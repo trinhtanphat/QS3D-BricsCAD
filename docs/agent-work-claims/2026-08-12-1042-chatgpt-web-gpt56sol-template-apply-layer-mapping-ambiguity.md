@@ -1,41 +1,44 @@
 # Work claim — template apply layer-mapping ambiguity preflight
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-template-apply-layer-mapping-ambiguity-20260812-1042`
 - Registered: `2026-08-12T10:42:00+07:00`
+- Completed: `2026-08-12T10:46:00+07:00`
 - Baseline main SHA: `1fc1a279f71c7a31e514f97ae75c11116d7f4ac7`
 - Priority: owner-requested continue-all Core integrity hardening
 
 ## Confirmed defect
 
-`TemplateProfileStore.ValidateApply(...)` projects existing project layer mappings into a case-insensitive dictionary after trimming each metadata-key suffix, then calls `ProjectRecognitionService.ValidateLayerMappings(...)`. If two distinct persisted metadata keys normalize to the same recognition pattern (for example `QS3D.LayerMapping:A-WALL` and `QS3D.LayerMapping: A-WALL `), the projection overwrites one entry before validation. The apply preflight therefore accepts project recognition state that `ProjectRecognitionService` itself rejects as an ambiguous normalized layer mapping.
+`TemplateProfileStore.ValidateApply(...)` projected existing project layer mappings into a case-insensitive dictionary after trimming each metadata-key suffix, then called `ProjectRecognitionService.ValidateLayerMappings(...)`. If two distinct persisted metadata keys normalized to the same recognition pattern (for example `QS3D.LayerMapping:A-WALL` and `QS3D.LayerMapping: A-WALL `), the projection overwrote one entry before validation. The apply preflight therefore accepted project recognition state that `ProjectRecognitionService` itself rejects as an ambiguous normalized layer mapping.
 
-## Reserved scope
+## Implemented scope
 
-- Validate the raw existing project layer-mapping metadata set before it is collapsed into the projected mapping dictionary used for template overlay validation.
-- Preserve existing template-overrides-project projection semantics after the existing project state has passed recognition mapping validation.
-- Add focused Core smoke coverage proving ambiguous persisted project mappings fail before template apply mutation/audit revision.
+- Materialize the raw existing project layer-mapping metadata set before projection.
+- Validate that raw set with `ProjectRecognitionService.ValidateLayerMappings(...)` before any trim/dictionary collapse can hide ambiguity.
+- Preserve the existing template-overrides-project projected mapping validation after the existing project state passes recognition validation.
+- Add focused module-initializer smoke coverage proving duplicate-normalized persisted mappings fail before project revision, audit history, or metadata mutation.
 
-## Expected surfaces
+## Integration evidence
 
-- `src/QS3D.Core/Templates/TemplateProfileStore.cs`
-- `tests/QS3D.Core.SmokeTests/TemplateApplyLayerMappingAmbiguitySmoke.cs`
-- this claim file
+- Claim registration: `0e87fd9a5848c5b818dbda27529fa132da813361`
+- Product fix: `26d9739684a1fd246a99a753cc56368d72891ef9`
+- Regression: `9bb555764a1d8096350c61da9bd69746c218ec3c`
+- Verified current-main descendant before close: `97c74699d7f47d7bac8aa2c51c40ae07023f4c8a`
+- `compare_commits(9bb5557..., 97c7469...)` reported current main ahead by 5 and behind by 0, with neither reserved source nor regression file modified after the regression commit.
+
+## Validation
+
+- Re-fetched `TemplateProfileStore.cs` from `main` and confirmed raw `projectMappings` are validated before `projectedMappings` is built.
+- Re-fetched `TemplateApplyLayerMappingAmbiguitySmoke.cs` from `main`; it asserts the ambiguity exception and unchanged `ChangeVersion`, `AuditEvents`, and metadata.
+- No GitHub Actions dispatched.
+- No force push, release publication, or BricsCAD runtime PASS claim.
 
 ## Excluded scope
 
 - No `ProjectRecognitionService` runtime behavior changes.
 - No `TemplateProfileStore.ExportProject` behavior changes in this claim.
 - No XML/schema/text, BQ layout, category-token, family-property, UI/native, release, or unrelated active-claim changes.
-- No GitHub Actions, force push, release publication, or BricsCAD runtime PASS claim.
-
-## Validation plan
-
-- Re-fetch current `main` and `TemplateProfileStore.cs` after claim registration before editing.
-- Materialize raw project layer mappings, validate them with the same recognition validator, then preserve the current projected overlay validation.
-- Add a module-initializer smoke that constructs duplicate-normalized persisted mapping keys and verifies apply fails without changing `ChangeVersion` or audit history; include a canonical control where useful.
-- Re-fetch final source/test from current `main`, verify ancestry, then mark this claim `COMPLETED` with exact integration SHAs.
 
 ## Completion condition
 
-Completed only when template apply cannot silently collapse ambiguous existing recognition mappings before preflight, focused regression coverage is committed, and this claim is closed on `main` with exact commit evidence.
+Completed: template apply can no longer silently collapse ambiguous existing recognition mappings before preflight, focused regression coverage is committed, and the lane is closed on `main` with exact commit evidence.
