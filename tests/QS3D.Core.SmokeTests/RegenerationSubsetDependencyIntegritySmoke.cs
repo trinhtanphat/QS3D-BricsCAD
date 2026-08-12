@@ -78,8 +78,11 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("REGEN-SUBSET-UNKNOWN", "Subset unknown target precedence");
             var dependent = new ProjectElement("DEPENDENT", ElementCategory.CustomQuantity);
+            var unrelated = new ProjectElement("UNRELATED", ElementCategory.CustomQuantity);
             dependent.DependsOn.Add("MISSING");
+            unrelated.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(dependent);
+            project.Elements.Add(unrelated);
 
             try
             {
