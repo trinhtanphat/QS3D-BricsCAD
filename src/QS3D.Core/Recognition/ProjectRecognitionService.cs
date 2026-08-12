@@ -24,7 +24,10 @@ namespace QS3D.Core.Recognition
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (snapshots == null) throw new ArgumentNullException(nameof(snapshots));
+            var versionBeforeEnumeration = project.ChangeVersion;
             var materialized = RecognitionInputBounds.Materialize(snapshots, RecognitionInputBounds.MaxBatchItems, "Project recognition snapshot batch");
+            if (project.ChangeVersion != versionBeforeEnumeration)
+                throw new InvalidOperationException("Project changed while recognition snapshots were being enumerated.");
             return new RecognitionBatch(materialized.Select(x => Suggest(project, x)), autoAcceptConfidence, minimumMargin);
         }
 
