@@ -64,13 +64,12 @@ namespace QS3D.Core.Diagnostics
         public static IEnumerable<KeyValuePair<string, string>> EnumerateLogicalOwnerHandles(ProjectElement element)
         {
             if (element == null) throw new ArgumentNullException(nameof(element));
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seen = new HashSet<KeyValuePair<string, string>>(LogicalOwnerPairComparer.Instance);
             foreach (var entry in EnumerateOwnerHandles(element))
             {
-                var slot = CanonicalOwnerSlot(entry.Value);
-                var token = entry.Key + "\n" + slot;
-                if (!seen.Add(token)) continue;
-                yield return new KeyValuePair<string, string>(entry.Key, slot);
+                var logical = new KeyValuePair<string, string>(entry.Key, CanonicalOwnerSlot(entry.Value));
+                if (!seen.Add(logical)) continue;
+                yield return logical;
             }
         }
 
@@ -128,6 +127,24 @@ namespace QS3D.Core.Diagnostics
                     throw new InvalidOperationException("Project contains a blank semantic element id; generated CAD ownership cannot be resolved safely.");
                 if (!seen.Add(elementId))
                     throw new InvalidOperationException("Project contains duplicate element id: " + elementId);
+            }
+        }
+
+        private sealed class LogicalOwnerPairComparer : IEqualityComparer<KeyValuePair<string, string>>
+        {
+            public static readonly LogicalOwnerPairComparer Instance = new LogicalOwnerPairComparer();
+
+            public bool Equals(KeyValuePair<string, string> left, KeyValuePair<string, string> right) =>
+                string.Equals(left.Key, right.Key, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(left.Value, right.Value, StringComparison.OrdinalIgnoreCase);
+
+            public int GetHashCode(KeyValuePair<string, string> value)
+            {
+                unchecked
+                {
+                    return (StringComparer.OrdinalIgnoreCase.GetHashCode(value.Key ?? string.Empty) * 397) ^
+                           StringComparer.OrdinalIgnoreCase.GetHashCode(value.Value ?? string.Empty);
+                }
             }
         }
 
