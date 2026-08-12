@@ -19,7 +19,8 @@ namespace QS3D.Core.Domain
             "Spacing",
             "Cover",
             "Clearance",
-            "Sagitta"
+            "Sagitta",
+            "Chamfer"
         };
 
         public static bool IsLinearMeterProperty(string key)
