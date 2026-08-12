@@ -28,8 +28,11 @@ def main() -> int:
 
     require(manifest, "function Convert-ToStrictSemVerText", "manifest strict SemVer validation")
     require(manifest, "PACKAGE-METADATA is missing productVersion", "manifest package productVersion requirement")
-    require(manifest, "Read-PluginProductVersion", "signed plugin product-version read")
-    require(manifest, "PACKAGE-METADATA productVersion $productVersion does not match signed QS3D plugin product version", "manifest signed product-version binding")
+    require(manifest, "function Read-ManagedProductVersion", "managed product-version reader")
+    require(manifest, "FileVersionInfo]::GetVersionInfo", "managed product-version source")
+    require(manifest, "managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')", "dual managed identity set")
+    require(manifest, "PACKAGE-METADATA productVersion $productVersion does not match signed $name product version", "manifest managed product-version binding")
+    require(manifest, "$signedPluginProductVersion = $managedIdentities['QS3D.BricsCAD.V25.dll'].ProductVersion", "plugin productVersion authority after dual binding")
     require(manifest, "schemaVersion = 2", "update manifest schema 2")
     require(manifest, "productVersion = $signedPluginProductVersion", "manifest productVersion emission")
     reject(manifest, "schemaVersion = 1", "legacy assembly-only manifest generation")
@@ -52,14 +55,12 @@ def main() -> int:
     require(updater, "is not newer than installed productVersion", "downloaded package monotonicity recheck")
     require(updater, "Installed QS3D productVersion changed during update preparation", "concurrent updater product-state guard")
 
-    # AssemblyVersion remains an independent binary/package check. The compatibility switch
-    # may allow an equal assembly version, but it must not bypass product SemVer monotonicity.
     require(updater, "if ($targetVersion -lt $installedVersion)", "assembly downgrade guard")
     require(updater, "if ($targetVersion -eq $installedVersion -and -not $AllowSameVersion)", "same AssemblyVersion compatibility gate")
     require(updater, "if ($signedPluginVersion -ne $targetVersion)", "signed DLL assembly binding")
     require(updater, "if ($packageVersion -ne $targetVersion)", "package metadata assembly binding")
 
-    print("PASS: update manifests and updater bind signed package identity to monotonically newer product SemVer.")
+    print("PASS: update manifests bind both managed payload identities to one product SemVer, and updater accepts only a signed package with monotonically newer matching productVersion.")
     return 0
 
 
