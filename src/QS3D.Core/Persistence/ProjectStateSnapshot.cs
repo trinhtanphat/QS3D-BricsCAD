@@ -66,10 +66,10 @@ namespace QS3D.Core.Persistence
         {
             target.SchemaVersion = source.SchemaVersion;
             target.Name = source.Name;
-            target.DrawingPath = source.DrawingPath ?? string.Empty;
-            target.DrawingFingerprint = source.DrawingFingerprint ?? string.Empty;
-            target.ActiveZoneId = source.ActiveZoneId ?? string.Empty;
-            target.ActiveFloorId = source.ActiveFloorId ?? string.Empty;
+            target.DrawingPath = source.DrawingPath;
+            target.DrawingFingerprint = source.DrawingFingerprint;
+            target.ActiveZoneId = source.ActiveZoneId;
+            target.ActiveFloorId = source.ActiveFloorId;
 
             target.Zones.Clear();
             foreach (var zone in source.Zones)
@@ -83,7 +83,7 @@ namespace QS3D.Core.Persistence
             foreach (var family in source.Families)
             {
                 var copy = new ProjectFamily(family.Id, family.Name, family.Category);
-                foreach (var property in family.Properties) copy.Properties[property.Key] = property.Value ?? string.Empty;
+                foreach (var property in family.Properties) copy.Properties[property.Key] = property.Value;
                 target.Families.Add(copy);
             }
 
@@ -113,16 +113,16 @@ namespace QS3D.Core.Persistence
                 target.AuditEvents.Add(new AuditEvent
                 {
                     Utc = audit.Utc,
-                    Action = audit.Action ?? string.Empty,
-                    ElementId = audit.ElementId ?? string.Empty,
-                    Detail = audit.Detail ?? string.Empty,
-                    Actor = audit.Actor ?? string.Empty,
-                    CorrelationId = audit.CorrelationId ?? string.Empty
+                    Action = audit.Action,
+                    ElementId = audit.ElementId,
+                    Detail = audit.Detail,
+                    Actor = audit.Actor,
+                    CorrelationId = audit.CorrelationId
                 });
             }
 
             target.Metadata.Clear();
-            foreach (var item in source.Metadata) target.Metadata[item.Key] = item.Value ?? string.Empty;
+            foreach (var item in source.Metadata) target.Metadata[item.Key] = item.Value;
             target.RestorePersistenceState(source.UpdatedUtc, source.ChangeVersion);
         }
 
@@ -139,19 +139,19 @@ namespace QS3D.Core.Persistence
                 throw new InvalidOperationException("Cannot restore element state into a different element id.");
 
             target.Category = source.Category;
-            target.FamilyId = source.FamilyId ?? string.Empty;
-            target.FloorId = source.FloorId ?? string.Empty;
-            target.ZoneId = source.ZoneId ?? string.Empty;
-            target.DrawingFingerprint = source.DrawingFingerprint ?? string.Empty;
+            target.FamilyId = source.FamilyId;
+            target.FloorId = source.FloorId;
+            target.ZoneId = source.ZoneId;
+            target.DrawingFingerprint = source.DrawingFingerprint;
 
             target.SourceHandles.Clear();
-            foreach (var handle in source.SourceHandles) target.SourceHandles.Add(handle ?? string.Empty);
+            foreach (var handle in source.SourceHandles) target.SourceHandles.Add(handle);
 
             target.DependsOn.Clear();
-            foreach (var dependency in source.DependsOn) target.DependsOn.Add(dependency ?? string.Empty);
+            foreach (var dependency in source.DependsOn) target.DependsOn.Add(dependency);
 
             target.Properties.Clear();
-            foreach (var property in source.Properties) target.Properties[property.Key] = property.Value ?? string.Empty;
+            foreach (var property in source.Properties) target.Properties[property.Key] = property.Value;
 
             target.Quantities.Clear();
             foreach (var quantity in source.Quantities) target.Quantities[quantity.Key] = quantity.Value;
