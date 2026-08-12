@@ -275,6 +275,7 @@ namespace QS3D.Core.Formulas
                 {
                     for (var i = 0; i < token.Length; i++)
                     {
+                        if (token[i] == 'e' || token[i] == 'E') break;
                         if (token[i] >= '1' && token[i] <= '9')
                             throw Error($"Number '{token}' underflowed to zero.");
                     }
