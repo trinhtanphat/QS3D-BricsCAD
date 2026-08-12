@@ -26,10 +26,10 @@ if not errors:
         'RequireExactlyOne(root, "elements")',
         'parent.Elements(name).Take(2).Count() != 1',
         'ValidateElement(element, "element", new[] { "id", "category", "familyId", "floorId", "zoneId" }, new[] { "properties", "quantities", "sourceHandles", "dependencies" })',
-        'RequireAtMostOne(element, "properties")',
-        'RequireAtMostOne(element, "quantities")',
-        'RequireAtMostOne(element, "sourceHandles")',
-        'RequireAtMostOne(element, "dependencies")',
+        'RequireExactlyOne(element, "properties")',
+        'RequireExactlyOne(element, "quantities")',
+        'RequireExactlyOne(element, "sourceHandles")',
+        'RequireExactlyOne(element, "dependencies")',
         'ValidateElement(property, "p", new[] { "name", "value" }, Array.Empty<string>())',
         'ValidateElement(quantity, "q", new[] { "name", "value" }, Array.Empty<string>())',
         'ValidateElement(handle, "h", new[] { "value" }, Array.Empty<string>())',
@@ -38,14 +38,21 @@ if not errors:
         'attribute.IsNamespaceDeclaration || attribute.Name.Namespace != XNamespace.None || !attributes.Contains(attribute.Name)',
         'child.Name.Namespace != XNamespace.None || !children.Contains(child.Name)',
         '!string.IsNullOrWhiteSpace(text.Value)',
-        'parent.Elements(name).Skip(1).Any()',
     ]
     for token in required:
         if token not in validator:
             errors.append("revision schema validator missing contract token: " + token)
 
-    if 'RequireAtMostOne(root, "elements")' in validator:
-        errors.append("revision root elements container must be required, not merely optional")
+    forbidden = [
+        'RequireAtMostOne(root, "elements")',
+        'RequireAtMostOne(element, "properties")',
+        'RequireAtMostOne(element, "quantities")',
+        'RequireAtMostOne(element, "sourceHandles")',
+        'RequireAtMostOne(element, "dependencies")',
+    ]
+    for token in forbidden:
+        if token in validator:
+            errors.append("revision canonical container must be required, not optional: " + token)
 
     if "root.Name.LocalName" in validator:
         errors.append("revision schema validator must not accept roots by LocalName only")
@@ -57,4 +64,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: revision XML load requires exactly one elements section and fails closed on foreign namespaces, unknown nodes/attributes/content, dependency shape, and duplicate singleton containers.")
+print("PASS: revision XML load requires all canonical root/element containers and fails closed on foreign namespaces, unknown nodes/attributes/content, and duplicate singleton containers.")
