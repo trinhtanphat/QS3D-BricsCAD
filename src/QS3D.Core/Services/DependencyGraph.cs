@@ -124,10 +124,16 @@ namespace QS3D.Core.Services
         public IReadOnlyList<ProjectElement> TopologicalDirtyOrder(IEnumerable<ProjectElement> elements)
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
-            var list = new List<ProjectElement>();
+            var materialized = new List<ProjectElement>();
             foreach (var element in elements)
             {
                 if (element == null) throw new InvalidOperationException("Dependency ordering cannot contain a null semantic element.");
+                materialized.Add(element);
+            }
+
+            var list = new List<ProjectElement>();
+            foreach (var element in materialized)
+            {
                 ValidateDependencies(element);
                 if (element.Dirty != ElementDirtyFlags.None) list.Add(element);
             }
