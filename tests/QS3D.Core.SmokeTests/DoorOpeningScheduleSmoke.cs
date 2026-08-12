@@ -27,6 +27,8 @@ namespace QS3D.Core.SmokeTests
             project.Families.Add(family);
 
             project.Zones.Add(new ZoneDefinition("z", "Zone"));
+            project.Elements.Add(new ProjectElement("wall-a", ElementCategory.ArchitecturalWall));
+            project.Elements.Add(new ProjectElement("wall-b", ElementCategory.ArchitecturalWall));
             var first = Door("d1", family.Id, "f1", "wall-a");
             first.Quantities["OpeningAreaM2"] = 1.95d;
             var second = Door("d2", family.Id, "f1", "wall-b");
@@ -59,6 +61,7 @@ namespace QS3D.Core.SmokeTests
             project.Families.Add(family);
 
             project.Zones.Add(new ZoneDefinition("z", "Zone"));
+            project.Elements.Add(new ProjectElement("wall-a", ElementCategory.ArchitecturalWall));
             var inherited = new ProjectElement("o1", ElementCategory.WallOpening, family.Id, "f1", "z");
             inherited.Properties["HostWallId"] = "wall-a";
             var overridden = new ProjectElement("o2", ElementCategory.WallOpening, family.Id, "f1", "z");
