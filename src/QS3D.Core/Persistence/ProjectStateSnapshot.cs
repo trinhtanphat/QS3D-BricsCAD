@@ -10,17 +10,23 @@ namespace QS3D.Core.Persistence
     {
         private readonly ProjectState _snapshot;
         private readonly ProjectState _capturedProject;
+        private readonly IReadOnlyDictionary<string, ZoneDefinition> _capturedZones;
+        private readonly IReadOnlyDictionary<string, FloorDefinition> _capturedFloors;
         private readonly IReadOnlyDictionary<string, ProjectFamily> _capturedFamilies;
         private readonly IReadOnlyDictionary<string, ProjectElement> _capturedElements;
 
         private ProjectStateSnapshot(
             ProjectState snapshot,
             ProjectState capturedProject,
+            IReadOnlyDictionary<string, ZoneDefinition> capturedZones,
+            IReadOnlyDictionary<string, FloorDefinition> capturedFloors,
             IReadOnlyDictionary<string, ProjectFamily> capturedFamilies,
             IReadOnlyDictionary<string, ProjectElement> capturedElements)
         {
             _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
             _capturedProject = capturedProject ?? throw new ArgumentNullException(nameof(capturedProject));
+            _capturedZones = capturedZones ?? throw new ArgumentNullException(nameof(capturedZones));
+            _capturedFloors = capturedFloors ?? throw new ArgumentNullException(nameof(capturedFloors));
             _capturedFamilies = capturedFamilies ?? throw new ArgumentNullException(nameof(capturedFamilies));
             _capturedElements = capturedElements ?? throw new ArgumentNullException(nameof(capturedElements));
         }
@@ -28,9 +34,17 @@ namespace QS3D.Core.Persistence
         public static ProjectStateSnapshot Capture(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            var capturedZones = CaptureZoneReferences(project);
+            var capturedFloors = CaptureFloorReferences(project);
             var capturedFamilies = CaptureFamilyReferences(project);
             var capturedElements = CaptureElementReferences(project);
-            return new ProjectStateSnapshot(CreateDetachedCopy(project), project, capturedFamilies, capturedElements);
+            return new ProjectStateSnapshot(
+                CreateDetachedCopy(project),
+                project,
+                capturedZones,
+                capturedFloors,
+                capturedFamilies,
+                capturedElements);
         }
 
         public static ProjectState CreateDetachedCopy(ProjectState project)
@@ -45,16 +59,46 @@ namespace QS3D.Core.Persistence
             if (!string.Equals(project.ProjectId, _snapshot.ProjectId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Cannot restore a snapshot into a different project id.");
             var preservingIdentity = ReferenceEquals(project, _capturedProject);
+            var preservedZones = preservingIdentity ? _capturedZones : null;
+            var preservedFloors = preservingIdentity ? _capturedFloors : null;
             var preservedFamilies = preservingIdentity ? _capturedFamilies : null;
             var preservedElements = preservingIdentity ? _capturedElements : null;
-            CopyInto(_snapshot, project, preservedFamilies, preservedElements);
+            CopyInto(_snapshot, project, preservedZones, preservedFloors, preservedFamilies, preservedElements);
         }
 
         private static ProjectState Clone(ProjectState source)
         {
             var target = new ProjectState(source.ProjectId, source.Name);
-            CopyInto(source, target, null, null);
+            CopyInto(source, target, null, null, null, null);
             return target;
+        }
+
+        private static IReadOnlyDictionary<string, ZoneDefinition> CaptureZoneReferences(ProjectState project)
+        {
+            var result = new Dictionary<string, ZoneDefinition>(StringComparer.OrdinalIgnoreCase);
+            foreach (var zone in project.Zones)
+            {
+                if (zone == null || string.IsNullOrWhiteSpace(zone.Id))
+                    throw new InvalidOperationException("Cannot capture a project containing a zone without id.");
+                if (result.ContainsKey(zone.Id))
+                    throw new InvalidOperationException("Cannot capture a project containing duplicate zone id: " + zone.Id + ".");
+                result.Add(zone.Id, zone);
+            }
+            return result;
+        }
+
+        private static IReadOnlyDictionary<string, FloorDefinition> CaptureFloorReferences(ProjectState project)
+        {
+            var result = new Dictionary<string, FloorDefinition>(StringComparer.OrdinalIgnoreCase);
+            foreach (var floor in project.Floors)
+            {
+                if (floor == null || string.IsNullOrWhiteSpace(floor.Id))
+                    throw new InvalidOperationException("Cannot capture a project containing a floor without id.");
+                if (result.ContainsKey(floor.Id))
+                    throw new InvalidOperationException("Cannot capture a project containing duplicate floor id: " + floor.Id + ".");
+                result.Add(floor.Id, floor);
+            }
+            return result;
         }
 
         private static IReadOnlyDictionary<string, ProjectFamily> CaptureFamilyReferences(ProjectState project)
@@ -88,6 +132,8 @@ namespace QS3D.Core.Persistence
         private static void CopyInto(
             ProjectState source,
             ProjectState target,
+            IReadOnlyDictionary<string, ZoneDefinition>? preservedZones,
+            IReadOnlyDictionary<string, FloorDefinition>? preservedFloors,
             IReadOnlyDictionary<string, ProjectFamily>? preservedFamilies,
             IReadOnlyDictionary<string, ProjectElement>? preservedElements)
         {
@@ -102,11 +148,35 @@ namespace QS3D.Core.Persistence
 
             target.Zones.Clear();
             foreach (var zone in source.Zones)
-                target.Zones.Add(new ZoneDefinition(zone.Id, zone.Name));
+            {
+                ZoneDefinition copy;
+                if (preservedZones != null && preservedZones.TryGetValue(zone.Id, out var preserved))
+                {
+                    copy = preserved;
+                    CopyZoneInto(zone, copy);
+                }
+                else
+                {
+                    copy = CloneZone(zone);
+                }
+                target.Zones.Add(copy);
+            }
 
             target.Floors.Clear();
             foreach (var floor in source.Floors)
-                target.Floors.Add(new FloorDefinition(floor.Id, floor.Name, floor.ElevationM));
+            {
+                FloorDefinition copy;
+                if (preservedFloors != null && preservedFloors.TryGetValue(floor.Id, out var preserved))
+                {
+                    copy = preserved;
+                    CopyFloorInto(floor, copy);
+                }
+                else
+                {
+                    copy = CloneFloor(floor);
+                }
+                target.Floors.Add(copy);
+            }
 
             target.Families.Clear();
             foreach (var family in source.Families)
@@ -182,6 +252,31 @@ namespace QS3D.Core.Persistence
                     throw new InvalidOperationException("Cannot snapshot a project containing a null " + label + " entry at index " + index + ".");
                 index++;
             }
+        }
+
+        private static ZoneDefinition CloneZone(ZoneDefinition source)
+        {
+            return new ZoneDefinition(source.Id, source.Name);
+        }
+
+        private static void CopyZoneInto(ZoneDefinition source, ZoneDefinition target)
+        {
+            if (!string.Equals(source.Id, target.Id, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Cannot restore zone state into a different zone id.");
+            target.Name = source.Name;
+        }
+
+        private static FloorDefinition CloneFloor(FloorDefinition source)
+        {
+            return new FloorDefinition(source.Id, source.Name, source.ElevationM);
+        }
+
+        private static void CopyFloorInto(FloorDefinition source, FloorDefinition target)
+        {
+            if (!string.Equals(source.Id, target.Id, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Cannot restore floor state into a different floor id.");
+            target.Name = source.Name;
+            target.ElevationM = source.ElevationM;
         }
 
         private static ProjectFamily CloneFamily(ProjectFamily source)
