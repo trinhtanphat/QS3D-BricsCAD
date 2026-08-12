@@ -63,10 +63,10 @@ namespace QS3D.Core.Reporting
                     floorId,
                     category,
                     familyId,
-                    widthM.ToString("R", CultureInfo.InvariantCulture),
-                    heightM.ToString("R", CultureInfo.InvariantCulture),
-                    sillM.ToString("R", CultureInfo.InvariantCulture),
-                    thicknessM.ToString("R", CultureInfo.InvariantCulture),
+                    CanonicalNumber(widthM),
+                    CanonicalNumber(heightM),
+                    CanonicalNumber(sillM),
+                    CanonicalNumber(thicknessM),
                     material);
                 if (!rows.TryGetValue(key, out var row))
                 {
@@ -108,6 +108,11 @@ namespace QS3D.Core.Reporting
                     .Append(token);
             }
             return key.ToString();
+        }
+
+        private static string CanonicalNumber(double value)
+        {
+            return (value == 0d ? 0d : value).ToString("R", CultureInfo.InvariantCulture);
         }
 
         private static string ScheduleCategory(ProjectElement element)
