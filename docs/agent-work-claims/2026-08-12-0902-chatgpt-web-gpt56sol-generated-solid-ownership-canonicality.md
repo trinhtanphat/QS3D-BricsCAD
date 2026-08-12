@@ -1,36 +1,33 @@
 # Work claim — Generated Solid semantic ownership canonicality
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-web/gpt56sol-generated-solid-ownership-canonicality`
 - Registered: `2026-08-12T09:02:00+07:00`
+- Completed: `2026-08-12T09:04:00+07:00`
 - Baseline main SHA: `5954521393578aea948fa3987c470695abfee8eb`
 - Priority: P1 — persisted Generated Solid ownership metadata must match the exact writer-owned semantic contract.
 - Task Key: `CORE-MODEL-HEALTH-GENERATED-SOLID-OWNERSHIP-CANONICALITY`
 
 ## Confirmed defect
 
-`GeneratedGeometryService.CommitReplacement(...)` writes exact `GeneratedSolidOwnershipVersion = "1"`, `GeneratedSolidOwnerProjectId = project.ProjectId` and `GeneratedSolidOwnerElementId = element.Id`. Baseline `ModelHealthService.ValidateGeneratedGeometry(...)` currently trims all three stored values before comparison. Malformed or externally edited persisted values such as `" 1 "`, a padded project id, or a padded element id can therefore pass ownership health even though the canonical writer never emits those spellings.
+`GeneratedGeometryService.CommitReplacement(...)` writes exact `GeneratedSolidOwnershipVersion = "1"`, `GeneratedSolidOwnerProjectId = project.ProjectId` and `GeneratedSolidOwnerElementId = element.Id`. Baseline `ModelHealthService.ValidateGeneratedGeometry(...)` trimmed all three stored values before comparison. Malformed or externally edited persisted values such as `" 1 "`, a padded project id, or a padded element id could therefore pass ownership health even though the canonical writer never emits those spellings.
 
-## Non-overlap check
+## Implemented
 
-Recent generated-solid work covers native runtime provider isolation, null-element health and native XData ownership. Existing relation-canonicality work covers Family/Floor/Zone relations only. Recent claim history showed no active or completed lane dedicated to canonical spelling of these three semantic Generated Solid ownership properties.
+- Claim: `681ba0b4462ccee0d881282aefeecd3a1b787737`
+- Source fix: `bd5a2bd242ddc924fd68c84867492e96d0e96ccd`
+- Focused smoke regression: `67878b2278aeb0e82b33490dde8f4e4278e3e52c`
 
-## Reserved scope
+`ModelHealthService.ValidateGeneratedGeometry(...)` now emits dedicated `HealthSeverity.Error` diagnostics for non-canonical surrounding whitespace on ownership version, project owner id and element owner id. Existing version/project/element mismatch checks continue to run against normalized values, so malformed spelling cannot hide an actual ownership mismatch.
 
-- `src/QS3D.Core/Diagnostics/ModelHealthService.cs`
-- one focused Core smoke regression for semantic Generated Solid ownership spelling
-- this claim file
+## Preserved scope
 
-Do not modify native XData ownership, `GeneratedGeometryService`, generated handle semantics, category metadata, builders, persistence format or BricsCAD runtime code.
+No edits were made to native XData ownership, `GeneratedGeometryService`, generated handle semantics, category metadata, builders, persistence format or BricsCAD runtime code.
 
-## Intended contract
+## Validation
 
-- Padded/non-writer-canonical ownership version, project id and element id fail visible as dedicated `HealthSeverity.Error` diagnostics.
-- Existing version/project/element mismatch checks continue to run against normalized values, so canonicality evidence does not hide an actual ownership mismatch.
-- Exact writer-owned values preserve existing health behavior.
-- Inspection remains read-only and deterministic.
-
-## Completion condition
-
-Malformed semantic Generated Solid ownership spellings are fail-visible, focused Core smoke coverage pins version/project/element padded cases plus canonical control behavior, source + smoke are read back from merged `main`, ancestry is verified, and this claim is closed with exact commit SHAs.
+- Read back current `ModelHealthService.cs` from merged `main`; the three canonicality diagnostics and normalized mismatch checks are present.
+- Read back `ModelHealthGeneratedSolidOwnershipCanonicalitySmoke.cs`; it pins padded version/project/element aliases, a padded wrong-project case that must retain mismatch evidence, and canonical control behavior.
+- Compared smoke commit `67878b2278aeb0e82b33490dde8f4e4278e3e52c` to merged `main` `f2b838b66220445508dca99146315f65c644b517`: status `ahead`, `ahead_by=9`, `behind_by=0`, merge base exactly the smoke commit. Later changes do not touch this lane's source or smoke.
+- No GitHub Actions workflow was dispatched. No full .NET build or licensed BricsCAD V25/V26 runtime PASS is claimed from this remote lane.
