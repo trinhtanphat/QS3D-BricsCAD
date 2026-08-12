@@ -43,7 +43,7 @@ namespace QS3D.Core.Diagnostics
 
                 RequireOwner(element, OwnerProjectKey, project.ProjectId, "SEMANTIC_TAG_PROJECT_MISMATCH", issues);
                 RequireOwner(element, OwnerElementKey, element.Id, "SEMANTIC_TAG_ELEMENT_MISMATCH", issues);
-                RequireOwner(element, OwnershipVersionKey, OwnershipVersion, "SEMANTIC_TAG_OWNERSHIP_VERSION_INVALID", issues);
+                RequireOwnershipVersion(element, issues);
 
                 var template = Property(element, TemplateKey);
                 if (template.Length == 0)
@@ -104,6 +104,19 @@ namespace QS3D.Core.Diagnostics
         {
             if (!string.Equals(Property(element, key), expected, StringComparison.OrdinalIgnoreCase))
                 issues.Add(new ModelHealthIssue(code, HealthSeverity.Error, key + " không khớp semantic owner hiện tại.", element.Id));
+        }
+
+        private static void RequireOwnershipVersion(ProjectElement element, ICollection<ModelHealthIssue> issues)
+        {
+            var raw = element.Properties.TryGetValue(OwnershipVersionKey, out var stored) ? stored ?? string.Empty : string.Empty;
+            var normalized = raw.Trim();
+            if (!string.Equals(normalized, OwnershipVersion, StringComparison.OrdinalIgnoreCase))
+            {
+                issues.Add(new ModelHealthIssue("SEMANTIC_TAG_OWNERSHIP_VERSION_INVALID", HealthSeverity.Error, OwnershipVersionKey + " không khớp semantic owner hiện tại.", element.Id));
+                return;
+            }
+            if (!string.Equals(raw, OwnershipVersion, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("SEMANTIC_TAG_OWNERSHIP_VERSION_NON_CANONICAL", HealthSeverity.Error, OwnershipVersionKey + " phải dùng đúng writer-owned token: " + OwnershipVersion + ".", element.Id));
         }
 
         private static void ValidatePositiveCanonical(ProjectElement element, string key, string invalidCode, string canonicalCode, ICollection<ModelHealthIssue> issues)
