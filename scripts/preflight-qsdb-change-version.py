@@ -24,7 +24,7 @@ for token, label in [
     ('new XAttribute("changeVersion", project.ChangeVersion.ToString(CultureInfo.InvariantCulture))', "serialized change version"),
     ('var changeVersion = ChangeVersion(root.Attribute("changeVersion")?.Value)', "load parse boundary"),
     ("project.RestorePersistenceState(updatedUtc, changeVersion)", "persistence-state restore"),
-    ("if (value == null) return 0L;", "legacy default"),
+    ("if (value == null) return 0L;", "legacy migration default"),
     ("NumberStyles.None", "canonical integer parse"),
     ("result < 0L", "negative persistence rejection"),
     ('throw new InvalidDataException("Invalid QSDB change version: " + value)', "persistence-format exception"),
@@ -43,7 +43,7 @@ for token, label in [
 
 for token, label in [
     ("SuccessfulSaveRoundTripsChangeVersion", "round-trip smoke"),
-    ("LegacyFileDefaultsChangeVersion", "legacy smoke"),
+    ("MissingCurrentChangeVersionIsRejected", "strict current-schema missing-version smoke"),
     ("InvalidPersistedChangeVersionIsRejected", "invalid persistence smoke"),
     ('new[] { "-1", "1.5", " 1", "9223372036854775808" }', "negative/malformed/overflow fixtures"),
     ('Throws<InvalidDataException>(() => store.Load(path)', "file-boundary exception assertion"),
@@ -61,4 +61,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QSDB persists non-negative ChangeVersion, defaults legacy files to zero, rejects negative/malformed/overflow values as InvalidDataException at the file parse boundary, and preserves backup-fallback semantics.")
+print("PASS: current-schema QSDB requires persisted non-negative ChangeVersion, legacy migration may synthesize zero before strict validation, malformed/overflow values fail as InvalidDataException, and backup-fallback semantics remain preserved.")
