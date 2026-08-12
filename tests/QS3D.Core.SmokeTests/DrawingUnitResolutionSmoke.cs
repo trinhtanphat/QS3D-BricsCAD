@@ -58,6 +58,18 @@ namespace QS3D.Core.SmokeTests
             };
             Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.TryResolve(null, paddedOverride, out _));
 
+            var emptyOverride = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.OverrideMetadataKey] = string.Empty
+            };
+            Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.TryResolve(null, emptyOverride, out _));
+
+            var whitespaceOverride = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.OverrideMetadataKey] = "   "
+            };
+            Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.TryResolve(null, whitespaceOverride, out _));
+
             var lowercaseBound = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 [DrawingUnitResolutionPolicy.BoundMetadataKey] = "meter"
@@ -75,6 +87,20 @@ namespace QS3D.Core.SmokeTests
                 [DrawingUnitResolutionPolicy.BoundMetadataKey] = " Meter "
             };
             Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(paddedBound, true, LengthUnit.Meter));
+
+            var emptyBound = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.BoundMetadataKey] = string.Empty
+            };
+            Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(emptyBound, false, LengthUnit.Meter));
+
+            var whitespaceBoundWithLegacyFallback = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.BoundMetadataKey] = "   ",
+                [DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey] = "Millimeter (assumed)",
+                [DrawingUnitResolutionPolicy.LegacyAssumptionMetadataKey] = "INSUNITS unsupported/undefined; assumed Millimeter"
+            };
+            Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(whitespaceBoundWithLegacyFallback, true, LengthUnit.Millimeter));
 
             metadata[DrawingUnitResolutionPolicy.OverrideMetadataKey] = "NotAUnit";
             Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.TryResolve(null, metadata, out _));
