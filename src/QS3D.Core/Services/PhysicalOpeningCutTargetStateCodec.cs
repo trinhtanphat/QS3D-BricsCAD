@@ -85,6 +85,11 @@ namespace QS3D.Core.Services
             if (ids.Count == 0)
                 throw new InvalidOperationException("Host " + host.Id + " physical opening target-state cannot be empty.");
 
+            ValidateProjectElements(project);
+            var currentHost = project.FindElement(canonicalHost.Id);
+            if (!ReferenceEquals(currentHost, canonicalHost))
+                throw new InvalidOperationException("Physical opening cut host no longer belongs to the project after opening target enumeration: " + canonicalHost.Id + ".");
+
             var result = new List<ProjectElement>(ids.Count);
             foreach (var id in ids)
             {
