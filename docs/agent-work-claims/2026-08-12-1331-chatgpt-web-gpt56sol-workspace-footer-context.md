@@ -1,6 +1,6 @@
 # Agent Work Claim — Workspace Footer Context
 
-- Status: ACTIVE
+- Status: COMPLETED
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-12 13:31 Asia/Ho_Chi_Minh
 - Scope: Add canonical read-only Project / Zone / Floor context to the Workspace footer using the current ExistingProjectMutationContext.
@@ -17,4 +17,9 @@
   - Resolve floor from ActiveFloorId via FindFloor(...).
   - UI refresh must be read-only: no SetActive*, Touch(), or ChangeVersion mutation.
   - Gracefully render empty/unavailable context when there is no active project/zone/floor.
-- Verification: source regression/preflight only; no claim of BricsCAD V25 runtime PASS from remote execution.
+- Source commit: ad1b8fb442d80bd461f7afa4f0f0e0dafc4268b9
+- Regression/preflight commit: ac2e56b3347c386d8a76048481a12e2dfd68aee8
+- Verification:
+  - Exact GitHub readback at main HEAD 51a3c85d1f4c4afd848058f45e98c6751d2cc47e confirmed the source and preflight are present after concurrent commits.
+  - Static contract readback confirms ExistingProjectMutationContext.TryGet, ActiveZoneId/FindZone, ActiveFloorId/FindFloor, refresh hooks, and no semantic mutation calls in the footer partial.
+  - Local checkout/preflight execution was unavailable because the execution container could not resolve github.com; no BricsCAD V25 runtime PASS is claimed.
