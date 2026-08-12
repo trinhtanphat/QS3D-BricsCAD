@@ -21,6 +21,8 @@ namespace QS3D.Core.Licensing
 
     public sealed class LicenseDocument
     {
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
+
         public string LicenseId { get; set; } = string.Empty;
         public string CustomerId { get; set; } = string.Empty;
         public string ProductId { get; set; } = string.Empty;
@@ -45,7 +47,7 @@ namespace QS3D.Core.Licensing
                 "features=" + string.Join(",", features),
                 "nonce=" + Nonce
             });
-            return Encoding.UTF8.GetBytes(text);
+            return StrictUtf8.GetBytes(text);
         }
 
         public void Validate()
@@ -75,6 +77,14 @@ namespace QS3D.Core.Licensing
             if (value.Length > maximumLength) throw new InvalidDataException("License " + name + " is too long.");
             foreach (var ch in value)
                 if (char.IsControl(ch) || ch == '\n' || ch == '\r') throw new InvalidDataException("License " + name + " contains control characters.");
+            try
+            {
+                StrictUtf8.GetByteCount(value);
+            }
+            catch (EncoderFallbackException ex)
+            {
+                throw new InvalidDataException("License " + name + " must contain well-formed Unicode text.", ex);
+            }
         }
     }
 
