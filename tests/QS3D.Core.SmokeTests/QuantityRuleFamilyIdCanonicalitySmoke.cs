@@ -21,7 +21,8 @@ namespace QS3D.Core.SmokeTests
             family.Properties["Factor"] = "2";
             project.Families.Add(family);
 
-            var element = new ProjectElement("B1", ElementCategory.Beam, " FAM-1 ", string.Empty, string.Empty);
+            var element = new ProjectElement("B1", ElementCategory.Beam, family.Id, string.Empty, string.Empty);
+            element.FamilyId = " FAM-1 ";
             element.Quantities["OldManaged"] = 7d;
             element.Properties["Rule:OldManaged"] = "old@1";
             project.Elements.Add(element);
@@ -38,7 +39,8 @@ namespace QS3D.Core.SmokeTests
         private static void WhitespaceOnlyFamilyIdRemainsValid()
         {
             var project = new ProjectState("p-rule-familyid-blank", "Rule blank FamilyId");
-            var element = new ProjectElement("B1", ElementCategory.Beam, "   ", string.Empty, string.Empty);
+            var element = new ProjectElement("B1", ElementCategory.Beam);
+            element.FamilyId = "   ";
             project.Elements.Add(element);
             project.QuantityRules.Add(new QuantityRule("beam-count", ElementCategory.Beam, "Computed", "Count", "1"));
 
