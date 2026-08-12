@@ -135,8 +135,8 @@ if "Editor.Regen(" in builder or "PaletteCoordinator" in builder:
     sys.exit(1)
 
 for token in [
-    '[CommandMethod("QS3DTAG", CommandFlags.Modal)]',
-    '[CommandMethod("QS3DTAGREFRESH", CommandFlags.Modal)]',
+    '[CommandMethod("QS3DTAG", CommandFlags.Modal | CommandFlags.UsePickSet)]',
+    '[CommandMethod("QS3DTAGREFRESH", CommandFlags.Modal | CommandFlags.UsePickSet)]',
     "GeneratedHandleOwnershipIndex.Build(project)",
     "generated.TryFindOwner(handle",
     "QS3D-generated output",
@@ -212,7 +212,7 @@ for token in [
     require(snapshot_state, token, "semantic tag rollback revision state")
 
 for token in [
-    '[CommandMethod("QS3DTAGREMOVE", CommandFlags.Modal)]',
+    '[CommandMethod("QS3DTAGREMOVE", CommandFlags.Modal | CommandFlags.UsePickSet)]',
     "SemanticTagRemovalService.Remove(document, project, element)",
 ]:
     require(remove_command, token, "semantic tag remove command")
