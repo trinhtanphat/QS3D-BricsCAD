@@ -259,6 +259,9 @@ namespace QS3D.Core.Persistence
             var children = new HashSet<XName>(allowedChildren.Select(XName.Get));
             foreach (var node in element.Nodes())
             {
+                if (node is XCData)
+                    throw new InvalidDataException("Unsupported QSDB CDATA content in " + element.Name.LocalName + ".");
+
                 if (node is XText text)
                 {
                     if (!allowText && !string.IsNullOrWhiteSpace(text.Value))
