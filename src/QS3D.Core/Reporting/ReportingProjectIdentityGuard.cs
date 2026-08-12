@@ -16,6 +16,7 @@ namespace QS3D.Core.Reporting
             RequireUniqueIds(project.Zones, x => x.Id, "zone", reportName);
             RequireUniqueIds(project.Families, x => x.Id, "family", reportName);
             RequireCanonicalElementReferences(project.Elements, reportName);
+            RequireExistingElementReferences(project, reportName);
         }
 
         internal static string NormalizeReferenceId(string? value) => (value ?? string.Empty).Trim();
@@ -55,6 +56,40 @@ namespace QS3D.Core.Reporting
                 RequireCanonicalReference(element.ZoneId, "zone", element.Id, reportName);
                 index++;
             }
+        }
+
+        private static void RequireExistingElementReferences(ProjectState project, string reportName)
+        {
+            var familyIds = IdentitySet(project.Families, x => x.Id);
+            var floorIds = IdentitySet(project.Floors, x => x.Id);
+            var zoneIds = IdentitySet(project.Zones, x => x.Id);
+
+            foreach (var element in project.Elements)
+            {
+                RequireExistingReference(element.FamilyId, familyIds, "family", element.Id, reportName);
+                RequireExistingReference(element.FloorId, floorIds, "floor", element.Id, reportName);
+                RequireExistingReference(element.ZoneId, zoneIds, "zone", element.Id, reportName);
+            }
+        }
+
+        private static HashSet<string> IdentitySet<T>(IEnumerable<T> items, Func<T, string> idSelector) where T : class
+        {
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in items)
+                result.Add(idSelector(item));
+            return result;
+        }
+
+        private static void RequireExistingReference(
+            string? rawId,
+            ISet<string> existingIds,
+            string identityName,
+            string elementId,
+            string reportName)
+        {
+            if (string.IsNullOrWhiteSpace(rawId)) return;
+            if (!existingIds.Contains(rawId))
+                throw new InvalidOperationException(reportName + " cannot be built because element '" + elementId + "' references missing " + identityName + " id '" + rawId + "'.");
         }
 
         private static void RequireCanonicalReference(string? rawId, string identityName, string elementId, string reportName)
