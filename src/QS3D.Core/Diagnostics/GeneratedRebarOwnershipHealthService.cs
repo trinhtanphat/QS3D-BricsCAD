@@ -19,7 +19,10 @@ namespace QS3D.Core.Diagnostics
                 foreach (var key in GeneratedHandleOwnershipPolicy.RebarHandleKeys)
                 {
                     if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
-                    foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
+                    foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity)
+                        .Where(x => x.Length > 0)
+                        .Distinct(StringComparer.OrdinalIgnoreCase))
                     {
                         var token = element.Id + "/" + key;
                         if (owners.TryGetValue(handle, out var previous) && !string.Equals(previous, token, StringComparison.OrdinalIgnoreCase))
