@@ -12,6 +12,7 @@ namespace QS3D.Core.Services
             RequireNonNegativeFinite(right, label);
             var result = left * right;
             if (!IsFinite(result)) throw new OverflowException("Quantity multiplication overflow: " + label);
+            if (result == 0d && left != 0d && right != 0d) throw new InvalidOperationException("Quantity multiplication underflow: " + label);
             return result;
         }
 
@@ -39,6 +40,7 @@ namespace QS3D.Core.Services
             if (!IsFinite(denominator) || denominator <= 0d) throw new InvalidOperationException("Quantity denominator must be finite and greater than zero: " + label);
             var result = numerator / denominator;
             if (!IsFinite(result)) throw new OverflowException("Quantity division overflow: " + label);
+            if (result == 0d && numerator != 0d) throw new InvalidOperationException("Quantity division underflow: " + label);
             return result;
         }
 
