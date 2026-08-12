@@ -85,7 +85,7 @@ namespace QS3D.Core.Reporting
                 if (row.MinimumClearPanelWidthM == double.MaxValue) row.MinimumClearPanelWidthM = 0d;
                 if (row.MinimumClearPanelHeightM == double.MaxValue) row.MinimumClearPanelHeightM = 0d;
             }
-            return order.Select(x => rows[x]).ToList();
+            return order.Select(x => rows[x]).ToList().AsReadOnly();
         }
 
         private static string GroupKey(string floorId, string familyId)
