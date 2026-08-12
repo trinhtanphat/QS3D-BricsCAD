@@ -224,7 +224,13 @@ namespace QS3D.Core.Licensing
             if (signatureElement.HasElements)
                 throw new InvalidDataException("License signature must contain text only.");
             ValidateSignatureTextNodes(signatureElement);
-            try { license.Signature = Convert.FromBase64String((signatureElement.Value ?? string.Empty).Trim()); }
+            var signatureText = signatureElement.Value ?? string.Empty;
+            try
+            {
+                license.Signature = Convert.FromBase64String(signatureText);
+                if (!string.Equals(Convert.ToBase64String(license.Signature), signatureText, StringComparison.Ordinal))
+                    throw new InvalidDataException("License signature must use canonical Base64 text.");
+            }
             catch (FormatException ex) { throw new InvalidDataException("License signature is not valid Base64.", ex); }
             if (license.Signature.Length > 1024) throw new InvalidDataException("License signature is too large.");
             license.Validate();
