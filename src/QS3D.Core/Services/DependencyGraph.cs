@@ -184,6 +184,9 @@ namespace QS3D.Core.Services
                 if (!string.Equals(dependency, dependency.Trim(), StringComparison.Ordinal))
                     throw new InvalidOperationException(
                         "Semantic element " + element.Id + " contains a non-canonical dependency at index " + index + ". Repair semantic relations before graph evaluation.");
+                if (string.Equals(dependency, element.Id, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(
+                        "Semantic element " + element.Id + " depends on itself. Repair semantic relations before graph evaluation.");
                 if (!seen.Add(dependency))
                     throw new InvalidOperationException(
                         "Semantic element " + element.Id + " contains duplicate dependency id: " + dependency + ". Repair semantic relations before graph evaluation.");
