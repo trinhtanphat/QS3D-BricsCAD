@@ -327,6 +327,8 @@ namespace QS3D.Core.Documentation
                     continue;
                 }
 
+                if (node is XCData)
+                    throw new InvalidDataException("Semantic schedule catalog contains unsupported CDATA content in " + expectedName + ".");
                 var text = node as XText;
                 if (text != null && string.IsNullOrWhiteSpace(text.Value)) continue;
                 throw new InvalidDataException("Semantic schedule catalog contains unsupported XML content in " + expectedName + ".");
