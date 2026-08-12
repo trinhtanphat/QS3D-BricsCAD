@@ -16,9 +16,17 @@ namespace QS3D.Core.Revisions
 
         public void Save(RevisionSnapshot snapshot, string path)
         {
+            Save(snapshot, path, MaxRevisionFileBytes);
+        }
+
+        private void Save(RevisionSnapshot snapshot, string path, long maximumBytes)
+        {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Revision path is required.", nameof(path));
+            if (maximumBytes <= 0L) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
             ValidateSnapshot(snapshot);
+            var document = Serialize(snapshot);
+            ValidateSerializedSize(document, maximumBytes);
             var full = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(full);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
@@ -26,7 +34,10 @@ namespace QS3D.Core.Revisions
             var backup = full + ".bak";
             try
             {
-                Serialize(snapshot).Save(temp, SaveOptions.DisableFormatting);
+                using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    document.Save(stream, SaveOptions.DisableFormatting);
+                }
                 ValidateSerializedFile(temp);
                 if (ShouldPreserveValidatedBackup(full, backup))
                 {
@@ -136,6 +147,14 @@ namespace QS3D.Core.Revisions
             using (var reader = XmlReader.Create(stream, settings))
             {
                 return XDocument.Load(reader, LoadOptions.None);
+            }
+        }
+
+        private static void ValidateSerializedSize(XDocument document, long maximumBytes)
+        {
+            using (var stream = new BoundedCountingStream(maximumBytes))
+            {
+                document.Save(stream, SaveOptions.DisableFormatting);
             }
         }
 
@@ -329,6 +348,45 @@ namespace QS3D.Core.Revisions
             if (timeSeparator < 0) return false;
             var offsetSeparator = Math.Max(value.LastIndexOf('+'), value.LastIndexOf('-'));
             return offsetSeparator > timeSeparator;
+        }
+
+        private sealed class BoundedCountingStream : Stream
+        {
+            private readonly long _maximumBytes;
+            private long _length;
+
+            public BoundedCountingStream(long maximumBytes)
+            {
+                if (maximumBytes <= 0L) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+                _maximumBytes = maximumBytes;
+            }
+
+            public override bool CanRead => false;
+            public override bool CanSeek => false;
+            public override bool CanWrite => true;
+            public override long Length => _length;
+            public override long Position
+            {
+                get => _length;
+                set => throw new NotSupportedException();
+            }
+
+            public override void Flush() { }
+
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+                if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
+                if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+                if (buffer.Length - offset < count) throw new ArgumentException("Invalid buffer range.");
+                if (_length > _maximumBytes - count)
+                    throw new InvalidDataException("QS3D revision exceeds the maximum supported file size of 64 MiB.");
+                _length += count;
+            }
         }
     }
 }
