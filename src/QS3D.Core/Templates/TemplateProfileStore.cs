@@ -177,13 +177,14 @@ namespace QS3D.Core.Templates
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Template path is required.", nameof(path));
             Validate(profile);
             var full = Path.GetFullPath(path);
+            var payload = SerializeBounded(profile);
             var directory = Path.GetDirectoryName(full);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
             var temp = AtomicFileCommit.CreateTempPath(full);
             var backup = full + ".bak";
             try
             {
-                Serialize(profile).Save(temp, SaveOptions.DisableFormatting);
+                File.WriteAllBytes(temp, payload);
                 Load(temp);
                 AtomicFileCommit.ReplaceWithBackup(temp, full, backup);
             }
@@ -311,6 +312,16 @@ namespace QS3D.Core.Templates
                 if (geometryChanged) dirty |= ElementDirtyFlags.Geometry;
                 element.MarkDirty(dirty);
                 affected.Add(element.Id);
+            }
+        }
+
+        private static byte[] SerializeBounded(TemplateProfile profile)
+        {
+            using (var stream = new MemoryStream())
+            {
+                Serialize(profile).Save(stream, SaveOptions.DisableFormatting);
+                if (stream.Length > MaxTemplateFileBytes) throw new InvalidDataException("QS3D template exceeds 8 MiB.");
+                return stream.ToArray();
             }
         }
 
