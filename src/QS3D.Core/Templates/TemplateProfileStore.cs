@@ -198,25 +198,36 @@ namespace QS3D.Core.Templates
             {
                 var category = RequiredCanonicalCategory(item, "family");
                 var family = new ProjectFamily(Required(item, "id"), Required(item, "name"), category);
+                var propertyNames = new List<string>();
                 foreach (var property in item.Element("properties")?.Elements("p") ?? Enumerable.Empty<XElement>())
                 {
                     var propertyName = Required(property, "name");
                     if (family.Properties.ContainsKey(propertyName)) throw new InvalidDataException("Duplicate template family property: " + family.Id + "/" + propertyName);
                     family.Properties[propertyName] = Value(property, "value");
+                    propertyNames.Add(propertyName);
                 }
+                RequireCanonicalOrder(propertyNames, "family properties for " + family.Id);
                 profile.Families.Add(family);
             }
+            RequireCanonicalOrder(profile.Families.Select(x => x.Id), "families");
+
             foreach (var item in root.Element("rules")?.Elements("rule") ?? Enumerable.Empty<XElement>())
             {
                 var category = RequiredCanonicalCategory(item, "rule");
                 profile.QuantityRules.Add(new QuantityRule(Required(item, "id"), category, Required(item, "output"), Required(item, "expression"), Required(item, "version")));
             }
+            RequireCanonicalOrder(profile.QuantityRules.Select(x => x.Id), "quantity rules");
+
+            var mappingPatterns = new List<string>();
             foreach (var item in root.Element("layerMappings")?.Elements("map") ?? Enumerable.Empty<XElement>())
             {
                 var pattern = Required(item, "pattern");
                 if (profile.LayerMappings.ContainsKey(pattern)) throw new InvalidDataException("Duplicate template layer mapping: " + pattern);
                 profile.LayerMappings.Add(pattern, Required(item, "category"));
+                mappingPatterns.Add(pattern);
             }
+            RequireCanonicalOrder(mappingPatterns, "layer mappings");
+
             foreach (var column in ReadCanonicalBqColumns(root.Element("bqColumns"))) profile.VisibleBqColumns.Add(column);
             Validate(profile);
             return profile;
@@ -360,6 +371,14 @@ namespace QS3D.Core.Templates
             if (!values.SequenceEqual(canonical, StringComparer.Ordinal))
                 throw new InvalidDataException("Template BQ columns are not in canonical order.");
             return values.AsReadOnly();
+        }
+
+        private static void RequireCanonicalOrder(IEnumerable<string> values, string label)
+        {
+            var actual = values.ToList();
+            var canonical = actual.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+            if (!actual.SequenceEqual(canonical, StringComparer.Ordinal))
+                throw new InvalidDataException("Template " + label + " are not in canonical order.");
         }
 
         private static IEnumerable<string> SplitColumns(string value) => (value ?? string.Empty).Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase);
