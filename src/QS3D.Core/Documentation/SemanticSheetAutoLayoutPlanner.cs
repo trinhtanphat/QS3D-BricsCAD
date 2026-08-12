@@ -102,8 +102,17 @@ namespace QS3D.Core.Documentation
                 normalized.Add(new SemanticSheetAutoLayoutItem(viewId, item.WidthMm, item.HeightMm));
             }
 
-            var usableWidth = options.PaperWidthMm - options.MarginLeftMm - options.MarginRightMm;
-            var usableHeight = options.PaperHeightMm - options.MarginTopMm - options.MarginBottomMm - options.ReservedBottomMm;
+            var usableWidth = RetreatEdge(
+                RetreatEdge(options.PaperWidthMm, options.MarginRightMm, "automatic sheet right margin"),
+                options.MarginLeftMm,
+                "automatic sheet left margin");
+            var usableHeight = RetreatEdge(
+                RetreatEdge(
+                    RetreatEdge(options.PaperHeightMm, options.MarginBottomMm, "automatic sheet bottom margin"),
+                    options.ReservedBottomMm,
+                    "automatic sheet reserved bottom area"),
+                options.MarginTopMm,
+                "automatic sheet top margin");
             if (usableWidth <= 0d || usableHeight <= 0d)
                 throw new InvalidOperationException("Automatic sheet layout margins/reserved area leave no usable paper region.");
 
@@ -228,6 +237,16 @@ namespace QS3D.Core.Documentation
         {
             if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
                 throw new ArgumentOutOfRangeException(name, "Value must be finite and non-negative.");
+        }
+
+        private static double RetreatEdge(double start, double amount, string label)
+        {
+            var edge = start - amount;
+            if (double.IsNaN(edge) || double.IsInfinity(edge))
+                throw new InvalidOperationException(label + " produced a non-finite usable paper boundary.");
+            if (amount > 0d && !(edge < start))
+                throw new InvalidOperationException(label + " was lost to floating-point precision.");
+            return edge;
         }
 
         private sealed class PageState
