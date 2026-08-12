@@ -32,6 +32,7 @@ namespace QS3D.Core.Services
                     if (!elementIndex.TryGetValue(elementId, out var element)) continue;
 
                     ValidateDependencies(element);
+                    EnsureDependenciesExist(element, elementIndex);
                     AddDirectHandles(element, knownHandles, handles, out var hasDirectReference);
                     var hasBoundaryReference = false;
                     if (!hasDirectReference)
@@ -103,6 +104,16 @@ namespace QS3D.Core.Services
                 if (!seen.Add(dependency))
                     throw new InvalidOperationException(
                         "Semantic element " + element.Id + " contains duplicate dependency id: " + dependency + ". Repair semantic relations before Locate.");
+            }
+        }
+
+        private static void EnsureDependenciesExist(ProjectElement element, IReadOnlyDictionary<string, ProjectElement> elementIndex)
+        {
+            foreach (var dependency in element.DependsOn)
+            {
+                if (elementIndex.ContainsKey(dependency)) continue;
+                throw new InvalidOperationException(
+                    "Semantic element " + element.Id + " depends on missing semantic element: " + dependency + ". Repair semantic relations before Locate.");
             }
         }
 
