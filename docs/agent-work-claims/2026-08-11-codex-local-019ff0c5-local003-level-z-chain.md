@@ -402,3 +402,11 @@ Baseline audited after a clean fetch and fast-forward: `origin/main@a0c40b9b7b55
 The full Core smoke reaches `QsdbPersistedRelationCanonicalReadSmoke.CanonicalRelationsStillLoad()`, whose intended-valid XML stores canonical active Zone/Floor IDs, element Family/Floor/Zone IDs and dependency `E0` while declaring empty Zone/Floor/Family collections and no dependency target element. The completed QSDB active-context and relation referential-integrity contracts now correctly reject that orphan graph after the token-canonicality checks. The original relation-read and active-context claims are `COMPLETED`; the current ACTIVE/BLOCKED audit found no owner for this exact fixture.
 
 Reserve only `tests/QS3D.Core.SmokeTests/QsdbPersistedRelationCanonicalReadSmoke.cs` to give the intended-valid control minimum matching Zone `Z1`, Floor `F1`, Beam Family `FAM-1` and dependency target `E0`, then assert/read the intended `E1` explicitly. Preserve every padded/empty relation rejection, canonical handles/dependencies, schema/timestamps and all production QSDB/domain code. Re-run the complete Core smoke after this fixture-data-only reconciliation.
+
+## 2026-08-12 QSDB timestamp-offset fixture supersession expansion
+
+Baseline audited after a clean fetch and fast-forward: `origin/main@265ab00e83d5ff5d84adbb9e5d22909695a517fc`.
+
+The full Core smoke reaches `QsdbTimestampOffsetSmoke.cs`, whose schema-3 fixture omits the now-required canonical `changeVersion` and whose former valid case expects a `+07:00` timestamp to normalize on load. The completed QSDB persistence-state and timestamp-canonicality contracts require exact UTC round-trip `O` text and intentionally reject semantically equivalent offsets, so the old expectation is superseded. No claim references or reserves this exact fixture in the current ACTIVE/BLOCKED audit.
+
+Reserve only `tests/QS3D.Core.SmokeTests/QsdbTimestampOffsetSmoke.cs` to add canonical `changeVersion=\"0\"`, keep the missing-offset rejection, require the former `+07:00` token to fail closed and add an intended-valid canonical UTC round-trip load control. Preserve schema shape, temporary-file cleanup and all production QSDB/migration/domain code. Re-run the complete Core smoke after this test-only supersession reconciliation.
