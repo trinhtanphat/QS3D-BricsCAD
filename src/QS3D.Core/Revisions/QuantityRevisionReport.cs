@@ -51,7 +51,7 @@ namespace QS3D.Core.Revisions
                     rows.Add(new QuantityRevisionRow { ElementId = id, Category = b?.Category ?? a?.Category ?? string.Empty, QuantityName = name, Change = !hasBefore ? "Added" : !hasAfter ? "Removed" : "Changed", Before = beforeValue, After = afterValue });
                 }
             }
-            return rows;
+            return rows.AsReadOnly();
         }
 
         public IReadOnlyList<QuantityRevisionSummary> Summarize(IEnumerable<QuantityRevisionRow> rows)
@@ -79,7 +79,7 @@ namespace QS3D.Core.Revisions
                 }
                 result.Add(new QuantityRevisionSummary { QuantityName = group.Key, Before = before, After = after });
             }
-            return result;
+            return result.AsReadOnly();
         }
 
         private static Dictionary<string, RevisionElementSnapshot> Index(RevisionSnapshot snapshot, string label)
