@@ -23,7 +23,7 @@ namespace QS3D.Core.SmokeTests
             project.Families.Add(new ProjectFamily("f1", "Duplicate B", ElementCategory.Beam));
             project.Families.Add(new ProjectFamily("F2", "Target", ElementCategory.Beam));
 
-            var element = new ProjectElement("E1", ElementCategory.Beam, "F2");
+            var element = new ProjectElement("E1", ElementCategory.Beam, "F2", string.Empty, string.Empty);
             element.Properties["Keep"] = "original";
             element.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(element);
@@ -54,7 +54,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("RULE-FAMILY-VALID", "Rule Family valid control");
             project.Families.Add(new ProjectFamily("F2", "Target", ElementCategory.Beam));
-            var element = new ProjectElement("E1", ElementCategory.Beam, "F2");
+            var element = new ProjectElement("E1", ElementCategory.Beam, "F2", string.Empty, string.Empty);
             element.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(element);
             project.QuantityRules.Add(new QuantityRule("R1", ElementCategory.Beam, "RuleQ", "2", "1"));

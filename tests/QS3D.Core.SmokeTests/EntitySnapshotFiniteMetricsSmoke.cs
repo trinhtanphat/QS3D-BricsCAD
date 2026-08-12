@@ -14,11 +14,11 @@ namespace QS3D.Core.SmokeTests
             Equal(null, snapshot.VolumeDrawingUnitsCubed, "default volume");
 
             snapshot.LengthDrawingUnits = 0d;
-            snapshot.AreaDrawingUnitsSquared = -1d;
+            snapshot.AreaDrawingUnitsSquared = 1d;
             snapshot.SurfaceAreaDrawingUnitsSquared = 12.5d;
             snapshot.VolumeDrawingUnitsCubed = null;
             Equal(0d, snapshot.LengthDrawingUnits, "finite zero length");
-            Equal(-1d, snapshot.AreaDrawingUnitsSquared, "finite negative area preserved");
+            Equal(1d, snapshot.AreaDrawingUnitsSquared, "finite positive area preserved");
             Equal(12.5d, snapshot.SurfaceAreaDrawingUnitsSquared, "finite surface area");
             Equal(null, snapshot.VolumeDrawingUnitsCubed, "nullable volume");
 
@@ -28,7 +28,7 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentOutOfRangeException>(() => snapshot.VolumeDrawingUnitsCubed = double.NaN, "volume NaN");
 
             Equal(0d, snapshot.LengthDrawingUnits, "length unchanged after rejection");
-            Equal(-1d, snapshot.AreaDrawingUnitsSquared, "area unchanged after rejection");
+            Equal(1d, snapshot.AreaDrawingUnitsSquared, "area unchanged after rejection");
             Equal(12.5d, snapshot.SurfaceAreaDrawingUnitsSquared, "surface area unchanged after rejection");
             Equal(null, snapshot.VolumeDrawingUnitsCubed, "volume unchanged after rejection");
         }

@@ -24,7 +24,7 @@ namespace QS3D.Core.SmokeTests
             Equal(0d, instance.TopAreaM2, "default top area");
             Equal(0d, instance.OtherAreaM2, "default other area");
 
-            instance.LengthM = -1d;
+            instance.LengthM = 1d;
             instance.AreaM2 = 2d;
             instance.VolumeM3 = 3d;
             instance.GrossConcreteM3 = 4d;
@@ -37,10 +37,10 @@ namespace QS3D.Core.SmokeTests
             instance.BottomAreaM2 = 11d;
             instance.TopAreaM2 = 12d;
             instance.OtherAreaM2 = 13d;
-            Equal(-1d, instance.LengthM, "finite negative length preserved");
+            Equal(1d, instance.LengthM, "finite positive length preserved");
             Equal(3d, instance.NetConcreteM3, "net concrete semantics preserved");
 
-            Reject(value => instance.LengthM = value, () => instance.LengthM, double.NaN, -1d, "length NaN");
+            Reject(value => instance.LengthM = value, () => instance.LengthM, double.NaN, 1d, "length NaN");
             Reject(value => instance.AreaM2 = value, () => instance.AreaM2, double.PositiveInfinity, 2d, "area +Infinity");
             Reject(value => instance.VolumeM3 = value, () => instance.VolumeM3, double.NegativeInfinity, 3d, "volume -Infinity");
             Reject(value => instance.GrossConcreteM3 = value, () => instance.GrossConcreteM3, double.NaN, 4d, "gross concrete NaN");

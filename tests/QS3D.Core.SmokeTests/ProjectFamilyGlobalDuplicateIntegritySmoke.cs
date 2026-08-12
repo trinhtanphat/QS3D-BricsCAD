@@ -24,7 +24,7 @@ namespace QS3D.Core.SmokeTests
             target.Properties["P"] = "V";
             project.Families.Add(target);
             project.Metadata["ActiveFamilyId"] = "F1";
-            var element = new ProjectElement("E1", ElementCategory.Beam, "F1");
+            var element = new ProjectElement("E1", ElementCategory.Beam, "F1", string.Empty, string.Empty);
             project.Elements.Add(element);
 
             AssertRejectedWithoutMutation(project, target, element, () => ProjectFamilyService.Duplicate(project, "F2", "F3", "Family 3"));
@@ -73,7 +73,7 @@ namespace QS3D.Core.SmokeTests
             var target = new ProjectFamily("F2", "Family 2", ElementCategory.Beam);
             project.Families.Add(source);
             project.Families.Add(target);
-            var element = new ProjectElement("E1", ElementCategory.Beam, source.Id);
+            var element = new ProjectElement("E1", ElementCategory.Beam, source.Id, string.Empty, string.Empty);
             project.Elements.Add(element);
 
             ProjectFamilyService.Rename(project, "F2", "Family 2 renamed");

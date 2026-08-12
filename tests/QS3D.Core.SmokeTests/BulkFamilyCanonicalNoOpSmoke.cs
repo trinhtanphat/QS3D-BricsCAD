@@ -20,7 +20,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void DirectBulkAssignmentIsCanonicalNoOp()
         {
-            var setup = CreateCanonicalNoOpProject("bulk-family-canonical-noop");
+            var setup = CreateCanonicalNoOpProject("bulk-family-canonical-noop", canonicalStoredFamilyId: false);
             var beforeVersion = setup.Project.ChangeVersion;
             var beforeProjectUpdated = setup.Project.UpdatedUtc;
             var beforeElementUpdated = setup.Element.UpdatedUtc;
@@ -34,7 +34,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void SelectionBulkAssignmentReportsCanonicalNoOp()
         {
-            var setup = CreateCanonicalNoOpProject("selection-family-canonical-noop");
+            var setup = CreateCanonicalNoOpProject("selection-family-canonical-noop", canonicalStoredFamilyId: true);
             var beforeVersion = setup.Project.ChangeVersion;
             var beforeProjectUpdated = setup.Project.UpdatedUtc;
             var beforeElementUpdated = setup.Element.UpdatedUtc;
@@ -71,7 +71,7 @@ namespace QS3D.Core.SmokeTests
             if (project.ChangeVersion <= beforeVersion) throw new Exception("Genuine bulk Family reassignment did not advance project ChangeVersion.");
         }
 
-        private static Setup CreateCanonicalNoOpProject(string id)
+        private static Setup CreateCanonicalNoOpProject(string id, bool canonicalStoredFamilyId)
         {
             var project = new ProjectState(id, "Canonical bulk Family no-op");
             var target = new ProjectFamily("TARGET", "Target", ElementCategory.ArchitecturalWall);
@@ -79,11 +79,11 @@ namespace QS3D.Core.SmokeTests
             project.Families.Add(target);
 
             var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall, target.Id, string.Empty, string.Empty);
-            element.FamilyId = "  target  ";
+            element.FamilyId = canonicalStoredFamilyId ? target.Id : "  target  ";
             element.Properties["InstanceOverride"] = "keep";
             element.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(element);
-            return new Setup(project, element);
+            return new Setup(project, element, element.FamilyId);
         }
 
         private static void AssertNoOpState(
@@ -94,7 +94,7 @@ namespace QS3D.Core.SmokeTests
             ElementDirtyFlags beforeDirty,
             string operation)
         {
-            if (!string.Equals(setup.Element.FamilyId, "  target  ", StringComparison.Ordinal))
+            if (!string.Equals(setup.Element.FamilyId, setup.StartingFamilyId, StringComparison.Ordinal))
                 throw new Exception(operation + " rewrote stored FamilyId during a canonical no-op.");
             if (!string.Equals(setup.Element.Properties["InstanceOverride"], "keep", StringComparison.Ordinal) || setup.Element.Properties.Count != 1)
                 throw new Exception(operation + " changed instance properties during a canonical no-op.");
@@ -106,14 +106,16 @@ namespace QS3D.Core.SmokeTests
 
         private sealed class Setup
         {
-            internal Setup(ProjectState project, ProjectElement element)
+            internal Setup(ProjectState project, ProjectElement element, string startingFamilyId)
             {
                 Project = project;
                 Element = element;
+                StartingFamilyId = startingFamilyId;
             }
 
             internal ProjectState Project { get; }
             internal ProjectElement Element { get; }
+            internal string StartingFamilyId { get; }
         }
     }
 }

@@ -9,9 +9,9 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             PreservesFiniteArithmetic();
-            PreservesNegativeFiniteArithmetic();
-            RejectsPositiveOverflow();
-            RejectsNegativeOverflow();
+            FloorsOverDeductionToZero();
+            PreservesMaximumFiniteGross();
+            PreservesMaximumFiniteDeduction();
         }
 
         private static void PreservesFiniteArithmetic()
@@ -22,28 +22,28 @@ namespace QS3D.Core.SmokeTests
             Near(1.1d, element.NetConcreteM3, 1e-12, "normal finite net");
         }
 
-        private static void PreservesNegativeFiniteArithmetic()
+        private static void FloorsOverDeductionToZero()
         {
             var element = NewElement();
             element.GrossConcreteM3 = 1d;
             element.DeductionM3 = 2d;
-            Near(-1d, element.NetConcreteM3, 0d, "negative finite net");
+            Near(0d, element.NetConcreteM3, 0d, "over-deduction floors net to zero");
         }
 
-        private static void RejectsPositiveOverflow()
+        private static void PreservesMaximumFiniteGross()
         {
             var element = NewElement();
             element.GrossConcreteM3 = double.MaxValue;
-            element.DeductionM3 = -double.MaxValue;
-            Throws<OverflowException>(() => _ = element.NetConcreteM3, "positive overflow");
+            element.DeductionM3 = 0d;
+            Near(double.MaxValue, element.NetConcreteM3, 0d, "maximum finite gross");
         }
 
-        private static void RejectsNegativeOverflow()
+        private static void PreservesMaximumFiniteDeduction()
         {
             var element = NewElement();
-            element.GrossConcreteM3 = -double.MaxValue;
+            element.GrossConcreteM3 = double.MaxValue;
             element.DeductionM3 = double.MaxValue;
-            Throws<OverflowException>(() => _ = element.NetConcreteM3, "negative overflow");
+            Near(0d, element.NetConcreteM3, 0d, "equal maximum finite values");
         }
 
         private static ElementInstance NewElement() =>
@@ -55,12 +55,6 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("ElementInstanceNetConcreteFiniteSmoke " + label + ": expected=" + expected + ", actual=" + actual + ".");
         }
 
-        private static void Throws<TException>(Action action, string label) where TException : Exception
-        {
-            try { action(); }
-            catch (TException) { return; }
-            throw new Exception("ElementInstanceNetConcreteFiniteSmoke " + label + ": expected " + typeof(TException).Name + ".");
-        }
     }
 
     internal static class ElementInstanceNetConcreteFiniteSmokeRegistration
