@@ -70,6 +70,13 @@ namespace QS3D.Core.Export
                 ValidateCellText(row.FabricationStatus, index, "Fabrication Status");
                 ValidateCellText(row.FabricationStandardCode, index, "Standard Code");
                 ValidateCellText(row.FabricationDetailingRevision, index, "Detailing Revision");
+                ValidateFinite(row.DiameterMm, index, "DiameterMm");
+                ValidateFinite(row.CuttingLengthM, index, "CuttingLengthM");
+                ValidateFinite(row.TotalLengthM, index, "TotalLengthM");
+                ValidateFinite(row.UnitWeightKgM, index, "UnitWeightKgM");
+                ValidateFinite(row.NetWeightKg, index, "NetWeightKg");
+                ValidateFinite(row.WastePercent, index, "WastePercent");
+                ValidateFinite(row.TotalWeightKg, index, "TotalWeightKg");
             }
             return count;
         }
@@ -81,6 +88,15 @@ namespace QS3D.Core.Export
                 "rows",
                 "BBS XLSX worksheet row " + (rowIndex + HeaderRows + 1).ToString(CultureInfo.InvariantCulture) +
                 " field '" + field + "' exceeds Excel's " + MaxCellTextLength.ToString(CultureInfo.InvariantCulture) + "-character cell text limit.");
+        }
+
+        private static void ValidateFinite(double value, int rowIndex, string field)
+        {
+            if (!double.IsNaN(value) && !double.IsInfinity(value)) return;
+            throw new ArgumentOutOfRangeException(
+                "rows",
+                "BBS XLSX worksheet row " + (rowIndex + HeaderRows + 1).ToString(CultureInfo.InvariantCulture) +
+                " field '" + field + "' must be finite.");
         }
 
         private static string BuildSheet(IReadOnlyList<RebarScheduleRow> rows, int rowCount)
