@@ -100,6 +100,7 @@ namespace QS3D.Core.Documentation
 
             var viewId = Required(definition.Id, nameof(definition.Id), MaxIdLength);
             var viewName = Required(definition.Name, nameof(definition.Name), MaxNameLength);
+            var viewKind = RequiredKind(definition.Kind);
             var elementIndex = BuildUniqueElementIndex(project);
 
             var floorId = NormalizeOptional(definition.FloorId, MaxIdLength, nameof(definition.FloorId));
@@ -133,7 +134,7 @@ namespace QS3D.Core.Documentation
                 .ThenBy(x => x, StringComparer.Ordinal)
                 .ToArray();
 
-            return new SemanticViewPlan(viewId, viewName, definition.Kind, floorId, zoneId, selectedIds);
+            return new SemanticViewPlan(viewId, viewName, viewKind, floorId, zoneId, selectedIds);
         }
 
         public static IReadOnlyList<SemanticViewPlan> BuildCatalog(ProjectState project, IEnumerable<SemanticViewDefinition> definitions)
@@ -218,6 +219,13 @@ namespace QS3D.Core.Documentation
 
             if (count == 0) throw new InvalidOperationException("Semantic view references missing " + label + " id: " + requestedId + ".");
             if (count > 1) throw new InvalidOperationException("Semantic view references ambiguous " + label + " id: " + requestedId + ".");
+        }
+
+        private static SemanticViewKind RequiredKind(SemanticViewKind kind)
+        {
+            if (!Enum.IsDefined(typeof(SemanticViewKind), kind))
+                throw new InvalidOperationException("Unsupported semantic view kind '" + kind + "'.");
+            return kind;
         }
 
         private static string Required(string? value, string name, int maxLength)
