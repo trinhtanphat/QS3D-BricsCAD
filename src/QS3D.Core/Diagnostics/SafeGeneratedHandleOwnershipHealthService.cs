@@ -13,7 +13,7 @@ namespace QS3D.Core.Diagnostics
         {
             public string ElementId { get; set; } = string.Empty;
             public string Slot { get; set; } = string.Empty;
-            public string Token => ElementId + "/" + Slot;
+            public string DisplayToken => ElementId + "/" + Slot;
         }
 
         public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project)
@@ -47,17 +47,16 @@ namespace QS3D.Core.Diagnostics
             foreach (var pair in claims.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
             {
                 var distinct = pair.Value
-                    .GroupBy(x => x.Token, StringComparer.OrdinalIgnoreCase)
-                    .Select(x => x.First())
-                    .OrderBy(x => x.Token, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(x => x.Slot, StringComparer.OrdinalIgnoreCase)
                     .ToList();
                 if (distinct.Count <= 1) continue;
 
                 foreach (var claim in distinct)
                 {
                     var others = string.Join(", ", distinct
-                        .Where(x => !string.Equals(x.Token, claim.Token, StringComparison.OrdinalIgnoreCase))
-                        .Select(x => x.Token));
+                        .Where(x => !ReferenceEquals(x, claim))
+                        .Select(x => x.DisplayToken));
                     issues.Add(new ModelHealthIssue(
                         "GENERATED_HANDLE_OWNERSHIP_CONFLICT",
                         HealthSeverity.Error,
