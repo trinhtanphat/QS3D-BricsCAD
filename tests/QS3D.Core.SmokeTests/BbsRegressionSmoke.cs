@@ -28,6 +28,7 @@ namespace QS3D.Core.SmokeTests
             ProjectScheduleRejectsDuplicateSemanticIdentity();
             CuttingLengthFallbackIsLazy();
             FabricationProvenanceFlowsToExports();
+            CsvPreservesNonzeroSubSixDecimalValues();
             CsvRejectsInvalidRowsBeforeReplace();
             XlsxRejectsWorksheetOverflowBeforeMutation();
         }
@@ -212,6 +213,39 @@ namespace QS3D.Core.SmokeTests
             finally
             {
                 try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
+            }
+        }
+
+        private static void CsvPreservesNonzeroSubSixDecimalValues()
+        {
+            const double tiny = 0.0000004d;
+            var row = new RebarScheduleRow
+            {
+                ElementId = "E-TINY",
+                BarMark = "B-TINY",
+                ShapeCode = "00",
+                Notation = "1D16",
+                DiameterMm = 16d,
+                Quantity = 1,
+                CuttingLengthM = tiny,
+                TotalLengthM = tiny,
+                UnitWeightKgM = tiny,
+                NetWeightKg = tiny,
+                WastePercent = tiny,
+                TotalWeightKg = tiny
+            };
+
+            var lines = RebarCsvExporter.ToCsv(new[] { row })
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            Equal(2, lines.Length);
+            var fields = lines[1].Split(',');
+            Equal(15, fields.Length);
+            Equal("16", fields[4]);
+            for (var index = 6; index <= 11; index++)
+            {
+                var parsed = double.Parse(fields[index], NumberStyles.Float, CultureInfo.InvariantCulture);
+                Equal(tiny, parsed);
+                if (parsed == 0d) throw new Exception("BBS CSV converted a validated non-zero numeric value to zero at column " + index + ".");
             }
         }
 
