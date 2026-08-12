@@ -26,6 +26,7 @@ def forbid(text, token, label):
 
 v25 = read("src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj")
 v26 = read("src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj")
+v26_solution = read("QS3D.V26.sln")
 entry = read("src/QS3D.BricsCAD.V26/PluginEntry.cs")
 update_commands = read("src/QS3D.BricsCAD.V26/Updates/UpdateCommands.cs")
 v25_release_client = read("src/QS3D.BricsCAD.V25/Updates/GitHubReleaseClient.cs")
@@ -61,6 +62,17 @@ for token in (
 
 for token in ("BRICSCAD_V25_DIR", "net48", "QS3D-BricsCAD-V25.update.json"):
     forbid(v26, token, "V26 project")
+
+for token in (
+    '"QS3D.Core", "src\\QS3D.Core\\QS3D.Core.csproj"',
+    '"QS3D.BricsCAD.V26", "src\\QS3D.BricsCAD.V26\\QS3D.BricsCAD.V26.csproj"',
+    '"QS3D.Core.SmokeTests", "tests\\QS3D.Core.SmokeTests\\QS3D.Core.SmokeTests.csproj"',
+    ".Debug|Any CPU.ActiveCfg = Debug|x64",
+    ".Release|Any CPU.ActiveCfg = Release|x64",
+):
+    require(v26_solution, token, "V26 solution")
+for token in ("QS3D.BricsCAD.V25.csproj", "BRICSCAD_V25_DIR"):
+    forbid(v26_solution, token, "V26 solution")
 
 for token in (
     "public sealed class PluginEntry : IExtensionApplication",
@@ -153,4 +165,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: V25 remains net48; V26 is isolated on net8.0-windows with V26-only refs/runtime/update assets, shared updater lifecycle is host-neutral, and V25/V26 release discovery is manifest-channel isolated.")
+print("PASS: V25 remains net48; V26 is isolated on net8.0-windows with a dedicated solution, V26-only refs/runtime/update assets, shared updater lifecycle is host-neutral, and V25/V26 release discovery is manifest-channel isolated.")
