@@ -117,8 +117,12 @@ namespace QS3D.Core.Geometry
 
         private static double Multiply(double left, double right, string label)
         {
-            var result = Finite(left, label + " left") * Finite(right, label + " right");
-            return Finite(result, label);
+            left = Finite(left, label + " left");
+            right = Finite(right, label + " right");
+            var result = Finite(left * right, label);
+            if (left != 0d && right != 0d && result == 0d)
+                throw new OverflowException(label + " underflowed below the representable positive range.");
+            return result;
         }
 
         private static double SubtractPositive(double left, double right, string label)
