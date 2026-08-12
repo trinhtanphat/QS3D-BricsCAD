@@ -9,9 +9,10 @@ HELPER = ROOT / "scripts/bricscad-runner-window-interop.ps1"
 RUNBOOK = ROOT / "docs/CURTAIN-NATIVE-PANELS.md"
 INBOX = ROOT / "docs/LOCAL-AGENT-INBOX.md"
 CLAIM = ROOT / "docs/agent-work-claims/2026-08-12-codex-local-curtain-p02-opening-probe.md"
+DIAGNOSTIC_CLAIM = ROOT / "docs/agent-work-claims/2026-08-12-codex-local-curtain-p02-failure-diagnostics.md"
 errors = []
 
-for path in (COMMAND, RUNNER, HELPER, RUNBOOK, INBOX, CLAIM):
+for path in (COMMAND, RUNNER, HELPER, RUNBOOK, INBOX, CLAIM, DIAGNOSTIC_CLAIM):
     if not path.is_file():
         errors.append("missing Curtain-panel P02 probe file: " + str(path.relative_to(ROOT)))
 
@@ -22,7 +23,7 @@ if COMMAND.is_file():
         'CommandMethod("QS3DCURTAINOPENINGPROBE", CommandFlags.Modal)',
         'ResultVariable = "QS3D_CURTAIN_PANEL_OPENING_RESULT"',
         'NonceVariable = "QS3D_CURTAIN_PANEL_OPENING_NONCE"',
-        'schema=QS3D_CURTAIN_PANEL_OPENING_RUNTIME_V1',
+        'schema=QS3D_CURTAIN_PANEL_OPENING_RUNTIME_V2',
         'qualification_boundary=LOCAL_002_P02_ONLY',
         'production_local002_qualified=false',
         'RequireLegacyNoLevel(host, "GlassWall")',
@@ -51,6 +52,27 @@ if COMMAND.is_file():
         'FileMode.CreateNew',
         'File.Move(tempPath, fullPath)',
         'error_code=CURTAIN_PANEL_OPENING_RUNTIME_FAILED',
+        'private static readonly HashSet<string> FailurePhases',
+        'private static readonly HashSet<string> FailureCodes',
+        '"OUTPUT_DISCOVERY"',
+        '"DOOR_PLAN_RECONSTRUCTION"',
+        '"EMPTY_NATIVE_GEOMETRY"',
+        '"OWNERSHIP_DISJOINT"',
+        '"RESULT_PUBLISH"',
+        '"STATE_REJECTED"',
+        '"DATA_REJECTED"',
+        '"IO_REJECTED"',
+        '"OVERFLOW_REJECTED"',
+        '"UNEXPECTED_REJECTED"',
+        'phase.Set(prefix + "SOURCE_SHAPE")',
+        'phase.Set(prefix + "PLAN_RECONSTRUCTION")',
+        'phase.Set(prefix + "OUTPUT_OWNERSHIP")',
+        'phase.Set(prefix + "METADATA")',
+        'phase.Set(prefix + "PLANNED_GEOMETRY")',
+        'phase.Set(prefix + "NATIVE_GEOMETRY")',
+        'TryWriteFailure(requestedPath, nonce, phase.Value, FailureCode(error))',
+        '"failure_phase=" + phase',
+        '"failure_code=" + failureCode',
     )
     for token in required:
         if token not in text:
@@ -64,6 +86,12 @@ if COMMAND.is_file():
     ):
         if forbidden in marker.lower():
             errors.append("Curtain-panel P02 marker leaks identity field: " + forbidden)
+    failure_start = text.find("private static void TryWriteFailure")
+    failure_end = text.find("private static void WriteMarkerAtomic", failure_start)
+    failure_marker = text[failure_start:failure_end]
+    for forbidden in (".Message", ".StackTrace", ".InnerException", ".GetType("):
+        if forbidden in failure_marker:
+            errors.append("Curtain-panel P02 FAIL marker exposes exception detail: " + forbidden)
 
 if RUNNER.is_file():
     text = RUNNER.read_text(encoding="utf-8")
@@ -108,6 +136,16 @@ if RUNNER.is_file():
         'if ($emptyFullyRemovedCount -ne $emptySourceCount)',
         'Restore-EnvironmentValue -Name "QS3D_CURTAIN_PANEL_OPENING_RESULT"',
         'Restore-EnvironmentValue -Name "QS3D_CURTAIN_PANEL_OPENING_NONCE"',
+        'Read-Qs3dAllowedValue',
+        'QS3D_CURTAIN_PANEL_OPENING_RUNTIME_V2',
+        '$failurePhases = @(',
+        '$failureCodes = @(',
+        '$failureKeys = [Collections.Generic.HashSet[string]]::new',
+        'Curtain-opening FAIL marker contains a non-contract field.',
+        '$diagnosticFailure = $true',
+        'if ($diagnosticFailure)',
+        'Curtain-opening probe failed at sanitized phase',
+        'process/script/sidecar/DWG cleanup was verified.',
     )
     for token in required:
         if token not in text:
@@ -115,6 +153,17 @@ if RUNNER.is_file():
     for forbidden in ("Get-Process -Name '*'", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
         if forbidden in text:
             errors.append("Curtain-panel P02 runner contains broad process/window action: " + forbidden)
+    fail_start = text.find('if ($marker.ContainsKey("status")')
+    fail_end = text.find('Require-Qs3dValue -Marker $marker -Key "status" -Expected "PASS"', fail_start)
+    fail_branch = text[fail_start:fail_end]
+    for forbidden in (".Message", ".StackTrace", ".InnerException", "GetType("):
+        if forbidden in fail_branch:
+            errors.append("Curtain-panel P02 runner FAIL branch exposes exception detail: " + forbidden)
+    deferred_failure = text.find("if ($diagnosticFailure)", fail_start)
+    drawing_hash_after = text.find("$drawingHashAfter =", fail_start)
+    sidecar_after = text.find("Curtain-opening runtime probe unexpectedly persisted a QS3D sidecar.", fail_start)
+    if deferred_failure < 0 or drawing_hash_after < 0 or sidecar_after < 0 or deferred_failure < drawing_hash_after or deferred_failure < sidecar_after:
+        errors.append("Curtain-panel P02 sanitized FAIL must be deferred until process/script/DWG/sidecar cleanup checks finish")
     stop_start = text.find("function Stop-Qs3dLaunchedProcess")
     stop_end = text.find("if ([Environment]::OSVersion.Platform", stop_start)
     stop_body = text[stop_start:stop_end]
@@ -133,7 +182,8 @@ if RUNBOOK.is_file():
     for token in (
         "LOCAL-002", "P02", "PENDING_LOCAL", "QS3DCURTAINOPENINGPROBE",
         "test-bricscad-v25-curtain-panel-openings.ps1", "legacy/no-Level",
-        "partial", "complete-empty",
+        "partial", "complete-empty", "QS3D_CURTAIN_PANEL_OPENING_RUNTIME_V2",
+        "failure_phase", "failure_code", "af0aec7f",
     ):
         if token not in text:
             errors.append("Curtain-panel runbook missing P02 handoff token: " + token)
@@ -146,6 +196,7 @@ if INBOX.is_file():
     for token in (
         "QS3DCURTAINOPENINGPROBE", "test-bricscad-v25-curtain-panel-openings.ps1",
         "legacy/no-Level", "partial", "complete-empty", "PENDING_LOCAL",
+        "failure_phase", "failure_code", "af0aec7f",
     ):
         if token not in local002:
             errors.append("LOCAL-002 missing P02 runner/evidence token: " + token)
@@ -158,6 +209,14 @@ if CLAIM.is_file():
     if "Status: `ACTIVE`" not in text and "Status: `COMPLETED`" not in text:
         errors.append("Curtain-panel P02 claim must remain ACTIVE during implementation or be COMPLETED at close-out")
 
+if DIAGNOSTIC_CLAIM.is_file():
+    text = DIAGNOSTIC_CLAIM.read_text(encoding="utf-8")
+    for token in ("LOCAL-002", "P02", "sanitized", "No BricsCAD launch", "PENDING_LOCAL"):
+        if token not in text:
+            errors.append("Curtain-panel P02 diagnostic claim missing boundary token: " + token)
+    if "Status: `ACTIVE`" not in text and "Status: `COMPLETED`" not in text:
+        errors.append("Curtain-panel P02 diagnostic claim must remain ACTIVE during implementation or be COMPLETED at close-out")
+
 print("QS3D Curtain-panel P02 opening-clipping runtime probe preflight")
 if errors:
     for error in errors:
@@ -165,4 +224,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: additive LOCAL-002/P02 probe seeds only synthetic legacy/no-Level LINE scenarios, verifies partial/full-cover clipping against authoritative Core plans and native bounds, guards healthy complete-empty output, and enforces exact-SHA/privacy/cleanup without claiming BricsCAD runtime evidence.")
+print("PASS: additive LOCAL-002/P02 probe seeds only synthetic legacy/no-Level LINE scenarios, verifies partial/full-cover clipping against authoritative Core plans and native bounds, emits allowlisted detail-free failure phase/class diagnostics, and enforces exact-SHA/privacy/cleanup without claiming BricsCAD runtime evidence.")
