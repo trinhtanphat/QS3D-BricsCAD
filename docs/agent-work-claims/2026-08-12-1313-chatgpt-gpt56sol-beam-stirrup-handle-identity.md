@@ -1,38 +1,48 @@
 # Work claim — Beam Stirrup standalone numeric handle identity
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-gpt56sol-beam-stirrup-handle-identity-20260812-1313`
 - Registered: `2026-08-12T13:13:00+07:00`
+- Completed: `2026-08-12T13:31:00+07:00`
 - Baseline main SHA: `b5daac1da22bee96fedb740c7b340b023ec96c9e`
+- Claim commit: `b96d3dda684b297887d4c5f95812c3fea993bd2d`
+- Source fix: `a12d7895059eb9c5461820e6c7a8d86fedfef351`
+- Focused smoke: `d354a9eedbdac2176ad604707b0c01ea394a9f0f`
+- Final sync head: `25735d01100eef1570150b42f31904b21e715e29`
+- Integration PR: `#919`
+- Main integration SHA: `64e49ee67224fb241c1ece14107026df7a76f202`
 - Priority: P0 generated ownership/health identity parity
 - Task Key: `CORE-BEAM-STIRRUP-STANDALONE-HANDLE-IDENTITY`
 
 ## Confirmed defect
 
-`GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(...)` canonicalizes valid positive CAD hexadecimal identities, so `A` and `0A` represent the same logical CAD handle. `GeneratedBeamStirrupHealthService` still uses trimmed raw text for its local duplicate set, valid-handle count, ownership lookup, SourceHandles comparison and live-handle lookup. Therefore a persisted list such as `A;0A` can count one CAD object twice, evade the provider's duplicate diagnostic, and diverge from shared ownership semantics.
+`GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(...)` canonicalizes valid positive CAD hexadecimal identities, so `A` and `0A` represent the same logical CAD handle. `GeneratedBeamStirrupHealthService` used trimmed raw text for its local duplicate set, valid-handle count, ownership lookup, SourceHandles comparison and live-handle lookup. A persisted list such as `A;0A` could therefore count one CAD object twice, evade the provider's duplicate diagnostic, and diverge from shared ownership semantics.
 
-The broader rebar-family standalone-handle claim explicitly released `GeneratedBeamStirrupHealthService.cs` for a separate follow-up claim. Current open-PR/history checks found no Beam Stirrup standalone numeric-handle identity lane.
+The broader rebar-family standalone-handle claim explicitly released `GeneratedBeamStirrupHealthService.cs` for this separate follow-up claim.
 
-## Reserved scope
+## Implemented contract
 
-- `src/QS3D.Core/Diagnostics/GeneratedBeamStirrupHealthService.cs`
-- `tests/QS3D.Core.SmokeTests/BeamStirrupHandleIdentitySmoke.cs`
-- this claim file
+- Existing hexadecimal validity and whitespace canonicality diagnostics are preserved.
+- Every token that passes the existing validity rule is normalized through `GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(...)` before provider-local duplicate/count, ownership, SourceHandles and live-handle checks.
+- The provider-local ownership index now reserves the same normalized numeric identity.
+- Numeric aliases such as `A` and `0A` are one logical CAD object and cannot inflate valid-handle count.
+- Persisted handle spelling, builders/native code, shared ownership policy and `0x` validity behavior were not changed.
+- Existing Beam Stirrup count, diameter, spacing, mode, advanced numeric, stale and category behavior remains intact.
 
-## Intended contract
+## Regression evidence
 
-- Preserve the provider's existing hexadecimal validity rule and whitespace canonicality diagnostic.
-- After a token passes the existing validity rule, normalize it through `GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(...)` for local duplicate/count, ownership, SourceHandles and live-handle checks.
-- Build the provider-local ownership index with the same normalized numeric identity so aliases cannot create separate ownership buckets.
-- `A` and `0A` must be treated as one logical CAD object; valid-handle count must count unique normalized identities only.
-- Preserve all existing Beam Stirrup count, diameter, spacing, mode, advanced numeric, stale and category behavior.
-- Do not change persisted handle spelling, builders/native code, shared ownership policy or `0x` validity behavior.
+`tests/QS3D.Core.SmokeTests/BeamStirrupHandleIdentitySmoke.cs` is auto-registered with `ModuleInitializer` and covers:
 
-## Validation plan
+- numeric alias duplicate detection and normalized count mismatch;
+- SourceHandles alias detection;
+- live-handle alias recognition;
+- cross-owner alias conflict;
+- distinct canonical handles remaining distinct;
+- prefixed `0x` text remaining invalid under the pre-existing validity rule.
 
-Add a focused auto-registered Core smoke proving numeric aliases produce the existing duplicate/count diagnostics rather than inflating valid count, and proving SourceHandles/live/ownership checks use normalized identity while canonical controls remain unchanged.
+## Integration / validation boundary
 
-## Validation boundary
+The feature branch was refreshed from moving `main` without force-push; final PR net diff remained only the reserved health source plus focused smoke. PR #919 was squash-merged with expected head `25735d01100eef1570150b42f31904b21e715e29` as `64e49ee67224fb241c1ece14107026df7a76f202`.
 
-Connector-only source/readback + focused smoke source. No GitHub Actions, full .NET executable smoke, or licensed BricsCAD V25/V26 runtime PASS will be claimed unless actually executed.
+No GitHub Actions, full .NET executable smoke, or licensed BricsCAD V25/V26 runtime PASS was executed or claimed in this connector-only lane.
