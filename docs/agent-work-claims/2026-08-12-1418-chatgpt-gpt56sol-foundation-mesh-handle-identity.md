@@ -1,6 +1,6 @@
 # Work claim — Foundation Mesh numeric handle identity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-12T14:18:00+07:00`
 - Baseline main SHA: `36ee7c1799df6edcc14b27746078234bd1917633`
@@ -24,16 +24,15 @@ Align `GeneratedFoundationMeshHealthService` generated-handle duplicate/count, o
 
 ## Evidence
 
-`GeneratedHandleOwnershipPolicy` defines numeric CAD-handle identity and current Slab/Wall/Rebar/Grid/Curtain/Semantic Tag health paths have been hardened around it. Foundation Mesh still adds raw trimmed `handle` to its local set, indexes owners using trim-only `Reserve`, compares SourceHandles by raw trimmed text, and calls `liveSolidHandles.Contains(handle)`. Therefore aliases such as generated `A` vs `0A` can evade duplicate/source/ownership collision checks or produce false missing-live diagnostics. Existing PR #762 only addressed whitespace canonicality and explicitly preserved these older comparisons.
+`GeneratedHandleOwnershipPolicy` defines numeric CAD-handle identity and current Slab/Wall/Rebar/Grid/Curtain/Semantic Tag health paths have been hardened around it. Foundation Mesh was still adding raw trimmed `handle` to its local set, indexing owners using trim-only `Reserve`, comparing SourceHandles by raw trimmed text, and calling `liveSolidHandles.Contains(handle)`. Therefore aliases such as generated `A` vs `0A` could evade duplicate/source/ownership collision checks or produce false missing-live diagnostics. Existing PR #762 only addressed whitespace canonicality and explicitly preserved these older comparisons.
 
-## Validation plan
+## Validation
 
-- Normalize provider-valid generated handles once and use that identity for local uniqueness/count, ownership, SourceHandles, and live lookup.
-- Normalize ownership-index reservation and use a logical live-handle helper.
-- Preserve empty/invalid token and padded-token diagnostics, lowercase acceptance, metadata/domain checks and stale behavior.
-- Add focused smoke cases for numeric-equivalent live handle, duplicate spellings, source overlap, and cross-owner alias conflict while retaining existing whitespace/empty controls.
-- Read back exact diffs; do not claim executable build/full smoke/Actions/V25 runtime PASS unless actually run.
+- Product fix: `5505585e95afcaa67bb4c2e8b812deeb2fb9f7ac` (`fix(health): normalize Foundation Mesh handle identity`). Readback confirms the provider now normalizes valid generated handles for local uniqueness/count, ownership lookup, SourceHandles comparison and live lookup; ownership-index `Reserve` now uses the same shared identity.
+- Regression: `db45d8e0ef383420e4075268de479310f1e6bfcc` (`test(health): cover Foundation Mesh numeric handles`). Existing auto-registered canonicality smoke now covers numeric-equivalent live handle acceptance, duplicate aliases, SourceHandles alias collision and cross-owner alias conflict, while retaining padded/lowercase/empty-token controls.
+- Existing validity, whitespace-canonicality, count/domain, faces/mode/footprint/category and stale behavior were not deliberately changed.
+- No GitHub Actions were dispatched. No executable full smoke/build or licensed BricsCAD runtime PASS is claimed.
 
 ## Completion condition
 
-Pushed `main` product and regression commits align Foundation Mesh with shared numeric handle identity, followed by this claim marked `COMPLETED` with exact SHAs.
+Satisfied by pushed product fix `5505585e95afcaa67bb4c2e8b812deeb2fb9f7ac`, regression `db45d8e0ef383420e4075268de479310f1e6bfcc`, and this completion record on `main`.
