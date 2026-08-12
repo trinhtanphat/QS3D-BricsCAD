@@ -106,7 +106,9 @@ namespace QS3D.Core.Reporting
 
         public void NormalizeAndValidate()
         {
-            if (SchemaVersion <= 0) SchemaVersion = CurrentSchemaVersion;
+            if (SchemaVersion < 0)
+                throw new InvalidOperationException("Quantity settings schema cannot be negative.");
+            if (SchemaVersion == 0) SchemaVersion = CurrentSchemaVersion;
             if (SchemaVersion > CurrentSchemaVersion)
                 throw new InvalidOperationException("Quantity settings schema " + SchemaVersion + " is newer than supported schema " + CurrentSchemaVersion + ".");
 
