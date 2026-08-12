@@ -40,10 +40,20 @@ namespace QS3D.Core.Diagnostics
                     continue;
                 }
 
-                var tokens = (rawHandles ?? string.Empty)
+                var handlesText = rawHandles ?? string.Empty;
+                var tokens = handlesText
                     .Split(new[] { ';' }, StringSplitOptions.None)
                     .Select(x => (x ?? string.Empty).Trim())
                     .ToList();
+                if (tokens.All(x => x.Length > 0) &&
+                    !string.Equals(handlesText, string.Join(";", tokens), StringComparison.Ordinal))
+                {
+                    issues.Add(new ModelHealthIssue(
+                        "GRID_ANNOTATION_HANDLE_LIST_NON_CANONICAL",
+                        HealthSeverity.Error,
+                        "GeneratedGridAnnotationHandles không được có khoảng trắng quanh các Handle token.",
+                        element.Id));
+                }
 
                 var distinct = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var handle in tokens)
