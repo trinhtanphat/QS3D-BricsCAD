@@ -51,7 +51,7 @@ namespace QS3D.BricsCAD.V25
                 Func<IReadOnlyList<QuantityReportRow>> recalculate = () =>
                 {
                     if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var currentProject))
-                        throw new InvalidOperationException("BQ cần một QS3D project hiện hữu; bảng tổng hợp không tạo replacement project khi chỉ đọc.");
+                        throw new CommandUserException("BQ cần một QS3D project hiện hữu; bảng tổng hợp không tạo replacement project khi chỉ đọc.");
                     var previewProject = ProjectStateSnapshot.CreateDetachedCopy(currentProject);
                     var regenerated = RegenerateProject(previewProject);
                     if (regenerated > 0) PaletteCoordinator.SetStatus("BQ: đã preview-regenerate " + regenerated + " lượt cấu kiện trên snapshot tách rời trước khi tổng hợp.");
@@ -65,7 +65,7 @@ namespace QS3D.BricsCAD.V25
                 Action<QuantityReportRow> locate = row =>
                 {
                     if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var currentProject))
-                        throw new InvalidOperationException("BQ Định vị: QS3D project hiện hành không còn khả dụng. Đóng bảng và mở lại BQ.");
+                        throw new CommandUserException("BQ Định vị: QS3D project hiện hành không còn khả dụng. Đóng bảng và mở lại BQ.");
                     var handles = SourceHandleResolver.Resolve(currentProject, row.ElementIds);
                     if (handles.Count == 0) { PaletteCoordinator.SetStatus("BQ Định vị: dòng này chưa có semantic handle để chọn trong CAD."); return; }
                     var count = Cad.CadHandleService.Select(doc, handles);
@@ -85,9 +85,9 @@ namespace QS3D.BricsCAD.V25
             Guard(doc, "QS3DED2", () =>
             {
                 if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
-                    throw new InvalidOperationException("ED2 cần một QS3D project hiện hữu; export không tạo project mới.");
+                    throw new CommandUserException("ED2 cần một QS3D project hiện hữu; export không tạo project mới.");
                 if (project.Elements.Count == 0)
-                    throw new InvalidOperationException("ED2 chưa có semantic element để xuất. Chạy QS3DB4D/capture trước.");
+                    throw new CommandUserException("ED2 chưa có semantic element để xuất. Chạy QS3DB4D/capture trước.");
                 if (!DrawingUnitWorkflow.EnsureResolved(doc, "QS3DED2")) return;
 
                 var implied = Cad.EntitySnapshotReader.ReadImpliedSelection(doc);
@@ -103,7 +103,7 @@ namespace QS3D.BricsCAD.V25
                 else if (!string.Equals(scope, "Floor", StringComparison.OrdinalIgnoreCase) &&
                          !string.Equals(scope, "Zone", StringComparison.OrdinalIgnoreCase) &&
                          !string.Equals(scope, "All", StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException("ED2 scope không được hỗ trợ: " + scope + ".");
+                    throw new CommandUserException("ED2 scope không được hỗ trợ: " + scope + ".");
 
                 IReadOnlyList<string>? elementIds = null;
                 if (string.Equals(scope, "Selection", StringComparison.OrdinalIgnoreCase))
@@ -112,7 +112,7 @@ namespace QS3D.BricsCAD.V25
                 }
                 else if (string.Equals(scope, "Floor", StringComparison.OrdinalIgnoreCase))
                 {
-                    var floor = project.FindFloor(project.ActiveFloorId) ?? throw new InvalidOperationException("ED2 Floor cần một Floor/Level active hợp lệ.");
+                    var floor = project.FindFloor(project.ActiveFloorId) ?? throw new CommandUserException("ED2 Floor cần một Floor/Level active hợp lệ.");
                     elementIds = project.Elements
                         .Where(x => string.Equals(x.FloorId, floor.Id, StringComparison.OrdinalIgnoreCase))
                         .Select(x => x.Id)
@@ -120,7 +120,7 @@ namespace QS3D.BricsCAD.V25
                 }
                 else if (string.Equals(scope, "Zone", StringComparison.OrdinalIgnoreCase))
                 {
-                    var zone = project.FindZone(project.ActiveZoneId) ?? throw new InvalidOperationException("ED2 Zone cần một Zone active hợp lệ.");
+                    var zone = project.FindZone(project.ActiveZoneId) ?? throw new CommandUserException("ED2 Zone cần một Zone active hợp lệ.");
                     elementIds = project.Elements
                         .Where(x => string.Equals(x.ZoneId, zone.Id, StringComparison.OrdinalIgnoreCase))
                         .Select(x => x.Id)
@@ -136,7 +136,7 @@ namespace QS3D.BricsCAD.V25
                     ? ProjectQuantityReportBuilder.Group(previewProject)
                     : ProjectQuantityReportBuilder.Group(previewProject, elementIds);
                 if (details.Count == 0)
-                    throw new InvalidOperationException("ED2 scope " + scope + " không có cấu kiện hợp lệ để xuất.");
+                    throw new CommandUserException("ED2 scope " + scope + " không có cấu kiện hợp lệ để xuất.");
 
                 EnsureEd2HandlesAreLive(doc, details);
 
@@ -170,7 +170,7 @@ namespace QS3D.BricsCAD.V25
             Guard(doc, "QS3DBBS", () =>
             {
                 if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
-                    throw new InvalidOperationException("BBS cần một QS3D project hiện hữu; export không tạo project mới.");
+                    throw new CommandUserException("BBS cần một QS3D project hiện hữu; export không tạo project mới.");
                 var previewProject = ProjectStateSnapshot.CreateDetachedCopy(project);
                 RegenerateProject(previewProject);
                 var rows = ProjectRebarScheduleBuilder.Build(previewProject);
@@ -178,7 +178,7 @@ namespace QS3D.BricsCAD.V25
                 var totalWeight = 0d;
                 foreach (var row in rows)
                 {
-                    if (row == null) throw new InvalidOperationException("BBS không được chứa dòng null.");
+                    if (row == null) throw new CommandUserException("BBS không được chứa dòng null.");
                     totalWeight = QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS command total weight");
                 }
 
@@ -355,10 +355,10 @@ namespace QS3D.BricsCAD.V25
                     regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
                         .RegenerateDirtySubset(project, regenerationTargets);
                     var currentOpening = project.FindElement(opening.Id)
-                        ?? throw new InvalidOperationException("QS3DLINKHOST: opening " + opening.Id + " không còn tồn tại sau regeneration.");
+                        ?? throw new CommandUserException("QS3DLINKHOST: opening " + opening.Id + " không còn tồn tại sau regeneration.");
                     if (!currentOpening.Properties.TryGetValue("HostWallId", out var persistedHostId) ||
                         !string.Equals(persistedHostId, wall.Id, StringComparison.OrdinalIgnoreCase))
-                        throw new InvalidOperationException("QS3DLINKHOST không lưu đúng HostWallId cho opening " + opening.Id + ".");
+                        throw new CommandUserException("QS3DLINKHOST không lưu đúng HostWallId cho opening " + opening.Id + ".");
                     project.Touch();
                 }
                 catch (System.Exception operationError)
@@ -366,7 +366,7 @@ namespace QS3D.BricsCAD.V25
                     try { rollback.Restore(project); }
                     catch (System.Exception restoreError)
                     {
-                        throw new InvalidOperationException(
+                        throw new CommandUserException(
                             "QS3DLINKHOST thất bại và rollback project cũng không hoàn tất.",
                             new AggregateException(operationError, restoreError));
                     }
@@ -381,9 +381,9 @@ namespace QS3D.BricsCAD.V25
                     PaletteCoordinator.SetStatus(status);
                     doc.Editor.WriteMessage("\nQS3D " + status);
                 }
-                catch (System.Exception uiError)
+                catch (System.Exception)
                 {
-                    try { doc.Editor.WriteMessage("\nQS3D link host đã commit; UI sync warning: " + uiError.Message); }
+                    try { doc.Editor.WriteMessage("\nQS3D link host đã commit; UI sync warning: không thể hoàn tất cập nhật giao diện."); }
                     catch { }
                 }
             });
@@ -412,7 +412,7 @@ namespace QS3D.BricsCAD.V25
             Guard(doc, "QS3DHEALTH", () =>
             {
                 if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
-                    throw new InvalidOperationException("Model Health cần một QS3D project hiện hữu; lệnh kiểm tra không tạo project mới.");
+                    throw new CommandUserException("Model Health cần một QS3D project hiện hữu; lệnh kiểm tra không tạo project mới.");
                 var sourceHandles = project.Elements
                     .SelectMany(x => x.SourceHandles)
                     .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -461,7 +461,7 @@ namespace QS3D.BricsCAD.V25
             Guard(doc, "QS3DLOCATE", () =>
             {
                 if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
-                    throw new InvalidOperationException("QS3D Locate cần một project hiện hữu; lệnh định vị không tạo project mới.");
+                    throw new CommandUserException("QS3D Locate cần một project hiện hữu; lệnh định vị không tạo project mới.");
                 var options = new PromptStringOptions("\nNhập QS3D Element Id: ") { AllowSpaces = false };
                 var result = doc.Editor.GetString(options); if (result.Status != PromptStatus.OK) return;
                 var element = project.FindElement(result.StringResult);
@@ -486,7 +486,7 @@ namespace QS3D.BricsCAD.V25
             Guard(doc, "QS3DEXCELLOCATE", () =>
             {
                 if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
-                    throw new InvalidOperationException("Excel Locate cần một QS3D project hiện hữu; lệnh định vị không tạo project mới.");
+                    throw new CommandUserException("Excel Locate cần một QS3D project hiện hữu; lệnh định vị không tạo project mới.");
                 var dialog = new OpenFileDialog { Title = "Chọn bảng Excel QS3D/BLT để định vị", Filter = "Excel Workbook (*.xlsx)|*.xlsx", CheckFileExists = true, Multiselect = false };
                 if (dialog.ShowDialog() != true) return;
                 var prompt = new PromptIntegerOptions("\nNhập số dòng Excel cần định vị: ") { AllowNone = false, LowerLimit = 1, UseDefaultValue = true, DefaultValue = 2 };
@@ -503,7 +503,7 @@ namespace QS3D.BricsCAD.V25
                 else
                 {
                     if (!lookup.UsesLegacyDecimalHandles)
-                        throw new InvalidOperationException("Only a legacy BLT $decimal Handle row may omit the DWG fingerprint.");
+                        throw new CommandUserException("Only a legacy BLT $decimal Handle row may omit the DWG fingerprint.");
                     var warning = "\nLegacy BLT row has no DWG fingerprint. Type YES to locate these Handles in the active drawing: ";
                     var confirmation = doc.Editor.GetString(new PromptStringOptions(warning) { AllowSpaces = false });
                     if (confirmation.Status != PromptStatus.OK || !string.Equals(confirmation.StringResult?.Trim(), "YES", StringComparison.OrdinalIgnoreCase))
@@ -515,7 +515,7 @@ namespace QS3D.BricsCAD.V25
                     if (handles.Count == 0) { doc.Editor.WriteMessage("\nQS3D: dòng Excel không có CAD Handle hợp lệ."); return; }
                     resolved = Cad.CadHandleService.Resolve(doc, handles);
                     if (resolved.Count != handles.Count)
-                        throw new InvalidOperationException(
+                        throw new CommandUserException(
                             "Excel Locate resolved only " + resolved.Count + "/" + handles.Count +
                             " Handle(s). Selection was not changed; repair stale/missing CAD provenance first.");
                 }
@@ -530,7 +530,7 @@ namespace QS3D.BricsCAD.V25
         private static IReadOnlyList<string> ResolveEd2Selection(ProjectState project, IReadOnlyList<EntitySnapshot> snapshots)
         {
             if (snapshots == null || snapshots.Count == 0)
-                throw new InvalidOperationException("ED2 Selection cần ít nhất một CAD object đã được QS3D theo dõi.");
+                throw new CommandUserException("ED2 Selection cần ít nhất một CAD object đã được QS3D theo dõi.");
 
             var handles = new HashSet<string>(
                 snapshots.Select(x => (x.Handle ?? string.Empty).Trim()).Where(x => x.Length > 0),
@@ -539,7 +539,7 @@ namespace QS3D.BricsCAD.V25
                 .Where(x => SemanticReferenceHandles.MatchesSelection(x, handles))
                 .ToList();
             if (elements.Count == 0)
-                throw new InvalidOperationException("ED2 Selection không khớp semantic element nào; chạy QS3DB4D/capture trước.");
+                throw new CommandUserException("ED2 Selection không khớp semantic element nào; chạy QS3DB4D/capture trước.");
 
             var aliases = new HashSet<string>(
                 elements.SelectMany(SemanticReferenceHandles.GetSelectionAliases),
@@ -549,7 +549,7 @@ namespace QS3D.BricsCAD.V25
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             if (untracked.Count > 0)
-                throw new InvalidOperationException(
+                throw new CommandUserException(
                     "ED2 Selection trộn CAD object chưa thuộc semantic scope: " + string.Join(", ", untracked) + ".");
 
             return elements
@@ -567,18 +567,18 @@ namespace QS3D.BricsCAD.V25
         {
             var expected = details
                 .SelectMany(x => x.SourceHandles)
-                .Select(x => Cad.CadHandleService.NormalizeHexHandle(x) ?? throw new InvalidOperationException("ED2 contains an invalid CAD Handle: " + x + "."))
+                .Select(x => Cad.CadHandleService.NormalizeHexHandle(x) ?? throw new CommandUserException("ED2 contains an invalid CAD Handle: " + x + "."))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             if (expected.Count == 0)
-                throw new InvalidOperationException("ED2 scope has no CAD Handle provenance. Capture/reconcile the source objects before export.");
+                throw new CommandUserException("ED2 scope has no CAD Handle provenance. Capture/reconcile the source objects before export.");
 
             var live = Cad.CadHandleService.GetLiveHandles(document, expected);
             var missing = expected.Where(x => !live.Contains(x)).ToList();
             if (missing.Count == 0) return;
             var sample = string.Join(", ", missing.Take(8));
-            throw new InvalidOperationException(
+            throw new CommandUserException(
                 "ED2 export blocked: " + missing.Count + " source Handle(s) are stale or missing" +
                 (sample.Length == 0 ? "." : " (" + sample + ").") +
                 " Run QS3DSYNCSOURCE or recapture before export.");
@@ -591,9 +591,9 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status + extra);
             }
-            catch (System.Exception uiError)
+            catch (System.Exception)
             {
-                try { document.Editor.WriteMessage("\n[QS3D] Export đã hoàn tất; cảnh báo UI: " + uiError.Message); }
+                try { document.Editor.WriteMessage("\n[QS3D] Export đã hoàn tất; cảnh báo UI: không thể hoàn tất cập nhật giao diện."); }
                 catch { }
             }
         }
@@ -604,9 +604,9 @@ namespace QS3D.BricsCAD.V25
             {
                 ui();
             }
-            catch (System.Exception uiError)
+            catch (System.Exception)
             {
-                try { document.Editor.WriteMessage("\n[QS3D] " + operation + " đã hoàn tất; cảnh báo UI: " + uiError.Message); }
+                try { document.Editor.WriteMessage("\n[QS3D] " + operation + " đã hoàn tất; cảnh báo UI: không thể hoàn tất cập nhật giao diện."); }
                 catch { }
             }
         }
@@ -629,6 +629,35 @@ namespace QS3D.BricsCAD.V25
         private static int RegenerateProject(ProjectState project) => new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;
         private static void Write(string message) => Active()?.Editor.WriteMessage("\n" + message);
-        private static void Guard(Document document, string operation, Action action) { try { action(); } catch (System.Exception ex) { document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message); PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message); } }
+
+        private static void Guard(Document document, string operation, Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (CommandUserException expected)
+            {
+                ReportCommandFailure(document, operation, expected.Message);
+            }
+            catch (System.Exception)
+            {
+                ReportCommandFailure(document, operation, "không thể hoàn tất thao tác.");
+            }
+        }
+
+        private static void ReportCommandFailure(Document document, string operation, string message)
+        {
+            try { document.Editor.WriteMessage("\n" + operation + " error: " + message); }
+            catch { }
+            try { PaletteCoordinator.SetStatus(operation + " lỗi: " + message); }
+            catch { }
+        }
+
+        private sealed class CommandUserException : InvalidOperationException
+        {
+            public CommandUserException(string message) : base(message) { }
+            public CommandUserException(string message, Exception innerException) : base(message, innerException) { }
+        }
     }
 }
