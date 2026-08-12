@@ -107,14 +107,16 @@ namespace QS3D.Core.Services
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
             ValidateUniqueFamilyIds(project);
             var family = project.FindFamily(familyId) ?? throw new KeyNotFoundException("Unknown family: " + familyId);
-            var targetProperties = ProjectFamilyService.SnapshotProperties(family, "Target", "bulk assignment");
-            var targetPropertyKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var property in targetProperties) targetPropertyKeys.Add(property.Key);
 
             var beforeTargetEnumeration = project.ChangeVersion;
             var targets = OwnedDistinctByIds(project, elementIds);
             RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk Family target-id enumeration");
             RequireCurrentFamilyAssignmentOwnership(project, family, targets);
+
+            var targetProperties = ProjectFamilyService.SnapshotProperties(family, "Target", "bulk assignment");
+            var targetPropertyKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var property in targetProperties) targetPropertyKeys.Add(property.Key);
+
             foreach (var element in targets)
                 if (element.Category != family.Category)
                     throw new InvalidOperationException("Cannot assign family " + family.Id + " (" + family.Category + ") to element " + element.Id + " (" + element.Category + "). Bulk family assignment is all-or-nothing.");
