@@ -159,7 +159,11 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
-            var requested = CanonicalTargetIds(elementIds, project.Elements.Count);
+            var inputVersion = project.ChangeVersion;
+            var sourceElementCount = project.Elements.Count;
+            var requested = CanonicalTargetIds(elementIds, sourceElementCount);
+            if (project.ChangeVersion != inputVersion)
+                throw new InvalidOperationException("Project changed while regeneration profile target ids were being materialized. Re-run the profile against the current semantic state.");
             if (requested.Count == 0)
                 return Build(project, RegenerationWorkScope.Subset, Array.Empty<string>(), Array.Empty<ProjectElement>());
 
