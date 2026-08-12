@@ -30,16 +30,22 @@ namespace QS3D.Core.Export
                 var row = SnapshotRow(sourceRow);
                 ValidateCellText(row.Floor, rowIndex, "Floor");
                 ValidateCellText(row.FamilyName, rowIndex, "FamilyName");
-                ValidateFinite(row.TotalWallLengthM, rowIndex, "TotalWallLengthM");
-                ValidateFinite(row.GrossWallAreaM2, rowIndex, "GrossWallAreaM2");
-                ValidateFinite(row.OpeningAreaM2, rowIndex, "OpeningAreaM2");
-                ValidateFinite(row.NetGlassAreaM2, rowIndex, "NetGlassAreaM2");
-                ValidateFinite(row.FrameFaceAreaM2, rowIndex, "FrameFaceAreaM2");
-                ValidateFinite(row.FrameLengthM, rowIndex, "FrameLengthM");
-                ValidateFinite(row.MinimumClearPanelWidthM, rowIndex, "MinimumClearPanelWidthM");
-                ValidateFinite(row.MaximumClearPanelWidthM, rowIndex, "MaximumClearPanelWidthM");
-                ValidateFinite(row.MinimumClearPanelHeightM, rowIndex, "MinimumClearPanelHeightM");
-                ValidateFinite(row.MaximumClearPanelHeightM, rowIndex, "MaximumClearPanelHeightM");
+                ValidateCount(row.WallCount, rowIndex, "WallCount");
+                ValidateCount(row.PanelCount, rowIndex, "PanelCount");
+                ValidateCount(row.VerticalFrameCount, rowIndex, "VerticalFrameCount");
+                ValidateCount(row.HorizontalFrameCount, rowIndex, "HorizontalFrameCount");
+                ValidateNonNegative(row.TotalWallLengthM, rowIndex, "TotalWallLengthM");
+                ValidateNonNegative(row.GrossWallAreaM2, rowIndex, "GrossWallAreaM2");
+                ValidateNonNegative(row.OpeningAreaM2, rowIndex, "OpeningAreaM2");
+                ValidateNonNegative(row.NetGlassAreaM2, rowIndex, "NetGlassAreaM2");
+                ValidateNonNegative(row.FrameFaceAreaM2, rowIndex, "FrameFaceAreaM2");
+                ValidateNonNegative(row.FrameLengthM, rowIndex, "FrameLengthM");
+                ValidateNonNegative(row.MinimumClearPanelWidthM, rowIndex, "MinimumClearPanelWidthM");
+                ValidateNonNegative(row.MaximumClearPanelWidthM, rowIndex, "MaximumClearPanelWidthM");
+                ValidateNonNegative(row.MinimumClearPanelHeightM, rowIndex, "MinimumClearPanelHeightM");
+                ValidateNonNegative(row.MaximumClearPanelHeightM, rowIndex, "MaximumClearPanelHeightM");
+                ValidateRange(row.MinimumClearPanelWidthM, row.MaximumClearPanelWidthM, rowIndex, "clear-panel width");
+                ValidateRange(row.MinimumClearPanelHeightM, row.MaximumClearPanelHeightM, rowIndex, "clear-panel height");
                 snapshot.Add(row);
             }
             var fullPath = Path.GetFullPath(path);
@@ -155,12 +161,28 @@ namespace QS3D.Core.Export
                     "Curtain XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
         }
 
-        private static void ValidateFinite(double value, int rowIndex, string fieldName)
+        private static void ValidateCount(int value, int rowIndex, string fieldName)
         {
-            if (double.IsNaN(value) || double.IsInfinity(value))
+            if (value < 0)
                 throw new ArgumentOutOfRangeException(
                     "rows",
-                    "Curtain XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be finite.");
+                    "Curtain XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be non-negative.");
+        }
+
+        private static void ValidateNonNegative(double value, int rowIndex, string fieldName)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Curtain XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be finite and non-negative.");
+        }
+
+        private static void ValidateRange(double minimum, double maximum, int rowIndex, string label)
+        {
+            if (minimum > maximum)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Curtain XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " " + label + " minimum cannot exceed maximum.");
         }
 
         private static void AppendInlineStringCell(StringBuilder sb, string cellRef, string value, int style)
