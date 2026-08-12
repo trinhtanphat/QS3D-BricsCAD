@@ -1,6 +1,6 @@
 # Work claim — Modern XLSX duplicate identity refusal
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-gpt5-audit-blt-notes-latest` (`/root/audit_blt_notes_latest`)
 - Registered: `2026-08-12T10:47:26+07:00`
 - Baseline main SHA: `9c6164ff89456280f6a17ea4a831849f1e14e1c5`
@@ -44,3 +44,14 @@ All ACTIVE/BLOCKED claims were re-read at the baseline. None reserves `XlsxHandl
 ## Completion condition
 
 The bounded parser/smoke/gate batch is integrated on current `main`, executed source-only evidence and any unrelated baseline blockers are recorded, the claim is closed with exact PR/commit SHAs, and no Actions/native/private operation has been performed.
+
+## Completion record
+
+- Completed: `2026-08-12T10:58:32+07:00`
+- Claim-only PR: `#779`; source commit `6ffb2f6d271faf925af28f919135a6c838c1f758`; merge commit `7363e2b0c34a9d0c759254381686a5bbefb9592a`.
+- Implementation PR: `#790`; source commit `a009dfc018459fe7243bc299124d6d0f0d5af23f`; merge commit `eac3791295cb3cf31ae5ff26de94ba8aa62ef84f`.
+- Implemented modern-schema duplicate refusal for case-insensitive Element IDs and hexadecimal Handle aliases while preserving unique modern multi-identity rows plus fuzzy and `$decimal` legacy deduplication.
+- PASS: focused `XlsxHandleModernDuplicateIdentitySmoke`; Core Release build with zero warnings/errors; `preflight-ed2-excel-roundtrip.py`; `preflight-smoke-registration.py` (469 runnable smoke classes at validation); `preflight.py`; `git diff --check`.
+- Baseline blocker: full Core smoke cannot compile on implementation merge `eac3791295` because `RevisionCaptureXmlTextIntegritySmoke.cs` lines 28 and 55 reference undefined `ElementCategory.Wall` (`CS0117`), an unrelated claimed surface.
+- Aggregate `preflight-all.py` was also red at the shared baseline with 61 unrelated feature-gate failures; the focused ED2 and smoke-registration gates pass.
+- No GitHub Actions were dispatched and no BricsCAD/native runtime or private/customer fixture was accessed.
