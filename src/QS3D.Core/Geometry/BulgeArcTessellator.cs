@@ -18,7 +18,7 @@ namespace QS3D.Core.Geometry
 
             var chord = start.DistanceTo(end);
             if (double.IsNaN(chord) || double.IsInfinity(chord) || chord <= 1e-12d) throw new ArgumentException("Arc chord must be finite and non-degenerate.");
-            if (Math.Abs(bulge) <= StraightBulgeTolerance) return new[] { start, end };
+            if (Math.Abs(bulge) <= StraightBulgeTolerance) return Array.AsReadOnly(new[] { start, end });
 
             var theta = 4d * Math.Atan(bulge);
             var absTheta = Math.Abs(theta);
