@@ -14,9 +14,19 @@ This index separates durable product/runtime contracts from feature notes, plans
 | Health/static gates | [`HEALTH-AND-PREFLIGHT.md`](HEALTH-AND-PREFLIGHT.md) |
 | CI policy | [`../CI_POLICY.md`](../CI_POLICY.md), [`CI.md`](CI.md) |
 | Local BricsCAD V25 qualification | [`LOCAL-V25-QUALIFICATION.md`](LOCAL-V25-QUALIFICATION.md) |
+| Local BricsCAD V26 qualification | [`LOCAL-V26-QUALIFICATION.md`](LOCAL-V26-QUALIFICATION.md) |
 | V25 install/runtime setup | [`V25-INSTALL.md`](V25-INSTALL.md) |
+| V25 release operation | [`MANUAL-BUILD-RELEASE.md`](MANUAL-BUILD-RELEASE.md) |
+| V26 release operation | [`MANUAL-BUILD-RELEASE-V26.md`](MANUAL-BUILD-RELEASE-V26.md) |
 | Multi-agent registration | [`AGENT-WORK-REGISTRATION.md`](AGENT-WORK-REGISTRATION.md), [`../AGENTS.md`](../AGENTS.md) |
 | Implementation snapshot | [`IMPLEMENTATION-STATUS.md`](IMPLEMENTATION-STATUS.md) |
+
+## Host support matrix
+
+- **BricsCAD V25 x64** — `QS3D.BricsCAD.V25.dll`, `net48`, existing `QS3D.sln` build surface.
+- **BricsCAD V26 x64** — `QS3D.BricsCAD.V26.dll`, `net8.0-windows`, isolated `QS3D.V26.sln` build surface.
+
+The two host majors share Core and most adapter source but require independent runtime/release qualification. V25 update assets must not be used by V26 and vice versa.
 
 ## Major workflow references
 
@@ -25,15 +35,13 @@ This index separates durable product/runtime contracts from feature notes, plans
 - Schedules: [`SCHEDULES.md`](SCHEDULES.md), [`SEMANTIC-SCHEDULES.md`](SEMANTIC-SCHEDULES.md).
 - Rebar 3D: [`REBAR-3D.md`](REBAR-3D.md), [`REBAR-3D-MODE-SPEC.md`](REBAR-3D-MODE-SPEC.md).
 - Start Center/UI: [`UI-START-CENTER-2026-08-11.md`](UI-START-CENTER-2026-08-11.md), [`UIUX-SPEC.md`](UIUX-SPEC.md).
-- Secure update/release design: [`SECURE-UPDATES.md`](SECURE-UPDATES.md) plus the release/runbook documents referenced from that file.
+- Secure update/release design: [`SECURE-UPDATES.md`](SECURE-UPDATES.md) plus the host-major release runbooks above.
 
 ## Documentation hygiene
 
-Use these rules when adding or updating Markdown:
-
 1. **Update a canonical document instead of cloning it.** New dated files are appropriate for audit evidence, migration records or handoffs, not for redefining stable product truth.
 2. **Keep README concise.** Root `README.md` is the product entry point; detailed command lists and implementation narratives belong under `docs/`.
-3. **Separate source truth from runtime proof.** Source/static coverage must not be described as BricsCAD V25 qualification unless the exact SHA has licensed-host evidence.
+3. **Separate source truth from runtime proof.** Source/static coverage must not be described as BricsCAD V25/V26 qualification unless the exact candidate SHA has licensed-host evidence for that major.
 4. **Prefer links over duplicated inventories.** Command, CI, qualification and agent rules should each have one maintained source.
 5. **Do not delete historical handoffs merely to reduce file count.** They may be required for provenance or agent coordination; archive/consolidate only when their references and purpose have been checked.
 
@@ -43,4 +51,4 @@ Files named `REVIEW-*`, `AUDIT-*`, `HANDOFF-*`, `PLAN-*` or containing explicit 
 
 ## Runtime qualification boundary
 
-Repository preflight and Core smoke tests can establish source contracts and deterministic non-CAD behavior. Native geometry, UI, DemandLoad/NETLOAD, proprietary API compatibility, signed package/update behavior and representative-DWG workflows remain local BricsCAD V25 gates unless there is explicit evidence for the exact candidate SHA.
+Repository preflight and Core smoke tests can establish source contracts and deterministic non-CAD behavior. Native geometry, UI, DemandLoad/NETLOAD, proprietary API compatibility, signed package/update behavior and representative-DWG workflows remain local host-major gates unless there is explicit evidence for the exact candidate SHA.
