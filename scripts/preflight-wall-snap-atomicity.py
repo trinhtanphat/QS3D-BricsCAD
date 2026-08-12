@@ -64,7 +64,7 @@ if SNAPSHOT.is_file():
         "target.AuditEvents.Clear();",
         "target.Metadata.Clear();",
         "target.Elements.Clear();",
-        "copy.RestorePersistenceState(element.Dirty, element.UpdatedUtc);",
+        "target.RestorePersistenceState(source.Dirty, source.UpdatedUtc);",
     ):
         if token not in text:
             errors.append("ProjectStateSnapshot no longer covers Wall Snap semantic rollback state: " + token)
@@ -75,4 +75,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: Wall Snap keeps source edits, generated-output/physical-cut invalidation, LengthM/dirty state, preview cleanup and audit inside one CAD+semantic rollback boundary; UI work is post-commit only.")
+print("PASS: Wall Snap keeps source edits, generated-output/physical-cut invalidation, LengthM/dirty state, preview cleanup and audit inside one CAD+semantic rollback boundary; snapshot element persistence state is restored through the target copy path and UI work is post-commit only.")
