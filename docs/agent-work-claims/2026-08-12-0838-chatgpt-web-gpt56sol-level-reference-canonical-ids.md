@@ -1,7 +1,7 @@
 # Work claim — Level Reference canonical IDs
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-web/gpt56sol-level-reference-canonical-ids`
 - Registered: `2026-08-12T08:38:00+07:00`
 - Baseline main SHA: `0abbd050176357572a4b165bf7cec408326bca16`
@@ -10,28 +10,33 @@
 
 ## Confirmed defect
 
-`ProjectFloorService.AssignBottomLevel(...)` / `AssignTopLevel(...)` persist exact canonical `floor.Id` values. `LevelReferenceHealthService`, however, reads `BottomLevelId` and `TopLevelId` through a helper that trims the stored text before validation. Directly mutated or malformed persisted values such as `" L1 "` therefore resolve as valid `L1` instead of producing health evidence. A whitespace-only stored reference is similarly normalized to empty/missing.
+`ProjectFloorService.AssignBottomLevel(...)` / `AssignTopLevel(...)` persist exact canonical `floor.Id` values. `LevelReferenceHealthService` previously trimmed stored `BottomLevelId` and `TopLevelId` values before validation. Directly mutated or malformed persisted values such as `" L1 "` therefore resolved as valid `L1` instead of producing health evidence. A whitespace-only stored reference was similarly normalized to empty/missing.
 
-## Non-overlap check
+## Implemented fix
 
-The existing Level Reference health lane for null Floor/Level and null element entries is completed. Existing work also covers duplicate floor IDs and invalid/missing references. No recent claim/commit was found for canonical spelling of persisted Bottom/Top Level ID properties.
+- Diagnostics now preserve the raw stored Bottom/Top Level reference text long enough to compare it with its trimmed form.
+- Padded/whitespace-only Bottom references emit `BOTTOM_LEVEL_REFERENCE_NON_CANONICAL` with `HealthSeverity.Error`.
+- Padded/whitespace-only Top references emit `TOP_LEVEL_REFERENCE_NON_CANONICAL` with `HealthSeverity.Error`.
+- Trimmed IDs are still used for the existing missing/ambiguous/range checks, so established lookup behavior remains intact while malformed persisted spelling is fail-visible.
+- Native-integration pending diagnostics remain suppressed when a canonicality error is already present for the element.
 
-## Reserved scope
+## Regression coverage
 
-- `src/QS3D.Core/Diagnostics/LevelReferenceHealthService.cs`
-- one focused Core smoke regression for non-canonical stored level references
-- this claim file
+`tests/QS3D.Core.SmokeTests/LevelReferenceCanonicalIdHealthSmoke.cs` covers:
 
-Do not modify ProjectFloor mutation APIs, `ElementVerticalPlacementService`, persistence formats, interchange remap, native placement or BricsCAD runtime code.
+- padded Bottom Level ID;
+- padded Top Level ID;
+- whitespace-only Top Level ID;
+- canonical Bottom/Top references do not emit the new canonicality errors.
 
-## Intended contract
+## Integration evidence
 
-- Persisted Bottom/Top Level ID properties with leading/trailing whitespace fail visible as dedicated `HealthSeverity.Error` diagnostics.
-- Whitespace-only stored level reference values also fail visible instead of being treated as absent.
-- Canonical `L1`-style references preserve existing missing/ambiguous/range/native-integration behavior.
-- Inspection remains read-only and deterministic.
-- No GitHub Actions/build/release dispatch and no BricsCAD V25 runtime PASS claim from this remote lane.
+- Claim registration: `2ecb42affc613707e5b25d1760411738be8d6701`.
+- Source fix: `0c7416c7dcaaac41dfb9749296e37eb4670a14aa`.
+- Focused Core smoke: `bc5aadcd20081f60c76ebfcec5458053fd4289bd`.
+- Source and smoke were read back from current `main` after concurrent commits.
+- Comparison from smoke commit `bc5aadcd20081f60c76ebfcec5458053fd4289bd` to then-current `main` `e86a5a71637882f00a0f6db7d7d8941a2eca0800` was `ahead`, `ahead_by=3`, `behind_by=0`, with the smoke commit as merge base.
 
-## Completion condition
+## Validation boundary
 
-Non-canonical persisted Bottom/Top Level references are fail-visible, focused Core smoke coverage pins padded and whitespace-only cases plus canonical control behavior, source + smoke are read back from merged `main`, ancestry is verified, and this claim is closed with exact commit SHAs.
+Committed deterministic Core smoke coverage plus source/readback/ancestry review. No GitHub Actions were dispatched, no full local .NET build PASS is claimed, and no licensed BricsCAD V25 runtime PASS is claimed.
