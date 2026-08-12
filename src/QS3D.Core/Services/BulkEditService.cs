@@ -108,9 +108,11 @@ namespace QS3D.Core.Services
             ValidateUniqueFamilyIds(project);
             var family = project.FindFamily(familyId) ?? throw new KeyNotFoundException("Unknown family: " + familyId);
 
+            var familyOwnership = SnapshotFamilyOwnership(project);
             var beforeTargetEnumeration = project.ChangeVersion;
             var targets = OwnedDistinctByIds(project, elementIds);
             RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk Family target-id enumeration");
+            RequireFamilyOwnershipUnchanged(project, familyOwnership);
             RequireCurrentFamilyAssignmentOwnership(project, family, targets);
 
             var targetProperties = ProjectFamilyService.SnapshotProperties(family, "Target", "bulk assignment");
@@ -247,6 +249,41 @@ namespace QS3D.Core.Services
                 var current = project.FindElement(element.Id);
                 if (!ReferenceEquals(current, element))
                     throw new InvalidOperationException(label + " target no longer belongs to the project after enumeration: " + element.Id + ".");
+            }
+        }
+
+        private static IReadOnlyDictionary<string, ProjectFamily> SnapshotFamilyOwnership(ProjectState project)
+        {
+            var result = new Dictionary<string, ProjectFamily>(StringComparer.OrdinalIgnoreCase);
+            foreach (var family in project.Families)
+            {
+                if (family == null)
+                    throw new InvalidOperationException("Project family collection contains a null family.");
+                var id = family.Id ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(id) || !string.Equals(id, id.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Project family collection contains a blank or non-canonical family id.");
+                if (result.ContainsKey(id))
+                    throw new InvalidOperationException("Project contains duplicate family id: " + id + ".");
+                result.Add(id, family);
+            }
+            return result;
+        }
+
+        private static void RequireFamilyOwnershipUnchanged(
+            ProjectState project,
+            IReadOnlyDictionary<string, ProjectFamily> expected)
+        {
+            if (project.Families.Count != expected.Count)
+                throw new InvalidOperationException("Project Family ownership changed while materializing bulk assignment targets. Retry against the current project state.");
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var family in project.Families)
+            {
+                if (family == null ||
+                    !seen.Add(family.Id) ||
+                    !expected.TryGetValue(family.Id, out var original) ||
+                    !ReferenceEquals(original, family))
+                    throw new InvalidOperationException("Project Family ownership changed while materializing bulk assignment targets. Retry against the current project state.");
             }
         }
 

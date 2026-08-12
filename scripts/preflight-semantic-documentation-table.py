@@ -100,7 +100,8 @@ if DOC.is_file():
         "never creates CAD entities",
         "defensively copied",
         "**not** a second BQ/BBS/schedule calculation engine",
-        "Native V25 work that remains",
+        "DWG tables — source-implemented native Table slice",
+        "Still open for native table qualification/expansion:",
     ):
         if token not in text:
             errors.append("DOCUMENTATION-LAYER.md missing table/runtime/immutability boundary: " + token)

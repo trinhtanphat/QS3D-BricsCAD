@@ -205,6 +205,7 @@ namespace QS3D.Core.Navigation
 
             var root = document.Root;
             if (root == null || root.Name != "ProjectBrowserWorkspaceState") throw new InvalidDataException("Project browser workspace state root is invalid.");
+            ValidateDocumentShape(document, root);
             ValidateRootShape(root);
             RequireAttribute(root, "format", FormatName);
             RequireAttribute(root, "version", FormatVersion.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -318,6 +319,15 @@ namespace QS3D.Core.Navigation
             return result.AsReadOnly();
         }
 
+        private static void ValidateDocumentShape(XDocument document, XElement root)
+        {
+            foreach (var node in document.Nodes())
+            {
+                if (ReferenceEquals(node, root)) continue;
+                throw new InvalidDataException("Project browser workspace document contains unsupported node content.");
+            }
+        }
+
         private static void ValidateRootShape(XElement root)
         {
             var expectedAttributes = new HashSet<XName>(new[]
@@ -353,8 +363,12 @@ namespace QS3D.Core.Navigation
             if (element.HasAttributes)
                 throw new InvalidDataException("Project browser workspace " + itemName + " item contains unsupported attributes.");
             foreach (var node in element.Nodes())
+            {
+                if (node is XCData)
+                    throw new InvalidDataException("Project browser workspace " + itemName + " item must not contain CDATA.");
                 if (!(node is XText))
                     throw new InvalidDataException("Project browser workspace " + itemName + " item must contain text only.");
+            }
         }
 
         private static void ValidateContainerNodes(XElement element, string label)
@@ -362,6 +376,8 @@ namespace QS3D.Core.Navigation
             foreach (var node in element.Nodes())
             {
                 if (node is XElement) continue;
+                if (node is XCData)
+                    throw new InvalidDataException("Project browser workspace " + label + " must not contain CDATA.");
                 var text = node as XText;
                 if (text != null && string.IsNullOrWhiteSpace(text.Value)) continue;
                 throw new InvalidDataException("Project browser workspace " + label + " contains unsupported node content.");

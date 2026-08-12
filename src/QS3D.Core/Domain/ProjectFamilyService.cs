@@ -68,6 +68,7 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var family = FindRequired(project, familyId);
+            ValidatePropertyKeysForMutation(family, "setting a property");
             var normalizedKey = Required(key, nameof(key), MaxPropertyKeyLength);
             var normalizedValue = Value(value, nameof(value), MaxPropertyValueLength);
             var hadPrevious = family.Properties.TryGetValue(normalizedKey, out var previousRaw);
@@ -96,6 +97,7 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var family = FindRequired(project, familyId);
+            ValidatePropertyKeysForMutation(family, "removing a property");
             var normalizedKey = Required(key, nameof(key), MaxPropertyKeyLength);
             if (!family.Properties.TryGetValue(normalizedKey, out var previousRaw)) return new FamilyPropertyUpdateResult();
             var previous = previousRaw ?? string.Empty;
@@ -211,6 +213,21 @@ namespace QS3D.Core.Domain
             }
 
             return properties.AsReadOnly();
+        }
+
+        private static void ValidatePropertyKeysForMutation(ProjectFamily family, string repairOperation)
+        {
+            var canonicalKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in family.Properties)
+            {
+                if (string.IsNullOrWhiteSpace(pair.Key))
+                    throw new InvalidOperationException("Target Family contains an empty property key. Repair the Family before " + repairOperation + ".");
+                var normalizedKey = pair.Key.Trim();
+                if (!string.Equals(normalizedKey, pair.Key, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Target Family contains a non-canonical property key: '" + pair.Key + "'. Repair the Family before " + repairOperation + ".");
+                if (!canonicalKeys.Add(normalizedKey))
+                    throw new InvalidOperationException("Target Family contains duplicate canonical property key: " + normalizedKey);
+            }
         }
 
         private static IReadOnlyList<ProjectElement> ResolveFamilyMembers(ProjectState project, string familyId)

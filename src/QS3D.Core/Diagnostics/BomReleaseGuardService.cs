@@ -18,7 +18,10 @@ namespace QS3D.Core.Diagnostics
             {
                 var index = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var handle in liveGeneratedHandles)
-                    if (!string.IsNullOrWhiteSpace(handle)) index.Add(handle.Trim());
+                {
+                    var normalized = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
+                    if (normalized.Length > 0) index.Add(normalized);
+                }
                 liveHandleIndex = index;
             }
 
