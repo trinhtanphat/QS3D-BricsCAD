@@ -75,6 +75,7 @@ namespace QS3D.Core.Services
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             ValidateProjectElements(project.Elements);
+            _graph.Rebuild(project.Elements);
             return RegenerateTransactional(project, project.Elements, project.Elements.Count);
         }
 
