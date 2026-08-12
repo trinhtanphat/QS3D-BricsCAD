@@ -124,6 +124,9 @@ namespace QS3D.Core.Diagnostics
                 Add(issues, code, HealthSeverity.Warning, key + " is missing or invalid.", element);
                 return null;
             }
+            var canonical = value.ToString(CultureInfo.InvariantCulture);
+            if (!string.Equals(raw, canonical, StringComparison.Ordinal))
+                Add(issues, "CURTAIN_PANEL_INTEGER_METADATA_NON_CANONICAL", HealthSeverity.Error, key + " must use exact invariant integer spelling: " + canonical + ".", element);
             return value;
         }
 
