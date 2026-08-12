@@ -9,6 +9,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             StableSemanticReferencesRender();
+            EmptyReferencesRenderEmpty();
             OptionalPropertyAndQuantityRender();
             GeneratedOwnershipCannotLeakIntoTag();
             NativeHandleMetadataCannotLeakIntoTag();
@@ -27,6 +28,16 @@ namespace QS3D.Core.SmokeTests
             var text = SemanticTagRenderer.Render(fixture.Project, fixture.Element, "{Category} | {Family} | {Floor} | {Zone} | {Id}");
             if (text != "Beam | B300x500 | L02 | Zone A | E-001")
                 throw new Exception("Unexpected semantic tag output: " + text);
+        }
+
+        private static void EmptyReferencesRenderEmpty()
+        {
+            var fixture = BuildFixture();
+            fixture.Element.FamilyId = string.Empty;
+            fixture.Element.FloorId = string.Empty;
+            fixture.Element.ZoneId = string.Empty;
+            var text = SemanticTagRenderer.Render(fixture.Project, fixture.Element, "{Family}|{Floor}|{Zone}");
+            if (text != "||") throw new Exception("Canonical empty semantic references must remain unassigned: " + text);
         }
 
         private static void OptionalPropertyAndQuantityRender()
@@ -109,6 +120,24 @@ namespace QS3D.Core.SmokeTests
             MustFail(
                 () => SemanticTagRenderer.Render(zoneFixture.Project, zoneFixture.Element, "{Zone}"),
                 "Whitespace-padded Zone references must fail closed instead of being normalized during render.");
+
+            var blankFamilyFixture = BuildFixture();
+            blankFamilyFixture.Element.FamilyId = "   ";
+            MustFail(
+                () => SemanticTagRenderer.Render(blankFamilyFixture.Project, blankFamilyFixture.Element, "{Family}"),
+                "Whitespace-only Family references must fail closed instead of being treated as unassigned.");
+
+            var blankFloorFixture = BuildFixture();
+            blankFloorFixture.Element.FloorId = "\t";
+            MustFail(
+                () => SemanticTagRenderer.Render(blankFloorFixture.Project, blankFloorFixture.Element, "{Floor}"),
+                "Whitespace-only Floor references must fail closed instead of being treated as unassigned.");
+
+            var blankZoneFixture = BuildFixture();
+            blankZoneFixture.Element.ZoneId = "  \t  ";
+            MustFail(
+                () => SemanticTagRenderer.Render(blankZoneFixture.Project, blankZoneFixture.Element, "{Zone}"),
+                "Whitespace-only Zone references must fail closed instead of being treated as unassigned.");
         }
 
         private static void DetachedElementWithSameIdFailsClosed()
