@@ -60,7 +60,10 @@ if SOURCE.is_file():
         'FamilyNonNegativeNumber(defaultsProject!, category, "BottomOffsetM", defaultSillM)',
         'FamilyNonNegativeNumber(defaultsProject!, category, "SillHeightM", bottomOffsetDefault)',
         'FamilyNonNegativeNumber(defaultsProject!, category, "BooleanClearanceM", 0.01d)',
-        "new AutoHostLinkCommands().AutoLinkHosts()",
+        "var projectPreview = DirectDrawProjectPreviewContext.Capture(document);",
+        "var projectExistedBeforeAuthoring = projectPreview.HasProject;",
+        "var project = projectPreview.ResolveForMutation(document, operation);",
+        "AutoHostLinkCommands.LinkSingleOpening(document, project, createdElementId)",
         'createdElement.Properties.TryGetValue("HostWallId"',
         'createdElement.SetProperty("WidthM"',
         'createdElement.SetProperty("HeightM"',
@@ -68,10 +71,13 @@ if SOURCE.is_file():
         'createdElement.SetProperty("BooleanClearanceM"',
         "EraseSource(document, sourceId)",
         "rollback.Restore(project)",
+        "if (!projectExistedBeforeAuthoring) ProjectContextCoordinator.Forget(document);",
     ):
         if token not in text:
             errors.append("quick Door/Opening lost guarded lifecycle token: " + token)
 
+    if "new AutoHostLinkCommands().AutoLinkHosts()" in text:
+        errors.append("Door/Opening Direct Draw must not re-enter broad pick-set AutoHost; link only the authored opening")
     if "OpeningBooleanService.CutLinkedOpenings" in text or "SendStringToExecute(\"QS3DCUTOPENINGS" in text:
         errors.append("Door/Opening Direct Draw must keep physical boolean explicit")
 
@@ -109,4 +115,4 @@ if errors:
         print("- " + error)
     sys.exit(1)
 
-print("Quick Door/Opening authoring preflight PASS")
+print("Quick Door/Opening authoring preflight PASS: quick/advanced authoring remains intact, Auto Host is exact to the authored opening, rollback owns project bootstrap cleanup, and physical cutting remains explicit.")
