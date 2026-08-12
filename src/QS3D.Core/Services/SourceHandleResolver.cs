@@ -21,6 +21,13 @@ namespace QS3D.Core.Services
             if (project.ChangeVersion != inputVersion)
                 throw new InvalidOperationException("Project state changed while materializing Locate root element ids. Retry Locate against the current project state.");
             var elementIndex = BuildElementIndex(project);
+            foreach (var rootElementId in rootElementIds)
+            {
+                if (!elementIndex.ContainsKey(rootElementId))
+                    throw new InvalidOperationException(
+                        "Locate root semantic element does not exist: " + rootElementId + ". Refresh the semantic selection and retry Locate.");
+            }
+
             var handles = new List<string>();
             var knownHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
