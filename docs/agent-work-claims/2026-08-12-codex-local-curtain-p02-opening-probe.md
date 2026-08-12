@@ -1,6 +1,6 @@
 # Work claim — LOCAL-002 Curtain P02 opening-clipping runtime probe
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local-curtain-p02-probe-20260812` (`/root/audit_preflight_latest`)
 - Registered: `2026-08-12T10:53:46+07:00`
 - Baseline main SHA: `c71fb530730d464e7cbbdaa7548f901ce0a5d3c6`
@@ -56,3 +56,12 @@ The active `LOCAL-003` claim explicitly excludes Curtain topology/P01-P12 and ow
 ## Completion condition
 
 The claim-only reservation is visible on `origin/main`; the additive P02 probe/runner/static gate and bounded LOCAL-002 docs are merged on current `main`; PowerShell parse, focused static gates and V25 compile pass without a BricsCAD launch; cleanup/privacy/exact-SHA contracts are guarded; the claim is `COMPLETED`; and P02 plus overall LOCAL-002 remain explicitly `PENDING_LOCAL` until a separate licensed exact-SHA run records sanitized evidence.
+
+## Close-out — 2026-08-12
+
+- Claim-only PR: `#789`, squash merge `e4515b9ad9c46b4e1f4e325028db9809eb2ef645`.
+- Implementation delivery: branch commit `96f5d3a025ff3de60874415bdeb811f7e55230c8`, PR `#815`; this close-out is part of the same implementation PR and the final squash SHA is assigned by merge.
+- Implemented only the five reserved probe/runner/static-gate/runbook/inbox surfaces. Production Curtain planners/builders/topology, generated Health semantics and `LOCAL-003` Level-owned source were not edited.
+- Validation PASS after rebase: PowerShell parser; `scripts/preflight-curtain-panel-opening-runtime-probe.py`; Curtain native-panel/orchestration/P01-runtime/runtime-health gates; Level-Curtain placement; Direct Draw openings/P1; `scripts/preflight.py`; and V25 `Release|x64` adapter build with zero warnings/errors against the installed managed references.
+- Aggregate discovery was also executed. The P02 gate passed; the aggregate remained red only on pre-existing moving-main gates outside this diff. A clean `origin/main@38c6244e43630cb2837f419a5da51cc7b545c2c1` comparison failed 66 gates while the pre-rebase P02 branch failed 65, so no aggregate regression was attributed to this lane.
+- No BricsCAD process, GitHub Actions workflow, private/customer/BLT fixture, release, signing or package publication was used. Runner readiness is `REMOTE_DONE`; P02 and overall LOCAL-002 remain `PENDING_LOCAL` and `production_local002_qualified=false` until a separate clean exact-main-SHA licensed V25 run records sanitized evidence.
