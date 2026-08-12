@@ -72,7 +72,7 @@ namespace QS3D.Core.Diagnostics
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var value in handles)
             {
-                var handle = (value ?? string.Empty).Trim();
+                var handle = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(value);
                 if (handle.Length == 0 || !seen.Add(handle)) continue;
                 if (!claims.TryGetValue(handle, out var list))
                 {
