@@ -132,6 +132,7 @@ namespace QS3D.Core.Domain
                     var handles = SourceSignature(room).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
                     return handles.Length > 0 && handles.All(selected.Contains);
                 })
+                .Where(room => !HasCanonicalTopologyStaleMetadata(room))
                 .OrderBy(room => room.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             if (stale.Count == 0) return stale;
@@ -295,6 +296,26 @@ namespace QS3D.Core.Domain
         private static bool SameScopeId(string? left, string? right)
         {
             return string.Equals((left ?? string.Empty).Trim(), (right ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool HasCanonicalTopologyStaleMetadata(ProjectElement room)
+        {
+            if (!room.Properties.TryGetValue(BoundaryStateKey, out var state) ||
+                !string.Equals(state, BoundaryStateStale, StringComparison.Ordinal))
+                return false;
+            if (!room.Properties.TryGetValue("BoundaryStaleReason", out var reason) ||
+                !string.Equals(reason, "TopologyChanged", StringComparison.Ordinal))
+                return false;
+            if (!room.Properties.TryGetValue("BoundaryStaleUtc", out var staleUtc) ||
+                !DateTime.TryParseExact(
+                    staleUtc,
+                    "O",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.RoundtripKind,
+                    out var parsed) ||
+                parsed.Kind != DateTimeKind.Utc)
+                return false;
+            return string.Equals(staleUtc, parsed.ToString("O"), StringComparison.Ordinal);
         }
 
         private static void ValidateUniqueFamilyIds(ProjectState project)
