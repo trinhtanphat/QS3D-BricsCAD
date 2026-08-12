@@ -232,6 +232,7 @@ namespace QS3D.Core.Domain
                 projectElements[projectElement.Id] = projectElement;
             }
 
+            var targetEnumerationVersion = project.ChangeVersion;
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in elements)
             {
@@ -242,6 +243,8 @@ namespace QS3D.Core.Domain
                     throw new InvalidOperationException("Family '" + target.Name + "' category " + target.Category + " cannot be assigned to element " + owned.Id + " category " + owned.Category + ".");
                 unique[owned.Id] = owned;
             }
+            if (project.ChangeVersion != targetEnumerationVersion)
+                throw new InvalidOperationException("Project changed while Family assignment targets were being enumerated. Retry the operation against the current project state.");
             return unique.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
         }
 
