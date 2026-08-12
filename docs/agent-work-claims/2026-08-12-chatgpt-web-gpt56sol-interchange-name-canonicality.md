@@ -1,8 +1,9 @@
 # Agent work claim — Project Interchange name canonicality
 
 - Agent: `chatgpt-web-gpt56sol-20260812`
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Registered: `2026-08-12T13:44:00+07:00`
+- Completed: `2026-08-12T13:53:00+07:00`
 - Task summary: Fail closed in the v1 Project Interchange JSON validator when the persisted Project, Zone, Floor, or Family `name` contains leading/trailing whitespace, so validated input is not silently changed by the typed reader's name normalization.
 - Expected files / surfaces:
   - `src/QS3D.Core/Export/ProjectInterchangeJsonValidator.cs`
@@ -20,10 +21,21 @@
   - Keep diagnostic paths/codes bounded and deterministic.
   - Re-read the committed validator/test/doc diff from `main` and verify the claim/source commits remain reachable without force-push.
 - Coordination notes:
-  - Refreshed current `main` and recent claim/commit history immediately before registration. Current neighboring claims observed for Template Profile XML canonicality, Floor referenced-level freshness, Curtain/Material XLSX round-trip and Slab Mesh identity do not overlap this Interchange validator/test/doc scope.
-  - GitHub code search for claim-file status is currently incomplete/stale, so collision checks also used current `main`, recent claim commits, BLOCKED-history search, exact target-file readback and Interchange commit history.
+  - Refreshed current `main` and recent claim/commit history immediately before registration. Current neighboring claims observed for Template Profile XML canonicality, Floor referenced-level freshness, Curtain/Material XLSX round-trip and Slab Mesh identity did not overlap this Interchange validator/test/doc scope.
+  - GitHub code search for claim-file status was incomplete/stale, so collision checks also used current `main`, recent claim commits, BLOCKED-history search, exact target-file readback and Interchange commit history.
+- Implementation commits:
+  - Claim: `3235662c30f33d6896a122e31479a88203f6b776`
+  - Source: `5a6b9704c4be64eca4c12860902ba15bc5ad3c5d` — validator emits `NAME_NON_CANONICAL` for padded nonblank required structural names while preserving existing empty/length diagnostics.
+  - Regression: `b5c93ff4605f74435547218c28bbc13505b20ff5` — existing Interchange validation smoke now covers padded Project, Zone, Floor and Family names independently.
+  - Documentation: `f1796688149354e3812b9e4dfbff0b07617d34ad` — v1 validator contract now documents canonical project/catalog names.
+- Validation evidence:
+  - GitHub commit readback confirms the source diff is only the two-line canonicality guard in `ValidateRequiredString`.
+  - GitHub commit readback confirms `NameCanonicalityFailsClosed()` is registered from the existing smoke `Run()` and covers all four structural name locations.
+  - GitHub commit readback confirms the documentation change is limited to the validator contract bullet.
+  - Git ancestry comparison at current `main` `2860296bf1c6805b6dcf5d101b2fa24d3c8c25a8` showed the claim commit as an ancestor with no divergence, and the implementation/doc tip `f1796688149354e3812b9e4dfbff0b07617d34ad` as an ancestor with no divergence.
+  - Focused smoke source was added but was **not executed in this remote session**. GitHub Actions were not dispatched. Full .NET build and BricsCAD V25/V26 runtime qualification were not run or claimed.
 - Completion criteria:
-  - Validator rejects leading/trailing whitespace for only the four structural catalog/project name fields before typed reading can trim them.
-  - Focused regression coverage is registered in the existing Interchange validation smoke.
-  - Interchange validation documentation states the canonical-name rule.
-  - Claim is changed to `COMPLETED` with implementation commit IDs and validation evidence.
+  - COMPLETED: validator rejects leading/trailing whitespace for only the four required Project/Zone/Floor/Family structural names before typed reading can normalize them.
+  - COMPLETED: focused regression coverage is registered in the existing Interchange validation smoke.
+  - COMPLETED: Interchange validation documentation states the canonical-name rule.
+  - COMPLETED: implementation IDs and validation boundaries are recorded above.
