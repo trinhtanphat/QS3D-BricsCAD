@@ -24,16 +24,55 @@ namespace QS3D.Core.Export
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-            if (rows.Count > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Quantity XLSX export supports at most " + MaxDataRows + " data rows.");
-            for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+            var snapshot = SnapshotStandardRows(rows);
+            ExportCore(path, snapshot, null);
+        }
+
+        private static IReadOnlyList<QuantityReportRow> SnapshotStandardRows(IReadOnlyList<QuantityReportRow> rows)
+        {
+            var count = rows.Count;
+            if (count > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Quantity XLSX export supports at most " + MaxDataRows + " data rows.");
+            var snapshot = new List<QuantityReportRow>(count);
+            for (var rowIndex = 0; rowIndex < count; rowIndex++)
             {
-                var row = rows[rowIndex];
-                if (row == null)
+                var source = rows[rowIndex];
+                if (source == null)
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
+                var row = new QuantityReportRow
+                {
+                    Floor = source.Floor ?? string.Empty,
+                    Zone = source.Zone ?? string.Empty,
+                    Category = source.Category ?? string.Empty,
+                    FamilyName = source.FamilyName ?? string.Empty,
+                    DrawingFingerprint = source.DrawingFingerprint ?? string.Empty,
+                    Count = source.Count,
+                    GrossConcreteM3 = source.GrossConcreteM3,
+                    DeductionM3 = source.DeductionM3,
+                    NetConcreteM3 = source.NetConcreteM3,
+                    FormworkM2 = source.FormworkM2,
+                    LengthM = source.LengthM,
+                    OuterPerimeterM = source.OuterPerimeterM,
+                    InnerPerimeterM = source.InnerPerimeterM,
+                    DoorAreaM2 = source.DoorAreaM2,
+                    SideAreaM2 = source.SideAreaM2,
+                    BottomAreaM2 = source.BottomAreaM2,
+                    TopAreaM2 = source.TopAreaM2,
+                    OtherAreaM2 = source.OtherAreaM2
+                };
+                SnapshotStrings(source.ElementIds, row.ElementIds);
+                SnapshotStrings(source.SourceHandles, row.SourceHandles);
                 ValidateStandardRowText(row, rowIndex);
                 ValidateStandardRowNumbers(row, rowIndex);
+                snapshot.Add(row);
             }
-            ExportCore(path, rows, null);
+            return snapshot;
+        }
+
+        private static void SnapshotStrings(IList<string> source, IList<string> target)
+        {
+            var count = source.Count;
+            for (var index = 0; index < count; index++)
+                target.Add(source[index] ?? string.Empty);
         }
 
         public static void ExportEd2(string path, IReadOnlyList<QuantityReportRow> detailRows, IReadOnlyList<QuantityReportRow> summaryRows)
