@@ -23,7 +23,8 @@ if not errors:
 
     required = [
         'ValidateElement(root, "qs3dRevision", new[] { "id", "createdUtc" }, new[] { "elements" })',
-        'RequireAtMostOne(root, "elements")',
+        'RequireExactlyOne(root, "elements")',
+        'parent.Elements(name).Take(2).Count() != 1',
         'ValidateElement(element, "element", new[] { "id", "category", "familyId", "floorId", "zoneId" }, new[] { "properties", "quantities", "sourceHandles", "dependencies" })',
         'RequireAtMostOne(element, "properties")',
         'RequireAtMostOne(element, "quantities")',
@@ -43,6 +44,9 @@ if not errors:
         if token not in validator:
             errors.append("revision schema validator missing contract token: " + token)
 
+    if 'RequireAtMostOne(root, "elements")' in validator:
+        errors.append("revision root elements container must be required, not merely optional")
+
     if "root.Name.LocalName" in validator:
         errors.append("revision schema validator must not accept roots by LocalName only")
 
@@ -53,4 +57,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: revision XML load fails closed on foreign namespaces, unknown nodes/attributes/content, dependency shape, and duplicate singleton containers.")
+print("PASS: revision XML load requires exactly one elements section and fails closed on foreign namespaces, unknown nodes/attributes/content, dependency shape, and duplicate singleton containers.")
