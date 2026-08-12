@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Xml;
@@ -21,7 +22,7 @@ namespace QS3D.Core.SmokeTests
                     Category = "Door",
                     FamilyName = "Cửa D1",
                     Material = "Gỗ",
-                    WidthM = 0.9d,
+                    WidthM = 1e-9d,
                     HeightM = 2.2d,
                     SillHeightM = 0d,
                     ThicknessM = 0.1d,
@@ -43,6 +44,16 @@ namespace QS3D.Core.SmokeTests
                         if (xml.IndexOf("DT mở", StringComparison.Ordinal) < 0) throw new Exception("Door/opening XLSX area header is missing.");
                         if (xml.IndexOf("3.9", StringComparison.Ordinal) < 0) throw new Exception("Door/opening XLSX numeric payload is missing.");
                         if (xml.IndexOf("wall-a;wall-b", StringComparison.Ordinal) < 0) throw new Exception("Door/opening XLSX host provenance is missing.");
+
+                        var document = new XmlDocument();
+                        document.LoadXml(xml);
+                        var namespaces = new XmlNamespaceManager(document.NameTable);
+                        namespaces.AddNamespace("s", "http://schemas.openxmlformats.org/spreadsheetml/2006/main");
+                        var widthNode = document.SelectSingleNode("/s:worksheet/s:sheetData/s:row[@r='2']/s:c[@r='E2']/s:v", namespaces);
+                        if (widthNode == null) throw new Exception("Door/opening XLSX width cell is missing.");
+                        var storedWidth = double.Parse(widthNode.InnerText, NumberStyles.Float, CultureInfo.InvariantCulture);
+                        if (storedWidth != row.WidthM)
+                            throw new Exception("Door/opening XLSX numeric payload did not round-trip the source double.");
                     }
                 }
                 File.WriteAllText(path, "ORIGINAL");
