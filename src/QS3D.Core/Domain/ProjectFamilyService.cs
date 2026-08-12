@@ -107,8 +107,7 @@ namespace QS3D.Core.Domain
                 var instance = instanceRaw ?? string.Empty;
                 if (string.Equals(instance, previous, StringComparison.Ordinal))
                 {
-                    element.Properties.Remove(normalizedKey);
-                    element.MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity | ElementDirtyFlags.Geometry);
+                    element.RemoveProperty(normalizedKey);
                     result.InheritedInstancesUpdated++;
                 }
                 else result.OverridesPreserved++;
