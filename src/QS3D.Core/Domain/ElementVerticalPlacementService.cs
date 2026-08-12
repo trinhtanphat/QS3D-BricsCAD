@@ -56,8 +56,8 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (element == null) throw new ArgumentNullException(nameof(element));
-            if (Property(element, ProjectFloorService.BottomLevelIdKey).Length == 0 &&
-                Property(element, ProjectFloorService.TopLevelIdKey).Length == 0 &&
+            if (LevelReferenceProperty(element, ProjectFloorService.BottomLevelIdKey).Length == 0 &&
+                LevelReferenceProperty(element, ProjectFloorService.TopLevelIdKey).Length == 0 &&
                 !HasConfiguredProperty(element, ProjectFloorService.BottomLevelOffsetKey) &&
                 !HasConfiguredProperty(element, ProjectFloorService.TopLevelOffsetKey))
                 return Positive(legacyHeightM, nameof(legacyHeightM));
@@ -111,8 +111,8 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (element == null) throw new ArgumentNullException(nameof(element));
 
-            var bottomLevelId = Property(element, ProjectFloorService.BottomLevelIdKey);
-            var topLevelId = Property(element, ProjectFloorService.TopLevelIdKey);
+            var bottomLevelId = LevelReferenceProperty(element, ProjectFloorService.BottomLevelIdKey);
+            var topLevelId = LevelReferenceProperty(element, ProjectFloorService.TopLevelIdKey);
             if (bottomLevelId.Length == 0)
             {
                 if (topLevelId.Length > 0)
@@ -174,9 +174,14 @@ namespace QS3D.Core.Domain
             }
         }
 
-        private static string Property(ProjectElement element, string key)
+        private static string LevelReferenceProperty(ProjectElement element, string key)
         {
-            return element.Properties.TryGetValue(key, out var raw) ? (raw ?? string.Empty).Trim() : string.Empty;
+            if (!element.Properties.TryGetValue(key, out var raw) || raw == null || raw.Length == 0)
+                return string.Empty;
+            var canonical = raw.Trim();
+            if (!string.Equals(raw, canonical, StringComparison.Ordinal))
+                throw new InvalidOperationException(element.Id + "/" + key + " must use a canonical Floor/Level reference without surrounding whitespace.");
+            return canonical;
         }
 
         private static bool HasConfiguredProperty(ProjectElement element, string key)
