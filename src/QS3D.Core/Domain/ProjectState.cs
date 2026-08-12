@@ -114,6 +114,7 @@ namespace QS3D.Core.Domain
     {
         public const int CurrentSchemaVersion = 3;
         private string _name;
+        private DateTime _updatedUtc = DateTime.UtcNow;
 
         public ProjectState(string projectId, string name)
         {
@@ -148,7 +149,11 @@ namespace QS3D.Core.Domain
         public string DrawingFingerprint { get; set; } = string.Empty;
         public string ActiveZoneId { get; set; } = string.Empty;
         public string ActiveFloorId { get; set; } = string.Empty;
-        public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedUtc
+        {
+            get => _updatedUtc;
+            set => _updatedUtc = RequireUtcTimestamp(value, nameof(value));
+        }
         public long ChangeVersion { get; private set; }
         public IList<ZoneDefinition> Zones { get; }
         public IList<FloorDefinition> Floors { get; }
@@ -173,12 +178,18 @@ namespace QS3D.Core.Domain
 
         internal void RestorePersistenceState(DateTime updatedUtc, long changeVersion)
         {
-            if (updatedUtc.Kind != DateTimeKind.Utc)
-                throw new ArgumentException("Project persistence timestamp must be UTC.", nameof(updatedUtc));
+            var restoredUpdatedUtc = RequireUtcTimestamp(updatedUtc, nameof(updatedUtc));
             if (changeVersion < 0L)
                 throw new ArgumentOutOfRangeException(nameof(changeVersion), "Project change version cannot be negative.");
-            UpdatedUtc = updatedUtc;
+            _updatedUtc = restoredUpdatedUtc;
             ChangeVersion = changeVersion;
+        }
+
+        private static DateTime RequireUtcTimestamp(DateTime value, string parameterName)
+        {
+            if (value.Kind != DateTimeKind.Utc)
+                throw new ArgumentException("Project persistence timestamp must be UTC.", parameterName);
+            return value;
         }
 
         private static string RequireProjectName(string value) => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Project name is required.", nameof(value)) : value.Trim();
