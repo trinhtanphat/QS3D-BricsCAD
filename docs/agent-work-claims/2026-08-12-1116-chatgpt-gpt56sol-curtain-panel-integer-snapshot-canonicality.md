@@ -1,26 +1,29 @@
 # Work claim — Curtain Panel integer snapshot canonicality
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-gpt56sol-curtain-panel-integer-snapshot-canonicality-20260812-1116`
 - Registered: `2026-08-12T11:16:00+07:00`
+- Completed: `2026-08-12T11:24:00+07:00`
+- Integration PR: `#816`
+- Main integration SHA: `f3091556371316aed84529a78dd8b6db1a194efa`
 - Priority: P1 generated-output health parity
 
 ## Confirmed defect
 
-`GeneratedCurtainPanelHealthService.Integer(...)` parses writer-owned integer metadata with `NumberStyles.Integer` but does not verify the exact invariant spelling. As a result, persisted values such as `"01"`, `"+1"` or `" 1 "` can pass the integer validity path without health evidence. Both native Curtain Panel writers emit these fields with `ToString(CultureInfo.InvariantCulture)`, and the sibling Curtain Frame health provider already fails visible on non-canonical integer snapshots.
+`GeneratedCurtainPanelHealthService.Integer(...)` parsed writer-owned integer metadata with `NumberStyles.Integer` but did not verify the exact invariant spelling. Persisted values such as `"01"`, `"+1"` or `" 1 "` could therefore pass the integer validity path without health evidence even though native Curtain Panel writers persist exact invariant integer text.
 
-Affected shared helper keys include `GeneratedCurtainPanelCount`, `GeneratedCurtainPanelBaseCount`, `GeneratedCurtainPanelColumns`, `GeneratedCurtainPanelRows`, `GeneratedCurtainPanelOpeningCount`, and path-panel `GeneratedCurtainPanelPathSegmentCount` / `GeneratedCurtainPanelMappedCount`.
+## Completed contract
 
-## Reserved scope
+- After existing parse/range validation, integer snapshots now require exact ordinal equality with `value.ToString(CultureInfo.InvariantCulture)`.
+- Noncanonical aliases emit Error `CURTAIN_PANEL_INTEGER_METADATA_NON_CANONICAL`.
+- The parsed integer remains available for all existing count/grid/path consistency checks.
+- Existing missing/invalid warnings and handle, BuildState, mode/source-kind, fingerprint, floating-point metadata, stale, ownership and native runtime behavior remain unchanged.
+- Focused auto-registered smoke covers leading-zero, explicit-plus, surrounding-whitespace and path-segment aliases plus canonical controls.
 
-- `src/QS3D.Core/Diagnostics/GeneratedCurtainPanelHealthService.cs`
-- one focused auto-registered Core smoke under `tests/QS3D.Core.SmokeTests/`
-- this claim file
+## Integration evidence
 
-## Intended contract
-
-After an integer parses and passes its existing zero/positive bound, require `raw == value.ToString(CultureInfo.InvariantCulture)` ordinally. Emit a dedicated `HealthSeverity.Error` canonicality issue on aliases while preserving the parsed value for all existing count/grid/path consistency checks. Preserve all current missing/invalid warnings and do not alter handle, BuildState, mode/source-kind, fingerprint, floating-point metadata, stale, ownership, or native runtime behavior.
+Exact PR #816 patch was reviewed. Four commits between PR base `17bda087e4b448a58f8a3ec9217b6fb59a6917c9` and reviewed `main@88953b37ef9c1bd73b6adb194f7491ea9a6fe060` did not touch the reserved source or smoke. PR #816 was squash-merged with expected head `b977164f4f3091f5a492a594c8422c972c0a7d8c` as `f3091556371316aed84529a78dd8b6db1a194efa`.
 
 ## Validation boundary
 
-Add focused regression coverage for leading-zero, explicit-plus and surrounding-whitespace aliases plus canonical controls. Source-safe readback only; no GitHub Actions/full build/executable smoke or BricsCAD V25/V26 runtime PASS claimed without execution.
+No GitHub Actions were dispatched. No local .NET build/full executable smoke or licensed BricsCAD V25/V26 runtime PASS is claimed from this connector-only integration.
