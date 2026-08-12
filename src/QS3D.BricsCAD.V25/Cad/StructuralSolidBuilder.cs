@@ -183,7 +183,6 @@ namespace QS3D.BricsCAD.V25.Cad
             var solid = new Solid3d();
             solid.SetDatabaseDefaults(document.Database);
             solid.CreateBox(length, width, height);
-            solid.TransformBy(Matrix3d.Displacement(new Vector3d(-length / 2d, -width / 2d, -height / 2d)));
             solid.TransformBy(Matrix3d.Rotation(angle, Vector3d.ZAxis, Point3d.Origin));
             solid.TransformBy(Matrix3d.Displacement(new Vector3d(mid.X, mid.Y, mid.Z)));
             return solid;
