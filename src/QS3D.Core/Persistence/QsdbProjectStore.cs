@@ -327,6 +327,10 @@ namespace QS3D.Core.Persistence
             if (duplicateZone != null) throw new InvalidDataException("Duplicate zone id in QSDB: " + duplicateZone.Key);
             var duplicateFloor = project.Floors.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicateFloor != null) throw new InvalidDataException("Duplicate floor id in QSDB: " + duplicateFloor.Key);
+            if (!string.IsNullOrEmpty(project.ActiveZoneId) && !project.Zones.Any(x => string.Equals(x.Id, project.ActiveZoneId, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException("Active zone id does not reference an existing zone: " + project.ActiveZoneId);
+            if (!string.IsNullOrEmpty(project.ActiveFloorId) && !project.Floors.Any(x => string.Equals(x.Id, project.ActiveFloorId, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException("Active floor id does not reference an existing floor: " + project.ActiveFloorId);
             var duplicateRule = project.QuantityRules.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicateRule != null) throw new InvalidDataException("Duplicate quantity rule id in QSDB: " + duplicateRule.Key);
             var duplicateOutput = project.QuantityRules.GroupBy(x => x.Category + "\u001f" + x.OutputName, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
