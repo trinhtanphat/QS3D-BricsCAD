@@ -76,9 +76,10 @@ required = {
         "sourceIds.Count != sourceHandles.Count",
         "AreAllModelSpaceEntities(document, sourceIds)",
         "entity.OwnerId.Equals(modelSpaceId)",
-        "document.Editor.SetImpliedSelection(sourceIds.ToArray())",
-        "EntitySnapshotReader.ReadImpliedSelection(document)",
+        "EntitySnapshotReader.ReadHandles(document, sourceHandles)",
+        "sourceSnapshots.Count != sourceHandles.Count",
         "ValidateWallSourceBatch",
+        "document.Editor.SetImpliedSelection(sourceIds.ToArray())",
         'string.Equals(x, "Line"',
         'string.Equals(x, "Polyline"',
         "sourceTypes.Count > 1",
@@ -260,15 +261,15 @@ if build3d.is_file():
     guard_category = text.find("if (categories.Count > 1)")
     resolve_sources = text.find("var sourceIds = CadHandleService.Resolve(document, sourceHandles);")
     source_space = text.find("if (!AreAllModelSpaceEntities(document, sourceIds))")
-    select_sources = text.find("document.Editor.SetImpliedSelection(sourceIds.ToArray())")
-    source_snapshots = text.find("var sourceSnapshots = EntitySnapshotReader.ReadImpliedSelection(document);")
+    source_snapshots = text.find("var sourceSnapshots = EntitySnapshotReader.ReadHandles(document, sourceHandles);")
     validate_call = text.find("if (!ValidateWallSourceBatch(selectedElements, sourceSnapshots, category, out var wallSourceError))")
     regenerate = text.find("regenerated = new RegenerationEngine")
+    select_sources = text.find("document.Editor.SetImpliedSelection(sourceIds.ToArray())")
     build = text.find("built = BuildCategory(document, project, category, sourceType);")
-    if min(guard_category, resolve_sources, source_space, select_sources, source_snapshots, validate_call, regenerate, build) < 0 or not (
-        guard_category < resolve_sources < source_space < select_sources < source_snapshots < validate_call < regenerate < build
+    if min(guard_category, resolve_sources, source_space, source_snapshots, validate_call, regenerate, select_sources, build) < 0 or not (
+        guard_category < resolve_sources < source_space < source_snapshots < validate_call < regenerate < select_sources < build
     ):
-        errors.append("QS3DBUILD3D must reject mixed categories, resolve complete live Model-Space source CAD, validate the source batch and regenerate semantic state before the native builder commit")
+        errors.append("QS3DBUILD3D must reject mixed categories, resolve/snapshot complete live Model-Space source CAD, validate the source batch and regenerate semantic state before mutating PICKFIRST only for native builder dispatch")
     if "if (sourceTypes.Count > 1)" not in text:
         errors.append("QS3DBUILD3D wall validation must reject mixed LINE/open POLYLINE source batches")
     if "foreach (var category in categories)" in text:
@@ -301,4 +302,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Direct Draw P0 uses source-relative offsets, fail-closed Family numerics, semantic validation before CAD mutation, Model-Space/unit-aware authoring, ownership-scoped/XData-complete rollback before project restore, non-destructive UI finalization, and guarded QS3DBUILD3D/Workspace source batches.")
+print("PASS: Direct Draw P0 uses source-relative offsets, fail-closed Family numerics, semantic validation before CAD mutation, Model-Space/unit-aware authoring, ownership-scoped/XData-complete rollback before project restore, non-destructive UI finalization, and source-snapshot-first guarded QS3DBUILD3D/Workspace batches.")
