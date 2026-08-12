@@ -214,8 +214,11 @@ namespace QS3D.Core.Rules
             AddNumeric(element.Properties, variables);
             foreach (var quantity in element.Quantities)
             {
-                if (double.IsNaN(quantity.Value) || double.IsInfinity(quantity.Value)) throw new InvalidOperationException("Rule variable quantity is not finite: " + element.Id + "/" + quantity.Key);
-                AddVariable(variables, quantity.Key, quantity.Value);
+                var quantityName = quantity.Key ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(quantityName) || !string.Equals(quantityName, quantityName.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Rule variable quantity name is blank or non-canonical: " + element.Id + "/" + quantityName);
+                if (double.IsNaN(quantity.Value) || double.IsInfinity(quantity.Value)) throw new InvalidOperationException("Rule variable quantity is not finite: " + element.Id + "/" + quantityName);
+                AddVariable(variables, quantityName, quantity.Value);
             }
             if (!variables.ContainsKey("Count")) variables["Count"] = 1d;
             return variables;
