@@ -255,13 +255,27 @@ namespace QS3D.Core.Domain
                     throw new InvalidOperationException("Material catalog contains an empty record at line " + (index + 1) + ".");
                 var fields = lines[index].Split(new[] { '|' }, 5, StringSplitOptions.None);
                 if (fields.Length != 4) throw new InvalidOperationException("Invalid material catalog record at line " + (index + 1) + ".");
-                var material = new ProjectMaterial(Decode(fields[0]), Decode(fields[1]), Decode(fields[2]), Decode(fields[3]), false);
+                var lineNumber = index + 1;
+                var material = new ProjectMaterial(
+                    DecodeCanonicalText(fields[0], "id", lineNumber),
+                    DecodeCanonicalText(fields[1], "name", lineNumber),
+                    DecodeCanonicalText(fields[2], "unit", lineNumber),
+                    DecodeCanonicalText(fields[3], "description", lineNumber),
+                    false);
                 EnsureDoesNotShadowBuiltIn(material);
                 if (!ids.Add(material.Id)) throw new InvalidOperationException("Duplicate material id in project catalog: " + material.Id);
                 if (!names.Add(material.Name)) throw new InvalidOperationException("Duplicate material name in project catalog: " + material.Name);
                 result.Add(material);
             }
             return result;
+        }
+
+        private static string DecodeCanonicalText(string encoded, string label, int lineNumber)
+        {
+            var decoded = Decode(encoded);
+            if (!string.Equals(decoded, decoded.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Material catalog contains non-canonical decoded " + label + " text at line " + lineNumber + ".");
+            return decoded;
         }
 
         private static void EnsureDoesNotShadowBuiltIn(ProjectMaterial material)
