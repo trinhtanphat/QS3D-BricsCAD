@@ -17,7 +17,8 @@ namespace QS3D.Core.Diagnostics
             var ownership = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Tie rebar health cannot inspect a null project element.");
                 if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
                 var handles = raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToArray();
                 var local = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -81,7 +82,8 @@ namespace QS3D.Core.Diagnostics
             var index = new OwnershipIndex();
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Tie rebar health cannot inspect a null project element.");
                 foreach (var handle in element.SourceHandles) Reserve(index, handle, element.Id + "/SourceHandles");
                 foreach (var property in element.Properties)
                 {
