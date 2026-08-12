@@ -1,35 +1,34 @@
 # Work claim — Opening centerline point budget
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-gpt56sol-20260812-opening-centerline-point-budget`
 - Registered: `2026-08-12T09:50:00+07:00`
+- Completed: `2026-08-12T09:56:00+07:00`
 - Baseline main SHA: `2b2b1479afbd61abed1fd43b0dfc3125a3b73c41`
+- Pull Request: `#727`
+- Reviewed head: `186d8d30864a2bfcd1cef658cdddb59afe667237`
+- Merge SHA: `8dd7b2c5e854c36dda76dbd303726c71af59a913`
 - Priority: bounded caller-controlled geometry input during owner-requested continue-all audit
 - Task Key: `CORE-OPENING-CENTERLINE-POINT-BUDGET`
 
 ## Confirmed defect
 
-`PolylineOpeningCutPlanner.Plan(...)` accepts an arbitrary caller-controlled `IReadOnlyList<Point2>` and immediately allocates a `double[input.Centerline.Count - 1]` before scanning every point/segment. `CurvedOpeningFootprintPlanner.Plan(...)` likewise accepts an unbounded centerline, materializes segment/projection collections, and then passes the sliced path into footprint topology work. Neither opening boundary caps the source point count.
+`PolylineOpeningCutPlanner.Plan(...)` and `CurvedOpeningFootprintPlanner.Plan(...)` accepted unbounded caller-controlled centerlines before per-segment allocation/materialization and geometry work, unlike the adjacent established 8192-point Core path budget.
 
-The adjacent `CurtainPathFramePlanner` already treats the same centerline/path input class as resource-bounded with `MaxPathPoints = 8192` and rejects larger input before path materialization. The opening planners currently lack that established guard and can therefore perform caller-amplified allocation/CPU work before semantic geometry validation completes.
+## Completed contract
 
-## Reserved scope
+- Both opening planners reject centerlines above 8192 points immediately after the minimum-count check.
+- Oversized input is rejected before indexing/enumerating caller point data or allocating/materializing per-segment structures.
+- Existing supported-input finite-coordinate, geometry, offset, ambiguity, corner/junction, overflow and footprint semantics remain unchanged.
+- Focused ModuleInitializer smoke uses an 8193-point custom `IReadOnlyList<Point2>` whose indexer/enumerator throws, proving rejection happens before reads, and keeps canonical two-point controls.
 
-- `src/QS3D.Core/Geometry/PolylineOpeningCutPlanner.cs`
-- `src/QS3D.Core/Geometry/CurvedOpeningFootprintPlanner.cs`
-- one focused Core smoke file for opening centerline point-budget rejection
-- this claim file for close-out
+## Evidence
 
-## Contract
+- PR #727 exact patch reviewed.
+- Moving-main comparison showed no overlap with either geometry planner or the smoke before merge.
+- Squash merge: `8dd7b2c5e854c36dda76dbd303726c71af59a913`.
 
-- use the established Core path point budget of 8192 for both opening centerline planners;
-- reject `Centerline.Count > 8192` before allocating/materializing per-segment structures or indexing the caller list;
-- preserve the existing minimum-two-points, finite coordinate, geometry, offset, ambiguity, corner/junction, overflow and footprint semantics for supported inputs;
-- do not broaden into `WallFootprintEngine`, Curtain path planning, structural wall opening host canonicality, CAD/native execution or UI.
+## Validation boundary
 
-## Validation plan
-
-Add focused ModuleInitializer smoke coverage with an oversized `IReadOnlyList<Point2>` whose indexer throws, proving both public opening planners reject the oversized count before reading any point. Also keep one small canonical valid path case to pin supported behavior.
-
-No GitHub Actions/build/release dispatch and no BricsCAD V25/V26 runtime PASS claim from this remote lane.
+No GitHub Actions/build/release dispatch occurred. No local/full .NET build or licensed BricsCAD V25/V26 runtime PASS is claimed.
