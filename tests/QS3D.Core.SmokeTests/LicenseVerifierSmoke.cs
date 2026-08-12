@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             ProductAndTimeWindowsAreEnforced();
             FeatureDelimiterIsRejected();
             CanonicalTokenWhitespaceIsRejected();
+            LoadedCanonicalTokenWhitespaceIsRejected();
             NamespacedLicenseRootsAreRejected();
             DuplicateLicenseSectionsAreRejected();
             NestedSignatureMarkupIsRejected();
@@ -79,6 +80,29 @@ namespace QS3D.Core.SmokeTests
             var paddedFeature = License();
             paddedFeature.Features.Add(" admin ");
             Throws<InvalidDataException>(() => paddedFeature.CanonicalPayload());
+        }
+
+        private static void LoadedCanonicalTokenWhitespaceIsRejected()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-license-token-load-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                const string valid = "<valid notBeforeUtc='2026-01-01T00:00:00.0000000Z' expiresUtc='2027-01-01T00:00:00.0000000Z'/>";
+                const string signature = "<signature algorithm='RSA-SHA256'>AA==</signature>";
+
+                var paddedIdPath = Path.Combine(directory, "padded-id.qslic");
+                File.WriteAllText(paddedIdPath, "<qs3dLicense schema='1' id=' LIC-001' customer='c' product='p' nonce='n'>" + valid + signature + "</qs3dLicense>");
+                Throws<InvalidDataException>(() => new LicenseVerifier().Load(paddedIdPath));
+
+                var paddedFeaturePath = Path.Combine(directory, "padded-feature.qslic");
+                File.WriteAllText(paddedFeaturePath, "<qs3dLicense schema='1' id='LIC-001' customer='c' product='p' nonce='n'>" + valid + "<features><feature name=' quantity '/></features>" + signature + "</qs3dLicense>");
+                Throws<InvalidDataException>(() => new LicenseVerifier().Load(paddedFeaturePath));
+            }
+            finally
+            {
+                try { Directory.Delete(directory, true); } catch { }
+            }
         }
 
         private static void NamespacedLicenseRootsAreRejected()
