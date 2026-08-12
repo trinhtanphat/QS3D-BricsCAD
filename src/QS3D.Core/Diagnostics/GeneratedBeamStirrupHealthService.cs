@@ -60,12 +60,26 @@ namespace QS3D.Core.Diagnostics
 
                 if (!element.Properties.TryGetValue(CountKey, out var countText) ||
                     !int.TryParse(countText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var count) || count < 0 || count != validCount)
+                {
                     issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_COUNT_MISMATCH", HealthSeverity.Warning, CountKey + " không khớp số handle hợp lệ.", element.Id));
+                }
+                else if (!string.Equals(countText, count.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
+                {
+                    issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_COUNT_NON_CANONICAL", HealthSeverity.Error, CountKey + " phải dùng đúng invariant integer spelling: " + count.ToString(CultureInfo.InvariantCulture) + ".", element.Id));
+                }
 
                 if (!element.Properties.TryGetValue(DiameterKey, out var diameterText) ||
                     !double.TryParse(diameterText, NumberStyles.Float, CultureInfo.InvariantCulture, out var diameter) ||
                     double.IsNaN(diameter) || double.IsInfinity(diameter) || diameter <= 0d)
+                {
                     issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_DIAMETER_INVALID", HealthSeverity.Warning, DiameterKey + " thiếu hoặc không hợp lệ.", element.Id));
+                }
+                else
+                {
+                    var canonicalDiameter = diameter.ToString("R", CultureInfo.InvariantCulture);
+                    if (!string.Equals(diameterText, canonicalDiameter, StringComparison.Ordinal))
+                        issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_DIAMETER_NON_CANONICAL", HealthSeverity.Error, DiameterKey + " phải dùng đúng round-trip invariant numeric spelling: " + canonicalDiameter + ".", element.Id));
+                }
 
                 InspectActualSpacing(element, issues);
 
@@ -106,12 +120,22 @@ namespace QS3D.Core.Diagnostics
                 element.Properties.ContainsKey(HookAngleKey);
 
             element.Properties.TryGetValue(ModeKey, out var rawMode);
-            var mode = (rawMode ?? string.Empty).Trim();
+            var modeText = rawMode ?? string.Empty;
+            var mode = modeText.Trim();
             var isClosed = string.Equals(mode, "Beam.Line.RectangularClosedLoop", StringComparison.OrdinalIgnoreCase);
             var isRounded = string.Equals(mode, "Beam.Line.RectangularRoundedLoop", StringComparison.OrdinalIgnoreCase);
             var isHooked = string.Equals(mode, "Beam.Line.RectangularHookedPath", StringComparison.OrdinalIgnoreCase);
-            if (mode.Length > 0 && !isClosed && !isRounded && !isHooked)
+            var canonicalMode = isClosed
+                ? "Beam.Line.RectangularClosedLoop"
+                : isRounded
+                    ? "Beam.Line.RectangularRoundedLoop"
+                    : isHooked
+                        ? "Beam.Line.RectangularHookedPath"
+                        : string.Empty;
+            if (mode.Length > 0 && canonicalMode.Length == 0)
                 issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_MODE_INVALID", HealthSeverity.Warning, ModeKey + " không phải mode beam stirrup được hỗ trợ.", element.Id));
+            else if (canonicalMode.Length > 0 && !string.Equals(modeText, canonicalMode, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_MODE_NON_CANONICAL", HealthSeverity.Error, ModeKey + " phải dùng đúng writer-owned token: " + canonicalMode + ".", element.Id));
 
             if (!hasAdvancedMetadata) return;
             if (mode.Length == 0)
