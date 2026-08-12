@@ -14,10 +14,11 @@ if not TARGET.is_file():
 else:
     text = TARGET.read_text(encoding="utf-8")
     required = [
-        '[CommandMethod("QS3DDRAWWALLREF", CommandFlags.Modal)]',
+        '[CommandMethod("QS3DDRAWWALLREF", CommandFlags.Modal | CommandFlags.UsePickSet)]',
         'AcquireReferenceLine(document)',
         'Chọn LINE tham chiếu cho Tường KT',
-        'transaction.GetObject(result.ObjectId, OpenMode.ForRead) as Line',
+        'ReadReferenceLine(document, result.ObjectId, failIfNotLine: true)',
+        'transaction.GetObject(objectId, OpenMode.ForRead) as Line',
         'PromptPositiveMeters(document.Editor, "Chiều dài Tường (m)", lengthM)',
         '"Bề dày Tường (m)"',
         '"Chiều cao Tường (m)"',
@@ -51,10 +52,11 @@ else:
     elif not reference_index < length_index < thickness_index < height_index < create_index < capture_index < regen_index < build_index:
         errors.append("reference-wall workflow order regressed")
 
-    reference_read = text.find('transaction.GetObject(result.ObjectId, OpenMode.ForRead) as Line')
+    helper_index = text.find('private static ReferenceLinePlan? ReadReferenceLine')
+    reference_read = text.find('transaction.GetObject(objectId, OpenMode.ForRead) as Line', helper_index)
     source_create = text.find('private static ObjectId CreateWcsLine')
-    if reference_read < 0 or source_create < 0 or not reference_read < source_create:
-        errors.append("reference LINE must be read-only and distinct from the created source LINE")
+    if helper_index < 0 or reference_read < 0 or source_create < 0 or not reference_read < source_create:
+        errors.append("reference LINE helper must read the selected/preselected LINE read-only and remain distinct from the created source LINE")
 
     forbidden = [
         'ReferenceHandle',
@@ -78,4 +80,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: reference-driven wall flow is read-only on the reference, dimension-first after selection, numerically guarded, ownership-safe, and rollback-covered.")
+print("PASS: reference-driven wall flow supports PICKFIRST/prompt fallback through one read-only helper, remains dimension-first after selection, numerically guarded, ownership-safe, and rollback-covered.")
