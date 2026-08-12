@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
 
@@ -14,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             DanglingPreviousFamilyBlocksBulkEditBatch();
             SemanticallyIdenticalTargetAssignmentIsNoOp();
             MalformedPreviousFamilyBlocksWholeAssignmentBeforeMutation();
+            LazyAssignmentTargetsRejectStaleProjectInput();
             CorruptProjectElementListBlocksPropertyPropagationBeforeMutation();
             CorruptProjectElementListBlocksFamilyDeleteBeforeMutation();
             UndefinedProjectFamilyCategoryFailsClosed();
@@ -117,6 +119,41 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Rejected previous-Family corruption dirtied or timestamped the element.");
             if (project.ChangeVersion != beforeVersion || project.UpdatedUtc != beforeUpdated)
                 throw new Exception("Rejected previous-Family corruption touched project persistence state.");
+        }
+
+        private static void LazyAssignmentTargetsRejectStaleProjectInput()
+        {
+            var project = new ProjectState("family-stale-input", "Family stale input");
+            var target = new ProjectFamily("TARGET", "Target", ElementCategory.ArchitecturalWall);
+            target.Properties["ThicknessM"] = "0.3";
+            var previous = new ProjectFamily("PREV", "Previous", ElementCategory.ArchitecturalWall);
+            previous.Properties["ThicknessM"] = "0.2";
+            project.Families.Add(target);
+            project.Families.Add(previous);
+
+            var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall, previous.Id, string.Empty, string.Empty);
+            element.Properties["ThicknessM"] = "0.2";
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+
+            var beforeVersion = project.ChangeVersion;
+            var beforeElementUpdated = element.UpdatedUtc;
+            var beforeDirty = element.Dirty;
+
+            Throws<InvalidOperationException>(() => ProjectFamilyService.Assign(project, target.Id, TouchProjectWhileEnumerating(project, element)));
+
+            if (project.ChangeVersion != beforeVersion + 1)
+                throw new Exception("Rejected stale Family assignment must preserve only the caller's deliberate project mutation.");
+            Equal(previous.Id, element.FamilyId, "Rejected stale Family assignment changed FamilyId.");
+            Equal("0.2", element.Properties["ThicknessM"], "Rejected stale Family assignment changed inherited properties.");
+            if (element.Dirty != beforeDirty || element.UpdatedUtc != beforeElementUpdated)
+                throw new Exception("Rejected stale Family assignment dirtied or timestamped the element.");
+        }
+
+        private static IEnumerable<ProjectElement> TouchProjectWhileEnumerating(ProjectState project, ProjectElement element)
+        {
+            project.Touch();
+            yield return element;
         }
 
         private static void CorruptProjectElementListBlocksPropertyPropagationBeforeMutation()
