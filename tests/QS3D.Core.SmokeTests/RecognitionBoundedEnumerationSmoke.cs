@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
 
         internal static void Run()
         {
+            RuleTermsAreReadOnlySnapshots();
+
             var rule = new RecognitionRule("bounded-beam", ElementCategory.Beam, new[] { "beam" }, entityTypes: new[] { "line" });
             var engine = new RecognitionEngine(new[] { rule });
             var snapshot = new EntitySnapshot("B1", "line", "beam");
@@ -46,6 +48,47 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => new RecognitionEngine(OverLimitRules(rule, () => observedRules++)));
             if (observedRules != 10001)
                 throw new InvalidOperationException("Lazy recognition rule enumeration did not stop at the cap sentinel.");
+        }
+
+        private static void RuleTermsAreReadOnlySnapshots()
+        {
+            var layerTerms = new List<string> { "  Beam  ", "BEAM" };
+            var textTerms = new List<string> { "dam" };
+            var entityTypes = new List<string> { "LINE" };
+            var rule = new RecognitionRule("readonly-terms", ElementCategory.Beam, layerTerms, textTerms, entityTypes);
+
+            if (rule.LayerTerms.Count != 1 || rule.LayerTerms[0] != "beam")
+                throw new InvalidOperationException("Recognition rule layer terms were not normalized deterministically.");
+            if (rule.TextTerms.Count != 1 || rule.TextTerms[0] != "dam")
+                throw new InvalidOperationException("Recognition rule text terms were not normalized deterministically.");
+            if (rule.EntityTypes.Count != 1 || rule.EntityTypes[0] != "line")
+                throw new InvalidOperationException("Recognition rule entity types were not normalized deterministically.");
+
+            layerTerms[0] = "column";
+            textTerms.Clear();
+            entityTypes.Add("solid3d");
+
+            if (rule.LayerTerms.Count != 1 || rule.LayerTerms[0] != "beam" ||
+                rule.TextTerms.Count != 1 || rule.TextTerms[0] != "dam" ||
+                rule.EntityTypes.Count != 1 || rule.EntityTypes[0] != "line")
+                throw new InvalidOperationException("Recognition rule terms changed after constructor source mutation.");
+
+            RejectTermMutation(rule.LayerTerms);
+            RejectTermMutation(rule.TextTerms);
+            RejectTermMutation(rule.EntityTypes);
+
+            var result = new RecognitionEngine(new[] { rule }).Suggest(new EntitySnapshot("B-READONLY", "line", "beam"));
+            if (result.TopCandidate == null || result.TopCandidate.Category != ElementCategory.Beam)
+                throw new InvalidOperationException("Read-only term hardening changed ordinary recognition semantics.");
+        }
+
+        private static void RejectTermMutation(IReadOnlyList<string> terms)
+        {
+            if (!(terms is IList<string> mutable))
+                throw new InvalidOperationException("Recognition rule term collection must expose the standard read-only IList contract.");
+
+            Throws<NotSupportedException>(() => mutable[0] = "mutated");
+            Throws<NotSupportedException>(() => mutable.Add("mutated"));
         }
 
         private static IEnumerable<RecognitionRule> OverLimitRules(RecognitionRule rule, Action observed)

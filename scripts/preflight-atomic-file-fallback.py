@@ -14,8 +14,9 @@ for path in (SOURCE, SMOKE):
 if SOURCE.is_file():
     text = SOURCE.read_text(encoding="utf-8")
     for token in (
-        "MoveWithRecovery(tempPath, destination, backup, keepBackup: true);",
-        "MoveWithRecovery(tempPath, destination, safetyBackup, keepBackup: false);",
+        "Validate(tempPath, destinationPath, out var temp, out var destination);",
+        "MoveWithRecovery(temp, destination, backup, keepBackup: true);",
+        "MoveWithRecovery(temp, destination, safetyBackup, keepBackup: false);",
         'previousBackupSafety = backupPath + "." + Guid.NewGuid().ToString("N") + ".previous";',
         "File.Move(backupPath, previousBackupSafety);",
         "File.Move(destinationPath, backupPath);",
@@ -54,4 +55,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: atomic file fallback uses move-based replacement, restores the previous destination on install failure, preserves any pre-existing backup until commit succeeds, and does not delete recovery state on failed commit.")
+print("PASS: atomic file fallback validates normalized paths before move-based replacement, restores the previous destination on install failure, preserves any pre-existing backup until commit succeeds, and does not delete recovery state on failed commit.")

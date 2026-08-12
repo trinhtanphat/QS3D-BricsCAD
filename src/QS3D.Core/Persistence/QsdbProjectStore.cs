@@ -411,6 +411,9 @@ namespace QS3D.Core.Persistence
             if (string.IsNullOrWhiteSpace(value)) return 0d;
             if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) || double.IsNaN(result) || double.IsInfinity(result))
                 throw new InvalidDataException("Invalid QSDB numeric value: " + value);
+            var canonical = F(result);
+            if (!string.Equals(value, canonical, StringComparison.Ordinal))
+                throw new InvalidDataException("Non-canonical QSDB numeric value: " + value);
             return result;
         }
 
