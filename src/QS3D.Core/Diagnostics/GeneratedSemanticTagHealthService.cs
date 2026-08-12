@@ -38,7 +38,7 @@ namespace QS3D.Core.Diagnostics
                 if (handles.Count == 0)
                     issues.Add(new ModelHealthIssue("SEMANTIC_TAG_HANDLE_INVALID", HealthSeverity.Error, "Semantic tag không còn generated handle hợp lệ.", element.Id));
 
-                if (element.SourceHandles.Any(source => handles.Contains((source ?? string.Empty).Trim())))
+                if (element.SourceHandles.Any(source => handles.Contains(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(source))))
                     issues.Add(new ModelHealthIssue("SEMANTIC_TAG_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated semantic tag handle không được nằm trong SourceHandles.", element.Id));
 
                 RequireOwner(element, OwnerProjectKey, project.ProjectId, "SEMANTIC_TAG_PROJECT_MISMATCH", issues);
@@ -94,7 +94,8 @@ namespace QS3D.Core.Diagnostics
                 }
                 if (!string.Equals(handleText, handle, StringComparison.Ordinal))
                     issues.Add(new ModelHealthIssue("SEMANTIC_TAG_HANDLE_NON_CANONICAL", HealthSeverity.Error, HandlesKey + " không được có khoảng trắng đầu/cuối quanh từng generated handle.", element.Id));
-                if (!result.Add(handle))
+                var identity = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
+                if (!result.Add(identity))
                     issues.Add(new ModelHealthIssue("SEMANTIC_TAG_HANDLE_DUPLICATE", HealthSeverity.Error, "Semantic tag generated handle bị lặp: " + handle, element.Id));
             }
             return result;
