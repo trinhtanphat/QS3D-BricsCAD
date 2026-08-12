@@ -54,8 +54,34 @@ namespace QS3D.Core.Units
 
         public static DrawingUnit ToDrawingUnit(LengthUnit unit)
         {
-            if (!Enum.IsDefined(typeof(LengthUnit), unit)) throw new ArgumentOutOfRangeException(nameof(unit));
-            return (DrawingUnit)(int)unit;
+            switch (unit)
+            {
+                case LengthUnit.Millimeter: return DrawingUnit.Millimeter;
+                case LengthUnit.Centimeter: return DrawingUnit.Centimeter;
+                case LengthUnit.Meter: return DrawingUnit.Meter;
+                case LengthUnit.Inch: return DrawingUnit.Inch;
+                case LengthUnit.Foot: return DrawingUnit.Foot;
+                case LengthUnit.Yard: return DrawingUnit.Yard;
+                case LengthUnit.Mile: return DrawingUnit.Mile;
+                case LengthUnit.Kilometer: return DrawingUnit.Kilometer;
+                case LengthUnit.Microinch: return DrawingUnit.Microinch;
+                case LengthUnit.Mil: return DrawingUnit.Mil;
+                case LengthUnit.Angstrom: return DrawingUnit.Angstrom;
+                case LengthUnit.Nanometer: return DrawingUnit.Nanometer;
+                case LengthUnit.Micrometer: return DrawingUnit.Micrometer;
+                case LengthUnit.Decimeter: return DrawingUnit.Decimeter;
+                case LengthUnit.Decameter: return DrawingUnit.Decameter;
+                case LengthUnit.Hectometer: return DrawingUnit.Hectometer;
+                case LengthUnit.Gigameter: return DrawingUnit.Gigameter;
+                case LengthUnit.AstronomicalUnit: return DrawingUnit.AstronomicalUnit;
+                case LengthUnit.LightYear: return DrawingUnit.LightYear;
+                case LengthUnit.Parsec: return DrawingUnit.Parsec;
+                case LengthUnit.USSurveyFoot: return DrawingUnit.USSurveyFoot;
+                case LengthUnit.USSurveyInch: return DrawingUnit.USSurveyInch;
+                case LengthUnit.USSurveyYard: return DrawingUnit.USSurveyYard;
+                case LengthUnit.USSurveyMile: return DrawingUnit.USSurveyMile;
+                default: throw new ArgumentOutOfRangeException(nameof(unit));
+            }
         }
     }
 }
