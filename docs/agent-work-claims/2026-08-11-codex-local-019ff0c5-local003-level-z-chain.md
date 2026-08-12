@@ -165,6 +165,12 @@ Baseline audited and synchronized before this expansion: `origin/main@70662c5c`.
 
 Reserve only that existing smoke file to construct clean projects for the three valid Beam Stirrup, Tie and longitudinal Rebar ownership-conflict cases, while retaining `ProjectWithNull(...)` exclusively for the explicit ownership-policy/index corruption case. Do not edit any health provider, ownership policy/index or generated metadata contract. The ACTIVE Generated Rebar health claim reserves only its production service and focused preflight, not this legacy fixture; Beam Stirrup and Tie null-health claims are `COMPLETED`. Re-run the complete Core smoke after this test-data-only reconciliation.
 
+## 2026-08-12 explicit project-unit mapping compile reconciliation expansion
+
+Baseline audited and synchronized before this expansion: `origin/main@0f8464ba`. The next full Core compile reaches the completed explicit project-unit mapping in `src/QS3D.Core/Units/ProjectUnitPolicy.cs`. Inside `ProjectUnitPolicy`, the instance property named `DrawingUnit` shadows the enum type on every switch RHS, producing `CS0120`/`CS0176` for all 24 mappings under the repository compiler.
+
+Reserve only that released source file to fully qualify the existing `QS3D.Core.Units.DrawingUnit` enum constants. Preserve the explicit one-to-one mapping, undefined-value rejection, enum declarations, conversion factors and regression test unchanged. The owning explicit-unit-mapping claim is `COMPLETED`; no ACTIVE claim reserves this exact compile repair. Re-run the complete Core smoke after this name-resolution-only fix.
+
 ## 2026-08-11 source-safe wave heartbeat
 
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
