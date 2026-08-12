@@ -350,3 +350,11 @@ Baseline audited after a clean fetch and fast-forward: `origin/main@bb50e290d890
 The full Core smoke next reaches the first two cases in `ProjectFloorZoneMutationIntegritySmoke.cs`, which still expect padded/case-varied `ActiveFloorId` and `ActiveZoneId` aliases to remain stored as no-ops. The completed active-context canonicalization contract now intentionally repairs such aliases to the exact project-owned ID and advances `ChangeVersion` once; only an already exact canonical value is a no-op. The assignment cases in this fixture remain on their separate canonical-equivalent no-op contract. Both owning claims are `COMPLETED`, and the current ACTIVE/BLOCKED audit found no reservation for this exact fixture.
 
 Reserve only `tests/QS3D.Core.SmokeTests/ProjectFloorZoneMutationIntegritySmoke.cs` to rename the two active-alias cases as repairs and assert exact stored IDs plus one version increment. Preserve Floor/Zone assignment no-ops, null-target atomicity, ownership assertions and all production services unchanged. Re-run the complete Core smoke after this fixture-only reconciliation.
+
+## 2026-08-12 interchange UTC defense fixture reconciliation expansion
+
+Baseline audited after a clean fetch and fast-forward: `origin/main@84df2060da5d1eb4b5cd7e4c180146cd3937cc8b`.
+
+The full Core smoke next reaches `ProjectInterchangeExportSafetySmoke.cs`, whose two exporter-defense cases assign Local/Unspecified values through the public `ProjectState.UpdatedUtc` setter. The completed live-domain UTC invariant now rejects those values before the exporter is invoked, so the fixture no longer reaches the intended `ProjectInterchangeJsonExporter` defense or atomic destination-preservation path. The newer domain invariant claim is `COMPLETED`, and the current ACTIVE/BLOCKED audit found no reservation for this exact fixture.
+
+Reserve only that smoke file to corrupt the private timestamp backing field through a test-local reflection helper after constructing an otherwise valid project, allowing the exporter defense-in-depth cases to remain executable without weakening the public setter. Preserve expected `InvalidDataException`, existing-destination preservation, successful replacement and all production domain/export code unchanged. Re-run the complete Core smoke after this fixture-only reconciliation.
