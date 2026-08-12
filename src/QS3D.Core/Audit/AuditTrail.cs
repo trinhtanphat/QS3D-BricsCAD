@@ -34,8 +34,9 @@ namespace QS3D.Core.Audit
                 var snapshot = new List<AuditEvent>(_events.Count);
                 foreach (var item in _events)
                 {
-                    if (item == null) throw new InvalidOperationException("Audit trail contains a null event.");
-                    snapshot.Add(Clone(item));
+                    var validationError = GetStoredEventValidationError(item);
+                    if (validationError != null) throw new InvalidOperationException(validationError);
+                    snapshot.Add(Clone(item!));
                 }
                 return snapshot.AsReadOnly();
             }
@@ -80,16 +81,26 @@ namespace QS3D.Core.Audit
         {
             foreach (var existing in _events)
             {
-                if (existing == null)
-                    throw new InvalidOperationException("Audit trail contains a null event. Repair the existing audit history before recording a new event.");
-                if (existing.Utc.Kind != DateTimeKind.Utc)
-                    throw new InvalidOperationException("Audit trail contains a non-UTC event timestamp. Repair the existing audit history before recording a new event.");
-                var existingAction = existing.Action ?? string.Empty;
-                if (string.IsNullOrWhiteSpace(existingAction) ||
-                    !string.Equals(existingAction, existingAction.Trim(), StringComparison.Ordinal) ||
-                    ContainsControlCharacter(existingAction))
-                    throw new InvalidOperationException("Audit trail contains a non-canonical action. Repair the existing audit history before recording a new event.");
+                var validationError = GetStoredEventValidationError(existing);
+                if (validationError != null)
+                    throw new InvalidOperationException(validationError + " Repair the existing audit history before recording a new event.");
             }
+        }
+
+        private static string? GetStoredEventValidationError(AuditEvent? item)
+        {
+            if (item == null)
+                return "Audit trail contains a null event.";
+            if (item.Utc.Kind != DateTimeKind.Utc)
+                return "Audit trail contains a non-UTC event timestamp.";
+
+            var action = item.Action ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(action) ||
+                !string.Equals(action, action.Trim(), StringComparison.Ordinal) ||
+                ContainsControlCharacter(action))
+                return "Audit trail contains a non-canonical action.";
+
+            return null;
         }
 
         private static bool ContainsControlCharacter(string value)
