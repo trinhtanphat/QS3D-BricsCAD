@@ -1,31 +1,36 @@
 # Work claim — Quantity Rule Preview global Element identity integrity
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-quantity-preview-global-element-integrity-20260812-0904`
 - Registered: `2026-08-12T09:04:00+07:00`
+- Completed: `2026-08-12T09:06:00+07:00`
 - Baseline main SHA: `bd5a2bd242ddc924fd68c84867492e96d0e96ccd`
+- Claim commit: `cd733ffa853ed961fc37b512850216966e7ecd5f`
+- Source fix commit: `ddc233073ac887efd50007aef115faa7ce4b18ef`
+- Focused smoke commit: `24bd9b58634207a6b6de33bc9de2fed490805f04`
 - Priority: P1 — quantity preview must not produce reviewable output from globally ambiguous Element identity state.
 - Task Key: `CORE-QUANTITY-PREVIEW-GLOBAL-DUPLICATE-ELEMENT-ID`
 
 ## Confirmed defect
 
-`QuantityRulePreviewService.RequireOwnedElement(...)` calls `ProjectState.FindElement(targetId)`, which detects duplicate IDs only when they match the requested target. `PreviewProject(...)` creates a detached project copy and enumerates its Elements without first validating global Element identity. A malformed project containing unrelated `E1`/`e1` plus unique target `E2` can therefore produce a normal Element or Project quantity-rule preview for `E2` even though QSDB and DependencyGraph reject the project globally. Apply flows may only fail later when snapshot/other integrity boundaries execute.
+`QuantityRulePreviewService.RequireOwnedElement(...)` resolved only the requested target through `ProjectState.FindElement(targetId)`, while `PreviewProject(...)` detached and enumerated project Elements without global ID validation. An unrelated `E1`/`e1` pair plus unique `E2` could therefore produce normal Element/Project previews from globally invalid semantic identity state.
 
-## Reserved scope
+## Implemented contract
 
-- `src/QS3D.Core/Rules/QuantityRulePreviewService.cs`
-- `tests/QS3D.Core.SmokeTests/QuantityRulePreviewGlobalElementIntegritySmoke.cs`
-- this claim file
+- `ValidateUniqueElementIds(...)` scans all non-null project Elements case-insensitively and rejects duplicate IDs with `Project contains duplicate element id: <id>`.
+- `RequireOwnedElement(...)` invokes that preflight before exact-instance target resolution, covering Element preview/apply entry paths.
+- `PreviewProject(...)` invokes the same preflight before detached-copy preview generation; project apply freshness flows reuse PreviewProject.
+- Existing null-entry behavior, exact-instance ownership, preview freshness, QuantityRuleEngine semantics and health guard behavior remain unchanged.
+- ProjectStateSnapshot, persistence, UI and native BricsCAD code were not modified.
 
-## Intended contract
+## Validation evidence
 
-- Quantity-rule preview/apply ownership preflight checks all non-null project Element IDs case-insensitively for uniqueness before exact target resolution.
-- Project-wide preview performs the same global Element-ID preflight before detached-copy preview generation.
-- Unrelated duplicate IDs fail closed with the canonical `Project contains duplicate element id: <id>` error.
-- Existing null-entry behavior, exact-instance ownership, preview freshness, quantity-rule semantics and health guard behavior remain unchanged.
-- No changes to ProjectStateSnapshot, QuantityRuleEngine, persistence, UI or native BricsCAD code.
+- Current `main` readback confirms project-wide and exact-owned preview paths invoke global Element-ID validation.
+- `QuantityRulePreviewGlobalElementIntegritySmoke` is auto-registered and proves `PreviewElement(E2)` and `PreviewProject()` reject `E1`/`e1 + E2` with the canonical duplicate error.
+- The same smoke preserves deterministic zero-change Element/Project preview semantics for canonical unique Elements.
+- This connector-only session did not execute .NET smoke, GitHub Actions or licensed BricsCAD runtime tests.
 
-## Validation plan
+## Completion
 
-Focused auto-registered Core smoke seeds `E1`/`e1` plus unique `E2`, verifies `PreviewElement(E2)` and `PreviewProject()` reject, and proves canonical project preview remains stable. Re-fetch exact source/claim before writes. No force-push, Actions dispatch, .NET smoke PASS or licensed BricsCAD runtime qualification claim unless actually executed.
+`COMPLETED`: Quantity Rule Preview no longer produces reviewable output from projects with unrelated duplicate Element identities.
