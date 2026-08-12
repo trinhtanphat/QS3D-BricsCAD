@@ -38,12 +38,15 @@ def main():
         'throw new InvalidOperationException("Zone assignment target collection contains a null element.");',
     ], "zone", missing)
     require(smoke, [
-        'FloorActiveCanonicalIdentityIsNoOp();',
-        'ZoneActiveCanonicalIdentityIsNoOp();',
+        'FloorActiveAliasIsCanonicalRepair();',
+        'ZoneActiveAliasIsCanonicalRepair();',
         'FloorAssignmentCanonicalIdentityIsNoOp();',
         'ZoneAssignmentCanonicalIdentityIsNoOp();',
         'FloorNullTargetFailsAtomically();',
         'ZoneNullTargetFailsAtomically();',
+        'Equal(beforeVersion + 1L, project.ChangeVersion);',
+        'Equal(floor.Id, project.ActiveFloorId);',
+        'Equal(zone.Id, project.ActiveZoneId);',
         'Equal(beforeVersion, project.ChangeVersion);',
         'Equal(beforeUpdatedUtc, element.UpdatedUtc);',
         'new ProjectElement[] { element, null! }',
@@ -110,7 +113,7 @@ def main():
         print("ERROR: Zone null-target validation must complete before mutation.")
         return 1
 
-    print("PASS: Floor/Zone activation and assignment use canonical no-op identity, and null-containing object-target batches fail closed before mutation with module-registered Core regression coverage.")
+    print("PASS: Floor/Zone active aliases are repaired to canonical ids exactly once; canonical activation/assignment remain no-ops, and null-containing object-target batches fail closed before mutation with module-registered Core regression coverage.")
     return 0
 
 
