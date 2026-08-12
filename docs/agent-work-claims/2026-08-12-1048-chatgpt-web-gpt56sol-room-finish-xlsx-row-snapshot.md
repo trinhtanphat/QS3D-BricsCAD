@@ -1,6 +1,6 @@
 # Work claim — Room Finish XLSX row snapshot integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-room-finish-xlsx-row-snapshot-20260812-1048`
 - Registered: `2026-08-12T10:48:00+07:00`
 - Baseline main SHA: `f81f916fede7735d9bd35fd0bd6de0ff5ffae69d`
@@ -8,15 +8,15 @@
 
 ## Confirmed defect
 
-`RoomFinishXlsxExporter.Export(...)` validates caller-owned `IReadOnlyList<RoomFinishScheduleRow>` values plus mutable `ElementIds` / `RoomIds` before filesystem mutation, but later `BuildSheet(rows)` re-reads the same external rows and joins the original nested lists after directory/temp-file creation. Mutated or hostile inputs can therefore serialize data not covered by preflight, or fail only after filesystem side effects begin.
+`RoomFinishXlsxExporter.Export(...)` validated caller-owned `IReadOnlyList<RoomFinishScheduleRow>` values plus mutable `ElementIds` / `RoomIds` before filesystem mutation, but later `BuildSheet(rows)` re-read the same external rows and joined the original nested lists after directory/temp-file creation. Mutated or hostile inputs could therefore serialize data not covered by preflight, or fail only after filesystem side effects began.
 
 ## Reserved scope
 
 - `src/QS3D.Core/Export/RoomFinishXlsxExporter.cs`
-- a new focused smoke file for row-snapshot integrity
+- `tests/QS3D.Core.SmokeTests/RoomFinishXlsxRowSnapshotSmoke.cs`
 - this claim file for close-out
 
-## Contract
+## Implemented contract
 
 - Capture bounded row count once.
 - Read each caller-owned row index once before filesystem mutation.
@@ -27,15 +27,21 @@
 
 ## Coordination / exclusions
 
-- Do not edit the separately reserved legacy fixture `tests/QS3D.Core.SmokeTests/RoomFinishXlsxSmoke.cs`.
+- The separately reserved legacy fixture `tests/QS3D.Core.SmokeTests/RoomFinishXlsxSmoke.cs` was not edited.
 - No Room Finish schedule-builder, identity, Health, UI/command or quantity changes.
 - No changes to other exporters in this claim.
 - No GitHub Actions/build/release dispatch and no BricsCAD V25/V26 runtime PASS claim.
 
-## Validation plan
+## Completion evidence
 
-Add a new smoke using a caller-owned row list that allows one indexed row read and rejects enumeration/second reads. Export must succeed from the detached snapshot while preserving existing text/numeric guards in source.
+- Claim registration: `bc2301b29fb858fce1db0a085a2d9d67505a9589`.
+- Source branch fix: `3bcea0c569be61839ff73e84ab633e2848c689ec`.
+- Focused smoke source: `9d7d2008493af6ae6b0790c6515c82795074fbd2`.
+- PR: `#782`.
+- Squash integration on `main`: `4c7c8a9258c062cf2ff7c06868ba3ba39e107cea`.
+- Post-merge readback confirmed `main` deep-copies worksheet scalars plus `ElementIds` / `RoomIds`, validates the detached row, and passes only `snapshot` to `BuildSheet`.
+- Post-merge readback confirmed the new `RoomFinishXlsxRowSnapshotSmoke` requires exactly one caller-row indexed read without touching the legacy reserved fixture.
 
-## Completion condition
+## Validation boundary
 
-Source fix and new smoke source are integrated on current `main`, read back after merge, and this claim is marked `COMPLETED` with exact SHA/PR evidence and remote validation boundaries.
+Focused smoke coverage was added and read back from `main`, but it was not executed in this remote session. No GitHub Actions, local .NET build, BricsCAD V25/V26 runtime, release or signing PASS is claimed.
