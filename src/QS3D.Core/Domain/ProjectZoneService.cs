@@ -126,7 +126,8 @@ namespace QS3D.Core.Domain
             var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var zone in project.Zones)
             {
-                if (zone == null) continue;
+                if (zone == null)
+                    throw new InvalidOperationException("Project zone collection contains a null zone.");
                 if (!seenIds.Add(zone.Id))
                     throw new InvalidOperationException("Project contains duplicate zone id: " + zone.Id + ".");
             }
