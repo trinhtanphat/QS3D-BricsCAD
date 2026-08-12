@@ -81,7 +81,7 @@ namespace QS3D.Core.Domain
             return result
                 .GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(x => x.First())
-                .OrderBy(x => x.Name, StringComparer.CurrentCultureIgnoreCase)
+                .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList()
                 .AsReadOnly();
         }
@@ -154,7 +154,7 @@ namespace QS3D.Core.Domain
                 AddMaterial(family.Properties, names);
             foreach (var element in scope.Elements)
                 AddMaterial(element.Properties, names);
-            return names.OrderBy(x => x, StringComparer.CurrentCultureIgnoreCase).ToList().AsReadOnly();
+            return names.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
         }
 
         private static void RenameReferences(MaterialReferenceScope scope, string previousName, string nextName)
