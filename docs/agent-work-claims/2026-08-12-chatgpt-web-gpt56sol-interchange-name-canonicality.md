@@ -1,0 +1,29 @@
+# Agent work claim — Project Interchange name canonicality
+
+- Agent: `chatgpt-web-gpt56sol-20260812`
+- Status: `ACTIVE`
+- Registered: `2026-08-12T13:44:00+07:00`
+- Task summary: Fail closed in the v1 Project Interchange JSON validator when the persisted Project, Zone, Floor, or Family `name` contains leading/trailing whitespace, so validated input is not silently changed by the typed reader's name normalization.
+- Expected files / surfaces:
+  - `src/QS3D.Core/Export/ProjectInterchangeJsonValidator.cs`
+  - `tests/QS3D.Core.SmokeTests/ProjectInterchangeValidationSmoke.cs`
+  - `docs/INTERCHANGE-JSON.md`
+  - this claim file for closeout
+- Explicit boundaries / non-goals:
+  - Do not change `ProjectInterchangeValidatedSnapshotReader` normalization semantics except by making its input contract stricter at validation.
+  - Do not change descriptions, expressions, audit text, property values, quantity values, or other free-text fields.
+  - Do not duplicate existing canonicality checks for IDs, source handles, dependencies, semantic property references, drawing fingerprints, or timestamps.
+  - Do not change Interchange merge/remap/collision policy, generated/native ownership rules, schema/version scope, or BricsCAD adapter/runtime behavior.
+  - Do not dispatch GitHub Actions and do not claim BricsCAD V25/V26 runtime qualification.
+- Validation plan:
+  - Add focused deterministic Core smoke coverage proving padded Project/Zone/Floor/Family names are rejected while canonical exported snapshots remain valid.
+  - Keep diagnostic paths/codes bounded and deterministic.
+  - Re-read the committed validator/test/doc diff from `main` and verify the claim/source commits remain reachable without force-push.
+- Coordination notes:
+  - Refreshed current `main` and recent claim/commit history immediately before registration. Current neighboring claims observed for Template Profile XML canonicality, Floor referenced-level freshness, Curtain/Material XLSX round-trip and Slab Mesh identity do not overlap this Interchange validator/test/doc scope.
+  - GitHub code search for claim-file status is currently incomplete/stale, so collision checks also used current `main`, recent claim commits, BLOCKED-history search, exact target-file readback and Interchange commit history.
+- Completion criteria:
+  - Validator rejects leading/trailing whitespace for only the four structural catalog/project name fields before typed reading can trim them.
+  - Focused regression coverage is registered in the existing Interchange validation smoke.
+  - Interchange validation documentation states the canonical-name rule.
+  - Claim is changed to `COMPLETED` with implementation commit IDs and validation evidence.
