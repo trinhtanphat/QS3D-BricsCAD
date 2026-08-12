@@ -262,7 +262,8 @@ namespace QS3D.Core.Diagnostics
                 return;
             }
 
-            var normalized = hostId.Trim();
+            var rawHostId = hostId ?? string.Empty;
+            var normalized = rawHostId.Trim();
             if (identity.DuplicateElementIds.Contains(normalized))
             {
                 issues.Add(new ModelHealthIssue("AMBIGUOUS_HOST", HealthSeverity.Error, "Host Wall trỏ tới mã semantic element bị trùng: " + normalized + ".", element.Id));
@@ -273,6 +274,8 @@ namespace QS3D.Core.Diagnostics
                 issues.Add(new ModelHealthIssue("INVALID_HOST", HealthSeverity.Error, "Host Wall không tồn tại trong project.", element.Id));
                 return;
             }
+            if (!string.Equals(rawHostId, host.Id, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("HOST_REFERENCE_NON_CANONICAL", HealthSeverity.Error, "HostWallId phải khớp chính xác mã Host Wall canonical: " + host.Id + ".", element.Id));
             if (!IsWall(host.Category)) issues.Add(new ModelHealthIssue("INVALID_HOST_CATEGORY", HealthSeverity.Error, "Host của cửa/lỗ mở không phải cấu kiện tường.", element.Id));
         }
 

@@ -66,7 +66,15 @@ for token in (
 ):
     require(v26, token, "V26 project")
 
-for token in ("Microsoft.NET.Sdk.WindowsDesktop", "BRICSCAD_V25_DIR", "net48", "QS3D-BricsCAD-V25.update.json"):
+# Validate executable MSBuild target semantics, not harmless documentation comments
+# that may mention the separate V25/net48 product lane.
+for token in (
+    "Microsoft.NET.Sdk.WindowsDesktop",
+    "BRICSCAD_V25_DIR",
+    "<TargetFramework>net48</TargetFramework>",
+    "<TargetFrameworks>",
+    "QS3D-BricsCAD-V25.update.json",
+):
     forbid(v26, token, "V26 project")
 
 for token in (
@@ -194,7 +202,8 @@ for token in (
     "Major(tdAssembly) == ExpectedRuntimeMajor",
     "expectedRuntime && x64Runtime && packageVersionMatches",
     '"NOT " + ExpectedRuntimeLabel',
-    '"licensed " + ExpectedRuntimeLabel + " scenario suite',
+    "plus the licensed ",
+    'ExpectedRuntimeLabel + " scenario suite',
 ):
     require(runtime_diagnostics, token, "shared runtime diagnostics")
 for token in (
