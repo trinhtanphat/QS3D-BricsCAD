@@ -39,6 +39,11 @@ select = block(
 select_if_any = block(
     service,
     "public static int SelectIfAny(Document document, IEnumerable<string> handles)",
+    "public static void ClearSelection(Document document)",
+)
+clear_selection = block(
+    service,
+    "public static void ClearSelection(Document document)",
     "public static ISet<string> GetLiveHandles",
 )
 resolve = block(
@@ -49,28 +54,14 @@ resolve = block(
 summary_locate = block(summary, "private void LocateCurrent()", "private QuantityReportRow ResolveCurrentRow")
 insight_locate = block(insight, "private void LocateSelected()", "private QuantityReportRow ResolveCurrentRow")
 
-for needle in (
-    "var ids = Resolve(document, handles);",
-    "document.Editor.SetImpliedSelection(new List<ObjectId>(ids).ToArray());",
-    "return ids.Count;",
-):
-    if needle not in select:
-        errors.append("explicit Select missing replacement contract: " + needle)
-
-if "if (ids.Count == 0) return 0;" in select:
-    errors.append("explicit Select must not return before replacing an empty implied selection")
-
-if select:
-    resolve_pos = select.find("var ids = Resolve(document, handles);")
-    replace_pos = select.find("document.Editor.SetImpliedSelection(new List<ObjectId>(ids).ToArray());")
-    return_pos = select.find("return ids.Count;")
-    if not (0 <= resolve_pos < replace_pos < return_pos):
-        errors.append("explicit Select must resolve, replace implied selection, then return count")
+if "=> SelectIfAny(document, handles);" not in select:
+    errors.append("Select must preserve its normal locate no-op-on-empty behavior through SelectIfAny")
 
 for needle in (
     "var ids = Resolve(document, handles);",
     "if (ids.Count == 0) return 0;",
     "document.Editor.SetImpliedSelection(new List<ObjectId>(ids).ToArray());",
+    "return ids.Count;",
 ):
     if needle not in select_if_any:
         errors.append("SelectIfAny preserve-on-empty contract changed: " + needle)
@@ -79,7 +70,14 @@ if select_if_any:
     zero_pos = select_if_any.find("if (ids.Count == 0) return 0;")
     replace_pos = select_if_any.find("document.Editor.SetImpliedSelection(new List<ObjectId>(ids).ToArray());")
     if not (0 <= zero_pos < replace_pos):
-        errors.append("SelectIfAny must keep its zero-count return before implied-selection replacement")
+        errors.append("SelectIfAny must keep zero-count return before implied-selection replacement")
+
+for needle in (
+    "if (document == null) throw new ArgumentNullException(nameof(document));",
+    "document.Editor.SetImpliedSelection(Array.Empty<ObjectId>());",
+):
+    if needle not in clear_selection:
+        errors.append("ClearSelection explicit replacement contract changed: " + needle)
 
 for needle in (
     "var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);",
@@ -90,9 +88,11 @@ for needle in (
         errors.append("multi-object/stale-handle Resolve contract changed: " + needle)
 
 summary_select = "Cad.CadHandleService.Select(_document, liveHandles)"
+summary_clear = "Cad.CadHandleService.ClearSelection(_document)"
 for needle in (
     summary_select,
     "if (selectedCount <= 0)",
+    summary_clear,
     "if (_locate != null)",
     '_document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);',
 ):
@@ -100,19 +100,24 @@ for needle in (
         errors.append("QuantitySummary locate missing contract: " + needle)
 
 if summary_locate:
-    if summary_locate.count(summary_select) < 2:
-        errors.append("QuantitySummary must replace selection both for live handles and for the zero-candidate fallback path")
-    first_select_pos = summary_locate.find(summary_select)
-    zero_live_guard_pos = summary_locate.find("if (selectedCount <= 0)")
+    if summary_locate.count(summary_select) != 1:
+        errors.append("QuantitySummary must use normal Select only for the positive-candidate locate attempt")
+    if summary_locate.count(summary_clear) < 2:
+        errors.append("QuantitySummary must explicitly clear both zero-resolved and zero-candidate stale selection paths")
+    select_pos = summary_locate.find(summary_select)
+    zero_resolved_guard_pos = summary_locate.find("if (selectedCount <= 0)", select_pos)
+    zero_resolved_clear_pos = summary_locate.find(summary_clear, zero_resolved_guard_pos)
     zoom_pos = summary_locate.find('_document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);')
-    zero_candidate_select_pos = summary_locate.find(summary_select, first_select_pos + len(summary_select))
+    zero_candidate_clear_pos = summary_locate.find(summary_clear, zoom_pos)
     fallback_pos = summary_locate.find("if (_locate != null)")
-    if not (0 <= first_select_pos < zero_live_guard_pos < zoom_pos < zero_candidate_select_pos < fallback_pos):
-        errors.append("QuantitySummary must clear zero-candidate selection after the live-handle branch and before fallback callback")
+    if not (0 <= select_pos < zero_resolved_guard_pos < zero_resolved_clear_pos < zoom_pos < zero_candidate_clear_pos < fallback_pos):
+        errors.append("QuantitySummary must clear stale selection before zero-resolved return and before zero-candidate fallback")
 
 insight_select = "Cad.CadHandleService.Select(document, handles)"
+insight_clear = "Cad.CadHandleService.ClearSelection(document)"
 for needle in (
     "if (handles.Count == 0)",
+    insight_clear,
     insight_select,
     "if (count > 0)",
     'document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);',
@@ -121,24 +126,27 @@ for needle in (
         errors.append("QuantityInsight locate missing contract: " + needle)
 
 if insight_locate:
-    if insight_locate.count(insight_select) < 2:
-        errors.append("QuantityInsight must replace selection in both zero-candidate and normal locate paths")
+    if insight_locate.count(insight_select) != 1:
+        errors.append("QuantityInsight must use normal Select only for the positive-candidate locate attempt")
+    if insight_locate.count(insight_clear) < 2:
+        errors.append("QuantityInsight must explicitly clear both zero-candidate and zero-resolved stale selection paths")
     zero_candidate_guard_pos = insight_locate.find("if (handles.Count == 0)")
-    zero_candidate_select_pos = insight_locate.find(insight_select, zero_candidate_guard_pos)
+    zero_candidate_clear_pos = insight_locate.find(insight_clear, zero_candidate_guard_pos)
     zero_candidate_status_pos = insight_locate.find(
         '_viewModel.Status = "Dòng này chưa có semantic handle hiện hành để định vị trong CAD.";',
         zero_candidate_guard_pos,
     )
-    normal_select_pos = insight_locate.find(insight_select, zero_candidate_select_pos + len(insight_select))
+    normal_select_pos = insight_locate.find(insight_select, zero_candidate_status_pos)
     positive_guard_pos = insight_locate.find("if (count > 0)", normal_select_pos)
     zoom_pos = insight_locate.find(
         'document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);',
-        normal_select_pos,
+        positive_guard_pos,
     )
+    zero_resolved_clear_pos = insight_locate.find(insight_clear, zoom_pos)
     if not (
-        0 <= zero_candidate_guard_pos < zero_candidate_select_pos < zero_candidate_status_pos < normal_select_pos < positive_guard_pos <= zoom_pos
+        0 <= zero_candidate_guard_pos < zero_candidate_clear_pos < zero_candidate_status_pos < normal_select_pos < positive_guard_pos < zoom_pos < zero_resolved_clear_pos
     ):
-        errors.append("QuantityInsight must clear zero-candidate selection before status/return and zoom only after normal positive selection")
+        errors.append("QuantityInsight must clear zero-candidate selection before return, zoom only after positive selection, and clear zero-resolved selection afterwards")
 
 for locate_name, source in (("QuantitySummary", summary_locate), ("QuantityInsight", insight_locate)):
     for forbidden in (
@@ -156,7 +164,6 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: explicit CAD Select replaces implied selection for zero-live and zero-candidate quantity targets, "
-    "SelectIfAny preserves its no-op-on-empty contract, and both quantity locate paths keep multi-object/stale-handle "
-    "resilience with zoom gated on a positive live selection."
+    "PASS: normal CAD Select preserves implied selection when no handle resolves, explicit ClearSelection removes stale PICKFIRST on failed quantity locate paths, "
+    "and both quantity surfaces keep multi-object resolution with zoom gated on a positive live selection."
 )
