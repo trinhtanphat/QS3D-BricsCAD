@@ -14,6 +14,8 @@ namespace QS3D.Core.SmokeTests
             RemovedTargetFamilyDuringLazyEnumerationFailsClosed();
             UnrelatedDuplicateFamilyDuringLazyEnumerationFailsClosed();
             UnrelatedDuplicateElementDuringLazyEnumerationFailsClosed();
+            TargetDefaultsChangedDuringLazyEnumerationUseCurrentSnapshot();
+            MalformedTargetDefaultsDuringLazyEnumerationFailClosed();
         }
 
         private static void RemovedElementDuringLazyEnumerationFailsClosed()
@@ -94,6 +96,41 @@ namespace QS3D.Core.SmokeTests
             Equal(beforeUpdated, element.UpdatedUtc, "duplicate-element target timestamp");
         }
 
+        private static void TargetDefaultsChangedDuringLazyEnumerationUseCurrentSnapshot()
+        {
+            var project = CreateProject("P-FAMILY-STRUCT-5", out var family, out var element);
+            var beforeVersion = project.ChangeVersion;
+
+            var changed = ProjectFamilyService.Assign(
+                project,
+                family.Id,
+                YieldThenChangeTargetMaterial(family, element));
+
+            Equal(1, changed, "target-default refresh assignment count");
+            Equal(beforeVersion + 1L, project.ChangeVersion, "target-default refresh project revision");
+            Equal("Concrete", family.Properties["Material"], "target-default refresh current Family material");
+            Equal(family.Id, element.FamilyId, "target-default refresh FamilyId");
+            Equal("Concrete", element.Properties["Material"], "target-default refresh inherited material");
+        }
+
+        private static void MalformedTargetDefaultsDuringLazyEnumerationFailClosed()
+        {
+            var project = CreateProject("P-FAMILY-STRUCT-6", out var family, out var element);
+            element.MarkClean(ElementDirtyFlags.All);
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdated = element.UpdatedUtc;
+
+            ThrowsContaining<InvalidOperationException>(
+                () => ProjectFamilyService.Assign(project, family.Id, YieldThenAddMalformedTargetDefault(family, element)),
+                "non-canonical property key");
+
+            Equal(beforeVersion, project.ChangeVersion, "malformed-target-default project revision");
+            Equal(string.Empty, element.FamilyId, "malformed-target-default FamilyId");
+            False(element.Properties.ContainsKey("Material"), "malformed-target-default inherited property");
+            Equal(ElementDirtyFlags.None, element.Dirty, "malformed-target-default dirty flags");
+            Equal(beforeUpdated, element.UpdatedUtc, "malformed-target-default timestamp");
+        }
+
         private static ProjectState CreateProject(string id, out ProjectFamily family, out ProjectElement element)
         {
             var project = new ProjectState(id, "Family structural freshness");
@@ -127,6 +164,18 @@ namespace QS3D.Core.SmokeTests
         {
             yield return element;
             project.Elements.Add(new ProjectElement("e-other", ElementCategory.Beam));
+        }
+
+        private static IEnumerable<ProjectElement> YieldThenChangeTargetMaterial(ProjectFamily family, ProjectElement element)
+        {
+            yield return element;
+            family.Properties["Material"] = "Concrete";
+        }
+
+        private static IEnumerable<ProjectElement> YieldThenAddMalformedTargetDefault(ProjectFamily family, ProjectElement element)
+        {
+            yield return element;
+            family.Properties[" Material "] = "Invalid";
         }
 
         private static void False(bool value, string label)
