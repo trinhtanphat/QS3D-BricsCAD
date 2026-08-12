@@ -9,10 +9,11 @@ SUMMARY_CODE = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml.cs"
 INSIGHT_CODE = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.xaml.cs"
 SUMMARY_XAML = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.xaml"
 INSIGHT_XAML = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.xaml"
+CAD = ROOT / "src/QS3D.BricsCAD.V25/Cad/CadHandleService.cs"
 PROJECT = ROOT / "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"
 errors = []
 
-paths = (SUMMARY_GUARD, INSIGHT_GUARD, SUMMARY_CODE, INSIGHT_CODE, SUMMARY_XAML, INSIGHT_XAML, PROJECT)
+paths = (SUMMARY_GUARD, INSIGHT_GUARD, SUMMARY_CODE, INSIGHT_CODE, SUMMARY_XAML, INSIGHT_XAML, CAD, PROJECT)
 for path in paths:
     if not path.is_file():
         errors.append("missing required file: " + str(path.relative_to(ROOT)))
@@ -28,12 +29,18 @@ summary_code = SUMMARY_CODE.read_text(encoding="utf-8")
 insight_code = INSIGHT_CODE.read_text(encoding="utf-8")
 summary_xaml = SUMMARY_XAML.read_text(encoding="utf-8")
 insight_xaml = INSIGHT_XAML.read_text(encoding="utf-8")
+cad = CAD.read_text(encoding="utf-8")
 project = PROJECT.read_text(encoding="utf-8")
 
 if 'Project Sdk="Microsoft.NET.Sdk.WindowsDesktop"' not in project or "<UseWPF>true</UseWPF>" not in project:
     errors.append("V25 project must remain SDK-style WPF so new partial .cs files are default-included")
 if "<EnableDefaultCompileItems>false</EnableDefaultCompileItems>" in project:
     errors.append("V25 project must not disable default Compile item discovery")
+
+clear_method = cad.find("public static void ClearSelection(Document document)")
+clear_set = cad.find("document.Editor.SetImpliedSelection(Array.Empty<ObjectId>());", clear_method)
+if clear_method < 0 or clear_set < clear_method:
+    errors.append("CadHandleService must expose an explicit ClearSelection API that clears implied selection")
 
 for name, guard in (("Summary", summary_guard), ("Insight", insight_guard)):
     ctor = "static QuantitySummaryWindow()" if name == "Summary" else "static QuantityInsightPanel()"
@@ -49,12 +56,14 @@ for name, guard in (("Summary", summary_guard), ("Insight", insight_guard)):
         errors.append(name + " guard must use WPF class handlers so pre-clear runs before instance locate handlers")
     if "BcadApplication.DocumentManager.MdiActiveDocument" not in guard:
         errors.append(name + " guard must recheck active-document affinity before clearing")
-    if "Cad.CadHandleService.Select" not in guard or "Array.Empty<string>()" not in guard:
-        errors.append(name + " guard must clear through explicit Select(empty)")
+    if "Cad.CadHandleService.ClearSelection" not in guard:
+        errors.append(name + " guard must use the explicit ClearSelection API")
+    if "Cad.CadHandleService.Select" in guard or "Array.Empty<string>()" in guard:
+        errors.append(name + " guard must not overload normal Select(empty) semantics for explicit pre-clear")
     active_pos = guard.find("BcadApplication.DocumentManager.MdiActiveDocument")
-    select_pos = guard.find("Cad.CadHandleService.Select")
-    if not (0 <= active_pos < select_pos):
-        errors.append(name + " guard must recheck active document before explicit empty selection")
+    clear_pos = guard.find("Cad.CadHandleService.ClearSelection")
+    if not (0 <= active_pos < clear_pos):
+        errors.append(name + " guard must recheck active document before explicit selection clear")
     for forbidden in (
         "ProjectContextCoordinator.GetOrCreate",
         "ExistingProjectMutationContext",
@@ -150,7 +159,7 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: quantity locate triggers pre-clear only the same active DWG before validation, "
+    "PASS: quantity locate triggers explicitly clear only the same active DWG before validation, "
     "Summary Follow3D parity covers both Summary/Detail modes, wrong-DWG behavior remains non-clearing, "
     "and canonical locate selection/zoom contracts remain intact."
 )
