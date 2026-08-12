@@ -46,7 +46,7 @@ namespace QS3D.Core.SmokeTests
         private static void CrossOwnerAliasConflicts()
         {
             var setup = Create("OWNER", "0A", "1");
-            var other = new ProjectElement("E-SLAB-MESH-HANDLE-OWNER-OTHER", ElementCategory.Wall);
+            var other = new ProjectElement("E-SLAB-MESH-HANDLE-OWNER-OTHER", ElementCategory.StructuralWall);
             other.SourceHandles.Add("A");
             setup.Project.Elements.Add(other);
             var issues = Inspect(setup);
