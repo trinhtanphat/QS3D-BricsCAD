@@ -15,6 +15,7 @@ namespace QS3D.Core.Reporting
             RequireUniqueIds(project.Floors, x => x.Id, "floor", reportName);
             RequireUniqueIds(project.Zones, x => x.Id, "zone", reportName);
             RequireUniqueIds(project.Families, x => x.Id, "family", reportName);
+            RequireCanonicalElementReferences(project.Elements, reportName);
         }
 
         internal static string NormalizeReferenceId(string? value) => (value ?? string.Empty).Trim();
@@ -39,6 +40,24 @@ namespace QS3D.Core.Reporting
                     throw new InvalidOperationException(reportName + " cannot be built because project " + identityName + " id '" + id + "' is duplicated.");
                 index++;
             }
+        }
+
+        private static void RequireCanonicalElementReferences(IEnumerable<ProjectElement> elements, string reportName)
+        {
+            foreach (var element in elements)
+            {
+                RequireCanonicalReference(element.FamilyId, "family", element.Id, reportName);
+                RequireCanonicalReference(element.FloorId, "floor", element.Id, reportName);
+                RequireCanonicalReference(element.ZoneId, "zone", element.Id, reportName);
+            }
+        }
+
+        private static void RequireCanonicalReference(string? rawId, string identityName, string elementId, string reportName)
+        {
+            if (string.IsNullOrWhiteSpace(rawId)) return;
+            var id = rawId.Trim();
+            if (!string.Equals(rawId, id, StringComparison.Ordinal))
+                throw new InvalidOperationException(reportName + " cannot be built because element '" + elementId + "' has a noncanonical " + identityName + " reference id '" + rawId + "'.");
         }
     }
 }
