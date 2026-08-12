@@ -12,7 +12,8 @@ namespace QS3D.Core.Diagnostics
             var issues = new List<ModelHealthIssue>();
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Generated-geometry stale diagnostics cannot inspect a project containing a null semantic element.");
                 if (element.IsGeneratedSolidStale())
                     issues.Add(new ModelHealthIssue(
                         "GENERATED_SOLID_STALE",
