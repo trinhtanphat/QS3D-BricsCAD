@@ -9,6 +9,7 @@ namespace QS3D.Core.SmokeTests
         {
             LargeFiniteQuadraticFallsBackWithoutOverflow();
             FiniteRawQuadraticPreservesNearEndpointTangent();
+            ScaleDisparityFallbackPreservesEndpointIntersection();
         }
 
         private static void LargeFiniteQuadraticFallsBackWithoutOverflow()
@@ -54,6 +55,29 @@ namespace QS3D.Core.SmokeTests
             Equal(1, result.Count);
             Equal("G-RAW-L", result[0].FirstElementId);
             Equal("G-RAW-A", result[0].SecondElementId);
+            NearRelative(0.0, result[0].Point.X, 0.0);
+            NearRelative(0.0, result[0].Point.Y, 0.0);
+        }
+
+        private static void ScaleDisparityFallbackPreservesEndpointIntersection()
+        {
+            const double tolerance = 1e-8;
+            var line = GridReferenceCurve.Line(
+                "G-SCALE-L",
+                new Point2(0.0, 0.0),
+                new Point2(2e-8, 0.0));
+            var arc = GridReferenceCurve.Arc(
+                "G-SCALE-A",
+                new Point2(1e200, 0.0),
+                1e200,
+                0.0,
+                Math.PI * 2.0);
+
+            var result = GridIntersectionPlanner.FindIntersections(new[] { line, arc }, tolerance);
+
+            Equal(1, result.Count);
+            Equal("G-SCALE-L", result[0].FirstElementId);
+            Equal("G-SCALE-A", result[0].SecondElementId);
             NearRelative(0.0, result[0].Point.X, 0.0);
             NearRelative(0.0, result[0].Point.Y, 0.0);
         }
