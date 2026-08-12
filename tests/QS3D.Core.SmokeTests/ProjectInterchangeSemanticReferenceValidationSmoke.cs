@@ -17,6 +17,8 @@ namespace QS3D.Core.SmokeTests
             ExportRejectsDuplicateSemanticIdentities();
             ValidatorRejectsNullSemanticElementBeforeOrdering();
             ValidatorAndTypedReaderRejectMissingRegisteredReference();
+            ValidatorAndTypedReaderRejectPaddedRegisteredReference();
+            ValidatorPreservesFreeTextAndCaseInsensitiveReference();
             ValidatorAndTypedReaderRejectInvalidLevelChain();
             MixedFieldMergeRollsBackInvalidLevelComposition();
         }
@@ -94,6 +96,52 @@ namespace QS3D.Core.SmokeTests
             True(!validation.IsValid);
             True(validation.Issues.Any(x => string.Equals(x.Code, "SEMANTIC_PROPERTY_REF_MISSING", StringComparison.Ordinal)));
             Throws<InvalidDataException>(() => ProjectInterchangeValidatedSnapshotReader.Read(smuggled));
+        }
+
+        private static void ValidatorAndTypedReaderRejectPaddedRegisteredReference()
+        {
+            var project = BaseProject("P-PADDED-REF");
+            var wall = new ProjectElement("E-WALL", ElementCategory.ArchitecturalWall, string.Empty, "A", string.Empty);
+            project.Elements.Add(wall);
+            var opening = new ProjectElement("E-OPEN", ElementCategory.WallOpening, string.Empty, "A", string.Empty);
+            opening.Properties[ProjectInterchangeSemanticReferencePolicy.HostWallIdKey] = wall.Id;
+            project.Elements.Add(opening);
+
+            ProjectInterchangeSemanticReferenceValidator.Validate(project);
+            opening.Properties[ProjectInterchangeSemanticReferencePolicy.HostWallIdKey] = " E-WALL ";
+            Throws<InvalidOperationException>(() => ProjectInterchangeSemanticReferenceValidator.Validate(project));
+
+            opening.Properties[ProjectInterchangeSemanticReferencePolicy.HostWallIdKey] = wall.Id;
+            var json = ProjectInterchangeJsonExporter.Build(project);
+            var smuggled = json.Replace(
+                "\"HostWallId\":\"E-WALL\"",
+                "\"HostWallId\":\" E-WALL \"",
+                StringComparison.Ordinal);
+            True(!string.Equals(json, smuggled, StringComparison.Ordinal));
+            var validation = ProjectInterchangeJsonValidator.Validate(smuggled);
+            True(!validation.IsValid);
+            True(validation.Issues.Any(x => string.Equals(x.Code, "SEMANTIC_PROPERTY_REF_NON_CANONICAL", StringComparison.Ordinal)));
+            Throws<InvalidDataException>(() => ProjectInterchangeValidatedSnapshotReader.Read(smuggled));
+        }
+
+        private static void ValidatorPreservesFreeTextAndCaseInsensitiveReference()
+        {
+            var project = BaseProject("P-CANONICAL-REF");
+            var wall = new ProjectElement("E-WALL", ElementCategory.ArchitecturalWall, string.Empty, "A", string.Empty);
+            project.Elements.Add(wall);
+            var opening = new ProjectElement("E-OPEN", ElementCategory.WallOpening, string.Empty, "A", string.Empty);
+            opening.Properties[ProjectInterchangeSemanticReferencePolicy.HostWallIdKey] = "e-wall";
+            opening.Properties["Description"] = " padded free text ";
+            project.Elements.Add(opening);
+
+            ProjectInterchangeSemanticReferenceValidator.Validate(project);
+            var json = ProjectInterchangeJsonExporter.Build(project);
+            var validation = ProjectInterchangeJsonValidator.Validate(json);
+            True(validation.IsValid);
+            var snapshot = ProjectInterchangeValidatedSnapshotReader.Read(json);
+            var restored = snapshot.Elements.Single(x => string.Equals(x.Id, opening.Id, StringComparison.OrdinalIgnoreCase));
+            Equal("e-wall", restored.Properties[ProjectInterchangeSemanticReferencePolicy.HostWallIdKey]);
+            Equal(" padded free text ", restored.Properties["Description"]);
         }
 
         private static void ValidatorAndTypedReaderRejectInvalidLevelChain()

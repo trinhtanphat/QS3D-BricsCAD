@@ -76,6 +76,10 @@ namespace QS3D.Core.Export
             {
                 if (!TryProperty(properties, reference.PropertyKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
                 var id = raw.Trim();
+                if (!string.Equals(raw, id, StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        "Element " + elementId + " property " + reference.PropertyKey +
+                        " must not contain leading/trailing whitespace in its " + reference.Kind + " identity reference.");
                 bool exists;
                 switch (reference.Kind)
                 {
