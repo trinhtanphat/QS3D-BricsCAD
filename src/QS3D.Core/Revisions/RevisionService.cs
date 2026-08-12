@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Xml;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Revisions
@@ -49,6 +50,7 @@ namespace QS3D.Core.Revisions
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (string.IsNullOrWhiteSpace(revisionId) || !string.Equals(revisionId, revisionId.Trim(), StringComparison.Ordinal))
                 throw new ArgumentException("Revision id is required and must not contain leading/trailing whitespace.", nameof(revisionId));
+            ValidateXmlArgument(revisionId, nameof(revisionId), "Revision id");
             var snapshot = new RevisionSnapshot { Id = revisionId, CreatedUtc = DateTime.UtcNow };
             var elementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
@@ -78,9 +80,55 @@ namespace QS3D.Core.Revisions
                 }
                 foreach (var handle in CanonicalSourceHandles(element)) item.SourceHandles.Add(handle);
                 foreach (var dependency in CanonicalDependencies(element.DependsOn, "element " + element.Id)) item.Dependencies.Add(dependency);
+                ValidateCaptureXmlPayload(item);
                 snapshot.Elements.Add(item);
             }
             return snapshot;
+        }
+
+        private static void ValidateCaptureXmlPayload(RevisionElementSnapshot item)
+        {
+            var label = "element " + item.ElementId;
+            ValidateXmlState(item.ElementId, label + " id");
+            ValidateXmlState(item.Category, label + " category");
+            ValidateXmlState(item.FamilyId, label + " family id");
+            ValidateXmlState(item.FloorId, label + " floor id");
+            ValidateXmlState(item.ZoneId, label + " zone id");
+            foreach (var property in item.Properties)
+            {
+                ValidateXmlState(property.Key, label + " property key");
+                ValidateXmlState(property.Value, label + " property value");
+            }
+            foreach (var quantity in item.Quantities)
+                ValidateXmlState(quantity.Key, label + " quantity key");
+            foreach (var handle in item.SourceHandles)
+                ValidateXmlState(handle, label + " source handle");
+            foreach (var dependency in item.Dependencies)
+                ValidateXmlState(dependency, label + " dependency");
+        }
+
+        private static void ValidateXmlArgument(string value, string parameterName, string label)
+        {
+            try
+            {
+                XmlConvert.VerifyXmlChars(value);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException(label + " contains characters that are invalid in XML.", parameterName, ex);
+            }
+        }
+
+        private static void ValidateXmlState(string? value, string label)
+        {
+            try
+            {
+                XmlConvert.VerifyXmlChars(value ?? string.Empty);
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidOperationException("Revision capture " + label + " contains characters that are invalid in XML.", ex);
+            }
         }
 
         public IReadOnlyList<RevisionDelta> Compare(RevisionSnapshot before, RevisionSnapshot after)
