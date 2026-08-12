@@ -30,6 +30,25 @@ namespace QS3D.Core.SmokeTests
             DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(empty, true, LengthUnit.Meter);
             Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(empty, true, LengthUnit.Millimeter));
 
+            var boundOverrideConflict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.BoundMetadataKey] = LengthUnit.Meter.ToString(),
+                [DrawingUnitResolutionPolicy.OverrideMetadataKey] = LengthUnit.Foot.ToString(),
+                [DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey] = LengthUnit.Foot.ToString(),
+                [DrawingUnitResolutionPolicy.BindingSourceMetadataKey] = DrawingUnitResolutionSource.NativeInsunits.ToString()
+            };
+            Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.SetProjectOverride(boundOverrideConflict, LengthUnit.Millimeter));
+            if (boundOverrideConflict[DrawingUnitResolutionPolicy.OverrideMetadataKey] != LengthUnit.Foot.ToString() ||
+                boundOverrideConflict[DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey] != LengthUnit.Foot.ToString() ||
+                boundOverrideConflict[DrawingUnitResolutionPolicy.BindingSourceMetadataKey] != DrawingUnitResolutionSource.NativeInsunits.ToString())
+                throw new Exception("A rejected drawing-unit override must not partially mutate project metadata.");
+            DrawingUnitResolutionPolicy.SetProjectOverride(boundOverrideConflict, LengthUnit.Meter);
+            if (boundOverrideConflict[DrawingUnitResolutionPolicy.BoundMetadataKey] != LengthUnit.Meter.ToString() ||
+                boundOverrideConflict[DrawingUnitResolutionPolicy.OverrideMetadataKey] != LengthUnit.Meter.ToString() ||
+                boundOverrideConflict[DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey] != LengthUnit.Meter.ToString() ||
+                boundOverrideConflict[DrawingUnitResolutionPolicy.BindingSourceMetadataKey] != DrawingUnitResolutionSource.ProjectOverride.ToString())
+                throw new Exception("A drawing-unit override matching the quantity binding must remain supported.");
+
             var legacy = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 [DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey] = "Millimeter (assumed)",
