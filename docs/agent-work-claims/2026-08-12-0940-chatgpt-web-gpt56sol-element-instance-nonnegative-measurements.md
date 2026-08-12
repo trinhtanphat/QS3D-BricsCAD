@@ -1,18 +1,19 @@
 # Work claim — Element instance non-negative measurements
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-12T09:40:00+07:00`
 - Baseline main SHA: `54ccdc640cdc28c871d42040b9c1858108ef83cc`
+- Merge SHA: `47dff0f9b81fc3145f77e680d8ae70d3518ad6e9`
 - Priority: evidence-driven remote-safe domain quantity invariant
 
 ## Reason
 
-`ElementInstance` currently rejects only NaN/Infinity for physical quantity fields, so negative length, area, volume, deduction, formwork and perimeter values can be stored in the public domain model. Downstream quantity math requires non-negative physical measurements, making these values guaranteed-invalid delayed inputs rather than meaningful signed geometry offsets.
+`ElementInstance` previously rejected only NaN/Infinity for physical quantity fields, so negative length, area, volume, deduction, formwork and perimeter values could be stored in the public domain model. Downstream quantity math requires non-negative physical measurements, making these values guaranteed-invalid delayed inputs rather than meaningful signed geometry offsets.
 
-## Intended scope
+## Completed scope
 
-Require all physical measurement properties on `ElementInstance` to be finite and non-negative while preserving zero as a valid neutral/default value, existing property names, floor normalization, source-handle behavior and the existing `NetConcreteM3` derived calculation.
+All physical measurement properties on `ElementInstance` now require finite, non-negative values while preserving zero as a valid neutral/default value, existing property names, floor normalization, source-handle behavior and the existing `NetConcreteM3` derived calculation. Focused module-initializer smoke coverage guards all 13 measurement setters against negative and non-finite inputs and confirms zero/positive values remain accepted.
 
 ## Changed surfaces
 
@@ -22,4 +23,4 @@ Require all physical measurement properties on `ElementInstance` to be finite an
 
 ## Validation boundary
 
-Remote/static validation only in this hosted session. Do not dispatch/rerun GitHub Actions and do not claim BricsCAD V25/V26 or local .NET runtime PASS without actual supported runtime execution.
+Remote/static validation only in this hosted session. GitHub `main` readback confirmed the source and smoke after merge. No GitHub Actions were dispatched/rerun and no BricsCAD V25/V26 or local .NET runtime PASS is claimed.
