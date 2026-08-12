@@ -12,7 +12,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             SaveLoadRoundTripsValidatedState();
-            PresentationStateTracksPersistenceVersion();
+            PresentationStateDoesNotInvalidateSemanticVersion();
             RepeatedSaveIsIdempotent();
             CorruptStateFailsClosed();
             UnsupportedSchemaShapeFailsClosed();
@@ -41,7 +41,7 @@ namespace QS3D.Core.SmokeTests
             var store = new ProjectBrowserWorkspaceStateStore();
             var beforeVersion = project.ChangeVersion;
             True(store.Save(project, state));
-            Equal(beforeVersion + 1, project.ChangeVersion);
+            Equal(beforeVersion, project.ChangeVersion);
             True(project.Metadata.ContainsKey(ProjectBrowserWorkspaceStateStore.MetadataKey));
 
             var loaded = store.Load(project);
@@ -59,17 +59,16 @@ namespace QS3D.Core.SmokeTests
             Equal("B-002", loaded.PrimaryElementId);
         }
 
-        private static void PresentationStateTracksPersistenceVersion()
+        private static void PresentationStateDoesNotInvalidateSemanticVersion()
         {
             var project = BuildProject();
             project.Touch();
-            var beforeSaveVersion = project.ChangeVersion;
+            var semanticVersion = project.ChangeVersion;
             var store = new ProjectBrowserWorkspaceStateStore();
             True(store.Save(project, ValidState(project)));
-            Equal(beforeSaveVersion + 1, project.ChangeVersion);
-            var beforeClearVersion = project.ChangeVersion;
+            Equal(semanticVersion, project.ChangeVersion);
             True(store.Clear(project));
-            Equal(beforeClearVersion + 1, project.ChangeVersion);
+            Equal(semanticVersion, project.ChangeVersion);
         }
 
         private static void RepeatedSaveIsIdempotent()
@@ -126,13 +125,12 @@ namespace QS3D.Core.SmokeTests
             var project = BuildProject();
             var store = new ProjectBrowserWorkspaceStateStore();
             True(store.Save(project, ValidState(project)));
-            var beforeClearVersion = project.ChangeVersion;
+            var version = project.ChangeVersion;
             True(store.Clear(project));
-            Equal(beforeClearVersion + 1, project.ChangeVersion);
+            Equal(version, project.ChangeVersion);
             True(!project.Metadata.ContainsKey(ProjectBrowserWorkspaceStateStore.MetadataKey));
-            var clearedVersion = project.ChangeVersion;
             True(!store.Clear(project));
-            Equal(clearedVersion, project.ChangeVersion);
+            Equal(version, project.ChangeVersion);
         }
 
         private static ProjectBrowserWorkspaceState ValidState(ProjectState project)
