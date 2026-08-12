@@ -17,7 +17,7 @@ namespace QS3D.Core.Rebar
         public ShapeRebarDistributionResult(double centerClearance, IReadOnlyList<double> offsets)
         {
             CenterClearance = centerClearance;
-            Offsets = offsets ?? throw new ArgumentNullException(nameof(offsets));
+            Offsets = new List<double>(offsets ?? throw new ArgumentNullException(nameof(offsets))).AsReadOnly();
         }
 
         public double CenterClearance { get; }
