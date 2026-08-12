@@ -1,29 +1,33 @@
 # Work claim — EntitySnapshot non-negative metric integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-entity-snapshot-nonnegative-metrics-20260812-0947`
 - Registered: `2026-08-12T09:47:00+07:00`
+- Completed: `2026-08-12T09:52:00+07:00`
 - Baseline main SHA observed before reservation: `4fd253b56a62576f9c9f7f99fe4ccf50fd847a1e`
+- Pull Request: `#718`
+- Reviewed head: `b611496f33cdddec1812d5a3cfd76fadd7ff1c93`
+- Merge SHA: `e9eeb5b02cc858f6720746f0f0c84cda6b30b8a4`
 - Priority: P1 — captured CAD measurement magnitudes must fail closed before recognition/capture consumes malformed values.
 
 ## Confirmed defect
 
-`EntitySnapshot` represents CAD measurement magnitudes through nullable Length, Area, SurfaceArea and Volume fields. Their shared setter guard currently rejects only NaN/Infinity, so negative finite lengths/areas/volumes can be stored in a semantic snapshot even though downstream capture eligibility explicitly requires positive primary metrics. This permits malformed source state to survive past the model boundary and be interpreted inconsistently by later recognition/capture paths.
+`EntitySnapshot` represents CAD measurement magnitudes through nullable Length, Area, SurfaceArea and Volume fields. Their shared setter guard rejected only NaN/Infinity, so negative finite measurements could survive the model boundary even though downstream capture eligibility requires positive primary metrics.
 
-## Reserved scope
+## Completed contract
 
-- `src/QS3D.Core/Model/EntitySnapshot.cs`
-- one isolated Core smoke file for snapshot metric bounds
-- this claim file for close-out
+- Negative finite values are rejected for LengthDrawingUnits, AreaDrawingUnitsSquared, SurfaceAreaDrawingUnitsSquared and VolumeDrawingUnitsCubed.
+- `null` remains "measurement unavailable" and zero remains a valid finite non-negative measurement.
+- Positive values and existing NaN/Infinity rejection remain unchanged.
+- Recognition scoring, proxy capture readiness thresholds, adapters, unit conversion and generated ownership semantics were not changed.
+- Focused ModuleInitializer smoke coverage exercises all four setters across null/zero/positive/negative/non-finite values.
 
-## Contract
+## Evidence
 
-- Reject negative finite values for LengthDrawingUnits, AreaDrawingUnitsSquared, SurfaceAreaDrawingUnitsSquared and VolumeDrawingUnitsCubed when provided.
-- Preserve `null` as "measurement unavailable" and preserve zero as a finite non-negative measurement that downstream readiness may still classify as insufficient.
-- Preserve positive values and existing NaN/Infinity rejection.
-- Do not change recognition scoring, proxy capture readiness thresholds, adapters, CAD runtime behavior, unit conversion, or generated-output ownership semantics.
-- No GitHub Actions/build/release dispatch and no BricsCAD runtime PASS claim from this remote lane.
+- PR #718 exact patch reviewed.
+- Moving-main comparison from PR base showed no overlap with `EntitySnapshot.cs` or the smoke.
+- Squash merge: `e9eeb5b02cc858f6720746f0f0c84cda6b30b8a4`.
 
-## Completion condition
+## Validation boundary
 
-The model boundary rejects negative measurement magnitudes, deterministic isolated Core smoke coverage is integrated on current `main`, resulting source/test are re-read, and this claim is marked `COMPLETED` with exact integration SHA/evidence.
+No GitHub Actions/build/release dispatch occurred. No local/full .NET build or licensed BricsCAD runtime PASS is claimed.
