@@ -92,6 +92,7 @@ namespace QS3D.Core.Domain
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var floor = FindRequired(project, floorId);
             var targets = ResolveOwnedElements(project, elements);
+            RequireCurrentFloorOwnership(project, floor);
             var changed = targets.Where(x => !string.Equals((x.FloorId ?? string.Empty).Trim(), floor.Id, StringComparison.OrdinalIgnoreCase)).ToList();
             if (changed.Count == 0) return 0;
 
@@ -110,6 +111,7 @@ namespace QS3D.Core.Domain
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var floor = FindRequired(project, floorId);
             var targets = ResolveOwnedElements(project, elements);
+            RequireCurrentFloorOwnership(project, floor);
 
             foreach (var element in targets)
             {
@@ -147,6 +149,7 @@ namespace QS3D.Core.Domain
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var top = FindRequired(project, floorId);
             var targets = ResolveOwnedElements(project, elements);
+            RequireCurrentFloorOwnership(project, top);
 
             foreach (var element in targets)
             {
@@ -289,6 +292,14 @@ namespace QS3D.Core.Domain
             }
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Floor mutation targets were being enumerated. Retry the operation against the current project state.");
+
+            var currentProjectElements = ResolveProjectElements(project)
+                .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in unique)
+            {
+                if (!currentProjectElements.TryGetValue(pair.Key, out var current) || !ReferenceEquals(current, pair.Value))
+                    throw new InvalidOperationException("Element no longer belongs to the project after Floor mutation target enumeration: " + pair.Key + ".");
+            }
             return unique.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
         }
 
@@ -321,6 +332,14 @@ namespace QS3D.Core.Domain
         private static string Property(ProjectElement element, string key)
         {
             return element.Properties.TryGetValue(key, out var raw) ? (raw ?? string.Empty).Trim() : string.Empty;
+        }
+
+        private static void RequireCurrentFloorOwnership(ProjectState project, FloorDefinition floor)
+        {
+            ValidateUniqueFloorIds(project);
+            var current = project.FindFloor(floor.Id);
+            if (!ReferenceEquals(current, floor))
+                throw new InvalidOperationException("Target Floor no longer belongs to the project after Floor mutation target enumeration: " + floor.Id + ".");
         }
 
         private static FloorDefinition FindRequired(ProjectState project, string id)
