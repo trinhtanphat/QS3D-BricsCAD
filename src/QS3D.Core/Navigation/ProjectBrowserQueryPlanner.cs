@@ -61,6 +61,8 @@ namespace QS3D.Core.Navigation
     public static class ProjectBrowserQueryPlanner
     {
         private const int MaxElements = 250000;
+        private const int MaxFamilies = 10000;
+        private const int MaxReferenceDefinitions = 2000;
         private const int MaxQueryLength = 160;
         internal const int MaxFilterIds = 10000;
 
@@ -81,6 +83,12 @@ namespace QS3D.Core.Navigation
 
             if (project.Elements.Count > MaxElements)
                 throw new InvalidOperationException("Project browser supports at most " + MaxElements + " semantic elements.");
+            if (project.Families.Count > MaxFamilies)
+                throw new InvalidOperationException("Project browser query supports at most " + MaxFamilies + " family definitions.");
+            if (project.Floors.Count > MaxReferenceDefinitions)
+                throw new InvalidOperationException("Project browser query supports at most " + MaxReferenceDefinitions + " floor definitions.");
+            if (project.Zones.Count > MaxReferenceDefinitions)
+                throw new InvalidOperationException("Project browser query supports at most " + MaxReferenceDefinitions + " zone definitions.");
 
             var familyIndex = BuildUniqueFamilyIndex(project);
             var floorIndex = BuildUniqueFloorIndex(project);
