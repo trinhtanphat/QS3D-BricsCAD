@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         {
             NewResolvedAndPersistentIssuesAreClassified();
             DuplicateIssuesAreStable();
+            MalformedIssuesFailClosed();
             StaleMessageChangesRemainPersistent();
             CrossProjectDiffFailsClosed();
             SemanticCaptureIsReadOnly();
@@ -58,6 +59,17 @@ namespace QS3D.Core.SmokeTests
             Equal(2, baseline.Issues.Count);
             Equal(1, baseline.WarningCount);
             Equal(1, baseline.InfoCount);
+        }
+
+        private static void MalformedIssuesFailClosed()
+        {
+            var project = Project("P-MALFORMED");
+            var service = new ModelHealthBaselineService();
+            Throws<InvalidOperationException>(() => service.Capture(project, new ModelHealthIssue[] { null! }));
+            Throws<InvalidOperationException>(() => service.Capture(project, new[]
+            {
+                new ModelHealthIssue("BAD_SEVERITY", (HealthSeverity)999, "bad")
+            }));
         }
 
         private static void StaleMessageChangesRemainPersistent()
