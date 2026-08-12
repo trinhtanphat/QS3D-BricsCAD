@@ -1,33 +1,35 @@
 # Work claim — Project quantity report structural read-only result
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-project-quantity-report-readonly-result-20260812-0820`
 - Registered: `2026-08-12T08:20:00+07:00`
+- Completed: `2026-08-12T08:21:00+07:00`
 - Baseline main SHA: `1d99fe7b9b8b8a753054591b11439256ed7c3ad9`
-- Priority: evidence-driven Reporting result ownership during owner-requested `continue all`
+- Claim commit: `77e2b8cc94340a8d2b51d95b3afc01060b28526b`
+- Source commit: `987e5d369d889154fa0596b16beb7e6733406fc8`
+- Regression commit: `d322aa4f35b552f7e09c91e688a03d9a8bb2e986`
+- Priority: evidence-driven public Reporting result ownership during owner-requested `continue all`
 
-## Confirmed defect
+## Confirmed defect fixed
 
-All public `ProjectQuantityReportBuilder.Group(...)` and `Detail(...)` paths share private `Build(...)`, whose return type is `IReadOnlyList<QuantityReportRow>` but whose completed result is returned as `order.Select(...).ToList()` directly. Callers can cast the result to a mutable collection and structurally add, remove or clear rows after aggregation has completed.
+All public `ProjectQuantityReportBuilder.Group(...)` and `Detail(...)` paths share private `Build(...)`, whose return type is `IReadOnlyList<QuantityReportRow>` but previously returned `order.Select(...).ToList()` directly. Callers could cast the result to a mutable collection and structurally add, remove or clear rows after aggregation had completed.
 
-## Reserved scope
+## Completed change
 
-- `src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs` — final return boundary only.
-- `tests/QS3D.Core.SmokeTests/ProjectQuantityReportReadOnlyResultSmoke.cs` — focused CAD-independent regression.
-- this claim file.
+The shared Build return now uses `order.Select(x => rows[x]).ToList().AsReadOnly()`. Group/detail keys, selection canonicality, ordering, quantities, mass/density handling, source-handle resolution, identity validation and existing exception behavior are unchanged. No deep-immutability redesign of `QuantityReportRow` was made.
 
-## Contract
+## Regression evidence
 
-Return a structural read-only wrapper for both Group and Detail result lists while preserving grouping/detail keys, selection canonicality, ordering, quantities, mass/density handling, source-handle resolution, identity validation and all existing exception behavior. No deep-immutability redesign of `QuantityReportRow`.
+`ProjectQuantityReportReadOnlyResultSmoke` builds two Beam elements in one family. Group still returns one row with Count=2 and LengthM=5; Detail still returns two rows with Count=1 each and aggregate LengthM=5. Both returned values must expose read-only `ICollection<QuantityReportRow>` boundaries and structural `Add` must throw `NotSupportedException`.
 
-## Coordination
+## Coordination respected
 
-The recent duplicate-selection canonicality source/regression remains authoritative. This lane does not edit `ResolveSelection(...)`, selection enumeration, source-handle traversal or any local V25/Core-gate reserved file.
+The recent duplicate-selection canonicality source/regression remains unchanged. This lane did not edit `ResolveSelection(...)`, selection enumeration, source-handle traversal, BLT quantity preset/settings or any local V25/Core-gate reserved file.
 
-## Excluded scope
+## Read-back validation
 
-No quantity rules/settings/preset behavior, deduction logic, Locate/UI, XLSX/export, CAD/native behavior, persistence or release/update changes.
+Current `main` source was re-fetched after publication and still contains the `ToList().AsReadOnly()` return. The focused smoke was also re-fetched from `main` with both Group and Detail checks intact.
 
-## Validation plan
+## Validation boundary
 
-Build a minimal project and exercise both Group and Detail, preserving expected row/count/length behavior. Require both returned values to expose read-only `ICollection<QuantityReportRow>` boundaries and prove structural `Add` throws `NotSupportedException`. Re-fetch current source before write; never force-push. No GitHub Actions dispatch or BricsCAD runtime qualification claim.
+Remote source/smoke read-back only. No GitHub Actions were dispatched; no executable Core build/smoke PASS and no BricsCAD V25/V26 runtime qualification are claimed.
