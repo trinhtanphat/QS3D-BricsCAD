@@ -11,6 +11,7 @@ namespace QS3D.Core.Diagnostics
         private const string HandlesKey = "GeneratedBeamStirrupHandles";
         private const string CountKey = "GeneratedBeamStirrupCount";
         private const string DiameterKey = "GeneratedBeamStirrupDiameterMm";
+        private const string ActualSpacingKey = "GeneratedBeamStirrupActualSpacingM";
         private const string ModeKey = "GeneratedBeamStirrupMode";
         private const string CenterlineKey = "GeneratedBeamStirrupCenterlineLengthM";
         private const string TotalCenterlineKey = "GeneratedBeamStirrupTotalCenterlineLengthM";
@@ -66,6 +67,8 @@ namespace QS3D.Core.Diagnostics
                     double.IsNaN(diameter) || double.IsInfinity(diameter) || diameter <= 0d)
                     issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_DIAMETER_INVALID", HealthSeverity.Warning, DiameterKey + " thiếu hoặc không hợp lệ.", element.Id));
 
+                InspectActualSpacing(element, issues);
+
                 if (element.Category != ElementCategory.Beam)
                     issues.Add(new ModelHealthIssue("BEAM_STIRRUP_CATEGORY_MISMATCH", HealthSeverity.Error, "Generated beam stirrup metadata chỉ hợp lệ trên Beam element.", element.Id));
 
@@ -75,6 +78,21 @@ namespace QS3D.Core.Diagnostics
                     issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_STALE", HealthSeverity.Warning, "Generated beam stirrup snapshot không còn khớp semantic/source hiện tại; rebuild stirrups trước khi phát hành bản vẽ.", element.Id));
             }
             return issues.AsReadOnly();
+        }
+
+        private static void InspectActualSpacing(ProjectElement element, ICollection<ModelHealthIssue> issues)
+        {
+            if (!element.Properties.TryGetValue(ActualSpacingKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
+            if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
+                double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+            {
+                issues.Add(new ModelHealthIssue("BEAM_STIRRUP_ACTUAL_SPACING_INVALID", HealthSeverity.Warning, ActualSpacingKey + " phải là số hữu hạn >= 0.", element.Id));
+                return;
+            }
+
+            var canonical = value.ToString("R", CultureInfo.InvariantCulture);
+            if (!string.Equals(raw, canonical, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("BEAM_STIRRUP_ACTUAL_SPACING_NON_CANONICAL", HealthSeverity.Error, ActualSpacingKey + " phải dùng đúng round-trip invariant numeric spelling: " + canonical + ".", element.Id));
         }
 
         private static void InspectAdvancedMetadata(ProjectElement element, int validCount, ICollection<ModelHealthIssue> issues)
