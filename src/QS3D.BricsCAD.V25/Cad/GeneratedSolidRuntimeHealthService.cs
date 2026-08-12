@@ -64,7 +64,8 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 foreach (var element in project.Elements)
                 {
-                    if (element == null) continue;
+                    if (element == null)
+                        throw new InvalidOperationException("Generated solid runtime health cannot inspect a project containing a null semantic element.");
                     if (!element.Properties.TryGetValue(HandleKey, out var rawHandle)) continue;
                     var handle = (rawHandle ?? string.Empty).Trim();
                     if (!long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
