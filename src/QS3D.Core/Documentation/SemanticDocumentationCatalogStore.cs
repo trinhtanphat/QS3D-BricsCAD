@@ -202,8 +202,8 @@ namespace QS3D.Core.Documentation
         private static void ValidateSchema(XElement root)
         {
             ValidateElement(root, "documentation", new[] { "version" }, new[] { "views", "sheets" });
-            EnsureAtMostOneChild(root, "views");
-            EnsureAtMostOneChild(root, "sheets");
+            RequireExactlyOneChild(root, "views");
+            RequireExactlyOneChild(root, "sheets");
 
             var views = root.Element("views");
             if (views != null)
@@ -278,6 +278,12 @@ namespace QS3D.Core.Documentation
                 if (text != null && string.IsNullOrWhiteSpace(text.Value)) continue;
                 throw new InvalidDataException("Semantic documentation catalog contains unsupported XML content in " + expectedName + ".");
             }
+        }
+
+        private static void RequireExactlyOneChild(XElement parent, string childName)
+        {
+            if (parent.Elements(childName).Take(2).Count() != 1)
+                throw new InvalidDataException("Semantic documentation catalog requires exactly one " + childName + " container.");
         }
 
         private static void EnsureAtMostOneChild(XElement parent, string childName)

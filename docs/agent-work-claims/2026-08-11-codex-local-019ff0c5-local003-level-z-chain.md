@@ -171,6 +171,12 @@ Baseline audited and synchronized before this expansion: `origin/main@0f8464ba`.
 
 Reserve only that released source file to fully qualify the existing `QS3D.Core.Units.DrawingUnit` enum constants. Preserve the explicit one-to-one mapping, undefined-value rejection, enum declarations, conversion factors and regression test unchanged. The owning explicit-unit-mapping claim is `COMPLETED`; no ACTIVE claim reserves this exact compile repair. Re-run the complete Core smoke after this name-resolution-only fix.
 
+## 2026-08-12 Curtain panel completed-empty build reconciliation expansion
+
+Baseline audited and synchronized before this expansion: `origin/main@e4842c86`. The next full Core smoke reaches the established completed-empty Curtain panel scenario. The completed delimiter-empty handle-token hardening correctly preserves malformed empty tokens in nonempty lists, but `string.Empty.Split(..., StringSplitOptions.None)` also yields one empty token; that incorrectly reports `INVALID_CURTAIN_PANEL_GENERATED_HANDLE` for a valid completed zero-piece build whose handle property is intentionally empty.
+
+Reserve only `src/QS3D.Core/Diagnostics/GeneratedCurtainPanelHealthService.cs` to treat a missing or exactly empty complete-build handle payload as zero tokens before validating list entries, while still rejecting whitespace-only payloads and leading/interior/trailing delimiter-empty tokens. Keep `CurtainPanelCoreSmoke.cs` and `preflight-curtain-panel-empty-handle-token.py` unchanged as complementary regression authorities. Do not change panel generation, count/build-state policy, ownership, live-solid or stale/release behavior. The empty-token claim is `COMPLETED`; no ACTIVE claim reserves this exact compatibility fix. Re-run the full Core smoke and the focused preflight.
+
 ## 2026-08-11 source-safe wave heartbeat
 
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.

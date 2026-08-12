@@ -119,7 +119,8 @@ namespace QS3D.Core.Diagnostics
         {
             foreach (var issue in source)
             {
-                if (issue == null) continue;
+                if (issue == null)
+                    throw new InvalidOperationException("Model health providers must not return null issues.");
                 var code = issue.Code ?? string.Empty;
                 var elementId = issue.ElementId ?? string.Empty;
                 var message = issue.Message ?? string.Empty;
