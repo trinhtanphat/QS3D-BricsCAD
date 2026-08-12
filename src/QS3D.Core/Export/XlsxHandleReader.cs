@@ -95,7 +95,8 @@ namespace QS3D.Core.Export
                 if (target == null)
                     return new XlsxHandleLookupResult(Array.Empty<string>(), Array.Empty<string>(), string.Empty, false, worksheet.Name, false, worksheet.IsEd2Detail);
 
-                var targetCells = ReadCells(target, ns, sharedStrings);
+                var dateColumns = new HashSet<int>();
+                var targetCells = ReadCells(target, ns, sharedStrings, dateColumns);
                 var handleColumns = new HashSet<int>();
                 var fuzzyHandleColumns = new HashSet<int>();
                 var elementIdColumns = new HashSet<int>();
@@ -110,6 +111,8 @@ namespace QS3D.Core.Export
                         if (string.Equals(header, "QS3D Element ID", StringComparison.OrdinalIgnoreCase)) elementIdColumns.Add(cell.Key);
                     }
                 if (handleColumns.Count == 0) handleColumns.UnionWith(fuzzyHandleColumns);
+                if (handleColumns.Any(dateColumns.Contains))
+                    throw new InvalidDataException("Excel CAD Handle cell cannot use the Date cell type.");
 
                 var isModernSchema = elementIdColumns.Count > 0 || fingerprintColumns.Count > 0;
                 if (worksheet.IsEd2Detail && !isModernSchema)
@@ -235,7 +238,7 @@ namespace QS3D.Core.Export
             using (var reader = XmlReader.Create(stream, settings)) return XDocument.Load(reader, LoadOptions.None);
         }
 
-        private static Dictionary<int, string> ReadCells(XElement row, XNamespace ns, IReadOnlyList<string> sharedStrings)
+        private static Dictionary<int, string> ReadCells(XElement row, XNamespace ns, IReadOnlyList<string> sharedStrings, ISet<int>? dateColumns = null)
         {
             var rowNumber = ParsePositiveInt((string?)row.Attribute("r"));
             if (rowNumber == int.MaxValue || rowNumber > MaxRows) throw new InvalidDataException("Excel worksheet row number is missing, invalid, or exceeds the XLSX row limit.");
@@ -250,7 +253,12 @@ namespace QS3D.Core.Export
                 else
                 {
                     value = cell.Element(ns + "v")?.Value ?? string.Empty;
-                    if (string.Equals(type, "s", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(type, "d", StringComparison.OrdinalIgnoreCase))
+                    {
+                        dateColumns?.Add(column);
+                        value = string.Empty;
+                    }
+                    else if (string.Equals(type, "s", StringComparison.OrdinalIgnoreCase))
                     {
                         if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var index) || index < 0 || index >= sharedStrings.Count)
                             throw new InvalidDataException("Excel shared-string cell contains an invalid shared-string index.");
