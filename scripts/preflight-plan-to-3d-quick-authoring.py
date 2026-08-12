@@ -31,11 +31,11 @@ if not errors:
     local014 = local_section(inbox, "## LOCAL-014")
 
     for token in (
-        '[CommandMethod("QS3DCONVERT2D", CommandFlags.Modal)]',
+        '[CommandMethod("QS3DCONVERT2D", CommandFlags.Modal | CommandFlags.UsePickSet)]',
         'ConvertPlanWalls("QS3DCONVERT2D", promptStyle: false)',
-        '[CommandMethod("QS3DPLAN2WALLS", CommandFlags.Modal)]',
+        '[CommandMethod("QS3DPLAN2WALLS", CommandFlags.Modal | CommandFlags.UsePickSet)]',
         'ConvertPlanWalls("QS3DPLAN2WALLS", promptStyle: false)',
-        '[CommandMethod("QS3DCONVERT2DADV", CommandFlags.Modal)]',
+        '[CommandMethod("QS3DCONVERT2DADV", CommandFlags.Modal | CommandFlags.UsePickSet)]',
         'ConvertPlanWalls("QS3DCONVERT2DADV", promptStyle: true)',
         'private static void ConvertPlanWalls(string operation, bool promptStyle)',
         'DirectDrawProjectPreviewContext.Capture(document)',
@@ -52,8 +52,8 @@ if not errors:
         if token not in source:
             errors.append("PlanTo3D quick-authoring contract missing: " + token)
 
-    quick_start = source.find('[CommandMethod("QS3DCONVERT2D", CommandFlags.Modal)]')
-    adv_start = source.find('[CommandMethod("QS3DCONVERT2DADV", CommandFlags.Modal)]')
+    quick_start = source.find('[CommandMethod("QS3DCONVERT2D", CommandFlags.Modal | CommandFlags.UsePickSet)]')
+    adv_start = source.find('[CommandMethod("QS3DCONVERT2DADV", CommandFlags.Modal | CommandFlags.UsePickSet)]')
     convert_start = source.find("private static void ConvertPlanWalls", adv_start + 1)
     if min(quick_start, adv_start, convert_start) < 0 or not (quick_start < adv_start < convert_start):
         errors.append("PlanTo3D quick/advanced command split is missing or ordered unexpectedly")
