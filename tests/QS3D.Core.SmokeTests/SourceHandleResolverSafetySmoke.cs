@@ -14,6 +14,9 @@ namespace QS3D.Core.SmokeTests
             DeepDependencyChainDoesNotUseProcessStack();
             DependencyCycleTerminatesDeterministically();
             DuplicateElementIdsFailClosed();
+            ExactDuplicateSourceHandlesFailClosed();
+            CaseAliasDuplicateSourceHandlesFailClosed();
+            UniqueSourceHandlesRemainResolvable();
             DirectAndDependencyHandleOrderIsStable();
             SourceReferenceWinsOverGeneratedFallback();
             BoundaryReferenceWinsOverGeneratedFallback();
@@ -63,6 +66,57 @@ namespace QS3D.Core.SmokeTests
             try { SourceHandleResolver.Resolve(project, new[] { "A" }); }
             catch (InvalidOperationException) { threw = true; }
             if (!threw) throw new Exception("Duplicate semantic element ids must fail source-handle resolution closed.");
+        }
+
+        private static void ExactDuplicateSourceHandlesFailClosed()
+        {
+            var project = new ProjectState("source-handle-duplicate", "Source Handle Duplicate");
+            var element = NewElement("E");
+            element.SourceHandles.Add("ABCD");
+            element.SourceHandles.Add("ABCD");
+            project.Elements.Add(element);
+
+            AssertDuplicateSourceHandlesFailClosed(project, element.Id);
+        }
+
+        private static void CaseAliasDuplicateSourceHandlesFailClosed()
+        {
+            var project = new ProjectState("source-handle-case-alias", "Source Handle Case Alias");
+            var element = NewElement("E");
+            element.SourceHandles.Add("ABCD");
+            element.SourceHandles.Add("abcd");
+            project.Elements.Add(element);
+
+            AssertDuplicateSourceHandlesFailClosed(project, element.Id);
+        }
+
+        private static void UniqueSourceHandlesRemainResolvable()
+        {
+            var project = new ProjectState("source-handle-unique", "Source Handle Unique");
+            var element = NewElement("E");
+            element.SourceHandles.Add("ABCD");
+            element.SourceHandles.Add("EF01");
+            project.Elements.Add(element);
+
+            var handles = SourceHandleResolver.Resolve(project, new[] { element.Id });
+            if (handles.Count != 2 || handles[0] != "ABCD" || handles[1] != "EF01")
+                throw new Exception("Unique SourceHandles must preserve direct-handle resolution order.");
+        }
+
+        private static void AssertDuplicateSourceHandlesFailClosed(ProjectState project, string elementId)
+        {
+            try
+            {
+                SourceHandleResolver.Resolve(project, new[] { elementId });
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("duplicate SourceHandles entries at indices 0 and 1", StringComparison.Ordinal) < 0)
+                    throw new Exception("Duplicate SourceHandles failure did not preserve first/current index diagnostics.");
+                return;
+            }
+
+            throw new Exception("Duplicate SourceHandles within one semantic element must fail source-handle resolution closed.");
         }
 
         private static void DirectAndDependencyHandleOrderIsStable()
