@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             UnsupportedTokenFailsClosed();
             MalformedBraceGrammarFailsClosed();
             MissingReferenceFailsClosed();
+            NonCanonicalReferencesFailClosed();
             DetachedElementWithSameIdFailsClosed();
             DuplicateElementIdFailsClosed();
             AmbiguousReferencesFailClosed();
@@ -87,6 +88,27 @@ namespace QS3D.Core.SmokeTests
             try { SemanticTagRenderer.Render(fixture.Project, fixture.Element, "{Family}"); }
             catch (InvalidOperationException) { failed = true; }
             if (!failed) throw new Exception("Missing semantic references must not render as valid documentation.");
+        }
+
+        private static void NonCanonicalReferencesFailClosed()
+        {
+            var familyFixture = BuildFixture();
+            familyFixture.Element.FamilyId = " FAM-B";
+            MustFail(
+                () => SemanticTagRenderer.Render(familyFixture.Project, familyFixture.Element, "{Family}"),
+                "Whitespace-padded Family references must fail closed instead of being normalized during render.");
+
+            var floorFixture = BuildFixture();
+            floorFixture.Element.FloorId = "F-02 ";
+            MustFail(
+                () => SemanticTagRenderer.Render(floorFixture.Project, floorFixture.Element, "{Floor}"),
+                "Whitespace-padded Floor references must fail closed instead of being normalized during render.");
+
+            var zoneFixture = BuildFixture();
+            zoneFixture.Element.ZoneId = "\tZ-A";
+            MustFail(
+                () => SemanticTagRenderer.Render(zoneFixture.Project, zoneFixture.Element, "{Zone}"),
+                "Whitespace-padded Zone references must fail closed instead of being normalized during render.");
         }
 
         private static void DetachedElementWithSameIdFailsClosed()
