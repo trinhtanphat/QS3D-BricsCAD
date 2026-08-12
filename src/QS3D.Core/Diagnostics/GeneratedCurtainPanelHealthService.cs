@@ -23,8 +23,11 @@ namespace QS3D.Core.Diagnostics
                 var hasHandles = element.Properties.TryGetValue(HandlesKey, out var raw) && !string.IsNullOrWhiteSpace(raw);
                 var hasBuildState = element.Properties.TryGetValue(BuildStateKey, out var buildState);
                 if (!hasHandles && !hasBuildState) continue;
-                if (!hasBuildState || !string.Equals((buildState ?? string.Empty).Trim(), BuildCompleteValue, StringComparison.OrdinalIgnoreCase))
+                var normalizedBuildState = (buildState ?? string.Empty).Trim();
+                if (!hasBuildState || !string.Equals(normalizedBuildState, BuildCompleteValue, StringComparison.OrdinalIgnoreCase))
                     Add(issues, "CURTAIN_PANEL_BUILD_STATE_INVALID", HealthSeverity.Warning, BuildStateKey + " must be Complete, including for a valid zero-piece panel build.", element);
+                else if (!string.Equals(buildState, BuildCompleteValue, StringComparison.Ordinal))
+                    Add(issues, "CURTAIN_PANEL_BUILD_STATE_NON_CANONICAL", HealthSeverity.Error, BuildStateKey + " must use exact writer-owned spelling: " + BuildCompleteValue + ".", element);
                 var handles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 if (hasHandles)
                 {
