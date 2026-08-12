@@ -10,5 +10,8 @@
 - Shared files: `none`
 - Dependencies: `none`
 - Validation owner: `chatgpt-gpt56-sol-bbs-csv-nonzero-rounding`
-- Test transfer: `Add focused BBS smoke coverage proving a positive sub-six-decimal weight stays positive/round-trippable in CSV while ordinary formatting remains unchanged; do not dispatch GitHub Actions.`
-- Status: `ACTIVE`
+- Test transfer: `Focused BBS regression coverage landed in BbsRegressionSmoke. No GitHub Actions dispatched.`
+- Status: `COMPLETED`
+- Source: `a917003ae45fd6037dc7a373fe30d6b6e5f73ec7`
+- Regression: `ff5b67d8f61c21208e4ee136b587f1190611ba37`
+- Validation: `GitHub commit readback confirmed the intended formatter/test diffs; no combined CI status was present on the regression commit. Licensed BricsCAD runtime qualification was not claimed.`
