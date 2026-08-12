@@ -1,46 +1,36 @@
 # Work claim — release #30 targeted opening-cut preflight reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-release30-targeted-opening-cut-preflight`
 - Registered: `2026-08-12T09:53:00+07:00`
+- Completed: `2026-08-12T09:55:00+07:00`
 - Baseline main SHA: `2fd8a0f6a0f38ee4123bd18ad8902b15cb34d392`
-- Priority: QS3D Cloud V25 Preview Build & Release #30 reports two targeted-opening-cut failures after Direct Draw Auto Host was intentionally narrowed to exact single-opening linking and selected-cut target resolution moved behind a helper.
+- Claim commit: `ea3b2e1ae20f3821830115b5c30b57f772256675`
+- Implementation commit: `8d8c7712ac23200884baeaf7fd920b4212aa6bac`
+- Priority: QS3D Cloud V25 Preview Build & Release #30 reported two targeted-opening-cut failures after Direct Draw Auto Host was intentionally narrowed to exact single-opening linking and selected-cut target resolution moved behind a helper.
 
-## Reserved scope
+## Completed scope
 
-Reconcile only `scripts/preflight-targeted-opening-cut.py` with the current exact Auto Host and helper-based selected-opening contracts. Preserve opening boolean/Direct Draw production source unchanged.
+Reconciled only `scripts/preflight-targeted-opening-cut.py` with the current exact Auto Host and helper-based selected-opening contracts. Opening boolean/Direct Draw production source remained unchanged.
 
-## Canonical evidence
+## Implemented gate contract
 
-- Direct Draw Door/WallOpening now calls `AutoHostLinkCommands.LinkSingleOpening(document, project, createdElementId)` against the exact project/created opening and explicitly avoids broad pick-set AutoHost re-entry.
-- Physical boolean cutting remains explicit; Direct Draw still contains no `CutLinkedOpenings`, OpeningBooleanCommands cut call or `QS3DCUT*` command dispatch.
-- `QS3DCUTSELECTEDOPENINGS` reads current selection, resolves `openingIds = ResolveOpeningIds(previewProject, handles)`, binds canonical state once, re-resolves current ids, compares exact target sets, then executes the targeted overload.
-- `ResolveOpeningIds` filters through `.Where(IsOpening)`, semantic selection matching, `.Distinct(StringComparer.OrdinalIgnoreCase)` and deterministic ordering.
-- The gate currently searches those helper internals only inside the command entry slice and still requires obsolete broad `new AutoHostLinkCommands().AutoLinkHosts()`.
+- Direct Draw Door/WallOpening must call `AutoHostLinkCommands.LinkSingleOpening(document, project, createdElementId)` and the gate explicitly rejects broad `new AutoHostLinkCommands().AutoLinkHosts()` re-entry.
+- Physical boolean cutting remains explicit; existing Direct Draw cut-service/command-dispatch prohibitions are retained.
+- Selected cut must resolve ids read-only through `ResolveOpeningIds(previewProject, handles)`, re-resolve after canonical binding, compare exact target sets and execute the targeted opening-id overload.
+- The actual `ResolveOpeningIds` helper is isolated and must retain `Where(IsOpening)`, semantic selection matching, case-insensitive deduplication and deterministic ordering.
+- Existing OpeningBooleanService normalization, pre-transaction target validation, UI/docs wiring and command uniqueness checks remain intact.
 
-## Expected surfaces
+## Validation performed
 
-- `scripts/preflight-targeted-opening-cut.py`
-- this claim file for close-out
-
-## Excluded scope
-
-- No edits to DirectDrawOpeningCommands.cs, OpeningBooleanCommands.cs, OpeningBooleanService.cs, docs/UI/ribbon or AutoHost implementation.
-- No automatic physical cut and no broad AutoHost command re-entry.
-- No unrelated run #30 failures, GitHub Actions dispatch, build/release publication or BricsCAD runtime qualification.
-
-## Validation plan
-
-- Replace the obsolete Direct Draw broad AutoHost requirement with exact `LinkSingleOpening(...)` and explicitly fail if `new AutoHostLinkCommands().AutoLinkHosts()` returns.
-- Require selected command to call `ResolveOpeningIds` before and after canonical binding, compare target sets, and keep targeted `CutLinkedOpenings(..., openingIds)`.
-- Validate `.Where(IsOpening)` and `.Distinct(...)` in the actual `ResolveOpeningIds` helper slice rather than only the command entry body.
-- Retain all existing physical-cut service guards, UI/docs wiring, targeted-overload normalization and Direct Draw no-boolean prohibitions.
-- Re-fetch exact gate before write, read back after commit, verify ancestry and close with exact SHA.
-
-## Coordination
-
-Repository search found no active reservation for the targeted opening-cut preflight. Current Structural Wall Opening Host claim is a different Core/domain lane and does not reserve these files.
+- Verified claim commit `ea3b2e1ae20f3821830115b5c30b57f772256675` remained an ancestor of moving `main`; the only intervening commit at that check closed an unrelated Recognition claim.
+- Re-fetched the exact gate before implementation.
+- Read current DirectDrawOpeningCommands and OpeningBooleanCommands before changing the gate.
+- Implementation commit `8d8c7712ac23200884baeaf7fd920b4212aa6bac` is on `main`.
+- A closeout write raced moving `main` once; current claim content was re-fetched and no force/overwrite was used.
+- No production source was changed.
+- No GitHub Actions/build/release dispatch was performed and no BricsCAD V25/V26 runtime PASS is claimed.
 
 ## Completion condition
 
-The targeted opening-cut gate follows exact single-opening Auto Host and helper-based deduplicated selected targets without weakening explicit-cut/ownership safety, is pushed to `main`, and this claim is closed with exact evidence.
+Completed. The targeted opening-cut gate now follows exact single-opening Auto Host and helper-based deduplicated selected targets without weakening explicit-cut/ownership safety, and this reservation is released.
