@@ -23,6 +23,11 @@ else:
         "MinimumViewSpan(view)",
         "Finite(extentMin)",
         "Finite(extentMax)",
+        "var paddedWidth = width * 1.25d",
+        "var paddedHeight = height * 1.25d",
+        "if (!FinitePositive(paddedWidth) || !FinitePositive(paddedHeight)) return false;",
+        "view.Width = paddedWidth",
+        "view.Height = paddedHeight",
         "private static void EnsureTiledModelSpace(Document document)",
         "if (document.Database.TileMode) return;",
         "document.Database.TileMode = true;",
@@ -46,6 +51,18 @@ else:
             errors.append("Selection extents must be transformed from WCS to DCS before union/framing.")
         if "view.ViewDirection =" in body or "view.Target =" in body or "view.ViewTwist =" in body:
             errors.append("Zoom Selected must frame the current view without changing camera direction/target/twist.")
+
+        padded_width = body.find("var paddedWidth = width * 1.25d")
+        padded_height = body.find("var paddedHeight = height * 1.25d")
+        padded_check = body.find("if (!FinitePositive(paddedWidth) || !FinitePositive(paddedHeight)) return false;")
+        assign_width = body.find("view.Width = paddedWidth")
+        assign_height = body.find("view.Height = paddedHeight")
+        if min(padded_width, padded_height, padded_check, assign_width, assign_height) < 0:
+            errors.append("Zoom Selected must compute, validate, and assign finite padded view dimensions.")
+        elif not (padded_width < padded_check and padded_height < padded_check < assign_width and padded_check < assign_height):
+            errors.append("Padded zoom dimensions must be validated before mutating the current view.")
+        if "view.Width = width * 1.25d" in body or "view.Height = height * 1.25d" in body:
+            errors.append("Zoom Selected must not assign unvalidated padding expressions directly to the current view.")
 
     viewport_commands_end = text.find('[CommandMethod("QS3DUNTRACK"')
     viewport_commands = text[:viewport_commands_end] if viewport_commands_end >= 0 else text
@@ -74,4 +91,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: viewport commands use idempotent TILEMODE-aware model focus, never blindly SwitchToModelSpace, and QS3DZOOMSELECTED transforms WCS entity extents into current-view DCS without changing camera orientation.")
+print("PASS: viewport commands use idempotent TILEMODE-aware model focus; QS3DZOOMSELECTED transforms WCS extents into current-view DCS, preserves camera orientation, and validates padded dimensions before mutating the view.")
