@@ -16,10 +16,7 @@ namespace QS3D.Core.Domain
             var normalizedName = Required(name, nameof(name), MaxNameLength);
             if (project.Zones.Any(x => x == null))
                 throw new InvalidOperationException("Project zone collection contains a null zone.");
-            var seenZoneIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var existing in project.Zones)
-                if (!seenZoneIds.Add(existing.Id))
-                    throw new InvalidOperationException("Project contains duplicate zone id: " + existing.Id + ".");
+            ValidateUniqueZoneIds(project);
             if (project.Zones.Count >= MaxZones) throw new InvalidOperationException("Project supports at most " + MaxZones + " zones.");
             if (project.Zones.Any(x => string.Equals(x.Id, normalizedId, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Zone id already exists: " + normalizedId);
@@ -120,7 +117,19 @@ namespace QS3D.Core.Domain
         private static ZoneDefinition FindRequired(ProjectState project, string id)
         {
             var normalized = Required(id, nameof(id), 64);
+            ValidateUniqueZoneIds(project);
             return project.FindZone(normalized) ?? throw new InvalidOperationException("Zone not found: " + normalized);
+        }
+
+        private static void ValidateUniqueZoneIds(ProjectState project)
+        {
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var zone in project.Zones)
+            {
+                if (zone == null) continue;
+                if (!seenIds.Add(zone.Id))
+                    throw new InvalidOperationException("Project contains duplicate zone id: " + zone.Id + ".");
+            }
         }
 
         private static IReadOnlyList<ProjectElement> ResolveProjectElements(ProjectState project)
