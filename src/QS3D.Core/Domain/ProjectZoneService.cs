@@ -77,6 +77,7 @@ namespace QS3D.Core.Domain
             }
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Zone assignment targets were being enumerated. Retry assignment against the current project state.");
+            RequireCurrentAssignmentOwnership(project, zone, unique.Values);
 
             var changed = unique.Values
                 .Where(x => !string.Equals((x.ZoneId ?? string.Empty).Trim(), zone.Id, StringComparison.OrdinalIgnoreCase))
@@ -115,6 +116,20 @@ namespace QS3D.Core.Domain
         private static bool ReferencesZone(ProjectElement element, string zoneId)
         {
             return string.Equals((element.ZoneId ?? string.Empty).Trim(), zoneId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void RequireCurrentAssignmentOwnership(ProjectState project, ZoneDefinition zone, IEnumerable<ProjectElement> elements)
+        {
+            var currentZone = project.FindZone(zone.Id);
+            if (!ReferenceEquals(currentZone, zone))
+                throw new InvalidOperationException("Target Zone no longer belongs to the project after assignment target enumeration: " + zone.Id + ".");
+
+            foreach (var element in elements)
+            {
+                var current = project.FindElement(element.Id);
+                if (!ReferenceEquals(current, element))
+                    throw new InvalidOperationException("Element no longer belongs to the project after Zone assignment target enumeration: " + element.Id + ".");
+            }
         }
 
         private static ZoneDefinition FindRequired(ProjectState project, string id)
