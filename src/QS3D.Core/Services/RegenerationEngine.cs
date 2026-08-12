@@ -51,6 +51,7 @@ namespace QS3D.Core.Services
             var normalizedId = (elementId ?? string.Empty).Trim();
             if (!_graph.TryGetElement(normalizedId, out var source) || source == null)
                 throw new KeyNotFoundException("Unknown element: " + elementId);
+            if (flags == ElementDirtyFlags.None) return;
 
             var dependents = new List<ProjectElement>();
             foreach (var dependentId in _graph.GetDependentsTransitive(source.Id))
