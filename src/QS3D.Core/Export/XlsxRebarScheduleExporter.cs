@@ -20,7 +20,8 @@ namespace QS3D.Core.Export
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-            var rowCount = ValidateRows(rows);
+            var snapshot = SnapshotRows(rows);
+            var rowCount = snapshot.Count;
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -35,7 +36,7 @@ namespace QS3D.Core.Export
                     WriteEntry(archive, "xl/workbook.xml", WorkbookXml);
                     WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml);
                     WriteEntry(archive, "xl/styles.xml", StylesXml);
-                    WriteEntry(archive, "xl/worksheets/sheet1.xml", BuildSheet(rows, rowCount));
+                    WriteEntry(archive, "xl/worksheets/sheet1.xml", BuildSheet(snapshot, rowCount));
                 }
                 ValidatePackage(tempPath);
                 AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
@@ -46,7 +47,7 @@ namespace QS3D.Core.Export
             }
         }
 
-        private static int ValidateRows(IReadOnlyList<RebarScheduleRow> rows)
+        private static IReadOnlyList<RebarScheduleRow> SnapshotRows(IReadOnlyList<RebarScheduleRow> rows)
         {
             var count = rows.Count;
             if (count < 0 || count > MaxDataRows)
@@ -55,13 +56,33 @@ namespace QS3D.Core.Export
                     count,
                     "BBS XLSX data rows must be between 0 and " + MaxDataRows.ToString(CultureInfo.InvariantCulture) + " so the worksheet stays within its row limit.");
 
+            var snapshot = new List<RebarScheduleRow>(count);
             for (var index = 0; index < count; index++)
             {
-                var row = rows[index];
-                if (row == null)
+                var source = rows[index];
+                if (source == null)
                     throw new ArgumentException(
                         "BBS row cannot be null. Invalid row index: " + index.ToString(CultureInfo.InvariantCulture) + ".",
                         nameof(rows));
+
+                var row = new RebarScheduleRow
+                {
+                    ElementId = source.ElementId ?? string.Empty,
+                    BarMark = source.BarMark ?? string.Empty,
+                    ShapeCode = source.ShapeCode ?? string.Empty,
+                    Notation = source.Notation ?? string.Empty,
+                    DiameterMm = source.DiameterMm,
+                    Quantity = source.Quantity,
+                    CuttingLengthM = source.CuttingLengthM,
+                    TotalLengthM = source.TotalLengthM,
+                    UnitWeightKgM = source.UnitWeightKgM,
+                    NetWeightKg = source.NetWeightKg,
+                    WastePercent = source.WastePercent,
+                    TotalWeightKg = source.TotalWeightKg,
+                    FabricationStatus = source.FabricationStatus ?? string.Empty,
+                    FabricationStandardCode = source.FabricationStandardCode ?? string.Empty,
+                    FabricationDetailingRevision = source.FabricationDetailingRevision ?? string.Empty
+                };
 
                 ValidateCellText(row.ElementId, index, "Element");
                 ValidateCellText(row.BarMark, index, "Bar Mark");
@@ -77,8 +98,9 @@ namespace QS3D.Core.Export
                 ValidateFinite(row.NetWeightKg, index, "NetWeightKg");
                 ValidateFinite(row.WastePercent, index, "WastePercent");
                 ValidateFinite(row.TotalWeightKg, index, "TotalWeightKg");
+                snapshot.Add(row);
             }
-            return count;
+            return snapshot;
         }
 
         private static void ValidateCellText(string value, int rowIndex, string field)
