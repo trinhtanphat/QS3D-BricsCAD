@@ -34,7 +34,8 @@ namespace QS3D.Core.Reporting
                 if (unit == "m2") return AreaM2;
                 if (unit == "m3") return VolumeM3;
                 if (unit == "kg") return MassKg;
-                return 0d;
+                if (unit.Length == 0) return 0d;
+                throw new InvalidOperationException("Material Usage primary quantity does not support unit: " + UnitHint + ".");
             }
         }
 
