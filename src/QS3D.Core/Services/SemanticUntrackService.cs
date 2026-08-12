@@ -35,9 +35,11 @@ namespace QS3D.Core.Services
             else
             {
                 var predicateVersion = project.ChangeVersion;
+                var predicateOwnership = SnapshotElementOwnership(project);
                 targets = resolved.Where(predicate).ToList();
                 if (project.ChangeVersion != predicateVersion)
                     throw new InvalidOperationException("Project state changed while evaluating semantic untrack predicate. Retry against the current project state.");
+                RequireElementOwnershipUnchanged(project, predicateOwnership);
             }
             if (targets.Count == 0)
                 return new SemanticUntrackResult(Array.Empty<string>());
@@ -56,6 +58,43 @@ namespace QS3D.Core.Services
                 project.Touch();
                 return new SemanticUntrackResult(targets.Select(x => x.Id).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly());
             });
+        }
+
+        private static IReadOnlyDictionary<string, ProjectElement> SnapshotElementOwnership(ProjectState project)
+        {
+            var result = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry.");
+                if (result.ContainsKey(element.Id))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + element.Id + ".");
+                result.Add(element.Id, element);
+            }
+            return result;
+        }
+
+        private static void RequireElementOwnershipUnchanged(
+            ProjectState project,
+            IReadOnlyDictionary<string, ProjectElement> expected)
+        {
+            if (project.Elements.Count != expected.Count)
+                throw PredicateStructuralFreshnessError();
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null || !seen.Add(element.Id) ||
+                    !expected.TryGetValue(element.Id, out var original) ||
+                    !ReferenceEquals(original, element))
+                    throw PredicateStructuralFreshnessError();
+            }
+        }
+
+        private static InvalidOperationException PredicateStructuralFreshnessError()
+        {
+            return new InvalidOperationException(
+                "Project element ownership changed while evaluating semantic untrack predicate. Retry against the current project state.");
         }
 
         private static void EnsureNoExternalDependents(
