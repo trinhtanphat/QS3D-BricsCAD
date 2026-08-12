@@ -547,10 +547,12 @@ namespace QS3D.Core.Geometry
 
             public int GetOrAdd(Point2 point)
             {
-                var cellX = Cell(point.X); var cellY = Cell(point.Y);
-                var best = -1; var bestDistance = double.MaxValue;
-                for (var x = cellX - 1; x <= cellX + 1; x++)
-                    for (var y = cellY - 1; y <= cellY + 1; y++)
+                var centerX = CellToken(point.X);
+                var centerY = CellToken(point.Y);
+                var best = -1;
+                var bestDistance = double.MaxValue;
+                foreach (var x in NeighborCellTokens(point.X))
+                    foreach (var y in NeighborCellTokens(point.Y))
                         if (_cells.TryGetValue(CellKey(x, y), out var candidates))
                             foreach (var index in candidates)
                             {
@@ -561,14 +563,40 @@ namespace QS3D.Core.Geometry
                 if (best >= 0) return best;
                 var created = _points.Count;
                 _points.Add(point);
-                var key = CellKey(cellX, cellY);
+                var key = CellKey(centerX, centerY);
                 if (!_cells.TryGetValue(key, out var list)) { list = new List<int>(); _cells[key] = list; }
                 list.Add(created);
                 return created;
             }
 
-            private long Cell(double value) => checked((long)Math.Floor(value / _tolerance));
-            private static string CellKey(long x, long y) => x.ToString(CultureInfo.InvariantCulture) + ":" + y.ToString(CultureInfo.InvariantCulture);
+            private IReadOnlyList<string> NeighborCellTokens(double value)
+            {
+                var scaled = value / _tolerance;
+                if (!Finite(scaled)) return new[] { ExactValueToken(value) };
+
+                var cell = Math.Floor(scaled);
+                var result = new List<string>(3);
+                AddCellToken(result, cell - 1d);
+                AddCellToken(result, cell);
+                AddCellToken(result, cell + 1d);
+                return result;
+            }
+
+            private string CellToken(double value)
+            {
+                var scaled = value / _tolerance;
+                return Finite(scaled) ? CellIndexToken(Math.Floor(scaled)) : ExactValueToken(value);
+            }
+
+            private static void AddCellToken(ICollection<string> target, double cell)
+            {
+                var token = CellIndexToken(cell);
+                if (!target.Contains(token)) target.Add(token);
+            }
+
+            private static string CellIndexToken(double cell) => "C:" + cell.ToString("R", CultureInfo.InvariantCulture);
+            private static string ExactValueToken(double value) => "V:" + value.ToString("R", CultureInfo.InvariantCulture);
+            private static string CellKey(string x, string y) => x + "|" + y;
         }
 
         private sealed class Cut { public Cut(double t, Point2 point) { T = t; Point = point; } public double T { get; } public Point2 Point { get; } }
