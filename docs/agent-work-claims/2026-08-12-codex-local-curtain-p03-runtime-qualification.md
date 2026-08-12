@@ -1,6 +1,6 @@
 # Work claim — LOCAL-002/P03 licensed Curtain straight-path qualification
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local-curtain-p03-runtime-qualification-20260812` (`/root`)
 - Registered: `2026-08-12T12:42:00+07:00`
 - Baseline main SHA: `3089b5bc8c174ff7f6f32a51b2c69ac2cd8929e1`
@@ -34,3 +34,10 @@
 - Canonical path build state was complete; ownership sets were disjoint; Health issue count was zero; Locate returned one panel and one canonical GlassWall owner; source geometry was preserved.
 - The repository-generated disposable drawing SHA-256 remained `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`; launched-process exit, private-script deletion and sidecar/backup absence were independently verified. No customer/private/BLT artifact or GitHub Actions workflow was used.
 - This proves only bounded P03. P04-P12 and overall LOCAL-002 remain `PENDING_LOCAL`.
+
+## Close-out — 2026-08-12
+
+- Claim-only PR `#877` merged as `83b3f93274a60e8de3744cb8ae668ca7de381e5b` before the licensed run.
+- That exact clean SHA passed every guarded P03 marker and cleanup invariant on installed BricsCAD V25.
+- Evidence/docs PR `#879` merged as `91fb6c7433c1768774b6432194555328dd5ba7be` and records only sanitized aggregate evidence.
+- P03 is bounded `LOCAL_PASS`; P04-P12 and overall LOCAL-002 remain open and `PENDING_LOCAL`. No GitHub Actions, release, signing, package publication or private/customer/BLT artifact was used.
