@@ -352,6 +352,25 @@ namespace QS3D.Core.Templates
             }
             try { ProjectRecognitionService.ValidateLayerMappings(profile.LayerMappings, "Template layer mappings"); }
             catch (InvalidOperationException ex) { throw new InvalidDataException(ex.Message, ex); }
+            ValidateSerializedXmlText(profile);
+        }
+
+        private static void ValidateSerializedXmlText(TemplateProfile profile)
+        {
+            try
+            {
+                var root = Serialize(profile).Root ?? throw new InvalidDataException("Template serialization produced no root element.");
+                foreach (var attribute in root.DescendantsAndSelf().Attributes())
+                    XmlConvert.VerifyXmlChars(attribute.Value);
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidDataException("Template contains characters that are invalid in XML.", ex);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new InvalidDataException("Template contains data that cannot be represented as XML.", ex);
+            }
         }
 
         private static ElementCategory RequiredCanonicalCategory(XElement element, string label)
