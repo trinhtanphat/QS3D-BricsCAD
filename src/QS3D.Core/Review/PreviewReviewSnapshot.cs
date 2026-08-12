@@ -404,6 +404,14 @@ namespace QS3D.Core.Review
         private static void Part(StringBuilder sb, string value)
         {
             var safe = value ?? string.Empty;
+            try
+            {
+                XmlConvert.VerifyXmlChars(safe);
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidOperationException("Preview review persisted text contains characters that are invalid in XML.", ex);
+            }
             sb.Append(safe.Length.ToString(CultureInfo.InvariantCulture)).Append(':').Append(safe).Append(';');
         }
     }
