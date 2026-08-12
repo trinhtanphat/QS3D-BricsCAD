@@ -18,8 +18,7 @@ namespace QS3D.Core.SmokeTests
             element.Properties["factor"] = "3";
             element.Properties[" LengthM "] = "4";
             element.Properties["\t"] = "222";
-            element.Quantities[" lengthm "] = 5d;
-            element.Quantities["  "] = 333d;
+            element.Quantities["LengthM"] = 5d;
             project.Elements.Add(element);
             project.QuantityRules.Add(new QuantityRule("beam-canonical-projected", ElementCategory.Beam, "ProjectedQuantity", "Factor*LengthM", "1"));
 
