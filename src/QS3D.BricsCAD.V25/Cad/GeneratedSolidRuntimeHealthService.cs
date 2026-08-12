@@ -170,7 +170,11 @@ namespace QS3D.BricsCAD.V25.Cad
             try
             {
                 foreach (var issue in provider())
-                    if (issue != null) target.Add(issue);
+                {
+                    if (issue == null)
+                        throw new InvalidOperationException("Runtime health providers must not return null issues.");
+                    target.Add(issue);
+                }
             }
             catch (System.Exception ex) when (IsRecoverableDiagnosticFailure(ex))
             {

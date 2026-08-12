@@ -226,6 +226,26 @@ def main():
     forbid(state_save, "File.WriteAllText(temp, Serialize(state)", "unbounded serialized state publish")
     forbid(state, "Process.Start", "Start Center state store")
 
+    require(catalog, "private const int MaxSearchQueryChars = 512;", "bounded launcher query characters")
+    require(catalog, "private const int MaxSearchTerms = 16;", "bounded launcher search terms")
+    bounded_search = section(
+        catalog,
+        "public static IReadOnlyList<StartCenterCommandItem> Search(string query, string group)",
+        "private static int Score(StartCenterCommandItem item, IReadOnlyList<string> terms)",
+        "bounded launcher search")
+    require(bounded_search, "if (normalizedQuery.Length > MaxSearchQueryChars)", "launcher query character bound")
+    require(bounded_search, "char.IsHighSurrogate(normalizedQuery[length - 1])", "launcher query surrogate boundary")
+    require(bounded_search, "char.IsLowSurrogate(normalizedQuery[length])", "launcher query surrogate pair preservation")
+    require(bounded_search, ".Take(MaxSearchTerms)", "launcher term bound")
+    require(bounded_search, ".ToArray();", "bounded launcher term materialization")
+    query_bound_pos = bounded_search.find("if (normalizedQuery.Length > MaxSearchQueryChars)")
+    split_pos = bounded_search.find(".Split(new[] { ' ', '\\t' }, StringSplitOptions.RemoveEmptyEntries)")
+    term_bound_pos = bounded_search.find(".Take(MaxSearchTerms)")
+    ranking_pos = bounded_search.find("var ranked = Items")
+    if min(query_bound_pos, split_pos, term_bound_pos, ranking_pos) < 0 or not (
+        query_bound_pos < split_pos < term_bound_pos < ranking_pos
+    ):
+        raise AssertionError("launcher search must bound query and terms before ranking")
     require(catalog, "StringSplitOptions.RemoveEmptyEntries", "multi-token launcher search")
     require(catalog, "ScoreTerm", "multi-token launcher scoring")
     require(catalog, "if (termScore == 0) return 0;", "AND-semantics launcher search")
@@ -265,7 +285,7 @@ def main():
     require(quantity_settings_health, '[CommandMethod("QS3DQSETTINGSHEALTHEXPORT", CommandFlags.Modal)]', "quantity-settings-health source registration")
     require(quantity_rule_create, '[CommandMethod("QS3DRULECREATE", CommandFlags.Modal)]', "quantity-rule-create source registration")
 
-    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, activation-fail-soft, failed-open-rollback-safe, command-diagnostic-fail-soft, unsubscribe-fail-soft, optional-state-fail-soft, stream-size-bounded, write-size-bounded, malformed-Unicode-safe, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
+    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, activation-fail-soft, failed-open-rollback-safe, command-diagnostic-fail-soft, unsubscribe-fail-soft, search-bounded, optional-state-fail-soft, stream-size-bounded, write-size-bounded, malformed-Unicode-safe, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
     return 0
 
 
