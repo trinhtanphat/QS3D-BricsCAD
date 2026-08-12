@@ -12,7 +12,7 @@ namespace QS3D.Core.SmokeTests
             AddedRemovedChangedRowsUseStableElementKeys();
             CaptureAndCompareDoNotMutateLiveProjects();
             ProjectAndSnapshotIdentityFailClosed();
-            NonFiniteAndOverflowFailClosed();
+            NonFiniteAndInvalidMagnitudeFailClosed();
         }
 
         private static void AddedRemovedChangedRowsUseStableElementKeys()
@@ -75,14 +75,11 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => service.Capture(Project("project-a", ("E1", 1d)), " padded "));
         }
 
-        private static void NonFiniteAndOverflowFailClosed()
+        private static void NonFiniteAndInvalidMagnitudeFailClosed()
         {
             var service = new QuantityReportRevisionService();
             Throws<InvalidOperationException>(() => service.Capture(Project("not-finite", ("E1", double.NaN)), "R1"));
-
-            var before = service.Capture(Project("overflow", ("E1", double.MaxValue)), "R1");
-            var after = service.Capture(Project("overflow", ("E1", -double.MaxValue)), "R2");
-            Throws<OverflowException>(() => service.Compare(before, after));
+            Throws<InvalidOperationException>(() => service.Capture(Project("negative", ("E1", -double.MaxValue)), "R2"));
         }
 
         private static ProjectState Project(string id, params (string Id, double LengthM)[] elements)

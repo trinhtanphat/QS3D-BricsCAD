@@ -75,7 +75,10 @@ namespace QS3D.Core.SmokeTests
             a.DependsOn.Add("MISSING");
             project.Elements.Add(a);
             var issues = new DependencyHealthService().Inspect(project);
-            Require(!issues.Any(), "missing dependency remains ModelHealthService responsibility and must not be misclassified as a cycle");
+            Require(issues.Count(x => x.Code == "DEPENDENCY_TARGET_MISSING" && x.ElementId == "A") == 1,
+                "missing dependency must be reported exactly once by the canonical dependency health service");
+            Require(!issues.Any(x => x.Code == "DEPENDENCY_CYCLE"),
+                "missing dependency must not be misclassified as a cycle");
         }
 
         private static void DuplicateDependencyTargetIsReportedAsAmbiguous()

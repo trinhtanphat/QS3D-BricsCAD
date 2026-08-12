@@ -73,7 +73,7 @@ for token in (
     "AddedRemovedChangedRowsUseStableElementKeys",
     "CaptureAndCompareDoNotMutateLiveProjects",
     "ProjectAndSnapshotIdentityFailClosed",
-    "NonFiniteAndOverflowFailClosed",
+    "NonFiniteAndInvalidMagnitudeFailClosed",
     "double.MaxValue",
     "double.NaN",
 ):
