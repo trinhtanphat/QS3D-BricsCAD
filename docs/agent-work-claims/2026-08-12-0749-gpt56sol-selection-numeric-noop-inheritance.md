@@ -3,7 +3,7 @@
 - Status: `ACTIVE`
 - Agent: `chatgpt-web-gpt56sol-selection-numeric-noop-inheritance-20260812-0749`
 - Registered: `2026-08-12T07:49:00+07:00`
-- Baseline main SHA: `117f529eaf88b8b30ddc8a788e849924915f0eb6`
+- Baseline main SHA: `547b759a4ae6d6808e6194ace1f5c96d8d893b2f`
 - Priority: evidence-driven remote-safe semantic mutation integrity during owner-requested `continue all`
 
 ## Confirmed defect
@@ -37,7 +37,7 @@ Preserve true numeric no-ops in `MultiplyNumericProperty()` based on numeric equ
 
 ## Coordination
 
-The active Goal-100 quantity-selection claim is confined to `ProjectQuantityReportBuilder.cs`, its smoke/registration and a planning document. Recent history contains an older atomic numeric bulk-edit fix and a distinct bulk Family-assignment no-op fix, but no numeric no-op/inheritance lane for this service.
+The active Goal-100 quantity-selection claim is confined to `ProjectQuantityReportBuilder.cs`, its smoke/registration and a planning document. Recent history contains an older atomic numeric bulk-edit fix and a distinct bulk Family-assignment no-op fix, but no numeric no-op/inheritance lane for this service. A concurrent wall-quantity null-opening fix landed immediately before this claim and was verified non-overlapping; the baseline above records that actual parent.
 
 ## Completion condition
 
