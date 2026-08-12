@@ -1,0 +1,21 @@
+# Agent Work Claim
+
+- Agent: `ChatGPT web / GPT-5.6 Sol`
+- Status: `ACTIVE`
+- State: `ACTIVE`
+- Started at: `2026-08-12T15:23:00+07:00`
+- Baseline main SHA: `7d00030f8c7cbbfc74f36687d8767284a45700eb`
+- Task Key: `CORE-PROJECT-BROWSER-SELECTION-ROOT-IDENTITY`
+- Scope: Make `ProjectBrowserSelectionPlanner.PlanReveal()` apply the established case-insensitive semantic element-id identity consistently when checking that selected ids belong to the root node. Preserve canonical whitespace rejection, duplicate/ambiguity handling, primary-selection behavior, tree indexing, paging, and returned selected-id spelling.
+- Primary files:
+  - `src/QS3D.Core/Navigation/ProjectBrowserSelectionPlanner.cs`
+  - `tests/QS3D.Core.SmokeTests/ProjectBrowserSelectionPlannerSmoke.cs`
+  - this claim file
+- Counterexample:
+  - A tree whose root contains semantic element id `B-001` currently rejects selection alias `b-001` at the root-membership check even though `ProjectState.FindElement`, planner membership indexes, selection duplicate detection, and the existing focused smoke all use case-insensitive element identity.
+- Tests intended:
+  - Explicitly pin that the fixture root contains `B-001` but not raw `b-001`, then require `PlanReveal(..., "b-001")` to resolve successfully.
+  - Preserve missing-id, case-duplicate, whitespace, primary-selection, deterministic paging, and immutable-result regressions.
+- Notes:
+  - Pure Core/Navigation change; no persistence, QSDB, formulas, recognition/B4D, SourceHandle/generated-handle, UI/native CAD, or release workflow scope.
+  - No GitHub Actions, full .NET build, executable smoke run, or BricsCAD V25/V26 runtime PASS will be claimed unless actually performed.
