@@ -27,9 +27,18 @@ namespace QS3D.Core.Documentation
             Categories = new List<ElementCategory>(categories ?? Array.Empty<ElementCategory>()).AsReadOnly();
             FloorId = floorId ?? string.Empty;
             ZoneId = zoneId ?? string.Empty;
-            IncludeElementIds = new List<string>(includeElementIds ?? Array.Empty<string>()).AsReadOnly();
-            ExcludeElementIds = new List<string>(excludeElementIds ?? Array.Empty<string>()).AsReadOnly();
-            Columns = new List<SemanticDocumentationColumn>(columns ?? throw new ArgumentNullException(nameof(columns))).AsReadOnly();
+            IncludeElementIds = SnapshotBounded(
+                includeElementIds ?? Array.Empty<string>(),
+                SemanticScheduleCatalog.MaxIds,
+                "Semantic schedule include list exceeds 5000 ids.");
+            ExcludeElementIds = SnapshotBounded(
+                excludeElementIds ?? Array.Empty<string>(),
+                SemanticScheduleCatalog.MaxIds,
+                "Semantic schedule exclude list exceeds 5000 ids.");
+            Columns = SnapshotBounded(
+                columns ?? throw new ArgumentNullException(nameof(columns)),
+                SemanticScheduleCatalog.MaxColumns,
+                "Semantic schedule requires 1..32 columns.");
         }
 
         public string Id { get; }
@@ -41,14 +50,28 @@ namespace QS3D.Core.Documentation
         public IReadOnlyList<string> IncludeElementIds { get; }
         public IReadOnlyList<string> ExcludeElementIds { get; }
         public IReadOnlyList<SemanticDocumentationColumn> Columns { get; }
+
+        private static IReadOnlyList<T> SnapshotBounded<T>(IEnumerable<T> values, int maxCount, string capacityError)
+        {
+            var result = new List<T>(Math.Min(maxCount, 256));
+            using (var enumerator = values.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= maxCount) throw new InvalidOperationException(capacityError);
+                    result.Add(enumerator.Current);
+                }
+            }
+            return result.AsReadOnly();
+        }
     }
 
     public static class SemanticScheduleCatalog
     {
         public const string MetadataKey = "QS3D.Documentation.SemanticSchedules.v1";
         private const int MaxSchedules = 128;
-        private const int MaxIds = 5000;
-        private const int MaxColumns = 32;
+        internal const int MaxIds = 5000;
+        internal const int MaxColumns = 32;
         private const int MaxPayloadChars = 1024 * 1024;
 
         public static IReadOnlyList<SemanticScheduleDefinition> Load(ProjectState project)
