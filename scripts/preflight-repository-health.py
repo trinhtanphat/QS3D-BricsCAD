@@ -65,8 +65,8 @@ if GENERIC.is_file():
         "generic preflight must enforce manual-only policy for both .yml and .yaml workflows",
     )
     require(
-        "'StartsWith(\"CAD.\")'" in source,
-        "generic preflight semantic-capture token must remain syntactically closed",
+        "cad_prefix = 'StartsWith(\"CAD.\", StringComparison.OrdinalIgnoreCase)'" in source,
+        "generic preflight semantic-capture token must retain explicit ordinal-ignore-case CAD prefix matching",
     )
 
 require(AGENTS.is_file(), "missing repository coordination policy: AGENTS.md")
