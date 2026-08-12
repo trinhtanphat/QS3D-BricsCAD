@@ -1,39 +1,34 @@
 # Work claim — Semantic Tag rotation metadata health
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-web/gpt56sol-semantic-tag-rotation-health`
 - Registered: `2026-08-12T12:31:00+07:00`
+- Completed: `2026-08-12T12:35:00+07:00`
 - Baseline main SHA: `ed05830886404e3f3c78b2ed8699486bd2c18cd4`
 - Priority: P1 — writer-owned Semantic Tag rotation metadata must not bypass health validation.
 - Task Key: `CORE-SEMANTIC-TAG-ROTATION-HEALTH`
 
 ## Confirmed defect
 
-`SemanticTagBuilder.Build(...)` always validates a finite `rotationRadians` then persists `GeneratedSemanticTagRotationRad` using `double.ToString("R", CultureInfo.InvariantCulture)`. `GeneratedSemanticTagHealthService` never reads that field. `GeneratedSemanticTagRuntimeHealthService` compares live MText rotation only when the stored rotation parses as finite, so missing/non-finite metadata silently skips the runtime drift check as well.
+`SemanticTagBuilder.Build(...)` always validates a finite `rotationRadians` then persists `GeneratedSemanticTagRotationRad` using `double.ToString("R", CultureInfo.InvariantCulture)`. `GeneratedSemanticTagHealthService` did not read that field. `GeneratedSemanticTagRuntimeHealthService` compared live MText rotation only when the stored rotation parsed as finite, so missing/non-finite metadata silently skipped the runtime drift check as well.
 
-Consequently a generated Semantic Tag can retain missing, `NaN`, `Infinity`, or alternate non-writer rotation text without any rotation-metadata health evidence.
+## Completed implementation
 
-## Non-overlap check
+- Claim commit: `1824eb91fbe695229a8ae0fdb3b1d8c9de50e4d7`.
+- Source commit: `dbb3806d1487bff9223913c97aa167049d7a7d40`.
+- Smoke commit: `8bdc9d9e667b0aa033ff082500fb890e1447380d`.
+- PR #886 squash merge: `a4418174690f2fd74e169695a3cb61683ca2858c`.
+- Merged source blob read back from `main`: `5256c0abed61796841cc8886a4aff991bca11782`.
+- Merged smoke blob read back from `main`: `066f36730fdf3796fb9b43d2aa1b0d2247a21f6c`.
+- `main` readback immediately after merge was `a4418174690f2fd74e169695a3cb61683ca2858c`, so the merge is the current verified ancestor/root of the snapshot.
 
-Recent commit search found no Semantic Tag rotation metadata health lane. Open PR #882 owns Bulk Edit ID-target freshness and does not overlap Semantic Tag diagnostics.
+## Final contract
 
-## Reserved scope
-
-- `src/QS3D.Core/Diagnostics/GeneratedSemanticTagHealthService.cs`
-- one focused Core smoke regression for `GeneratedSemanticTagRotationRad`
-- this claim file
-
-Do not modify Semantic Tag builder/runtime health, owner/template/text/position metadata, generated handle ownership, persistence format, command wrappers, or BricsCAD runtime code.
-
-## Intended contract
-
-- Generated Semantic Tag rotation metadata must be present and parse as a finite invariant number or emit `SEMANTIC_TAG_ROTATION_INVALID` as Error.
-- After finite validity, raw text must equal `value.ToString("R", CultureInfo.InvariantCulture)` or emit `SEMANTIC_TAG_ROTATION_NON_CANONICAL` as Error.
+- Generated Semantic Tag rotation metadata must be present and parse as a finite invariant number or emits `SEMANTIC_TAG_ROTATION_INVALID` as Error.
+- After finite validity, raw text must equal `value.ToString("R", CultureInfo.InvariantCulture)` or emits `SEMANTIC_TAG_ROTATION_NON_CANONICAL` as Error.
 - Invalid/missing values do not receive canonicality noise.
 - Exact writer-owned round-trip rotation strings, including `0`, preserve existing behavior.
 - Elements without generated Semantic Tag handles remain unaffected.
 
-## Completion condition
-
-Missing/non-finite/noncanonical rotation metadata is fail-visible, focused smoke coverage pins those cases plus zero/canonical/no-handles controls, source + smoke are read back from merged `main`, ancestry is verified, and this claim is closed with exact commit SHAs.
+No GitHub Actions were dispatched. No full local .NET build PASS, executable smoke PASS, or BricsCAD V25/V26 runtime PASS is claimed for this lane.
