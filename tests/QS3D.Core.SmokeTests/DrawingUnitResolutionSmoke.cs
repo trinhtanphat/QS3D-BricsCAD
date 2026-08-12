@@ -52,6 +52,12 @@ namespace QS3D.Core.SmokeTests
             };
             Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.TryResolve(null, numericOverride, out _));
 
+            var paddedOverride = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.OverrideMetadataKey] = " Meter "
+            };
+            Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.TryResolve(null, paddedOverride, out _));
+
             var lowercaseBound = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 [DrawingUnitResolutionPolicy.BoundMetadataKey] = "meter"
@@ -63,6 +69,12 @@ namespace QS3D.Core.SmokeTests
                 [DrawingUnitResolutionPolicy.BoundMetadataKey] = ((int)LengthUnit.Meter).ToString()
             };
             Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(numericBound, true, LengthUnit.Meter));
+
+            var paddedBound = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.BoundMetadataKey] = " Meter "
+            };
+            Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(paddedBound, true, LengthUnit.Meter));
 
             metadata[DrawingUnitResolutionPolicy.OverrideMetadataKey] = "NotAUnit";
             Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.TryResolve(null, metadata, out _));
