@@ -196,8 +196,7 @@ namespace QS3D.Core.Templates
 
             foreach (var item in root.Element("families")?.Elements("family") ?? Enumerable.Empty<XElement>())
             {
-                if (!Enum.TryParse(Required(item, "category"), true, out ElementCategory category) || !Enum.IsDefined(typeof(ElementCategory), category))
-                    throw new InvalidDataException("Invalid template family category.");
+                var category = RequiredCanonicalCategory(item, "family");
                 var family = new ProjectFamily(Required(item, "id"), Required(item, "name"), category);
                 foreach (var property in item.Element("properties")?.Elements("p") ?? Enumerable.Empty<XElement>())
                 {
@@ -209,8 +208,7 @@ namespace QS3D.Core.Templates
             }
             foreach (var item in root.Element("rules")?.Elements("rule") ?? Enumerable.Empty<XElement>())
             {
-                if (!Enum.TryParse(Required(item, "category"), true, out ElementCategory category) || !Enum.IsDefined(typeof(ElementCategory), category))
-                    throw new InvalidDataException("Invalid template rule category.");
+                var category = RequiredCanonicalCategory(item, "rule");
                 profile.QuantityRules.Add(new QuantityRule(Required(item, "id"), category, Required(item, "output"), Required(item, "expression"), Required(item, "version")));
             }
             foreach (var item in root.Element("layerMappings")?.Elements("map") ?? Enumerable.Empty<XElement>())
@@ -332,6 +330,17 @@ namespace QS3D.Core.Templates
             }
             try { ProjectRecognitionService.ValidateLayerMappings(profile.LayerMappings, "Template layer mappings"); }
             catch (InvalidOperationException ex) { throw new InvalidDataException(ex.Message, ex); }
+        }
+
+        private static ElementCategory RequiredCanonicalCategory(XElement element, string label)
+        {
+            var raw = element.Attribute("category")?.Value;
+            if (string.IsNullOrWhiteSpace(raw) ||
+                !Enum.TryParse(raw, false, out ElementCategory category) ||
+                !Enum.IsDefined(typeof(ElementCategory), category) ||
+                !string.Equals(raw, category.ToString(), StringComparison.Ordinal))
+                throw new InvalidDataException("Invalid or non-canonical template " + label + " category.");
+            return category;
         }
 
         private static IEnumerable<string> SplitColumns(string value) => (value ?? string.Empty).Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase);
