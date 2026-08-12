@@ -66,17 +66,17 @@ namespace QS3D.Core.Diagnostics
                 ValidateNonNegative(element, "GeneratedFoundationMeshCoverM", "FOUNDATION_MESH_COVER_INVALID", issues);
 
                 if (!element.Properties.TryGetValue("GeneratedFoundationMeshFaces", out var faces) ||
-                    !(string.Equals(faces, "Bottom", StringComparison.OrdinalIgnoreCase) ||
-                      string.Equals(faces, "Top", StringComparison.OrdinalIgnoreCase) ||
-                      string.Equals(faces, "Both", StringComparison.OrdinalIgnoreCase)))
+                    !(string.Equals(faces, "Bottom", StringComparison.Ordinal) ||
+                      string.Equals(faces, "Top", StringComparison.Ordinal) ||
+                      string.Equals(faces, "Both", StringComparison.Ordinal)))
                     issues.Add(new ModelHealthIssue("FOUNDATION_MESH_FACES_INVALID", HealthSeverity.Warning, "GeneratedFoundationMeshFaces phải là Bottom, Top hoặc Both.", element.Id));
 
-                if (!element.Properties.TryGetValue("GeneratedFoundationMeshMode", out var mode) || !string.Equals(mode, "FoundationMeshXY", StringComparison.OrdinalIgnoreCase))
+                if (!element.Properties.TryGetValue("GeneratedFoundationMeshMode", out var mode) || !string.Equals(mode, "FoundationMeshXY", StringComparison.Ordinal))
                     issues.Add(new ModelHealthIssue("FOUNDATION_MESH_MODE_INVALID", HealthSeverity.Warning, "GeneratedFoundationMeshMode thiếu hoặc không hợp lệ.", element.Id));
 
                 if (element.Properties.TryGetValue("GeneratedFoundationMeshFootprintMode", out var footprintMode) &&
-                    !(string.Equals(footprintMode, "RectangleLocalXY", StringComparison.OrdinalIgnoreCase) ||
-                      string.Equals(footprintMode, "PolygonGlobalXY", StringComparison.OrdinalIgnoreCase)))
+                    !(string.Equals(footprintMode, "RectangleLocalXY", StringComparison.Ordinal) ||
+                      string.Equals(footprintMode, "PolygonGlobalXY", StringComparison.Ordinal)))
                     issues.Add(new ModelHealthIssue("FOUNDATION_MESH_FOOTPRINT_MODE_INVALID", HealthSeverity.Warning, "GeneratedFoundationMeshFootprintMode phải là RectangleLocalXY hoặc PolygonGlobalXY; missing key is accepted only as legacy rectangle metadata.", element.Id));
 
                 if (element.Category != ElementCategory.Foundation)
