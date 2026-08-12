@@ -26,9 +26,12 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var key = SemanticPropertyEditPolicy.RequireEditablePropertyKey(propertyName);
+            var beforeTargetEnumeration = project.ChangeVersion;
+            var targets = OwnedDistinct(project, elements);
+            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk edit object target enumeration");
             var updates = new List<PendingPropertyUpdate>();
             var next = value ?? string.Empty;
-            foreach (var element in OwnedDistinct(project, elements))
+            foreach (var element in targets)
             {
                 var hadBefore = element.Properties.TryGetValue(key, out var before);
                 if (hadBefore && string.Equals(before ?? string.Empty, next, StringComparison.Ordinal)) continue;
@@ -57,8 +60,11 @@ namespace QS3D.Core.Services
             if (double.IsNaN(factor) || double.IsInfinity(factor)) throw new ArgumentOutOfRangeException(nameof(factor));
             var key = SemanticPropertyEditPolicy.RequireEditablePropertyKey(propertyName);
 
+            var beforeTargetEnumeration = project.ChangeVersion;
+            var targets = OwnedDistinct(project, elements);
+            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk numeric object target enumeration");
             var updates = new List<PendingPropertyUpdate>();
-            foreach (var element in OwnedDistinct(project, elements))
+            foreach (var element in targets)
             {
                 if (!element.Properties.TryGetValue(key, out var text)) continue;
                 if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var current) || double.IsNaN(current) || double.IsInfinity(current))
@@ -89,7 +95,10 @@ namespace QS3D.Core.Services
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
-            return SetProperty(project, OwnedDistinctByIds(project, elementIds), propertyName, value).Count;
+            var beforeTargetEnumeration = project.ChangeVersion;
+            var targets = OwnedDistinctByIds(project, elementIds);
+            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk edit target-id enumeration");
+            return SetProperty(project, targets, propertyName, value).Count;
         }
 
         public int AssignFamily(ProjectState project, IEnumerable<string> elementIds, string familyId)
@@ -101,7 +110,9 @@ namespace QS3D.Core.Services
             var targetPropertyKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var property in targetProperties) targetPropertyKeys.Add(property.Key);
 
+            var beforeTargetEnumeration = project.ChangeVersion;
             var targets = OwnedDistinctByIds(project, elementIds);
+            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk Family target-id enumeration");
             foreach (var element in targets)
                 if (element.Category != family.Category)
                     throw new InvalidOperationException("Cannot assign family " + family.Id + " (" + family.Category + ") to element " + element.Id + " (" + element.Category + "). Bulk family assignment is all-or-nothing.");
@@ -229,6 +240,12 @@ namespace QS3D.Core.Services
                 throw new InvalidOperationException(label + " cannot exceed " + MaxTargetInputCount + " input entries.");
             if (values is IReadOnlyCollection<T> readOnlyCollection && readOnlyCollection.Count > MaxTargetInputCount)
                 throw new InvalidOperationException(label + " cannot exceed " + MaxTargetInputCount + " input entries.");
+        }
+
+        private static void RequireTargetEnumerationFreshness(ProjectState project, long beforeVersion, string label)
+        {
+            if (project.ChangeVersion != beforeVersion)
+                throw new InvalidOperationException(label + " changed the project while targets were being enumerated. Retry the bulk edit against the current project state.");
         }
 
         private static ElementDirtyFlags DirtyFlags(ProjectElement element, string propertyName)
