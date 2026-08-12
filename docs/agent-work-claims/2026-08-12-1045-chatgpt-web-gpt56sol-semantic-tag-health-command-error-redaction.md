@@ -1,6 +1,6 @@
 # Work claim — Semantic Tag Health command error redaction
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-semantic-tag-health-command-error-redaction-20260812-1045`
 - Registered: `2026-08-12T10:45:00+07:00`
 - Baseline main SHA: `f62d6c07de99dfcecc6aad98c8ca130f25a95c2e`
@@ -8,7 +8,7 @@
 
 ## Confirmed defect
 
-`src/QS3D.BricsCAD.V25/SemanticTagHealthCommands.cs` catches `Exception ex` at the `QS3DTAGHEALTH` command boundary and constructs `"QS3DTAGHEALTH lỗi: " + ex.Message`, then reports it to Palette status and Editor output. Raw exception details can expose filesystem/provider/environment information.
+`src/QS3D.BricsCAD.V25/SemanticTagHealthCommands.cs` previously caught `Exception ex` at the `QS3DTAGHEALTH` command boundary and constructed `"QS3DTAGHEALTH lỗi: " + ex.Message`, then reported it to Palette status and Editor output. Raw exception details could expose filesystem/provider/environment information.
 
 ## Reserved scope
 
@@ -26,13 +26,16 @@
 
 - No changes to semantic tag generation, health service/runtime semantics, issue de-duplication, handle keys, project persistence, Actions dispatch, release publication, force push, or BricsCAD runtime PASS claim.
 
-## Validation plan
+## Validation completed
 
-- Re-fetch current source after claim registration before editing.
-- Replace raw exception-message composition with a stable generic command failure message while preserving tag health/locate behavior.
-- Add a focused Python source preflight that rejects `ex.Message` and pins registration/read-only/health aggregation/PASS/output-cap/locate/error-output contracts.
-- Re-fetch source/preflight from current `main`, verify ancestry/readback, then close with exact SHAs.
+- Claim registration: `84df2060da5d1eb4b5cd7e4c180146cd3937cc8b`.
+- Source fix: `7ea4588e496393ea012ef23bd0b7985899a4f4d1`.
+- Focused preflight source: `6898b7d6170f75baff8f4bc9bf1ce5277dc3218b`.
+- Readback on current `main` confirmed `catch (Exception)` and stable generic text `QS3DTAGHEALTH lỗi: không thể hoàn tất health check.` while preserving persisted/runtime aggregation, de-duplication, PASS path, issue output cap, semantic-tag handle locate, and protected Palette/Editor error sinks.
+- Readback confirmed `scripts/preflight-semantic-tag-health-command-error-redaction.py` pins those source contracts and rejects `catch (Exception ex)`, `ex.Message`, and exception-detail concatenation.
+- Ancestry verification against `main` SHA `3a4ef1312cf99a0d3c4af08a7bd176d5aa440190` confirmed both source fix and focused preflight commit are ancestors.
+- Python preflight execution, GitHub Actions, build, and licensed BricsCAD V25/V26 runtime were not executed or claimed PASS through this connector session.
 
 ## Completion condition
 
-Completed only when current `main` no longer reflects `ex.Message` from `QS3DTAGHEALTH`, focused regression source pins the existing command flow, and this claim is `COMPLETED` with exact integration evidence.
+Completed: current `main` no longer reflects `ex.Message` from `QS3DTAGHEALTH`, focused regression source pins the existing command flow, and exact integration evidence is recorded above.
