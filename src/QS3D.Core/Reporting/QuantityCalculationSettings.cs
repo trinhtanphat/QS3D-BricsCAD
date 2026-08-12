@@ -108,15 +108,15 @@ namespace QS3D.Core.Reporting
         {
             if (SchemaVersion < 0)
                 throw new InvalidOperationException("Quantity settings schema cannot be negative.");
-            if (SchemaVersion == 0) SchemaVersion = CurrentSchemaVersion;
-            if (SchemaVersion > CurrentSchemaVersion)
-                throw new InvalidOperationException("Quantity settings schema " + SchemaVersion + " is newer than supported schema " + CurrentSchemaVersion + ".");
+            var normalizedSchemaVersion = SchemaVersion == 0 ? CurrentSchemaVersion : SchemaVersion;
+            if (normalizedSchemaVersion > CurrentSchemaVersion)
+                throw new InvalidOperationException("Quantity settings schema " + normalizedSchemaVersion + " is newer than supported schema " + CurrentSchemaVersion + ".");
 
-            CategoryRules = CategoryRules ?? new List<QuantityCategoryRuleSetting>();
-            IntersectionRules = IntersectionRules ?? new List<QuantityIntersectionRuleSetting>();
-            RequireCollectionCardinality(CategoryRules, IntersectionRules);
+            var normalizedCategoryRules = CategoryRules ?? new List<QuantityCategoryRuleSetting>();
+            var normalizedIntersectionRules = IntersectionRules ?? new List<QuantityIntersectionRuleSetting>();
+            RequireCollectionCardinality(normalizedCategoryRules, normalizedIntersectionRules);
 
-            DimColor = string.IsNullOrWhiteSpace(DimColor) ? "#FFFFFF" : DimColor.Trim().ToUpperInvariant();
+            var normalizedDimColor = string.IsNullOrWhiteSpace(DimColor) ? "#FFFFFF" : DimColor.Trim().ToUpperInvariant();
 
             RequireFiniteNonNegative(FormworkTolerance, nameof(FormworkTolerance));
             RequireFiniteNonNegative(BlindingConcreteOffset, nameof(BlindingConcreteOffset));
@@ -129,11 +129,11 @@ namespace QS3D.Core.Reporting
             RequireFiniteNonNegative(RoomSearchRadiusMm, nameof(RoomSearchRadiusMm));
             RequireFiniteNonNegative(DimTextHeight, nameof(DimTextHeight));
             if (DimTextHeight <= 0d) throw new InvalidOperationException("DimTextHeight must be greater than zero.");
-            if (!IsHexColor(DimColor)) throw new InvalidOperationException("DimColor must use #RRGGBB format.");
+            if (!IsHexColor(normalizedDimColor)) throw new InvalidOperationException("DimColor must use #RRGGBB format.");
 
             var categoryCodes = new HashSet<int>();
             var observedCategoryCodes = new HashSet<int>();
-            foreach (var rule in CategoryRules)
+            foreach (var rule in normalizedCategoryRules)
             {
                 if (rule == null) throw new InvalidOperationException(NullCategoryRuleMessage);
                 if (rule.Category < 0) throw new InvalidOperationException("Category code cannot be negative.");
@@ -144,7 +144,7 @@ namespace QS3D.Core.Reporting
             }
 
             var pairs = new HashSet<long>();
-            foreach (var rule in IntersectionRules)
+            foreach (var rule in normalizedIntersectionRules)
             {
                 if (rule == null) throw new InvalidOperationException(NullIntersectionRuleMessage);
                 if (rule.Source < 0 || rule.Target < 0) throw new InvalidOperationException("Intersection category codes cannot be negative.");
@@ -153,6 +153,11 @@ namespace QS3D.Core.Reporting
                 var key = PairKey(rule.Source, rule.Target);
                 if (!pairs.Add(key)) throw new InvalidOperationException("Duplicate intersection rule for " + rule.Source + ":" + rule.Target + ".");
             }
+
+            SchemaVersion = normalizedSchemaVersion;
+            CategoryRules = normalizedCategoryRules;
+            IntersectionRules = normalizedIntersectionRules;
+            DimColor = normalizedDimColor;
         }
 
         public QuantityCategoryRuleSetting? FindCategoryRule(int categoryCode)
