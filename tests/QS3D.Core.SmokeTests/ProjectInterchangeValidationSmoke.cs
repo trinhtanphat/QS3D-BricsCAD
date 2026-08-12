@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using QS3D.Core.Domain;
@@ -16,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             BrokenDependencyFailsClosed();
             DependencyCycleFailsClosed();
             InvalidUtf8FileFailsClosed();
+            OversizeFilePreservesGuardedLimit();
             MissingRequiredCollectionFailsClosed();
             EmptyRequiredNamesFailClosed();
         }
@@ -68,6 +70,34 @@ namespace QS3D.Core.SmokeTests
             {
                 File.WriteAllBytes(path, new byte[] { (byte)'{', 0xff, (byte)'}' });
                 RequireError(ProjectInterchangeJsonValidator.ValidateFile(path), "JSON_UTF8");
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+            }
+        }
+
+        private static void OversizeFilePreservesGuardedLimit()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-interchange-oversize-" + Guid.NewGuid().ToString("N") + ".qs3d.json");
+            try
+            {
+                using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                    stream.SetLength(ProjectInterchangeJsonValidator.MaxFileBytes + 1L);
+
+                try
+                {
+                    ProjectInterchangeJsonValidator.ValidateFile(path);
+                }
+                catch (InvalidDataException ex)
+                {
+                    var expected = "Semantic snapshot exceeds the guarded " + ProjectInterchangeJsonValidator.MaxFileBytes.ToString(CultureInfo.InvariantCulture) + " byte limit.";
+                    if (!string.Equals(ex.Message, expected, StringComparison.Ordinal))
+                        throw new Exception("Interchange oversize guard changed its public error contract: " + ex.Message);
+                    return;
+                }
+
+                throw new Exception("Interchange validator must reject files above MaxFileBytes.");
             }
             finally
             {
