@@ -1,6 +1,6 @@
 # Work claim — Floor/Zone mutation preflight canonical-repair aliases
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-12T14:05:00+07:00`
 - Baseline main SHA: `6ca953768c76f8d916e8c87c982c06c7dc298245`
@@ -27,13 +27,15 @@ Reconcile `scripts/preflight-project-floor-zone-mutation-integrity.py` with the 
 
 PR #821 explicitly recorded `scripts/preflight-project-floor-zone-mutation-integrity.py` as a known stale gate because it hard-coded `FloorActiveCanonicalIdentityIsNoOp` / `ZoneActiveCanonicalIdentityIsNoOp`. Current smoke instead runs `FloorActiveAliasIsCanonicalRepair` / `ZoneActiveAliasIsCanonicalRepair`, verifies alias repair advances `ChangeVersion` once and stores the canonical ID, then verifies a subsequent canonical activation is a no-op.
 
-## Validation plan
+## Validation
 
-- Update only the stale smoke-token expectations in the preflight and strengthen them to require canonical-repair evidence.
-- Preserve existing assignment no-op, null-target atomicity, registration, and source ordering guards.
-- Read back the exact pushed diff.
-- Do not claim executable preflight/build/Actions/V25 runtime PASS unless actually executed.
+- Implementation commit: `50d444ad4f6eabc2ba0ed8f100442969c00915ed` (`test(preflight): track Floor Zone alias repair semantics`).
+- Only `scripts/preflight-project-floor-zone-mutation-integrity.py` changed.
+- The gate now requires `FloorActiveAliasIsCanonicalRepair` and `ZoneActiveAliasIsCanonicalRepair`, plus evidence that alias repair advances `ChangeVersion` once and writes canonical active IDs.
+- Existing assignment canonical no-op, null-target atomicity, module registration, and source-ordering guards are preserved.
+- Production Floor/Zone services and smoke implementation were read-only.
+- No GitHub Actions were dispatched. No executable preflight/build or licensed BricsCAD runtime PASS is claimed.
 
 ## Completion condition
 
-A pushed `main` implementation updates the focused preflight without changing production source, followed by this claim marked `COMPLETED` with the implementation SHA.
+Satisfied by pushed implementation `50d444ad4f6eabc2ba0ed8f100442969c00915ed` and this completion record on `main`.
