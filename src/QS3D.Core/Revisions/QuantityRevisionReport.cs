@@ -46,7 +46,8 @@ namespace QS3D.Core.Revisions
                     var hasAfter = b != null && b.Quantities.TryGetValue(name, out bv);
                     var beforeValue = hasBefore ? RevisionMath.Finite(av, id + "/" + name + "/before") : 0d;
                     var afterValue = hasAfter ? RevisionMath.Finite(bv, id + "/" + name + "/after") : 0d;
-                    if (hasBefore && hasAfter && beforeValue == afterValue) continue;
+                    var delta = RevisionMath.Subtract(afterValue, beforeValue, id + "/" + name);
+                    if (a != null && b != null && hasBefore && hasAfter && Math.Abs(delta) <= 1e-9) continue;
                     rows.Add(new QuantityRevisionRow { ElementId = id, Category = b?.Category ?? a?.Category ?? string.Empty, QuantityName = name, Change = !hasBefore ? "Added" : !hasAfter ? "Removed" : "Changed", Before = beforeValue, After = afterValue });
                 }
             }
