@@ -51,7 +51,7 @@ namespace QS3D.Core.Formulas
                 }
                 index++;
             }
-            return result;
+            return result.AsReadOnly();
         }
 
         private static void ValidateExpression(string expression)
