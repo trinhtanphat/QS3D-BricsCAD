@@ -48,7 +48,7 @@ namespace QS3D.Core.Geometry
 
             return new CurtainWallOpeningPanelPlan
             {
-                Pieces = clipped.Pieces
+                Pieces = Array.AsReadOnly(clipped.Pieces
                     .Select(x => new CurtainWallPanelPiece
                     {
                         SourcePanelIndex = x.SourceFrameIndex,
@@ -62,7 +62,7 @@ namespace QS3D.Core.Geometry
                     .ThenBy(x => x.X_M)
                     .ThenBy(x => x.HeightM)
                     .ThenBy(x => x.WidthM)
-                    .ToArray(),
+                    .ToArray()),
                 SourcePanelCount = panels.Count,
                 InterruptedPanelCount = clipped.InterruptedFrameCount,
                 OriginalPanelAreaM2 = clipped.OriginalFrameAreaM2,
