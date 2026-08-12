@@ -135,7 +135,7 @@ namespace QS3D.Core.Domain
                     SetIfChanged(element, GridSequenceIndexKey, assignment.SequenceIndex.ToString(CultureInfo.InvariantCulture));
                 }
             }
-            return plan;
+            return plan.AsReadOnly();
         }
 
         public static string FormatLabel(GridNamingOptions options, int sequenceIndex)
