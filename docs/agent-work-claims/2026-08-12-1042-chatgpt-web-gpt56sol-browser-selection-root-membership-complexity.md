@@ -1,6 +1,6 @@
 # Work claim — Project Browser selection root-membership complexity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-browser-selection-root-membership-complexity-20260812-1042`
 - Registered: `2026-08-12T10:42:00+07:00`
 - Baseline main SHA: `d049ae89c17e037148d23c9f2dba1aec35609569`
@@ -30,3 +30,10 @@ Recent Browser query/reference/workspace lanes are completed or own different fi
 ## Validation boundary
 
 Committed deterministic semantic smoke coverage plus exact source/diff review. No GitHub Actions dispatch; no licensed BricsCAD V25/V26 runtime PASS claimed.
+
+## Completion
+
+- PR: `#798`
+- Merge SHA: `3b3616b4633de79dd1e73bdda00edde67323c442`
+- Product change: `ProjectBrowserSelectionPlanner` now uses the indexed case-insensitive `HashSet<string>.Contains` instance lookup for root membership.
+- Regression: `ProjectBrowserSelectionRootMembershipSmoke` preserves case-insensitive selection semantics and fail-closed missing-ID behavior.
