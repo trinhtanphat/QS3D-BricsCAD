@@ -332,7 +332,8 @@ namespace QS3D.Core.Domain
             var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var floor in project.Floors)
             {
-                if (floor == null) continue;
+                if (floor == null)
+                    throw new InvalidOperationException("Project floor collection contains a null floor.");
                 if (!seenIds.Add(floor.Id))
                     throw new InvalidOperationException("Project contains duplicate floor id: " + floor.Id + ".");
             }
