@@ -61,9 +61,15 @@ namespace QS3D.Core.Templates
             }
             foreach (var rule in project.QuantityRules.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                 profile.QuantityRules.Add(new QuantityRule(rule.Id, rule.Category, rule.OutputName, rule.Expression, rule.Version));
-            foreach (var item in project.Metadata.Where(x => x.Key.StartsWith(LayerMappingPrefix, StringComparison.OrdinalIgnoreCase)).OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+            var layerMappings = project.Metadata
+                .Where(x => x.Key.StartsWith(LayerMappingPrefix, StringComparison.OrdinalIgnoreCase))
+                .Select(x => new KeyValuePair<string, string>(x.Key.Substring(LayerMappingPrefix.Length), x.Value))
+                .OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            ProjectRecognitionService.ValidateLayerMappings(layerMappings, "Project recognition mappings");
+            foreach (var item in layerMappings)
             {
-                var pattern = item.Key.Substring(LayerMappingPrefix.Length).Trim();
+                var pattern = item.Key.Trim();
                 if (pattern.Length > 0) profile.LayerMappings[pattern] = item.Value;
             }
             if (project.Metadata.TryGetValue(VisibleBqColumnsKey, out var columns))
