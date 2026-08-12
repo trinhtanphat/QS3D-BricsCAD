@@ -237,6 +237,13 @@ namespace QS3D.Core.Review
             return IsCanonicalOptionalReviewToken(category ?? string.Empty);
         }
 
+        internal static bool IsCanonicalReviewChange(string change)
+        {
+            return string.Equals(change, "Added", StringComparison.Ordinal) ||
+                   string.Equals(change, "Changed", StringComparison.Ordinal) ||
+                   string.Equals(change, "Removed", StringComparison.Ordinal);
+        }
+
         private static bool IsCanonicalOptionalReviewToken(string raw)
         {
             return raw.Length == 0 ||
@@ -314,7 +321,8 @@ namespace QS3D.Core.Review
             {
                 if (entry == null) throw new InvalidOperationException("Preview review contains a null entry.");
                 CanonicalRequired(entry.ElementId, "preview review entry element id");
-                CanonicalRequired(entry.Change, "preview review entry change");
+                var change = CanonicalRequired(entry.Change, "preview review entry change");
+                if (!IsCanonicalReviewChange(change)) throw new InvalidOperationException("Preview review entry change is not supported: " + change + ".");
                 if (!IsCanonicalOptionalReviewCategory(entry.Category)) throw new InvalidOperationException("Preview review entry category must be exact-empty or canonical without surrounding whitespace.");
                 if (!IsCanonicalOptionalReviewField(entry.Field)) throw new InvalidOperationException("Preview review entry field must be exact-empty or canonical without surrounding whitespace and use canonical structured payloads.");
                 if (!IsPortableReviewField(entry.Field)) throw new InvalidOperationException("Preview review artifacts cannot contain drawing-local/native fields: " + entry.Field + ".");
@@ -472,6 +480,7 @@ namespace QS3D.Core.Review
                 var category = Value(node, "category");
                 if (!PreviewReviewSnapshotService.IsCanonicalOptionalReviewCategory(category)) throw new InvalidDataException("Preview review category is not canonical: category.");
                 var change = CanonicalRequired(node, "change");
+                if (!PreviewReviewSnapshotService.IsCanonicalReviewChange(change)) throw new InvalidDataException("Preview review change is not supported: " + change + ".");
                 var field = Value(node, "field");
                 if (!PreviewReviewSnapshotService.IsCanonicalOptionalReviewField(field)) throw new InvalidDataException("Preview review field is not canonical: field.");
                 if (!PreviewReviewSnapshotService.IsPortableReviewField(field)) throw new InvalidDataException("Preview review file contains a forbidden drawing-local/native field: " + field + ".");
