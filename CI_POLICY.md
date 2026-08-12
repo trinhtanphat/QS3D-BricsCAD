@@ -15,6 +15,19 @@ GitHub Actions are **manual-only** on `main`.
 
 The intended operating mode is: keep developing and committing normally with Actions idle; when the owner explicitly requests a build/release, dispatch the requested manual workflow for the chosen commit.
 
+## Agent execution roles and CI authorization
+
+The repository owner expects the normal/default agent pool to concentrate on **finding and fixing bugs, updating source code, adding deterministic regressions/static guards, reviewing diffs, and committing/pushing coherent code changes**. Those agents must keep GitHub Actions idle unless the owner separately designates them for CI/runtime/release execution.
+
+- A normal `continue all`, `fix bug`, `update code`, `commit`, `push`, `merge`, review, or handoff assignment means **source/code work only**; it is not permission to dispatch, re-run, cancel, or otherwise operate GitHub Actions.
+- The owner may explicitly designate one or more specific agents to operate GitHub CI/Actions, build, runtime, packaging, release, or related workflow tasks. Only those owner-designated agents may perform the CI operations covered by that designation.
+- CI authorization is **agent- and scope-specific**. Permission granted to one designated agent does not automatically transfer to other concurrent agents, and permission for one workflow/task does not authorize unrelated workflows or releases.
+- If an agent cannot establish that it is the owner-designated CI agent for the requested operation, it must behave as a normal coding agent: continue source-safe work and leave Actions undispatched.
+- A designated CI agent must still follow every manual-only, exact-SHA, runner, release-confirmation, and safety requirement in this file. Designation does not permit automatic triggers or bypass repository guards.
+- Coding agents and CI-designated agents may work concurrently. Coding agents should not stop bug-fix/source work merely because another explicitly designated agent is handling CI.
+
+This role split is intentional: most agents maximize progress by fixing/updating code, while a smaller owner-selected set may spend CI minutes or operate specialized runners when explicitly assigned.
+
 ## Changes that do not need GitHub CI
 
 The following changes do not require a GitHub Actions run and must not trigger one automatically:
