@@ -10,26 +10,25 @@
 
 ## Confirmed defect
 
-`ComprehensiveModelHealthService.NormalizeHandleSet(...)` trims/case-folds `liveGeneratedSolidHandles` but does not canonicalize numeric CAD Handle aliases. `ModelHealthService.ValidateGeneratedGeometry(...)` likewise keys a valid `GeneratedSolidHandle` by trimmed raw text for duplicate/live membership. Thus persisted `A` and caller live handle `0A` can represent the same CAD object while Model Health reports `GENERATED_SOLID_MISSING`; numeric aliases can also evade the local generated-solid duplicate owner check.
+`ComprehensiveModelHealthService.NormalizeHandleSet(...)` trims/case-folds `liveGeneratedSolidHandles` but does not apply numeric CAD Handle identity. Downstream generated providers now compare canonical numeric identities, while generic `ModelHealthService` still calls `Contains(rawGeneratedHandle)`. A live alias such as `0A` can therefore represent the same CAD object as persisted `A` yet produce a false `GENERATED_SOLID_MISSING` depending on spelling direction.
 
-The provider-specific generated health services now use the shared numeric identity policy, so this boundary mismatch is isolated to the generic generated-solid / comprehensive live-set path.
+Global generated ownership diagnostics already cover duplicate owner aliases, so the lane is intentionally refined to the live-set boundary only.
 
 ## Reserved scope
 
-- `src/QS3D.Core/Diagnostics/ModelHealthService.cs`
 - `src/QS3D.Core/Diagnostics/ComprehensiveModelHealthService.cs`
 - one focused Core smoke regression
 - this claim file
 
-Do not change `liveSourceHandles`, semantic SourceHandle duplicate/orphan behavior, malformed generated-handle validity, persistence spelling, builders, or BricsCAD runtime code.
+Do not modify `ModelHealthService`, `liveSourceHandles`, semantic SourceHandle duplicate/orphan behavior, generated-handle validity/persistence, builders, or runtime code.
 
 ## Intended contract
 
-- Once `GeneratedSolidHandle` passes the existing hexadecimal validity rule, use `GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(...)` for local generated ownership and generated live membership.
-- Comprehensive health normalizes only `liveGeneratedSolidHandles` through numeric identity; source live sets retain their existing semantics.
-- `A`, `0A`, and equivalent leading-zero/case aliases are one generated CAD object.
-- Existing invalid/whitespace diagnostics and truly missing generated-solid behavior remain unchanged.
+- `liveGeneratedSolidHandles` is represented by a set whose equality/hash semantics use `GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(...)`.
+- This makes `Contains("A")`, `Contains("0A")`, and equivalent case/leading-zero aliases identify the same live CAD object even for consumers that pass raw persisted text to `Contains`.
+- `liveSourceHandles` keeps its existing trim/case-only semantics.
+- Invalid generated-live text retains shared normalizer fallback semantics; truly missing generated handles remain missing.
 
 ## Completion condition
 
-Focused regression proves numeric-equivalent live handles do not report missing, generated aliases collide locally, truly missing handles still report, and source-live normalization behavior is unchanged; merged source + smoke are read back from current `main`, ancestry is verified, and this claim is closed with exact commit SHAs.
+Focused regression proves numeric-equivalent generated live handles do not report missing in both spelling directions, truly missing handles still report, and source-live behavior is unchanged; merged source + smoke are read back from current `main`, ancestry is verified, and this claim is closed with exact commit SHAs.
