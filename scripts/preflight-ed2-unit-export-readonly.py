@@ -22,33 +22,51 @@ if not errors:
         errors.append("Commands.cs missing QS3DED2/QS3DBBS method boundaries")
     else:
         ed2 = commands[ed2_start:bbs_start]
-        ensure = ed2.find('DrawingUnitWorkflow.EnsureResolved(doc, "QS3DED2")')
-        confirm = ed2.find("if (dialog.ShowDialog() != true) return;")
         project = ed2.find("ProjectContextCoordinator.TryGetReadOnly(doc, out var project)")
-        if min(ensure, confirm, project) < 0:
-            errors.append("ED2 missing unit/save/read-only project contract token")
-        elif not ensure < confirm < project:
-            errors.append("ED2 contract changed: unit policy check must remain non-mutating before Save and live project lookup must remain after Save confirmation")
+        ensure = ed2.find('DrawingUnitWorkflow.EnsureResolved(doc, "QS3DED2")', project + 1)
+        snapshot = ed2.find("ProjectStateSnapshot.CreateDetachedCopy(project)", ensure + 1)
+        details = ed2.find("ProjectQuantityReportBuilder.Detail(previewProject", snapshot + 1)
+        live = ed2.find("EnsureEd2HandlesAreLive(doc, details);", details + 1)
+        dialog = ed2.find("var dialog = new SaveFileDialog", live + 1)
+        confirm = ed2.find("if (dialog.ShowDialog() != true) return;", dialog + 1)
+        export = ed2.find("XlsxQuantityExporter.ExportEd2(dialog.FileName, details, summary);", confirm + 1)
+        if min(project, ensure, snapshot, details, live, dialog, confirm, export) < 0:
+            errors.append("ED2 missing existing-project/unit/detached-report/save/export contract token")
+        elif not project < ensure < snapshot < details < live < dialog < confirm < export:
+            errors.append("ED2 must resolve an existing project and read-only unit policy before detached export validation, then write only after Save confirmation")
+        if "ProjectContextCoordinator.GetOrCreate(doc)" in ed2 or "ExistingProjectMutationContext" in ed2:
+            errors.append("ED2 export path must not create or bind mutable live project state")
+        if confirm >= 0 and "XlsxQuantityExporter.ExportEd2(" in ed2[:confirm]:
+            errors.append("ED2 must not write XLSX before Save confirmation")
 
-    marker = 'var readOnlyExportPreparation = string.Equals(operation, "QS3DED2", StringComparison.OrdinalIgnoreCase);'
-    resolved_guard = "if (!readOnlyExportPreparation)\n                    PersistLegacyBindingIfNeeded(document, resolution);"
-    unresolved_guard = "if (readOnlyExportPreparation)"
+    read_only_export = 'var readOnlyExportPreparation = string.Equals(operation, "QS3DED2", StringComparison.OrdinalIgnoreCase);'
+    read_only_bq = 'var readOnlyBqPreparation = string.Equals(operation, "QS3DBQ", StringComparison.OrdinalIgnoreCase);'
+    combined = "var readOnlyQuantityPreparation = readOnlyExportPreparation || readOnlyBqPreparation;"
+    resolved_guard = "if (!readOnlyQuantityPreparation)\n                    PersistLegacyBindingIfNeeded(document, resolution);"
+    unresolved_guard = "if (readOnlyQuantityPreparation)"
     prompt = "return PromptAndPersist(document);"
-    if marker not in units:
-        errors.append("DrawingUnitWorkflow no longer identifies QS3DED2 read-only export preparation")
-    if resolved_guard not in units:
-        errors.append("resolved ED2 unit policy can persist legacy project binding before Save confirmation")
+    for token, message in (
+        (read_only_export, "DrawingUnitWorkflow no longer identifies QS3DED2 read-only export preparation"),
+        (read_only_bq, "DrawingUnitWorkflow no longer identifies QS3DBQ read-only quantity preparation"),
+        (combined, "DrawingUnitWorkflow no longer combines ED2/BQ into shared read-only quantity preparation"),
+        (resolved_guard, "resolved ED2/BQ unit policy can persist legacy project binding during read-only quantity preparation"),
+    ):
+        if token not in units:
+            errors.append(message)
+
     unresolved = units.find(unresolved_guard)
     prompt_index = units.find(prompt)
     if unresolved < 0 or prompt_index < 0 or unresolved > prompt_index:
-        errors.append("unresolved ED2 unit policy is not blocked before PromptAndPersist")
+        errors.append("unresolved read-only quantity unit policy is not blocked before PromptAndPersist")
     else:
         guarded_block = units[unresolved:prompt_index]
         if "return false;" not in guarded_block:
-            errors.append("unresolved ED2 unit policy must fail closed without project/unit persistence")
+            errors.append("unresolved ED2/BQ unit policy must fail closed without project/unit persistence")
+        if "readOnlyExportPreparation" not in guarded_block:
+            errors.append("ED2-specific unresolved unit guidance must remain inside the shared read-only quantity guard")
         for forbidden in ("PromptAndPersist(document)", "GetOrCreate", "ProjectContextCoordinator.Save", ".Touch()"):
             if forbidden in guarded_block:
-                errors.append("ED2 read-only unit guard contains forbidden mutation token: " + forbidden)
+                errors.append("read-only quantity unit guard contains forbidden mutation token: " + forbidden)
 
 print("QS3D ED2 unit export read-only preflight")
 if errors:
@@ -57,4 +75,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: ED2 unit resolution before Save confirmation is read-only; unresolved units fail closed and explicit QS3DUNITS owns persistence.")
+print("PASS: ED2 resolves existing state and unit policy read-only before detached export validation; ED2/BQ resolved legacy binding is suppressed, unresolved units fail closed, and explicit QS3DUNITS owns persistence.")
