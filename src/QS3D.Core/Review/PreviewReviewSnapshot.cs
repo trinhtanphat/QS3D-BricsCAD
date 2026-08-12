@@ -98,6 +98,7 @@ namespace QS3D.Core.Review
     public sealed class PreviewReviewSnapshotService
     {
         private const string PropertyFieldPrefix = "Property:";
+        private const string QuantityFieldPrefix = "Quantity:";
 
         public const string FormatName = "QS3D.PreviewReviewSnapshot";
         public const int FormatVersion = 1;
@@ -121,7 +122,7 @@ namespace QS3D.Core.Review
                         elementId,
                         element.Category.ToString(),
                         change.Kind.ToString(),
-                        "Quantity:" + output,
+                        QuantityFieldPrefix + output,
                         NullableNumber(change.BeforeValue, elementId + "/" + output + "/before"),
                         NullableNumber(change.AfterValue, elementId + "/" + output + "/after"),
                         change.BeforeProvenance,
@@ -226,13 +227,29 @@ namespace QS3D.Core.Review
         internal static bool IsCanonicalOptionalReviewField(string field)
         {
             var raw = field ?? string.Empty;
-            return raw.Length == 0 ||
-                   (!string.IsNullOrWhiteSpace(raw) && string.Equals(raw, raw.Trim(), StringComparison.Ordinal));
+            return IsCanonicalOptionalReviewToken(raw) &&
+                   HasCanonicalStructuredPayload(raw, PropertyFieldPrefix) &&
+                   HasCanonicalStructuredPayload(raw, QuantityFieldPrefix);
         }
 
         internal static bool IsCanonicalOptionalReviewCategory(string category)
         {
-            return IsCanonicalOptionalReviewField(category);
+            return IsCanonicalOptionalReviewToken(category ?? string.Empty);
+        }
+
+        private static bool IsCanonicalOptionalReviewToken(string raw)
+        {
+            return raw.Length == 0 ||
+                   (!string.IsNullOrWhiteSpace(raw) && string.Equals(raw, raw.Trim(), StringComparison.Ordinal));
+        }
+
+        private static bool HasCanonicalStructuredPayload(string field, string prefix)
+        {
+            if (!field.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return true;
+            var payload = field.Substring(prefix.Length);
+            return payload.Length > 0 &&
+                   !string.IsNullOrWhiteSpace(payload) &&
+                   string.Equals(payload, payload.Trim(), StringComparison.Ordinal);
         }
 
         internal static string ComputeFingerprint(PreviewReviewSnapshot snapshot)
@@ -299,7 +316,7 @@ namespace QS3D.Core.Review
                 CanonicalRequired(entry.ElementId, "preview review entry element id");
                 CanonicalRequired(entry.Change, "preview review entry change");
                 if (!IsCanonicalOptionalReviewCategory(entry.Category)) throw new InvalidOperationException("Preview review entry category must be exact-empty or canonical without surrounding whitespace.");
-                if (!IsCanonicalOptionalReviewField(entry.Field)) throw new InvalidOperationException("Preview review entry field must be exact-empty or canonical without surrounding whitespace.");
+                if (!IsCanonicalOptionalReviewField(entry.Field)) throw new InvalidOperationException("Preview review entry field must be exact-empty or canonical without surrounding whitespace and use canonical structured payloads.");
                 if (!IsPortableReviewField(entry.Field)) throw new InvalidOperationException("Preview review artifacts cannot contain drawing-local/native fields: " + entry.Field + ".");
                 var rowKey = entry.ElementId + "\u001f" + entry.Field;
                 if (!seenRows.Add(rowKey)) throw new InvalidOperationException("Preview review contains a duplicate element/field row: " + entry.ElementId + "/" + entry.Field + ".");

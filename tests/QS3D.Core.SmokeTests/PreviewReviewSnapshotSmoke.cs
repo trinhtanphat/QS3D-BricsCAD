@@ -21,6 +21,7 @@ namespace QS3D.Core.SmokeTests
             HandleFieldInjectionFailsClosed();
             NonPortableGeneratedFieldInjectionFailsClosed();
             NonCanonicalFieldInjectionFailsClosed();
+            NonCanonicalStructuredFieldPayloadFailsClosed();
             NonCanonicalCategoryInjectionFailsClosed();
             UnsupportedXmlShapeFailsClosed();
         }
@@ -145,6 +146,12 @@ namespace QS3D.Core.SmokeTests
         {
             AssertNonCanonicalFieldRejected(" Quantity:Cost ");
             AssertNonCanonicalFieldRejected("   ");
+        }
+
+        private static void NonCanonicalStructuredFieldPayloadFailsClosed()
+        {
+            AssertNonCanonicalFieldRejected("Quantity: Cost");
+            AssertNonCanonicalFieldRejected("Property: WidthM");
         }
 
         private static void AssertNonCanonicalFieldRejected(string field)
