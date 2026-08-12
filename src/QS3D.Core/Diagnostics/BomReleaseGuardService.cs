@@ -23,8 +23,28 @@ namespace QS3D.Core.Diagnostics
             }
 
             var issues = new List<ModelHealthIssue>();
-            issues.AddRange(new RoomFinishHealthService().Inspect(project));
-            issues.AddRange(new GeneratedCurtainPanelHealthService().Inspect(project, liveHandleIndex));
+            try
+            {
+                issues.AddRange(new RoomFinishHealthService().Inspect(project));
+            }
+            catch (InvalidOperationException)
+            {
+                issues.Add(new ModelHealthIssue(
+                    "BOM_ROOM_FINISH_HEALTH_FAILED",
+                    HealthSeverity.Error,
+                    "Không thể chạy chẩn đoán Room Finish an toàn; phát hành BQ bị chặn."));
+            }
+            try
+            {
+                issues.AddRange(new GeneratedCurtainPanelHealthService().Inspect(project, liveHandleIndex));
+            }
+            catch (InvalidOperationException)
+            {
+                issues.Add(new ModelHealthIssue(
+                    "BOM_CURTAIN_PANEL_HEALTH_FAILED",
+                    HealthSeverity.Error,
+                    "Không thể chạy chẩn đoán Curtain Panel an toàn; phát hành BQ bị chặn."));
+            }
 
             var included = new List<ProjectElement>();
             foreach (var element in project.Elements)
