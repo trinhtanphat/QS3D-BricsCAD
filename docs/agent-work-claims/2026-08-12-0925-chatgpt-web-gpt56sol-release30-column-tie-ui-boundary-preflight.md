@@ -1,46 +1,42 @@
 # Work claim — release #30 Column Tie QTY UI-boundary preflight reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-release30-column-tie-ui-boundary-preflight`
 - Registered: `2026-08-12T09:25:00+07:00`
+- Completed: `2026-08-12T09:27:00+07:00`
 - Baseline main SHA: `52cc7ca78284aa7f0fa6b33af175caff7b9bb26a`
-- Priority: QS3D Cloud V25 Preview Build & Release #30 has contradictory Column Tie QTY gates: the canonical audit-revision gate passes and forbids redundant `project.Touch()`, while the UI-boundary gate still requires that obsolete touch.
+- Claim commit: `96f6475f4e62b3c527329663e96d31b9ca1af20a`
+- Implementation commit: `0179dc5312733ff1e157ee59885e78a12a55f001`
+- Priority: QS3D Cloud V25 Preview Build & Release #30 had contradictory Column Tie QTY gates: the canonical audit-revision gate passed and forbade redundant `project.Touch()`, while the UI-boundary gate still required that obsolete touch.
 
-## Reserved scope
+## Completed scope
 
-Reconcile only `scripts/preflight-column-tie-quantity-ui-boundary.py` with the current audit-owned revision lifecycle. Preserve `ColumnTieQuantityCommands.cs` production behavior and the existing audit-revision gate unchanged.
+Reconciled only `scripts/preflight-column-tie-quantity-ui-boundary.py` with the current audit-owned revision lifecycle. `ColumnTieQuantityCommands.cs` production behavior and `scripts/preflight-column-tie-audit-revision.py` remained unchanged.
 
-## Canonical evidence
+## Canonical evidence retained
 
 - `ColumnTieQuantityCommands.CalculateSelectedColumnTies()` snapshots the project before quantity mutation.
 - Each mutated Column records `quantity.rebar.column.tie` through `AuditTrail.ForProject(project).Record(...)`, which owns revision advancement.
 - Failure restores the project snapshot; successful semantic mutation exits the try/catch before `FinalizeUi(document, message)`.
-- `scripts/preflight-column-tie-audit-revision.py` explicitly rejects a standalone `project.Touch();` after those per-target AuditTrail records and PASSes in run #30.
-- Run #30 UI-boundary gate is therefore stale because it requires the exact behavior the canonical audit-revision gate forbids.
+- The canonical audit-revision gate explicitly rejects a standalone `project.Touch();` after per-target AuditTrail records.
 
-## Expected surfaces
+## Implemented gate contract
 
-- `scripts/preflight-column-tie-quantity-ui-boundary.py`
-- this claim file for close-out
+- Requires snapshot capture, canonical Tie QTY AuditTrail call, snapshot restore and post-boundary `FinalizeUi`.
+- Requires ordering snapshot -> audit-owned mutation -> catch/restore -> FinalizeUi.
+- Explicitly fails if a standalone `project.Touch();` returns.
+- Pins exactly one per-loop `quantity.rebar.column.tie` AuditTrail call site.
+- Preserves the prohibition on direct fallible Palette/editor work between rollback boundary and FinalizeUi.
+- Preserves FinalizeUi exception isolation, Palette refresh and the committed-UI warning marker.
 
-## Excluded scope
+## Validation performed
 
-- No edits to `src/QS3D.BricsCAD.V25/ColumnTieQuantityCommands.cs`.
-- No changes to quantity math, selection/binding, rollback, AuditTrail, UI reporting or post-commit behavior.
-- No unrelated run #30 failures, GitHub Actions dispatch, build/release publication or BricsCAD runtime qualification.
-
-## Validation plan
-
-- Require snapshot capture, the canonical `AuditTrail.ForProject(project).Record("quantity.rebar.column.tie", element.Id,` call, snapshot restore, FinalizeUi helper/call, Palette refresh and warning isolation.
-- Require source ordering snapshot -> audit mutation -> catch/restore -> post-boundary FinalizeUi -> helper.
-- Explicitly fail if the command regains a standalone `project.Touch();`.
-- Preserve the existing check that no fallible Palette/editor work occurs directly between rollback boundary and FinalizeUi.
-- Re-fetch the exact gate before writing, read back after commit, verify ancestry and close with exact SHA.
-
-## Coordination
-
-Current observed active claims are on unrelated wall-junction and other Core/runtime lanes. Repository search found no current reservation for this Column Tie UI-boundary preflight.
+- Re-fetched current source, canonical audit gate and stale UI gate before the claim/write.
+- Verified the claim commit remained an ancestor of moving `main`; the only intervening change at that check was unrelated Interchange source.
+- Read back the implemented UI-boundary gate from `main` at blob `4549933f83f84afa7cf86fdffaed094e1138aef5`.
+- No production source was changed.
+- No GitHub Actions/build/release dispatch was performed and no BricsCAD V25/V26 runtime PASS is claimed.
 
 ## Completion condition
 
-The Column Tie QTY UI-boundary gate agrees with the canonical audit-owned revision contract, still pins rollback and post-commit UI isolation, is pushed to `main`, and this claim is closed with exact evidence.
+Completed. The Column Tie QTY UI-boundary gate now agrees with the audit-owned revision contract, retains rollback/post-commit UI isolation, and this reservation is released.
