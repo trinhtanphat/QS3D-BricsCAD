@@ -16,12 +16,17 @@ namespace QS3D.Core.Persistence
 
         public void Save(ProjectState project, string path)
         {
-            SaveCore(project, path, SaveMode.ReplaceWithBackup);
+            SaveCore(project, path, SaveMode.ReplaceWithBackup, MaxProjectFileBytes);
+        }
+
+        private void Save(ProjectState project, string path, long maximumBytes)
+        {
+            SaveCore(project, path, SaveMode.ReplaceWithBackup, maximumBytes);
         }
 
         public void SaveNew(ProjectState project, string path)
         {
-            SaveCore(project, path, SaveMode.PublishNew);
+            SaveCore(project, path, SaveMode.PublishNew, MaxProjectFileBytes);
         }
 
         public void SavePreservingValidatedBackup(ProjectState project, string path)
@@ -32,26 +37,25 @@ namespace QS3D.Core.Persistence
             if (!File.Exists(backupPath))
                 throw new FileNotFoundException("A validated QSDB backup is required for recovery-safe publication.", backupPath);
             Load(backupPath);
-            SaveCore(project, fullPath, SaveMode.ReplacePrimaryOnly);
+            SaveCore(project, fullPath, SaveMode.ReplacePrimaryOnly, MaxProjectFileBytes);
             Load(fullPath);
             Load(backupPath);
         }
 
-        private void SaveCore(ProjectState project, string path, SaveMode mode)
+        private void SaveCore(ProjectState project, string path, SaveMode mode, long maximumBytes)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Project path is required.", nameof(path));
+            if (maximumBytes <= 0L) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
 
             ValidateProject(project);
             ValidateSerializedXmlText(project);
             var fullPath = Path.GetFullPath(path);
-            var directory = Path.GetDirectoryName(fullPath);
-            if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-            var tempPath = AtomicFileCommit.CreateTempPath(fullPath);
             var backupPath = fullPath + ".bak";
             var previousSchemaVersion = project.SchemaVersion;
             var previousUpdatedUtc = project.UpdatedUtc;
             var previousChangeVersion = project.ChangeVersion;
+            string? tempPath = null;
             var committed = false;
 
             try
@@ -59,7 +63,15 @@ namespace QS3D.Core.Persistence
                 project.SchemaVersion = ProjectState.CurrentSchemaVersion;
                 project.Touch();
                 var document = Serialize(project);
-                document.Save(tempPath, SaveOptions.DisableFormatting);
+                ValidateSerializedSize(document, maximumBytes);
+
+                var directory = Path.GetDirectoryName(fullPath);
+                if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
+                tempPath = AtomicFileCommit.CreateTempPath(fullPath);
+                using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    document.Save(stream, SaveOptions.DisableFormatting);
+                }
                 ValidateSerializedFile(tempPath);
                 if (mode == SaveMode.PublishNew)
                     AtomicFileCommit.PublishNew(tempPath, fullPath, backupPath);
@@ -268,6 +280,14 @@ namespace QS3D.Core.Persistence
             catch (ArgumentException ex)
             {
                 throw new InvalidDataException("QSDB project contains data that cannot be represented as XML.", ex);
+            }
+        }
+
+        private static void ValidateSerializedSize(XDocument document, long maximumBytes)
+        {
+            using (var stream = new BoundedCountingStream(maximumBytes))
+            {
+                document.Save(stream, SaveOptions.DisableFormatting);
             }
         }
 
@@ -494,6 +514,44 @@ namespace QS3D.Core.Persistence
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new InvalidDataException("QSDB numeric values must be finite.");
             return value.ToString("R", CultureInfo.InvariantCulture);
+        }
+
+        private sealed class BoundedCountingStream : Stream
+        {
+            private readonly long _maximumBytes;
+            private long _length;
+
+            public BoundedCountingStream(long maximumBytes)
+            {
+                if (maximumBytes <= 0L) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+                _maximumBytes = maximumBytes;
+            }
+
+            public override bool CanRead => false;
+            public override bool CanSeek => false;
+            public override bool CanWrite => true;
+            public override long Length => _length;
+            public override long Position
+            {
+                get => _length;
+                set => throw new NotSupportedException();
+            }
+
+            public override void Flush() { }
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+                if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
+                if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+                if (buffer.Length - offset < count) throw new ArgumentException("Invalid buffer range.");
+                if (_length > _maximumBytes - count)
+                    throw new InvalidDataException("QSDB project exceeds the maximum supported file size of 64 MiB.");
+                _length += count;
+            }
         }
     }
 }
