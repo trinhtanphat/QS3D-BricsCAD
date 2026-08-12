@@ -410,3 +410,11 @@ Baseline audited after a clean fetch and fast-forward: `origin/main@265ab00e83d5
 The full Core smoke reaches `QsdbTimestampOffsetSmoke.cs`, whose schema-3 fixture omits the now-required canonical `changeVersion` and whose former valid case expects a `+07:00` timestamp to normalize on load. The completed QSDB persistence-state and timestamp-canonicality contracts require exact UTC round-trip `O` text and intentionally reject semantically equivalent offsets, so the old expectation is superseded. No claim references or reserves this exact fixture in the current ACTIVE/BLOCKED audit.
 
 Reserve only `tests/QS3D.Core.SmokeTests/QsdbTimestampOffsetSmoke.cs` to add canonical `changeVersion=\"0\"`, keep the missing-offset rejection, require the former `+07:00` token to fail closed and add an intended-valid canonical UTC round-trip load control. Preserve schema shape, temporary-file cleanup and all production QSDB/migration/domain code. Re-run the complete Core smoke after this test-only supersession reconciliation.
+
+## 2026-08-12 Room Finish non-negative storage follow-up expansion
+
+Baseline audited after a clean fetch and fast-forward: `origin/main@3b3616b4633de79dd1e73bdda00edde67323c442`.
+
+The full Core smoke returns to the already reserved `RoomFinishGeneratorNumericSafetySmoke.cs`: its two negative-metric generator cases still assign through public `ElementInstance` setters. The completed non-negative measurement contract now rejects those assignments before generator execution, superseding this claim's earlier assumption that finite negative metrics remained constructible. The original generator and measurement claims are `COMPLETED`; no other ACTIVE/BLOCKED claim owns this fixture.
+
+Extend the existing reservation for that smoke file only to inject negative legacy/corrupt `_areaM2` and `_sideAreaM2` state through a test-local private-field helper for the consumed and disabled-output defense cases. Preserve the public NaN/Infinity setter-boundary assertions, valid generation/provenance, output selection and all production `ElementInstance`/Room Finish code. Re-run the complete Core smoke after this fixture-boundary reconciliation.
