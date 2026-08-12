@@ -1,6 +1,6 @@
 # Work claim — Curtain panel fingerprint piece bound
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-curtain-panel-fingerprint-piece-bound-20260812-1029`
 - Registered: `2026-08-12T10:29:00+07:00`
 - Baseline main SHA: `c67af958f080eeb1fa970f3064860c7cdcc222da`
@@ -30,6 +30,16 @@ Add focused deterministic smoke coverage with a hostile `IReadOnlyList<CurtainWa
 
 Recent Curtain panel fingerprint work completed signed-zero and finite-area contracts. This reservation is limited to caller-owned piece enumeration/resource-bound integrity and does not overlap those completed semantics or current licensing/health/LOCAL_ONLY lanes.
 
-## Completion condition
+## Completion evidence
 
-Current `main` contains the bounded indexed snapshot fix plus focused smoke coverage; the source/test are read back after integration; this claim is updated to `COMPLETED` with exact implementation/merge evidence. No CI or licensed BricsCAD runtime PASS is claimed.
+- Claim registration: `4874abb8444a7b2caceab068c49679321633f892`.
+- Source branch fix: `d7c48540c7cc3a57617e1873dc88923f24bd7768`.
+- Focused smoke source: `0322c278fb47a38a5d15b02043261e57ba8fca5d`.
+- PR: `#759`.
+- Squash integration on `main`: `7ea97ab7a28c60629b4fce2fe0a7b080821d8d84`.
+- Post-merge readback confirmed `main` snapshots the captured bounded count via indexed access before sorting/hashing and contains `BoundedIndexedSnapshotDoesNotTrustEnumerator()`.
+- Existing signed-zero, finite-area, deterministic ordering/hash and `MaxPieces` semantics remain in the merged source.
+
+## Validation boundary
+
+Focused smoke coverage was added and read back from `main`, but it was not executed in this remote session. No GitHub Actions, local .NET build, BricsCAD V25/V26 runtime, release or signing PASS is claimed.
