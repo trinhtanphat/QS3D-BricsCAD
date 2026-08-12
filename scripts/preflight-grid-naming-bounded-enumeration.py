@@ -20,21 +20,25 @@ def main():
     renumber = source[start:end]
 
     required = [
+        "var targetEnumerationVersion = project.ChangeVersion;",
+        "var projectElementsAtStart = project.Elements.ToList();",
         "var ids = new List<string>();",
         "foreach (var value in orderedGridElementIds)",
         "if (ids.Count == MaxGridBatch)",
         'throw new InvalidOperationException("A Grid renumber batch supports at most " + MaxGridBatch + " elements.");',
         'ids.Add(Required(value, "orderedGridElementIds[" + ids.Count + "]", 128));',
+        "if (project.ChangeVersion != targetEnumerationVersion)",
+        "var originalTargets = ResolveOriginalTargets(projectElementsAtStart, ids);",
         "var projectElements = ResolveProjectElements(project);",
     ]
     for token in required:
         if token not in renumber:
-            print("ERROR: missing bounded Grid naming contract: " + token)
+            print("ERROR: missing bounded/fresh Grid naming contract: " + token)
             return 1
 
     legacy = [
         ".Select((value, index) => Required(",
-        ".ToList();",
+        "orderedGridElementIds.ToList()",
         "if (ids.Count > MaxGridBatch)",
     ]
     for token in legacy:
@@ -42,12 +46,17 @@ def main():
             print("ERROR: legacy post-materialization Grid naming capacity path returned: " + token)
             return 1
 
+    snapshot = renumber.find("var projectElementsAtStart = project.Elements.ToList();")
     loop = renumber.find("foreach (var value in orderedGridElementIds)")
     cap = renumber.find("if (ids.Count == MaxGridBatch)", loop)
     add = renumber.find("ids.Add(Required(value", loop)
-    resolve = renumber.find("var projectElements = ResolveProjectElements(project);")
-    if min(loop, cap, add, resolve) < 0 or not (loop < cap < add < resolve):
-        print("ERROR: Grid naming capacity guard must execute inside enumeration before normalization/add and project resolution.")
+    freshness = renumber.find("if (project.ChangeVersion != targetEnumerationVersion)", add)
+    original = renumber.find("var originalTargets = ResolveOriginalTargets(projectElementsAtStart, ids);", freshness)
+    resolve = renumber.find("var projectElements = ResolveProjectElements(project);", original)
+    if min(snapshot, loop, cap, add, freshness, original, resolve) < 0 or not (
+        snapshot < loop < cap < add < freshness < original < resolve
+    ):
+        print("ERROR: Grid naming must snapshot project identity, bound caller enumeration before normalization/add, verify freshness, then resolve current project state.")
         return 1
 
     smoke_tokens = [
@@ -68,7 +77,7 @@ def main():
         print("ERROR: Grid naming bounded-enumeration smoke is not module-registered.")
         return 1
 
-    print("PASS: GridNamingService.Renumber bounds lazy input enumeration at the first item beyond the 2,000-item capacity, before project resolution or mutation.")
+    print("PASS: GridNamingService.Renumber snapshots project identity while bounding lazy target enumeration at the first item beyond the 2,000-item capacity, before current-state resolution or mutation.")
     return 0
 
 
