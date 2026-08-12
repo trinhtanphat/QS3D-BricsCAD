@@ -38,7 +38,7 @@ namespace QS3D.Core.Diagnostics
             {
                 foreach (var ownerHandle in GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element))
                 {
-                    var handle = (ownerHandle.Key ?? string.Empty).Trim();
+                    var handle = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(ownerHandle.Key);
                     if (handle.Length == 0) continue;
 
                     if (!entries.TryGetValue(handle, out var existing))
@@ -64,7 +64,7 @@ namespace QS3D.Core.Diagnostics
 
         public bool TryFindOwner(string handle, out ProjectElement? owner, out string propertyKey)
         {
-            var normalized = (handle ?? string.Empty).Trim();
+            var normalized = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
             owner = null;
             propertyKey = string.Empty;
             if (normalized.Length == 0) return false;
