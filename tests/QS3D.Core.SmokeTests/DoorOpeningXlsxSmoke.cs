@@ -57,7 +57,12 @@ namespace QS3D.Core.SmokeTests
                     }
                 }
                 File.WriteAllText(path, "ORIGINAL");
-                var invalidRow = new DoorOpeningScheduleRow { FamilyName = "Invalid\u0001Family" };
+                var invalidRow = new DoorOpeningScheduleRow
+                {
+                    FamilyName = "Invalid\u0001Family",
+                    WidthM = 0.9d,
+                    HeightM = 2.2d
+                };
                 DoorOpeningXlsxExporter.Export(path, new List<DoorOpeningScheduleRow> { invalidRow });
                 using (var archive = ZipFile.OpenRead(path))
                 {
