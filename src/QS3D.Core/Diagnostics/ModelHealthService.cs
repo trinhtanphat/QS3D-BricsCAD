@@ -293,7 +293,7 @@ namespace QS3D.Core.Diagnostics
             }
         }
 
-        private static void ValidateDimensions(ProjectElement element, ICollection<ModelHealthIssue> issues, string key)
+        private static void ValidateDimensions(ProjectElement element, ICollection<ModelHealthIssue> issues)
         {
             switch (element.Category)
             {
