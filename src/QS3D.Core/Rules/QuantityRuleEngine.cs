@@ -128,8 +128,12 @@ namespace QS3D.Core.Rules
 
         private static ProjectFamily? ResolveFamily(ProjectState project, ProjectElement element)
         {
-            var familyId = (element.FamilyId ?? string.Empty).Trim();
+            var rawFamilyId = element.FamilyId ?? string.Empty;
+            var familyId = rawFamilyId.Trim();
             if (familyId.Length == 0) return null;
+            if (!string.Equals(rawFamilyId, familyId, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Quantity rule target element contains a non-canonical family id: " + element.Id + "/" + rawFamilyId + ".");
             var family = project.FindFamily(familyId)
                 ?? throw new InvalidOperationException("Quantity rule target element references missing family id: " + element.Id + "/" + familyId + ".");
             if (family.Category != element.Category)
