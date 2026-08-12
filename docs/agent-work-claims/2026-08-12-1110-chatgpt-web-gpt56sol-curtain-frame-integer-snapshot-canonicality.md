@@ -1,7 +1,7 @@
 # Work claim — Curtain Frame integer snapshot canonicality
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-web/gpt56sol-curtain-frame-integer-snapshot-canonicality`
 - Registered: `2026-08-12T11:10:00+07:00`
 - Baseline main SHA: `ad62c1648569c5ae792378bdaefc7325b3778f8e`
@@ -10,28 +10,26 @@
 
 ## Confirmed defect
 
-The line/path Curtain Frame writers persist generated integer metadata with `int.ToString(CultureInfo.InvariantCulture)`, including `GeneratedCurtainFrameCount`, `GeneratedCurtainFrameBaseCount`, `GeneratedCurtainFrameOpeningCount`, `GeneratedCurtainFrameColumns`, `GeneratedCurtainFrameRows`, and for path mode `GeneratedCurtainFramePathSegmentCount` / `GeneratedCurtainFrameMappedFrameCount`. `GeneratedCurtainFrameHealthService` currently accepts these values through `int.TryParse(...)` only, so alternate spellings such as padded, signed-positive or leading-zero text can pass health even though the writers never emit them.
+The line/path Curtain Frame writers persist generated integer metadata with `int.ToString(CultureInfo.InvariantCulture)`, including `GeneratedCurtainFrameCount`, `GeneratedCurtainFrameBaseCount`, `GeneratedCurtainFrameOpeningCount`, `GeneratedCurtainFrameColumns`, `GeneratedCurtainFrameRows`, and for path mode `GeneratedCurtainFramePathSegmentCount` / `GeneratedCurtainFrameMappedFrameCount`. `GeneratedCurtainFrameHealthService` previously accepted these values through `int.TryParse(...)` only, allowing alternate spellings such as padded, signed-positive or leading-zero text to pass health even though the writers never emit them.
 
-## Non-overlap check
+## Completed implementation
 
-Recent claim/commit search found no Curtain Frame integer/count canonicality lane. Completed Curtain Frame handle, mode, source-kind and geometry-snapshot canonicality lanes own different metadata. Other active Curtain/Reporting/Revision/XLSX lanes do not reserve these generated integer slots.
+- Claim commit: `e03d2a1777b6d2ff3b9c974acb96a40db4223ba9`.
+- Branch source commit: `881d71881e9fdbec84f01ffc37954f06de2fe4f0`.
+- Branch smoke commit: `ac9b9bab4b6e464b6d3ba7e58a5a61221e811729`.
+- PR: `#802` (`chatgpt-curtain-frame-integer-canon-20260812`).
+- Squash merge on `main`: `e9aaab613fc57dad6655730a677dbef181498c12`.
+- Merged source and `GeneratedCurtainFrameIntegerSnapshotCanonicalitySmoke.cs` were read back from `main`.
+- Ancestry was verified from squash merge `e9aaab613fc57dad6655730a677dbef181498c12` to `main` snapshot `0fda3dfc5da53cdb7be739dbd6900faef21d7b74`; the intervening commits did not touch this lane.
 
-## Reserved scope
+## Resulting contract
 
-- `src/QS3D.Core/Diagnostics/GeneratedCurtainFrameHealthService.cs`
-- one focused Core smoke regression for generated integer snapshot canonicality
-- this claim file
-
-Do not modify Curtain Frame builders, handles, geometry doubles, mode/source-kind/fingerprint metadata, count arithmetic, native ownership/XData, persistence format, command wrappers, or BricsCAD runtime code.
-
-## Intended contract
-
-- After an integer snapshot parses and passes its existing positive/nonnegative domain rule, its raw text must equal `value.ToString(CultureInfo.InvariantCulture)` or emit `CURTAIN_FRAME_INTEGER_METADATA_NON_CANONICAL` as `HealthSeverity.Error`.
+- After generated integer snapshots parse and satisfy their existing positive/nonnegative domain rules, their raw text must equal `value.ToString(CultureInfo.InvariantCulture)` or emit `CURTAIN_FRAME_INTEGER_METADATA_NON_CANONICAL` as `HealthSeverity.Error`.
 - Existing missing/invalid/range warnings retain precedence and invalid values do not receive canonicality noise.
 - Existing count/grid/opening/path mismatch calculations continue to use parsed integer values.
 - Exact writer-owned decimal strings preserve existing behavior.
 - Inspection remains read-only and deterministic.
 
-## Completion condition
+## Verification boundary
 
-Alternate raw spellings for generated integer snapshots are fail-visible without changing invalid/mismatch semantics, focused smoke coverage pins required/optional/path aliases plus invalid and canonical controls, source + smoke are read back from merged `main`, ancestry is verified, and this claim is closed with exact commit SHAs.
+No GitHub Actions were dispatched. No full local .NET build PASS and no BricsCAD V25/V26 runtime PASS are claimed by this lane.
