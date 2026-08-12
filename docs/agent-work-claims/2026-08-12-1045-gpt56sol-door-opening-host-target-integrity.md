@@ -1,6 +1,6 @@
 # Work claim — Door/opening schedule host target integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-door-opening-host-target-integrity-20260812-1045`
 - Registered: `2026-08-12T10:45:00+07:00`
 - Baseline main SHA: `9826397496fa32097f0463f3b26142d2eba01976`
@@ -8,9 +8,9 @@
 
 ## Confirmed defect
 
-`DoorOpeningScheduleBuilder.Build(...)` currently validates `HostWallId` only for canonical surrounding whitespace. A non-empty canonical token is added to `HostIds`/`HostCount` without proving that it resolves to an existing semantic element or that the target is a wall category.
+`DoorOpeningScheduleBuilder.Build(...)` validated `HostWallId` only for canonical surrounding whitespace. A non-empty canonical token could be added to `HostIds`/`HostCount` without proving that it resolved to an existing semantic element or that the target was a wall category.
 
-This is inconsistent with the reporting identity guard, which fails closed on missing Family/Floor/Zone references, and with Model Health, which reports missing/non-wall opening hosts as errors. A stale or non-wall `HostWallId` can therefore be emitted as an apparently valid host in the Door/Opening schedule.
+This was inconsistent with the reporting identity guard, which fails closed on missing Family/Floor/Zone references, and with Model Health, which reports missing/non-wall opening hosts as errors. A stale or non-wall `HostWallId` could therefore be emitted as an apparently valid host in the Door/Opening schedule.
 
 ## Reserved scope
 
@@ -18,18 +18,21 @@ This is inconsistent with the reporting identity guard, which fails closed on mi
 - `tests/QS3D.Core.SmokeTests/DoorOpeningScheduleHostIdCanonicalitySmoke.cs`
 - this claim file
 
-## Expected fix
+## Implemented fix
 
-Preserve missing/empty `HostWallId` as the supported unhosted case. For a non-empty canonical `HostWallId`, require an existing unique semantic target and require that target category is one of the wall host categories before it contributes to schedule `HostIds`/`HostCount`.
+Missing/empty `HostWallId` remains the supported unhosted case. For a non-empty canonical `HostWallId`, the schedule now requires an existing unique semantic target and requires the target category to be an ArchitecturalWall, GlassWall, WallPier, or StructuralWall before it contributes to `HostIds`/`HostCount`.
 
-## Excluded scope
+No project repair/mutation is attempted by reporting.
 
-- No HostLink mutation/repair logic.
-- No change to opening/door authoring or physical-cut behavior.
-- No XLSX exporter changes.
-- No BricsCAD/native/runtime or GitHub Actions work.
+## Integration evidence
 
-## Validation plan
+- Claim registration: `97c74699d7f47d7bac8aa2c51c40ae07023f4c8a`
+- Source fix: `17de2ee58e5916752d4e389f527dccf9227912b7`
+- Focused regression: `704776fcfbc747beb68a406a25a1d7992738e6b0`
+- Source readback blob: `1365ee54e42c768790133a4e8b5dde0eb53814ca`
+- Smoke readback blob: `a45652b68f72ce23bd942dc4e2d98e9ba527fef7`
+
+## Validation coverage
 
 - Canonical existing wall host remains reported once.
 - Missing and empty host property remain unhosted.
@@ -37,6 +40,4 @@ Preserve missing/empty `HostWallId` as the supported unhosted case. For a non-em
 - Canonical orphan host id fails closed.
 - Canonical host id targeting a non-wall element fails closed.
 
-## Completion condition
-
-Source and focused smoke regression are committed to `main`, exact integration SHAs are recorded, and this claim is marked `COMPLETED` without claiming local BricsCAD/runtime PASS.
+No GitHub Actions, executable smoke suite, .NET build, or BricsCAD V25 runtime was dispatched or claimed PASS in this remote lane.
