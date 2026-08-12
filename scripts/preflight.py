@@ -168,7 +168,15 @@ if template_commands.exists():
 bulk = ROOT / "src/QS3D.Core/Services/BulkEditService.cs"
 if bulk.exists():
     text = bulk.read_text(encoding="utf-8")
-    if "inheritedKeys" not in text or "previousFamily.Properties" not in text: errors.append("family reassignment must refresh inherited defaults without overwriting instance overrides")
+    family_reassignment_tokens = (
+        "inheritedKeys",
+        'ProjectFamilyService.SnapshotProperties(family, "Target", "bulk assignment")',
+        'ProjectFamilyService.SnapshotProperties(previousFamily, "Previous", "bulk assignment")',
+        "targetPropertyKeys",
+        "previousProperties",
+    )
+    if any(token not in text for token in family_reassignment_tokens):
+        errors.append("family reassignment must refresh inherited defaults without overwriting instance overrides")
 wall_quantity = ROOT / "src/QS3D.Core/Services/WallQuantityCalculator.cs"
 if wall_quantity.exists():
     text = wall_quantity.read_text(encoding="utf-8")
