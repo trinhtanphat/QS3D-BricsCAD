@@ -63,20 +63,21 @@ function Restore-EnvironmentValue {
 function Stop-Qs3dLaunchedProcess {
     param([AllowNull()][Diagnostics.Process]$Process)
     if ($null -eq $Process) { return }
-    try {
+    $Process.Refresh()
+    if (-not $Process.HasExited) {
+        Stop-Process -Id $Process.Id -Force -ErrorAction Stop
+        $Process.WaitForExit(10000) | Out-Null
         $Process.Refresh()
-        if (-not $Process.HasExited) {
-            Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
-            $Process.WaitForExit(10000) | Out-Null
-        }
     }
-    catch { }
+    if (-not $Process.HasExited) { throw "Launched BricsCAD curtain-panel process did not exit." }
 }
 
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw "Curtain-panel runtime qualification requires Windows." }
 if (-not [Environment]::UserInteractive) { throw "Curtain-panel runtime qualification requires an interactive Windows session." }
 if (-not $ConfirmDisposableCopy) { throw "Pass -ConfirmDisposableCopy only for a disposable synthetic drawing copy." }
+if ([string]::IsNullOrWhiteSpace($Profile)) { throw "Curtain-panel runtime qualification requires an initialized BricsCAD profile." }
 
+$repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $BricsCadDir = [IO.Path]::GetFullPath($BricsCadDir)
 $PluginDll = [IO.Path]::GetFullPath($PluginDll)
 $DrawingCopy = [IO.Path]::GetFullPath($DrawingCopy)
@@ -90,6 +91,20 @@ $coreDll = Join-Path (Split-Path -Parent $PluginDll) "QS3D.Core.dll"
 foreach ($required in @($bricscadExe, $PluginDll, $coreDll, $DrawingCopy)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw "Required curtain-panel runtime input is missing: $required" }
 }
+$expectedPlugin = [IO.Path]::GetFullPath((Join-Path $repoRoot "src\QS3D.BricsCAD.V25\bin\x64\Release\net48\QS3D.BricsCAD.V25.dll"))
+if (-not [string]::Equals($PluginDll, $expectedPlugin, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "PluginDll must be the exact repository x64 Release V25 build output."
+}
+if ($ArtifactDir.StartsWith($repoRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "ArtifactDir must stay outside the repository because the runtime script contains a private local plugin path."
+}
+
+$git = Get-Command git -CommandType Application -ErrorAction Stop
+$gitHead = (& $git.Source -C $repoRoot rev-parse HEAD).Trim()
+if ($LASTEXITCODE -ne 0 -or $gitHead -notmatch '^[0-9a-f]{40}$') { throw "Cannot resolve the exact Git candidate SHA." }
+$gitStatus = @(& $git.Source -C $repoRoot status --porcelain --untracked-files=normal)
+if ($LASTEXITCODE -ne 0) { throw "Cannot inspect the Git candidate worktree." }
+if ($gitStatus.Count -ne 0) { throw "Curtain-panel runtime qualification requires a clean exact-SHA worktree." }
 if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
     throw "Close existing BricsCAD processes before starting the isolated curtain-panel runtime probe."
 }
@@ -99,7 +114,10 @@ if ((Test-Path -LiteralPath $projectSidecar) -or (Test-Path -LiteralPath ($proje
     throw "The disposable curtain drawing copy must not have a pre-existing QS3D sidecar."
 }
 
-New-Item -ItemType Directory -Force -Path $ArtifactDir | Out-Null
+if (Test-Path -LiteralPath $ArtifactDir) {
+    if (@(Get-ChildItem -LiteralPath $ArtifactDir -Force).Count -ne 0) { throw "ArtifactDir must be empty." }
+}
+else { New-Item -ItemType Directory -Path $ArtifactDir | Out-Null }
 $resultPath = Join-Path $ArtifactDir "curtain-panel-runtime-result.txt"
 $scriptPath = Join-Path $ArtifactDir "curtain-panel-runtime.scr"
 $metadataPath = Join-Path $ArtifactDir "curtain-panel-runtime-metadata.json"
@@ -174,6 +192,10 @@ try {
     if ($panelCount -ne $panelMetadataCount) { throw "Curtain-panel native and metadata counts differ." }
 
     Stop-Qs3dLaunchedProcess -Process $process
+    if (Test-Path -LiteralPath $scriptPath) {
+        Remove-Item -LiteralPath $scriptPath -Force -ErrorAction Stop
+    }
+    if (Test-Path -LiteralPath $scriptPath) { throw "Curtain-panel runtime script cleanup failed." }
     $drawingHashAfter = (Get-FileHash -LiteralPath $DrawingCopy -Algorithm SHA256).Hash.ToUpperInvariant()
     if (-not [string]::Equals($drawingHashBefore, $drawingHashAfter, [StringComparison]::Ordinal)) {
         throw "The disposable curtain drawing was written unexpectedly."
@@ -184,6 +206,7 @@ try {
 
     $metadata = [ordered]@{
         status = "PASS"
+        git_sha = $gitHead
         started_at = $startedAt.ToUniversalTime().ToString("O")
         completed_at = (Get-Date).ToUniversalTime().ToString("O")
         profile = $Profile
@@ -191,6 +214,8 @@ try {
         plugin_sha256 = $pluginHash
         drawing_copy_sha256_before = $drawingHashBefore
         drawing_copy_sha256_after = $drawingHashAfter
+        process_cleanup_verified = $true
+        script_cleanup_verified = $true
         proxy_information_dialogs_dismissed = $proxyInformationDialogsDismissed
         marker = $marker
     }
@@ -202,7 +227,15 @@ try {
     Write-Host "Metadata: $metadataPath"
 }
 finally {
-    Stop-Qs3dLaunchedProcess -Process $process
-    Restore-EnvironmentValue -Name "QS3D_CURTAIN_PANEL_RESULT" -Value $oldResult
-    Restore-EnvironmentValue -Name "QS3D_CURTAIN_PANEL_NONCE" -Value $oldNonce
+    try {
+        Stop-Qs3dLaunchedProcess -Process $process
+        if (Test-Path -LiteralPath $scriptPath) {
+            Remove-Item -LiteralPath $scriptPath -Force -ErrorAction Stop
+        }
+        if (Test-Path -LiteralPath $scriptPath) { throw "Curtain-panel runtime script cleanup failed." }
+    }
+    finally {
+        Restore-EnvironmentValue -Name "QS3D_CURTAIN_PANEL_RESULT" -Value $oldResult
+        Restore-EnvironmentValue -Name "QS3D_CURTAIN_PANEL_NONCE" -Value $oldNonce
+    }
 }
