@@ -136,8 +136,8 @@ smoke = ROOT / "tests/QS3D.Core.SmokeTests/GeneratedGeometryStaleSmoke.cs"
 if smoke.is_file():
     text = smoke.read_text(encoding="utf-8")
     for needle in (
-        "GeneratedOutputsBecomeStaleAfterSemanticEdit();", "ReplacedHandleAutoResolvesOnlyItsOwnStaleKind();",
-        "ExplicitClearPreservesOtherStaleKinds();", "StaleHealthReportsAllGeneratedKinds();",
+        "GeneratedOutputsBecomeStaleAfterSemanticEdit();", "ReplacedHandlesRemainAsObsoleteMetadataUntilExplicitClear();",
+        "CurtainPanelObsoleteMarkerIsQueryPure();", "ExplicitClearPreservesOtherStaleKinds();", "StaleHealthReportsAllGeneratedKinds();",
         "GeneratedTieRebarHandles", "GeneratedBeamStirrupHandles",
     ):
         if needle not in text: errors.append("generated stale regression missing: " + needle)
@@ -151,4 +151,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: stale snapshots, exact live-handle prevalidation before destructive invalidation/replacement, auto-resolution, five generated output kinds, cross-set ownership, UI mutation path, health command and regression coverage are present.")
+print("PASS: stale snapshots, exact live-handle prevalidation before destructive invalidation/replacement, query-pure obsolete markers until explicit cleanup, cross-set ownership, UI mutation path, health command and regression coverage are present.")
