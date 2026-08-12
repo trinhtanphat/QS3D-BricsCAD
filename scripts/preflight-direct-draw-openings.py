@@ -22,8 +22,9 @@ else:
         'createdElement.SetProperty("BooleanClearanceM"',
         "ProjectStateSnapshot.Capture(project)",
         "EnsureActive(document, \"Direct Draw \" + label + \" / Auto Host\")",
-        "new AutoHostLinkCommands().AutoLinkHosts()",
-        'createdElement.Properties.TryGetValue("HostWallId"',
+        "AutoHostLinkCommands.LinkSingleOpening(document, project, createdElementId)",
+        'createdElement.Properties.TryGetValue("HostWallId", out var recordedHostId)',
+        'string.Equals(recordedHostId.Trim(), hostId, StringComparison.OrdinalIgnoreCase)',
         "regenerated += new RegenerationEngine",
         "EraseSource(document, sourceId)",
         "rollback.Restore(project)",
@@ -55,6 +56,7 @@ else:
         "FamilyNumber(",
         'createdElement.Properties["WidthM"] =',
         'createdElement.Properties["HeightM"] =',
+        "new AutoHostLinkCommands().AutoLinkHosts()",
     )
     for token in forbidden:
         if token in text:
@@ -67,7 +69,7 @@ else:
     first_subset = '.RegenerateDirtySubset(project, new[] { createdElementId });'
     second_subset = '.RegenerateDirtySubset(project, new[] { createdElementId, hostId });'
     if first_subset not in text or second_subset not in text or text.find(first_subset) >= text.find(second_subset):
-        errors.append("Door/Opening Direct Draw must validate only the authored opening, then the opening+host closure after Auto Host")
+        errors.append("Door/Opening Direct Draw must validate only the authored opening, then the exact opening+host closure after Auto Host")
     if ".RegenerateDirty(project)" in text:
         errors.append("Door/Opening Direct Draw must not clean unrelated dirty semantic elements")
     if text.count("Sửa Family trước khi Direct Draw.") < 3:
@@ -112,4 +114,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Door/Opening Direct Draw uses canonical SetProperty writes, active-DWG guards, operation-owned ObjectId cleanup before project restore, post-link semantic verification and non-destructive post-commit UI sync; it exposes Ribbon/Hub actions and never invokes global physical cutting.")
+print("PASS: Door/Opening Direct Draw uses exact single-opening AutoHost on the authorized project, canonical SetProperty writes, active-DWG guards, operation-owned ObjectId cleanup before project restore, post-link semantic verification and non-destructive post-commit UI sync; it exposes Ribbon/Hub actions and never invokes global physical cutting.")
