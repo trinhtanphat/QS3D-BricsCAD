@@ -120,8 +120,10 @@ checks = {
     "quantity": (
         'Text="BQ REVIEW"', 'x:Name="FloorCombo"', 'x:Name="SearchBox"',
         'x:Name="CategoryList"', 'x:Name="QuantityGrid"', 'x:Name="TotalsText"',
+        'x:Name="AutoRevealCheck"', 'Content="Bám 3D"',
+        'SelectionChanged="OnQuantityGridSelectionChanged"', 'MouseDoubleClick="OnQuantityGridDoubleClick"',
         'Checked="OnColumnVisibilityChanged"', 'Unchecked="OnColumnVisibilityChanged"',
-        'Text="DETAIL: CLICK → 3D • SUMMARY: DOUBLE-CLICK → LOCATE • EXPORT XLSX"',
+        'Text="BÁM 3D: CLICK → LOCATE • TẮT BÁM 3D: DOUBLE-CLICK / ĐỊNH VỊ • EXPORT XLSX"',
     ),
     "rebar_hub": (
         'Text="REBAR WORKFLOW"', 'x:Key="RebarCard"', 'Tag="QS3DREBAR3D"',
