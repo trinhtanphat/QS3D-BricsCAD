@@ -92,7 +92,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         var family = project.FindFamily(element.FamilyId);
                         var xGroup = ParseDirection(element, family, "RebarFoundationXNotation");
                         var yGroup = ParseDirection(element, family, "RebarFoundationYNotation");
-                        var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", .5d), element.Id + "/ThicknessM");
+                        var legacyThicknessM = CadGeometryGuard.Number(element, family, "ThicknessM", .5d);
                         var coverM = CadGeometryGuard.Number(element, family, "RebarFoundationCoverM", CadGeometryGuard.Number(element, family, "RebarCoverM", .05d));
                         if (coverM < 0d) throw new InvalidOperationException(element.Id + "/RebarFoundationCoverM phải >= 0.");
                         var faces = Text(element, family, "RebarFoundationFaces", "Bottom");
@@ -101,10 +101,17 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (!includeBottom && !includeTop) throw new InvalidOperationException(element.Id + "/RebarFoundationFaces phải là Bottom, Top hoặc Both.");
                         var xClosest = Boolean(element, family, "RebarFoundationXClosestToFace", true);
                         var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-                        var centerOffsetM = CadGeometryGuard.Add(bottomM, thicknessM / 2d, element.Id + "/foundation mesh center offset Z");
-                        var centerZ = CadGeometryGuard.Add(
+                        var placement = CadVerticalPlacementResolver.Resolve(
+                            document,
+                            project,
+                            element,
                             polyline.Elevation,
-                            CadGeometryGuard.ToDrawingUnits(document, centerOffsetM, element.Id + "/foundation mesh center Z"),
+                            legacyThicknessM,
+                            bottomM);
+                        var thicknessM = placement.HeightM;
+                        var centerZ = CadGeometryGuard.Add(
+                            placement.BottomDrawingUnits,
+                            placement.HeightDrawingUnits / 2d,
                             element.Id + "/foundation mesh world center Z");
 
                         var rectangle = TryReadRectangle(document, element, polyline);

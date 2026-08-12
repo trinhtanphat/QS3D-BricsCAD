@@ -155,7 +155,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var coverM = CadGeometryGuard.Number(element, family, "RebarCoverM", .025d);
             if (coverM < 0d) throw new InvalidOperationException(element.Id + "/RebarCoverM không được âm.");
             var cover = CadGeometryGuard.ToDrawingUnits(document, coverM, element.Id + "/cover");
-            var bottom = CadGeometryGuard.ToDrawingUnits(document, CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d), element.Id + "/bottom");
+            var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
             if (source is Line line)
             {
                 var dx = SubtractFinite(line.EndPoint.X, line.StartPoint.X, element.Id + "/axis dx");
@@ -167,9 +167,10 @@ namespace QS3D.BricsCAD.V25.Cad
                 var wallLike = IsWallLike(element.Category);
                 var spanM = wallLike ? CadGeometryGuard.Number(element, family, "ThicknessM", .2d) : CadGeometryGuard.Number(element, family, "WidthM", .3d);
                 var span = CadGeometryGuard.ToDrawingUnits(document, CadGeometryGuard.Positive(spanM, element.Id + "/spanM"), element.Id + "/span");
+                var baseZ = ResolveBaseZ(document, project, element, family, line.StartPoint.Z, bottomOffsetM);
                 return new Placement
                 {
-                    Origin = Point(line.StartPoint.X, line.StartPoint.Y, AddFinite(line.StartPoint.Z, bottom, element.Id + "/shape rebar base Z"), element.Id + "/line origin"),
+                    Origin = Point(line.StartPoint.X, line.StartPoint.Y, baseZ, element.Id + "/line origin"),
                     Axis = axis,
                     Distribution = distribution,
                     Span = span,
@@ -184,9 +185,10 @@ namespace QS3D.BricsCAD.V25.Cad
             var depth = SubtractFinite(extents.MaxPoint.Y, extents.MinPoint.Y, element.Id + "/source depth");
             if (width <= 1e-9d || depth <= 1e-9d) throw new InvalidOperationException("Source extents quá nhỏ cho shape rebar: " + element.Id);
             var alongX = width >= depth;
+            var extentsBaseZ = ResolveBaseZ(document, project, element, family, extents.MinPoint.Z, bottomOffsetM);
             return new Placement
             {
-                Origin = Point(extents.MinPoint.X, extents.MinPoint.Y, AddFinite(extents.MinPoint.Z, bottom, element.Id + "/shape rebar base Z"), element.Id + "/extents origin"),
+                Origin = Point(extents.MinPoint.X, extents.MinPoint.Y, extentsBaseZ, element.Id + "/extents origin"),
                 Axis = alongX ? Vector3d.XAxis : Vector3d.YAxis,
                 Distribution = alongX ? Vector3d.YAxis : Vector3d.XAxis,
                 Span = alongX ? depth : width,
@@ -194,6 +196,47 @@ namespace QS3D.BricsCAD.V25.Cad
                 DistributionCentered = false,
                 AxisStartsAtBoundary = true
             };
+        }
+
+        private static double ResolveBaseZ(
+            Document document,
+            ProjectState project,
+            ProjectElement element,
+            ProjectFamily? family,
+            double sourceBaseDrawingUnits,
+            double bottomOffsetM)
+        {
+            if (!CadVerticalPlacementResolver.HasConfiguredLevel(element))
+                return AddFinite(
+                    sourceBaseDrawingUnits,
+                    CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/bottom"),
+                    element.Id + "/shape rebar base Z");
+
+            var legacyHeightM = LegacyPlacementHeightM(element, family);
+            return CadVerticalPlacementResolver.Resolve(
+                document,
+                project,
+                element,
+                sourceBaseDrawingUnits,
+                legacyHeightM,
+                bottomOffsetM).BottomDrawingUnits;
+        }
+
+        private static double LegacyPlacementHeightM(ProjectElement element, ProjectFamily? family)
+        {
+            switch (element.Category)
+            {
+                case ElementCategory.Slab:
+                case ElementCategory.Foundation:
+                case ElementCategory.Stair:
+                    return CadGeometryGuard.Number(element, family, "ThicknessM", .15d);
+                case ElementCategory.Earthwork:
+                    return CadGeometryGuard.Number(element, family, "DepthM", 1d);
+                case ElementCategory.Railing:
+                    return CadGeometryGuard.Number(element, family, "HeightM", 1.1d);
+                default:
+                    return CadGeometryGuard.Number(element, family, "HeightM", 3d);
+            }
         }
 
         private static Solid3d BuildShape(Document document, Point3d origin, Vector3d axis, Vector3d distribution, RebarShapePath path, double radius, string label)

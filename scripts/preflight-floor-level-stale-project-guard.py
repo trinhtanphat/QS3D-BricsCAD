@@ -13,7 +13,7 @@ if not SOURCE.is_file():
 text = SOURCE.read_text(encoding="utf-8")
 
 for token in (
-    "private ProjectState _boundProject;",
+    "private ProjectState? _boundProject;",
     "_boundProject = null;",
     "_boundProject = project;",
     "private ProjectState RequireBoundProjectForRead(string operation)",

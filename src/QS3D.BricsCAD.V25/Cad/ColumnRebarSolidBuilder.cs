@@ -121,14 +121,20 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (layout.BarCenters.Count > MaxBarsPerElement) throw new InvalidOperationException(element.Id + " vượt giới hạn " + MaxBarsPerElement + " thanh cột 3D.");
                         if (totalBars > MaxBarsPerBatch - layout.BarCenters.Count) throw new InvalidOperationException("Column Rebar 3D vượt giới hạn " + MaxBarsPerBatch + " thanh/batch.");
 
-                        var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
+                        var legacyHeightM = CadGeometryGuard.Number(element, family, "HeightM", 3.6d);
                         var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-                        var height = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/rebar height"), element.Id + "/rebar drawing height");
+                        var placement = CadVerticalPlacementResolver.Resolve(
+                            document,
+                            project,
+                            element,
+                            polyline.Elevation,
+                            legacyHeightM,
+                            bottomOffsetM);
+                        var height = placement.HeightDrawingUnits;
                         var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, diameterMm / 2000d, element.Id + "/rebar radius"), element.Id + "/rebar drawing radius");
-                        var bottom = CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM");
                         var centerX = CadGeometryGuard.Midpoint(p0.X, p2.X, element.Id + "/center X");
                         var centerY = CadGeometryGuard.Midpoint(p0.Y, p2.Y, element.Id + "/center Y");
-                        var baseZ = CadGeometryGuard.Add(polyline.Elevation, bottom, element.Id + "/rebar base Z");
+                        var baseZ = placement.BottomDrawingUnits;
 
                         ErasePrevious(document, transaction, project, element, ownership);
                         var update = new PendingUpdate { Element = element, DiameterMm = diameterMm, CoverM = coverM };

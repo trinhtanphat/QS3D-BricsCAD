@@ -69,7 +69,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         var geometry = RectangleGeometry(polyline, element.Id);
                         var widthM = CadGeometryGuard.ToMeters(document, geometry.Width, element.Id + "/tie width");
                         var depthM = CadGeometryGuard.ToMeters(document, geometry.Depth, element.Id + "/tie depth");
-                        var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
+                        var legacyHeightM = CadGeometryGuard.Number(element, family, "HeightM", 3.6d);
                         var coverM = CadGeometryGuard.Number(element, family, "RebarCoverM", 0.04d);
                         if (coverM < 0d) throw new InvalidOperationException(element.Id + "/RebarCoverM phải >= 0.");
                         var diameterMm = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "RebarTieDiameterMm", 8d), element.Id + "/RebarTieDiameterMm");
@@ -79,6 +79,14 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (bottomClearanceM < 0d) throw new InvalidOperationException(element.Id + "/RebarTieBottomClearanceM phải >= 0.");
                         if (topClearanceM < 0d) throw new InvalidOperationException(element.Id + "/RebarTieTopClearanceM phải >= 0.");
                         var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
+                        var placement = CadVerticalPlacementResolver.Resolve(
+                            document,
+                            project,
+                            element,
+                            polyline.Elevation,
+                            legacyHeightM,
+                            bottomOffsetM);
+                        var heightM = placement.HeightM;
 
                         var layout = ColumnTieLayoutPlanner.Plan(new ColumnTieLayoutInput
                         {
@@ -97,12 +105,10 @@ namespace QS3D.BricsCAD.V25.Cad
                         ErasePrevious(document, transaction, project, element, ownership);
                         var update = new PendingUpdate { Element = element, DiameterMm = diameterMm, ActualSpacingM = layout.ActualSpacingM, CoverM = coverM };
                         var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, diameterMm / 2000d, element.Id + "/tie radius"), element.Id + "/tie radius drawing units");
-                        var bottomOffset = CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM");
                         foreach (var elevationM in layout.ElevationsM)
                         {
                             var elevation = CadGeometryGuard.ToDrawingUnits(document, elevationM, element.Id + "/tie elevation");
-                            var localZ = CadGeometryGuard.Add(bottomOffset, elevation, element.Id + "/tie local Z");
-                            var z = CadGeometryGuard.Add(polyline.Elevation, localZ, element.Id + "/tie Z");
+                            var z = CadGeometryGuard.Add(placement.BottomDrawingUnits, elevation, element.Id + "/tie Z");
                             var tie = BuildTie(document, geometry, layout, z, radius, element.Id);
                             try
                             {
