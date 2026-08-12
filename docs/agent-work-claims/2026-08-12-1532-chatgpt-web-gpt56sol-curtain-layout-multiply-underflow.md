@@ -1,0 +1,22 @@
+# Agent Work Claim
+
+- Agent: `ChatGPT web / GPT-5.6 Sol`
+- Status: `ACTIVE`
+- State: `ACTIVE`
+- Started at: `2026-08-12T15:32:00+07:00`
+- Baseline main SHA: `548354da1a3e6a19b145e393ae7849ea112f5403`
+- Task Key: `CORE-CURTAIN-LAYOUT-MULTIPLY-UNDERFLOW`
+- Scope: Harden CAD-independent `CurtainWallLayoutPlanner` multiplication so finite non-zero operands that IEEE-754 underflow to exact zero fail closed instead of silently returning zero geometric area/quantity. Preserve legitimate multiplication where either operand is already zero, existing overflow/non-finite handling, grid limits, and frame-deduction semantics.
+- Primary files:
+  - `src/QS3D.Core/Geometry/CurtainWallLayoutPlanner.cs`
+  - `tests/QS3D.Core.SmokeTests/CurtainWallLayoutSmoke.cs`
+  - this claim file
+- Counterexample:
+  - `LengthM = 1e-200`, `HeightM = 1e-200`, max panel dimensions `1`, and zero frame widths currently pass all positive/finite/grid checks but `GrossAreaM2` and `ClearGlassAreaM2` silently collapse from a mathematically positive value to exact `0d`.
+- Tests intended:
+  - Reject a positive finite curtain layout whose gross-area multiplication underflows to exact zero.
+  - Preserve a normal zero-width-frame calculation where multiplication legitimately has a zero operand.
+  - Preserve existing normal layout, impossible-frame, excessive-grid, and non-finite regressions.
+- Notes:
+  - Pure Core/Geometry change; no Navigation, persistence, QSDB, formulas, recognition/B4D, generated handles, native CAD, or release workflow scope.
+  - No GitHub Actions, full .NET build, executable smoke run, or BricsCAD V25/V26 runtime PASS will be claimed unless actually performed.
