@@ -81,9 +81,11 @@ namespace QS3D.Core.Export
                 var rows = sheet.Descendants(ns + "row").ToList();
                 foreach (var row in rows)
                 {
-                    var declaredRow = ParsePositiveInt((string?)row.Attribute("r"));
+                    var declaredRowText = (string?)row.Attribute("r");
+                    if (declaredRowText == null) continue;
+                    var declaredRow = ParsePositiveInt(declaredRowText);
                     if (declaredRow == int.MaxValue || declaredRow > MaxRows)
-                        throw new InvalidDataException("Excel worksheet row number is missing, invalid, or exceeds the XLSX row limit.");
+                        throw new InvalidDataException("Excel worksheet row number is invalid or exceeds the XLSX row limit.");
                 }
                 var targets = rows.Where(x => ParsePositiveInt((string?)x.Attribute("r")) == rowNumber).ToList();
                 if (targets.Count > 1) throw new InvalidDataException("Excel worksheet contains duplicate row number " + rowNumber + ".");
