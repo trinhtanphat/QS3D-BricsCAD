@@ -97,13 +97,14 @@ namespace QS3D.BricsCAD.V25
                 if (walls.Count != seeds.Count || project.Elements.Count != seeds.Count)
                     throw new InvalidOperationException("Plan-to-3D did not create exactly one semantic wall per seed source.");
 
-                failureCode = "PLAN_TO_3D_RUNTIME_SOURCE_FAILED";
+                failureCode = "PLAN_TO_3D_RUNTIME_SOURCE_GEOMETRY_FAILED";
                 RequireSeedGeometryUnchanged(document, seeds);
                 var seedHandles = new HashSet<string>(seeds.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
                 var claimedSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var generatedHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var wall in walls)
                 {
+                    failureCode = "PLAN_TO_3D_RUNTIME_SOURCE_OWNERSHIP_FAILED";
                     if (wall.SourceHandles.Count != 1)
                         throw new InvalidOperationException("A Plan-to-3D wall does not own exactly one source LINE.");
                     var sourceHandle = CadHandleService.NormalizeHexHandle(wall.SourceHandles[0])
@@ -111,10 +112,12 @@ namespace QS3D.BricsCAD.V25
                     if (!seedHandles.Contains(sourceHandle) || !claimedSources.Add(sourceHandle))
                         throw new InvalidOperationException("Plan-to-3D source ownership is incomplete or duplicated.");
 
+                    failureCode = "PLAN_TO_3D_RUNTIME_FALLBACK_VALUES_FAILED";
                     RequireNumber(wall, "ThicknessM", 0.2d);
                     RequireNumber(wall, "HeightM", 3d);
                     RequireNumber(wall, "BottomOffsetM", 0d);
 
+                    failureCode = "PLAN_TO_3D_RUNTIME_GENERATED_METADATA_FAILED";
                     if (!wall.Properties.TryGetValue("GeneratedSolidHandle", out var rawGenerated))
                         throw new InvalidOperationException("A Plan-to-3D wall is missing GeneratedSolidHandle.");
                     var generatedHandle = CadHandleService.NormalizeHexHandle(rawGenerated)
@@ -122,6 +125,7 @@ namespace QS3D.BricsCAD.V25
                     if (seedHandles.Contains(generatedHandle) || !generatedHandles.Add(generatedHandle))
                         throw new InvalidOperationException("Plan-to-3D generated ownership overlaps or is duplicated.");
 
+                    failureCode = "PLAN_TO_3D_RUNTIME_GENERATED_OWNERSHIP_FAILED";
                     var owned = GeneratedGeometryService.FindMatchingOwnedHandles(
                         document,
                         project.ProjectId,
@@ -134,9 +138,11 @@ namespace QS3D.BricsCAD.V25
                     if (owned.Count != 1 || !string.Equals(owned[0], generatedHandle, StringComparison.OrdinalIgnoreCase))
                         throw new InvalidOperationException("Generated metadata and native ownership marker disagree.");
 
+                    failureCode = "PLAN_TO_3D_RUNTIME_NATIVE_BOUNDS_FAILED";
                     var seed = seeds.Single(x => string.Equals(x.Handle, sourceHandle, StringComparison.OrdinalIgnoreCase));
                     RequireGeneratedSolidBounds(document, project, wall, generatedHandle, seed.LengthM);
                 }
+                failureCode = "PLAN_TO_3D_RUNTIME_SOURCE_SET_FAILED";
                 if (!claimedSources.SetEquals(seedHandles))
                     throw new InvalidOperationException("Plan-to-3D did not retain every seeded source as canonical provenance.");
 
