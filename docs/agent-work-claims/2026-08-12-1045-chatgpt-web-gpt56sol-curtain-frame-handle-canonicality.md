@@ -1,7 +1,7 @@
 # Work claim — Curtain Frame generated handle canonicality
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-web/gpt56sol-curtain-frame-handle-canonicality`
 - Registered: `2026-08-12T10:45:00+07:00`
 - Baseline main SHA: `84df2060da5d1eb4b5cd7e4c180146cd3937cc8b`
@@ -10,28 +10,26 @@
 
 ## Confirmed defect
 
-`CurtainWallFrameSolidBuilder` records each generated solid with `solid.Handle.ToString()` and persists `GeneratedCurtainFrameHandles` as `string.Join(";", update.Handles)`. `GeneratedCurtainFrameHealthService` currently splits this metadata and trims every token before validating it, so a persisted alias such as `"A; B"` can pass handle validity without health evidence even though the writer never emits surrounding whitespace.
+`CurtainWallFrameSolidBuilder` records each generated solid with `solid.Handle.ToString()` and persists `GeneratedCurtainFrameHandles` as `string.Join(";", update.Handles)`. `GeneratedCurtainFrameHealthService` previously trimmed every token before validating it, so persisted aliases such as `"A; B"` could pass handle validity without health evidence even though the writer never emits surrounding whitespace.
 
-## Non-overlap check
+## Completed implementation
 
-Recent claim/commit search found no Curtain Frame handle canonicality lane. The active/completed Curtain Frame health-command error-redaction lane only owns the BricsCAD command wrapper and does not modify this Core provider. Curtain Panel, Slab, Foundation and Wall Mesh handle canonicality are separate lanes.
+- Claim commit: `1fc1a279f71c7a31e514f97ae75c11116d7f4ac7`.
+- Branch source commit: `483f328a8679e09e3e9ab0648d89e5700145e483`.
+- Branch smoke commit: `2149191b29a6ce4cf31fb83962fc6e380d13cd6e`.
+- PR: `#772` (`chatgpt-curtain-frame-canon-20260812`).
+- Squash merge on `main`: `9a61a08606f4dcb92ab677d4903da06d72c4860c`.
+- Merged source and `GeneratedCurtainFrameHandleCanonicalitySmoke.cs` were read back from `main`.
+- Ancestry was verified from squash merge `9a61a08606f4dcb92ab677d4903da06d72c4860c` to `main` snapshot `9bb555764a1d8096350c61da9bd69746c218ec3c`; intervening commits did not touch this lane.
 
-## Reserved scope
+## Resulting contract
 
-- `src/QS3D.Core/Diagnostics/GeneratedCurtainFrameHealthService.cs`
-- one focused Core smoke regression for Curtain Frame handle token spacing
-- this claim file
-
-Do not modify `CurtainWallFrameSolidBuilder`, health-command wrapper, native ownership/XData, empty-token validity, duplicate/count/source/live-solid semantics, hex-letter casing, fingerprint/geometry/mode logic, persistence format, or BricsCAD runtime code.
-
-## Intended contract
-
-- A non-empty generated Curtain Frame handle token with leading/trailing whitespace emits a dedicated `HealthSeverity.Error` canonicality diagnostic.
-- Existing invalid/duplicate/count/source-overlap/live-solid/ownership checks continue to operate on the trimmed token.
+- Non-empty generated Curtain Frame handle tokens with leading/trailing whitespace emit `CURTAIN_FRAME_GENERATED_HANDLE_NON_CANONICAL` as `HealthSeverity.Error`.
+- Existing invalid/duplicate/count/source-overlap/live-solid/ownership checks continue to use the trimmed token.
 - Empty tokens retain `INVALID_CURTAIN_FRAME_GENERATED_HANDLE` precedence without canonicality noise.
 - Lower/upper hex spelling remains accepted; this lane only owns writer-proven whitespace/delimiter canonicality.
-- Inspection remains read-only and deterministic.
+- Fingerprint/geometry/mode/stale health behavior remains unchanged.
 
-## Completion condition
+## Verification boundary
 
-Padded Curtain Frame handle tokens are fail-visible without changing existing downstream validation semantics, focused smoke coverage pins padded/canonical/empty/duplicate/lowercase behavior, source + smoke are read back from merged `main`, ancestry is verified, and this claim is closed with exact commit SHAs.
+No GitHub Actions were dispatched. No full local .NET build PASS and no BricsCAD V25/V26 runtime PASS are claimed by this lane.
