@@ -62,7 +62,7 @@ namespace QS3D.Core.SmokeTests
         private static Setup Create(string suffix, string? version, bool addHandles)
         {
             var project = new ProjectState("P-Semantic-Tag-Version-" + suffix, "Semantic Tag ownership-version canonicality smoke");
-            var element = new ProjectElement("Semantic-Tag-Version-" + suffix, ElementCategory.Wall);
+            var element = new ProjectElement("Semantic-Tag-Version-" + suffix, ElementCategory.ArchitecturalWall);
             if (addHandles)
             {
                 element.Properties[GeneratedSemanticTagHealthService.HandlesKey] = "A";
