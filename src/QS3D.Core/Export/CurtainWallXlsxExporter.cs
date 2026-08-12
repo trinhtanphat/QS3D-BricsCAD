@@ -27,6 +27,16 @@ namespace QS3D.Core.Export
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
                 ValidateCellText(row.Floor, rowIndex, "Floor");
                 ValidateCellText(row.FamilyName, rowIndex, "FamilyName");
+                ValidateFinite(row.TotalWallLengthM, rowIndex, "TotalWallLengthM");
+                ValidateFinite(row.GrossWallAreaM2, rowIndex, "GrossWallAreaM2");
+                ValidateFinite(row.OpeningAreaM2, rowIndex, "OpeningAreaM2");
+                ValidateFinite(row.NetGlassAreaM2, rowIndex, "NetGlassAreaM2");
+                ValidateFinite(row.FrameFaceAreaM2, rowIndex, "FrameFaceAreaM2");
+                ValidateFinite(row.FrameLengthM, rowIndex, "FrameLengthM");
+                ValidateFinite(row.MinimumClearPanelWidthM, rowIndex, "MinimumClearPanelWidthM");
+                ValidateFinite(row.MaximumClearPanelWidthM, rowIndex, "MaximumClearPanelWidthM");
+                ValidateFinite(row.MinimumClearPanelHeightM, rowIndex, "MinimumClearPanelHeightM");
+                ValidateFinite(row.MaximumClearPanelHeightM, rowIndex, "MaximumClearPanelHeightM");
             }
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
@@ -116,6 +126,14 @@ namespace QS3D.Core.Export
                 throw new ArgumentOutOfRangeException(
                     "rows",
                     "Curtain XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
+        }
+
+        private static void ValidateFinite(double value, int rowIndex, string fieldName)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Curtain XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be finite.");
         }
 
         private static void AppendInlineStringCell(StringBuilder sb, string cellRef, string value, int style)
