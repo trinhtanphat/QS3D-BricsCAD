@@ -179,8 +179,10 @@ namespace QS3D.BricsCAD.V25.UI
                 var value = PropertyValueBox.Text;
                 var result = ExecuteAtomic(project, () =>
                 {
+                    var beforeVersion = project.ChangeVersion;
                     var update = ProjectFamilyService.SetProperty(project, family.Id, key, value);
-                    AuditTrail.ForProject(project).Record("family.property.set", string.Empty, family.Id + " • " + key + "=" + value + " • inherited=" + update.InheritedInstancesUpdated + " • overrides=" + update.OverridesPreserved);
+                    if (project.ChangeVersion != beforeVersion)
+                        AuditTrail.ForProject(project).Record("family.property.set", string.Empty, family.Id + " • " + key + "=" + value + " • inherited=" + update.InheritedInstancesUpdated + " • overrides=" + update.OverridesPreserved);
                     return update;
                 }, "Lưu Family property");
 
@@ -202,8 +204,10 @@ namespace QS3D.BricsCAD.V25.UI
                 var key = PropertyKeyBox.Text;
                 var result = ExecuteAtomic(project, () =>
                 {
+                    var beforeVersion = project.ChangeVersion;
                     var update = ProjectFamilyService.RemoveProperty(project, family.Id, key);
-                    AuditTrail.ForProject(project).Record("family.property.remove", string.Empty, family.Id + " • " + key + " • inherited=" + update.InheritedInstancesUpdated + " • overrides=" + update.OverridesPreserved);
+                    if (project.ChangeVersion != beforeVersion)
+                        AuditTrail.ForProject(project).Record("family.property.remove", string.Empty, family.Id + " • " + key + " • inherited=" + update.InheritedInstancesUpdated + " • overrides=" + update.OverridesPreserved);
                     return update;
                 }, "Xóa Family property");
 
