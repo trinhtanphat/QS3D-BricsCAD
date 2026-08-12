@@ -150,6 +150,7 @@ namespace QS3D.Core.Licensing
             var valid = RequiredSingleElement(root, "valid");
             var features = OptionalSingleElement(root, "features");
             var signatureElement = RequiredSingleElement(root, "signature");
+            ValidateFeatureChildren(features);
             var license = new LicenseDocument
             {
                 LicenseId = Required(root, "id"),
@@ -184,6 +185,17 @@ namespace QS3D.Core.Licensing
                     string.Equals(name, "signature", StringComparison.Ordinal))
                     continue;
                 throw new InvalidDataException("Unexpected QS3D license child element: <" + name + ">.");
+            }
+        }
+
+        private static void ValidateFeatureChildren(XElement? features)
+        {
+            if (features == null) return;
+            foreach (var child in features.Elements())
+            {
+                if (!string.IsNullOrEmpty(child.Name.NamespaceName) ||
+                    !string.Equals(child.Name.LocalName, "feature", StringComparison.Ordinal))
+                    throw new InvalidDataException("License <features> may contain only unnamespaced <feature> elements.");
             }
         }
 
