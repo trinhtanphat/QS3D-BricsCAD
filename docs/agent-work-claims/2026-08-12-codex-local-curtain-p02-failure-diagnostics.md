@@ -1,6 +1,6 @@
 # Work claim — LOCAL-002/P02 sanitized runtime failure diagnostics
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local-curtain-p02-failure-diagnostics-20260812` (`/root/audit_preflight_latest`)
 - Registered: `2026-08-12T11:36:53+07:00`
 - Baseline main SHA: `db781d8042f2a1764d4c55576c6458f565764bcb`
@@ -52,3 +52,12 @@ The active Curtain Panel token-canonicality claim owns only `GeneratedCurtainPan
 ## Completion condition
 
 The claim is visible on `origin/main`; sanitized phase/failure diagnostics, runner validation and static privacy guard are merged; focused gates and V25 compile pass without BricsCAD; the claim is `COMPLETED`; and a final clean-main SHA is handed back for one local diagnostic rerun with P02 and overall LOCAL-002 still `PENDING_LOCAL`.
+
+## Close-out — 2026-08-12
+
+- Claim-only PR `#826` merged as `2e7603ea94af632a0740c502973350296d40883a` before implementation.
+- Implementation commit `c75e5c41852e041859ac07c57c5fb6219fd0f52a` is delivered by PR `#831`; the final squash SHA is recorded after merge.
+- Implemented marker schema V2 with allowlisted static phases and rejection classes, strict FAIL-field validation, and deferred failure reporting after launched-process/private-script/DWG-hash/sidecar cleanup checks. No raw exception message/type/stack/inner exception, path, Handle, semantic ID or drawing content is serialized.
+- Focused P02, Curtain native/orchestration/P01-runtime/runtime-health, Level-Curtain, Direct Draw openings/P1 and repository structural preflights passed after rebase. The installed-reference V25 `Release|x64` adapter build passed with zero warnings/errors; PowerShell parse and `git diff --check` passed.
+- No BricsCAD run/rerun, GitHub Actions, private/customer/BLT fixture, production Curtain planner/builder/Health/ownership/Level edit, release, signing or package publication occurred. No production clipping defect was inferred from the original coarse marker.
+- The candidate is ready for one fresh disposable-copy local rerun at the final clean merged `main` SHA. P02 and overall LOCAL-002 remain `PENDING_LOCAL`; on another FAIL, return only the allowlisted `failure_phase` and `failure_code` plus ordinary aggregate cleanup booleans.
