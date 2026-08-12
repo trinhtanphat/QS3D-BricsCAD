@@ -1,9 +1,13 @@
 # Work claim — XLSX Handle reader error-cell semantics
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-xlsx-handle-error-cell-20260812-0817`
 - Registered: `2026-08-12T08:17:00+07:00`
+- Completed: `2026-08-12T08:50:00+07:00`
 - Baseline main SHA: `d5af18a12c77725d52430da4798051e65366091a`
+- Claim commit: `0c363d7fc2e05fc718739c6f0fe43e8f136a0cce`
+- Source fix commit: `3e875192e9ff7a70a1e0f21e90b47fc0271f67ea`
+- Regression commit: `5c59749340e30a7abb0e025fa0c98f4124875c8f`
 - Priority: P2 evidence-driven remote-safe XLSX cell-semantics hardening
 
 ## Confirmed defect
@@ -38,10 +42,17 @@ Preserve error-cell type semantics by converting `t="e"` values to unmistakably 
 
 Microsoft Learn/Open XML documentation defines `CellValues.Error` / `t="e"` as an error cell type, distinct from numeric/string cell values.
 
+## Completion evidence
+
+- `3e875192e9ff7a70a1e0f21e90b47fc0271f67ea` makes SpreadsheetML error cells non-handle values and rejects them in identity columns.
+- `5c59749340e30a7abb0e025fa0c98f4124875c8f` adds focused smoke coverage for explicit Handle error cells, legacy-looking error tokens and normal default/numeric Handle compatibility.
+- Current `main` subsequently unified typed Error/Date handling under the unsupported-cell sentinel; the current source still fail-closes typed Error values before Handle/identity interpretation.
+- No GitHub Actions or native BricsCAD runtime validation is claimed by this remote-safe claim.
+
 ## Coordination
 
 Recent current-main search found no active XLSX Handle error-cell owner. The exact-header-precedence claim is completed. This claim is limited to error-cell semantic preservation.
 
 ## Completion condition
 
-Completed only when error cells cannot be synthesized into CAD Handles or legacy `$decimal` fallback, focused regression source is on current `main`, exact integration SHAs are recorded and this claim is marked `COMPLETED`.
+Completed: error cells cannot be synthesized into CAD Handles or legacy `$decimal` fallback, focused regression source is on current `main`, exact integration SHAs are recorded and this claim is marked `COMPLETED`.
