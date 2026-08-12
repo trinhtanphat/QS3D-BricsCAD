@@ -140,8 +140,8 @@ namespace QS3D.Core.Export
 
         private static WorksheetReference ResolveWorksheet(ZipArchive archive)
         {
-            var workbookEntry = archive.GetEntry("xl/workbook.xml");
-            var relationshipsEntry = archive.GetEntry("xl/_rels/workbook.xml.rels");
+            var workbookEntry = GetUniqueEntry(archive, "xl/workbook.xml");
+            var relationshipsEntry = GetUniqueEntry(archive, "xl/_rels/workbook.xml.rels");
             if ((workbookEntry == null) != (relationshipsEntry == null))
                 throw new InvalidDataException("Excel workbook metadata is incomplete: workbook.xml and workbook.xml.rels must either both be present or both be absent.");
             if (workbookEntry != null && relationshipsEntry != null)
@@ -171,13 +171,22 @@ namespace QS3D.Core.Export
                 var target = ((string?)matches[0].Attribute("Target") ?? string.Empty).Replace('\\', '/').TrimStart('/');
                 if (target.StartsWith("xl/", StringComparison.OrdinalIgnoreCase)) target = target.Substring(3);
                 if (target.IndexOf("..", StringComparison.Ordinal) >= 0) throw new InvalidDataException("Excel worksheet relationship target is invalid.");
-                var entry = archive.GetEntry("xl/" + target);
+                var entry = GetUniqueEntry(archive, "xl/" + target);
                 if (entry == null) throw new InvalidDataException("Excel worksheet part is missing: " + target + ".");
                 var name = ((string?)selected.Attribute("name") ?? string.Empty).Trim();
                 return new WorksheetReference(entry, name, string.Equals(name, "CHI_TIET", StringComparison.OrdinalIgnoreCase));
             }
 
-            var fallback = archive.GetEntry("xl/worksheets/sheet1.xml") ?? archive.Entries.FirstOrDefault(x => x.FullName.StartsWith("xl/worksheets/sheet", StringComparison.OrdinalIgnoreCase) && x.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
+            var fallback = GetUniqueEntry(archive, "xl/worksheets/sheet1.xml");
+            if (fallback == null)
+            {
+                var candidates = archive.Entries
+                    .Where(x => x.FullName.StartsWith("xl/worksheets/sheet", StringComparison.OrdinalIgnoreCase) && x.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                var duplicate = candidates.GroupBy(x => x.FullName, StringComparer.Ordinal).FirstOrDefault(x => x.Skip(1).Any());
+                if (duplicate != null) throw new InvalidDataException("Excel workbook contains duplicate worksheet part: " + duplicate.Key + ".");
+                fallback = candidates.FirstOrDefault();
+            }
             if (fallback == null) throw new InvalidDataException("Excel workbook does not contain a worksheet.");
             return new WorksheetReference(fallback, string.Empty, false);
         }
@@ -196,11 +205,18 @@ namespace QS3D.Core.Export
 
         private static IReadOnlyList<string> ReadSharedStrings(ZipArchive archive)
         {
-            var entry = archive.GetEntry("xl/sharedStrings.xml");
+            var entry = GetUniqueEntry(archive, "xl/sharedStrings.xml");
             if (entry == null) return Array.Empty<string>();
             var document = LoadXml(entry);
             XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
             return document.Descendants(ns + "si").Select(x => string.Concat(x.Descendants(ns + "t").Select(t => t.Value))).ToList();
+        }
+
+        private static ZipArchiveEntry? GetUniqueEntry(ZipArchive archive, string fullName)
+        {
+            var matches = archive.Entries.Where(x => string.Equals(x.FullName, fullName, StringComparison.Ordinal)).Take(2).ToList();
+            if (matches.Count > 1) throw new InvalidDataException("Excel workbook contains duplicate package part: " + fullName + ".");
+            return matches.Count == 0 ? null : matches[0];
         }
 
         private static XDocument LoadXml(ZipArchiveEntry entry)
