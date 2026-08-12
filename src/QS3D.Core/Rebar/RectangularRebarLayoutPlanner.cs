@@ -18,7 +18,7 @@ namespace QS3D.Core.Rebar
     {
         public RectangularRebarLayout(IReadOnlyList<Point2> barCenters, double clearHalfWidthM, double clearHalfDepthM)
         {
-            BarCenters = barCenters ?? throw new ArgumentNullException(nameof(barCenters));
+            BarCenters = new List<Point2>(barCenters ?? throw new ArgumentNullException(nameof(barCenters))).AsReadOnly();
             ClearHalfWidthM = clearHalfWidthM;
             ClearHalfDepthM = clearHalfDepthM;
         }
