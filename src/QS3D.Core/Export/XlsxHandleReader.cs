@@ -251,8 +251,7 @@ namespace QS3D.Core.Export
                 var type = (string?)cell.Attribute("t") ?? string.Empty;
                 string value;
                 if (string.Equals(type, "inlineStr", StringComparison.OrdinalIgnoreCase)) value = string.Concat(cell.Descendants(ns + "t").Select(x => x.Value));
-                else if (string.Equals(type, "e", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(type, "d", StringComparison.OrdinalIgnoreCase)) value = UnsupportedCellSentinel;
+                else if (string.Equals(type, "e", StringComparison.OrdinalIgnoreCase)) value = UnsupportedCellSentinel;
                 else
                 {
                     value = cell.Element(ns + "v")?.Value ?? string.Empty;
@@ -357,7 +356,6 @@ namespace QS3D.Core.Export
             {
                 throw new InvalidDataException("Excel cell reference column is invalid.", ex);
             }
-
             if (index == 0 || index >= reference.Length)
                 throw new InvalidDataException("Excel cell reference is invalid: " + reference + ".");
 
