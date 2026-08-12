@@ -108,6 +108,7 @@ namespace QS3D.Core.SmokeTests
             element.Properties["GeneratedCurtainPanelBaseCount"] = "1";
             element.Properties["GeneratedCurtainPanelColumns"] = "1";
             element.Properties["GeneratedCurtainPanelOpeningCount"] = "1";
+            element.Properties["GeneratedCurtainPanelAreaM2"] = "0";
             element.Properties["GeneratedCurtainPanelMode"] = "LinePanelSolids.OpeningAware";
             element.Properties["GeneratedCurtainPanelConfigFingerprint"] = Fingerprint(Array.Empty<CurtainWallPanelPiece>(), 0.02d);
             project.Elements.Add(element);
@@ -121,6 +122,7 @@ namespace QS3D.Core.SmokeTests
             element.Properties["GeneratedCurtainPanelSourceKind"] = "OpenPolyline";
             element.Properties["GeneratedCurtainPanelPathSegmentCount"] = "2";
             element.Properties["GeneratedCurtainPanelMappedCount"] = "0";
+            element.Properties["GeneratedCurtainPanelPathSagittaM"] = "0.002";
             Require(new GeneratedCurtainPanelHealthService().Inspect(project).Count == 0, "completed-empty path panel build produced health issues");
         }
 
@@ -137,6 +139,7 @@ namespace QS3D.Core.SmokeTests
             element.Properties["GeneratedCurtainPanelDepthM"] = "0.02";
             element.Properties["GeneratedCurtainPanelSourceLengthM"] = "4";
             element.Properties["GeneratedCurtainPanelHeightM"] = "3";
+            element.Properties["GeneratedCurtainPanelAreaM2"] = "2";
             element.Properties["GeneratedCurtainPanelConfigFingerprint"] = Fingerprint(new[] { Piece(0, 0d, 0d, 1d, 1d), Piece(1, 2d, 0d, 1d, 1d) }, 0.02d);
             element.Properties["GeneratedCurtainPanelMode"] = "LinePanelSolids";
             return element;
