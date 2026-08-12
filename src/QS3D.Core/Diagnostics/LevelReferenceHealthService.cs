@@ -131,12 +131,13 @@ namespace QS3D.Core.Diagnostics
             element.Properties.TryGetValue(key, out var raw) ? raw ?? string.Empty : string.Empty;
 
         private static bool HasProperty(ProjectElement element, string key) =>
-            element.Properties.TryGetValue(key, out var raw) && !string.IsNullOrWhiteSpace(raw);
+            element.Properties.ContainsKey(key);
 
         private static bool TryOffset(ProjectElement element, string key, out double value)
         {
             value = 0d;
-            if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return true;
+            if (!element.Properties.TryGetValue(key, out var raw)) return true;
+            if (string.IsNullOrWhiteSpace(raw)) return false;
             return double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value) &&
                    !double.IsNaN(value) && !double.IsInfinity(value);
         }
