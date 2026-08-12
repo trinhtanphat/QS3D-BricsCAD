@@ -32,7 +32,12 @@ namespace QS3D.Core.Domain
 
         private static readonly ISet<string> GeneratedOutputProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "Material", "CurtainFrameMaterial"
+            "Material"
+        };
+
+        private static readonly ISet<string> CurtainGeneratedOutputProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "CurtainFrameMaterial"
         };
 
         public static bool RequiresGeneratedGeometry(ElementCategory category)
@@ -61,7 +66,9 @@ namespace QS3D.Core.Domain
         {
             if (!RequiresGeneratedGeometry(category) || string.IsNullOrWhiteSpace(propertyName)) return false;
             var key = propertyName!.Trim();
-            return IsGeometryProperty(category, key) || GeneratedOutputProperties.Contains(key);
+            return IsGeometryProperty(category, key) ||
+                   GeneratedOutputProperties.Contains(key) ||
+                   (category == ElementCategory.GlassWall && CurtainGeneratedOutputProperties.Contains(key));
         }
 
         public static ElementDirtyFlags SemanticCleanFlags(ElementCategory category)
