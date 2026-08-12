@@ -30,12 +30,15 @@ namespace QS3D.Core.Diagnostics
                 {
                     foreach (var token in (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.None))
                     {
-                        var handle = token.Trim();
+                        var handleText = token ?? string.Empty;
+                        var handle = handleText.Trim();
                         if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
                         {
                             Add(issues, "INVALID_CURTAIN_PANEL_GENERATED_HANDLE", HealthSeverity.Error, HandlesKey + " contains an invalid hexadecimal handle.", element);
                             continue;
                         }
+                        if (!string.Equals(handleText, handle, StringComparison.Ordinal))
+                            Add(issues, "CURTAIN_PANEL_GENERATED_HANDLE_NON_CANONICAL", HealthSeverity.Error, HandlesKey + " cannot contain leading or trailing whitespace around a handle token.", element);
                         if (!handles.Add(handle))
                         {
                             Add(issues, "DUPLICATE_CURTAIN_PANEL_GENERATED_HANDLE", HealthSeverity.Error, "A generated curtain panel handle is repeated in the same owner: " + handle + ".", element);
