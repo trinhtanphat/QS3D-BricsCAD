@@ -14,6 +14,8 @@ namespace QS3D.Core.SmokeTests
             EmptySearchReturnsWholeTree();
             MissingFamilyReferenceFailsClosed();
             FamilyCategoryMismatchFailsClosed();
+            UnfilteredMissingFamilyReferenceFailsClosed();
+            UnfilteredFamilyCategoryMismatchFailsClosed();
             FilteredPathStillValidatesUnmatchedReferences();
             InvalidFilterReferenceFailsClosed();
         }
@@ -108,6 +110,24 @@ namespace QS3D.Core.SmokeTests
                     ProjectBrowserGrouping.Category,
                     new ProjectBrowserQueryOptions(dirtyOnly: true, categories: new[] { ElementCategory.Column })),
                 "Filtered browser query must reject Family/category corruption even when the corrupt element would not match the filter.");
+        }
+
+        private static void UnfilteredMissingFamilyReferenceFailsClosed()
+        {
+            var project = BuildProject();
+            project.Elements.Add(new ProjectElement("BAD-UNFILTERED-FAMILY", ElementCategory.Beam, "FAM-404", "F-02", "Z-EAST"));
+            MustFail(
+                () => ProjectBrowserQueryPlanner.Build(project, ProjectBrowserGrouping.Category),
+                "Unfiltered browser query must reject a missing Family reference instead of bypassing query integrity preflight.");
+        }
+
+        private static void UnfilteredFamilyCategoryMismatchFailsClosed()
+        {
+            var project = BuildProject();
+            project.Elements.Add(new ProjectElement("BAD-UNFILTERED-CATEGORY", ElementCategory.Beam, "FAM-C", "F-02", "Z-EAST"));
+            MustFail(
+                () => ProjectBrowserQueryPlanner.Build(project, ProjectBrowserGrouping.Category, new ProjectBrowserQueryOptions("   ")),
+                "Unfiltered browser query must reject a Family/category mismatch instead of bypassing query integrity preflight.");
         }
 
         private static void FilteredPathStillValidatesUnmatchedReferences()
