@@ -52,6 +52,7 @@ if RUNNER.is_file():
     text = RUNNER.read_text(encoding="utf-8")
     for token in (
         '[switch]$ConfirmDisposableCopy',
+        '[string]::IsNullOrWhiteSpace($Profile)',
         '*.curtain-probe-copy.dwg',
         'QS3D_CURTAIN_PANEL_RESULT',
         'QS3D_CURTAIN_PANEL_NONCE',
@@ -64,7 +65,20 @@ if RUNNER.is_file():
         '"QS3DCURTAINPANELPROBE"',
         'Start-Process -FilePath $bricscadExe',
         '-WindowStyle Hidden',
+        'PluginDll must be the exact repository x64 Release V25 build output.',
+        'ArtifactDir must stay outside the repository',
+        'rev-parse HEAD',
+        'status --porcelain --untracked-files=normal',
+        'Curtain-panel runtime qualification requires a clean exact-SHA worktree.',
+        'ArtifactDir must be empty.',
         'Stop-Qs3dLaunchedProcess -Process $process',
+        'Stop-Process -Id $Process.Id -Force -ErrorAction Stop',
+        'Launched BricsCAD curtain-panel process did not exit.',
+        'git_sha = $gitHead',
+        'process_cleanup_verified = $true',
+        'script_cleanup_verified = $true',
+        'Remove-Item -LiteralPath $scriptPath -Force -ErrorAction Stop',
+        'Curtain-panel runtime script cleanup failed.',
         'drawing_copy_sha256_before',
         'drawing_copy_sha256_after',
         'Require-Qs3dValue -Marker $marker -Key "health_issue_count" -Expected "0"',
@@ -77,6 +91,12 @@ if RUNNER.is_file():
     for forbidden in ("Get-Process -Name '*'", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
         if forbidden in text:
             errors.append("curtain-panel runtime runner contains broad process/window action: " + forbidden)
+    stop_start = text.find("function Stop-Qs3dLaunchedProcess")
+    stop_end = text.find("if ([Environment]::OSVersion.Platform", stop_start)
+    stop_body = text[stop_start:stop_end]
+    for forbidden in ("SilentlyContinue", "catch { }"):
+        if forbidden in stop_body:
+            errors.append("curtain-panel runtime process cleanup must fail visible: " + forbidden)
 
 if RUNBOOK.is_file():
     text = RUNBOOK.read_text(encoding="utf-8")
