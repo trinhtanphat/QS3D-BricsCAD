@@ -37,6 +37,14 @@ namespace QS3D.Core.SmokeTests
                 () => evaluator.Evaluate("1e-4000"));
             Contains("Number '1e-4000' underflowed to zero.", literalUnderflow.Message);
 
+            var roundDigitsBelowInteger = Capture<InvalidOperationException>(
+                () => evaluator.Evaluate("round(1.25, 0.9999999999995)"));
+            Contains("round(value, digits) requires an integer digits argument from 0 to 15.", roundDigitsBelowInteger.Message);
+
+            var roundDigitsAboveInteger = Capture<InvalidOperationException>(
+                () => evaluator.Evaluate("round(1.25, 1.0000000000005)"));
+            Contains("round(value, digits) requires an integer digits argument from 0 to 15.", roundDigitsAboveInteger.Message);
+
             Near(5d, evaluator.Evaluate("min(10, 5)"), 1e-12);
             Near(6d, evaluator.Evaluate("2 * 3"), 1e-12);
             Near(0d, evaluator.Evaluate("0"), 0d);
@@ -44,6 +52,8 @@ namespace QS3D.Core.SmokeTests
             Near(double.Epsilon, evaluator.Evaluate("5e-324"), 0d);
             Near(0d, evaluator.Evaluate("0 * 1e-300"), 0d);
             Near(0d, evaluator.Evaluate("0 / 1e300"), 0d);
+            Near(1.3d, evaluator.Evaluate("round(1.25, 1)"), 1e-12);
+            Near(1.25d, evaluator.Evaluate("round(1.25, 15)"), 1e-15);
             Near(1d, evaluator.Evaluate(new string('-', 64) + "1"), 1e-12);
 
             var depthBoundary = Capture<InvalidOperationException>(
