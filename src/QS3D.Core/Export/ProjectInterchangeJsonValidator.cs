@@ -483,6 +483,14 @@ namespace QS3D.Core.Export
                 {
                     if (!TryProperty(element.Properties, reference.PropertyKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
                     var id = raw.Trim();
+                    if (!string.Equals(raw, id, StringComparison.Ordinal))
+                    {
+                        issues.Error(
+                            "SEMANTIC_PROPERTY_REF_NON_CANONICAL",
+                            "Element " + elementId + " property " + reference.PropertyKey + " must not contain leading/trailing whitespace in its " + reference.Kind + " identity reference.",
+                            propertyPath + "." + reference.PropertyKey);
+                        continue;
+                    }
                     bool exists;
                     switch (reference.Kind)
                     {
@@ -491,7 +499,7 @@ namespace QS3D.Core.Export
                         case InterchangeRemapIdentityKind.Family: exists = familyIds.Contains(id); break;
                         case InterchangeRemapIdentityKind.Element: exists = elementIndex.ContainsKey(id); break;
                         default:
-                            issues.Error("SEMANTIC_PROPERTY_REF_KIND", "Unsupported registered semantic property reference kind: " + reference.Kind + ".", propertyPath + "." + reference.PropertyKey);
+                            issues.Error("SEMANTIC_PROPERTY_REF_KIND", "Unsupported registered semantic reference kind: " + reference.Kind + ".", propertyPath + "." + reference.PropertyKey);
                             continue;
                     }
                     if (!exists)
