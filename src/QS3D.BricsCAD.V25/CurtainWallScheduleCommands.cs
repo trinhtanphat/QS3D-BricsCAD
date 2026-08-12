@@ -33,7 +33,10 @@ namespace QS3D.BricsCAD.V25
                 if (dialog.ShowDialog() != true) return;
 
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
-                    throw new InvalidOperationException("Curtain XLSX cần một QS3D project hiện hữu; lệnh export không tạo project mới.");
+                {
+                    Report(document, "Curtain XLSX: BLOCKED • cần một QS3D project hiện hữu; lệnh export không tạo project mới.");
+                    return;
+                }
                 var snapshot = ProjectStateSnapshot.CreateDetachedCopy(project);
                 new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(snapshot);
                 var rows = CurtainWallScheduleBuilder.Build(snapshot);
@@ -58,9 +61,9 @@ namespace QS3D.BricsCAD.V25
                 var status = "Curtain XLSX: " + rows.Count + " nhóm • " + panels + " panel • " + glass.ToString("0.###") + " m² kính net • " + frame.ToString("0.###") + " m khung.";
                 FinalizeUi(document, status, dialog.FileName);
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                Report(document, "QS3DCURTAINXLSX lỗi: " + ex.Message);
+                Report(document, "QS3DCURTAINXLSX lỗi: không thể xuất bảng Vách Kính.");
             }
         }
 
@@ -71,11 +74,11 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status + "\n" + fileName);
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
                 try
                 {
-                    document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau export: " + ex.Message);
+                    document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau export: không thể cập nhật giao diện sau khi file đã được xuất.");
                 }
                 catch
                 {
