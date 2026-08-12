@@ -71,7 +71,7 @@ namespace QS3D.Core.SmokeTests
         private static Setup Create(string suffix, string? rotation, bool addHandles)
         {
             var project = new ProjectState("P-Semantic-Tag-Rotation-" + suffix, "Semantic Tag rotation health smoke");
-            var element = new ProjectElement("Semantic-Tag-Rotation-" + suffix, ElementCategory.Wall);
+            var element = new ProjectElement("Semantic-Tag-Rotation-" + suffix, ElementCategory.ArchitecturalWall);
             if (addHandles)
             {
                 element.Properties[GeneratedSemanticTagHealthService.HandlesKey] = "A";
