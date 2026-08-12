@@ -223,6 +223,13 @@ namespace QS3D.Core.Review
             return ProjectInterchangeElementPropertyPolicy.IsPortable(field.Substring(PropertyFieldPrefix.Length));
         }
 
+        internal static bool IsCanonicalOptionalReviewField(string field)
+        {
+            var raw = field ?? string.Empty;
+            return raw.Length == 0 ||
+                   (!string.IsNullOrWhiteSpace(raw) && string.Equals(raw, raw.Trim(), StringComparison.Ordinal));
+        }
+
         internal static string ComputeFingerprint(PreviewReviewSnapshot snapshot)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
@@ -286,6 +293,7 @@ namespace QS3D.Core.Review
                 if (entry == null) throw new InvalidOperationException("Preview review contains a null entry.");
                 CanonicalRequired(entry.ElementId, "preview review entry element id");
                 CanonicalRequired(entry.Change, "preview review entry change");
+                if (!IsCanonicalOptionalReviewField(entry.Field)) throw new InvalidOperationException("Preview review entry field must be exact-empty or canonical without surrounding whitespace.");
                 if (!IsPortableReviewField(entry.Field)) throw new InvalidOperationException("Preview review artifacts cannot contain drawing-local/native fields: " + entry.Field + ".");
                 var rowKey = entry.ElementId + "\u001f" + entry.Field;
                 if (!seenRows.Add(rowKey)) throw new InvalidOperationException("Preview review contains a duplicate element/field row: " + entry.ElementId + "/" + entry.Field + ".");
@@ -441,6 +449,7 @@ namespace QS3D.Core.Review
                 var category = Value(node, "category");
                 var change = CanonicalRequired(node, "change");
                 var field = Value(node, "field");
+                if (!PreviewReviewSnapshotService.IsCanonicalOptionalReviewField(field)) throw new InvalidDataException("Preview review field is not canonical: field.");
                 if (!PreviewReviewSnapshotService.IsPortableReviewField(field)) throw new InvalidDataException("Preview review file contains a forbidden drawing-local/native field: " + field + ".");
                 var key = elementId + "\u001f" + field;
                 if (!seenRows.Add(key)) throw new InvalidDataException("Duplicate preview review element/field row: " + elementId + "/" + field + ".");
