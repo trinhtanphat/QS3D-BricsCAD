@@ -1,44 +1,37 @@
 # Work claim — release #30 V26 preflight token-scope reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-release30-v26-preflight-token-scope`
 - Registered: `2026-08-12T09:37:00+07:00`
+- Completed: `2026-08-12T09:39:00+07:00`
 - Baseline main SHA: `4658163352e18be52f0fbc3e53d2242571f3ec32`
-- Priority: QS3D Cloud V25 Preview Build & Release #30 reports two V26 compatibility failures caused by over-broad/exact text checks while the actual V26 target and host-major runtime diagnostics remain correct.
+- Claim commit: `340c88459f312710a6a794ffa8362d19f879c8af`
+- Implementation commit: `d2c24e40d3ecfd9c214a28740f8ce22b3a2bc2f1`
+- Priority: QS3D Cloud V25 Preview Build & Release #30 reported two V26 compatibility failures caused by over-broad/exact text checks while the actual V26 target and host-major runtime diagnostics remained correct.
 
-## Reserved scope
+## Completed scope
 
-Reconcile only `scripts/preflight-bricscad-v26.py` with the current V26 project/comment and shared runtime-diagnostics wording. Preserve V25/V26 project files and runtime diagnostic production source unchanged.
+Reconciled only `scripts/preflight-bricscad-v26.py`. V25/V26 project files and runtime diagnostic production source remained unchanged.
 
-## Canonical evidence
+## Implemented gate contract
 
-- `src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj` targets only `<TargetFramework>net8.0-windows</TargetFramework>`; the bare text `net48` appears only in a comment explaining that the separate V25 product lane remains net48.
-- The V26 gate currently forbids bare `net48` anywhere in the project file, so a harmless architecture comment causes failure.
-- `RuntimeDiagnosticsCommands` remains compile-selected by `BRICSCAD_V26`, uses `ExpectedRuntimeMajor/ExpectedRuntimeLabel`, validates BrxMgd/TD_Mgd host major, and tells the user to run `QS3DRELEASECHECK plus the licensed ` + ExpectedRuntimeLabel + ` scenario suite`.
-- The gate requires an obsolete exact quoted fragment beginning immediately at `licensed`, which no longer exists because the string literal now begins earlier in the sentence.
+- V25 is still required to target `<TargetFramework>net48</TargetFramework>`.
+- V26 is still required to target exactly `<TargetFramework>net8.0-windows</TargetFramework>`.
+- V26 now forbids executable/multi-target net48 forms (`<TargetFramework>net48</TargetFramework>` and `<TargetFrameworks>`) rather than forbidding the harmless word `net48` in an architecture comment.
+- V26 still forbids V25 SDK/env/update identities and retains all V26-only refs/updater/workflow checks.
+- Shared runtime diagnostics still require compile-selected V25/V26 major constants, BrxMgd/TD_Mgd host-major validation, architecture/package checks and the licensed scenario-suite instruction.
+- The scenario-suite wording check now pins `plus the licensed ` and `ExpectedRuntimeLabel + " scenario suite` structurally instead of an obsolete string-literal boundary.
 
-## Expected surfaces
+## Validation performed
 
-- `scripts/preflight-bricscad-v26.py`
-- this claim file for close-out
-
-## Excluded scope
-
-- No edits to V25/V26 csproj, RuntimeDiagnosticsCommands, runtime probe, release readiness, updater, workflow, qualification docs or package identity.
-- No weakening of the required V26 `net8.0-windows` target or V25-only binary/update prohibitions.
-- No unrelated run #30 failures, GitHub Actions dispatch, build/release publication or BricsCAD runtime qualification.
-
-## Validation plan
-
-- Replace bare `net48` prohibition with executable MSBuild target-form prohibitions so comments can mention V25 without allowing V26 to target net48.
-- Retain required `<TargetFramework>net8.0-windows</TargetFramework>` and all V25 environment/update identity prohibitions.
-- Replace obsolete runtime sentence literal with structural wording tokens that still require `plus the licensed ` and `ExpectedRuntimeLabel + " scenario suite` alongside existing host-major checks.
-- Re-fetch exact gate before write, read back after commit, verify ancestry and close with exact SHA.
-
-## Coordination
-
-Repository search found no active reservation for the V26 compatibility preflight.
+- Verified claim commit `340c88459f312710a6a794ffa8362d19f879c8af` remained an ancestor of moving `main`; intervening commits were unrelated Wall/Grid/Selection work.
+- Re-fetched the exact gate before implementation.
+- Read back the implemented V26 target section and runtime diagnostics section from `main` at blob `408935eb41a1dd7f03e1bd217b991a8cc2b34855`.
+- Confirmed current V26 project remains `net8.0-windows`; bare `net48` is only explanatory text about the separate V25 lane.
+- Confirmed runtime diagnostics still emit the licensed host-major scenario-suite requirement.
+- No production source was changed.
+- No GitHub Actions/build/release dispatch was performed and no BricsCAD V25/V26 runtime PASS is claimed.
 
 ## Completion condition
 
-The V26 gate validates actual build/runtime semantics rather than harmless comment/string-literal boundaries, retains all host-major safety checks, is pushed to `main`, and this claim is closed with exact evidence.
+Completed. The V26 gate now validates actual build/runtime semantics rather than harmless comment/string-literal boundaries, retains host-major safety checks, and this reservation is released.
