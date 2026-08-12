@@ -9,6 +9,9 @@ namespace QS3D.Core.Diagnostics
     public sealed class GeneratedTieRebarHealthService
     {
         private const string HandlesKey = "GeneratedTieRebarHandles";
+        private const string CoverKey = "GeneratedTieRebarCoverM";
+        private const string ModeKey = "GeneratedTieRebarMode";
+        private const string CanonicalMode = "ColumnRectangularTies";
 
         public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project, ISet<string>? liveSolidHandles = null)
         {
@@ -55,12 +58,42 @@ namespace QS3D.Core.Diagnostics
 
                 CheckPositive(element, "GeneratedTieRebarDiameterMm", "TIE_REBAR_GENERATED_DIAMETER_INVALID", "GeneratedTieRebarDiameterMm thiếu hoặc không hợp lệ.", issues);
                 CheckNonNegative(element, "GeneratedTieRebarActualSpacingM", "TIE_REBAR_GENERATED_SPACING_INVALID", "GeneratedTieRebarActualSpacingM thiếu hoặc không hợp lệ.", issues);
+                InspectCover(element, issues);
+                InspectMode(element, issues);
                 if (element.Category != ElementCategory.Column)
                     issues.Add(new ModelHealthIssue("TIE_REBAR_CATEGORY_MISMATCH", HealthSeverity.Error, "Generated tie metadata chỉ hợp lệ trên Column element.", element.Id));
                 if (element.IsGeneratedTieRebarStale())
                     issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_STALE", HealthSeverity.Warning, "Generated tie snapshot không còn khớp semantic/source hiện tại; rebuild ties trước khi phát hành bản vẽ.", element.Id));
             }
             return issues.AsReadOnly();
+        }
+
+        private static void InspectCover(ProjectElement element, ICollection<ModelHealthIssue> issues)
+        {
+            if (!element.Properties.TryGetValue(CoverKey, out var raw) ||
+                !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
+                double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+            {
+                issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_COVER_INVALID", HealthSeverity.Warning, CoverKey + " thiếu hoặc phải là số hữu hạn >= 0.", element.Id));
+                return;
+            }
+
+            var canonical = value.ToString("R", CultureInfo.InvariantCulture);
+            if (!string.Equals(raw, canonical, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_COVER_NON_CANONICAL", HealthSeverity.Error, CoverKey + " phải dùng đúng round-trip invariant numeric spelling: " + canonical + ".", element.Id));
+        }
+
+        private static void InspectMode(ProjectElement element, ICollection<ModelHealthIssue> issues)
+        {
+            var raw = element.Properties.TryGetValue(ModeKey, out var stored) ? stored ?? string.Empty : string.Empty;
+            var normalized = raw.Trim();
+            if (!string.Equals(normalized, CanonicalMode, StringComparison.OrdinalIgnoreCase))
+            {
+                issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_MODE_INVALID", HealthSeverity.Warning, ModeKey + " thiếu hoặc không phải mode được hỗ trợ " + CanonicalMode + ".", element.Id));
+                return;
+            }
+            if (!string.Equals(raw, CanonicalMode, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_MODE_NON_CANONICAL", HealthSeverity.Error, ModeKey + " phải dùng đúng writer-owned token: " + CanonicalMode + ".", element.Id));
         }
 
         private sealed class OwnershipIndex
