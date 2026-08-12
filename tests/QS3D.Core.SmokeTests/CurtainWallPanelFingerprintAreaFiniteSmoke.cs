@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         {
             OverflowingAreaIsRejected();
             FiniteAreaFingerprintRemainsDeterministic();
+            SignedZeroCoordinatesRemainCanonical();
         }
 
         private static void OverflowingAreaIsRejected()
@@ -42,6 +43,31 @@ namespace QS3D.Core.SmokeTests
 
             Equal(64, first.Length);
             Equal(first, second);
+        }
+
+        private static void SignedZeroCoordinatesRemainCanonical()
+        {
+            var positive = Input(new CurtainWallPanelPiece
+            {
+                SourcePanelIndex = 0,
+                X_M = 0d,
+                Z_M = 0d,
+                WidthM = 2d,
+                HeightM = 3d
+            });
+            var negative = Input(new CurtainWallPanelPiece
+            {
+                SourcePanelIndex = 0,
+                X_M = -0d,
+                Z_M = -0d,
+                WidthM = 2d,
+                HeightM = 3d
+            });
+            Equal(CurtainWallPanelFingerprint.Compute(positive), CurtainWallPanelFingerprint.Compute(negative));
+
+            positive.BottomOffsetM = 0d;
+            negative.BottomOffsetM = -0d;
+            Equal(CurtainWallPanelFingerprint.Compute(positive), CurtainWallPanelFingerprint.Compute(negative));
         }
 
         private static CurtainWallPanelFingerprintInput Input(CurtainWallPanelPiece piece)
