@@ -241,6 +241,14 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => new StructuralRegenerator().Regenerate(project, foundation));
             Equal("0.3", foundation.Properties["ThicknessM"]);
 
+            var railing = NewElement(project, "effective-railing", ElementCategory.Railing);
+            railing.Properties["LengthM"] = "5";
+            railing.Properties["HeightM"] = "1.1";
+            railing.Properties["PostSpacingM"] = "1";
+            AssignBounded(project, railing);
+            Throws<InvalidOperationException>(() => new StructuralRegenerator().Regenerate(project, railing));
+            Equal("1.1", railing.Properties["HeightM"]);
+
             Near(4d, ElementVerticalPlacementService.ResolveEffectiveHeight(project, foundation, double.NaN));
         }
 

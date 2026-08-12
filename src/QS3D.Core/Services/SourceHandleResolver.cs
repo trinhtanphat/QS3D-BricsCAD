@@ -15,8 +15,11 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
-            var elementIndex = BuildElementIndex(project);
+            var inputVersion = project.ChangeVersion;
             var rootElementIds = MaterializeRootElementIds(elementIds);
+            if (project.ChangeVersion != inputVersion)
+                throw new InvalidOperationException("Project state changed while materializing Locate root element ids. Retry Locate against the current project state.");
+            var elementIndex = BuildElementIndex(project);
             var handles = new List<string>();
             var knownHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
