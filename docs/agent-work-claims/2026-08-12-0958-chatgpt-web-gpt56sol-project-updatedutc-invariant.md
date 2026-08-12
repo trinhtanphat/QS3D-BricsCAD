@@ -1,37 +1,36 @@
 # Work claim — ProjectState UpdatedUtc UTC invariant
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-project-updatedutc-invariant-20260812-0958`
 - Registered: `2026-08-12T09:58:00+07:00`
+- Completed: `2026-08-12T10:03:00+07:00`
 - Baseline main SHA observed: `bcc3d13fca83ee747cec362945883bc6686b3a08`
+- Claim commit: `f80afc84ceb319d9fd1a8d0d87315c7926403046`
+- Pull Request: `#733`
+- Reviewed head: `2977c4f59ccbd62c5ca8afba0a139ee69b2815d2`
+- Merge SHA: `3c99695ffacc78c012602735df2a5ec5f3908acf`
 - Priority: P1 deterministic persistence-state integrity
 - Task Key: `CORE-PROJECT-UPDATEDUTC-INVARIANT`
 
 ## Confirmed defect
 
-`ProjectState` initializes and advances `UpdatedUtc` with `DateTime.UtcNow`, and `RestorePersistenceState(...)` explicitly rejects any timestamp whose `DateTimeKind` is not `Utc`. QSDB persistence also has an established deterministic-UTC save gate (`f497819ad7de4178e42f25c070c38ac77b850412`). Despite those contracts, `UpdatedUtc` is currently a public auto-property setter, so any caller can assign `DateTimeKind.Local` or `Unspecified` and leave the live project in a state that its own persistence boundary refuses to save.
+`ProjectState` initializes and advances `UpdatedUtc` with UTC, `RestorePersistenceState(...)` rejects non-UTC timestamps, and QSDB save has an established deterministic-UTC gate, but public `UpdatedUtc` assignment previously accepted Local/Unspecified values and could leave the live project in a state its own persistence boundary refused to save.
 
-## Reserved scope
+## Completed implementation
 
-- `src/QS3D.Core/Domain/ProjectState.cs` — `UpdatedUtc` storage/setter invariant only
-- `tests/QS3D.Core.SmokeTests/ProjectStateUpdatedUtcInvariantSmoke.cs` — focused auto-registered regression
-- this claim file
+- `ProjectState.UpdatedUtc` now uses a private backing field and rejects any non-UTC assignment before mutation.
+- Exact valid UTC values remain assignable without changing `ChangeVersion`.
+- `Touch()` and successful Name mutation continue to assign UTC timestamps.
+- `RestorePersistenceState(...)` uses the same UTC validation while preserving its existing change-version validation and restore semantics.
+- Project Name freshness/overflow behavior, ProjectElement timestamps and QSDB code were not changed.
 
-## Intended contract
+## Regression evidence
 
-- `ProjectState.UpdatedUtc` must always have `DateTimeKind.Utc`.
-- Default construction, `Touch()`, successful Name mutation and snapshot/persistence restore continue using UTC values.
-- Direct UTC assignment remains allowed and preserves the exact value.
-- Direct Local/Unspecified assignment fails before mutation and leaves the previous timestamp unchanged.
-- No ChangeVersion increment is added to direct timestamp assignment; this lane enforces the existing timestamp representation invariant only.
+`tests/QS3D.Core.SmokeTests/ProjectStateUpdatedUtcInvariantSmoke.cs` covers default UTC state, exact UTC assignment without revision mutation, atomic Local/Unspecified rejection, and `Touch()` preserving UTC while advancing one revision.
 
-## Excluded scope
+Moving-main comparison from the claim commit showed no overlap with `ProjectState.cs` or the smoke, and the source blob on moving `main` was re-read unchanged immediately before the head-locked squash merge.
 
-No changes to Project Name freshness/overflow semantics, ChangeVersion policy, ProjectElement timestamps, QSDB parser/schema, snapshots, CAD/UI/runtime, Actions/build/release.
+## Validation boundary
 
-## Validation plan
-
-Add ModuleInitializer Core smoke coverage for default UTC, exact UTC assignment, Local/Unspecified rejection with atomic timestamp preservation, and `Touch()` continuing to emit UTC while incrementing ChangeVersion once. Re-fetch moving `main`, compare exact overlap, merge with expected head SHA, and close this claim with immutable evidence.
-
-No GitHub Actions/full build/release dispatch and no licensed BricsCAD V25/V26 runtime PASS claim from this lane.
+No GitHub Actions/full build/release dispatch occurred. No local/full .NET build or licensed BricsCAD V25/V26 runtime PASS is claimed.
