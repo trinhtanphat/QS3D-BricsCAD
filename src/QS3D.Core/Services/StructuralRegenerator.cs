@@ -37,7 +37,7 @@ namespace QS3D.Core.Services
                 case ElementCategory.StructuralWall: RegenerateWall(project, element); break;
                 case ElementCategory.Foundation: RegenerateFoundation(project, element); break;
                 case ElementCategory.Stair: RegenerateStair(element); break;
-                case ElementCategory.Railing: RegenerateRailing(element); break;
+                case ElementCategory.Railing: RegenerateRailing(project, element); break;
                 case ElementCategory.Earthwork: RegenerateEarthwork(element); break;
             }
         }
@@ -186,10 +186,11 @@ namespace QS3D.Core.Services
             element.SetQuantity("FormworkM2", waistArea);
         }
 
-        private static void RegenerateRailing(ProjectElement element)
+        private static void RegenerateRailing(ProjectState project, ProjectElement element)
         {
             var length = QuantityMath.Positive(SemanticNumber.Get(element, "LengthM"));
-            var height = QuantityMath.Positive(SemanticNumber.Get(element, "HeightM", 1.1d));
+            var legacyHeight = SemanticNumber.Get(element, "HeightM", 1.1d);
+            var height = QuantityMath.Positive(QualifiedVerticalQuantity.EffectiveHeight(project, element, legacyHeight));
             var postSpacing = QuantityMath.Positive(SemanticNumber.Get(element, "PostSpacingM", 1d));
             var postCount = 0d;
             if (length > 0d)

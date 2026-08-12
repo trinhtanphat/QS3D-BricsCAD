@@ -153,15 +153,13 @@ namespace QS3D.BricsCAD.V25.Cad
             widthM = CadGeometryGuard.Positive(widthM, element.Id + "/3D width");
             heightM = CadGeometryGuard.Positive(heightM, element.Id + "/3D height");
             var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-            var placement = category == ElementCategory.Railing
-                ? null
-                : CadVerticalPlacementResolver.Resolve(
-                    document,
-                    project,
-                    element,
-                    line.StartPoint.Z,
-                    heightM,
-                    bottomM);
+            var placement = CadVerticalPlacementResolver.Resolve(
+                document,
+                project,
+                element,
+                line.StartPoint.Z,
+                heightM,
+                bottomM);
             var dx = CadGeometryGuard.Subtract(line.EndPoint.X, line.StartPoint.X, element.Id + "/dx");
             var dy = CadGeometryGuard.Subtract(line.EndPoint.Y, line.StartPoint.Y, element.Id + "/dy");
             var dz = CadGeometryGuard.Subtract(line.EndPoint.Z, line.StartPoint.Z, element.Id + "/dz");
@@ -174,13 +172,8 @@ namespace QS3D.BricsCAD.V25.Cad
             if (length <= 1e-6) throw new InvalidOperationException("Structural LINE quá ngắn: " + element.Id);
 
             var width = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, widthM, element.Id + "/3D width"), element.Id + "/3D width drawing units");
-            var height = placement?.HeightDrawingUnits ?? CadGeometryGuard.Positive(
-                CadGeometryGuard.ToDrawingUnits(document, heightM, element.Id + "/3D height"),
-                element.Id + "/3D height drawing units");
-            var bottom = placement?.BottomDrawingUnits ?? CadGeometryGuard.Add(
-                line.StartPoint.Z,
-                CadGeometryGuard.ToDrawingUnits(document, bottomM, element.Id + "/BottomOffsetM"),
-                element.Id + "/legacy base Z");
+            var height = placement.HeightDrawingUnits;
+            var bottom = placement.BottomDrawingUnits;
             var angle = CadGeometryGuard.Finite(Math.Atan2(dy, dx), element.Id + "/angle");
             var midX = CadGeometryGuard.Midpoint(line.StartPoint.X, line.EndPoint.X, element.Id + "/mid X");
             var midY = CadGeometryGuard.Midpoint(line.StartPoint.Y, line.EndPoint.Y, element.Id + "/mid Y");

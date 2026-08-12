@@ -90,4 +90,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] Longitudinal/transverse reinforcement, Slab/Foundation/StructuralWall meshes and BBS shape origins share host Level placement before native replacement; policy remains fail-closed pending Stair/Railing/UI and V25 proof")
+print("[PASS] Longitudinal/transverse reinforcement, Slab/Foundation/StructuralWall meshes and BBS shape origins share host Level placement before native replacement; policy remains fail-closed pending Stair/UI and V25 proof")
