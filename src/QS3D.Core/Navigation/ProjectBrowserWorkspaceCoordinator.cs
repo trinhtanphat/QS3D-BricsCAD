@@ -67,8 +67,11 @@ namespace QS3D.Core.Navigation
             if (current == null) throw new ArgumentNullException(nameof(current));
             if (selectedElementIds == null) throw new ArgumentNullException(nameof(selectedElementIds));
 
+            var sourceChangeVersion = project.ChangeVersion;
+            var sourceElements = project.Elements.ToArray();
             var query = ProjectBrowserQueryPlanner.Build(project, current.Grouping, current.ToQueryOptions());
             var reveal = ProjectBrowserSelectionPlanner.PlanReveal(query.Root, selectedElementIds, primaryElementId);
+            RequireSelectionFreshness(project, sourceChangeVersion, sourceElements);
             var expanded = MergeExpandedPaths(current.ExpandedPaths, reveal.ExpansionPaths);
             return Copy(
                 current,
@@ -135,6 +138,26 @@ namespace QS3D.Core.Navigation
                 Array.Empty<string>(),
                 Array.Empty<string>(),
                 string.Empty);
+        }
+
+        private static void RequireSelectionFreshness(
+            ProjectState project,
+            long expectedChangeVersion,
+            IReadOnlyList<ProjectElement> expectedElements)
+        {
+            if (project.ChangeVersion != expectedChangeVersion)
+                throw new InvalidOperationException("Project changed while Project Browser selection ids were being enumerated; recompute the selection against the current project state.");
+            if (project.Elements.Count != expectedElements.Count)
+                throw StructuralFreshnessError();
+            for (var index = 0; index < expectedElements.Count; index++)
+                if (!ReferenceEquals(project.Elements[index], expectedElements[index]))
+                    throw StructuralFreshnessError();
+        }
+
+        private static InvalidOperationException StructuralFreshnessError()
+        {
+            return new InvalidOperationException(
+                "Project element structure changed while Project Browser selection ids were being enumerated; recompute the selection against the current project state.");
         }
 
         private static ProjectBrowserWorkspaceState Copy(
