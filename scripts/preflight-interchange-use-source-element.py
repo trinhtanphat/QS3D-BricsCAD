@@ -24,8 +24,16 @@ if not errors:
         "ElementCollision = InterchangeExistingIdentityAction.UseSourceSemanticData",
         "SourceHandles = InterchangeSourceHandlePolicy.Discard",
         "GeneratedOutputReset = InterchangeGeneratedOutputResetPolicy.ClearOwnershipAndRequireRebuild",
-        "ProjectStateSnapshot.Capture(project)",
-        "GeneratedDependentGeometryInvalidator.Prepare(document, transaction, project, invalidationTargets)",
+        "using (document.LockDocument())",
+        "var lockedProject = InterchangeMutationTargetGuard.RequireExact(",
+        "var lockedReplacementTargets = prepared.Plan.ReplacementElementIds",
+        "var lockedInvalidationTargets = ExpandInvalidationTargets(",
+        "rollback = ProjectStateSnapshot.Capture(lockedProject)",
+        "GeneratedDependentGeometryInvalidator.Prepare(",
+        "lockedProject,",
+        "lockedInvalidationTargets);",
+        "ApplyCatalogAdds(lockedProject, prepared.Source, prepared.Resolution)",
+        "ApplyElements(lockedProject, prepared.Source, prepared.Resolution)",
         "invalidation.CommitMetadata();",
         "transaction.Commit();",
         "rollback.Restore(project)",
@@ -36,15 +44,20 @@ if not errors:
         "target.Quantities.Clear();",
         "target.MarkDirty(ElementDirtyFlags.All);",
         "ProjectInterchangeKeepTargetImporter.Plan(project, json)",
+        "ProjectContextCoordinator.RequireBackingStoreUnchanged(",
     ]
     for needle in required_service:
         if needle not in s:
             errors.append(f"service missing atomic/policy contract: {needle}")
 
-    if s.index("GeneratedDependentGeometryInvalidator.Prepare") > s.index("transaction.Commit();"):
-        errors.append("native generated-output invalidation must be prepared before CAD commit")
+    prepare_index = s.find("GeneratedDependentGeometryInvalidator.Prepare")
+    commit_index = s.find("transaction.Commit();")
+    if min(prepare_index, commit_index) < 0 or prepare_index > commit_index:
+        errors.append("locked native generated-output invalidation must be prepared before CAD commit")
     if s.index("invalidation.CommitMetadata();") > s.index("transaction.Commit();"):
         errors.append("semantic generated-output ownership must clear before CAD commit")
+    if s.count("ProjectStateSnapshot.Capture(lockedProject)") != 1:
+        errors.append("element service must own exactly one locked semantic rollback snapshot")
 
     forbidden_service = [
         "QS3DBUILD3D",
@@ -98,4 +111,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-use-source-element: PASS")
-print("UseSource Element import is guarded by native invalidation + semantic rollback; target source ownership is preserved, UI keeps Append separate, and rebuild remains explicit.")
+print("UseSource Element import rebinds the exact locked project before native invalidation + semantic rollback; target source ownership is preserved, UI keeps Append separate, and rebuild remains explicit.")
