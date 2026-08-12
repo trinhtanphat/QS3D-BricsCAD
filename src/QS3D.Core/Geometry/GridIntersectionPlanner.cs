@@ -204,12 +204,38 @@ namespace QS3D.Core.Geometry
             var fx = line.Start.X - arc.Center.X;
             var fy = line.Start.Y - arc.Center.Y;
             EnsureFiniteDerived("Grid LINE/ARC delta", dx, dy, fx, fy);
-            var a = dx * dx + dy * dy;
-            var b = 2.0 * (fx * dx + fy * dy);
-            var c = fx * fx + fy * fy - arc.Radius * arc.Radius;
+
+            var scale = Math.Max(
+                1.0,
+                Math.Max(
+                    Math.Max(Math.Abs(dx), Math.Abs(dy)),
+                    Math.Max(Math.Max(Math.Abs(fx), Math.Abs(fy)), arc.Radius)));
+            var inverseScale = 1.0 / scale;
+            var normalizedDx = dx * inverseScale;
+            var normalizedDy = dy * inverseScale;
+            var normalizedFx = fx * inverseScale;
+            var normalizedFy = fy * inverseScale;
+            var normalizedRadius = arc.Radius * inverseScale;
+            EnsureFiniteDerived(
+                "Grid LINE/ARC normalized geometry",
+                scale,
+                inverseScale,
+                normalizedDx,
+                normalizedDy,
+                normalizedFx,
+                normalizedFy,
+                normalizedRadius);
+
+            var a = normalizedDx * normalizedDx + normalizedDy * normalizedDy;
+            var b = 2.0 * (normalizedFx * normalizedDx + normalizedFy * normalizedDy);
+            var c = normalizedFx * normalizedFx + normalizedFy * normalizedFy - normalizedRadius * normalizedRadius;
             EnsureFiniteDerived("Grid LINE/ARC quadratic", a, b, c);
             var discriminant = b * b - 4.0 * a * c;
-            var discTolerance = tolerance * Math.Max(1.0, b * b + Math.Abs(4.0 * a * c));
+            var inverseScaleSquared = inverseScale * inverseScale;
+            var unitDiscriminantScale = inverseScaleSquared * inverseScaleSquared;
+            var discTolerance = tolerance * Math.Max(
+                unitDiscriminantScale,
+                b * b + Math.Abs(4.0 * a * c));
             EnsureFiniteDerived("Grid LINE/ARC discriminant", discriminant, discTolerance);
             if (discriminant < -discTolerance) return Array.Empty<Point2>();
             if (Math.Abs(discriminant) <= discTolerance) discriminant = 0.0;
