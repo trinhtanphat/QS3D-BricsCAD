@@ -1,36 +1,43 @@
 # Work claim — RecognitionResult candidate enumeration bounds
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-recognition-result-candidate-bounds-20260812-1202`
 - Registered: `2026-08-12T12:02:00+07:00`
+- Completed: `2026-08-12T12:07:00+07:00`
 - Baseline main SHA observed before registration: `e782ab6760b0f6cde9a09ecc04ca973095df86ca`
+- Claim commit: `ffd75bc9606959c9ca0318319bf200992089628d`
+- Source integration commit: `f83f17b90b40132b2924d056364b71e8236bec6e`
+- Regression integration commit: `895b74e4f28c50192e9d8aa1a4025a236840813d`
 - Priority: evidence-driven remote-safe recognition input integrity
 
-## Confirmed defect
+## Completed scope
 
-`RecognitionInputBounds.MaxRules` limits a recognition engine to 10,000 rules, and `RecognitionResult` already requires candidate `RuleId` values to be unique. A valid result produced by an engine therefore cannot contain more than 10,000 candidates. However, the public `RecognitionResult(EntitySnapshot, IReadOnlyList<RecognitionCandidate>)` constructor currently validates the caller list with an unbounded `foreach` and then materializes it with `ToList()`. A custom `IReadOnlyList` can report a small `Count` while exposing an unbounded enumerator, and an oversized ordinary list is fully traversed instead of failing at the established engine rule ceiling.
+`RecognitionResult(EntitySnapshot, IReadOnlyList<RecognitionCandidate>)` now materializes candidate input through the existing `RecognitionInputBounds.Materialize(...)` helper with the established `RecognitionInputBounds.MaxRules` ceiling before semantic validation. Because recognition rules and candidate RuleIds are one-to-one by unique rule identity, the existing 10,000-rule ceiling is also a non-invented upper bound for a valid result candidate list.
 
-## Reserved scope
+Known `IReadOnlyCollection` inputs above 10,000 therefore fail from `Count` without enumeration, while arbitrary/custom enumerators stop at the 10,001st sentinel and fail closed. Existing null/rule-id/category/confidence validation and mutable-candidate revalidation are preserved on the bounded snapshot.
 
-- `src/QS3D.Core/Recognition/RecognitionEngine.cs`, limited to bounded materialization of `RecognitionResult` candidate input before semantic validation.
-- one focused `QS3D.Core.SmokeTests` regression file.
-- this claim file.
+## Implemented surfaces
 
-## Intended contract
+- `src/QS3D.Core/Recognition/RecognitionEngine.cs`
+- `tests/QS3D.Core.SmokeTests/RecognitionResultCandidateBoundsSmoke.cs`
+- this claim file
 
-- Reuse the existing `RecognitionInputBounds.Materialize(...)` helper and `MaxRules` ceiling; do not invent a new numerical policy.
-- Fast-reject known candidate collections above 10,000 without enumerating them.
-- Stop arbitrary/lazy candidate enumeration at the 10,001st item and fail closed.
-- Preserve current candidate null/rule-id/category/confidence validation, ordering/projection semantics, mutable-candidate revalidation, scoring and batch behavior.
+## Integration / concurrency evidence
 
-## Coordination
+- Source was updated through GitHub Contents API with expected pre-edit blob `215ba5b6bd95313457f33e58c3eb7b48b2a8576f`; a concurrent same-file edit would therefore have failed instead of being overwritten.
+- Source integration commit: `f83f17b90b40132b2924d056364b71e8236bec6e`.
+- Focused regression integration commit: `895b74e4f28c50192e9d8aa1a4025a236840813d`.
+- Current-main readback after later concurrent commits confirms production blob `037458d5c9ab069b059775fdb2418144e5644985` and smoke blob `d4045001990e1e0aad9d560bb732e736bbed3b2c` remain present.
+- Concurrent authoritative layer-mapping work reserved `src/QS3D.Core/Recognition/ProjectRecognitionService.cs`; this lane did not modify that file or its semantics.
 
-A concurrently active authoritative-layer-mapping claim reserves `src/QS3D.Core/Recognition/ProjectRecognitionService.cs`; this lane does not modify that file or layer-mapping semantics. Recent recognition candidate integrity/reranking/confidence lanes are completed and do not reserve candidate cardinality/materialization.
+## Validation actually performed
 
-## Validation boundary
-
-Focused source/readback regression only in this connector session. No GitHub Actions dispatch, local .NET build/smoke PASS, or licensed BricsCAD V25/V26 runtime PASS will be claimed without execution.
+- Exact source readback confirms candidate materialization uses `RecognitionInputBounds.MaxRules` and occurs before `ValidateCandidates(...)`.
+- Focused smoke source covers ordinary result semantics, fast Count-based rejection for a known 10,001-item read-only list, and a lying-Count custom enumerator that must stop exactly at item 10,001 instead of reading farther.
+- No GitHub Actions were dispatched.
+- No local .NET build/smoke execution PASS is claimed from this connector-only session.
+- No licensed BricsCAD V25/V26 runtime PASS or release qualification is claimed.
 
 ## Completion condition
 
-Current `main` bounds `RecognitionResult` candidate enumeration using the already-established recognition rule ceiling, focused regression evidence is present, moving-main overlap is rechecked, and this claim is closed `COMPLETED` with exact integration evidence.
+Satisfied. Current `main` contains the bounded `RecognitionResult` constructor and focused regression, remote source/test readback is complete, and this reservation is released.
