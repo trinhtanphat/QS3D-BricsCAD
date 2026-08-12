@@ -117,8 +117,11 @@ namespace QS3D.Core.Domain
             if (activeRoomIds == null) throw new ArgumentNullException(nameof(activeRoomIds));
             if (selectedSourceHandles == null) throw new ArgumentNullException(nameof(selectedSourceHandles));
             if (utcNow.Kind != DateTimeKind.Utc) throw new ArgumentException("utcNow must have DateTimeKind.Utc.", nameof(utcNow));
+            var inputVersion = project.ChangeVersion;
             var active = new HashSet<string>(activeRoomIds.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()), StringComparer.OrdinalIgnoreCase);
             var selected = new HashSet<string>(selectedSourceHandles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()), StringComparer.OrdinalIgnoreCase);
+            if (project.ChangeVersion != inputVersion)
+                throw new InvalidOperationException("Project changed while Auto Room stale-selection inputs were being enumerated. Retry against the current project state.");
             var stale = ResolveProjectElements(project)
                 .Where(IsAutoRoom)
                 .Where(room => !active.Contains(room.Id))
