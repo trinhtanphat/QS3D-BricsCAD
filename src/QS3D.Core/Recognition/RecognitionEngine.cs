@@ -92,22 +92,31 @@ namespace QS3D.Core.Recognition
         }
         public EntitySnapshot Snapshot { get; }
         public IReadOnlyList<RecognitionCandidate> Candidates { get; }
-        public RecognitionCandidate? TopCandidate => Candidates.Count == 0 ? null : Candidates[0];
+        public RecognitionCandidate? TopCandidate => CurrentTopTwo().Top;
         public double Margin
         {
             get
             {
-                ValidateCurrentCandidates();
-                return Candidates.Count < 2 ? (TopCandidate?.Confidence ?? 0d) : Candidates[0].Confidence - Candidates[1].Confidence;
+                var current = CurrentTopTwo();
+                if (current.Top == null) return 0d;
+                return current.RunnerUp == null ? current.Top.Confidence : current.Top.Confidence - current.RunnerUp.Confidence;
             }
         }
-        public bool IsCaptureReady => TopCandidate != null && EntitySnapshotCaptureEligibility.IsReady(Snapshot, TopCandidate.Category, out _);
+        public bool IsCaptureReady
+        {
+            get
+            {
+                var top = TopCandidate;
+                return top != null && EntitySnapshotCaptureEligibility.IsReady(Snapshot, top.Category, out _);
+            }
+        }
         public string CaptureReadinessReason
         {
             get
             {
-                if (TopCandidate == null) return "No recognition candidate is available.";
-                EntitySnapshotCaptureEligibility.IsReady(Snapshot, TopCandidate.Category, out var reason);
+                var top = TopCandidate;
+                if (top == null) return "No recognition candidate is available.";
+                EntitySnapshotCaptureEligibility.IsReady(Snapshot, top.Category, out var reason);
                 return reason;
             }
         }
@@ -115,23 +124,44 @@ namespace QS3D.Core.Recognition
         {
             get
             {
-                ValidateCurrentCandidates();
-                return TopCandidate == null || TopCandidate.Confidence < 0.82d || Margin < 0.15d || !IsCaptureReady;
+                var current = CurrentTopTwo();
+                if (current.Top == null) return true;
+                var margin = current.RunnerUp == null ? current.Top.Confidence : current.Top.Confidence - current.RunnerUp.Confidence;
+                return current.Top.Confidence < 0.82d || margin < 0.15d || !EntitySnapshotCaptureEligibility.IsReady(Snapshot, current.Top.Category, out _);
             }
         }
         public string Handle => Snapshot.Handle;
         public string SuggestedCategory => TopCandidate?.Category.ToString() ?? string.Empty;
-        public double Confidence
-        {
-            get
-            {
-                ValidateCurrentCandidates();
-                return TopCandidate?.Confidence ?? 0d;
-            }
-        }
+        public double Confidence => TopCandidate?.Confidence ?? 0d;
         public string Evidence => TopCandidate?.EvidenceText ?? string.Empty;
 
         internal void ValidateCurrentCandidates() => ValidateCandidates(Candidates);
+
+        private (RecognitionCandidate? Top, RecognitionCandidate? RunnerUp) CurrentTopTwo()
+        {
+            ValidateCurrentCandidates();
+            RecognitionCandidate? top = null;
+            RecognitionCandidate? runnerUp = null;
+            foreach (var candidate in Candidates)
+            {
+                if (top == null || RanksBefore(candidate, top))
+                {
+                    runnerUp = top;
+                    top = candidate;
+                }
+                else if (runnerUp == null || RanksBefore(candidate, runnerUp))
+                {
+                    runnerUp = candidate;
+                }
+            }
+            return (top, runnerUp);
+        }
+
+        private static bool RanksBefore(RecognitionCandidate candidate, RecognitionCandidate incumbent)
+        {
+            if (candidate.Confidence != incumbent.Confidence) return candidate.Confidence > incumbent.Confidence;
+            return StringComparer.OrdinalIgnoreCase.Compare(candidate.RuleId, incumbent.RuleId) < 0;
+        }
 
         private static void ValidateCandidates(IEnumerable<RecognitionCandidate> candidates)
         {

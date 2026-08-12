@@ -30,7 +30,7 @@ namespace QS3D.Core.Services
         {
             if (_lock == null) throw new InvalidOperationException("Acquire the project write lock before saving.");
             var snapshot = ProjectStateSnapshot.Capture(Project);
-            Audit.Record("PROJECT_SAVE", string.Empty, Path);
+            Audit.Record("PROJECT_SAVE", string.Empty, string.Empty);
             try
             {
                 if (_recoveredFromBackup)
@@ -59,7 +59,7 @@ namespace QS3D.Core.Services
             var result = _store.LoadWithBackupFallback(Path);
             var project = result.Project;
             var audit = AuditTrail.ForProject(project);
-            audit.Record("PROJECT_RELOAD", string.Empty, Path);
+            audit.Record("PROJECT_RELOAD", string.Empty, string.Empty);
             Project = project;
             Audit = audit;
             _recoveredFromBackup = result.RecoveredFromBackup;

@@ -455,6 +455,9 @@ namespace QS3D.Core.Persistence
             if (string.IsNullOrWhiteSpace(value)) return ElementDirtyFlags.None;
             if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var raw) || raw < 0 || (raw & ~(int)ElementDirtyFlags.All) != 0)
                 throw new InvalidDataException("Invalid QSDB dirty flags: " + value);
+            var canonical = raw.ToString(CultureInfo.InvariantCulture);
+            if (!string.Equals(value, canonical, StringComparison.Ordinal))
+                throw new InvalidDataException("Non-canonical QSDB dirty flags: " + value);
             return (ElementDirtyFlags)raw;
         }
 

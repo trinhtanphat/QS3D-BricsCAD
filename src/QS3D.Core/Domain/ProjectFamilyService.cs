@@ -257,7 +257,8 @@ namespace QS3D.Core.Domain
             var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var family in project.Families)
             {
-                if (family == null) continue;
+                if (family == null)
+                    throw new InvalidOperationException("Project family collection contains a null family.");
                 if (!seenIds.Add(family.Id))
                     throw new InvalidOperationException("Project contains duplicate family id: " + family.Id + ".");
             }

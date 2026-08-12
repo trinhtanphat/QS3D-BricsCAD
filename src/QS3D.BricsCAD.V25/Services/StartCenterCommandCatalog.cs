@@ -210,6 +210,7 @@ namespace QS3D.BricsCAD.V25.Services
                 New("QS3DTAKEOFF", "Quick Takeoff", "Takeoff nhanh có quy đổi drawing unit.", "Khối lượng", "takeoff quantity nhanh", 72),
                 New("QS3DBBSVIEW", "BBS Review", "Xem bảng cốt thép.", "Khối lượng", "bbs rebar schedule", 73),
                 New("QS3DBBS", "Xuất BBS", "Xuất BBS Excel.", "Khối lượng", "bbs excel export", 74),
+                New("QS3DSETUPBLT", "Preset BLT3D tính toán", "Mở Cài đặt tính toán và nạp preset BLT3D vào bản nháp; chỉ lưu khi bấm Lưu Cài Đặt.", "Khối lượng", "blt blt3d cai dat tinh toan quantity settings preset", 75),
 
                 New("QS3DREBARMESHSETUP", "Thiết lập lưới thép", "Cấu hình lưới thép trên semantic selection.", "Cốt thép", "rebar mesh setup", 80),
                 New("QS3DREBAR3D", "Thép dọc Cột 3D", "Tạo/cập nhật longitudinal rebar cột.", "Cốt thép", "column rebar longitudinal", 81),
