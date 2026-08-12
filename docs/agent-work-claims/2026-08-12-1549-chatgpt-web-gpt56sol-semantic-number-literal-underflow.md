@@ -1,0 +1,25 @@
+# Agent Work Claim
+
+- Agent: `ChatGPT web / GPT-5.6 Sol`
+- Status: `ACTIVE`
+- State: `ACTIVE`
+- Started at: `2026-08-12T15:49:00+07:00`
+- Baseline main SHA: `b942ff6174cd3681e2afaa2a064b3c8c13791fd1`
+- Task Key: `CORE-SEMANTIC-NUMBER-LITERAL-UNDERFLOW`
+- Scope: Harden shared `SemanticNumber.Get()` parsing so a syntactically non-zero semantic numeric token that `double.TryParse` underflows to exact zero is rejected instead of flowing through regeneration as a false zero. Preserve true zero spellings, representable subnormal values, existing finite validation, caller-specific positivity semantics, and regeneration atomicity.
+- Primary files:
+  - `src/QS3D.Core/Services/SemanticRegenerators.cs`
+  - `tests/QS3D.Core.SmokeTests/SemanticOverflowSmoke.cs`
+  - this claim file
+- Counterexample:
+  - A `WallFinish` with `PerimeterM = "1e-4000"` and `HeightM = "1"` currently parses the mathematically positive perimeter as `0d`; `RoomRegenerator` then publishes `NetFinishAreaM2 = 0` instead of failing closed.
+- Tests intended:
+  - Reject a non-zero underflowing semantic numeric token before any quantities are mutated.
+  - Preserve exact-zero scientific spelling such as `0e-4000`.
+  - Preserve the smallest representable positive token `5e-324` as `double.Epsilon`.
+  - Preserve existing overflow atomicity regressions.
+- Coordination:
+  - Concurrent claim `b942ff6174cd3681e2afaa2a064b3c8c13791fd1` owns only `QuantityMath.Multiply/Divide`, `QuantityMathUnderflowSmoke`, and smoke registration. This lane occurs before `QuantityMath` and does not modify those surfaces.
+- Notes:
+  - Pure Core semantic parsing/regeneration boundary; no `QuantityMath` arithmetic, persistence/schema, measured-solid policy, geometry planners, generated handles, native CAD, or release workflow scope.
+  - No GitHub Actions, full .NET build, executable smoke run, or BricsCAD V25/V26 runtime PASS will be claimed unless actually performed.
