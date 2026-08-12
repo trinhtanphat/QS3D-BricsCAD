@@ -173,7 +173,7 @@ namespace QS3D.Core.Export
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value), "Curtain XLSX numeric values must be finite.");
             sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"2\"><v>")
-                .Append(value.ToString("0.########", CultureInfo.InvariantCulture)).Append("</v></c>");
+                .Append(value.ToString("R", CultureInfo.InvariantCulture)).Append("</v></c>");
         }
 
         private static string CellRef(int columnZeroBased, int row)
