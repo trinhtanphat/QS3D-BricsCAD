@@ -22,6 +22,13 @@ namespace QS3D.Core.Diagnostics
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
             var ownership = BuildOwnershipIndex(project);
+            var liveHandleIdentities = liveSolidHandles == null
+                ? null
+                : new HashSet<string>(
+                    liveSolidHandles
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .Select(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity),
+                    StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
                 if (element == null)
@@ -40,20 +47,21 @@ namespace QS3D.Core.Diagnostics
                         issues.Add(new ModelHealthIssue("INVALID_CURTAIN_FRAME_GENERATED_HANDLE", HealthSeverity.Error, HandlesKey + " chứa handle không hợp lệ.", element.Id));
                         continue;
                     }
-                    if (!local.Add(handle))
+                    var handleIdentity = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
+                    if (!local.Add(handleIdentity))
                     {
                         issues.Add(new ModelHealthIssue("DUPLICATE_CURTAIN_FRAME_GENERATED_HANDLE", HealthSeverity.Error, "Một curtain frame handle bị lặp trong cùng element: " + handle, element.Id));
                         continue;
                     }
                     validCount++;
                     var expected = element.Id + "/" + HandlesKey;
-                    if (ownership.Conflicts.Contains(handle))
+                    if (ownership.Conflicts.Contains(handleIdentity))
                         issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated curtain frame handle đang được nhiều project slot/element cùng claim: " + handle, element.Id));
-                    else if (ownership.Owners.TryGetValue(handle, out var owner) && !string.Equals(owner, expected, StringComparison.OrdinalIgnoreCase))
+                    else if (ownership.Owners.TryGetValue(handleIdentity, out var owner) && !string.Equals(owner, expected, StringComparison.OrdinalIgnoreCase))
                         issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated curtain frame xung đột owner/project handle khác: " + owner, element.Id));
-                    if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
+                    if (element.SourceHandles.Any(x => string.Equals(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x), handleIdentity, StringComparison.OrdinalIgnoreCase)))
                         issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated curtain frame handle không được nằm trong SourceHandles.", element.Id));
-                    if (liveSolidHandles != null && !liveSolidHandles.Contains(handle))
+                    if (liveHandleIdentities != null && !liveHandleIdentities.Contains(handleIdentity))
                         issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GENERATED_SOLID_MISSING", HealthSeverity.Error, "Không còn tìm thấy generated curtain frame Solid3d: " + handle, element.Id));
                 }
 
@@ -269,7 +277,7 @@ namespace QS3D.Core.Diagnostics
 
         private static void Reserve(OwnershipIndex ownership, string? handle, string token)
         {
-            var normalized = (handle ?? string.Empty).Trim();
+            var normalized = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
             if (normalized.Length == 0) return;
             if (ownership.Owners.TryGetValue(normalized, out var existing))
             {
