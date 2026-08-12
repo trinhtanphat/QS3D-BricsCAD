@@ -125,7 +125,9 @@ namespace QS3D.Core.Domain
             var target = FindRequired(project, familyId);
             var targetProperties = SnapshotProperties(target, "Target", "assignment");
 
+            var beforeTargetEnumeration = project.ChangeVersion;
             var owned = ResolveOwnedElements(project, elements, target);
+            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration);
             var pending = new List<PendingFamilyAssignment>();
             var previousSnapshots = new Dictionary<string, IReadOnlyList<KeyValuePair<string, string>>>(StringComparer.OrdinalIgnoreCase);
 
@@ -246,6 +248,12 @@ namespace QS3D.Core.Domain
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Family assignment targets were being enumerated. Retry the operation against the current project state.");
             return unique.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+        }
+
+        private static void RequireTargetEnumerationFreshness(ProjectState project, long beforeEnumeration)
+        {
+            if (project.ChangeVersion != beforeEnumeration)
+                throw new InvalidOperationException("Project changed while Family assignment targets were being enumerated.");
         }
 
         private static ProjectFamily FindRequired(ProjectState project, string id)
