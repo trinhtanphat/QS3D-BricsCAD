@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             InvalidPublicResultStateFailsClosed();
+            TokenWhitespaceIsCanonicalized();
             ZeroValueRemainsValid();
             QuantityEngineResultRemainsValid();
         }
@@ -24,6 +25,14 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentOutOfRangeException>(() => new TakeoffResult("ABCD", TakeoffKind.Length, double.PositiveInfinity, "m"));
             Throws<ArgumentOutOfRangeException>(() => new TakeoffResult("ABCD", TakeoffKind.Length, double.NegativeInfinity, "m"));
             Throws<ArgumentException>(() => new TakeoffResult("ABCD", TakeoffKind.Count, 1d, " "));
+        }
+
+        private static void TokenWhitespaceIsCanonicalized()
+        {
+            var result = new TakeoffResult("  ABCD\t", TakeoffKind.Length, 1d, "\tm  ");
+            if (!string.Equals(result.Handle, "ABCD", StringComparison.Ordinal) ||
+                !string.Equals(result.Unit, "m", StringComparison.Ordinal))
+                throw new InvalidOperationException("Takeoff result tokens must be trimmed before storage.");
         }
 
         private static void ZeroValueRemainsValid()

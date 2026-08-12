@@ -1,0 +1,104 @@
+using System;
+using System.Linq;
+using QS3D.Core.Reporting;
+
+namespace QS3D.Core.SmokeTests
+{
+    internal static class QuantityCalculationBltCompatibilityPresetSmoke
+    {
+        internal static void Run()
+        {
+            var preset = QuantityCalculationBltCompatibilityPreset.Create();
+            Equal(QuantityCalculationSettings.CurrentSchemaVersion, preset.SchemaVersion, "schema");
+            Equal(28, preset.CategoryRules.Count, "category rule count");
+            Equal(784, preset.IntersectionRules.Count, "intersection rule count");
+            Near(10d, preset.FormworkTolerance, "formwork tolerance");
+            Near(100d, preset.BlindingConcreteOffset, "blinding offset");
+            Near(10d, preset.MinSubtractAreaMm2, "minimum subtract area");
+            Near(1000d, preset.MinFormworkAreaMm2, "minimum formwork area");
+            Near(0.0001d, preset.MinConcreteVolumeM3, "minimum concrete volume");
+            Near(1d, preset.EngulfRelPercent, "engulf relative percent");
+            Near(1000d, preset.EngulfMinAreaMm2, "engulf minimum area");
+            Near(50d, preset.RoomGapFillMm, "room gap fill");
+            Near(40000d, preset.RoomSearchRadiusMm, "room search radius");
+            Equal("#FFFFFF", preset.DimColor, "dimension color");
+            Near(30d, preset.DimTextHeight, "dimension text height");
+
+            var room = RequireCategory(preset, 201);
+            True(room.ExtractSide && room.ExtractBottom, "201 extraction flags");
+            var floorFinish = RequireCategory(preset, 202);
+            True(!floorFinish.ExtractSide && !floorFinish.ExtractBottom, "202 extraction flags");
+            var ramp = RequireCategory(preset, 501);
+            True(ramp.ExtractSide && !ramp.ExtractBottom, "501 extraction flags");
+
+            AssertRule(preset, 201, 207, false, true, true, false, false);
+            AssertRule(preset, 207, 201, true, true, true, true, true);
+            AssertRule(preset, 701, 601, false, true, true, false, false);
+            AssertRule(preset, 601, 701, true, true, true, true, true);
+            AssertRule(preset, 1301, 1302, false, true, true, false, false);
+            AssertRule(preset, 1302, 1301, true, true, true, true, true);
+
+            var native = QuantityCalculationSettings.CreateDefault();
+            True(native.CategoryRules.All(x => x.Category != 201), "native default must not be replaced by BLT codes");
+            True(native.IntersectionRules.All(IsConservative), "native default intersections remain conservative");
+        }
+
+        private static QuantityCategoryRuleSetting RequireCategory(QuantityCalculationSettings settings, int code)
+        {
+            var rule = settings.FindCategoryRule(code);
+            if (rule == null) throw new InvalidOperationException("Missing BLT category rule " + code + ".");
+            Near(30d, rule.FaceAngleThresholdDeg, code + " face threshold");
+            return rule;
+        }
+
+        private static void AssertRule(
+            QuantityCalculationSettings settings,
+            int source,
+            int target,
+            bool concrete,
+            bool sideByConcrete,
+            bool bottomByConcrete,
+            bool sideBySide,
+            bool bottomByBottom)
+        {
+            var rule = settings.FindIntersectionRule(source, target);
+            if (rule == null) throw new InvalidOperationException("Missing BLT intersection rule " + source + "->" + target + ".");
+            True(rule.SubtractConcrete == concrete, source + "->" + target + " concrete");
+            True(rule.SubtractSideFormworkByConcrete == sideByConcrete, source + "->" + target + " side/concrete");
+            True(rule.SubtractBottomFormworkByConcrete == bottomByConcrete, source + "->" + target + " bottom/concrete");
+            True(rule.SubtractSideFormworkBySideFormwork == sideBySide, source + "->" + target + " side/side");
+            True(rule.SubtractBottomFormworkByBottomFormwork == bottomByBottom, source + "->" + target + " bottom/bottom");
+        }
+
+        private static bool IsConservative(QuantityIntersectionRuleSetting rule)
+        {
+            return !rule.SubtractConcrete &&
+                   !rule.SubtractSideFormworkByConcrete &&
+                   !rule.SubtractBottomFormworkByConcrete &&
+                   !rule.SubtractSideFormworkBySideFormwork &&
+                   !rule.SubtractBottomFormworkByBottomFormwork;
+        }
+
+        private static void True(bool condition, string message)
+        {
+            if (!condition) throw new InvalidOperationException("BLT quantity preset regression: " + message + ".");
+        }
+
+        private static void Equal(int expected, int actual, string message)
+        {
+            if (expected != actual) throw new InvalidOperationException("BLT quantity preset regression: " + message + ".");
+        }
+
+        private static void Equal(string expected, string actual, string message)
+        {
+            if (!string.Equals(expected, actual, StringComparison.Ordinal))
+                throw new InvalidOperationException("BLT quantity preset regression: " + message + ".");
+        }
+
+        private static void Near(double expected, double actual, string message)
+        {
+            if (Math.Abs(expected - actual) > 1e-12)
+                throw new InvalidOperationException("BLT quantity preset regression: " + message + ".");
+        }
+    }
+}

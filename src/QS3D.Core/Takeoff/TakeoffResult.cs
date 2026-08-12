@@ -12,10 +12,10 @@ namespace QS3D.Core.Takeoff
                 throw new ArgumentOutOfRangeException(nameof(value), "Takeoff value must be finite and non-negative.");
             if (string.IsNullOrWhiteSpace(unit)) throw new ArgumentException("Takeoff unit is required.", nameof(unit));
 
-            Handle = handle;
+            Handle = handle.Trim();
             Kind = kind;
             Value = value;
-            Unit = unit;
+            Unit = unit.Trim();
         }
 
         public string Handle { get; }

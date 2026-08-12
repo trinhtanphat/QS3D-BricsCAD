@@ -82,7 +82,7 @@ namespace QS3D.Core.Diagnostics
         private static HashSet<string> ParseHandles(ProjectElement element, string raw, ICollection<ModelHealthIssue> issues)
         {
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var token in (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+            foreach (var token in (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.None))
             {
                 var handle = token.Trim();
                 if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
