@@ -20,6 +20,7 @@ namespace QS3D.Core.Diagnostics
         public const string PositionXKey = "GeneratedSemanticTagPositionX";
         public const string PositionYKey = "GeneratedSemanticTagPositionY";
         public const string PositionZKey = "GeneratedSemanticTagPositionZ";
+        public const string RotationKey = "GeneratedSemanticTagRotationRad";
         public const string OwnershipVersion = "1";
         public const string DrawingLocalWcs = "DrawingLocalWcs";
 
@@ -74,6 +75,7 @@ namespace QS3D.Core.Diagnostics
                 ValidateFinite(element, PositionXKey, "SEMANTIC_TAG_POSITION_INVALID", issues);
                 ValidateFinite(element, PositionYKey, "SEMANTIC_TAG_POSITION_INVALID", issues);
                 ValidateFinite(element, PositionZKey, "SEMANTIC_TAG_POSITION_INVALID", issues);
+                ValidateRotation(element, issues);
             }
 
             return issues.AsReadOnly();
@@ -115,6 +117,22 @@ namespace QS3D.Core.Diagnostics
         {
             if (!TryFinite(element, key, out _))
                 issues.Add(new ModelHealthIssue(code, HealthSeverity.Error, key + " phải là số hữu hạn theo drawing-local WCS.", element.Id));
+        }
+
+        private static void ValidateRotation(ProjectElement element, ICollection<ModelHealthIssue> issues)
+        {
+            if (!element.Properties.TryGetValue(RotationKey, out var raw) ||
+                string.IsNullOrWhiteSpace(raw) ||
+                !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
+                double.IsNaN(value) || double.IsInfinity(value))
+            {
+                issues.Add(new ModelHealthIssue("SEMANTIC_TAG_ROTATION_INVALID", HealthSeverity.Error, RotationKey + " phải là số hữu hạn.", element.Id));
+                return;
+            }
+
+            var canonical = value.ToString("R", CultureInfo.InvariantCulture);
+            if (!string.Equals(raw, canonical, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("SEMANTIC_TAG_ROTATION_NON_CANONICAL", HealthSeverity.Error, RotationKey + " phải dùng đúng round-trip invariant numeric spelling: " + canonical + ".", element.Id));
         }
 
         private static bool TryFinite(ProjectElement element, string key, out double value)
