@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
@@ -15,6 +16,9 @@ namespace QS3D.Core.SmokeTests
             GeometryNumericNoOpPreservesLexicalAndFreshnessState();
             NonGeometryNumericNoOpPreservesLexicalState();
             RealGeometryNumericChangeStillMutates();
+            ParseUnderflowFailsWithoutMutation();
+            MultiplicationUnderflowFailsWithoutMutation();
+            LegitimateZeroAndRepresentableSubnormalRemainValid();
         }
 
         private static void GeometryNumericNoOpPreservesLexicalAndFreshnessState()
@@ -95,6 +99,113 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("A real geometry numeric multiplication did not preserve expected dirty flags.");
             if (!setup.Element.IsGeneratedSolidStale())
                 throw new InvalidOperationException("A real geometry numeric multiplication did not mark generated solid output stale.");
+        }
+
+        private static void ParseUnderflowFailsWithoutMutation()
+        {
+            var setup = NewWall("parse-underflow");
+            setup.Element.Properties["Scale"] = "1e-4000";
+            setup.Element.MarkClean(ElementDirtyFlags.All);
+            var beforeProjectVersion = setup.Project.ChangeVersion;
+            var beforeProjectUpdatedUtc = setup.Project.UpdatedUtc;
+            var beforeElementUpdatedUtc = setup.Element.UpdatedUtc;
+
+            ExpectInvalidOperation(() => new BulkEditService().MultiplyNumericProperty(
+                setup.Project,
+                new[] { setup.Element },
+                "Scale",
+                2d));
+
+            if (!setup.Element.Properties.TryGetValue("Scale", out var raw) || !string.Equals(raw, "1e-4000", StringComparison.Ordinal))
+                throw new InvalidOperationException("Bulk numeric parse underflow mutated the original property token.");
+            if (setup.Project.ChangeVersion != beforeProjectVersion || setup.Project.UpdatedUtc != beforeProjectUpdatedUtc)
+                throw new InvalidOperationException("Bulk numeric parse underflow changed project freshness state.");
+            if (setup.Element.Dirty != ElementDirtyFlags.None || setup.Element.UpdatedUtc != beforeElementUpdatedUtc)
+                throw new InvalidOperationException("Bulk numeric parse underflow partially mutated the target element.");
+        }
+
+        private static void MultiplicationUnderflowFailsWithoutMutation()
+        {
+            var setup = NewWall("multiply-underflow");
+            var epsilonText = double.Epsilon.ToString("R", CultureInfo.InvariantCulture);
+            setup.Element.Properties["Scale"] = epsilonText;
+            setup.Element.MarkClean(ElementDirtyFlags.All);
+            var beforeProjectVersion = setup.Project.ChangeVersion;
+            var beforeProjectUpdatedUtc = setup.Project.UpdatedUtc;
+            var beforeElementUpdatedUtc = setup.Element.UpdatedUtc;
+
+            ExpectInvalidOperation(() => new BulkEditService().MultiplyNumericProperty(
+                setup.Project,
+                new[] { setup.Element },
+                "Scale",
+                0.5d));
+
+            if (!setup.Element.Properties.TryGetValue("Scale", out var raw) || !string.Equals(raw, epsilonText, StringComparison.Ordinal))
+                throw new InvalidOperationException("Bulk numeric multiplication underflow replaced a representable subnormal with zero.");
+            if (setup.Project.ChangeVersion != beforeProjectVersion || setup.Project.UpdatedUtc != beforeProjectUpdatedUtc)
+                throw new InvalidOperationException("Bulk numeric multiplication underflow changed project freshness state.");
+            if (setup.Element.Dirty != ElementDirtyFlags.None || setup.Element.UpdatedUtc != beforeElementUpdatedUtc)
+                throw new InvalidOperationException("Bulk numeric multiplication underflow partially mutated the target element.");
+        }
+
+        private static void LegitimateZeroAndRepresentableSubnormalRemainValid()
+        {
+            var zeroSetup = NewWall("true-zero");
+            zeroSetup.Element.Properties["Scale"] = "0e-4000";
+            zeroSetup.Element.MarkClean(ElementDirtyFlags.All);
+            var zeroVersion = zeroSetup.Project.ChangeVersion;
+
+            var zeroChanged = new BulkEditService().MultiplyNumericProperty(
+                zeroSetup.Project,
+                new[] { zeroSetup.Element },
+                "Scale",
+                2d);
+
+            if (zeroChanged.Count != 0 || zeroSetup.Project.ChangeVersion != zeroVersion)
+                throw new InvalidOperationException("A legitimate exact-zero scientific token must remain a no-op when multiplied by a finite factor.");
+            if (!zeroSetup.Element.Properties.TryGetValue("Scale", out var zeroRaw) || !string.Equals(zeroRaw, "0e-4000", StringComparison.Ordinal))
+                throw new InvalidOperationException("A legitimate exact-zero scientific token lost its lexical representation.");
+
+            var subnormalSetup = NewWall("representable-subnormal");
+            var epsilonText = double.Epsilon.ToString("R", CultureInfo.InvariantCulture);
+            var expected = (double.Epsilon * 2d).ToString("R", CultureInfo.InvariantCulture);
+            subnormalSetup.Element.Properties["Scale"] = epsilonText;
+            subnormalSetup.Element.MarkClean(ElementDirtyFlags.All);
+
+            var changed = new BulkEditService().MultiplyNumericProperty(
+                subnormalSetup.Project,
+                new[] { subnormalSetup.Element },
+                "Scale",
+                2d);
+
+            if (changed.Count != 1)
+                throw new InvalidOperationException("A representable subnormal multiplication was rejected as underflow.");
+            if (!subnormalSetup.Element.Properties.TryGetValue("Scale", out var subnormalRaw) || !string.Equals(subnormalRaw, expected, StringComparison.Ordinal))
+                throw new InvalidOperationException("A representable subnormal multiplication did not persist its exact round-trip result.");
+
+            var zeroFactorSetup = NewWall("zero-factor");
+            zeroFactorSetup.Element.Properties["Scale"] = "2";
+            zeroFactorSetup.Element.MarkClean(ElementDirtyFlags.All);
+            var zeroFactorChanged = new BulkEditService().MultiplyNumericProperty(
+                zeroFactorSetup.Project,
+                new[] { zeroFactorSetup.Element },
+                "Scale",
+                0d);
+            if (zeroFactorChanged.Count != 1 || !zeroFactorSetup.Element.Properties.TryGetValue("Scale", out var zeroFactorRaw) || !string.Equals(zeroFactorRaw, "0", StringComparison.Ordinal))
+                throw new InvalidOperationException("Multiplication by an explicit zero factor must remain a legitimate zero-producing edit.");
+        }
+
+        private static void ExpectInvalidOperation(Action action)
+        {
+            try
+            {
+                action();
+                throw new InvalidOperationException("Expected BulkEdit numeric underflow to fail closed.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (string.Equals(ex.Message, "Expected BulkEdit numeric underflow to fail closed.", StringComparison.Ordinal)) throw;
+            }
         }
 
         private static Setup NewWall(string suffix)
