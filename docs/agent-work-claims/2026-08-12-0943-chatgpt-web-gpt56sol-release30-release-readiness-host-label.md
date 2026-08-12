@@ -1,44 +1,34 @@
 # Work claim — release #30 release-readiness host-label preflight reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-release30-release-readiness-host-label`
 - Registered: `2026-08-12T09:43:00+07:00`
+- Completed: `2026-08-12T09:45:00+07:00`
 - Baseline main SHA: `cdccbb5d12c9fdd446cef91dc2704a5756ab5ad5`
-- Priority: QS3D Cloud V25 Preview Build & Release #30 still fails `preflight-release-readiness.py` because it requires a V25-only user-facing sentence from a source file now shared by V25 and V26.
+- Claim commit: `ce1481fbb4a9db57f3bf5efc42189341f86ac8b7`
+- Implementation commit: `67a1c02c6ec38389ec49aea414da4a919f5de758`
+- Priority: QS3D Cloud V25 Preview Build & Release #30 failed `preflight-release-readiness.py` because it required a V25-only user-facing sentence from a source file now shared by V25 and V26.
 
-## Reserved scope
+## Completed scope
 
-Reconcile only `scripts/preflight-release-readiness.py` with the current host-major-aware `ReleaseReadinessCommands` wording. Preserve release-readiness production behavior and all health coverage unchanged.
+Reconciled only `scripts/preflight-release-readiness.py` with the current host-major-aware `ReleaseReadinessCommands` wording. Release-readiness production behavior and all health coverage remained unchanged.
 
-## Canonical evidence
+## Implemented contract
 
-- `ReleaseReadinessCommands.cs` is shared by V25/V26 and compile-selects `ExpectedRuntimeLabel` under `BRICSCAD_V26`.
-- READY text now appends `ExpectedRuntimeLabel + " runtime/private-DWG gate vẫn là bước riêng."`.
-- `preflight-bricscad-v26.py` already requires this host-major-aware form and explicitly forbids the obsolete literal `V25 runtime/private-DWG gate vẫn là bước riêng.`.
-- The legacy release-readiness gate still requires that obsolete V25-only literal, causing an internal gate contradiction.
+- Requires `#if BRICSCAD_V26` and both V26/V25 `ExpectedRuntimeLabel` constants in shared ReleaseReadiness source.
+- Requires the host-major-aware `ExpectedRuntimeLabel + " runtime/private-DWG gate` wording instead of the obsolete V25-only phrase.
+- Preserves all existing release health, ownership, dependency, BOM, stale/live CAD, command uniqueness and transitional-command checks.
+- Final preflight PASS wording is host-major-neutral.
 
-## Expected surfaces
+## Validation performed
 
-- `scripts/preflight-release-readiness.py`
-- this claim file for close-out
-
-## Excluded scope
-
-- No edits to ReleaseReadinessCommands, health services, BOM guard, generated ownership or UI behavior.
-- No changes to release qualification policy or LOCAL_ONLY runtime requirements.
-- No unrelated run #30 failures, GitHub Actions dispatch, build/release publication or BricsCAD runtime qualification.
-
-## Validation plan
-
-- Replace the V25-only phrase requirement with `#if BRICSCAD_V26`, both V25/V26 `ExpectedRuntimeLabel` constants and the shared `ExpectedRuntimeLabel + " runtime/private-DWG gate` wording.
-- Preserve all existing release-health source checks and command uniqueness checks.
-- Update only the final preflight PASS wording to host-major-neutral language.
-- Re-fetch exact gate before write, read back after commit, verify ancestry and close with exact SHA.
-
-## Coordination
-
-Repository search found no active reservation for this release-readiness preflight.
+- Verified the claim commit remained in moving `main` ancestry before implementation; intervening work was unrelated Curved Opening regression registration.
+- Re-fetched the exact gate before writing.
+- Read back the implemented ReleaseReadiness check list from `main` at blob `75a8d1406d7c152a55119d10a62fcf9276927f61`.
+- Re-read current `ReleaseReadinessCommands.cs` and confirmed READY text remains compile-selected through `ExpectedRuntimeLabel`.
+- No production source was changed.
+- No GitHub Actions/build/release dispatch was performed and no BricsCAD V25/V26 runtime PASS is claimed.
 
 ## Completion condition
 
-The release-readiness gate agrees with the shared V25/V26 source contract while retaining all health/ownership checks, is pushed to `main`, and this claim is closed with exact evidence.
+Completed. The release-readiness gate now agrees with the shared V25/V26 source contract while retaining all health/ownership checks, and this reservation is released.
