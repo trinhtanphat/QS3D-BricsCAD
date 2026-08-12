@@ -170,9 +170,7 @@ namespace QS3D.Core.Licensing
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("License path is required.", nameof(path));
             var full = Path.GetFullPath(path);
-            var info = new FileInfo(full);
-            if (!info.Exists) throw new FileNotFoundException("License file was not found.", full);
-            if (info.Length <= 0 || info.Length > MaxLicenseBytes) throw new InvalidDataException("License file size is invalid.");
+            if (!File.Exists(full)) throw new FileNotFoundException("License file was not found.", full);
 
             var settings = new XmlReaderSettings
             {
@@ -182,8 +180,12 @@ namespace QS3D.Core.Licensing
             };
             XDocument document;
             using (var stream = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read))
-            using (var reader = XmlReader.Create(stream, settings))
-                document = XDocument.Load(reader, LoadOptions.None);
+            {
+                if (stream.Length <= 0 || stream.Length > MaxLicenseBytes)
+                    throw new InvalidDataException("License file size is invalid.");
+                using (var reader = XmlReader.Create(stream, settings))
+                    document = XDocument.Load(reader, LoadOptions.None);
+            }
 
             var root = document.Root ?? throw new InvalidDataException("License has no root element.");
             if (!string.IsNullOrEmpty(root.Name.NamespaceName) ||
