@@ -6,7 +6,8 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class QuantityMathUnderflowSmoke
     {
-        private static readonly Type QuantityMathType = typeof(GeometryTolerancePolicy).Assembly.GetType("QS3D.Core.Services.QuantityMath", throwOnError: true);
+        private static readonly Type QuantityMathType = typeof(GeometryTolerancePolicy).Assembly.GetType("QS3D.Core.Services.QuantityMath", throwOnError: true)
+            ?? throw new InvalidOperationException("QuantityMath type was not found.");
 
         internal static void Run()
         {
@@ -28,7 +29,9 @@ namespace QS3D.Core.SmokeTests
 
             try
             {
-                return (double)method.Invoke(null, new object[] { first, second, label });
+                var result = method.Invoke(null, new object[] { first, second, label });
+                if (result is double value) return value;
+                throw new Exception("QuantityMath method did not return a double: " + methodName);
             }
             catch (TargetInvocationException ex) when (ex.InnerException != null)
             {
