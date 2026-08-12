@@ -26,7 +26,11 @@ namespace QS3D.Core.SmokeTests
                     new CurtainWallScheduleRow
                     {
                         FamilyName = new string('A', 32767),
-                        WallCount = 1
+                        WallCount = 1,
+                        MinimumClearPanelWidthM = 0d,
+                        MaximumClearPanelWidthM = 0d,
+                        MinimumClearPanelHeightM = 0d,
+                        MaximumClearPanelHeightM = 0d
                     }
                 });
                 if (!File.Exists(path)) throw new Exception("Curtain XLSX must accept exactly 32,767 text characters.");
@@ -52,7 +56,11 @@ namespace QS3D.Core.SmokeTests
                         new CurtainWallScheduleRow
                         {
                             FamilyName = new string('B', 32768),
-                            WallCount = 1
+                            WallCount = 1,
+                            MinimumClearPanelWidthM = 0d,
+                            MaximumClearPanelWidthM = 0d,
+                            MinimumClearPanelHeightM = 0d,
+                            MaximumClearPanelHeightM = 0d
                         }
                     });
                 }
