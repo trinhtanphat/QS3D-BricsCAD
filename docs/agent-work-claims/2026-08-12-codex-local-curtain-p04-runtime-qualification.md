@@ -1,6 +1,6 @@
 # Work claim — LOCAL-002/P04 licensed Curtain bulged-path qualification
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local-curtain-p04-runtime-qualification-20260812` (`/root`)
 - Registered: `2026-08-12T13:02:00+07:00`
 - Baseline main SHA: `45191c819ee9cae1b20791af779fab61fd008df8`
@@ -33,3 +33,10 @@
 - One host, 215 frames and 168 panels were ownership-disjoint; Health issue count was zero; Locate resolved one panel to one canonical owner; source geometry was preserved.
 - The disposable drawing SHA-256 remained `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`; launched-process exit, private-script deletion and sidecar/backup absence passed. No customer/private/BLT artifact or GitHub Actions workflow was used.
 - This proves bounded tessellated P04 only: `tessellated_fragments_only=true`, `exact_swept_curve_qualified=false`. P05-P12 and overall LOCAL-002 remain `PENDING_LOCAL`.
+
+## Close-out — 2026-08-12
+
+- Claim-only PR `#896` merged as `127292c3945390c86af12a9c0a871248f9ce56f4` before the licensed run.
+- Exact clean SHA `40502704b402b1aa55300f7f187b4fabd355eb40` satisfied every guarded P04 marker and cleanup invariant on installed BricsCAD V25.
+- Evidence/docs PR `#898` merged as `e89e2893a4638489d1e7a322a0dd5a6c2635a86c` with sanitized aggregate evidence and the explicit tessellation-only boundary.
+- P04 is bounded `LOCAL_PASS`; P05-P12 and overall LOCAL-002 remain open and `PENDING_LOCAL`. No Actions, release, signing, packaging or private/customer/BLT artifact was used.
