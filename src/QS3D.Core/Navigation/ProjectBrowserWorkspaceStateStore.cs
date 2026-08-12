@@ -151,16 +151,17 @@ namespace QS3D.Core.Navigation
                 throw new InvalidOperationException("Project browser workspace state exceeds the maximum persisted size.");
             if (project.Metadata.TryGetValue(MetadataKey, out var existing) && string.Equals(existing, serialized, StringComparison.Ordinal))
                 return false;
-            project.Metadata[MetadataKey] = serialized;
             project.Touch();
+            project.Metadata[MetadataKey] = serialized;
             return true;
         }
 
         public bool Clear(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            if (!project.Metadata.Remove(MetadataKey)) return false;
+            if (!project.Metadata.ContainsKey(MetadataKey)) return false;
             project.Touch();
+            project.Metadata.Remove(MetadataKey);
             return true;
         }
 
