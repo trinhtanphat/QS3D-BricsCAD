@@ -147,9 +147,9 @@ namespace QS3D.Core.Persistence
                         DrawingFingerprint = Value(item, "drawingFingerprint")
                     };
                     foreach (var handle in item.Element("handles")?.Elements("h") ?? Enumerable.Empty<XElement>())
-                        if (!string.IsNullOrWhiteSpace(handle.Value)) element.SourceHandles.Add(handle.Value.Trim());
+                        element.SourceHandles.Add(handle.Value);
                     foreach (var dep in item.Element("dependencies")?.Elements("d") ?? Enumerable.Empty<XElement>())
-                        if (!string.IsNullOrWhiteSpace(dep.Value)) element.DependsOn.Add(dep.Value.Trim());
+                        element.DependsOn.Add(dep.Value);
                     ReadStringMap(item.Element("properties"), "p", element.Properties);
                     var quantities = item.Element("quantities");
                     if (quantities != null)
@@ -417,7 +417,6 @@ namespace QS3D.Core.Persistence
                 throw new InvalidDataException("Non-canonical QSDB numeric value: " + value);
             return result;
         }
-
         private static int Int(string? value, int fallback) => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result) ? result : fallback;
 
         private static long ChangeVersion(string? value)
