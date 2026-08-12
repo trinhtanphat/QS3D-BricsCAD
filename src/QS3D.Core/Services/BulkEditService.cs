@@ -116,8 +116,8 @@ namespace QS3D.Core.Services
             var beforeTargetEnumeration = project.ChangeVersion;
             var targets = OwnedDistinctByIds(project, elementIds);
             RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk Family target-id enumeration");
-            RequireFamilyOwnershipUnchanged(project, familyOwnership);
             RequireCurrentFamilyAssignmentOwnership(project, family, targets);
+            RequireFamilyOwnershipUnchanged(project, familyOwnership);
 
             var targetProperties = ProjectFamilyService.SnapshotProperties(family, "Target", "bulk assignment");
             var targetPropertyKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
