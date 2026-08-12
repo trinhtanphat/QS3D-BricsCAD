@@ -1,6 +1,6 @@
 # Work claim — XLSX Handle reader shared-string index validation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-xlsx-handle-shared-string-index-20260812-0720`
 - Registered: `2026-08-12T07:20:00+07:00`
 - Baseline main SHA: `7cbbb0a6f5fe772ca83c4f0fc2aa4211863e4667`
@@ -8,7 +8,7 @@
 
 ## Confirmed defect
 
-`XlsxHandleReader.ReadCells(...)` currently dereferences a cell with `t="s"` only when `<v>` parses to an in-range shared-string index. If the index is non-numeric, negative or out of range, the method leaves the raw `<v>` text as the cell value. In a CAD Handle column, malformed shared-string XML such as `<c r="A2" t="s"><v>123</v></c>` can therefore be interpreted as hexadecimal handle `123` instead of rejecting the malformed workbook.
+`XlsxHandleReader.ReadCells(...)` dereferenced a cell with `t="s"` only when `<v>` parsed to an in-range shared-string index. Otherwise it left the raw `<v>` text as the cell value, allowing malformed shared-string XML in a CAD Handle column to be interpreted as a valid-looking hexadecimal handle.
 
 ## Reserved scope
 
@@ -27,18 +27,27 @@ Fail closed for every `t="s"` cell whose shared-string index is missing, non-num
 - No BLT/ED2 handle parsing policy changes outside malformed shared-string references.
 - No UI/native BricsCAD/runtime, persistence or GitHub Actions work.
 
-## Validation plan
+## Validation implemented
 
-- Build a minimal XLSX ZIP with a valid shared-string table but an out-of-range `t="s"` handle-cell index and require `InvalidDataException` instead of a synthesized handle.
-- Also cover non-numeric and negative shared-string indices if the focused smoke remains small.
-- Preserve valid shared-string lookup and inline-string handle reading.
-- Re-read current source/test after SHA-guarded integration and preserve concurrent history.
-- Source/smoke review only; no .NET or BricsCAD runtime PASS unless actually executed.
+- `t="s"` now always requires a numeric, non-negative, in-range index; invalid references throw `InvalidDataException` instead of preserving raw `<v>` text.
+- Focused smoke creates minimal XLSX ZIPs and covers a valid index plus out-of-range, non-numeric, negative and missing index values.
+- Source commit readback confirms the implementation diff is limited to strict shared-string reference validation.
+- The regression commit remains an ancestor of current `main`; subsequent commit comparison showed no overlap with the reader/smoke files.
+
+## Integration commits
+
+- Claim: `ccb12c9e548263c2db314029e31b2172c59f0293`
+- Source fix: `17d33821aa1d8a8ee3335cea7e424fbdf6c6b298`
+- Focused smoke: `450a0d41be44e80e332f8c7b5c2e2eab999cb8a4`
+
+## Validation boundary
+
+Remote source/smoke review only. No .NET build, BricsCAD V25/V26 runtime qualification, private-DWG/native execution or GitHub Actions run is claimed by this session.
 
 ## Coordination
 
-Recent current-main searches for `XlsxHandleReader` and `shared string index` returned no active owner. This claim is limited to the malformed shared-string reference fail-open path.
+Recent current-main searches for `XlsxHandleReader` and `shared string index` returned no active owner before registration. This claim remained limited to the malformed shared-string reference fail-open path.
 
 ## Completion condition
 
-Completed only when malformed shared-string references fail closed, focused regression source is present on current `main`, exact integration SHAs are recorded and this claim is marked `COMPLETED`.
+Completed: malformed shared-string references fail closed, focused regression source is present on current `main`, and exact integration SHAs are recorded above.
