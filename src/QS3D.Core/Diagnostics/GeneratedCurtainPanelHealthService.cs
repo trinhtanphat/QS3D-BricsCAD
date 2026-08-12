@@ -101,17 +101,33 @@ namespace QS3D.Core.Diagnostics
 
         private static void Mode(ProjectElement element, int openingCount, List<ModelHealthIssue> issues)
         {
-            var mode = element.Properties.TryGetValue("GeneratedCurtainPanelMode", out var raw) ? (raw ?? string.Empty).Trim() : string.Empty;
-            var line = string.Equals(mode, "LinePanelSolids", StringComparison.OrdinalIgnoreCase) || string.Equals(mode, "LinePanelSolids.OpeningAware", StringComparison.OrdinalIgnoreCase);
-            var path = string.Equals(mode, "PathPanelSolids", StringComparison.OrdinalIgnoreCase) || string.Equals(mode, "PathPanelSolids.OpeningAware", StringComparison.OrdinalIgnoreCase);
-            var openingAware = mode.EndsWith(".OpeningAware", StringComparison.OrdinalIgnoreCase);
-            if (!line && !path) Add(issues, "CURTAIN_PANEL_MODE_INVALID", HealthSeverity.Warning, "GeneratedCurtainPanelMode is missing or invalid.", element);
-            else if ((openingCount > 0) != openingAware) Add(issues, "CURTAIN_PANEL_OPENING_MODE_MISMATCH", HealthSeverity.Warning, "Curtain panel opening-aware mode does not match GeneratedCurtainPanelOpeningCount.", element);
+            var rawMode = element.Properties.TryGetValue("GeneratedCurtainPanelMode", out var raw) ? raw ?? string.Empty : string.Empty;
+            var mode = rawMode.Trim();
+            var canonicalMode = string.Empty;
+            if (string.Equals(mode, "LinePanelSolids", StringComparison.OrdinalIgnoreCase)) canonicalMode = "LinePanelSolids";
+            else if (string.Equals(mode, "LinePanelSolids.OpeningAware", StringComparison.OrdinalIgnoreCase)) canonicalMode = "LinePanelSolids.OpeningAware";
+            else if (string.Equals(mode, "PathPanelSolids", StringComparison.OrdinalIgnoreCase)) canonicalMode = "PathPanelSolids";
+            else if (string.Equals(mode, "PathPanelSolids.OpeningAware", StringComparison.OrdinalIgnoreCase)) canonicalMode = "PathPanelSolids.OpeningAware";
+
+            var line = canonicalMode.StartsWith("LinePanelSolids", StringComparison.Ordinal);
+            var path = canonicalMode.StartsWith("PathPanelSolids", StringComparison.Ordinal);
+            var openingAware = canonicalMode.EndsWith(".OpeningAware", StringComparison.Ordinal);
+            if (canonicalMode.Length == 0)
+                Add(issues, "CURTAIN_PANEL_MODE_INVALID", HealthSeverity.Warning, "GeneratedCurtainPanelMode is missing or invalid.", element);
+            else
+            {
+                if (!string.Equals(rawMode, canonicalMode, StringComparison.Ordinal))
+                    Add(issues, "CURTAIN_PANEL_MODE_NON_CANONICAL", HealthSeverity.Error, "GeneratedCurtainPanelMode must use exact writer-owned spelling: " + canonicalMode + ".", element);
+                if ((openingCount > 0) != openingAware)
+                    Add(issues, "CURTAIN_PANEL_OPENING_MODE_MISMATCH", HealthSeverity.Warning, "Curtain panel opening-aware mode does not match GeneratedCurtainPanelOpeningCount.", element);
+            }
             if (!path) return;
             Integer(element, "GeneratedCurtainPanelPathSegmentCount", false, issues, "CURTAIN_PANEL_PATH_SEGMENTS_INVALID");
             Integer(element, "GeneratedCurtainPanelMappedCount", true, issues, "CURTAIN_PANEL_MAPPED_COUNT_INVALID");
             if (!element.Properties.TryGetValue("GeneratedCurtainPanelSourceKind", out var kind) || !string.Equals((kind ?? string.Empty).Trim(), "OpenPolyline", StringComparison.OrdinalIgnoreCase))
                 Add(issues, "CURTAIN_PANEL_PATH_SOURCE_KIND_INVALID", HealthSeverity.Warning, "Path curtain panels require GeneratedCurtainPanelSourceKind=OpenPolyline.", element);
+            else if (!string.Equals(kind, "OpenPolyline", StringComparison.Ordinal))
+                Add(issues, "CURTAIN_PANEL_PATH_SOURCE_KIND_NON_CANONICAL", HealthSeverity.Error, "GeneratedCurtainPanelSourceKind must use exact writer-owned spelling: OpenPolyline.", element);
         }
 
         private static void Fingerprint(ProjectElement element, List<ModelHealthIssue> issues)
