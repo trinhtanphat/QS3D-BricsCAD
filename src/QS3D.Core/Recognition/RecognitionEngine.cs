@@ -92,7 +92,14 @@ namespace QS3D.Core.Recognition
         public EntitySnapshot Snapshot { get; }
         public IReadOnlyList<RecognitionCandidate> Candidates { get; }
         public RecognitionCandidate? TopCandidate => Candidates.Count == 0 ? null : Candidates[0];
-        public double Margin => Candidates.Count < 2 ? (TopCandidate?.Confidence ?? 0d) : Candidates[0].Confidence - Candidates[1].Confidence;
+        public double Margin
+        {
+            get
+            {
+                ValidateCurrentCandidates();
+                return Candidates.Count < 2 ? (TopCandidate?.Confidence ?? 0d) : Candidates[0].Confidence - Candidates[1].Confidence;
+            }
+        }
         public bool IsCaptureReady => TopCandidate != null && EntitySnapshotCaptureEligibility.IsReady(Snapshot, TopCandidate.Category, out _);
         public string CaptureReadinessReason
         {
@@ -113,7 +120,14 @@ namespace QS3D.Core.Recognition
         }
         public string Handle => Snapshot.Handle;
         public string SuggestedCategory => TopCandidate?.Category.ToString() ?? string.Empty;
-        public double Confidence => TopCandidate?.Confidence ?? 0d;
+        public double Confidence
+        {
+            get
+            {
+                ValidateCurrentCandidates();
+                return TopCandidate?.Confidence ?? 0d;
+            }
+        }
         public string Evidence => TopCandidate?.EvidenceText ?? string.Empty;
 
         internal void ValidateCurrentCandidates() => ValidateCandidates(Candidates);

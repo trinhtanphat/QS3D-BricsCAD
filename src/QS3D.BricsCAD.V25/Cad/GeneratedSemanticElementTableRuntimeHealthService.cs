@@ -32,7 +32,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
             QS3D.Core.Documentation.SemanticDocumentationTable expected;
             try { expected = SemanticElementTableBuilder.BuildSnapshot(project); }
-            catch (Exception ex)
+            catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
             {
                 issues.Add(new ModelHealthIssue(
                     "SEMANTIC_ELEMENT_TABLE_RENDER_INVALID",
@@ -116,7 +116,7 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             string actual;
             try { actual = table.TextString(row, column) ?? string.Empty; }
-            catch (Exception ex)
+            catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
             {
                 issues.Add(new ModelHealthIssue(
                     "SEMANTIC_ELEMENT_TABLE_CAD_CELL_UNREADABLE",
@@ -196,7 +196,10 @@ namespace QS3D.BricsCAD.V25.Cad
                 id = database.GetObjectId(false, new Handle(value), 0);
                 return !id.IsNull && id.IsValid;
             }
-            catch { return false; }
+            catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
+            {
+                return false;
+            }
         }
 
         private static bool TryFinite(IDictionary<string, string> metadata, string key, out double value)
@@ -205,6 +208,13 @@ namespace QS3D.BricsCAD.V25.Cad
             return metadata.TryGetValue(key, out var raw) &&
                    double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value) &&
                    !double.IsNaN(value) && !double.IsInfinity(value);
+        }
+
+        private static bool IsRecoverableDiagnosticFailure(Exception exception)
+        {
+            return !(exception is OutOfMemoryException) &&
+                   !(exception is StackOverflowException) &&
+                   !(exception is AccessViolationException);
         }
     }
 }

@@ -1,39 +1,36 @@
 # Work claim — RecognitionResult confidence projection fail-closed
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-recognition-result-confidence-projection-20260812-0850`
 - Registered: `2026-08-12T08:50:00+07:00`
-- Baseline main SHA: `953bc91e46bfbcbb2e089080e1d647f6529c74ac`
+- Actual claim parent SHA: `a53bb86dd12adc37d672938d479f665ff29542a8`
+- Feature branch base SHA: `4c88546c99c6894d41ad496748de763030896213`
 - Priority: evidence-driven remote-safe Recognition integrity during owner-requested continue-all audit
 
 ## Confirmed defect
 
-`RecognitionCandidate.Confidence` remains publicly mutable after a `RecognitionResult` is constructed. Existing hardening validates current candidates in `RequiresReview` and `RecognitionBatch` partitions, but the public `RecognitionResult.Confidence` and `Margin` projections still read the mutable confidence values directly. A caller can therefore mutate a candidate to `NaN`/`Infinity` after construction and receive a non-finite public result instead of the fail-closed behavior already established for recognition readiness/partitioning.
+`RecognitionCandidate.Confidence` remains publicly mutable after a `RecognitionResult` is constructed. Existing hardening validated current candidates in `RequiresReview` and `RecognitionBatch` partitions, but the public `RecognitionResult.Confidence` and `Margin` projections still read mutable confidence values directly. A caller could mutate a candidate to `NaN`/`Infinity` after construction and receive a non-finite public result instead of the fail-closed behavior already established for recognition readiness/partitioning.
 
-## Reserved scope
+## Implemented fix
 
-- Make `RecognitionResult.Confidence` and `RecognitionResult.Margin` validate current candidates before exposing confidence-derived values.
-- Preserve zero/one-candidate semantics and valid confidence arithmetic.
-- Add focused Core smoke coverage for post-construction `NaN`/`Infinity` mutation plus valid projections.
+- `RecognitionResult.Margin` now validates current candidates before exposing confidence-derived arithmetic.
+- `RecognitionResult.Confidence` now validates current candidates before returning the top confidence.
+- Valid zero/one/two-candidate scalar semantics, scoring, thresholds, batch partitioning and capture behavior remain unchanged.
+- Added focused module-initialized smoke coverage for valid projection values, post-construction top-candidate `NaN`, and runner-up positive infinity.
 
-## Expected surfaces
+## Integration evidence
 
-- `src/QS3D.Core/Recognition/RecognitionEngine.cs`
-- focused smoke under `tests/QS3D.Core.SmokeTests/`
-- this claim file
+- Source branch commit: `2822c1af4bd1524da72cdc0c5be3654dbc268384`.
+- Regression branch commit: `3e0ca41eb64f1183ffc6679b4a37d1991393ef49`.
+- PR: `#669`.
+- PR head reviewed: `bd685ba0f378b3bfd8391f7670e2d39d26d0be75`.
+- Squash integration commit on `main`: `8c6b6cc39e64f79c2fa97fa7963f45ead0dee48f`.
+- Remote `main` was re-read after integration and confirms both validating getters and the focused smoke source.
 
-## Excluded scope
+## Coordination / validation boundary
 
-- Recognition scoring, thresholds, rule terms, category compatibility, batch partition logic, capture eligibility, snapshot scanning, UI/native runtime or persistence.
-- No GitHub Actions or LOCAL_ONLY qualification.
-
-## Validation plan
-
-- A valid two-candidate result preserves expected top confidence and margin.
-- Mutating the top candidate confidence to `NaN` makes both `Confidence` and `Margin` fail closed.
-- Mutating the runner-up confidence to positive infinity makes `Margin` fail closed.
-- Existing `RequiresReview` and batch behavior remains unchanged.
+The original claim write raced with moving `main`; the actual claim parent was the unrelated Preview Review composite-key claim `a53bb86d...`. Before integration, moving-main comparisons and direct source readback confirmed no concurrent changes to `RecognitionEngine.cs`. Exact PR patch contained only `RecognitionEngine.cs` plus the focused smoke. No GitHub Actions were dispatched, no local .NET build PASS is claimed, and no licensed BricsCAD V25/V26 runtime PASS is claimed.
 
 ## Completion condition
 
-Focused source and regression are merged to current `main`, remote source/test are re-read, and this claim is closed `COMPLETED` with the integration SHA.
+Satisfied. The lane is released.

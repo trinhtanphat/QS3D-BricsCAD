@@ -223,7 +223,7 @@ namespace QS3D.Core.Templates
             {
                 var pattern = Required(item, "pattern");
                 if (profile.LayerMappings.ContainsKey(pattern)) throw new InvalidDataException("Duplicate template layer mapping: " + pattern);
-                profile.LayerMappings.Add(pattern, Required(item, "category"));
+                profile.LayerMappings.Add(pattern, RequiredCanonicalLayerMappingCategory(item));
                 mappingPatterns.Add(pattern);
             }
             RequireCanonicalOrder(mappingPatterns, "layer mappings");
@@ -352,6 +352,17 @@ namespace QS3D.Core.Templates
                 !string.Equals(raw, category.ToString(), StringComparison.Ordinal))
                 throw new InvalidDataException("Invalid or non-canonical template " + label + " category.");
             return category;
+        }
+
+        private static string RequiredCanonicalLayerMappingCategory(XElement element)
+        {
+            var raw = element.Attribute("category")?.Value;
+            if (string.IsNullOrWhiteSpace(raw) ||
+                !Enum.TryParse(raw, false, out ElementCategory category) ||
+                !Enum.IsDefined(typeof(ElementCategory), category) ||
+                !string.Equals(raw, category.ToString(), StringComparison.Ordinal))
+                throw new InvalidDataException("Invalid or non-canonical template layer mapping category.");
+            return category.ToString();
         }
 
         private static IReadOnlyList<string> ReadCanonicalBqColumns(XElement? container)

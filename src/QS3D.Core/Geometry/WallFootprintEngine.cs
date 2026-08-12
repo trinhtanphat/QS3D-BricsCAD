@@ -7,7 +7,7 @@ namespace QS3D.Core.Geometry
     {
         public WallFootprintResult(IReadOnlyList<Point2> polygon, double centerlineLength, double area, double perimeter, bool usedBevelJoin)
         {
-            Polygon = polygon ?? throw new ArgumentNullException(nameof(polygon));
+            Polygon = new List<Point2>(polygon ?? throw new ArgumentNullException(nameof(polygon))).AsReadOnly();
             CenterlineLength = centerlineLength;
             Area = area;
             Perimeter = perimeter;

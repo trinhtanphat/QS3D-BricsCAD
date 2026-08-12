@@ -26,6 +26,7 @@ namespace QS3D.Core.SmokeTests
             ModelHealthGeneratedGeometryIntegrity();
             FamilyChangeNotification();
             FeatureFlagsNormalizeLookupNames();
+            FeatureFlagSnapshotsAreReadOnly();
             FormulaEvaluatorIsConcurrent();
             FormulaEvaluatorHasResourceGuards();
             FormulaRoundingAndSmallDivisor();
@@ -189,6 +190,26 @@ namespace QS3D.Core.SmokeTests
 
             flags.Set("hardening.flag", false);
             True(!flags.IsEnabled("  Hardening.Flag  "));
+        }
+
+        private static void FeatureFlagSnapshotsAreReadOnly()
+        {
+            var flags = new FeatureFlags();
+            flags.Set("snapshot.flag", true);
+
+            var snapshot = flags.Snapshot();
+            True(snapshot["SNAPSHOT.FLAG"]);
+
+            flags.Set("snapshot.flag", false);
+            flags.Set("later.flag", true);
+            True(snapshot["snapshot.flag"]);
+            True(!snapshot.ContainsKey("later.flag"));
+
+            if (snapshot is IDictionary<string, bool> mutable)
+            {
+                Throws<NotSupportedException>(() => mutable["snapshot.flag"] = false);
+                True(snapshot["snapshot.flag"]);
+            }
         }
 
         private static void FormulaEvaluatorIsConcurrent()
