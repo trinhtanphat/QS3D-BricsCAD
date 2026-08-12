@@ -1,6 +1,6 @@
 # Work claim — QSDB current-schema changeVersion contract sync
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-12T13:57:10+07:00`
 - Baseline main SHA: `a4abd6deb170c4332db72f659814b9852a6f764c`
@@ -29,8 +29,8 @@ Align the registered QSDB save smoke and schema preflight with the current stric
 
 - `ProjectSchemaMigrator.ValidateCurrentPersistenceState` requires nonblank `changeVersion` after version migration.
 - `QsdbTimestampValidationSmoke` explicitly registers `RejectsMissingCurrentChangeVersion()` and `RejectsBlankCurrentChangeVersion()`.
-- `QsdbSaveAtomicitySmoke` is registered earlier in `SmokeTestRegistration.RunAll()` but still calls `LegacyFileDefaultsChangeVersion()`, removes `changeVersion` from a real schema-3 file, and expects load success/default zero. That contradicts the current strict schema-3 contract.
-- `scripts/preflight-qsdb-schema.py` still requires the removed same-schema backfill and the stale save-smoke compatibility tokens.
+- `QsdbSaveAtomicitySmoke` was registered earlier in `SmokeTestRegistration.RunAll()` but still called `LegacyFileDefaultsChangeVersion()`, removed `changeVersion` from a real schema-3 file, and expected load success/default zero. That contradicted the current strict schema-3 contract.
+- `scripts/preflight-qsdb-schema.py` still required the removed same-schema backfill and stale save-smoke compatibility tokens.
 
 ## Validation plan
 
@@ -39,6 +39,16 @@ Align the registered QSDB save smoke and schema preflight with the current stric
 - Read back exact diffs and confirm no production source changed.
 - Do not claim executable full smoke/preflight/build/Actions/runtime PASS unless actually executed.
 
+## Completion
+
+- Smoke correction: `c9b6b52fb64ca332dd828815716e94eefb3a75ed` (`test(persistence): reject missing current changeVersion`).
+- Schema preflight correction: `e36c5a6d5bd9997388294e7b6fea426448ac5be3` (`test(preflight): align QSDB current schema strictness`).
+- Readback confirms the save smoke now removes `changeVersion` from a real current schema-3 file and requires `InvalidDataException`; successful round-trip and malformed-value coverage remain intact.
+- Readback confirms the preflight guards strict current-schema validation and scopes `changeVersion=0` synthesis to `MigrateV2ToV3`, while retaining legacy-v1 migration coverage.
+- Production `ProjectSchemaMigrator.cs`, `QsdbProjectStore.cs`, and timestamp validation source were not changed.
+- Two attempted atomic ref updates were rejected as non-fast-forward because `main` advanced concurrently; no force-push occurred. The final two file writes used exact existing blob SHA guards and landed safely on current `main`.
+- No GitHub Actions were dispatched. No executable full smoke/preflight/build or BricsCAD runtime PASS is claimed.
+
 ## Completion condition
 
-Pushed `main` commits make the registered test surfaces and schema preflight agree with the already-enforced current schema-3 contract, followed by this claim marked `COMPLETED` with exact SHAs.
+Satisfied by pushed commits `c9b6b52fb64ca332dd828815716e94eefb3a75ed` and `e36c5a6d5bd9997388294e7b6fea426448ac5be3`, followed by this completion record on `main`.
