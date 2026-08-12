@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             EndpointTouchIsAcceptedButOverlapFailsClosed();
             LineArcRespectsArcSweep();
             ArcArcProducesTwoPointsWhenBothSweepsContainThem();
+            LargeFiniteArcArcProducesFinitePoints();
             CoincidentArcSupportFailsClosed();
             DuplicateElementIdsFailClosed();
             ElementIdsAreCanonicalizedBeforeDuplicateCheck();
@@ -74,6 +75,21 @@ namespace QS3D.Core.SmokeTests
             Near(4.0, result[1].Point.Y);
         }
 
+        private static void LargeFiniteArcArcProducesFinitePoints()
+        {
+            const double radius = 1e200;
+            var first = GridReferenceCurve.Arc("G-LARGE-A", new Point2(0.0, 0.0), radius, 0.0, Math.PI * 2.0);
+            var second = GridReferenceCurve.Arc("G-LARGE-B", new Point2(radius, 0.0), radius, 0.0, Math.PI * 2.0);
+
+            var result = GridIntersectionPlanner.FindIntersections(new[] { first, second });
+
+            Equal(2, result.Count);
+            NearRelative(5e199, result[0].Point.X, 1e-14);
+            NearRelative(-8.660254037844386e199, result[0].Point.Y, 1e-14);
+            NearRelative(5e199, result[1].Point.X, 1e-14);
+            NearRelative(8.660254037844386e199, result[1].Point.Y, 1e-14);
+        }
+
         private static void CoincidentArcSupportFailsClosed()
         {
             Throws<InvalidOperationException>(() => GridIntersectionPlanner.FindIntersections(new[]
@@ -120,6 +136,15 @@ namespace QS3D.Core.SmokeTests
         private static void Near(double expected, double actual)
         {
             if (Math.Abs(expected - actual) > 1e-7) throw new Exception("Expected " + expected + ", got " + actual + ".");
+        }
+
+        private static void NearRelative(double expected, double actual, double relativeTolerance)
+        {
+            if (double.IsNaN(actual) || double.IsInfinity(actual))
+                throw new Exception("Expected a finite value, got " + actual + ".");
+            var scale = Math.Max(1.0, Math.Abs(expected));
+            if (Math.Abs(expected - actual) > scale * relativeTolerance)
+                throw new Exception("Expected " + expected + ", got " + actual + ".");
         }
 
         private static void Equal<T>(T expected, T actual)
