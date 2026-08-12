@@ -137,8 +137,11 @@ namespace QS3D.Core.Domain
             {
                 var next = RequireProjectName(value);
                 if (string.Equals(_name, next, StringComparison.Ordinal)) return;
+                var nextChangeVersion = checked(ChangeVersion + 1L);
+                var nextUpdatedUtc = DateTime.UtcNow;
                 _name = next;
-                Touch();
+                UpdatedUtc = nextUpdatedUtc;
+                ChangeVersion = nextChangeVersion;
             }
         }
         public string DrawingPath { get; set; } = string.Empty;
