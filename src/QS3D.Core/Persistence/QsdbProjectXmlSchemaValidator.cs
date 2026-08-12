@@ -181,6 +181,7 @@ namespace QS3D.Core.Persistence
                     "event",
                     new[] { "utc", "action", "elementId", "detail", "actor", "correlationId" },
                     Array.Empty<string>());
+                ValidateRequiredCanonicalAttribute(item, "action", "audit action");
             }
         }
 
