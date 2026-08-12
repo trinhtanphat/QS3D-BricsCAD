@@ -1,8 +1,9 @@
 # Work claim — LOCAL-014 Plan-to-3D P01 quick-path probe
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local-root` (`/root`, local Windows + licensed BricsCAD V25)
 - Registered: `2026-08-12T09:55:29+07:00`
+- Completed: `2026-08-12T10:21:04+07:00`
 - Baseline main SHA: `26e769a351e1d6f1ac6ec5f12074537f5a6d0240`
 - Priority: `LOCAL-014 / P1` — establish the first exact-SHA, reproducible native proof for the BLT-style 2D plan -> semantic wall -> owned Solid3d quick workflow.
 
@@ -67,3 +68,15 @@ Expand this claim narrowly to reserve:
 - `docs/LOCAL-AGENT-INBOX.md` / this claim — record only exact clean-SHA P01 evidence after strict build and runtime pass; full LOCAL-014 remains OPEN/PENDING.
 
 No other wall/path builder, Plan-to-3D orchestration, Core, persistence, quantity, Ribbon, private fixture or workflow is added. Before the product edit, publish this expansion on `main`; then run strict V25 build, focused gates and the exact-clean-SHA P01 probe again. If the strict build remains blocked by unrelated current-main compile debt, runtime output is diagnostic only and must not be promoted to P01 PASS.
+
+## Completion evidence
+
+- Claim-only reservation merged through PR `#728`; native Z-placement expansion merged through claim-only PR `#743` before the product edit.
+- Probe/runner/gates merged through PRs `#737`, `#738` and `#742`; the centered native LINE-wall placement correction merged through PR `#744`; the separately reserved Core null-flow compile reconciliation merged through PR `#748`.
+- Exact clean source SHA: `21ca2d08427013f3ef8154708fef85fb2454ff8f`.
+- Strict BricsCAD V25 `Release|x64` build: PASS, zero warnings/errors.
+- Runtime: BricsCAD V25.2.10 x64, profile `QS3DReleaseAutomation-20260810`, plugin SHA-256 `3CF3F79C22A8659743E4CC72F777CD30596ED794775714C6F0A342C477E2200C`.
+- Result: two bounded LINE sources -> two semantic `ArchitecturalWall` elements -> two live owned Solid3d outputs; fallback `ThicknessM=0.2`, `HeightM=3`, `BottomOffsetM=0`; source retained, ownership disjoint, native bounds verified, Core/runtime blocking Health errors `0/0`.
+- Disposable synthetic copy SHA-256 remained `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`; no `.qsdb`/backup/lock, `.scr` or launched BricsCAD process remained.
+- Focused Plan-to-3D runtime/quick/finish/lifecycle/source-geometry/scoped-regeneration gates plus `scripts/preflight.py` passed on the exact candidate. The broader aggregate/full smoke state remains independent moving-main work and is not claimed by this P01.
+- Boundary remains explicit in the marker: `qualification_boundary=P01_QUICK_POSITIVE_ONLY` and `production_local014_qualified=false`. LOCAL-014 stays OPEN/PENDING for every excluded matrix item listed above.
