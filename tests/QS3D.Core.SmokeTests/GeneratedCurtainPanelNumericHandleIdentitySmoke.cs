@@ -14,6 +14,8 @@ namespace QS3D.Core.SmokeTests
         {
             NumericEquivalentLiveHandleIsAccepted();
             NumericEquivalentDuplicateSpellingsAreRejected();
+            NumericEquivalentSourceHandleIsRejected();
+            DistinctSourceHandleIsAccepted();
             TrulyMissingLiveHandleIsRejected();
         }
 
@@ -43,6 +45,30 @@ namespace QS3D.Core.SmokeTests
             RequireIssue(issues, setup.Element.Id, "DUPLICATE_CURTAIN_PANEL_GENERATED_HANDLE");
             ForbidIssue(issues, setup.Element.Id, "CURTAIN_PANEL_GENERATED_SOLID_MISSING");
             ForbidIssue(issues, setup.Element.Id, "CURTAIN_PANEL_COUNT_MISMATCH");
+        }
+
+        private static void NumericEquivalentSourceHandleIsRejected()
+        {
+            var setup = Create("SOURCE-ALIAS", "A", "1");
+            setup.Element.SourceHandles.Add("0A");
+            var beforeVersion = setup.Project.ChangeVersion;
+
+            var issues = new GeneratedCurtainPanelHealthService().Inspect(setup.Project);
+
+            Equal(beforeVersion, setup.Project.ChangeVersion);
+            RequireIssue(issues, setup.Element.Id, "CURTAIN_PANEL_GENERATED_HANDLE_IN_SOURCE");
+        }
+
+        private static void DistinctSourceHandleIsAccepted()
+        {
+            var setup = Create("SOURCE-DISTINCT", "A", "1");
+            setup.Element.SourceHandles.Add("B");
+            var beforeVersion = setup.Project.ChangeVersion;
+
+            var issues = new GeneratedCurtainPanelHealthService().Inspect(setup.Project);
+
+            Equal(beforeVersion, setup.Project.ChangeVersion);
+            ForbidIssue(issues, setup.Element.Id, "CURTAIN_PANEL_GENERATED_HANDLE_IN_SOURCE");
         }
 
         private static void TrulyMissingLiveHandleIsRejected()
