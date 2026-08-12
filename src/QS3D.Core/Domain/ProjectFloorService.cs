@@ -81,7 +81,7 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var floor = FindRequired(project, floorId);
-            if (string.Equals((project.ActiveFloorId ?? string.Empty).Trim(), floor.Id, StringComparison.OrdinalIgnoreCase)) return;
+            if (string.Equals(project.ActiveFloorId, floor.Id, StringComparison.Ordinal)) return;
             project.Touch();
             project.ActiveFloorId = floor.Id;
         }
