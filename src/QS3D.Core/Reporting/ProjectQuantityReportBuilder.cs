@@ -127,6 +127,7 @@ namespace QS3D.Core.Reporting
         private static HashSet<string>? ResolveSelection(ProjectState project, IEnumerable<string>? elementIds)
         {
             if (elementIds == null) return null;
+            var selectionVersion = project.ChangeVersion;
             var selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var selectedInstances = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var raw in elementIds)
@@ -138,6 +139,9 @@ namespace QS3D.Core.Reporting
                 var element = project.FindElement(id) ?? throw new KeyNotFoundException("Unknown quantity report element: " + id);
                 selectedInstances.Add(id, element);
             }
+
+            if (project.ChangeVersion != selectionVersion)
+                throw new InvalidOperationException("Project changed while quantity report element ids were being enumerated; recompute the selection against the current project state.");
 
             ReportingProjectIdentityGuard.RequireUniqueElementIds(project, "Quantity report selection");
             foreach (var selectedInstance in selectedInstances)
