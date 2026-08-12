@@ -8,6 +8,7 @@ text = SOURCE.read_text(encoding="utf-8")
 required = [
     '[CommandMethod("QS3DDRAWWALLREF", CommandFlags.Modal | CommandFlags.UsePickSet)]',
     '[CommandMethod("QS3DDRAWWALLREFADV", CommandFlags.Modal | CommandFlags.UsePickSet)]',
+    'var reference = AcquireReferenceLine(document);',
     'var implied = document.Editor.SelectImplied();',
     'if (objectIds.Length == 1)',
     'ReadReferenceLine(document, objectIds[0], failIfNotLine: false)',
@@ -22,15 +23,14 @@ missing = [needle for needle in required if needle not in text]
 if missing:
     raise SystemExit("reference-wall PICKFIRST contract missing: " + " | ".join(missing))
 
-acquire = text.index("private static ReferenceLinePlan? AcquireReferenceLine")
-preview = text.index("var projectPreview = DirectDrawProjectPreviewContext.Capture(document);")
-if acquire < preview:
-    pass
-else:
-    raise SystemExit("reference acquisition must remain before project preview/mutation")
+acquire_call = text.index("var reference = AcquireReferenceLine(document);")
+preview = text.index("var projectPreview = DirectDrawProjectPreviewContext.Capture(document);", acquire_call)
+if acquire_call >= preview:
+    raise SystemExit("reference acquisition call must remain before project preview/mutation")
 
-select_implied = text.index("var implied = document.Editor.SelectImplied();", acquire)
-get_entity = text.index("var result = document.Editor.GetEntity(options);", acquire)
+acquire_method = text.index("private static ReferenceLinePlan? AcquireReferenceLine")
+select_implied = text.index("var implied = document.Editor.SelectImplied();", acquire_method)
+get_entity = text.index("var result = document.Editor.GetEntity(options);", acquire_method)
 if select_implied >= get_entity:
     raise SystemExit("PICKFIRST must be attempted before interactive GetEntity fallback")
 
@@ -42,4 +42,4 @@ for forbidden in (
     if forbidden in text:
         raise SystemExit("forbidden broad/creating path introduced: " + forbidden)
 
-print("PASS: Direct Draw Reference Wall consumes exactly one preselected LINE before prompt fallback while preserving source-safe scoped authoring.")
+print("PASS: Direct Draw Reference Wall consumes exactly one preselected LINE before prompt fallback and before project preview/mutation while preserving source-safe scoped authoring.")
