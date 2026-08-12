@@ -320,9 +320,16 @@ namespace QS3D.Core.Export
             }
 
             foreach (var element in target.Elements)
+            {
+                var dependencyIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var dependency in element.DependsOn)
+                {
+                    if (!dependencyIds.Add(dependency))
+                        throw new InvalidOperationException("Target element " + element.Id + " contains duplicate dependency " + dependency + ".");
                     if (!elementIds.Contains(dependency))
                         throw new InvalidOperationException("Target element " + element.Id + " references missing dependency " + dependency + ".");
+                }
+            }
         }
 
         private static string FamilyNameKey(ElementCategory category, string name) => category + "\u001f" + (name ?? string.Empty).Trim();
