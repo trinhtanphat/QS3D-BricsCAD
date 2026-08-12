@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             MissingMetadataReturnsDefaultWithoutMutation();
+            NullMetadataFailsWithoutMutation();
             EmptyMetadataFailsWithoutMutation();
             WhitespaceMetadataFailsWithoutMutation();
             CanonicalMetadataStillLoadsWithoutMutation();
@@ -34,6 +35,11 @@ namespace QS3D.Core.SmokeTests
             AssertFreshnessUnchanged(project, beforeUpdatedUtc, beforeVersion, "missing metadata load");
         }
 
+        private static void NullMetadataFailsWithoutMutation()
+        {
+            AssertCorruptMetadataFailsWithoutMutation(null, "null");
+        }
+
         private static void EmptyMetadataFailsWithoutMutation()
         {
             AssertCorruptMetadataFailsWithoutMutation(string.Empty, "empty");
@@ -44,10 +50,10 @@ namespace QS3D.Core.SmokeTests
             AssertCorruptMetadataFailsWithoutMutation("   ", "whitespace");
         }
 
-        private static void AssertCorruptMetadataFailsWithoutMutation(string serialized, string label)
+        private static void AssertCorruptMetadataFailsWithoutMutation(string? serialized, string label)
         {
             var project = NewProject(label);
-            project.Metadata[ProjectBrowserWorkspaceStateStore.MetadataKey] = serialized;
+            project.Metadata[ProjectBrowserWorkspaceStateStore.MetadataKey] = serialized!;
             var beforeUpdatedUtc = project.UpdatedUtc;
             var beforeVersion = project.ChangeVersion;
 
