@@ -1,6 +1,6 @@
 # Work claim — QSDB canonical UTC timestamp preflight sync
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-12T13:54:20+07:00`
 - Baseline main SHA: `3c6bf9bdafd0651e372c41e89a01cc4396674889`
@@ -35,6 +35,14 @@ Reconcile `scripts/preflight-qsdb-timestamp-offset.py` with the current QSDB tim
 
 This is a narrow static-script reconciliation after PR #904 updated the timestamp fixtures while explicitly leaving the timestamp/schema preflights stale. It does not modify current Formula, Grid, Preview Review, XLSX, handle-identity, quantity, EntitySnapshot, interchange, or other active source lanes.
 
+## Completion
+
+- Implementation commit: `0f8b857503b9c0e921c2ec221377603b98e52af9` (`test(preflight): enforce canonical QSDB UTC timestamps`).
+- Readback diff confirms only `scripts/preflight-qsdb-timestamp-offset.py` changed.
+- The guard now requires the production canonical-UTC comparison (`utc.ToString("O")`, exact input equality, fail-closed non-canonical timestamp) and the smoke contract (`ExplicitNonUtcOffsetIsRejected`, `MissingOffsetIsRejected`, `CanonicalUtcRoundTripLoads`).
+- Production `QsdbProjectStore.cs` and `QsdbTimestampOffsetSmoke.cs` were read-only.
+- No GitHub Actions were dispatched. No executable preflight/build or BricsCAD runtime PASS is claimed.
+
 ## Completion condition
 
-A pushed `main` commit makes the dedicated timestamp preflight require current canonical-UTC parser and regression tokens, then this claim is marked `COMPLETED` with exact implementation SHA and validation actually performed.
+Satisfied by pushed implementation `0f8b857503b9c0e921c2ec221377603b98e52af9` and this completion record on `main`.
