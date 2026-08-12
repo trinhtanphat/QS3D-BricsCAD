@@ -22,6 +22,10 @@ if not errors:
         errors.append("RevisionSnapshotStore.Load must validate XML shape before reading snapshot fields")
 
     required = [
+        'var document = root.Document;',
+        'foreach (var node in document.Nodes())',
+        'ReferenceEquals(node, root)',
+        'Unsupported QS3D revision document-level XML content.',
         'ValidateElement(root, "qs3dRevision", new[] { "id", "createdUtc" }, new[] { "elements" })',
         'RequireExactlyOne(root, "elements")',
         'parent.Elements(name).Take(2).Count() != 1',
@@ -44,6 +48,11 @@ if not errors:
     for token in required:
         if token not in validator:
             errors.append("revision schema validator missing contract token: " + token)
+
+    document_guard = validator.find("var document = root.Document;")
+    root_shape = validator.find('ValidateElement(root, "qs3dRevision"')
+    if min(document_guard, root_shape) < 0 or not document_guard < root_shape:
+        errors.append("revision document-level XML content must be rejected before root schema parsing")
 
     cdata = validator.find("if (node is XCData)")
     text = validator.find("if (node is XText text)")
@@ -71,4 +80,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: revision XML load requires canonical containers, rejects CDATA before XText, and fails closed on foreign namespaces and unknown XML content.")
+print("PASS: revision XML load rejects document-level sibling nodes and CDATA, requires canonical containers, and fails closed on foreign namespaces and unknown XML content.")
