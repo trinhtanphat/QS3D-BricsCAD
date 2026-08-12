@@ -60,6 +60,7 @@ v26_manifest_probe = read("src/QS3D.BricsCAD.V26/Updates/UpdateManifestProbe.cs"
 v26_launcher = read("src/QS3D.BricsCAD.V26/Updates/SecureUpdateLauncher.cs")
 v26_update_command = read("src/QS3D.BricsCAD.V26/Updates/UpdateCommands.cs")
 v26_entry = read("src/QS3D.BricsCAD.V26/PluginEntry.cs")
+build_props = read("Directory.Build.props")
 
 for token in (
     ".Replace('V25', 'V26').Replace('v25', 'v26')",
@@ -151,9 +152,28 @@ for text, label, asset in (
 for token in ("QS3D-BricsCAD-V25.update.json", "QS3D-BricsCAD-V25-Updater"):
     forbid(v26_release_client, token, "V26 release client")
 
+# V26 targets .NET 8 with warnings-as-errors. Keep updater HTTP on HttpClient so
+# obsolete WebRequest/CreateHttp (SYSLIB0014) cannot re-enter this release lane.
+require(build_props, "<TreatWarningsAsErrors>true</TreatWarningsAsErrors>", "Directory.Build.props")
+for text, label in (
+    (v26_release_client, "V26 release client"),
+    (v26_manifest_probe, "V26 manifest probe"),
+):
+    for token in (
+        "using System.Net.Http;",
+        "HttpClient",
+        "HttpClientHandler",
+        "HttpCompletionOption.ResponseHeadersRead",
+        "CancellationTokenSource",
+        "Timeout.InfiniteTimeSpan",
+    ):
+        require(text, token, label)
+    for token in ("WebRequest.CreateHttp", "HttpWebRequest"):
+        forbid(text, token, label)
+
 for token in (
     'private const string Target = "BricsCAD V26 x64";',
-    'request.UserAgent = "QS3D-BricsCAD-V26-Updater";',
+    'request.Headers.UserAgent.ParseAdd("QS3D-BricsCAD-V26-Updater")',
     '"QS3D-BricsCAD-V26.zip"',
     "GitHubReleaseClient.UpdateManifestAssetName",
     "schemaVersion 2",
@@ -254,4 +274,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: V26 packaging preserves current hardened V25 transaction/security logic under guarded major transformation; V25/V26 discovery is manifest-channel isolated; V26 publication revalidates remote tag identity and uploaded asset bytes before publish.")
+print("PASS: V26 packaging preserves current hardened V25 transaction/security logic under guarded major transformation; .NET 8 update networking is HttpClient-only; discovery is manifest-channel isolated; publication revalidates remote tag identity and uploaded asset bytes before publish.")
