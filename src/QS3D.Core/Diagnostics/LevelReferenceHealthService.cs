@@ -15,7 +15,10 @@ namespace QS3D.Core.Diagnostics
             var duplicateFloorIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var floor in project.Floors)
             {
-                if (floor == null || string.IsNullOrWhiteSpace(floor.Id)) continue;
+                if (floor == null)
+                    throw new InvalidOperationException("Level-reference diagnostics cannot inspect a project containing a null Floor/Level entry.");
+                if (string.IsNullOrWhiteSpace(floor.Id))
+                    throw new InvalidOperationException("Level-reference diagnostics cannot inspect a Floor/Level with a blank semantic id.");
                 var id = floor.Id.Trim();
                 if (!floors.ContainsKey(id))
                 {
@@ -28,7 +31,8 @@ namespace QS3D.Core.Diagnostics
 
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Level-reference diagnostics cannot inspect a project containing a null semantic element.");
                 var issueCountBefore = issues.Count;
                 var bottomId = Property(element, ProjectFloorService.BottomLevelIdKey);
                 var topId = Property(element, ProjectFloorService.TopLevelIdKey);
