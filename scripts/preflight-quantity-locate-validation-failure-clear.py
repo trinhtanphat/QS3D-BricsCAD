@@ -74,11 +74,13 @@ for needle in (
     'string.Equals(button.Content as string, "Định vị", StringComparison.Ordinal)',
     "Window.GetWindow(button) as QuantitySummaryWindow",
     "Window.GetWindow(grid) as QuantitySummaryWindow",
-    "!owner._detailMode || owner.AutoRevealCheck?.IsChecked != true",
-    "owner._detailMode && owner.AutoRevealCheck?.IsChecked == true",
+    "owner.AutoRevealCheck?.IsChecked != true",
+    "owner.AutoRevealCheck?.IsChecked == true",
 ):
     if needle not in summary_guard:
         errors.append("Summary guard missing trigger/ownership contract: " + needle)
+if "owner._detailMode" in summary_guard:
+    errors.append("Summary locate pre-clear must follow Follow3D parity and must not restrict triggers by Detail/Summary mode")
 
 if summary_xaml.count('Content="Định vị" Click="OnLocateClick"') != 1:
     errors.append("Summary XAML must expose exactly one explicit Định vị button")
@@ -149,5 +151,6 @@ if errors:
 
 print(
     "PASS: quantity locate triggers pre-clear only the same active DWG before validation, "
-    "wrong-DWG behavior remains non-clearing, and canonical locate selection/zoom contracts remain intact."
+    "Summary Follow3D parity covers both Summary/Detail modes, wrong-DWG behavior remains non-clearing, "
+    "and canonical locate selection/zoom contracts remain intact."
 )
