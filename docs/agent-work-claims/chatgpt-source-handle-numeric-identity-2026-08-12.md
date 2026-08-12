@@ -10,5 +10,8 @@
 - Shared files: `none`
 - Dependencies: `GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity`
 - Validation owner: `chatgpt-gpt56-sol-source-handle-numeric-identity`
-- Test transfer: `Extend SourceHandleResolverSafetySmoke with same-element numeric alias rejection and cross-element numeric alias deduplication; do not dispatch GitHub Actions.`
-- Status: `ACTIVE`
+- Test transfer: `Focused numeric-alias coverage landed in the already auto-registered SourceHandleResolverSafetySmoke. No GitHub Actions dispatched.`
+- Status: `COMPLETED`
+- Source: `725829cf1b94c9a0f7224029cc2d67406de55f1e`
+- Regression: `37ac14ac287052f619a6ab35f223d9378049877a`
+- Validation: `GitHub commit readback confirmed the intended numeric-identity source/test diffs; no combined CI status was present on the regression commit. Licensed BricsCAD runtime qualification was not claimed.`
