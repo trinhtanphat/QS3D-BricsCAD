@@ -54,7 +54,7 @@ namespace QS3D.Core.Licensing
         {
             ValidateToken(LicenseId, nameof(LicenseId), 128);
             ValidateToken(CustomerId, nameof(CustomerId), 256);
-            ValidateToken(ProductId, nameof(ProductId), 128);
+            ValidateProductId(ProductId);
             ValidateToken(Nonce, nameof(Nonce), 256);
             if (NotBeforeUtc.Kind != DateTimeKind.Utc || ExpiresUtc.Kind != DateTimeKind.Utc)
                 throw new InvalidDataException("License validity timestamps must be UTC.");
@@ -67,6 +67,11 @@ namespace QS3D.Core.Licensing
                 if (feature.IndexOf(',') >= 0) throw new InvalidDataException("License feature contains the reserved ',' delimiter.");
                 if (!seen.Add(feature)) throw new InvalidDataException("Duplicate license feature: " + feature);
             }
+        }
+
+        internal static void ValidateProductId(string value)
+        {
+            ValidateToken(value, nameof(ProductId), 128);
         }
 
         private static void ValidateToken(string value, string name, int maximumLength)
@@ -132,6 +137,14 @@ namespace QS3D.Core.Licensing
         {
             if (license == null) throw new ArgumentNullException(nameof(license));
             if (string.IsNullOrWhiteSpace(expectedProductId)) throw new ArgumentException("Expected product id is required.", nameof(expectedProductId));
+            try
+            {
+                LicenseDocument.ValidateProductId(expectedProductId);
+            }
+            catch (InvalidDataException ex)
+            {
+                throw new ArgumentException("Expected product id must be a canonical license ProductId.", nameof(expectedProductId), ex);
+            }
             if (nowUtc.Kind != DateTimeKind.Utc) throw new ArgumentException("Verification time must be UTC.", nameof(nowUtc));
             license.Validate();
             if (!string.Equals(license.ProductId, expectedProductId, StringComparison.Ordinal))
