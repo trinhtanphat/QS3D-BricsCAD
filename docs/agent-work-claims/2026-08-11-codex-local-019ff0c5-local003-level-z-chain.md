@@ -334,3 +334,11 @@ Baseline audited after a clean fetch and fast-forward: `origin/main@fe4337496bc8
 The full Core smoke next reaches `LicenseSignatureNodeShapeSmoke.AcceptsOrdinaryTextSignature()`, whose older valid control wraps `AA==` in surrounding whitespace. The completed signature Base64 canonicality contract now intentionally rejects both surrounding and embedded whitespace while preserving exact canonical text and the separate non-text-node rejection contract. Both owning licensing claims are `COMPLETED`, and the current ACTIVE/BLOCKED audit found no reservation for this exact fixture.
 
 Reserve only `tests/QS3D.Core.SmokeTests/LicenseSignatureNodeShapeSmoke.cs` to rename the valid-control method/message to canonical text and use exact `AA==` content. Preserve comment, CDATA and processing-instruction rejection, decoded byte assertion, XML structure and production `LicenseVerifier` unchanged. Re-run the complete Core smoke after this fixture-only reconciliation.
+
+## 2026-08-12 Project Browser dirty-tracking fixture reconciliation expansion
+
+Baseline audited after a clean fetch and fast-forward: `origin/main@4e49bedf178f560b6fa97a3713a28f1cced3cf8c`.
+
+The full Core smoke next reaches `ProjectBrowserWorkspaceDirtyTrackingSmoke.cs`, whose older regression expects persisted presentation-state Save/Clear to increment semantic `ProjectState.ChangeVersion`, make `ProjectPersistenceStamp.RequiresSave()` true, and overflow at `long.MaxValue`. The completed semantic-version-isolation fix intentionally restored the opposite product contract: workspace presentation metadata mutates without touching semantic revision, so it remains invisible to the semantic persistence stamp and can Save/Clear at maximum semantic version. The old dirty-tracking/revision-atomicity claims and the superseding semantic-version claim are all `COMPLETED`; the current ACTIVE/BLOCKED audit found no reservation for this exact fixture.
+
+Reserve only that smoke file to assert Save/change/Clear mutate only workspace metadata while semantic version/timestamp/stamp remain unchanged; convert the two maximum-version overflow cases into successful presentation-only Save/Clear controls. Preserve changed/no-op return values, metadata presence/removal, exact maximum version and production store/stamp code unchanged. Re-run the complete Core smoke after this fixture-only reconciliation.
