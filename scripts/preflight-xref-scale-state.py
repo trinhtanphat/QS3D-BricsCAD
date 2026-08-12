@@ -142,7 +142,7 @@ if XAML.is_file():
         'GridViewColumn Header="Khóa"',
         'GridViewColumn Header="SL"',
         'DisplayMemberBinding="{Binding InstanceText}"',
-        'GridViewColumn Header="Tỉ lệ"',
+        'GridViewColumn Header="Tỉ lệ Xref"',
         'DisplayMemberBinding="{Binding ScaleText}"',
         'Content="+ Thêm"',
         'Click="OnReloadXrefClick"',
@@ -156,7 +156,7 @@ if XAML.is_file():
         if needle not in text:
             errors.append("RightPanel.xaml missing scale/preserved Xref action contract: " + needle)
     if 'GridViewColumn Header="Loại"' in text:
-        errors.append("drawing manager must use the screenshot-style Tỉ lệ display column instead of the redundant Loại column")
+        errors.append("drawing manager must use the clarified Tỉ lệ Xref display column instead of the redundant Loại column")
 
 if CORE.is_file():
     text = CORE.read_text(encoding="utf-8")
@@ -191,4 +191,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: drawing manager reports read-only current-space Xref scale state with mixed/non-uniform handling, notifying row enrichment, screenshot-style Tỉ lệ display, and all prior Xref/layer actions preserved.")
+print("PASS: drawing manager reports read-only current-space Xref scale state with mixed/non-uniform handling, notifying row enrichment, clarified Tỉ lệ Xref display, and all prior Xref/layer actions preserved.")
