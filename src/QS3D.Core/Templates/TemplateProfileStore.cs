@@ -256,10 +256,16 @@ namespace QS3D.Core.Templates
             var duplicateOutput = projectedRules.Values.GroupBy(x => x.Category + "\u001f" + x.OutputName, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicateOutput != null) throw new InvalidOperationException("Template would create multiple project rules for the same category/output: " + duplicateOutput.Key);
 
+            var projectMappings = project.Metadata
+                .Where(x => x.Key.StartsWith(LayerMappingPrefix, StringComparison.OrdinalIgnoreCase))
+                .Select(x => new KeyValuePair<string, string>(x.Key.Substring(LayerMappingPrefix.Length), x.Value))
+                .ToList();
+            ProjectRecognitionService.ValidateLayerMappings(projectMappings, "Project recognition mappings");
+
             var projectedMappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in project.Metadata.Where(x => x.Key.StartsWith(LayerMappingPrefix, StringComparison.OrdinalIgnoreCase)))
+            foreach (var item in projectMappings)
             {
-                var pattern = item.Key.Substring(LayerMappingPrefix.Length).Trim();
+                var pattern = item.Key.Trim();
                 if (pattern.Length > 0) projectedMappings[pattern] = item.Value;
             }
             foreach (var mapping in profile.LayerMappings) projectedMappings[mapping.Key.Trim()] = mapping.Value;
