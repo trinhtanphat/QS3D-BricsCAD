@@ -208,6 +208,7 @@ namespace QS3D.Core.Licensing
                 throw new InvalidDataException("Unsupported license signature algorithm.");
             if (signatureElement.HasElements)
                 throw new InvalidDataException("License signature must contain text only.");
+            ValidateSignatureTextNodes(signatureElement);
             try { license.Signature = Convert.FromBase64String((signatureElement.Value ?? string.Empty).Trim()); }
             catch (FormatException ex) { throw new InvalidDataException("License signature is not valid Base64.", ex); }
             if (license.Signature.Length > 1024) throw new InvalidDataException("License signature is too large.");
@@ -235,6 +236,17 @@ namespace QS3D.Core.Licensing
                     continue;
                 }
                 throw new InvalidDataException("Unsupported XML content in license <" + label + ">.");
+            }
+        }
+
+        private static void ValidateSignatureTextNodes(XElement signatureElement)
+        {
+            foreach (var node in signatureElement.Nodes())
+            {
+                if (node is XCData)
+                    throw new InvalidDataException("License signature must use ordinary text, not CDATA.");
+                if (node is XText) continue;
+                throw new InvalidDataException("License signature contains unsupported XML content.");
             }
         }
 
