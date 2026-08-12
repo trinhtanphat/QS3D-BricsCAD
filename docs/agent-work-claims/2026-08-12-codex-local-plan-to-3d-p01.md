@@ -52,3 +52,18 @@ Current `ACTIVE` / `BLOCKED` claims were inspected. None reserves Plan-to-3D com
 ## Completion condition
 
 The reusable P01 runner/probe/gates and truthful docs are integrated on current `main`; one exact clean V25 SHA produces sanitized positive quick-path evidence with verified cleanup; LOCAL-014 remains OPEN/PENDING for the unexecuted matrix; and this claim is marked `COMPLETED` with exact PR/merge/evidence references.
+
+## 2026-08-12 native wall Z-placement expansion
+
+The merged runner/probe executed twice on clean current-main descendants in BricsCAD V25.2.10 x64. Both runs passed source retention, semantic provenance, fallback values, generated metadata/native ownership, length and thickness checks, then failed fail-closed on the native minimum-Z assertion. The refined sanitized marker reports `PLAN_TO_3D_RUNTIME_NATIVE_MIN_Z_FAILED`; BricsCAD exited, no sidecar was created, and the disposable copy was not saved.
+
+Static comparison confirms the same already-proven `Solid3d.CreateBox` placement defect previously fixed in `StructuralSolidBuilder`: `WallSolidBuilder` still applies `Displacement(-length/2, -thickness/2, -height/2)` before rotating and moving a box to a midpoint that already includes `height/2`. BricsCAD's native box is centered by creation, so the extra negative half-height shifts a requested fallback wall below its resolved bottom.
+
+Expand this claim narrowly to reserve:
+
+- `src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs` — remove only the redundant negative half-dimension displacement so LINE wall native bounds match source midpoint/thickness/resolved bottom and height; preserve transactions, ownership and Level placement.
+- `scripts/preflight-plan-to-3d-runtime-probe.py` — require the corrected builder placement and continue forbidding the redundant displacement.
+- `src/QS3D.BricsCAD.V25/PlanTo3DRuntimeProbeCommands.cs` — retain the sanitized native-bound sub-phase diagnostics and exact bounds regression.
+- `docs/LOCAL-AGENT-INBOX.md` / this claim — record only exact clean-SHA P01 evidence after strict build and runtime pass; full LOCAL-014 remains OPEN/PENDING.
+
+No other wall/path builder, Plan-to-3D orchestration, Core, persistence, quantity, Ribbon, private fixture or workflow is added. Before the product edit, publish this expansion on `main`; then run strict V25 build, focused gates and the exact-clean-SHA P01 probe again. If the strict build remains blocked by unrelated current-main compile debt, runtime output is diagnostic only and must not be promoted to P01 PASS.
