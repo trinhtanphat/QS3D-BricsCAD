@@ -114,6 +114,10 @@ namespace QS3D.Core.Domain
     {
         public const int CurrentSchemaVersion = 3;
         private string _name;
+        private string _drawingPath = string.Empty;
+        private string _drawingFingerprint = string.Empty;
+        private string _activeZoneId = string.Empty;
+        private string _activeFloorId = string.Empty;
         private DateTime _updatedUtc = DateTime.UtcNow;
 
         public ProjectState(string projectId, string name)
@@ -145,10 +149,26 @@ namespace QS3D.Core.Domain
                 ChangeVersion = nextChangeVersion;
             }
         }
-        public string DrawingPath { get; set; } = string.Empty;
-        public string DrawingFingerprint { get; set; } = string.Empty;
-        public string ActiveZoneId { get; set; } = string.Empty;
-        public string ActiveFloorId { get; set; } = string.Empty;
+        public string DrawingPath
+        {
+            get => _drawingPath;
+            set => SetPersistedScalar(ref _drawingPath, value);
+        }
+        public string DrawingFingerprint
+        {
+            get => _drawingFingerprint;
+            set => SetPersistedScalar(ref _drawingFingerprint, value);
+        }
+        public string ActiveZoneId
+        {
+            get => _activeZoneId;
+            set => SetPersistedScalar(ref _activeZoneId, value);
+        }
+        public string ActiveFloorId
+        {
+            get => _activeFloorId;
+            set => SetPersistedScalar(ref _activeFloorId, value);
+        }
         public DateTime UpdatedUtc
         {
             get => _updatedUtc;
@@ -183,6 +203,16 @@ namespace QS3D.Core.Domain
                 throw new ArgumentOutOfRangeException(nameof(changeVersion), "Project change version cannot be negative.");
             _updatedUtc = restoredUpdatedUtc;
             ChangeVersion = changeVersion;
+        }
+
+        private void SetPersistedScalar(ref string field, string value)
+        {
+            if (string.Equals(field, value, StringComparison.Ordinal)) return;
+            var nextChangeVersion = checked(ChangeVersion + 1L);
+            var nextUpdatedUtc = DateTime.UtcNow;
+            field = value;
+            UpdatedUtc = nextUpdatedUtc;
+            ChangeVersion = nextChangeVersion;
         }
 
         private static DateTime RequireUtcTimestamp(DateTime value, string parameterName)
