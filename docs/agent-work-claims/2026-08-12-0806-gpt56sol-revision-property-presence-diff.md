@@ -3,7 +3,7 @@
 - Status: `ACTIVE`
 - Agent: `chatgpt-web-gpt56sol-revision-property-presence-diff-20260812-0806`
 - Registered: `2026-08-12T08:06:00+07:00`
-- Baseline main SHA: `a767ae5e2f6838f4f5e86b5c937e681b2a0b6417`
+- Baseline main SHA: `e394d708125977bc1f41e5fea908e8ee263eeba3`
 - Priority: evidence-driven remote-safe revision fidelity during owner-requested `continue all`
 
 ## Confirmed defect
@@ -37,7 +37,7 @@ Preserve property-key presence in revision comparison so absent↔present-empty 
 
 ## Coordination
 
-Recent revision snapshot backup work is confined to snapshot persistence/store behavior. No recent claim/history search found a revision property-presence comparison lane.
+Recent revision snapshot backup work is confined to snapshot persistence/store behavior. No recent claim/history search found a revision property-presence comparison lane. A concurrent Quantity Settings schema-badge closeout landed immediately before this claim and was verified non-overlapping; the baseline above records that actual parent.
 
 ## Completion condition
 
