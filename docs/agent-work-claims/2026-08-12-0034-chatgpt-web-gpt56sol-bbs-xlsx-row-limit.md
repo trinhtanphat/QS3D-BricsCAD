@@ -2,7 +2,7 @@
 
 - Agent: ChatGPT remote agent
 - Owner: OpenAI ChatGPT
-- Status: COMPLETE
+- Status: COMPLETED
 - Scope: Harden `XlsxRebarScheduleExporter.Export(...)` so BBS exports fail closed before file mutation when row count would exceed the XLSX worksheet row limit, instead of building an oversized/invalid worksheet in memory.
 - Claimed Files:
   - `src/QS3D.Core/Export/XlsxRebarScheduleExporter.cs`
