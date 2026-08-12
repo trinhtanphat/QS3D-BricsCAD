@@ -60,7 +60,7 @@ The claim-only reservation is visible on `origin/main`; the additive P02 probe/r
 ## Close-out — 2026-08-12
 
 - Claim-only PR: `#789`, squash merge `e4515b9ad9c46b4e1f4e325028db9809eb2ef645`.
-- Implementation delivery: rebased branch commit `41bf25aef89226107f323273af19bb2c94f32a93`, PR `#817`; superseded PR `#815` was closed instead of force-pushing after `main` advanced. This close-out is part of PR `#817`, and the final squash SHA is assigned by merge.
+- Implementation delivery: rebased branch commit `41bf25aedaf3b8d1a7b5818eeaa843fac69cbe4c`, PR `#817`; superseded PR `#815` was closed instead of force-pushing after `main` advanced. This close-out is part of PR `#817`, and the final squash SHA is assigned by merge.
 - Implemented only the five reserved probe/runner/static-gate/runbook/inbox surfaces. Production Curtain planners/builders/topology, generated Health semantics and `LOCAL-003` Level-owned source were not edited.
 - Validation PASS after rebase: PowerShell parser; `scripts/preflight-curtain-panel-opening-runtime-probe.py`; Curtain native-panel/orchestration/P01-runtime/runtime-health gates; Level-Curtain placement; Direct Draw openings/P1; `scripts/preflight.py`; and V25 `Release|x64` adapter build with zero warnings/errors against the installed managed references.
 - Aggregate discovery was also executed. The P02 gate passed; the aggregate remained red only on pre-existing moving-main gates outside this diff. A clean `origin/main@38c6244e43630cb2837f419a5da51cc7b545c2c1` comparison failed 66 gates while the pre-rebase P02 branch failed 65, so no aggregate regression was attributed to this lane.
