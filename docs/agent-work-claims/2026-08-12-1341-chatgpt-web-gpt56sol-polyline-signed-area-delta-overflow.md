@@ -1,7 +1,7 @@
 # Work claim — Polyline SignedArea coordinate-delta overflow
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-web/gpt56sol-polyline-signed-area-delta-overflow`
 - Registered: `2026-08-12T13:41:00+07:00`
 - Baseline main SHA: `92c2a3486b632012fcc5e368e5871616ceebdaa2`
@@ -10,29 +10,25 @@
 
 ## Confirmed defect
 
-`PolylineMetrics.SignedArea(...)` triangulates around `points[0]` and calls `SubtractFinite(...)` on translated coordinates before the overflow-aware cross-product path. For finite coordinates on opposite sides of the double range, a translated delta can overflow even when the actual signed area is small and representable.
+`PolylineMetrics.SignedArea(...)` triangulated around `points[0]` and formed translated coordinate deltas before the overflow-aware cross-product path. The finite triangle `(-double.MaxValue, 0)`, `(double.MaxValue, 0)`, `(0, 2.2250738585072014e-308)` has mathematical area near `4`, but the old implementation overflowed while forming `double.MaxValue - (-double.MaxValue)`.
 
-Concrete counterexample: `(-double.MaxValue, 0)`, `(double.MaxValue, 0)`, `(0, 2.2250738585072014e-308)`. The mathematical triangle area is approximately `double.MaxValue * 2.2250738585072014e-308 ~= 4`, but `double.MaxValue - (-double.MaxValue)` overflows and the current implementation throws before computing the representable cross product.
+## Completed contract
 
-## Non-overlap check
+- Existing direct translated-cross behavior remains the fast path when all coordinate deltas are finite.
+- When translation itself cannot be represented, the same cross product is evaluated with independent X/Y scaling before subtraction.
+- Extreme anisotropic finite triangles retain representable signed area and winding sign.
+- Ordinary geometry remains on the old fast path.
+- Genuine area overflow and non-finite coordinates remain fail-closed.
 
-The latest history/code search returned no PolylineMetrics/SignedArea overflow lane. Comparing the audited source snapshot `9f8398883e0408dc6f1c6a6500c5a94eb80f624f` to baseline `92c2a3486b632012fcc5e368e5871616ceebdaa2` shows no changes to `src/QS3D.Core/Geometry/PolylineMetrics.cs`.
+## Evidence
 
-## Reserved scope
+- Claim commit: `954be0f4e24fc28960a6bacfeb5b2e28d75b88c1`
+- Source branch commit: `a7c307cd2fd467440c211feb52a12dde83fac408`
+- Smoke branch commit: `bf695703c2d14a611020c0f9290a2858f20aeee5`
+- PR: `#936`
+- Squash merge: `1e2b69a4f87eedcffefb64a392327ab8a73bd1a1`
+- Merged source blob: `58117fa14f4c4df5e8259033448204043e7f2b82`
+- Merged smoke blob: `4e30bb5a45509b6ff592d06597256d253ded9c80`
+- Ancestry verified against `main@ecc277828b99c04050ce0d322eeb9c3c783a0b49`; the only later file change was unrelated QSDB XML validation.
 
-- `src/QS3D.Core/Geometry/PolylineMetrics.cs`
-- one focused Core smoke regression
-- this claim file
-
-Do not alter `Point2`, callers, polygon topology/scanline planners, BricsCAD runtime code, or finite-input validation semantics.
-
-## Intended contract
-
-- Preserve the existing direct translated-cross fast path when all coordinate deltas are finite.
-- If translation itself overflows, compute the same triangle cross product using independent finite X/Y scaling before subtraction, so extreme anisotropic coordinates do not lose the small axis.
-- Return a finite signed area whenever the computed area is representable; retain fail-closed overflow when the area/cross/sum truly exceeds supported numeric range.
-- Preserve orientation/sign and normal-coordinate behavior.
-
-## Completion condition
-
-A focused regression proves the extreme finite triangle returns finite area near +4 and reversed winding near -4, while ordinary polygon behavior and genuine overflow remain fail-closed; merged source + smoke are read back from current `main`, ancestry is verified, and this claim is closed with exact commit SHAs.
+No GitHub Actions were dispatched. No full local .NET build, executable smoke process, or BricsCAD V25/V26 runtime PASS is claimed.
