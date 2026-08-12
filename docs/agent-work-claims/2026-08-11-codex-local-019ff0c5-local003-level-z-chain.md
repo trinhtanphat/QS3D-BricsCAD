@@ -183,6 +183,12 @@ Baseline audited and synchronized before this expansion: `origin/main@cc3d339a`.
 
 Reserve only `tests/QS3D.Core.SmokeTests/GeneratedSlabMeshHealthSmoke.cs` and `tests/QS3D.Core.SmokeTests/GeneratedWallMeshHealthSmoke.cs`. Change the Slab method to require direct `InvalidOperationException`; split the Wall fixture into an explicit null-state rejection and a clean later-owner conflict project. Preserve all valid footprint, metadata, ownership and live-handle assertions. Do not edit either health provider, mesh generation or ownership policy/index. Both owning null-health claims are `COMPLETED`; no ACTIVE claim reserves these legacy smoke files. Re-run the complete Core smoke after this test-only batch.
 
+## 2026-08-12 Template BQ column nullable compile reconciliation expansion
+
+Baseline audited and synchronized before this expansion: `origin/main@2907f7f9`. The next full Core compile reaches the completed BQ-column canonicality implementation in `src/QS3D.Core/Templates/TemplateProfileStore.cs`. The local nullable compiler reports `CS8602` because `raw.Trim()` is evaluated inside a compound condition without an explicit null branch, even though the preceding whitespace check rejects null values semantically.
+
+Reserve only that released source file to add an explicit `raw == null` guard before the existing whitespace/trim-canonical checks. Preserve BQ column ordering, duplicate detection, case policy, serialization and all template schema behavior. The owning Template BQ and subsequent structural-canonicality claims are `COMPLETED`; no ACTIVE claim reserves this exact compile repair. Re-run the complete Core smoke after this null-flow-only fix.
+
 ## 2026-08-11 source-safe wave heartbeat
 
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
