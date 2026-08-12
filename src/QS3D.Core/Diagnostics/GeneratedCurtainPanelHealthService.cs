@@ -165,7 +165,13 @@ namespace QS3D.Core.Diagnostics
         private static void Positive(ProjectElement element, string key, List<ModelHealthIssue> issues, string code)
         {
             if (!element.Properties.TryGetValue(key, out var raw) || !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || value <= 0d)
+            {
                 Add(issues, code, HealthSeverity.Warning, key + " is missing or invalid.", element);
+                return;
+            }
+            var canonical = value.ToString("R", CultureInfo.InvariantCulture);
+            if (!string.Equals(raw, canonical, StringComparison.Ordinal))
+                Add(issues, "CURTAIN_PANEL_FLOAT_METADATA_NON_CANONICAL", HealthSeverity.Error, key + " must use exact invariant round-trip spelling: " + canonical + ".", element);
         }
 
         private static void NonNegativeRoundTrip(ProjectElement element, string key, List<ModelHealthIssue> issues, string invalidCode, string nonCanonicalCode)
