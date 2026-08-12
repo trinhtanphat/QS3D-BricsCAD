@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
@@ -12,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         {
             RejectsUnrelatedDuplicateSemanticIds();
             ResolvesValidTargetsByCanonicalIdentity();
+            RejectsHostRemovedDuringLazyTargetEnumeration();
         }
 
         private static void RejectsUnrelatedDuplicateSemanticIds()
@@ -33,6 +35,39 @@ namespace QS3D.Core.SmokeTests
             Equal(1, resolved.Count, "valid target count");
             if (!ReferenceEquals(opening, resolved[0]))
                 throw new Exception("PhysicalOpeningGlobalElementIntegritySmoke valid target did not resolve to the canonical ProjectElement instance.");
+        }
+
+        private static void RejectsHostRemovedDuringLazyTargetEnumeration()
+        {
+            var project = CreateValidProject(out var host, out var opening);
+            host.MarkClean(ElementDirtyFlags.All);
+            opening.MarkClean(ElementDirtyFlags.All);
+            var beforeVersion = project.ChangeVersion;
+            var beforeHostUpdated = host.UpdatedUtc;
+            var beforeOpeningUpdated = opening.UpdatedUtc;
+            var beforeHostDirty = host.Dirty;
+            var beforeOpeningDirty = opening.Dirty;
+            var beforeLinkedHost = opening.Properties["HostWallId"];
+
+            ThrowsContaining<InvalidOperationException>(
+                () => PhysicalOpeningCutTargetStateCodec.Resolve(project, host, YieldThenRemoveHost(project, host, opening.Id)),
+                "Physical opening cut host no longer belongs to the project after opening target enumeration",
+                "host structural freshness");
+
+            Equal(beforeVersion, project.ChangeVersion, "host structural freshness project revision");
+            if (project.Elements.Contains(host))
+                throw new Exception("PhysicalOpeningGlobalElementIntegritySmoke expected the deliberate external host removal to remain visible.");
+            Equal(beforeLinkedHost, opening.Properties["HostWallId"], "host structural freshness HostWallId");
+            Equal(beforeHostDirty, host.Dirty, "host structural freshness host dirty state");
+            Equal(beforeOpeningDirty, opening.Dirty, "host structural freshness opening dirty state");
+            Equal(beforeHostUpdated, host.UpdatedUtc, "host structural freshness host timestamp");
+            Equal(beforeOpeningUpdated, opening.UpdatedUtc, "host structural freshness opening timestamp");
+        }
+
+        private static IEnumerable<string> YieldThenRemoveHost(ProjectState project, ProjectElement host, string openingId)
+        {
+            yield return openingId;
+            project.Elements.Remove(host);
         }
 
         private static ProjectState CreateValidProject(out ProjectElement host, out ProjectElement opening)
@@ -61,6 +96,24 @@ namespace QS3D.Core.SmokeTests
             catch (TException)
             {
                 return;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("PhysicalOpeningGlobalElementIntegritySmoke " + label + ": expected " + typeof(TException).Name + " but got " + ex.GetType().Name + ".", ex);
+            }
+            throw new Exception("PhysicalOpeningGlobalElementIntegritySmoke " + label + ": expected " + typeof(TException).Name + ".");
+        }
+
+        private static void ThrowsContaining<TException>(Action action, string expectedText, string label) where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException ex)
+            {
+                if (ex.Message.IndexOf(expectedText, StringComparison.Ordinal) >= 0) return;
+                throw new Exception("PhysicalOpeningGlobalElementIntegritySmoke " + label + ": expected message containing '" + expectedText + "', actual='" + ex.Message + "'.");
             }
             catch (Exception ex)
             {
