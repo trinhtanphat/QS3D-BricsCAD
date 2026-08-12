@@ -195,6 +195,12 @@ Baseline audited and synchronized before this expansion: `origin/main@3b10e481`.
 
 Reserve only that released smoke file to select `columns.Elements("column").First()`, preserving the exact first persisted BQ column mutation and every canonicality expectation. Do not edit template production source under this test-only expansion. The ACTIVE template-collection-order claim reserves `TemplateProfileStore.cs` plus its own isolated smoke, not this completed BQ fixture; its source ownership remains authoritative until release. Re-run the complete Core smoke after this call-site-only repair.
 
+## 2026-08-12 health severity fixture reconciliation expansion
+
+Baseline audited and synchronized before this expansion: `origin/main@cc9741e3`. The next full Core smoke reaches `ProjectDiagnosticSummarySmoke.UndefinedSeverityFailsClosedWithoutReplacingExport()`, which attempts to construct `(HealthSeverity)999` through `ModelHealthIssue`; the completed domain severity-integrity contract now rejects that value in the constructor before the exporter defense can be exercised. `HealthSummaryReadinessSmoke.cs` has the same obsolete construction and also still expects null issues to be ignored despite the completed null-issue fail-closed contract.
+
+Reserve only `tests/QS3D.Core.SmokeTests/ProjectDiagnosticSummarySmoke.cs` and `tests/QS3D.Core.SmokeTests/HealthSummaryReadinessSmoke.cs`. Create an otherwise valid issue and corrupt only its private severity backing field through test-local reflection so exporter/summary defense-in-depth remains executable; change the old null-ignore readiness case to require `InvalidOperationException`. Preserve valid counters, privacy redaction, atomic export replacement and production constructors/services unchanged. All owning severity, null-summary and diagnostic-summary claims are `COMPLETED`; no ACTIVE claim reserves these released fixture files. Re-run the complete Core smoke after this test-only batch.
+
 ## 2026-08-11 source-safe wave heartbeat
 
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
