@@ -347,10 +347,18 @@ namespace QS3D.Core.Diagnostics
             if (element.SourceHandles.Any(x => string.Equals(x?.Trim(), handle, StringComparison.OrdinalIgnoreCase)))
                 issues.Add(new ModelHealthIssue("GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "GeneratedSolidHandle không được nằm trong SourceHandles.", element.Id));
 
-            if (!element.Properties.TryGetValue("GeneratedSolidCategory", out var rawCategory) || !Enum.TryParse(rawCategory, true, out ElementCategory generatedCategory))
+            var categoryText = (element.Properties.TryGetValue("GeneratedSolidCategory", out var rawCategory) ? rawCategory : string.Empty) ?? string.Empty;
+            var normalizedCategoryText = categoryText.Trim();
+            if (normalizedCategoryText.Length == 0 || !Enum.TryParse(normalizedCategoryText, true, out ElementCategory generatedCategory))
                 issues.Add(new ModelHealthIssue("GENERATED_CATEGORY_MISSING", HealthSeverity.Warning, "GeneratedSolidCategory bị thiếu hoặc không hợp lệ.", element.Id));
-            else if (generatedCategory != element.Category)
-                issues.Add(new ModelHealthIssue("GENERATED_CATEGORY_MISMATCH", HealthSeverity.Error, "GeneratedSolidCategory không khớp category semantic: " + generatedCategory + " ≠ " + element.Category + ".", element.Id));
+            else
+            {
+                var canonicalCategoryText = generatedCategory.ToString();
+                if (!string.Equals(categoryText, canonicalCategoryText, StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue("GENERATED_CATEGORY_NON_CANONICAL", HealthSeverity.Error, "GeneratedSolidCategory phải dùng đúng canonical ElementCategory token: " + canonicalCategoryText + ".", element.Id));
+                if (generatedCategory != element.Category)
+                    issues.Add(new ModelHealthIssue("GENERATED_CATEGORY_MISMATCH", HealthSeverity.Error, "GeneratedSolidCategory không khớp category semantic: " + generatedCategory + " ≠ " + element.Category + ".", element.Id));
+            }
 
             var hasVersion = element.Properties.TryGetValue("GeneratedSolidOwnershipVersion", out var ownershipVersion) && !string.IsNullOrWhiteSpace(ownershipVersion);
             var hasProjectOwner = element.Properties.TryGetValue("GeneratedSolidOwnerProjectId", out var ownerProjectId) && !string.IsNullOrWhiteSpace(ownerProjectId);
