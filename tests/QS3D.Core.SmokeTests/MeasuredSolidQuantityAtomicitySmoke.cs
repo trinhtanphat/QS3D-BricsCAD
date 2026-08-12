@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
             InvalidVolumeDoesNotPartiallyApplySurfaceArea();
             ValidSurfaceAndVolumeApplyTogether();
             UnsupportedCategoryStillIgnoresVolumeProperty();
+            MissingSourcesRetractOnlyPolicyOwnedQuantities();
+            RegenerationFallsBackAfterMeasuredSourcesDisappear();
         }
 
         private static void InvalidVolumeDoesNotPartiallyApplySurfaceArea()
@@ -52,6 +54,53 @@ namespace QS3D.Core.SmokeTests
             if (MeasuredSolidQuantityPolicy.Apply(element))
                 throw new InvalidOperationException("Unsupported-category volume input should remain unhandled.");
             False(element.Quantities.ContainsKey("MeasuredSolidVolumeM3"));
+        }
+
+        private static void MissingSourcesRetractOnlyPolicyOwnedQuantities()
+        {
+            var element = new ProjectElement("B-MEASURE-STALE", ElementCategory.Beam);
+            element.SetQuantity("MeasuredSurfaceAreaM2", 12.5d);
+            element.SetQuantity("MeasuredSolidVolumeM3", 3.75d);
+            element.SetQuantity("GrossVolumeM3", 2d);
+            element.SetQuantity("NetVolumeM3", 1.5d);
+
+            if (!MeasuredSolidQuantityPolicy.Apply(element))
+                throw new InvalidOperationException("Removing stale policy-owned measured quantities must count as handled work.");
+
+            False(element.Quantities.ContainsKey("MeasuredSurfaceAreaM2"));
+            False(element.Quantities.ContainsKey("MeasuredSolidVolumeM3"));
+            Near(2d, element.Quantities["GrossVolumeM3"]);
+            Near(1.5d, element.Quantities["NetVolumeM3"]);
+        }
+
+        private static void RegenerationFallsBackAfterMeasuredSourcesDisappear()
+        {
+            var project = new ProjectState("MEASURE-LIFECYCLE", "Measured lifecycle");
+            var element = new ProjectElement("EW-MEASURE-LIFECYCLE", ElementCategory.Earthwork);
+            element.SetProperty("AreaM2", "2");
+            element.SetProperty("DepthM", "0.5");
+            element.SetProperty(MeasuredSolidQuantityPolicy.SurfaceAreaProperty, "12.5");
+            element.SetProperty(MeasuredSolidQuantityPolicy.VolumeProperty, "3.75");
+            project.Elements.Add(element);
+
+            var engine = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
+            if (engine.RegenerateDirty(project) != 1)
+                throw new InvalidOperationException("Initial measured earthwork regeneration was not handled exactly once.");
+            Near(12.5d, element.Quantities["MeasuredSurfaceAreaM2"]);
+            Near(3.75d, element.Quantities["MeasuredSolidVolumeM3"]);
+            Near(3.75d, element.Quantities["GrossVolumeM3"]);
+            Near(3.75d, element.Quantities["NetVolumeM3"]);
+
+            element.Properties.Remove(MeasuredSolidQuantityPolicy.SurfaceAreaProperty);
+            element.Properties.Remove(MeasuredSolidQuantityPolicy.VolumeProperty);
+            element.MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity);
+
+            if (engine.RegenerateDirty(project) != 1)
+                throw new InvalidOperationException("Measured-source removal regeneration was not handled exactly once.");
+            False(element.Quantities.ContainsKey("MeasuredSurfaceAreaM2"));
+            False(element.Quantities.ContainsKey("MeasuredSolidVolumeM3"));
+            Near(1d, element.Quantities["GrossVolumeM3"]);
+            Near(1d, element.Quantities["NetVolumeM3"]);
         }
 
         private static void Near(double expected, double actual)
