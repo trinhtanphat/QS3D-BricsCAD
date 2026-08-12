@@ -51,7 +51,7 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => PhysicalOpeningCutTargetStateCodec.Resolve(project, host, YieldThenRemoveHost(project, host, opening.Id)),
-                "Physical opening cut host no longer belongs to the project after opening target enumeration",
+                "Project element structure changed while physical opening target ids were being enumerated; recompute the target set against the current project state.",
                 "host structural freshness");
 
             Equal(beforeVersion, project.ChangeVersion, "host structural freshness project revision");
