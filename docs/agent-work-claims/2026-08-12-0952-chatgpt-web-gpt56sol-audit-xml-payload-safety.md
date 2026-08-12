@@ -1,32 +1,36 @@
 # Work claim — Audit XML payload safety
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-audit-xml-payload-safety`
 - Registered: `2026-08-12T09:52:00+07:00`
 - Baseline main SHA: `6d3bdd42b153198bda216e7692a555a06df5800f`
+- Regression commit: `a31aba4fe367cde50fc05dc49c419385976aa7ae`
+- Completed source commit: `e4689ee03e7462eed267c5feb0768ff8bdc6e6fc`
+- Readback main SHA before close-out: `e8c5c8f179e56d9449f7afe26b2a702957fd6254`
 - Priority: P1 persisted-audit atomicity / QSDB save safety found during owner-requested `continue all` audit.
 
 ## Confirmed defect
 
-`AuditTrail.Record(...)` validates/normalizes the audit action but currently accepts `elementId`, `detail`, `actor`, and `correlationId` as arbitrary .NET strings, calls `ProjectState.Touch()`, and appends the event. `QsdbProjectStore.Serialize(...)` later persists every one of those values through `XAttribute`. .NET XML serialization rejects XML-invalid characters (including invalid control characters and malformed surrogate content), so a caller can successfully mutate project/audit state and only discover the invalid payload later when QSDB save fails.
+`AuditTrail.Record(...)` validated/normalized the audit action but accepted `elementId`, `detail`, `actor`, and `correlationId` as arbitrary .NET strings, then called `ProjectState.Touch()` and appended the event. `QsdbProjectStore.Serialize(...)` persists every one of those values through `XAttribute`; .NET XML serialization rejects XML-invalid characters, so an audit mutation could succeed in memory and only fail later during QSDB save.
 
-The existing audit read-integrity lane is already completed and currently guards null events, UTC timestamps, and action canonicality. This lane extends the persistence-safety boundary without changing audit payload whitespace/redaction semantics.
+The previous audit read-integrity lane was already complete and guarded null events, UTC timestamps, and action canonicality. This lane extends persistence safety without changing payload whitespace/redaction semantics.
 
-## Reserved scope
+## Implemented contract
 
-- `src/QS3D.Core/Audit/AuditTrail.cs`
-- one focused Core smoke source under `tests/QS3D.Core.SmokeTests/`
-- this claim file for close-out
+1. `Record(...)` keeps the existing required/trimmed/control-character action policy.
+2. Before any project `Touch()` or event append, `XmlConvert.VerifyXmlChars(...)` now validates action, elementId, detail, actor and correlationId.
+3. Invalid new payload throws `ArgumentException` before project freshness or audit collection changes.
+4. Existing in-memory audit history now fails visibly when any persisted payload field contains XML-invalid character content, and such history blocks a subsequent `Record(...)` before freshness mutation.
+5. Valid payload strings are not trimmed/canonicalized; ordinary whitespace and XML-valid tab/newline/carriage-return content remain preserved.
+6. Focused smoke coverage uses the real QSDB writer/loader for valid payload round-trip and covers all four non-action fields, an invalid action surrogate, and malformed-existing-history read/record rejection atomicity.
 
-## Plan
+## Verification
 
-1. Re-fetch moving `main`, current AuditTrail source and this claim before writes.
-2. Validate XML character legality for action, elementId, detail, actor and correlationId before any `Touch()` or event append; preserve existing stricter action control-character rule.
-3. Extend stored-history validation so malformed in-memory audit payloads fail visibly through `Events` and block further `Record(...)` calls before project freshness changes.
-4. Preserve exact valid payload text, including ordinary whitespace and XML-valid tab/newline/carriage-return characters.
-5. Add focused smoke coverage for valid payload round-trip, invalid new payload atomicity across all four non-action fields, invalid action surrogate/control cases, and malformed existing-history read/record rejection without freshness mutation.
-6. Read back source/test on current `main`; do not dispatch GitHub Actions or claim BricsCAD runtime PASS.
-7. Close claim only after source/regression commits remain visible on current `main`.
+- Current-main source readback confirmed XML validation occurs before `ValidateExistingHistoryForRecord()`, `Touch()` and `_events.Add(...)`, and stored history checks all persisted payload fields.
+- Current-main smoke readback confirmed valid QSDB round-trip plus invalid-new/existing payload cases.
+- `e4689ee03e7462eed267c5feb0768ff8bdc6e6fc...main` compared as `ahead` with the source commit as merge base; subsequent concurrent commits touched unrelated structural-wall/project-name/floor claim files.
+- Smoke source was committed but not executed from this remote connector session. Full Core smoke execution/build and GitHub Actions were not run; no PASS is fabricated.
+- This is Core audit/persistence work and makes no licensed BricsCAD runtime claim.
 
 ## Excluded
 
