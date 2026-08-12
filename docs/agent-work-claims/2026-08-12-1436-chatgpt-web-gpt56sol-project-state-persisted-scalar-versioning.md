@@ -1,8 +1,9 @@
 # Work claim — ProjectState persisted scalar versioning
 
-- Status: `ACTIVE`
+- Status: `RELEASED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-12T14:36:00+07:00`
+- Released: `2026-08-12T14:37:00+07:00`
 - Baseline main SHA: `553cc7e411b39f413c380fa123b6c0f4f6940dc1`
 - Priority: continue-all persistence false-clean correctness
 
@@ -30,6 +31,8 @@ Fix `ProjectState` persisted scalar mutation freshness so changes to `DrawingPat
 - No Floor/Zone canonicalization or validation changes.
 - No GitHub Actions dispatch/rerun and no BricsCAD runtime changes.
 
-## Completion condition
+## Owner-coordinated handoff
 
-Implementation and deterministic regression land on `main`, then this claim is updated to `COMPLETED` with verified commit SHAs.
+Repository owner `trinhtanphat` explicitly requested that the remaining work be finished. At the handoff point, current `main` still had the four persisted scalar auto-properties and no implementation/regression commit had landed under this reservation. The scope is released to successor claim `docs/agent-work-claims/2026-08-12-1437-chatgpt-web-gpt56sol-project-state-scalar-versioning-takeover.md`, which was published first as `b51a0c062c7e46a1870ce723260777fe9033cba7`.
+
+No source/test changes are attributed to this released claim.
