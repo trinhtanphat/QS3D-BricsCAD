@@ -189,6 +189,12 @@ Baseline audited and synchronized before this expansion: `origin/main@2907f7f9`.
 
 Reserve only that released source file to add an explicit `raw == null` guard before the existing whitespace/trim-canonical checks. Preserve BQ column ordering, duplicate detection, case policy, serialization and all template schema behavior. The owning Template BQ and subsequent structural-canonicality claims are `COMPLETED`; no ACTIVE claim reserves this exact compile repair. Re-run the complete Core smoke after this null-flow-only fix.
 
+## 2026-08-12 Template BQ smoke XElement enumeration reconciliation expansion
+
+Baseline audited and synchronized before this expansion: `origin/main@3b10e481`. After the source nullable blocker is removed, the full Core smoke compile reaches `tests/QS3D.Core.SmokeTests/TemplateBqColumnCanonicalitySmoke.cs`, where the padded-column mutation calls `First()` directly on an `XElement`; `XElement` does not expose the expected sequence extension target, producing `CS1061` despite `System.Linq` already being imported.
+
+Reserve only that released smoke file to select `columns.Elements("column").First()`, preserving the exact first persisted BQ column mutation and every canonicality expectation. Do not edit template production source under this test-only expansion. The ACTIVE template-collection-order claim reserves `TemplateProfileStore.cs` plus its own isolated smoke, not this completed BQ fixture; its source ownership remains authoritative until release. Re-run the complete Core smoke after this call-site-only repair.
+
 ## 2026-08-11 source-safe wave heartbeat
 
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
