@@ -113,8 +113,19 @@ namespace QS3D.Core.Diagnostics
 
         private static void Fingerprint(ProjectElement element, List<ModelHealthIssue> issues)
         {
-            if (!element.Properties.TryGetValue("GeneratedCurtainPanelConfigFingerprint", out var raw) || raw == null || raw.Trim().Length != 64 || raw.Trim().Any(x => !Uri.IsHexDigit(x)))
+            if (!element.Properties.TryGetValue("GeneratedCurtainPanelConfigFingerprint", out var raw) || raw == null)
+            {
                 Add(issues, "CURTAIN_PANEL_CONFIG_FINGERPRINT_INVALID", HealthSeverity.Warning, "GeneratedCurtainPanelConfigFingerprint must be a SHA-256 hexadecimal digest.", element);
+                return;
+            }
+            var normalized = raw.Trim();
+            if (normalized.Length != 64 || normalized.Any(x => !Uri.IsHexDigit(x)))
+            {
+                Add(issues, "CURTAIN_PANEL_CONFIG_FINGERPRINT_INVALID", HealthSeverity.Warning, "GeneratedCurtainPanelConfigFingerprint must be a SHA-256 hexadecimal digest.", element);
+                return;
+            }
+            if (!string.Equals(raw, normalized.ToLowerInvariant(), StringComparison.Ordinal))
+                Add(issues, "CURTAIN_PANEL_CONFIG_FINGERPRINT_NON_CANONICAL", HealthSeverity.Error, "GeneratedCurtainPanelConfigFingerprint must use exact lowercase SHA-256 writer-owned spelling.", element);
         }
 
         private static int? Integer(ProjectElement element, string key, bool allowZero, List<ModelHealthIssue> issues, string code)
