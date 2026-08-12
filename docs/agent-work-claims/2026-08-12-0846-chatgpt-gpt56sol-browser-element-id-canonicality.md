@@ -2,34 +2,20 @@
 
 - Agent: `chatgpt-gpt56sol-browser-element-id-canonicality`
 - Owner: OpenAI ChatGPT
-- Status: `ACTIVE`
+- Status: `RETRACTED`
 - Registered: 2026-08-12 08:46 +07:00
+- Retracted: 2026-08-12 08:48 +07:00
 - Baseline main SHA observed: `6d18a2f86b714774750ce56b976ca2a3b2d43c7b`
+- Claim commit: `2c13039902877d66f73f12a16acffc3ecae6c8ae`
 - Task key: `CORE-BROWSER-ELEMENT-ID-CANONICALITY`
 
-## Confirmed defect
+## Retraction reason
 
-`ProjectBrowserPlanner.ValidateAndOrderElements()` rejects blank and duplicate semantic element IDs, but uses `element.Id.Trim()` only for duplicate detection and then preserves the raw padded ID in browser node output. The same planner already rejects surrounding whitespace in FloorId/ZoneId references, and persisted semantic IDs are canonical structural identities. A padded element ID can therefore be silently normalized for uniqueness while leaking a different raw identity into browser navigation/paging.
+The initial audit observed that `ProjectBrowserPlanner.ValidateAndOrderElements()` trims `element.Id` for duplicate detection while preserving `element.Id` in browser node output. Before regression creation, the canonical construction boundary was re-read: `ProjectElement(string id, ElementCategory category, ...)` rejects blank ids and immediately assigns `Id = id.Trim()`, while `Id` is getter-only. Therefore a padded semantic element id cannot be produced through the public domain construction contract that feeds normal project state. The proposed planner guard would only defend a state requiring out-of-contract reflection/memory corruption and is not justified as a source defect.
 
-## Reserved scope
+## Outcome
 
-- `src/QS3D.Core/Navigation/ProjectBrowserPlanner.cs`
-- one focused Core smoke source for Project Browser element-ID canonicality
-- this claim file
-
-## Excluded scope
-
-- Project Browser workspace persistence/query/selection/virtualization changes
-- Floor/Zone/Family active-ID semantics
-- BricsCAD adapters/UI/runtime
-- Actions/build/release
-
-## Plan
-
-1. Re-fetch moving `main` and confirm the planner still accepts a padded semantic element ID.
-2. Fail closed when a non-empty semantic element ID has surrounding whitespace, before browser node construction.
-3. Preserve case-insensitive duplicate detection, valid canonical IDs, ordering, grouping and reference validation.
-4. Add focused deterministic Core smoke coverage for padded-ID rejection plus a canonical valid case.
-5. Merge only after exact moving-main diff/collision review, then close this claim with immutable evidence.
-
-No GitHub Actions/build/release is authorized by this lane. No BricsCAD V25/V26 runtime PASS will be claimed remotely.
+- No source/test change from the implementation branch is merged to `main`.
+- The speculative branch patch must remain unmerged.
+- `ProjectBrowserPlanner.cs` is released for other agents.
+- No GitHub Actions/build/release was dispatched; no BricsCAD runtime claim is made.
