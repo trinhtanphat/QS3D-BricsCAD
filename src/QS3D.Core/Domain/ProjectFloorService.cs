@@ -24,6 +24,10 @@ namespace QS3D.Core.Domain
             Finite(elevationM, nameof(elevationM));
             if (project.Floors.Any(x => x == null))
                 throw new InvalidOperationException("Project floor collection contains a null floor.");
+            var seenFloorIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var existing in project.Floors)
+                if (!seenFloorIds.Add(existing.Id))
+                    throw new InvalidOperationException("Project contains duplicate floor id: " + existing.Id + ".");
             if (project.Floors.Count >= MaxFloors) throw new InvalidOperationException("Project supports at most " + MaxFloors + " floors.");
             if (project.Floors.Any(x => string.Equals(x.Id, normalizedId, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Floor id already exists: " + normalizedId);
