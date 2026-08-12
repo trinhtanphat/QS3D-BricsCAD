@@ -13,7 +13,7 @@
 ## Reserved surfaces
 
 - `src/QS3D.Core/Licensing/LicenseVerifier.cs`
-- `tests/QS3D.Core.SmokeTests/LicenseVerifierSmoke.cs`
+- `tests/QS3D.Core.SmokeTests/LicenseXmlChildShapeSmoke.cs` (new focused module-initializer regression)
 - this claim file
 
 ## Intended fix
@@ -21,7 +21,7 @@
 - Require every direct child of `<qs3dLicense>` to be an unnamespaced `valid`, `features`, or `signature` element.
 - Keep existing cardinality rules: exactly one `valid`, at most one `features`, exactly one `signature`.
 - Add focused `Load(...)` smoke coverage for an unexpected direct child and a namespaced lookalike child.
-- Do not alter canonical payload fields, signature verification, product/time policy, token whitespace rules, DTD/file-size protections, or Base64 handling.
+- Do not alter `LicenseVerifierSmoke.cs`, canonical payload fields, signature verification, product/time policy, token whitespace rules, DTD/file-size protections, or Base64 handling.
 
 ## Validation boundary
 
