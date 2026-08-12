@@ -12,7 +12,8 @@ else:
     text = SOURCE.read_text(encoding="utf-8")
     required = (
         "foreach (var token in (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.None))",
-        "var handle = token.Trim();",
+        "var handleText = token ?? string.Empty;",
+        "var handle = handleText.Trim();",
         "if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))",
         '"INVALID_CURTAIN_PANEL_GENERATED_HANDLE"',
     )
