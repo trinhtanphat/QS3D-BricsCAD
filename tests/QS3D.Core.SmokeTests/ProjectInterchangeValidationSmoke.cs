@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             ExportedValidSnapshotPasses();
+            TimestampCanonicalityFailsClosed();
             WrongUnitsFailClosed();
             GeneratedOwnershipSmugglingFailsClosed();
             BrokenDependencyFailsClosed();
@@ -33,6 +34,30 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Interchange validator summary counts are incorrect.");
             if (!string.Equals(result.Format, ProjectInterchangeJsonExporter.FormatName, StringComparison.Ordinal) || result.FormatVersion != ProjectInterchangeJsonExporter.FormatVersion)
                 throw new Exception("Interchange validator did not preserve format identity.");
+        }
+
+        private static void TimestampCanonicalityFailsClosed()
+        {
+            var canonical = ProjectInterchangeJsonExporter.Build(BuildFixture());
+            const string writerToken = "2026-08-10T11:00:00.0000000Z";
+            if (canonical.IndexOf(writerToken, StringComparison.Ordinal) < 0)
+                throw new Exception("Interchange timestamp regression fixture no longer contains the expected canonical writer token.");
+
+            RequireError(
+                ProjectInterchangeJsonValidator.Validate(canonical.Replace(writerToken, "2026-08-10T18:00:00.0000000+07:00")),
+                "TIMESTAMP_NOT_UTC");
+            RequireError(
+                ProjectInterchangeJsonValidator.Validate(canonical.Replace(writerToken, "2026-08-10T11:00:00.0000000+00:00")),
+                "TIMESTAMP_NOT_UTC");
+            RequireError(
+                ProjectInterchangeJsonValidator.Validate(canonical.Replace(writerToken, "2026-08-10T11:00:00.0000000")),
+                "TIMESTAMP_NOT_UTC");
+            RequireError(
+                ProjectInterchangeJsonValidator.Validate(canonical.Replace(writerToken, "2026-08-10T11:00:00Z")),
+                "TIMESTAMP_NOT_UTC");
+            RequireError(
+                ProjectInterchangeJsonValidator.Validate(canonical.Replace(writerToken, " 2026-08-10T11:00:00.0000000Z")),
+                "TIMESTAMP_INVALID");
         }
 
         private static void WrongUnitsFailClosed()
