@@ -71,8 +71,8 @@ namespace QS3D.Core.SmokeTests
                 Equal("B-FAMILY", loaded.Families[1].Id, "second family");
                 Equal("A-RULE", loaded.QuantityRules[0].Id, "first rule");
                 Equal("B-RULE", loaded.QuantityRules[1].Id, "second rule");
-                Equal("A-LAYER", loaded.LayerMappings.Keys.First(), "first layer mapping");
-                Equal("B-LAYER", loaded.LayerMappings.Keys.Skip(1).First(), "second layer mapping");
+                Equal("Beam", loaded.LayerMappings["A-LAYER"], "A layer mapping");
+                Equal("Slab", loaded.LayerMappings["B-LAYER"], "B layer mapping");
             });
         }
 
