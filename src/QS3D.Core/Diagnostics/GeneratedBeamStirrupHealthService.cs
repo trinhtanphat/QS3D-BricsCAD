@@ -146,19 +146,54 @@ namespace QS3D.Core.Diagnostics
                 issues.Add(InvalidMetadata(element, CenterlineKey + " phải là số hữu hạn > 0."));
                 return;
             }
+            ValidateAdvancedCanonicality(element, CenterlineKey, centerline, issues);
+
             if (!TryNumber(element, TotalCenterlineKey, out var totalCenterline) || totalCenterline <= 0d)
+            {
                 issues.Add(InvalidMetadata(element, TotalCenterlineKey + " phải là số hữu hạn > 0."));
+            }
+            else
+            {
+                ValidateAdvancedCanonicality(element, TotalCenterlineKey, totalCenterline, issues);
+            }
+
             if (!TryNumber(element, PolylineKey, out var polyline) || polyline <= 0d)
+            {
                 issues.Add(InvalidMetadata(element, PolylineKey + " phải là số hữu hạn > 0."));
-            else if (polyline > centerline + Math.Max(1e-9d, centerline * 1e-9d))
-                issues.Add(InvalidMetadata(element, PolylineKey + " không được dài hơn exact centerline length."));
+            }
+            else
+            {
+                ValidateAdvancedCanonicality(element, PolylineKey, polyline, issues);
+                if (polyline > centerline + Math.Max(1e-9d, centerline * 1e-9d))
+                    issues.Add(InvalidMetadata(element, PolylineKey + " không được dài hơn exact centerline length."));
+            }
 
             if (!TryNumber(element, BendRadiusKey, out var bendRadius) || bendRadius < 0d)
+            {
                 issues.Add(InvalidMetadata(element, BendRadiusKey + " phải là số hữu hạn >= 0."));
+            }
+            else
+            {
+                ValidateAdvancedCanonicality(element, BendRadiusKey, bendRadius, issues);
+            }
+
             if (!TryNumber(element, HookLengthKey, out var hookLength) || hookLength < 0d)
+            {
                 issues.Add(InvalidMetadata(element, HookLengthKey + " phải là số hữu hạn >= 0."));
+            }
+            else
+            {
+                ValidateAdvancedCanonicality(element, HookLengthKey, hookLength, issues);
+            }
+
             if (!TryNumber(element, HookAngleKey, out var hookAngle))
+            {
                 issues.Add(InvalidMetadata(element, HookAngleKey + " phải là số hữu hạn."));
+            }
+            else
+            {
+                ValidateAdvancedCanonicality(element, HookAngleKey, hookAngle, issues);
+            }
 
             if (TryNumber(element, TotalCenterlineKey, out totalCenterline))
             {
@@ -189,6 +224,14 @@ namespace QS3D.Core.Diagnostics
                 if (isHooked && hookLength <= epsilon)
                     issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_MODE_MISMATCH", HealthSeverity.Warning, "HookedPath mode yêu cầu hook length > 0.", element.Id));
             }
+        }
+
+        private static void ValidateAdvancedCanonicality(ProjectElement element, string key, double value, ICollection<ModelHealthIssue> issues)
+        {
+            if (!element.Properties.TryGetValue(key, out var raw)) return;
+            var canonical = value.ToString("R", CultureInfo.InvariantCulture);
+            if (!string.Equals(raw, canonical, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_METADATA_NON_CANONICAL", HealthSeverity.Error, key + " phải dùng đúng round-trip invariant numeric spelling: " + canonical + ".", element.Id));
         }
 
         private static ModelHealthIssue InvalidMetadata(ProjectElement element, string message) =>
