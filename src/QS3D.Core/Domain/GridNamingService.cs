@@ -69,6 +69,7 @@ namespace QS3D.Core.Domain
             if (ids.Distinct(StringComparer.OrdinalIgnoreCase).Count() != ids.Count)
                 throw new InvalidOperationException("Grid renumber input contains duplicate element ids.");
 
+            var originalTargets = ResolveOriginalTargets(projectElementsAtStart, ids);
             var prefix = Optional(options.Prefix, nameof(options.Prefix), MaxAffixLength);
             var suffix = Optional(options.Suffix, nameof(options.Suffix), MaxAffixLength);
             if (options.StartIndex < 1 || options.StartIndex > MaxSequenceIndex)
@@ -86,11 +87,9 @@ namespace QS3D.Core.Domain
             {
                 if (!projectElements.TryGetValue(id, out var element))
                     throw new InvalidOperationException("Grid element does not exist: " + id);
-                var originalMatches = projectElementsAtStart
-                    .Where(x => x != null && string.Equals((x.Id ?? string.Empty).Trim(), id, StringComparison.OrdinalIgnoreCase))
-                    .Take(2)
-                    .ToArray();
-                if (originalMatches.Length != 1 || !ReferenceEquals(originalMatches[0], element))
+                if (!originalTargets.TryGetValue(id, out var originalElement) ||
+                    originalElement == null ||
+                    !ReferenceEquals(originalElement, element))
                     throw new InvalidOperationException("Grid renumber target changed while Grid IDs were being enumerated: " + id + ". Retry against the current project state.");
                 if (element.Category != ElementCategory.Grid)
                     throw new InvalidOperationException("Element is not a Grid reference: " + element.Id);
@@ -160,6 +159,27 @@ namespace QS3D.Core.Domain
             var result = prefix + core + suffix;
             if (result.Length > MaxLabelLength) throw new InvalidOperationException("Grid label exceeds " + MaxLabelLength + " characters.");
             return result;
+        }
+
+        private static Dictionary<string, ProjectElement?> ResolveOriginalTargets(
+            IEnumerable<ProjectElement> projectElementsAtStart,
+            IEnumerable<string> targetIds)
+        {
+            var requested = new HashSet<string>(targetIds, StringComparer.OrdinalIgnoreCase);
+            var resolved = new Dictionary<string, ProjectElement?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in projectElementsAtStart)
+            {
+                if (element == null) continue;
+                var elementId = (element.Id ?? string.Empty).Trim();
+                if (!requested.Contains(elementId)) continue;
+                if (resolved.ContainsKey(elementId))
+                {
+                    resolved[elementId] = null;
+                    continue;
+                }
+                resolved[elementId] = element;
+            }
+            return resolved;
         }
 
         private static Dictionary<string, ProjectElement> ResolveProjectElements(ProjectState project)
