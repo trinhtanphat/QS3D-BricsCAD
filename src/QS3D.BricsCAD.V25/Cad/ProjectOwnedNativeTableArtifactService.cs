@@ -254,7 +254,7 @@ namespace QS3D.BricsCAD.V25.Cad
             if (!definition.StateKeys.Any(project.Metadata.ContainsKey)) return issues.AsReadOnly();
 
             try { ValidatePersistedState(project, definition); }
-            catch (Exception ex)
+            catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
             {
                 issues.Add(Issue("METADATA_INVALID", HealthSeverity.Error, ex.Message));
                 return issues.AsReadOnly();
@@ -266,7 +266,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 expected = snapshotProvider();
                 ValidateSnapshot(expected);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
             {
                 issues.Add(Issue("RENDER_INVALID", HealthSeverity.Error, ex.Message));
                 return issues.AsReadOnly();
@@ -345,7 +345,7 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             string actual;
             try { actual = table.TextString(row, column) ?? string.Empty; }
-            catch (Exception ex)
+            catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
             {
                 issues.Add(Issue("CAD_CELL_UNREADABLE", HealthSeverity.Warning, "Cannot read live Table cell " + label + ": " + ex.Message));
                 detailCount++;
@@ -501,7 +501,17 @@ namespace QS3D.BricsCAD.V25.Cad
                 id = database.GetObjectId(false, new Handle(value), 0);
                 return !id.IsNull && id.IsValid;
             }
-            catch { return false; }
+            catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
+            {
+                return false;
+            }
+        }
+
+        private static bool IsRecoverableDiagnosticFailure(Exception exception)
+        {
+            return !(exception is OutOfMemoryException) &&
+                   !(exception is StackOverflowException) &&
+                   !(exception is AccessViolationException);
         }
 
         private static string ProjectIdentityToken(string projectId)
