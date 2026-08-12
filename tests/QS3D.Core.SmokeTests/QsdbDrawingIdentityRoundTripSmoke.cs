@@ -20,8 +20,8 @@ namespace QS3D.Core.SmokeTests
             try
             {
                 const string drawingPath = "  drawing/path.dwg  ";
-                const string projectFingerprint = "  project-fingerprint  ";
-                const string elementFingerprint = "  element-fingerprint  ";
+                const string projectFingerprint = "project-fingerprint";
+                const string elementFingerprint = "element-fingerprint";
 
                 var project = new ProjectState("DRAW-IDENTITY", "Drawing identity round trip")
                 {
