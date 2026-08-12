@@ -57,7 +57,7 @@ namespace QS3D.Core.Reporting
                 var familyName = family?.Name ?? familyId;
                 var category = ScheduleCategory(element);
                 var hostId = element.Properties.TryGetValue("HostWallId", out var hostRaw)
-                    ? CanonicalOptionalHostId(hostRaw, element.Id)
+                    ? CanonicalOptionalHostId(project, hostRaw, element.Id)
                     : string.Empty;
                 var key = GroupKey(
                     floorId,
@@ -126,14 +126,26 @@ namespace QS3D.Core.Reporting
                 : ElementCategory.WallOpening.ToString();
         }
 
-        private static string CanonicalOptionalHostId(string? value, string elementId)
+        private static string CanonicalOptionalHostId(ProjectState project, string? value, string elementId)
         {
             var raw = value ?? string.Empty;
             if (raw.Length == 0) return string.Empty;
             if (string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
                 throw new InvalidOperationException("Door/opening schedule requires canonical HostWallId without surrounding whitespace on element: " + elementId + ".");
+
+            var host = project.FindElement(raw);
+            if (host == null)
+                throw new InvalidOperationException("Door/opening schedule cannot report missing HostWallId target '" + raw + "' on element: " + elementId + ".");
+            if (!IsWall(host.Category))
+                throw new InvalidOperationException("Door/opening schedule requires HostWallId target '" + raw + "' to be a wall for element: " + elementId + ".");
             return raw;
         }
+
+        private static bool IsWall(ElementCategory category) =>
+            category == ElementCategory.ArchitecturalWall ||
+            category == ElementCategory.GlassWall ||
+            category == ElementCategory.WallPier ||
+            category == ElementCategory.StructuralWall;
 
         private static double Number(ProjectElement element, ProjectFamily? family, string key, double fallback)
         {
