@@ -228,7 +228,7 @@ namespace QS3D.Core.Persistence
             string elementId)
         {
             var reference = element.Attribute(attributeName)?.Value;
-            if (string.IsNullOrEmpty(reference)) return;
+            if (reference == null || reference.Length == 0) return;
             if (!validIds.Contains(reference))
                 throw new InvalidDataException(
                     "QSDB element " + elementId + " " + attributeName + " does not reference an existing " + targetName + ": " + reference + ".");
