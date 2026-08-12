@@ -19,7 +19,9 @@ namespace QS3D.Core.Diagnostics
 
             foreach (var element in project.Elements)
             {
-                if (element == null || element.Category != ElementCategory.Grid) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Grid-naming diagnostics cannot inspect a project containing a null semantic element.");
+                if (element.Category != ElementCategory.Grid) continue;
 
                 var hasLabelProperty = element.Properties.TryGetValue(GridNamingService.GridLabelKey, out var rawLabel);
                 var label = (rawLabel ?? string.Empty).Trim();
