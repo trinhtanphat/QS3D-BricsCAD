@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         {
             ExportedValidSnapshotPasses();
             TimestampCanonicalityFailsClosed();
+            NameCanonicalityFailsClosed();
             WrongUnitsFailClosed();
             GeneratedOwnershipSmugglingFailsClosed();
             BrokenDependencyFailsClosed();
@@ -58,6 +59,23 @@ namespace QS3D.Core.SmokeTests
             RequireError(
                 ProjectInterchangeJsonValidator.Validate(canonical.Replace(writerToken, " 2026-08-10T11:00:00.0000000Z")),
                 "TIMESTAMP_INVALID");
+        }
+
+        private static void NameCanonicalityFailsClosed()
+        {
+            var canonical = ProjectInterchangeJsonExporter.Build(BuildFixture());
+            RequireError(
+                ProjectInterchangeJsonValidator.Validate(canonical.Replace("\"name\":\"Interchange Validate Smoke\"", "\"name\":\" Interchange Validate Smoke\"")),
+                "NAME_NON_CANONICAL");
+            RequireError(
+                ProjectInterchangeJsonValidator.Validate(canonical.Replace("\"name\":\"Zone 1\"", "\"name\":\"Zone 1 \"")),
+                "NAME_NON_CANONICAL");
+            RequireError(
+                ProjectInterchangeJsonValidator.Validate(canonical.Replace("\"name\":\"L01\"", "\"name\":\" L01 \"")),
+                "NAME_NON_CANONICAL");
+            RequireError(
+                ProjectInterchangeJsonValidator.Validate(canonical.Replace("\"name\":\"B300x500\"", "\"name\":\"B300x500 \"")),
+                "NAME_NON_CANONICAL");
         }
 
         private static void WrongUnitsFailClosed()
