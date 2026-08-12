@@ -138,6 +138,8 @@ namespace QS3D.Core.Export
         {
             var workbookEntry = archive.GetEntry("xl/workbook.xml");
             var relationshipsEntry = archive.GetEntry("xl/_rels/workbook.xml.rels");
+            if ((workbookEntry == null) != (relationshipsEntry == null))
+                throw new InvalidDataException("Excel workbook metadata is incomplete: workbook.xml and workbook.xml.rels must either both be present or both be absent.");
             if (workbookEntry != null && relationshipsEntry != null)
             {
                 var workbook = LoadXml(workbookEntry);
