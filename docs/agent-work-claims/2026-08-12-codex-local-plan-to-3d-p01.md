@@ -1,0 +1,54 @@
+# Work claim — LOCAL-014 Plan-to-3D P01 quick-path probe
+
+- Status: `ACTIVE`
+- Agent: `codex-local-root` (`/root`, local Windows + licensed BricsCAD V25)
+- Registered: `2026-08-12T09:55:29+07:00`
+- Baseline main SHA: `26e769a351e1d6f1ac6ec5f12074537f5a6d0240`
+- Priority: `LOCAL-014 / P1` — establish the first exact-SHA, reproducible native proof for the BLT-style 2D plan -> semantic wall -> owned Solid3d quick workflow.
+
+## Reserved scope
+
+Implement and execute only a bounded **P01 positive quick-path** qualification around the real production `QS3DCONVERT2D` flow. The automation-only probe may seed simple supported Model Space LINE sources in a disposable repository-generated drawing, select them through PICKFIRST, invoke the production command path, and verify the resulting semantic/native ownership and quick fallback values. The runner must bind evidence to one clean exact Git SHA and built V25 plugin, keep runtime artifacts outside the repository, preserve the disposable DWG bytes by closing without save, and verify process/script cleanup.
+
+This P01 result is infrastructure and one positive runtime slice only. It must not promote all of LOCAL-014.
+
+## Expected surfaces
+
+- `src/QS3D.BricsCAD.V25/PlanTo3DRuntimeProbeCommands.cs` — new automation-only seed/invoke/verify command; no user-facing feature route.
+- `scripts/test-bricscad-v25-plan-to-3d.ps1` — new exact-SHA disposable-copy runner.
+- `scripts/preflight-plan-to-3d-runtime-probe.py` — new static/privacy/cleanup contract.
+- `scripts/preflight-plan-to-3d-quick-authoring.py` — reconcile only the stale bare-`Modal` token with the current `Modal | UsePickSet` contract.
+- `scripts/preflight-plan-to-3d-finish-workflow.py` — reconcile only the stale Ribbon `CollectionContainsId` token with current find-or-create/reconcile behavior.
+- `docs/LOCAL-AGENT-INBOX.md` and `docs/PLAN-TO-3D-WORKFLOW.md` — record exact P01 scope/evidence while retaining full `PENDING_LOCAL` status.
+- this claim file for close-out.
+
+## P01 contract
+
+- Start from a clean exact SHA, canonical V25 x64 Release plugin path, initialized nonblank profile, fresh ordinary `*.plan-to-3d-probe-copy.dwg`, and fresh empty artifact directory outside the repository.
+- Seed only bounded simple supported LINE sources; no private/customer drawing or BLT binary/API.
+- Invoke the actual `PlanTo3DCommands.Convert2D()` / `QS3DCONVERT2D` implementation after PICKFIRST setup; do not duplicate semantic capture, regeneration or native wall formulas in the probe.
+- Verify expected source count, one semantic `ArchitecturalWall` owner per source, fallback `ThicknessM=0.2`, `HeightM=3.0`, `BottomOffsetM=0`, one live owned generated solid per wall, source geometry retained, distinct canonical ownership, and clean focused model health.
+- Emit nonce-bound sanitized booleans/counts/hashes/version fields only: no raw path, Handle, semantic ID/name, layer/text or project/drawing identity.
+- Require unchanged disposable-DWG SHA-256, no adjacent `.qsdb`/`.bak`, deleted generated `.scr`, and verified launched-process exit.
+
+## Excluded scope
+
+- No full LOCAL-014 PASS; `QS3DPLAN2WALLS` alias parity, `QS3DCONVERT2DADV` three-prompt cancellation, mid-prompt DWG/UCS/unit/project/source drift, unrelated dirty-state proof, deterministic mid-batch native failure injection, Undo/Redo and save/reopen remain `PENDING_LOCAL` unless separately implemented and executed.
+- No edit to production Plan-to-3D orchestration, geometry fingerprint, semantic capture, builders, ownership, regeneration, Ribbon source, Core quantity/reporting or project persistence unless the P01 run exposes a concrete bug and this published claim is expanded first.
+- No private sample DWG/XLSX access, no BLT binary/source/API use, no GitHub Actions, packaging, release, installer or signing work.
+- No V26 runtime claim; this lane is V25-only.
+
+## Validation plan
+
+- Re-run all focused Plan-to-3D source gates, the new probe gate, `scripts/preflight.py`, V25 x64 Release build, and `git diff --check` on the exact candidate.
+- Run the new runner against an ordinary temporary copy of `samples/generated/QS3D-Sample.dwg` with BricsCAD V25.2.10 x64 and profile `QS3D-V25-TEST`.
+- Record sanitized exact-SHA/plugin/DWG hash/count/ownership/cleanup evidence; retain private runtime files only outside the repository and do not commit them.
+- Re-fetch and reconcile current `origin/main` before every implementation/close-out commit; no force push and no Actions dispatch.
+
+## Coordination
+
+Current `ACTIVE` / `BLOCKED` claims were inspected. None reserves Plan-to-3D commands, the planned new probe/runner/gate, or LOCAL-014 P01. The active LOCAL-003 claim belongs to the same local agent but owns Level Z-chain surfaces and explicitly excludes this Plan-to-3D runtime lane. The active Build3D claim owns only `Build3DCommands.cs`, which is excluded here. Start Center/Create Similar/Workspace claims own disjoint UI surfaces.
+
+## Completion condition
+
+The reusable P01 runner/probe/gates and truthful docs are integrated on current `main`; one exact clean V25 SHA produces sanitized positive quick-path evidence with verified cleanup; LOCAL-014 remains OPEN/PENDING for the unexecuted matrix; and this claim is marked `COMPLETED` with exact PR/merge/evidence references.
