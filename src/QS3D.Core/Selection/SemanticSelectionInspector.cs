@@ -173,7 +173,7 @@ namespace QS3D.Core.Selection
 
         private static string CanonicalOptionalReference(string? value, string elementId, string label)
         {
-            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+            if (value == null || string.IsNullOrWhiteSpace(value)) return string.Empty;
             var normalized = value.Trim();
             if (!string.Equals(value, normalized, StringComparison.Ordinal))
                 throw new InvalidOperationException("Selected element contains a non-canonical " + label + " id: " + elementId + "/" + value + ".");
