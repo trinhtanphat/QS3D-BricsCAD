@@ -20,7 +20,7 @@ if COMMANDS.is_file():
     required = (
         'var totalWeight = 0d;',
         'QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS command total weight")',
-        'if (row == null) throw new InvalidOperationException("BBS không được chứa dòng null.");',
+        'if (row == null) throw new CommandUserException("BBS không được chứa dòng null.");',
     )
     for token in required:
         if token not in text:
