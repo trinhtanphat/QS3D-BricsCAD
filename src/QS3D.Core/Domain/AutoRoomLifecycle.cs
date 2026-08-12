@@ -15,6 +15,7 @@ namespace QS3D.Core.Domain
         public const string BoundarySourceSignatureKey = "BoundarySourceSignature";
         public const string RoomSourceIdKey = "RoomSourceId";
         private const string FamilyDefaultSnapshotPrefix = "AutoRoomFamilyDefault:";
+        private const int MaxSourceHandleInputCount = 5000;
 
         private static readonly string[] RoomReferencePropertyKeys =
         {
@@ -52,11 +53,20 @@ namespace QS3D.Core.Domain
         public static string NormalizeSourceHandles(IEnumerable<string> handles)
         {
             if (handles == null) throw new ArgumentNullException(nameof(handles));
-            return string.Join(";", handles
-                .Where(x => !string.IsNullOrWhiteSpace(x))
-                .Select(x => x.Trim().ToUpperInvariant())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
+
+            var normalized = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var inputCount = 0;
+            foreach (var raw in handles)
+            {
+                if (inputCount >= MaxSourceHandleInputCount)
+                    throw new InvalidOperationException(
+                        "Auto Room source handles cannot exceed " + MaxSourceHandleInputCount + " input entries.");
+                inputCount++;
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+                normalized.Add(raw.Trim().ToUpperInvariant());
+            }
+
+            return string.Join(";", normalized.OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
         }
 
         public static string SourceSignature(ProjectElement element)
