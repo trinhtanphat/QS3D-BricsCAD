@@ -125,8 +125,9 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           git show b064215655e3da25c7855e18a85677ae5d4088f9:scripts/preflight-ci-manual-only.py > scripts/preflight-ci-manual-only.py
+          git show b064215655e3da25c7855e18a85677ae5d4088f9:scripts/preflight.py > scripts/preflight.py
           git rm .github/workflows/release-v25-cloud-auto.yml
-          git add scripts/preflight-ci-manual-only.py
+          git add scripts/preflight-ci-manual-only.py scripts/preflight.py
           if git diff --cached --quiet; then
             echo "Temporary dispatcher already disabled."
             exit 0
