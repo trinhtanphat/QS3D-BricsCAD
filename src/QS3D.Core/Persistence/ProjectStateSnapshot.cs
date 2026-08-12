@@ -64,6 +64,8 @@ namespace QS3D.Core.Persistence
 
         private static void CopyInto(ProjectState source, ProjectState target, IReadOnlyDictionary<string, ProjectElement>? preservedElements)
         {
+            ValidateCollectionEntries(source);
+
             target.SchemaVersion = source.SchemaVersion;
             target.Name = source.Name;
             target.DrawingPath = source.DrawingPath;
@@ -124,6 +126,27 @@ namespace QS3D.Core.Persistence
             target.Metadata.Clear();
             foreach (var item in source.Metadata) target.Metadata[item.Key] = item.Value;
             target.RestorePersistenceState(source.UpdatedUtc, source.ChangeVersion);
+        }
+
+        private static void ValidateCollectionEntries(ProjectState source)
+        {
+            RequireNoNullEntries(source.Zones, "zone");
+            RequireNoNullEntries(source.Floors, "floor");
+            RequireNoNullEntries(source.Families, "family");
+            RequireNoNullEntries(source.Elements, "element");
+            RequireNoNullEntries(source.QuantityRules, "quantity rule");
+            RequireNoNullEntries(source.AuditEvents, "audit event");
+        }
+
+        private static void RequireNoNullEntries<T>(IEnumerable<T> values, string label) where T : class
+        {
+            var index = 0;
+            foreach (var value in values)
+            {
+                if (value == null)
+                    throw new InvalidOperationException("Cannot snapshot a project containing a null " + label + " entry at index " + index + ".");
+                index++;
+            }
         }
 
         private static ProjectElement CloneElement(ProjectElement source)
