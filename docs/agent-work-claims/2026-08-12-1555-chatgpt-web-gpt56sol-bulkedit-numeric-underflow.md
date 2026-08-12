@@ -1,10 +1,11 @@
 # Work claim — BulkEdit numeric underflow integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT web / GPT-5.6 Sol`
 - Registered: `2026-08-12T15:55:00+07:00`
+- Completed: `2026-08-12T16:08:00+07:00`
 - Baseline main SHA: `41c2c5c7217986995151db282216bd9b4b18f09a`
-- Priority: Proven Core bulk-edit numeric integrity defect: direct invariant parsing and multiplication can silently collapse mathematically non-zero semantic property values to exact zero.
+- Priority: Proven Core bulk-edit numeric integrity defect: direct invariant parsing and multiplication could silently collapse mathematically non-zero semantic property values to exact zero.
 
 ## Reserved scope
 
@@ -15,11 +16,32 @@ Harden `BulkEditService.MultiplyNumericProperty()` so it fails closed when:
 
 Preserve legitimate zero tokens/operands, representable subnormal results, exact numeric no-op behavior, existing overflow handling, atomicity, project freshness and generated-geometry dirty semantics.
 
-## Expected surfaces
+## Implementation
 
-- `src/QS3D.Core/Services/BulkEditService.cs`
-- focused `tests/QS3D.Core.SmokeTests/` regression coverage for BulkEdit numeric underflow
-- this claim file
+- Claim publication: `8a17e54fdc9c8beae65fec6748a26fe1fe279f0c`.
+- Product guard: `e16e5629b456c92b9ec614d25b422404e645a028`.
+- Focused regression: `bb1a84e78ff490cead56bec10731464a8b2e48f2`.
+
+`BulkEditService.MultiplyNumericProperty()` now rejects syntactically non-zero property tokens that parse to exact zero and rejects finite non-zero multiplication that underflows to exact zero. Explicit zero operands remain valid, exact numeric no-ops remain lexical/freshness no-ops, and representable subnormal results remain writable.
+
+## Regression coverage
+
+`BulkEditNumericNoOpSmoke` now covers:
+
+- `"1e-4000"` parse underflow with no project/element/property mutation;
+- `double.Epsilon * 0.5` multiplication underflow with no partial mutation;
+- exact scientific zero `"0e-4000"` remaining a lexical/freshness no-op;
+- representable `double.Epsilon * 2` remaining valid;
+- explicit zero-factor multiplication remaining a legitimate zero-producing edit;
+- the earlier geometry/non-geometry x1 no-op and real-change behavior.
+
+## Validation actually obtained
+
+- Read back `BulkEditService.cs` from implementation head `bb1a84e78ff490cead56bec10731464a8b2e48f2` and confirmed both underflow guards are live before mutation.
+- Read back `BulkEditNumericNoOpSmoke.cs` from the same head and confirmed focused atomicity/zero/subnormal regressions are present.
+- Executable .NET build/smoke: `NOT RUN` in this connector-only lane.
+- GitHub Actions: `NOT DISPATCHED` under `CI_POLICY.md`.
+- BricsCAD V25/V26 runtime: `NOT RUN`; no runtime PASS claimed.
 
 ## Excluded scope
 
@@ -27,24 +49,10 @@ Preserve legitimate zero tokens/operands, representable subnormal results, exact
 - `QuantityMath` arithmetic (already completed independently).
 - Formula parsing, measured-solid parsing, Curtain/Grid/geometry arithmetic, persistence, native CAD/runtime, release/workflow changes.
 
-## Counterexamples
-
-- Stored property token `"1e-4000"` with factor `2` currently parses to `0d`; the exact-numeric no-op guard then silently accepts a mathematically non-zero property as zero.
-- Stored property token `"5e-324"` with factor `0.5` currently parses to `double.Epsilon` but multiplication underflows to `0d`, allowing BulkEdit to publish false zero.
-
-## Validation plan
-
-- Reject non-zero numeric-token parse underflow before any mutation.
-- Reject non-zero multiplication underflow before any mutation.
-- Preserve exact-zero scientific tokens and true-zero multiplication.
-- Preserve representable subnormal results and existing x1 lexical/freshness no-op behavior.
-- Verify failure is all-or-nothing for project/property/freshness state.
-- No GitHub Actions or BricsCAD runtime PASS will be claimed unless separately executed under repository policy.
-
 ## Coordination
 
-Recent BulkEdit numeric no-op work changed the same method but addressed lexical x1 no-ops, not underflow. Current claim/history search found no ACTIVE neighboring claim owning this underflow scope. Re-check concurrent claims and `main` immediately before implementation writes.
+Recent BulkEdit numeric no-op work addressed lexical x1 no-ops, not underflow. No overlapping ACTIVE claim was found for this underflow scope before implementation. Source/test writes were based on current blobs and read back from `main` after landing.
 
 ## Completion condition
 
-Product guard and focused regression are pushed to `main`; source/test readback confirms the exact intended behavior; this claim is then closed `COMPLETED` with exact commit evidence and no overlapping ACTIVE ownership left unresolved.
+Satisfied: product guard and focused regression are on `main`, source/test readback confirms the intended behavior, and this claim is closed with exact commit evidence.
