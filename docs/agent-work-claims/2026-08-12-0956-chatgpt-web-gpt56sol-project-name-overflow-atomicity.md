@@ -1,32 +1,32 @@
 # Work claim — ProjectState Name ChangeVersion-overflow atomicity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
+- Outcome: `REDUNDANT_CONCURRENT_FIX` — defect confirmed, but concurrent work integrated the final fix before this branch could merge.
 - Agent: `chatgpt-web-gpt56sol-project-name-overflow-atomicity-20260812-0956`
 - Registered: `2026-08-12T09:56:00+07:00`
 - Baseline main SHA: `2808d90412f298dee0e008a7806a7e898c360366`
-- Priority: P1 — close an atomicity regression in the just-merged Project Name freshness fix.
 
 ## Confirmed defect
 
-The completed Project Name freshness lane made a real `ProjectState.Name` change call `Touch()`, but currently assigns `_name = next` before `Touch()`. `Touch()` computes `checked(ChangeVersion + 1L)` and can throw when `ChangeVersion == long.MaxValue`. At that boundary the setter throws after the persisted Name has already changed, leaving a partially-mutated project with unchanged freshness. Core mutation services normally call `project.Touch()` before their non-throwing field assignments for exactly this fail-before-mutate property.
+PR #722 initially assigned `_name = next` before the checked freshness increment. At `ChangeVersion == long.MaxValue`, rename could throw after changing Name while leaving ChangeVersion/UpdatedUtc unchanged.
 
-## Reserved surfaces
+## Concurrent completion observed on main
 
-- `src/QS3D.Core/Domain/ProjectState.cs` — Name setter statement order only
-- `tests/QS3D.Core.SmokeTests/ProjectNameOverflowAtomicitySmoke.cs` — new focused regression
-- this claim file
+Parallel completed claim `2026-08-12-0955-gpt56sol-project-name-overflow-atomicity.md` integrated the same defect first:
 
-## Intended fix
+- source fix `0255a53315e1b624fc88b6b6a0f48082c51bfc81`
+- regression `46105e82c54012468625a1cf5155e14cdc758678`
+- current setter precomputes checked next ChangeVersion and timestamp before mutating Name/freshness.
 
-- Keep validation and canonical-equivalent no-op behavior unchanged.
-- For a real name change, call `Touch()` first; assign `_name` only after the checked freshness increment succeeds.
-- Preserve the previously merged one-revision persistence freshness behavior in normal states.
-- Add focused smoke that seeds `ChangeVersion = long.MaxValue` through the existing internal persistence-restoration method via reflection, then proves rename throws `OverflowException` without changing Name/ChangeVersion/UpdatedUtc; include a normal rename control.
+## Redundant branch evidence
 
-## Coordination
+- claim commit `6d3bdd42b153198bda216e7692a555a06df5800f`
+- branch source `966556436c3db682aa7ee3eb4db2f1df62c84605`
+- branch smoke `45814654d704622e57c77c9b38dc664397b53e6d`
+- PR #730 intentionally closed unmerged after comparison showed concurrent `ProjectState.cs` overlap.
 
-This is a narrow follow-up to completed PR #722. It does not alter QSDB changeVersion parsing, ProjectStateSnapshot semantics, selection build work or any native/UI file.
+No source/test from this duplicate branch was merged into main.
 
 ## Validation boundary
 
-Committed deterministic Core smoke coverage plus exact source/diff review. No GitHub Actions dispatch; no licensed BricsCAD V25/V26 runtime PASS claimed.
+Current-main source/claim readback plus exact overlap comparison. No GitHub Actions were dispatched and no licensed BricsCAD V25/V26 runtime PASS is claimed.
