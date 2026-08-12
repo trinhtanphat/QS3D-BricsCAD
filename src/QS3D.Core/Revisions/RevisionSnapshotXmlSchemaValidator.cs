@@ -20,10 +20,10 @@ namespace QS3D.Core.Revisions
                 foreach (var element in elements.Elements("element"))
                 {
                     ValidateElement(element, "element", new[] { "id", "category", "familyId", "floorId", "zoneId" }, new[] { "properties", "quantities", "sourceHandles", "dependencies" });
-                    RequireAtMostOne(element, "properties");
-                    RequireAtMostOne(element, "quantities");
-                    RequireAtMostOne(element, "sourceHandles");
-                    RequireAtMostOne(element, "dependencies");
+                    RequireExactlyOne(element, "properties");
+                    RequireExactlyOne(element, "quantities");
+                    RequireExactlyOne(element, "sourceHandles");
+                    RequireExactlyOne(element, "dependencies");
 
                     foreach (var properties in element.Elements("properties"))
                     {
@@ -93,13 +93,6 @@ namespace QS3D.Core.Revisions
             var name = XName.Get(childName);
             if (parent.Elements(name).Take(2).Count() != 1)
                 throw new InvalidDataException("QS3D revision requires exactly one " + childName + " section.");
-        }
-
-        private static void RequireAtMostOne(XElement parent, string childName)
-        {
-            var name = XName.Get(childName);
-            if (parent.Elements(name).Skip(1).Any())
-                throw new InvalidDataException("Duplicate QS3D revision singleton element: " + parent.Name.LocalName + "/" + childName);
         }
     }
 }
