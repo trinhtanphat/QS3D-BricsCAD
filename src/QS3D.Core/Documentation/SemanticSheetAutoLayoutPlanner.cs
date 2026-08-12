@@ -234,6 +234,8 @@ namespace QS3D.Core.Documentation
                 double usableWidth,
                 double usableHeight)
             {
+                if (Placements.Count >= SemanticSheetPlanner.MaxPlacements) return false;
+
                 var localX = _started ? _cursorX : 0d;
                 var localY = _started ? _cursorY : 0d;
                 var rowHeight = _started ? _rowHeight : 0d;
