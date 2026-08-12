@@ -119,6 +119,8 @@ namespace QS3D.Core.Revisions
         {
             if (before == null) throw new ArgumentNullException(nameof(before));
             if (after == null) throw new ArgumentNullException(nameof(after));
+            var beforeRevisionId = CanonicalRevisionId(before.Id, "before revision id");
+            var afterRevisionId = CanonicalRevisionId(after.Id, "after revision id");
 
             var beforeIndex = Index(before, "before");
             var afterIndex = Index(after, "after");
@@ -184,7 +186,15 @@ namespace QS3D.Core.Revisions
             if (summary.TotalElementCount != orderedElements.Count)
                 throw new InvalidOperationException("Semantic change review summary is inconsistent with its grouped elements.");
 
-            return new SemanticChangeReview(before.Id, after.Id, orderedElements, summary);
+            return new SemanticChangeReview(beforeRevisionId, afterRevisionId, orderedElements, summary);
+        }
+
+        private static string CanonicalRevisionId(string? value, string label)
+        {
+            var raw = value ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Revision " + label + " is required and must not contain leading/trailing whitespace.");
+            return raw;
         }
 
         private static bool IsPortableReviewField(string field)
