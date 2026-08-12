@@ -237,7 +237,9 @@ namespace QS3D.Core.Services
             foreach (var child in project.Elements)
             {
                 if (child.Category != ElementCategory.WallOpening && child.Category != ElementCategory.Door) continue;
-                if (!child.Properties.TryGetValue("HostWallId", out var host) || !string.Equals(host, wall.Id, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!child.Properties.TryGetValue("HostWallId", out var host)) continue;
+                var hostId = CanonicalOptionalHostId(host, child.Id);
+                if (hostId.Length == 0 || !string.Equals(hostId, wall.Id, StringComparison.OrdinalIgnoreCase)) continue;
                 double area;
                 if (child.Quantities.TryGetValue("OpeningAreaM2", out var stored)) area = QuantityMath.Positive(stored);
                 else
@@ -250,6 +252,16 @@ namespace QS3D.Core.Services
                 total = QuantityMath.Add(total, area, wall.Id + "/linked opening area");
             }
             return total;
+        }
+
+        private static string CanonicalOptionalHostId(string? value, string elementId)
+        {
+            var raw = value ?? string.Empty;
+            if (raw.Length == 0) return string.Empty;
+            if (string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Structural wall quantity requires canonical HostWallId without surrounding whitespace on opening: " + elementId + ".");
+            return raw;
         }
     }
 
