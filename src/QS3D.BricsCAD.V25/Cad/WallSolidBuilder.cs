@@ -105,14 +105,13 @@ namespace QS3D.BricsCAD.V25.Cad
                         var midZ = CadGeometryGuard.Add(placement.BottomDrawingUnits, height / 2d, element.Id + "/mid Z");
                         var mid = new Point3d(midX, midY, midZ);
 
-                        var solid = new Solid3d();
-                        try
-                        {
-                            solid.SetDatabaseDefaults(document.Database);
-                            solid.CreateBox(length, thickness, height);
-                            solid.TransformBy(Matrix3d.Displacement(new Vector3d(-length / 2d, -thickness / 2d, -height / 2d)));
-                            solid.TransformBy(Matrix3d.Rotation(angle, Vector3d.ZAxis, Point3d.Origin));
-                            solid.TransformBy(Matrix3d.Displacement(new Vector3d(mid.X, mid.Y, mid.Z)));
+                            var solid = new Solid3d();
+                            try
+                            {
+                                solid.SetDatabaseDefaults(document.Database);
+                                solid.CreateBox(length, thickness, height);
+                                solid.TransformBy(Matrix3d.Rotation(angle, Vector3d.ZAxis, Point3d.Origin));
+                                solid.TransformBy(Matrix3d.Displacement(new Vector3d(mid.X, mid.Y, mid.Z)));
                             solid.Layer = line.Layer;
 
                             var previousHandle = GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
