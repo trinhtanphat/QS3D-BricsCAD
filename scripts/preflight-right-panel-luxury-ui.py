@@ -67,7 +67,7 @@ else:
         'DisplayMemberBinding="{Binding Name}"',
         'DisplayMemberBinding="{Binding LockState}"',
         'DisplayMemberBinding="{Binding InstanceText}"',
-        'Header="Tỉ lệ"',
+        'Header="Tỉ lệ Xref"',
         'DisplayMemberBinding="{Binding ScaleText}"',
     )
     for token in required_xref_state:
