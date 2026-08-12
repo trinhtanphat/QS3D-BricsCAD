@@ -36,6 +36,8 @@ namespace QS3D.Core.SmokeTests
         private static void CaseInsensitiveSelectionIdentityReveals()
         {
             var root = BuildRoot();
+            True(root.ElementIds.Contains("B-001"));
+            True(!root.ElementIds.Contains("b-001"));
             var plan = ProjectBrowserSelectionPlanner.PlanReveal(root, new[] { "b-001" }, "B-001");
 
             Equal(1, plan.SelectedElementIds.Count);
