@@ -74,9 +74,10 @@ namespace QS3D.Core.Rebar
         private static List<double> ParsePositiveList(string? text, string label, int maxCount)
         {
             if (string.IsNullOrWhiteSpace(text)) return new List<double>();
-            if (text!.Length > MaxListTextLength) throw new FormatException(label + " exceeds the supported " + MaxListTextLength + "-character limit.");
+            var raw = text!;
+            if (raw.Length > MaxListTextLength) throw new FormatException(label + " exceeds the supported " + MaxListTextLength + "-character limit.");
             var values = new List<double>();
-            foreach (var token in Split(text))
+            foreach (var token in Split(raw))
             {
                 if (values.Count >= maxCount) throw new InvalidOperationException("Rebar shape exceeds the supported leg limit of " + MaxLegs + ".");
                 if (!double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || value <= 0d) throw new FormatException(label + " contains an invalid positive number: " + token);
@@ -87,9 +88,10 @@ namespace QS3D.Core.Rebar
         private static IReadOnlyList<double> ParseTurns(string? text, int maxCount)
         {
             if (string.IsNullOrWhiteSpace(text)) return Array.Empty<double>();
-            if (text!.Length > MaxListTextLength) throw new FormatException("RebarShapeTurnsDeg exceeds the supported " + MaxListTextLength + "-character limit.");
+            var raw = text!;
+            if (raw.Length > MaxListTextLength) throw new FormatException("RebarShapeTurnsDeg exceeds the supported " + MaxListTextLength + "-character limit.");
             var values = new List<double>();
-            foreach (var token in Split(text))
+            foreach (var token in Split(raw))
             {
                 if (values.Count >= maxCount) throw new InvalidOperationException("RebarShapeTurnsDeg must contain exactly legs-1 values.");
                 if (!double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || Math.Abs(value) > 180d) throw new FormatException("RebarShapeTurnsDeg contains an invalid turn angle: " + token);
