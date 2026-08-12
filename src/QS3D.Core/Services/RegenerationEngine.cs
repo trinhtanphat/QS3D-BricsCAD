@@ -108,6 +108,7 @@ namespace QS3D.Core.Services
                 var missing = unresolved.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).First();
                 throw new KeyNotFoundException("Unknown regeneration target: " + missing);
             }
+            ValidateSubsetDependencyExistence(targets, seenProjectIds);
 
             return RegenerateTransactional(project, targets, targets.Count);
         }
@@ -120,6 +121,36 @@ namespace QS3D.Core.Services
                 if (element == null) throw new InvalidOperationException("Project contains a null semantic element entry.");
                 if (!seenProjectIds.Add(element.Id))
                     throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
+            }
+        }
+
+        private static void ValidateSubsetDependencyExistence(
+            IEnumerable<ProjectElement> targets,
+            ISet<string> projectIds)
+        {
+            foreach (var target in targets)
+            {
+                var dependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var canonicalUnique = true;
+                foreach (var dependencyRaw in target.DependsOn)
+                {
+                    var dependency = dependencyRaw ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(dependency) ||
+                        !string.Equals(dependency, dependency.Trim(), StringComparison.Ordinal) ||
+                        !dependencies.Add(dependency))
+                    {
+                        canonicalUnique = false;
+                        break;
+                    }
+                }
+                if (!canonicalUnique) continue;
+
+                foreach (var dependency in dependencies)
+                {
+                    if (projectIds.Contains(dependency)) continue;
+                    throw new InvalidOperationException(
+                        "Semantic element " + target.Id + " depends on missing semantic element: " + dependency + ". Repair semantic relations before graph evaluation.");
+                }
             }
         }
 
