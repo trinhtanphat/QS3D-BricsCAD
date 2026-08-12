@@ -14,7 +14,7 @@ namespace QS3D.Core.SmokeTests
         {
             ValidCurrentProjectLoads();
             LegacyV1StillMigrates();
-            RootNameCasingRemainsCompatible();
+            RejectsNonCanonicalRootName();
             RejectsForeignNamespace();
             RejectsUnknownRootAttribute();
             RejectsUnknownChild();
@@ -40,11 +40,7 @@ namespace QS3D.Core.SmokeTests
             Equal("1", project.Metadata["QS3D.SchemaMigratedFrom"]);
         }
 
-        private static void RootNameCasingRemainsCompatible()
-        {
-            var project = Load(Current("Qs3D"));
-            Equal("P", project.ProjectId);
-        }
+        private static void RejectsNonCanonicalRootName() => Reject(Current("Qs3D"));
 
         private static void RejectsForeignNamespace() => Reject(
             "<qs3d xmlns='urn:qs3d:future' schema='3' projectId='P' name='Project' updatedUtc='" + Timestamp + "' changeVersion='0'><metadata/><zones/><floors/><families/><rules/><elements/><audit/></qs3d>");
