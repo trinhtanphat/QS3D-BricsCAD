@@ -109,9 +109,7 @@ namespace QS3D.Core.Documentation
             var zoneId = NormalizeOptional(definition.ZoneId, MaxIdLength, nameof(definition.ZoneId));
             if (zoneId != null) EnsureUniqueReference(project.Zones, x => x.Id, zoneId, "zone");
 
-            var categories = new HashSet<ElementCategory>(definition.Categories);
-            if (categories.Count != definition.Categories.Count)
-                throw new InvalidOperationException("Semantic view contains duplicate category filters.");
+            var categories = NormalizeCategories(definition.Categories);
 
             var includeIds = NormalizeIds(definition.IncludeElementIds, "includeElementIds");
             var excludeIds = NormalizeIds(definition.ExcludeElementIds, "excludeElementIds");
@@ -186,6 +184,20 @@ namespace QS3D.Core.Documentation
                 var id = Required(element.Id, "project.Elements.Id", MaxIdLength);
                 if (result.ContainsKey(id)) throw new InvalidOperationException("Project contains duplicate semantic element id: " + id + ".");
                 result.Add(id, element);
+            }
+            return result;
+        }
+
+        private static HashSet<ElementCategory> NormalizeCategories(IReadOnlyList<ElementCategory> values)
+        {
+            var result = new HashSet<ElementCategory>();
+            for (var i = 0; i < values.Count; i++)
+            {
+                var category = values[i];
+                if (!Enum.IsDefined(typeof(ElementCategory), category))
+                    throw new InvalidOperationException("Unsupported semantic view category filter '" + category + "'.");
+                if (!result.Add(category))
+                    throw new InvalidOperationException("Semantic view contains duplicate category filters.");
             }
             return result;
         }
