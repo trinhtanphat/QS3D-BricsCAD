@@ -159,6 +159,8 @@ namespace QS3D.Core.Domain
             if (room == null) throw new ArgumentNullException(nameof(room));
             if (family == null) throw new ArgumentNullException(nameof(family));
 
+            ResolveProjectElements(project);
+            ValidateUniqueFamilyIds(project);
             var ownedRoom = project.FindElement(room.Id) ?? throw new InvalidOperationException("Room does not belong to the project: " + room.Id);
             if (!ReferenceEquals(ownedRoom, room))
                 throw new InvalidOperationException("Room instance does not belong to the project: " + room.Id);
@@ -286,6 +288,18 @@ namespace QS3D.Core.Domain
         private static bool SameScopeId(string? left, string? right)
         {
             return string.Equals((left ?? string.Empty).Trim(), (right ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void ValidateUniqueFamilyIds(ProjectState project)
+        {
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var family in project.Families)
+            {
+                if (family == null)
+                    throw new InvalidOperationException("Project contains a null Family entry.");
+                if (!seenIds.Add(family.Id))
+                    throw new InvalidOperationException("Project contains duplicate Family id: " + family.Id + ".");
+            }
         }
 
         private static IReadOnlyList<ProjectElement> ResolveProjectElements(ProjectState project)
