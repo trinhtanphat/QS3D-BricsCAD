@@ -1,6 +1,6 @@
 # Work claim — global Floor duplicate identity integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-floor-global-duplicate-integrity-20260812-0857`
 - Registered: `2026-08-12T08:57:00+07:00`
 - Baseline main SHA: `057d9fd153190511322fd7339c5ea0406587b276`
@@ -8,21 +8,24 @@
 
 ## Confirmed defect
 
-The previous Floor Create fix blocks duplicate existing IDs before Create, but other `ProjectFloorService` operations resolve a requested Floor through `ProjectState.FindFloor(id)`. `FindUnique` only detects duplicates matching the requested ID. If the collection contains unrelated duplicate IDs such as `F1` + `f1`, an operation on unique `F2` can still proceed and mutate an already-invalid project. `ProjectZoneService` has just been hardened with a global identity preflight for the same reason.
+The earlier Floor Create fix blocked duplicate existing IDs only on Create. Other `ProjectFloorService` operations resolved a requested Floor through `ProjectState.FindFloor(id)`, whose uniqueness check only detects duplicates matching the requested ID. An unrelated duplicate pair such as `F1` + `f1` could therefore coexist while a mutation on unique `F2` still proceeded.
 
-## Reserved surfaces
+## Implemented fix
 
-- `src/QS3D.Core/Domain/ProjectFloorService.cs`
-- `tests/QS3D.Core.SmokeTests/ProjectFloorGlobalDuplicateIntegritySmoke.cs` — new focused regression
-- this claim file
+- Existing Floor ID uniqueness is centralized in `ValidateUniqueFloorIds(project)`.
+- `Create(...)` uses the shared global identity guard.
+- `FindRequired(...)` now runs the same global guard before lookup, covering Update, SetActive, Assign, vertical-level assignment, Delete and ReferenceCount paths.
+- Case-insensitive canonical lookup, previous Create behavior, active-floor same-target alias semantics, finite/vertical validations and unrelated services remain unchanged.
+- Focused smoke proves `SetActive("F2")` fails before mutation when unrelated `F1/f1` duplicates exist, while valid case-insensitive activation still advances one revision.
 
-## Intended fix
+## Integration evidence
 
-- Factor the existing Create duplicate scan into `ValidateUniqueFloorIds(project)`.
-- Call that preflight from both Create and `FindRequired`, so Update/SetActive/Assign/vertical-level/Delete/ReferenceCount paths fail before mutation when any Floor identity is duplicated globally.
-- Preserve case-insensitive canonical lookup, previous Create behavior, active-floor alias no-op semantics, finite/vertical validations and all unrelated services.
-- Add focused smoke proving an operation on unique `F2` does not mutate when unrelated `F1/f1` duplicates exist, while a valid project still updates normally.
+- Claim registration: `60b5a6ddfcb90c7331162f41f4722ff9b3bc4d50`.
+- Branch source commit: `c6a13a683b5029c86e6f4d561faf43d3464f208f`.
+- Focused smoke commit: `205ae17a89b29499b1a554ae7f1cc08b3e6e5e0f`.
+- Branch diff was exactly `ProjectFloorService.cs` (+13/-4) plus the new 49-line smoke.
+- PR `#670` was mergeable and squash-merged at `cd05005f3c0d6fd2abb381e1db822777f7631131`.
 
 ## Validation boundary
 
-Committed deterministic Core smoke coverage plus exact source/diff review. No GitHub Actions dispatch; no licensed BricsCAD V25/V26 runtime PASS claimed.
+Committed deterministic Core smoke coverage plus exact source/diff review. No GitHub Actions were dispatched and no licensed BricsCAD V25/V26 runtime PASS is claimed.
