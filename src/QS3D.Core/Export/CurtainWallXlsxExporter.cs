@@ -19,12 +19,15 @@ namespace QS3D.Core.Export
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-            if (rows.Count > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Curtain XLSX export supports at most " + MaxDataRows + " data rows.");
-            for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+            var rowCount = rows.Count;
+            if (rowCount > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Curtain XLSX export supports at most " + MaxDataRows + " data rows.");
+            var snapshot = new List<CurtainWallScheduleRow>(rowCount);
+            for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
             {
-                var row = rows[rowIndex];
-                if (row == null)
+                var sourceRow = rows[rowIndex];
+                if (sourceRow == null)
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
+                var row = SnapshotRow(sourceRow);
                 ValidateCellText(row.Floor, rowIndex, "Floor");
                 ValidateCellText(row.FamilyName, rowIndex, "FamilyName");
                 ValidateFinite(row.TotalWallLengthM, rowIndex, "TotalWallLengthM");
@@ -37,6 +40,7 @@ namespace QS3D.Core.Export
                 ValidateFinite(row.MaximumClearPanelWidthM, rowIndex, "MaximumClearPanelWidthM");
                 ValidateFinite(row.MinimumClearPanelHeightM, rowIndex, "MinimumClearPanelHeightM");
                 ValidateFinite(row.MaximumClearPanelHeightM, rowIndex, "MaximumClearPanelHeightM");
+                snapshot.Add(row);
             }
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
@@ -52,12 +56,35 @@ namespace QS3D.Core.Export
                     WriteEntry(archive, "xl/workbook.xml", WorkbookXml);
                     WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml);
                     WriteEntry(archive, "xl/styles.xml", StylesXml);
-                    WriteEntry(archive, "xl/worksheets/sheet1.xml", BuildSheet(rows));
+                    WriteEntry(archive, "xl/worksheets/sheet1.xml", BuildSheet(snapshot));
                 }
                 ValidatePackage(tempPath);
                 AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
             }
             finally { AtomicFileCommit.TryDelete(tempPath); }
+        }
+
+        private static CurtainWallScheduleRow SnapshotRow(CurtainWallScheduleRow row)
+        {
+            return new CurtainWallScheduleRow
+            {
+                Floor = row.Floor ?? string.Empty,
+                FamilyName = row.FamilyName ?? string.Empty,
+                WallCount = row.WallCount,
+                TotalWallLengthM = row.TotalWallLengthM,
+                GrossWallAreaM2 = row.GrossWallAreaM2,
+                OpeningAreaM2 = row.OpeningAreaM2,
+                NetGlassAreaM2 = row.NetGlassAreaM2,
+                FrameFaceAreaM2 = row.FrameFaceAreaM2,
+                FrameLengthM = row.FrameLengthM,
+                PanelCount = row.PanelCount,
+                VerticalFrameCount = row.VerticalFrameCount,
+                HorizontalFrameCount = row.HorizontalFrameCount,
+                MinimumClearPanelWidthM = row.MinimumClearPanelWidthM,
+                MaximumClearPanelWidthM = row.MaximumClearPanelWidthM,
+                MinimumClearPanelHeightM = row.MinimumClearPanelHeightM,
+                MaximumClearPanelHeightM = row.MaximumClearPanelHeightM
+            };
         }
 
         private static string BuildSheet(IReadOnlyList<CurtainWallScheduleRow> rows)
