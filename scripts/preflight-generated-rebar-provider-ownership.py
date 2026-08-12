@@ -3,12 +3,13 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = [
+TOLERANT_FILES = [
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedWallMeshHealthService.cs",
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedBeamStirrupHealthService.cs",
     ROOT / "src/QS3D.Core/Diagnostics/GeneratedTieRebarHealthService.cs",
-    ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs",
 ]
+REBAR = ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs"
+FILES = TOLERANT_FILES + [REBAR]
 POLICY = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs"
 INDEX = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipIndex.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/GeneratedRebarProviderOwnershipSmoke.cs"
@@ -25,7 +26,6 @@ for path in FILES:
         continue
     text = path.read_text(encoding="utf-8")
     for token in (
-        "if (element == null) continue;",
         "HashSet<string> Conflicts",
         "if (Conflicts.Contains(handle)) return true;",
         "GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)",
@@ -35,6 +35,18 @@ for path in FILES:
             errors.append(path.name + " missing order-independent diagnostic ownership token: " + token)
     if "normalized.Length == 0 || owners.ContainsKey(normalized)" in text:
         errors.append(path.name + " still uses first-owner-wins reservation logic.")
+
+for path in TOLERANT_FILES:
+    if path.is_file() and "if (element == null) continue;" not in path.read_text(encoding="utf-8"):
+        errors.append(path.name + " diagnostic provider no longer tolerates isolated null entries.")
+
+if REBAR.is_file():
+    text = REBAR.read_text(encoding="utf-8")
+    null_guard = 'throw new InvalidOperationException("Generated rebar health cannot inspect a null project element.")'
+    if text.count(null_guard) != 4:
+        errors.append("GeneratedRebarHealthService must fail closed in exactly four semantic traversals.")
+    if "if (element == null) continue;" in text:
+        errors.append("GeneratedRebarHealthService must not silently skip null semantic entries.")
 
 if POLICY.is_file():
     text = POLICY.read_text(encoding="utf-8")
@@ -89,4 +101,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: generated rebar/wall/tie/stirrup diagnostics remain null-tolerant and order-independent, while canonical generated ownership policy fails closed on corrupt semantic element sets and ambiguity.")
+print("PASS: generated wall/tie/stirrup diagnostics remain null-tolerant and order-independent; GeneratedRebar and canonical ownership policy fail closed on corrupt semantic element sets and ambiguity.")
