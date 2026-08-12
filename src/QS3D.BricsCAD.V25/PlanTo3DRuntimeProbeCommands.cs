@@ -31,6 +31,12 @@ namespace QS3D.BricsCAD.V25
         private const double DrawingUnitsPerMeter = 1000d;
         private const double ToleranceM = 0.000001d;
 
+        private sealed class ProbeFailureException : InvalidOperationException
+        {
+            public ProbeFailureException(string code) : base(code) => Code = code;
+            public string Code { get; }
+        }
+
         private sealed class SeedLine
         {
             public SeedLine(ObjectId id, Point3d start, Point3d end)
@@ -185,8 +191,9 @@ namespace QS3D.BricsCAD.V25
                 });
                 document.Editor.WriteMessage("\nQS3D Plan-to-3D P01 runtime probe PASS.");
             }
-            catch (System.Exception)
+            catch (System.Exception error)
             {
+                if (error is ProbeFailureException probeFailure) failureCode = probeFailure.Code;
                 TryWriteFailure(requestedPath, nonce, failureCode);
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
                     "\nQS3D Plan-to-3D P01 runtime probe FAIL. See the local qualification result.");
@@ -241,21 +248,27 @@ namespace QS3D.BricsCAD.V25
             double expectedLengthM)
         {
             var ids = CadHandleService.Resolve(document, new[] { generatedHandle });
-            if (ids.Count != 1) throw new InvalidOperationException("Generated Solid3d handle did not resolve uniquely.");
+            if (ids.Count != 1) throw new ProbeFailureException("PLAN_TO_3D_RUNTIME_NATIVE_HANDLE_RESOLUTION_FAILED");
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
                 var solid = transaction.GetObject(ids[0], OpenMode.ForRead, false) as Solid3d;
                 if (solid == null || solid.IsErased)
-                    throw new InvalidOperationException("Generated output is not a live Solid3d.");
+                    throw new ProbeFailureException("PLAN_TO_3D_RUNTIME_NATIVE_SOLID_TYPE_FAILED");
                 if (!GeneratedGeometryService.HasMatchingOwnership(solid, project, wall))
-                    throw new InvalidOperationException("Generated Solid3d XData ownership does not match its semantic wall.");
+                    throw new ProbeFailureException("PLAN_TO_3D_RUNTIME_NATIVE_XDATA_FAILED");
                 var extents = solid.GeometricExtents;
-                Near(expectedLengthM, (extents.MaxPoint.X - extents.MinPoint.X) / DrawingUnitsPerMeter, "native wall length");
-                Near(0.2d, (extents.MaxPoint.Y - extents.MinPoint.Y) / DrawingUnitsPerMeter, "native wall thickness");
-                Near(0d, extents.MinPoint.Z / DrawingUnitsPerMeter, "native wall minimum Z");
-                Near(3d, extents.MaxPoint.Z / DrawingUnitsPerMeter, "native wall maximum Z");
+                RequireNear(expectedLengthM, (extents.MaxPoint.X - extents.MinPoint.X) / DrawingUnitsPerMeter, "PLAN_TO_3D_RUNTIME_NATIVE_LENGTH_FAILED");
+                RequireNear(0.2d, (extents.MaxPoint.Y - extents.MinPoint.Y) / DrawingUnitsPerMeter, "PLAN_TO_3D_RUNTIME_NATIVE_THICKNESS_FAILED");
+                RequireNear(0d, extents.MinPoint.Z / DrawingUnitsPerMeter, "PLAN_TO_3D_RUNTIME_NATIVE_MIN_Z_FAILED");
+                RequireNear(3d, extents.MaxPoint.Z / DrawingUnitsPerMeter, "PLAN_TO_3D_RUNTIME_NATIVE_MAX_Z_FAILED");
                 transaction.Commit();
             }
+        }
+
+        private static void RequireNear(double expected, double actual, string failureCode)
+        {
+            if (double.IsNaN(actual) || double.IsInfinity(actual) || Math.Abs(expected - actual) > ToleranceM)
+                throw new ProbeFailureException(failureCode);
         }
 
         private static void RequireNumber(ProjectElement element, string key, double expected)
