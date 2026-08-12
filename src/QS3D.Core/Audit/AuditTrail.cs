@@ -52,9 +52,7 @@ namespace QS3D.Core.Audit
             var normalizedAction = (action ?? string.Empty).Trim();
             if (normalizedAction.Length == 0)
                 throw new ArgumentException("Audit action is required.", nameof(action));
-            foreach (var existing in _events)
-                if (existing == null)
-                    throw new InvalidOperationException("Audit trail contains a null event. Repair the existing audit history before recording a new event.");
+            ValidateExistingHistoryForRecord();
 
             var item = new AuditEvent
             {
@@ -74,6 +72,20 @@ namespace QS3D.Core.Audit
             if (_events.Count == 0) return;
             _project?.Touch();
             _events.Clear();
+        }
+
+        private void ValidateExistingHistoryForRecord()
+        {
+            foreach (var existing in _events)
+            {
+                if (existing == null)
+                    throw new InvalidOperationException("Audit trail contains a null event. Repair the existing audit history before recording a new event.");
+                if (existing.Utc.Kind != DateTimeKind.Utc)
+                    throw new InvalidOperationException("Audit trail contains a non-UTC event timestamp. Repair the existing audit history before recording a new event.");
+                var existingAction = existing.Action ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(existingAction) || !string.Equals(existingAction, existingAction.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Audit trail contains a non-canonical action. Repair the existing audit history before recording a new event.");
+            }
         }
 
         private static AuditEvent Clone(AuditEvent item)
