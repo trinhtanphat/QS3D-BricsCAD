@@ -11,27 +11,39 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
-            ExplicitOffsetNormalizesToUtcAndMissingOffsetFailsClosed();
+            CanonicalUtcLoadsAndNonCanonicalTimestampsFailClosed();
             SaveRequiresUtcAndCanonicalDefinedCategory();
             FreeTextRoundTripsAndInvalidSavePreservesExistingFile();
             MalformedMapsAndSourceHandlesFailClosed();
         }
 
-        private static void ExplicitOffsetNormalizesToUtcAndMissingOffsetFailsClosed()
+        private static void CanonicalUtcLoadsAndNonCanonicalTimestampsFailClosed()
         {
             var directory = TempDirectory();
             try
             {
                 var store = new RevisionSnapshotStore();
-                var offsetPath = Path.Combine(directory, "offset.qsrev");
-                RevisionDocument("2026-08-10T12:00:00+07:00").Save(offsetPath, SaveOptions.DisableFormatting);
-                var loaded = store.Load(offsetPath);
+                var canonicalPath = Path.Combine(directory, "canonical.qsrev");
+                RevisionDocument("2026-08-10T05:00:00.0000000Z").Save(canonicalPath, SaveOptions.DisableFormatting);
+                var loaded = store.Load(canonicalPath);
                 Equal(new DateTime(2026, 8, 10, 5, 0, 0, DateTimeKind.Utc), loaded.CreatedUtc);
                 Equal(DateTimeKind.Utc, loaded.CreatedUtc.Kind);
 
+                var offsetPath = Path.Combine(directory, "offset.qsrev");
+                RevisionDocument("2026-08-10T12:00:00.0000000+07:00").Save(offsetPath, SaveOptions.DisableFormatting);
+                Throws<InvalidDataException>(() => store.Load(offsetPath));
+
+                var zeroOffsetPath = Path.Combine(directory, "zero-offset.qsrev");
+                RevisionDocument("2026-08-10T05:00:00.0000000+00:00").Save(zeroOffsetPath, SaveOptions.DisableFormatting);
+                Throws<InvalidDataException>(() => store.Load(zeroOffsetPath));
+
                 var missingOffsetPath = Path.Combine(directory, "missing-offset.qsrev");
-                RevisionDocument("2026-08-10T12:00:00").Save(missingOffsetPath, SaveOptions.DisableFormatting);
+                RevisionDocument("2026-08-10T05:00:00.0000000").Save(missingOffsetPath, SaveOptions.DisableFormatting);
                 Throws<InvalidDataException>(() => store.Load(missingOffsetPath));
+
+                var shortUtcPath = Path.Combine(directory, "short-utc.qsrev");
+                RevisionDocument("2026-08-10T05:00:00Z").Save(shortUtcPath, SaveOptions.DisableFormatting);
+                Throws<InvalidDataException>(() => store.Load(shortUtcPath));
             }
             finally
             {
@@ -66,7 +78,7 @@ namespace QS3D.Core.SmokeTests
                 False(File.Exists(nonCanonicalPath), "non-canonical revision category was persisted");
 
                 var loadedUndefinedPath = Path.Combine(directory, "load-undefined.qsrev");
-                RevisionDocument("2026-08-10T05:00:00Z", "999").Save(loadedUndefinedPath, SaveOptions.DisableFormatting);
+                RevisionDocument("2026-08-10T05:00:00.0000000Z", "999").Save(loadedUndefinedPath, SaveOptions.DisableFormatting);
                 Throws<InvalidDataException>(() => store.Load(loadedUndefinedPath));
             }
             finally
@@ -114,13 +126,13 @@ namespace QS3D.Core.SmokeTests
                 var duplicateProperties = new XElement("properties",
                     new XElement("p", new XAttribute("name", "Note"), new XAttribute("value", "first")),
                     new XElement("p", new XAttribute("name", "note"), new XAttribute("value", "second")));
-                RevisionDocument("2026-08-10T05:00:00Z", "Beam", duplicateProperties).Save(duplicateMapPath, SaveOptions.DisableFormatting);
+                RevisionDocument("2026-08-10T05:00:00.0000000Z", "Beam", duplicateProperties).Save(duplicateMapPath, SaveOptions.DisableFormatting);
                 Throws<InvalidDataException>(() => store.Load(duplicateMapPath));
 
                 var paddedMapPath = Path.Combine(directory, "padded-map.qsrev");
                 var paddedProperties = new XElement("properties",
                     new XElement("p", new XAttribute("name", " Note "), new XAttribute("value", "value")));
-                RevisionDocument("2026-08-10T05:00:00Z", "Beam", paddedProperties).Save(paddedMapPath, SaveOptions.DisableFormatting);
+                RevisionDocument("2026-08-10T05:00:00.0000000Z", "Beam", paddedProperties).Save(paddedMapPath, SaveOptions.DisableFormatting);
                 Throws<InvalidDataException>(() => store.Load(paddedMapPath));
 
                 var paddedHandle = Snapshot("padded-handle", "Beam");
@@ -129,7 +141,7 @@ namespace QS3D.Core.SmokeTests
 
                 var duplicateHandlePath = Path.Combine(directory, "duplicate-handle.qsrev");
                 RevisionDocument(
-                    "2026-08-10T05:00:00Z",
+                    "2026-08-10T05:00:00.0000000Z",
                     "Beam",
                     null,
                     new XElement("sourceHandles",
