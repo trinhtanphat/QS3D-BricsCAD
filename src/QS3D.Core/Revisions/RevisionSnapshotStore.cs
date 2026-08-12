@@ -203,7 +203,11 @@ namespace QS3D.Core.Revisions
 
         private static void ValidateStringMap(IDictionary<string, string> values, string label)
         {
-            foreach (var key in values.Keys) ValidateCanonicalRequired(key, label + " key");
+            foreach (var item in values)
+            {
+                ValidateCanonicalRequired(item.Key, label + " key");
+                ValidateXmlText(item.Value, label + " value for " + item.Key);
+            }
         }
 
         private static void ValidateNumberMap(IDictionary<string, double> values, string label)
@@ -255,6 +259,7 @@ namespace QS3D.Core.Revisions
         private static void ValidateCanonicalRequired(string? value, string label)
         {
             if (value == null) throw new InvalidDataException("Revision " + label + " is required.");
+            ValidateXmlText(value, label);
             var trimmed = value.Trim();
             if (trimmed.Length == 0) throw new InvalidDataException("Revision " + label + " is required.");
             if (!string.Equals(value, trimmed, StringComparison.Ordinal))
@@ -265,6 +270,18 @@ namespace QS3D.Core.Revisions
         {
             if (value == null || value.Length == 0) return;
             ValidateCanonicalRequired(value, label);
+        }
+
+        private static void ValidateXmlText(string? value, string label)
+        {
+            try
+            {
+                XmlConvert.VerifyXmlChars(value ?? string.Empty);
+            }
+            catch (XmlException exception)
+            {
+                throw new InvalidDataException("Revision " + label + " contains characters that are invalid in XML.", exception);
+            }
         }
 
         private static void ValidateUtcTimestamp(DateTime value, string label)
