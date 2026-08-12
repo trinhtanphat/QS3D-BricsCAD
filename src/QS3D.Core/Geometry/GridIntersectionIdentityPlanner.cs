@@ -42,6 +42,7 @@ namespace QS3D.Core.Geometry
         private const int MaxIntersectionsPerPair = 2;
         private const string PairTokenPrefix = "GIP1:";
         private const string OwnerTokenPrefix = "GIX1:";
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public static IReadOnlyList<GridIntersectionIdentity> Assign(
             IEnumerable<GridIntersection> intersections,
@@ -148,12 +149,21 @@ namespace QS3D.Core.Geometry
             var normalized = value.Trim();
             if (normalized.Length > MaxElementIdLength)
                 throw new ArgumentException("Grid " + label + " exceeds " + MaxElementIdLength + " characters.", label);
-            return normalized.ToUpperInvariant();
+            var canonical = normalized.ToUpperInvariant();
+            try
+            {
+                StrictUtf8.GetByteCount(canonical);
+            }
+            catch (EncoderFallbackException)
+            {
+                throw new ArgumentException("Grid " + label + " must contain well-formed Unicode text.", label);
+            }
+            return canonical;
         }
 
         private static string Sha256Hex(string value)
         {
-            var bytes = Encoding.UTF8.GetBytes(value);
+            var bytes = StrictUtf8.GetBytes(value);
             using (var sha = SHA256.Create())
             {
                 var hash = sha.ComputeHash(bytes);
