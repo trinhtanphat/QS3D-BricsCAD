@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
         {
             RemovedElementDuringLazyEnumerationFailsClosed();
             RemovedTargetFamilyDuringLazyEnumerationFailsClosed();
+            UnrelatedDuplicateFamilyDuringLazyEnumerationFailsClosed();
+            UnrelatedDuplicateElementDuringLazyEnumerationFailsClosed();
         }
 
         private static void RemovedElementDuringLazyEnumerationFailsClosed()
@@ -52,6 +54,46 @@ namespace QS3D.Core.SmokeTests
             Equal(beforeUpdated, element.UpdatedUtc, "removed-family timestamp");
         }
 
+        private static void UnrelatedDuplicateFamilyDuringLazyEnumerationFailsClosed()
+        {
+            var project = CreateProject("P-FAMILY-STRUCT-3", out var family, out var element);
+            project.Families.Add(new ProjectFamily("F-OTHER", "Other Family", ElementCategory.Beam));
+            element.MarkClean(ElementDirtyFlags.All);
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdated = element.UpdatedUtc;
+
+            ThrowsContaining<InvalidOperationException>(
+                () => ProjectFamilyService.Assign(project, family.Id, YieldThenDuplicateUnrelatedFamily(project, element)),
+                "Project contains duplicate family id: f-other");
+
+            Equal(beforeVersion, project.ChangeVersion, "duplicate-family project revision");
+            Equal(3, project.Families.Count, "duplicate-family deliberate corruption count");
+            Equal(string.Empty, element.FamilyId, "duplicate-family target FamilyId");
+            False(element.Properties.ContainsKey("Material"), "duplicate-family inherited property");
+            Equal(ElementDirtyFlags.None, element.Dirty, "duplicate-family target dirty flags");
+            Equal(beforeUpdated, element.UpdatedUtc, "duplicate-family target timestamp");
+        }
+
+        private static void UnrelatedDuplicateElementDuringLazyEnumerationFailsClosed()
+        {
+            var project = CreateProject("P-FAMILY-STRUCT-4", out var family, out var element);
+            project.Elements.Add(new ProjectElement("E-OTHER", ElementCategory.Beam));
+            element.MarkClean(ElementDirtyFlags.All);
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdated = element.UpdatedUtc;
+
+            ThrowsContaining<InvalidOperationException>(
+                () => ProjectFamilyService.Assign(project, family.Id, YieldThenDuplicateUnrelatedElement(project, element)),
+                "Project contains duplicate semantic element id: e-other");
+
+            Equal(beforeVersion, project.ChangeVersion, "duplicate-element project revision");
+            Equal(3, project.Elements.Count, "duplicate-element deliberate corruption count");
+            Equal(string.Empty, element.FamilyId, "duplicate-element target FamilyId");
+            False(element.Properties.ContainsKey("Material"), "duplicate-element inherited property");
+            Equal(ElementDirtyFlags.None, element.Dirty, "duplicate-element target dirty flags");
+            Equal(beforeUpdated, element.UpdatedUtc, "duplicate-element target timestamp");
+        }
+
         private static ProjectState CreateProject(string id, out ProjectFamily family, out ProjectElement element)
         {
             var project = new ProjectState(id, "Family structural freshness");
@@ -73,6 +115,18 @@ namespace QS3D.Core.SmokeTests
         {
             yield return element;
             project.Families.Remove(family);
+        }
+
+        private static IEnumerable<ProjectElement> YieldThenDuplicateUnrelatedFamily(ProjectState project, ProjectElement element)
+        {
+            yield return element;
+            project.Families.Add(new ProjectFamily("f-other", "Other Family Duplicate", ElementCategory.Beam));
+        }
+
+        private static IEnumerable<ProjectElement> YieldThenDuplicateUnrelatedElement(ProjectState project, ProjectElement element)
+        {
+            yield return element;
+            project.Elements.Add(new ProjectElement("e-other", ElementCategory.Beam));
         }
 
         private static void False(bool value, string label)
