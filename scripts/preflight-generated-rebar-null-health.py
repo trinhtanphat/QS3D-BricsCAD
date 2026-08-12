@@ -21,8 +21,9 @@ else:
         "public IReadOnlyList<ModelHealthIssue> InspectShape(",
         "public IReadOnlyList<ModelHealthIssue> InspectAll(",
         "BuildOwnershipIndex(project)",
-        '"REBAR_GENERATED_OWNERSHIP_CONFLICT"',
-        '"SHAPE_REBAR_GENERATED_OWNERSHIP_CONFLICT"',
+        'CodePrefix = "REBAR"',
+        'CodePrefix = "SHAPE_REBAR"',
+        'spec.CodePrefix + "_GENERATED_OWNERSHIP_CONFLICT"',
         '"REBAR_GENERATED_DIAMETER_INVALID"',
     )
     for token in required:
@@ -49,4 +50,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: all Generated Rebar health traversals reject null entries and aggregate health remains fail-visible.")
+print("PASS: all Generated Rebar health traversals reject null entries, shared code-prefix ownership diagnostics cover longitudinal/shape rebar, and aggregate health remains fail-visible.")
