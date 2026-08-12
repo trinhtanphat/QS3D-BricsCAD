@@ -134,19 +134,27 @@ namespace QS3D.Core.Revisions
 
         private static XDocument LoadDocument(string path)
         {
+            return LoadDocument(path, MaxRevisionFileBytes);
+        }
+
+        private static XDocument LoadDocument(string path, long maximumBytes)
+        {
+            if (maximumBytes <= 0L) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
             var full = Path.GetFullPath(path);
-            var info = new FileInfo(full);
-            if (info.Length > MaxRevisionFileBytes) throw new InvalidDataException("QS3D revision exceeds the maximum supported file size of 64 MiB.");
             var settings = new XmlReaderSettings
             {
                 DtdProcessing = DtdProcessing.Prohibit,
                 XmlResolver = null,
-                MaxCharactersInDocument = MaxRevisionFileBytes
+                MaxCharactersInDocument = maximumBytes
             };
             using (var stream = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read))
-            using (var reader = XmlReader.Create(stream, settings))
             {
-                return XDocument.Load(reader, LoadOptions.None);
+                if (stream.Length > maximumBytes)
+                    throw new InvalidDataException("QS3D revision exceeds the maximum supported file size of 64 MiB.");
+                using (var reader = XmlReader.Create(stream, settings))
+                {
+                    return XDocument.Load(reader, LoadOptions.None);
+                }
             }
         }
 
