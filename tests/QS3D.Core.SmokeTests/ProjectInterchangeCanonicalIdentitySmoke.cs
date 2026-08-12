@@ -17,7 +17,8 @@ namespace QS3D.Core.SmokeTests
             RejectsPaddedSourceHandle();
             RejectsPaddedPropertyKey();
             RejectsTimestampWithoutOffset();
-            AcceptsExplicitOffsetDeterministically();
+            RejectsTimestampWithExplicitOffset();
+            AcceptsCanonicalUtcDeterministically();
         }
 
         private static void RejectsPaddedProjectId()
@@ -56,13 +57,18 @@ namespace QS3D.Core.SmokeTests
             Reject(json);
         }
 
-        private static void AcceptsExplicitOffsetDeterministically()
+        private static void RejectsTimestampWithExplicitOffset()
         {
             var json = Json().Replace("2026-08-10T10:11:12.0000000Z", "2026-08-10T17:11:12.0000000+07:00");
-            var snapshot = ProjectInterchangeValidatedSnapshotReader.Read(json);
+            Reject(json);
+        }
+
+        private static void AcceptsCanonicalUtcDeterministically()
+        {
+            var snapshot = ProjectInterchangeValidatedSnapshotReader.Read(Json());
             var expected = new DateTime(2026, 8, 10, 10, 11, 12, DateTimeKind.Utc);
             if (!snapshot.Project.UpdatedUtc.HasValue || snapshot.Project.UpdatedUtc.Value != expected || snapshot.Project.UpdatedUtc.Value.Kind != DateTimeKind.Utc)
-                throw new InvalidOperationException("ProjectInterchangeCanonicalIdentitySmoke: explicit timestamp offset was not normalized deterministically.");
+                throw new InvalidOperationException("ProjectInterchangeCanonicalIdentitySmoke: canonical UTC timestamp did not round-trip deterministically.");
         }
 
         private static void Reject(string json)
