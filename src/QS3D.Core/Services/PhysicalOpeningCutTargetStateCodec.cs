@@ -91,8 +91,11 @@ namespace QS3D.Core.Services
                     throw new InvalidOperationException("Physical opening target no longer exists: " + id + ". Rebuild the host 3D geometry before cutting again.");
                 if (!IsOpening(opening))
                     throw new InvalidOperationException("Physical opening target is no longer a Door/WallOpening: " + id + ". Rebuild the host 3D geometry.");
-                if (!opening.Properties.TryGetValue("HostWallId", out var linkedHostId) ||
-                    !string.Equals(linkedHostId?.Trim(), canonicalHost.Id, StringComparison.OrdinalIgnoreCase))
+                if (!opening.Properties.TryGetValue("HostWallId", out var linkedHostId) || string.IsNullOrWhiteSpace(linkedHostId))
+                    throw new InvalidOperationException("Physical opening target " + id + " is no longer linked to host " + canonicalHost.Id + ". Rebuild the host 3D geometry.");
+                if (!string.Equals(linkedHostId, linkedHostId.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Physical opening target " + id + " has a non-canonical HostWallId relation. Repair semantic relations before trusting physical cut ownership.");
+                if (!string.Equals(linkedHostId, canonicalHost.Id, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Physical opening target " + id + " is no longer linked to host " + canonicalHost.Id + ". Rebuild the host 3D geometry.");
                 result.Add(opening);
             }
