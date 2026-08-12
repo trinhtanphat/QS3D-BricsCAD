@@ -261,14 +261,23 @@ namespace QS3D.Core.Domain
 
         private static void RequireCurrentAssignmentOwnership(ProjectState project, ProjectFamily target, IReadOnlyList<ProjectElement> elements)
         {
+            ValidateUniqueFamilyIds(project);
+            var currentElements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var projectElement in project.Elements)
+            {
+                if (projectElement == null) throw new InvalidOperationException("Project contains a null semantic element entry.");
+                if (currentElements.ContainsKey(projectElement.Id))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + projectElement.Id);
+                currentElements[projectElement.Id] = projectElement;
+            }
+
             var currentTarget = project.FindFamily(target.Id);
             if (!ReferenceEquals(currentTarget, target))
                 throw new InvalidOperationException("Target Family no longer belongs to the project after assignment target enumeration: " + target.Id + ".");
 
             foreach (var element in elements)
             {
-                var current = project.FindElement(element.Id);
-                if (!ReferenceEquals(current, element))
+                if (!currentElements.TryGetValue(element.Id, out var current) || !ReferenceEquals(current, element))
                     throw new InvalidOperationException("Element no longer belongs to the project after Family assignment target enumeration: " + element.Id + ".");
                 if (element.Category != target.Category)
                     throw new InvalidOperationException("Family '" + target.Name + "' category " + target.Category + " cannot be assigned to element " + element.Id + " category " + element.Category + ".");
