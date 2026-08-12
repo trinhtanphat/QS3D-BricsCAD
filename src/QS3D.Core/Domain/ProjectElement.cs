@@ -154,31 +154,42 @@ namespace QS3D.Core.Domain
 
         public void MarkGeneratedGeometryStale(string reason)
         {
-            var marked = false;
-            marked |= MarkGeneratedOutputStale(GeneratedSolidHandleKey, GeneratedSolidStateKey, GeneratedSolidStaleSnapshotKey);
-            marked |= MarkGeneratedOutputStale(GeneratedRebarHandlesKey, GeneratedRebarStateKey, GeneratedRebarStaleSnapshotKey);
-            marked |= MarkGeneratedOutputStale(GeneratedShapeRebarHandlesKey, GeneratedShapeRebarStateKey, GeneratedShapeRebarStaleSnapshotKey);
-            marked |= MarkGeneratedOutputStale(GeneratedTieRebarHandlesKey, GeneratedTieRebarStateKey, GeneratedTieRebarStaleSnapshotKey);
-            marked |= MarkGeneratedOutputStale(GeneratedBeamStirrupHandlesKey, GeneratedBeamStirrupStateKey, GeneratedBeamStirrupStaleSnapshotKey);
-            marked |= MarkGeneratedOutputStale(GeneratedSlabMeshHandlesKey, GeneratedSlabMeshStateKey, GeneratedSlabMeshStaleSnapshotKey);
-            marked |= MarkGeneratedOutputStale(GeneratedWallMeshHandlesKey, GeneratedWallMeshStateKey, GeneratedWallMeshStaleSnapshotKey);
-            marked |= MarkGeneratedOutputStale(GeneratedFoundationMeshHandlesKey, GeneratedFoundationMeshStateKey, GeneratedFoundationMeshStaleSnapshotKey);
-            marked |= MarkGeneratedOutputStale(GeneratedCurtainFrameHandlesKey, GeneratedCurtainFrameStateKey, GeneratedCurtainFrameStaleSnapshotKey);
-            marked |= MarkGeneratedCurtainPanelOutputStale();
-            if (!marked) return;
-            SetAggregateStaleReason(reason);
+            var changed = false;
+            var hasOutput = false;
+            bool outputPresent;
+            changed |= MarkGeneratedOutputStale(GeneratedSolidHandleKey, GeneratedSolidStateKey, GeneratedSolidStaleSnapshotKey, out outputPresent); hasOutput |= outputPresent;
+            changed |= MarkGeneratedOutputStale(GeneratedRebarHandlesKey, GeneratedRebarStateKey, GeneratedRebarStaleSnapshotKey, out outputPresent); hasOutput |= outputPresent;
+            changed |= MarkGeneratedOutputStale(GeneratedShapeRebarHandlesKey, GeneratedShapeRebarStateKey, GeneratedShapeRebarStaleSnapshotKey, out outputPresent); hasOutput |= outputPresent;
+            changed |= MarkGeneratedOutputStale(GeneratedTieRebarHandlesKey, GeneratedTieRebarStateKey, GeneratedTieRebarStaleSnapshotKey, out outputPresent); hasOutput |= outputPresent;
+            changed |= MarkGeneratedOutputStale(GeneratedBeamStirrupHandlesKey, GeneratedBeamStirrupStateKey, GeneratedBeamStirrupStaleSnapshotKey, out outputPresent); hasOutput |= outputPresent;
+            changed |= MarkGeneratedOutputStale(GeneratedSlabMeshHandlesKey, GeneratedSlabMeshStateKey, GeneratedSlabMeshStaleSnapshotKey, out outputPresent); hasOutput |= outputPresent;
+            changed |= MarkGeneratedOutputStale(GeneratedWallMeshHandlesKey, GeneratedWallMeshStateKey, GeneratedWallMeshStaleSnapshotKey, out outputPresent); hasOutput |= outputPresent;
+            changed |= MarkGeneratedOutputStale(GeneratedFoundationMeshHandlesKey, GeneratedFoundationMeshStateKey, GeneratedFoundationMeshStaleSnapshotKey, out outputPresent); hasOutput |= outputPresent;
+            changed |= MarkGeneratedOutputStale(GeneratedCurtainFrameHandlesKey, GeneratedCurtainFrameStateKey, GeneratedCurtainFrameStaleSnapshotKey, out outputPresent); hasOutput |= outputPresent;
+            changed |= MarkGeneratedCurtainPanelOutputStale(out outputPresent); hasOutput |= outputPresent;
+            if (!hasOutput) return;
+            changed |= SetAggregateStaleReason(reason);
+            if (changed) UpdatedUtc = DateTime.UtcNow;
         }
 
         public void MarkGeneratedCurtainFrameStale(string reason)
         {
-            if (!MarkGeneratedOutputStale(GeneratedCurtainFrameHandlesKey, GeneratedCurtainFrameStateKey, GeneratedCurtainFrameStaleSnapshotKey)) return;
-            SetAggregateStaleReason(reason);
+            var changed = MarkGeneratedOutputStale(
+                GeneratedCurtainFrameHandlesKey,
+                GeneratedCurtainFrameStateKey,
+                GeneratedCurtainFrameStaleSnapshotKey,
+                out var hasOutput);
+            if (!hasOutput) return;
+            changed |= SetAggregateStaleReason(reason);
+            if (changed) UpdatedUtc = DateTime.UtcNow;
         }
 
         public void MarkGeneratedCurtainPanelStale(string reason)
         {
-            if (!MarkGeneratedCurtainPanelOutputStale()) return;
-            SetAggregateStaleReason(reason);
+            var changed = MarkGeneratedCurtainPanelOutputStale(out var hasOutput);
+            if (!hasOutput) return;
+            changed |= SetAggregateStaleReason(reason);
+            if (changed) UpdatedUtc = DateTime.UtcNow;
         }
 
         public bool IsGeneratedGeometryStale()
@@ -275,22 +286,46 @@ namespace QS3D.Core.Domain
             return value;
         }
 
-        private bool MarkGeneratedOutputStale(string outputKey, string stateKey, string snapshotKey)
+        private bool MarkGeneratedOutputStale(string outputKey, string stateKey, string snapshotKey, out bool hasOutput)
         {
             var signature = OutputSignature(outputKey);
-            if (signature.Length == 0) return false;
-            Properties[stateKey] = StaleValue;
-            Properties[snapshotKey] = signature;
-            return true;
+            hasOutput = signature.Length > 0;
+            if (!hasOutput) return false;
+
+            var changed = false;
+            if (!Properties.TryGetValue(stateKey, out var state) || !string.Equals(state, StaleValue, StringComparison.Ordinal))
+            {
+                Properties[stateKey] = StaleValue;
+                changed = true;
+            }
+            if (!Properties.TryGetValue(snapshotKey, out var snapshot) ||
+                !string.Equals((snapshot ?? string.Empty).Trim(), signature, StringComparison.OrdinalIgnoreCase))
+            {
+                Properties[snapshotKey] = signature;
+                changed = true;
+            }
+            return changed;
         }
 
-        private bool MarkGeneratedCurtainPanelOutputStale()
+        private bool MarkGeneratedCurtainPanelOutputStale(out bool hasOutput)
         {
             var signature = CurtainPanelOutputSignature();
-            if (signature.Length == 0) return false;
-            Properties[GeneratedCurtainPanelStateKey] = StaleValue;
-            Properties[GeneratedCurtainPanelStaleSnapshotKey] = signature;
-            return true;
+            hasOutput = signature.Length > 0;
+            if (!hasOutput) return false;
+
+            var changed = false;
+            if (!Properties.TryGetValue(GeneratedCurtainPanelStateKey, out var state) || !string.Equals(state, StaleValue, StringComparison.Ordinal))
+            {
+                Properties[GeneratedCurtainPanelStateKey] = StaleValue;
+                changed = true;
+            }
+            if (!Properties.TryGetValue(GeneratedCurtainPanelStaleSnapshotKey, out var snapshot) ||
+                !string.Equals((snapshot ?? string.Empty).Trim(), signature, StringComparison.OrdinalIgnoreCase))
+            {
+                Properties[GeneratedCurtainPanelStaleSnapshotKey] = signature;
+                changed = true;
+            }
+            return changed;
         }
 
         private bool IsGeneratedCurtainPanelOutputStale()
@@ -331,11 +366,22 @@ namespace QS3D.Core.Domain
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
         }
 
-        private void SetAggregateStaleReason(string reason)
+        private bool SetAggregateStaleReason(string reason)
         {
-            Properties[GeneratedGeometryStateKey] = StaleValue;
-            Properties[GeneratedGeometryStaleReasonKey] = string.IsNullOrWhiteSpace(reason) ? "Semantic/source state changed." : reason.Trim();
-            UpdatedUtc = DateTime.UtcNow;
+            var normalizedReason = string.IsNullOrWhiteSpace(reason) ? "Semantic/source state changed." : reason.Trim();
+            var changed = false;
+            if (!Properties.TryGetValue(GeneratedGeometryStateKey, out var state) || !string.Equals(state, StaleValue, StringComparison.Ordinal))
+            {
+                Properties[GeneratedGeometryStateKey] = StaleValue;
+                changed = true;
+            }
+            if (!Properties.TryGetValue(GeneratedGeometryStaleReasonKey, out var existingReason) ||
+                !string.Equals(existingReason, normalizedReason, StringComparison.Ordinal))
+            {
+                Properties[GeneratedGeometryStaleReasonKey] = normalizedReason;
+                changed = true;
+            }
+            return changed;
         }
 
         private void ClearGeneratedOutputStale(string stateKey, string snapshotKey)
