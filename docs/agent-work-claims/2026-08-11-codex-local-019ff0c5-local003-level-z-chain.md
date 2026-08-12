@@ -326,3 +326,11 @@ Baseline audited after a clean fetch and fast-forward: `origin/main@7c43babfd706
 The full Core smoke next reaches `EntitySnapshotFiniteMetricsSmoke.cs`, whose older finite control expects a negative area to remain stored despite the completed nonnegative snapshot-metric contract. A source/history audit found two adjacent completed finite-metric fixtures with the same supersession: `OpeningPropertySetFiniteMetricsSmoke.cs` still stores zero width and negative height although physical opening dimensions are now strictly positive, and `RoomWallPropertySetFiniteMetricsSmoke.cs` still stores negative wall thickness although thickness is now strictly positive. Signed sill/base/axis offsets remain valid and must stay unchanged. All newer invariant claims are `COMPLETED`, and the current ACTIVE/BLOCKED audit found no reservation for these exact three fixtures.
 
 Reserve only those three smoke files to use positive finite control values for snapshot area, opening width/height and wall thickness, updating only their corresponding retained-value assertions. Preserve nullable/default values, signed offsets, non-finite rejection, state-retention checks and all production model/domain code. Re-run the complete Core smoke after this fixture-only reconciliation.
+
+## 2026-08-12 license signature node-shape fixture reconciliation expansion
+
+Baseline audited after a clean fetch and fast-forward: `origin/main@fe4337496bc8d91f4173e979cec900aa2dc6c600`.
+
+The full Core smoke next reaches `LicenseSignatureNodeShapeSmoke.AcceptsOrdinaryTextSignature()`, whose older valid control wraps `AA==` in surrounding whitespace. The completed signature Base64 canonicality contract now intentionally rejects both surrounding and embedded whitespace while preserving exact canonical text and the separate non-text-node rejection contract. Both owning licensing claims are `COMPLETED`, and the current ACTIVE/BLOCKED audit found no reservation for this exact fixture.
+
+Reserve only `tests/QS3D.Core.SmokeTests/LicenseSignatureNodeShapeSmoke.cs` to rename the valid-control method/message to canonical text and use exact `AA==` content. Preserve comment, CDATA and processing-instruction rejection, decoded byte assertion, XML structure and production `LicenseVerifier` unchanged. Re-run the complete Core smoke after this fixture-only reconciliation.
