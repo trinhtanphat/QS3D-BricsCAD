@@ -20,6 +20,7 @@ namespace QS3D.Core.SmokeTests
             TamperedReviewFailsClosed();
             HandleFieldInjectionFailsClosed();
             NonPortableGeneratedFieldInjectionFailsClosed();
+            NonCanonicalFieldInjectionFailsClosed();
             UnsupportedXmlShapeFailsClosed();
         }
 
@@ -131,6 +132,34 @@ namespace QS3D.Core.SmokeTests
                 if (!xml.Contains("field=\"Quantity:Cost\"")) throw new Exception("Expected serialized field was not found.");
                 File.WriteAllText(path, xml.Replace("field=\"Quantity:Cost\"", "field=\"Property:QS3D.GeneratedSolid.StaleSnapshot\""));
                 ThrowsInvalidDataContaining(() => store.Load(path), "forbidden drawing-local/native field");
+            }
+            finally
+            {
+                SafeDelete(path);
+                SafeDelete(path + ".bak");
+            }
+        }
+
+        private static void NonCanonicalFieldInjectionFailsClosed()
+        {
+            AssertNonCanonicalFieldRejected(" Quantity:Cost ");
+            AssertNonCanonicalFieldRejected("   ");
+        }
+
+        private static void AssertNonCanonicalFieldRejected(string field)
+        {
+            var snapshot = new PreviewReviewSnapshotService().Create("Cost review", new QuantityRulePreviewService().PreviewProject(RuleFixture()));
+            var path = TempPath();
+            try
+            {
+                var store = new PreviewReviewSnapshotStore();
+                store.Save(snapshot, path);
+                var document = XDocument.Load(path);
+                var entry = document.Root?.Element("entries")?.Elements("entry").FirstOrDefault()
+                    ?? throw new Exception("Expected serialized preview review entry was not found.");
+                entry.SetAttributeValue("field", field);
+                document.Save(path, SaveOptions.DisableFormatting);
+                ThrowsInvalidDataContaining(() => store.Load(path), "field is not canonical");
             }
             finally
             {
