@@ -366,3 +366,11 @@ Baseline audited after a clean fetch and fast-forward: `origin/main@2f981b82ea77
 The full Core smoke next reaches `QsdbProjectSchemaRegressionSmoke.ValidCurrentProjectLoads()`, whose intended-valid current-schema control still uses a second-precision root timestamp. The completed QSDB timestamp-canonicality contract now requires the exact UTC round-trip `O` representation and therefore correctly rejects that stale fixture. A read-only audit found the same completed-contract incompatibility in the intended-valid Schema V2 migration XML in `WorkflowPersistenceSmoke.cs`. The QSDB timestamp-canonicality claim and the older workflow fixture claims are `COMPLETED`; the current ACTIVE/BLOCKED audit found no reservation for these exact two fixture surfaces.
 
 Reserve only `tests/QS3D.Core.SmokeTests/QsdbProjectSchemaRegressionSmoke.cs` and `tests/QS3D.Core.SmokeTests/WorkflowPersistenceSmoke.cs` to add the seven-digit fractional component to those two intended-valid root UTC timestamp tokens. Preserve every schema/migration/rejection assertion, XML structure and all production persistence code. Re-run the complete Core smoke after this fixture-data-only reconciliation.
+
+## 2026-08-12 revision-capture category fixture compile reconciliation expansion
+
+Baseline audited after a clean fetch and fast-forward: `origin/main@c71fb530730d464e7cbbdaa7548f901ce0a5d3c6`.
+
+The full Core smoke cannot compile because the newly completed `RevisionCaptureXmlTextIntegritySmoke.cs` uses the removed `ElementCategory.Wall` enum member in two intended-valid fixture constructors. Current source exposes the specific `ArchitecturalWall` category used by the same semantic wall contract. The owning revision-capture claim is `COMPLETED`, and the current ACTIVE/BLOCKED audit found no reservation for this exact fixture.
+
+Reserve only `tests/QS3D.Core.SmokeTests/RevisionCaptureXmlTextIntegritySmoke.cs` to replace those two stale enum references with `ElementCategory.ArchitecturalWall`. Preserve the XML-invalid input cases, valid Unicode control, revision capture assertions and all production revision/persistence code. Re-run the complete Core smoke after this fixture-only compile reconciliation.
