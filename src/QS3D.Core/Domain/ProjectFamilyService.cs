@@ -128,6 +128,7 @@ namespace QS3D.Core.Domain
             var beforeTargetEnumeration = project.ChangeVersion;
             var owned = ResolveOwnedElements(project, elements, target);
             RequireTargetEnumerationFreshness(project, beforeTargetEnumeration);
+            RequireCurrentAssignmentOwnership(project, target, owned);
             var pending = new List<PendingFamilyAssignment>();
             var previousSnapshots = new Dictionary<string, IReadOnlyList<KeyValuePair<string, string>>>(StringComparer.OrdinalIgnoreCase);
 
@@ -254,6 +255,22 @@ namespace QS3D.Core.Domain
         {
             if (project.ChangeVersion != beforeEnumeration)
                 throw new InvalidOperationException("Project changed while Family assignment targets were being enumerated.");
+        }
+
+        private static void RequireCurrentAssignmentOwnership(ProjectState project, ProjectFamily target, IReadOnlyList<ProjectElement> elements)
+        {
+            var currentTarget = project.FindFamily(target.Id);
+            if (!ReferenceEquals(currentTarget, target))
+                throw new InvalidOperationException("Target Family no longer belongs to the project after assignment target enumeration: " + target.Id + ".");
+
+            foreach (var element in elements)
+            {
+                var current = project.FindElement(element.Id);
+                if (!ReferenceEquals(current, element))
+                    throw new InvalidOperationException("Element no longer belongs to the project after Family assignment target enumeration: " + element.Id + ".");
+                if (element.Category != target.Category)
+                    throw new InvalidOperationException("Family '" + target.Name + "' category " + target.Category + " cannot be assigned to element " + element.Id + " category " + element.Category + ".");
+            }
         }
 
         private static ProjectFamily FindRequired(ProjectState project, string id)
