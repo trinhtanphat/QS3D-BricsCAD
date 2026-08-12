@@ -95,8 +95,12 @@ namespace QS3D.Core.Recognition
         {
             Snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
             if (candidates == null) throw new ArgumentNullException(nameof(candidates));
-            ValidateCandidates(candidates);
-            Candidates = candidates.ToList().AsReadOnly();
+            var materialized = RecognitionInputBounds.Materialize(
+                candidates,
+                RecognitionInputBounds.MaxRules,
+                "Recognition candidate list");
+            ValidateCandidates(materialized);
+            Candidates = materialized.AsReadOnly();
         }
         public EntitySnapshot Snapshot { get; }
         public IReadOnlyList<RecognitionCandidate> Candidates { get; }
