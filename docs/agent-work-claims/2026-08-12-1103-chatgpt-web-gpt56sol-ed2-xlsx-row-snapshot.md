@@ -1,6 +1,6 @@
 # Work claim — ED2 Quantity XLSX row snapshot integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-ed2-xlsx-row-snapshot-20260812-1103`
 - Registered: `2026-08-12T11:03:00+07:00`
 - Baseline main SHA: `a0c40b9b7b5503ba8abb39289e6a8505a95760a7`
@@ -8,15 +8,15 @@
 
 ## Confirmed defect
 
-`XlsxQuantityExporter.ExportEd2(...)` validates and cross-checks caller-owned `detailRows` / `summaryRows`, including mutable `ElementIds` and `SourceHandles`, then passes the same external row objects to `ExportCore(...)`. After directory/temp-file creation, `BuildEd2Sheet(...)` re-reads those mutable rows and derived provenance text. A changing or hostile caller can therefore serialize CHI_TIET/TONG_HOP data different from the values that passed identity/numeric/provenance parity, or fail only after filesystem side effects have begun.
+`XlsxQuantityExporter.ExportEd2(...)` validated and cross-checked caller-owned `detailRows` / `summaryRows`, including mutable `ElementIds` and `SourceHandles`, then passed the same external row objects to `ExportCore(...)`. After directory/temp-file creation, `BuildEd2Sheet(...)` re-read those mutable rows and derived provenance text. A changing or hostile caller could therefore serialize CHI_TIET/TONG_HOP data different from the values that passed identity/numeric/provenance parity, or fail only after filesystem side effects began.
 
 ## Reserved scope
 
 - ED2 path in `src/QS3D.Core/Export/XlsxQuantityExporter.cs`
-- a new focused smoke file for ED2 row-snapshot integrity
+- `tests/QS3D.Core.SmokeTests/Ed2QuantityXlsxRowSnapshotSmoke.cs`
 - this claim file for close-out
 
-## Contract
+## Implemented contract
 
 - Capture the existing CHI_TIET and TONG_HOP worksheet row bounds once.
 - Read each caller-owned detail/summary row index exactly once before ED2 validation, parity checks, path resolution, directory creation or temp-file creation.
@@ -27,19 +27,21 @@
 
 ## Exclusions
 
-- Standard `XlsxQuantityExporter.Export(...)` is already completed and must not be semantically changed in this claim.
+- Standard `XlsxQuantityExporter.Export(...)` remains the completed PR #794 behavior and was not semantically changed in this claim.
 - No Quantity builders/math/UI/commands/Health changes.
-- No changes to ED2 semantic/parity rules beyond making their input stable.
+- No ED2 semantic/parity rules were changed beyond stabilizing their input.
 - No GitHub Actions/build/release dispatch and no BricsCAD V25/V26 runtime PASS claim.
 
-## Validation plan
+## Completion evidence
 
-Add a focused smoke with valid one-row CHI_TIET and TONG_HOP scopes backed by hostile `IReadOnlyList<QuantityReportRow>` implementations that allow one indexed read and reject enumeration/second reads. `ExportEd2(...)` must succeed from the detached snapshots and leave each external row list at exactly one indexed read.
+- Claim registration: `b6e9aa70bf433e8bfd560ff99ee18539d8250dae`.
+- Source branch fix: `6259e9f723305a3f636966b1df6a86e0511be8d9`.
+- Focused smoke source: `9bf407ac75dc9afa027b93450e95e0bf782af539`.
+- PR: `#799`.
+- Squash integration on `main`: `15583036eb19dcb1a24a9d3c4b1288bc35456d88`.
+- Post-merge readback confirmed `ExportEd2(...)` creates `detailSnapshot` / `summarySnapshot`, performs all subsequent scope/parity checks on those snapshots, and passes the same snapshots to `ExportCore`.
+- Post-merge readback confirmed `Ed2QuantityXlsxRowSnapshotSmoke` uses valid matching CHI_TIET/TONG_HOP data and rejects caller-list enumeration or any second indexed row read.
 
-## Coordination
+## Validation boundary
 
-The standard Quantity XLSX snapshot lane is completed in PR #794 / `33956d1cd4e8c4cc4a3243c838fa9cf55bb524ae`. No open PR existed at ED2 claim registration time, and no separate ED2 snapshot claim was found.
-
-## Completion condition
-
-ED2 source fix and focused smoke source are integrated on current `main`, read back after merge, and this claim is marked `COMPLETED` with exact SHA/PR evidence and remote validation boundaries.
+Focused smoke coverage was added and read back from `main`, but it was not executed in this remote session. No GitHub Actions, local .NET build, BricsCAD V25/V26 runtime, release or signing PASS is claimed.
