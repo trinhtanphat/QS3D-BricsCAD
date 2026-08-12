@@ -111,8 +111,8 @@ namespace QS3D.Core.Persistence
             var project = new ProjectState(RequiredCanonical(root, "projectId"), Required(root, "name"))
             {
                 SchemaVersion = ProjectState.CurrentSchemaVersion,
-                DrawingPath = Value(root, "drawingPath"),
-                DrawingFingerprint = Value(root, "drawingFingerprint"),
+                DrawingPath = RawValue(root, "drawingPath"),
+                DrawingFingerprint = RawValue(root, "drawingFingerprint"),
                 ActiveZoneId = Value(root, "activeZoneId"),
                 ActiveFloorId = Value(root, "activeFloorId")
             };
@@ -157,7 +157,7 @@ namespace QS3D.Core.Persistence
                     var category = Category(item, "element");
                     var element = new ProjectElement(Required(item, "id"), category, Value(item, "familyId"), Value(item, "floorId"), Value(item, "zoneId"))
                     {
-                        DrawingFingerprint = Value(item, "drawingFingerprint")
+                        DrawingFingerprint = RawValue(item, "drawingFingerprint")
                     };
                     foreach (var handle in item.Element("handles")?.Elements("h") ?? Enumerable.Empty<XElement>())
                         if (!string.IsNullOrWhiteSpace(handle.Value)) element.SourceHandles.Add(handle.Value.Trim());
