@@ -25,7 +25,7 @@ namespace QS3D.Core.SmokeTests
             {
                 var project = new ProjectState("P-DIAG-SUMMARY-NULL", "Diagnostic summary null issue");
                 ExpectThrows<InvalidOperationException>(() =>
-                    ProjectDiagnosticSummaryExporter.Export(path, project, new ModelHealthIssue[] { null }));
+                    ProjectDiagnosticSummaryExporter.Export(path, project, new ModelHealthIssue[] { null! }));
                 False(Directory.Exists(root));
             }
             finally
