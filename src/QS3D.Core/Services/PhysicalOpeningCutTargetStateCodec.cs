@@ -25,7 +25,7 @@ namespace QS3D.Core.Services
             if (raw.Length > MaxSerializedLength)
                 throw new InvalidOperationException("Host " + host.Id + " physical opening target-state exceeds the safety limit.");
 
-            var tokens = raw.Split(new[] { ';' }, StringSplitOptions.None);
+            var tokens = raw.Split(new[] { ';' }, MaxOpeningIds + 1, StringSplitOptions.None);
             if (tokens.Length > MaxOpeningIds)
                 throw new InvalidOperationException("Host " + host.Id + " has too many physical opening targets; limit " + MaxOpeningIds + ".");
 
