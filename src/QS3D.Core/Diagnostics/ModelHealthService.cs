@@ -333,12 +333,15 @@ namespace QS3D.Core.Diagnostics
         private static void ValidateGeneratedGeometry(ProjectState project, ProjectElement element, ISet<string>? liveGeneratedSolidHandles, IDictionary<string, string> owners, ICollection<ModelHealthIssue> issues)
         {
             if (!element.Properties.TryGetValue("GeneratedSolidHandle", out var rawHandle)) return;
-            var handle = (rawHandle ?? string.Empty).Trim();
+            var handleText = rawHandle ?? string.Empty;
+            var handle = handleText.Trim();
             if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
             {
                 issues.Add(new ModelHealthIssue("INVALID_GENERATED_HANDLE", HealthSeverity.Error, "GeneratedSolidHandle không hợp lệ.", element.Id));
                 return;
             }
+            if (!string.Equals(handleText, handle, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("GENERATED_HANDLE_NON_CANONICAL", HealthSeverity.Error, "GeneratedSolidHandle không được có khoảng trắng đầu/cuối.", element.Id));
 
             if (owners.TryGetValue(handle, out var owner) && !string.Equals(owner, element.Id, StringComparison.OrdinalIgnoreCase))
                 issues.Add(new ModelHealthIssue("DUPLICATE_GENERATED_HANDLE", HealthSeverity.Error, "Generated solid đang được nhiều element nhận sở hữu; element khác: " + owner, element.Id));
