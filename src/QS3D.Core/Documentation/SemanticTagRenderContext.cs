@@ -127,8 +127,11 @@ namespace QS3D.Core.Documentation
 
         private static void Add<T>(IDictionary<string, T> index, ISet<string> ambiguous, string rawId, T value)
         {
-            var id = (rawId ?? string.Empty).Trim();
-            if (id.Length == 0) throw new InvalidOperationException("Semantic documentation index contains an empty id.");
+            var id = rawId ?? string.Empty;
+            var canonicalId = id.Trim();
+            if (canonicalId.Length == 0) throw new InvalidOperationException("Semantic documentation index contains an empty id.");
+            if (!string.Equals(id, canonicalId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Semantic documentation index contains a non-canonical id: \"" + rawId + "\".");
             if (index.ContainsKey(id))
             {
                 ambiguous.Add(id);
