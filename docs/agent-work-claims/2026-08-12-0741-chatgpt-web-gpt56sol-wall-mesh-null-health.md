@@ -1,0 +1,33 @@
+# Work claim — Generated Wall Mesh health null-element fail-visible
+
+- Status: `ACTIVE`
+- State: `ACTIVE`
+- Agent: `chatgpt-web/gpt56sol-wall-mesh-null-health`
+- Registered: `2026-08-12T07:41:00+07:00`
+- Baseline main SHA: `53d6a8e3148c33ba3c9f719799dd77df9d6dd51a`
+- Priority: P1 — standalone generated health must not silently treat malformed ProjectState entries as clean.
+- Task Key: `CORE-WALL-MESH-NULL-HEALTH`
+
+## Confirmed defect
+
+`GeneratedWallMeshHealthService.Inspect(ProjectState, ...)` and its internal ownership-index traversal execute `if (element == null) continue;`. A malformed project containing a null semantic element can therefore be silently normalized inside this standalone provider. Newer generated-health lanes use a fail-visible contract: direct inspection rejects malformed null entries with `InvalidOperationException`, while `ComprehensiveModelHealthService.AddSafely(...)` converts the bounded failure into a stable Error-level `HEALTH_PROVIDER_FAILED` issue.
+
+## Reserved scope
+
+- `src/QS3D.Core/Diagnostics/GeneratedWallMeshHealthService.cs`
+- one focused auto-discovered `scripts/preflight-*.py` regression gate
+- this claim file
+
+Do not modify wall mesh builders, quantity semantics, ownership policy/index, CAD runtime code, or `ComprehensiveModelHealthService`.
+
+## Intended contract
+
+- Direct Wall Mesh health inspection and its ownership traversal throw `InvalidOperationException` on a null project element instead of silently skipping it.
+- Valid projects retain all existing handle/count/diameter/spacing/cover/faces/mode/category/stale diagnostics.
+- Composite health reuses existing `AddSafely` handling and remains fail-visible via `HEALTH_PROVIDER_FAILED` without aggregate changes.
+- Inspection remains read-only.
+- No GitHub Actions/build/release dispatch and no executable Core/full-build/BricsCAD runtime PASS claim from this remote lane.
+
+## Completion condition
+
+Standalone Wall Mesh health can no longer return clean solely because a null semantic element was skipped, focused regression coverage pins direct fail-closed behavior and aggregate compatibility, and this claim is closed after merged-main readback.
