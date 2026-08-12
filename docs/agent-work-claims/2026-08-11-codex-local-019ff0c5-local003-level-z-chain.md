@@ -135,6 +135,12 @@ Baseline audited before this expansion and synchronized through `origin/main@910
 
 Reserve `src/QS3D.Core/Geometry/GridIntersectionPlanner.cs` and `tests/QS3D.Core.SmokeTests/GridLineIntersectionScaleSmoke.cs` only for this released regression: when raw scale products overflow, use a finite well-conditioned algebraic determinant factorization when available, retain the existing normalized fail-closed fallback otherwise, and compare the smoke result to the exact intersection implied by the actually represented endpoints rather than the unrepresentable ideal midpoint. Preserve LINE/ARC, ARC/ARC, ambiguity, range and ownership behavior. The previous Grid claims are `COMPLETED`; no ACTIVE claim reserves these exact surfaces. Re-run the complete Core smoke after this focused numeric repair.
 
+## 2026-08-12 QSDB free-text fixture reconciliation expansion
+
+Baseline audited and synchronized before this expansion: `origin/main@25eabe09`. The next full Core smoke reaches `tests/QS3D.Core.SmokeTests/QsdbFreeTextRoundtripSmoke.cs`, whose legacy free-text fixture still assigns a padded audit `Action`. The completed QSDB audit-action canonicality contract now correctly rejects leading/trailing whitespace for that provenance identity while intentionally leaving audit detail, actor, correlation and element-id payloads as free text.
+
+Reserve only that released smoke file to use a canonical audit action and assert it round-trips unchanged, while retaining every intentional padded free-text assertion for the remaining fields. Do not edit `QsdbProjectStore`, `QsdbProjectXmlSchemaValidator`, `AuditTrail`, audit normalization policy or any production persistence source. The owning claim `2026-08-12-0728-chatgpt-web-gpt56sol-qsdb-audit-action-canonicality.md` is `COMPLETED` on this baseline; no ACTIVE claim reserves this exact fixture reconciliation. Re-run the complete Core smoke after this test-data-only fix.
+
 ## 2026-08-11 source-safe wave heartbeat
 
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
