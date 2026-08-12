@@ -230,10 +230,30 @@ namespace QS3D.Core.Geometry
         {
             var dx = segment.End.X - segment.Start.X;
             var dy = segment.End.Y - segment.Start.Y;
-            var lengthSquared = dx * dx + dy * dy;
-            if (!(lengthSquared > 0d)) return;
-            var t = ((point.X - segment.Start.X) * dx + (point.Y - segment.Start.Y) * dy) / lengthSquared;
-            if (t < 0d || t > 1d) return;
+            if (!Finite(dx) || !Finite(dy)) throw new OverflowException("Room boundary endpoint projection direction exceeds the supported numeric range.");
+            var length = segment.Start.DistanceTo(segment.End);
+            if (!(length > 0d)) return;
+            var ux = dx / length;
+            var uy = dy / length;
+            if (!Finite(ux) || !Finite(uy)) throw new OverflowException("Room boundary endpoint projection direction is not finite.");
+
+            var qx = point.X - segment.Start.X;
+            var qy = point.Y - segment.Start.Y;
+            if (!Finite(qx) || !Finite(qy)) throw new OverflowException("Room boundary endpoint projection delta exceeds the supported numeric range.");
+            var scale = Math.Max(Math.Abs(qx), Math.Abs(qy));
+            if (scale == 0d)
+            {
+                cuts.Add(new Cut(0d, segment.Start));
+                return;
+            }
+
+            var scaledAlong = qx / scale * ux + qy / scale * uy;
+            if (!Finite(scaledAlong)) throw new OverflowException("Room boundary endpoint scaled projection is not finite.");
+            if (scaledAlong < 0d) return;
+            var scaledLength = length / scale;
+            if (!(scaledLength > 0d) || scaledAlong > scaledLength) return;
+            var t = scaledAlong / scaledLength;
+            if (!Finite(t) || t < 0d || t > 1d) return;
             var projected = new Point2(segment.Start.X + dx * t, segment.Start.Y + dy * t);
             if (projected.DistanceTo(point) <= tolerance) cuts.Add(new Cut(Clamp01(t), projected));
         }
@@ -461,7 +481,23 @@ namespace QS3D.Core.Geometry
             if (a > b) { var temp = a; a = b; b = temp; }
             return a.ToString(CultureInfo.InvariantCulture) + ":" + b.ToString(CultureInfo.InvariantCulture);
         }
-        private static double Cross(double ax, double ay, double bx, double by) => ax * by - ay * bx;
+        private static double Cross(double ax, double ay, double bx, double by)
+        {
+            var scaleA = Math.Max(Math.Abs(ax), Math.Abs(ay));
+            var scaleB = Math.Max(Math.Abs(bx), Math.Abs(by));
+            if (!Finite(scaleA) || !Finite(scaleB)) throw new OverflowException("Room boundary determinant input exceeds the supported numeric range.");
+            if (scaleA == 0d || scaleB == 0d) return 0d;
+
+            var normalized = ax / scaleA * (by / scaleB) - ay / scaleA * (bx / scaleB);
+            if (!Finite(normalized)) throw new OverflowException("Room boundary determinant exceeds the supported numeric range.");
+            var smallerScale = Math.Min(scaleA, scaleB);
+            var largerScale = Math.Max(scaleA, scaleB);
+            var scaled = normalized * smallerScale;
+            if (!Finite(scaled)) throw new OverflowException("Room boundary determinant exceeds the supported numeric range.");
+            var value = scaled * largerScale;
+            if (!Finite(value)) throw new OverflowException("Room boundary determinant exceeds the supported numeric range.");
+            return value;
+        }
         private static double Clamp01(double value) => value < 0d ? 0d : value > 1d ? 1d : value;
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
         private static bool FinitePositive(double value) => Finite(value) && value > 0d;
