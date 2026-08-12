@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
         {
             RemovedElementDuringLazyEnumerationFailsClosed();
             RemovedTargetZoneDuringLazyEnumerationFailsClosed();
+            UnrelatedDuplicateZoneDuringLazyEnumerationFailsClosed();
+            UnrelatedDuplicateElementDuringLazyEnumerationFailsClosed();
         }
 
         private static void RemovedElementDuringLazyEnumerationFailsClosed()
@@ -50,6 +52,44 @@ namespace QS3D.Core.SmokeTests
             Equal(beforeUpdated, element.UpdatedUtc, "removed-zone timestamp");
         }
 
+        private static void UnrelatedDuplicateZoneDuringLazyEnumerationFailsClosed()
+        {
+            var project = CreateProject("P-ZONE-STRUCT-3", out var zone, out var element);
+            project.Zones.Add(new ZoneDefinition("Z-OTHER", "Other Zone"));
+            element.MarkClean(ElementDirtyFlags.All);
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdated = element.UpdatedUtc;
+
+            ThrowsContaining<InvalidOperationException>(
+                () => ProjectZoneService.Assign(project, zone.Id, YieldThenDuplicateUnrelatedZone(project, element)),
+                "Project contains duplicate zone id: z-other");
+
+            Equal(beforeVersion, project.ChangeVersion, "duplicate-zone project revision");
+            Equal(3, project.Zones.Count, "duplicate-zone deliberate corruption count");
+            Equal(string.Empty, element.ZoneId, "duplicate-zone target ZoneId");
+            Equal(ElementDirtyFlags.None, element.Dirty, "duplicate-zone target dirty flags");
+            Equal(beforeUpdated, element.UpdatedUtc, "duplicate-zone target timestamp");
+        }
+
+        private static void UnrelatedDuplicateElementDuringLazyEnumerationFailsClosed()
+        {
+            var project = CreateProject("P-ZONE-STRUCT-4", out var zone, out var element);
+            project.Elements.Add(new ProjectElement("E-OTHER", ElementCategory.Door));
+            element.MarkClean(ElementDirtyFlags.All);
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdated = element.UpdatedUtc;
+
+            ThrowsContaining<InvalidOperationException>(
+                () => ProjectZoneService.Assign(project, zone.Id, YieldThenDuplicateUnrelatedElement(project, element)),
+                "Project contains duplicate semantic element id: e-other");
+
+            Equal(beforeVersion, project.ChangeVersion, "duplicate-element project revision");
+            Equal(3, project.Elements.Count, "duplicate-element deliberate corruption count");
+            Equal(string.Empty, element.ZoneId, "duplicate-element target ZoneId");
+            Equal(ElementDirtyFlags.None, element.Dirty, "duplicate-element target dirty flags");
+            Equal(beforeUpdated, element.UpdatedUtc, "duplicate-element target timestamp");
+        }
+
         private static ProjectState CreateProject(string id, out ZoneDefinition zone, out ProjectElement element)
         {
             var project = new ProjectState(id, "Zone structural freshness");
@@ -70,6 +110,18 @@ namespace QS3D.Core.SmokeTests
         {
             yield return element;
             project.Zones.Remove(zone);
+        }
+
+        private static IEnumerable<ProjectElement> YieldThenDuplicateUnrelatedZone(ProjectState project, ProjectElement element)
+        {
+            yield return element;
+            project.Zones.Add(new ZoneDefinition("z-other", "Other Zone Duplicate"));
+        }
+
+        private static IEnumerable<ProjectElement> YieldThenDuplicateUnrelatedElement(ProjectState project, ProjectElement element)
+        {
+            yield return element;
+            project.Elements.Add(new ProjectElement("e-other", ElementCategory.Door));
         }
 
         private static void False(bool value, string label)
