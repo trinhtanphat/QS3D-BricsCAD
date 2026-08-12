@@ -7,6 +7,9 @@ namespace QS3D.Core.Diagnostics
 {
     public sealed class GeneratedRebarModeHealthService
     {
+        private const string ShapeModeKey = "GeneratedShapeRebarMode";
+        private const string ShapeMode = "BBS.ShapePath.SegmentedCylinder";
+
         public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -16,6 +19,7 @@ namespace QS3D.Core.Diagnostics
                 if (element == null)
                     throw new InvalidOperationException("Generated-rebar mode diagnostics cannot inspect a project containing a null semantic element.");
                 InspectLongitudinal(element, issues);
+                InspectShape(element, issues);
                 InspectSlabMesh(element, issues);
                 InspectWallMesh(element, issues);
                 InspectFoundationMesh(element, issues);
@@ -52,6 +56,20 @@ namespace QS3D.Core.Diagnostics
                     issues.Add(new ModelHealthIssue("GENERATED_REBAR_MODE_UNKNOWN", HealthSeverity.Warning, "GeneratedRebarMode chưa được health service nhận diện: " + mode, element.Id));
                     break;
             }
+        }
+
+        private static void InspectShape(ProjectElement element, ICollection<ModelHealthIssue> issues)
+        {
+            if (!HasHandles(element, "GeneratedShapeRebarHandles")) return;
+            var raw = element.Properties.TryGetValue(ShapeModeKey, out var stored) ? stored ?? string.Empty : string.Empty;
+            var normalized = raw.Trim();
+            if (!string.Equals(normalized, ShapeMode, StringComparison.OrdinalIgnoreCase))
+            {
+                issues.Add(new ModelHealthIssue("GENERATED_REBAR_MODE_METADATA_INVALID", HealthSeverity.Warning, ShapeModeKey + " thiếu hoặc phải là " + ShapeMode + ".", element.Id));
+                return;
+            }
+            if (!string.Equals(raw, ShapeMode, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("GENERATED_REBAR_MODE_METADATA_NON_CANONICAL", HealthSeverity.Error, ShapeModeKey + " phải dùng đúng writer-owned token: " + ShapeMode + ".", element.Id));
         }
 
         private static void InspectSlabMesh(ProjectElement element, ICollection<ModelHealthIssue> issues)
