@@ -67,6 +67,8 @@ if RUNNER.is_file():
         '-WindowStyle Hidden',
         'PluginDll must be the exact repository x64 Release V25 build output.',
         'ArtifactDir must stay outside the repository',
+        'Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1',
+        'Git executable is unavailable.',
         'rev-parse HEAD',
         'status --porcelain --untracked-files=normal',
         'Curtain-panel runtime qualification requires a clean exact-SHA worktree.',

@@ -99,7 +99,8 @@ if ($ArtifactDir.StartsWith($repoRoot + [IO.Path]::DirectorySeparatorChar, [Stri
     throw "ArtifactDir must stay outside the repository because the runtime script contains a private local plugin path."
 }
 
-$git = Get-Command git -CommandType Application -ErrorAction Stop
+$git = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
+if ($null -eq $git -or [string]::IsNullOrWhiteSpace($git.Source)) { throw "Git executable is unavailable." }
 $gitHead = (& $git.Source -C $repoRoot rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $gitHead -notmatch '^[0-9a-f]{40}$') { throw "Cannot resolve the exact Git candidate SHA." }
 $gitStatus = @(& $git.Source -C $repoRoot status --porcelain --untracked-files=normal)
