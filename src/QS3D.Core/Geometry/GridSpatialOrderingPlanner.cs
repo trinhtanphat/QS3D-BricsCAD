@@ -34,11 +34,16 @@ namespace QS3D.Core.Geometry
             if (!Finite(coordinateTolerance) || coordinateTolerance <= 0.0)
                 throw new ArgumentOutOfRangeException(nameof(coordinateTolerance), "Grid coordinate tolerance must be finite and positive.");
 
-            var axisLength = Hypot(orderingAxis.X, orderingAxis.Y);
-            if (!(axisLength > 0.0) || !Finite(axisLength))
+            if (!Finite(orderingAxis.X) || !Finite(orderingAxis.Y))
                 throw new ArgumentException("Grid ordering axis must be finite and non-zero.", nameof(orderingAxis));
-            var ux = orderingAxis.X / axisLength;
-            var uy = orderingAxis.Y / axisLength;
+            var axisScale = Math.Max(Math.Abs(orderingAxis.X), Math.Abs(orderingAxis.Y));
+            if (!(axisScale > 0.0))
+                throw new ArgumentException("Grid ordering axis must be finite and non-zero.", nameof(orderingAxis));
+            var scaledAxisX = orderingAxis.X / axisScale;
+            var scaledAxisY = orderingAxis.Y / axisScale;
+            var scaledAxisLength = Math.Sqrt(scaledAxisX * scaledAxisX + scaledAxisY * scaledAxisY);
+            var ux = scaledAxisX / scaledAxisLength;
+            var uy = scaledAxisY / scaledAxisLength;
             if (!Finite(ux) || !Finite(uy))
                 throw new InvalidOperationException("Grid ordering axis normalization overflowed the supported numeric range.");
 
