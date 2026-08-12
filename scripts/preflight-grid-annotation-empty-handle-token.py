@@ -18,19 +18,22 @@ else:
         "if (handle.Length == 0)",
         '"GRID_ANNOTATION_HANDLE_INVALID"',
         '"Generated Grid annotation Handle không được rỗng."',
-        "if (!distinct.Add(handle))",
+        "var isValidHex = long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _);",
+        "GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle)",
+        "if (!distinct.Add(identity))",
         "if (distinct.Count != ExpectedHandleCount)",
     )
     for token in required:
         if token not in text:
-            errors.append("missing grid-annotation empty-token contract token: " + token)
+            errors.append("missing grid-annotation empty-token/canonical-identity contract token: " + token)
 
     for forbidden in (
         ".Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)",
         ".Where(x => x.Length > 0)",
+        "if (!distinct.Add(handle))",
     ):
         if forbidden in text:
-            errors.append("grid-annotation inspected stream still discards empty handle tokens: " + forbidden)
+            errors.append("grid-annotation inspected stream regressed to discarded/uncanonical handle identity: " + forbidden)
 
 fixtures = (
     "A1;A2;A3;A4;A5;A6;;",
@@ -50,4 +53,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: whole-value-empty Grid annotation metadata keeps its warning and embedded empty handle tokens fail visible.")
+print("PASS: Grid annotation metadata keeps empty tokens fail-visible while duplicate checks use canonical numeric CAD-handle identity.")
