@@ -183,6 +183,10 @@ namespace QS3D.Core.Domain
                     throw new InvalidOperationException(
                         "Room " + room.Id + " references missing family id: " + previousFamilyId +
                         ". Repair the relation before Auto Room family synchronization.");
+                if (previousFamily.Category != room.Category)
+                    throw new InvalidOperationException(
+                        "Room " + room.Id + " references previous Family '" + previousFamily.Id + "' category " + previousFamily.Category +
+                        " while the room category is " + room.Category + ". Repair the relation before Auto Room family synchronization.");
             }
             var previousFamilyProperties = previousFamily != null
                 ? ProjectFamilyService.SnapshotProperties(previousFamily, "Previous", "auto-room synchronization")
