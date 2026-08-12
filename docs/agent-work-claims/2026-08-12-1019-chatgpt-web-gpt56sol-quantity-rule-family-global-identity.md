@@ -1,30 +1,41 @@
 # Work claim — QuantityRuleEngine global Family identity integrity
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-quantity-rule-family-global-identity-20260812-1019`
 - Registered: `2026-08-12T10:19:00+07:00`
+- Last Updated: `2026-08-12T10:22:00+07:00`
 - Baseline main SHA: `2b6d5274ce07a9a4c93648ec31f73ba8ed7a8d0c`
+- Source fix SHA: `a2986e5e708ee78f69ffb63a949b829fb492c893`
+- Regression SHA: `9e063e605e17c98ff11b04dc0422f2c4892653ee`
 - Priority: P1 — quantity-rule mutation must not run against an ambiguous Family identity space.
 - Task Key: `CORE-QUANTITY-RULE-FAMILY-GLOBAL-IDENTITY`
 
 ## Confirmed defect
 
-`QuantityRuleEngine.ApplyMatching(...)` globally validates quantity-rule IDs, but Family validation is limited to `ResolveFamily(project, element)`, which resolves only the target element's Family ID. A malformed project containing unrelated duplicate Families such as `F1` / `f1` plus a unique target Family `F2` can still evaluate rules for an `F2` element and write quantities/provenance. QSDB persistence and canonical Family mutation services reject that same Family collection as ambiguous.
+`QuantityRuleEngine.ApplyMatching(...)` globally validated quantity-rule IDs, but Family validation was limited to `ResolveFamily(project, element)`, which resolved only the target element's Family ID. A malformed project containing unrelated duplicate Families such as `F1` / `f1` plus a unique target Family `F2` could still evaluate rules for an `F2` element and write quantities/provenance even though QSDB persistence and canonical Family services reject the same Family collection as ambiguous.
 
-## Reserved scope
+## Completed implementation
 
-- `src/QS3D.Core/Rules/QuantityRuleEngine.cs`
-- `tests/QS3D.Core.SmokeTests/QuantityRuleFamilyGlobalIdentitySmoke.cs`
-- this claim file
+- `ApplyMatching(...)` now validates the complete project Family collection before Family resolution or rule evaluation.
+- Null Family entries, blank/non-canonical Family IDs and case-insensitive duplicate Family IDs fail closed before quantity/provenance mutation.
+- Existing rule-ID/output validation, dependency ordering, stale-output cleanup, family/category checks, provenance generation and valid rule evaluation remain unchanged.
+- No expression-parser, preview UI/native BricsCAD or persistence-schema behavior was changed.
 
-## Intended contract
+## Regression evidence
 
-- Before Family resolution or quantity/provenance mutation, validate the complete project Family collection for null entries, blank/non-canonical IDs and case-insensitive duplicate IDs.
-- Fail before element quantity/property/timestamp mutation when Family identity is ambiguous, even if the target element references a different unique Family.
-- Preserve valid rule evaluation, rule-ID/output validation, dependency ordering, stale-output cleanup, family/category checks, provenance and no-rule cleanup semantics.
-- Do not alter ProjectFamilyService, expression parsing, preview UI/native BricsCAD or persistence schema.
+`tests/QS3D.Core.SmokeTests/QuantityRuleFamilyGlobalIdentitySmoke.cs` is auto-registered and covers:
 
-## Validation plan
+- unrelated `F1` / `f1` duplicates plus unique target `F2` are rejected;
+- rejection preserves quantities, properties/provenance, dirty state and element UpdatedUtc;
+- a valid unique-Family control still applies one rule, writes the expected `RuleQ=2` quantity and canonical `Rule:RuleQ=R1@1` provenance.
 
-Focused auto-registered Core smoke constructs unrelated `F1`/`f1` duplicates plus unique target `F2`, an `F2` element and a valid rule, then requires `ApplyMatching(...)` to reject without changing quantities, properties or element persistence state. A valid control proves rule evaluation with unique Families still writes the expected quantity/provenance. Re-fetch source/claim before writes. No force-push, GitHub Actions dispatch, executable full-smoke PASS or licensed BricsCAD runtime qualification claim unless actually executed.
+Source and regression were read back directly from `main` after their commits.
+
+## Validation boundary
+
+No GitHub Actions were dispatched. No executable full smoke/build or licensed BricsCAD V25/V26 runtime PASS is claimed from this connector-only session.
+
+## Completion condition
+
+Completed: quantity-rule matching now fails closed on globally ambiguous Family identity before semantic quantity/provenance mutation while preserving valid rule behavior.
