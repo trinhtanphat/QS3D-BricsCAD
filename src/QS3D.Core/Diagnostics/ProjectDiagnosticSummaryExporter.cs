@@ -28,6 +28,11 @@ namespace QS3D.Core.Diagnostics
             var normalizedIssues = issues.ToList();
             if (normalizedIssues.Any(x => x == null))
                 throw new InvalidOperationException("Diagnostic summary cannot contain a null health issue.");
+            foreach (var issue in normalizedIssues)
+            {
+                if (!Enum.IsDefined(typeof(HealthSeverity), issue.Severity))
+                    throw new InvalidOperationException("Diagnostic summary contains an undefined health severity: " + (int)issue.Severity + ".");
+            }
 
             var health = normalizedIssues
                 .GroupBy(x => new { x.Severity, Code = CanonicalCode(x.Code) })

@@ -1,7 +1,7 @@
 # Work claim — Manager cold-cache modeless launch binding
 
-- Status: `COMPLETE`
-- State: `COMPLETE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-gpt56sol-20260812-manager-cold-cache-modeless-launch`
 - Registered: `2026-08-12T00:35:00+07:00`
 - Completed: `2026-08-12T00:39:00+07:00`

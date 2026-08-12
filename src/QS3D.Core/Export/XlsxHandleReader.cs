@@ -256,7 +256,11 @@ namespace QS3D.Core.Export
                 else
                 {
                     value = cell.Element(ns + "v")?.Value ?? string.Empty;
-                    if (string.Equals(type, "s", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(type, "d", StringComparison.OrdinalIgnoreCase))
+                    {
+                        value = "[Date] " + value;
+                    }
+                    else if (string.Equals(type, "s", StringComparison.OrdinalIgnoreCase))
                     {
                         if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var index) || index < 0 || index >= sharedStrings.Count)
                             throw new InvalidDataException("Excel shared-string cell contains an invalid shared-string index.");

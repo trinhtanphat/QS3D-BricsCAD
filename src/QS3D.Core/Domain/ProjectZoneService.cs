@@ -14,6 +14,8 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             var normalizedId = Required(id, nameof(id), 64);
             var normalizedName = Required(name, nameof(name), MaxNameLength);
+            if (project.Zones.Any(x => x == null))
+                throw new InvalidOperationException("Project zone collection contains a null zone.");
             if (project.Zones.Count >= MaxZones) throw new InvalidOperationException("Project supports at most " + MaxZones + " zones.");
             if (project.Zones.Any(x => string.Equals(x.Id, normalizedId, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Zone id already exists: " + normalizedId);

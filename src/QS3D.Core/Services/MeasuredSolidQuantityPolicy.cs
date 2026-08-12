@@ -23,6 +23,7 @@ namespace QS3D.Core.Services
                 hasVolume = TryRead(element, VolumeProperty, out volume);
 
             var handled = false;
+            var removed = false;
             if (hasSurfaceArea)
             {
                 element.SetQuantity("MeasuredSurfaceAreaM2", surfaceArea);
@@ -31,6 +32,7 @@ namespace QS3D.Core.Services
             else if (element.Quantities.Remove("MeasuredSurfaceAreaM2"))
             {
                 handled = true;
+                removed = true;
             }
 
             if (hasVolume)
@@ -43,8 +45,10 @@ namespace QS3D.Core.Services
             else if (element.Quantities.Remove("MeasuredSolidVolumeM3"))
             {
                 handled = true;
+                removed = true;
             }
 
+            if (removed) element.TouchPersistenceState();
             return handled;
         }
 

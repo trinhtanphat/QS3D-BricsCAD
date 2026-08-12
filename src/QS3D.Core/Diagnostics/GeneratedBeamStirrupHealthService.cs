@@ -118,9 +118,16 @@ namespace QS3D.Core.Diagnostics
             if (TryNumber(element, TotalCenterlineKey, out totalCenterline))
             {
                 var expected = centerline * validCount;
-                var tolerance = Math.Max(1e-9d, Math.Abs(expected) * 1e-9d);
-                if (Math.Abs(totalCenterline - expected) > tolerance)
-                    issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_LENGTH_MISMATCH", HealthSeverity.Warning, TotalCenterlineKey + " không khớp centerline length × số stirrup handle.", element.Id));
+                if (double.IsNaN(expected) || double.IsInfinity(expected))
+                {
+                    issues.Add(InvalidMetadata(element, TotalCenterlineKey + " expected value overflowed the finite numeric range."));
+                }
+                else
+                {
+                    var tolerance = Math.Max(1e-9d, Math.Abs(expected) * 1e-9d);
+                    if (Math.Abs(totalCenterline - expected) > tolerance)
+                        issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_LENGTH_MISMATCH", HealthSeverity.Warning, TotalCenterlineKey + " không khớp centerline length × số stirrup handle.", element.Id));
+                }
             }
 
             if (TryNumber(element, BendRadiusKey, out bendRadius) && TryNumber(element, HookLengthKey, out hookLength) && TryNumber(element, HookAngleKey, out hookAngle))

@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
 
@@ -13,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             ValidSurfaceAndVolumeApplyTogether();
             UnsupportedCategoryStillIgnoresVolumeProperty();
             MissingSourcesRetractOnlyPolicyOwnedQuantities();
+            RemovalAdvancesFreshnessWithoutNoOpTouch();
             RegenerationFallsBackAfterMeasuredSourcesDisappear();
         }
 
@@ -71,6 +73,25 @@ namespace QS3D.Core.SmokeTests
             False(element.Quantities.ContainsKey("MeasuredSolidVolumeM3"));
             Near(2d, element.Quantities["GrossVolumeM3"]);
             Near(1.5d, element.Quantities["NetVolumeM3"]);
+        }
+
+        private static void RemovalAdvancesFreshnessWithoutNoOpTouch()
+        {
+            var element = new ProjectElement("B-MEASURE-FRESH", ElementCategory.Beam);
+            element.SetQuantity("MeasuredSurfaceAreaM2", 12.5d);
+            var beforeRemoval = element.UpdatedUtc;
+            while (DateTime.UtcNow <= beforeRemoval) Thread.SpinWait(32);
+
+            if (!MeasuredSolidQuantityPolicy.Apply(element))
+                throw new InvalidOperationException("Stale measured quantity removal was not reported as handled.");
+            if (element.UpdatedUtc <= beforeRemoval)
+                throw new InvalidOperationException("Measured quantity removal did not advance element freshness metadata.");
+
+            var afterRemoval = element.UpdatedUtc;
+            if (MeasuredSolidQuantityPolicy.Apply(element))
+                throw new InvalidOperationException("A measured-quantity true no-op must remain unhandled.");
+            if (element.UpdatedUtc != afterRemoval)
+                throw new InvalidOperationException("Measured-quantity true no-op changed element freshness metadata.");
         }
 
         private static void RegenerationFallsBackAfterMeasuredSourcesDisappear()

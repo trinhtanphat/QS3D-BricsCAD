@@ -8,27 +8,32 @@ ROOT = Path(__file__).resolve().parents[1]
 required = {
     "README.md": [
         "Product form — BricsCAD plugin, not standalone EXE",
-        "BricsCAD V25 is required at runtime",
+        "plugin for BricsCAD V25 and V26 x64",
+        "A matching licensed BricsCAD host is required at runtime",
         "docs/PRODUCT-BOUNDARY.md",
     ],
     "AGENTS.md": [
         "Locked product form: BricsCAD plugin",
+        "BricsCAD V25 + V26 Windows x64 hosted plugin",
         "docs/PRODUCT-BOUNDARY.md",
         "Do not reinterpret",
     ],
     "docs/PRODUCT-BOUNDARY.md": [
-        "QS3D is intentionally a **BricsCAD V25 x64 .NET plugin**",
+        "QS3D is intentionally a **Windows x64 BricsCAD plugin** with host-specific managed assemblies",
         "A `QS3D.exe` is **not** a required or expected product artifact",
         "BLT/BLT3D material is a clean-room **workflow and UX reference only**",
     ],
     "docs/REQUIREMENTS.md": [
         "Product/runtime boundary",
-        "BricsCAD V25 x64 .NET plugin",
+        "BricsCAD V25 + V26 Windows x64 hosted plugin",
         "not a standalone",
+        "net8.0-windows",
     ],
     "docs/ARCHITECTURE.md": [
         "Hosted-plugin boundary",
-        "DemandLoad or `NETLOAD`",
+        "QS3D is a **BricsCAD-hosted plugin**",
+        "`QS3D.BricsCAD.V25` — BricsCAD V25",
+        "`QS3D.BricsCAD.V26` — BricsCAD V26",
         "not a standalone",
     ],
     "docs/UI-SPEC.md": [
@@ -85,21 +90,43 @@ if agents.is_file():
     elif not (ROOT / "docs" / match.group(1)).is_file():
         errors.append("AGENTS.md canonical current-handoff pointer does not exist: docs/" + match.group(1))
 
-csproj = ROOT / "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"
-if not csproj.is_file():
-    errors.append(str(csproj.relative_to(ROOT)) + " is missing")
-else:
+host_projects = {
+    "V25": (
+        ROOT / "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj",
+        (
+            "<TargetFramework>net48</TargetFramework>",
+            "<OutputType>Library</OutputType>",
+            "<AssemblyName>QS3D.BricsCAD.V25</AssemblyName>",
+        ),
+    ),
+    "V26": (
+        ROOT / "src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj",
+        (
+            "<TargetFramework>net8.0-windows</TargetFramework>",
+            "<OutputType>Library</OutputType>",
+            "<AssemblyName>QS3D.BricsCAD.V26</AssemblyName>",
+        ),
+    ),
+}
+for host, (csproj, tokens) in host_projects.items():
+    if not csproj.is_file():
+        errors.append(str(csproj.relative_to(ROOT)) + " is missing")
+        continue
     text = csproj.read_text(encoding="utf-8")
-    if "<OutputType>Library</OutputType>" not in text:
-        errors.append("BricsCAD adapter must remain a Library plugin target")
+    for token in tokens:
+        if token not in text:
+            errors.append("BricsCAD " + host + " adapter missing hosted Library identity: " + token)
 
-entry = ROOT / "src/QS3D.BricsCAD.V25/PluginEntry.cs"
-if not entry.is_file():
-    errors.append(str(entry.relative_to(ROOT)) + " is missing")
-else:
-    text = entry.read_text(encoding="utf-8")
-    if "IExtensionApplication" not in text:
-        errors.append("PluginEntry must remain a BricsCAD/Teigha extension entry point")
+for relative in (
+    "src/QS3D.BricsCAD.V25/PluginEntry.cs",
+    "src/QS3D.BricsCAD.V26/PluginEntry.cs",
+):
+    entry = ROOT / relative
+    if not entry.is_file():
+        errors.append(relative + " is missing")
+        continue
+    if "IExtensionApplication" not in entry.read_text(encoding="utf-8"):
+        errors.append(relative + " must remain a BricsCAD/Teigha extension entry point")
 
 if errors:
     for error in errors:
@@ -107,4 +134,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: canonical docs, Direct Draw handoffs and source keep QS3D explicitly scoped as a BricsCAD V25 plugin; BLT wording cannot silently redefine it as a standalone EXE.")
+print("PASS: canonical policy/docs and both host projects keep QS3D explicitly scoped as BricsCAD V25 + V26 managed Library plugins; BLT wording cannot silently redefine it as a standalone EXE or cross-major binary.")

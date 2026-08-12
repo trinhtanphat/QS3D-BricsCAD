@@ -34,10 +34,25 @@ namespace QS3D.Core.Diagnostics
                 if (element == null)
                     throw new InvalidOperationException("Level-reference diagnostics cannot inspect a project containing a null semantic element.");
                 var issueCountBefore = issues.Count;
-                var bottomId = Property(element, ProjectFloorService.BottomLevelIdKey);
-                var topId = Property(element, ProjectFloorService.TopLevelIdKey);
+                var bottomRaw = RawProperty(element, ProjectFloorService.BottomLevelIdKey);
+                var topRaw = RawProperty(element, ProjectFloorService.TopLevelIdKey);
+                var bottomId = bottomRaw.Trim();
+                var topId = topRaw.Trim();
                 var hasBottomOffset = HasProperty(element, ProjectFloorService.BottomLevelOffsetKey);
                 var hasTopOffset = HasProperty(element, ProjectFloorService.TopLevelOffsetKey);
+
+                if (!string.Equals(bottomRaw, bottomId, StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue(
+                        "BOTTOM_LEVEL_REFERENCE_NON_CANONICAL",
+                        HealthSeverity.Error,
+                        "BottomLevelId phải dùng đúng canonical Floor/Level ID, không có khoảng trắng đầu/cuối.",
+                        element.Id));
+                if (!string.Equals(topRaw, topId, StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue(
+                        "TOP_LEVEL_REFERENCE_NON_CANONICAL",
+                        HealthSeverity.Error,
+                        "TopLevelId phải dùng đúng canonical Floor/Level ID, không có khoảng trắng đầu/cuối.",
+                        element.Id));
 
                 if (bottomId.Length == 0)
                 {
@@ -112,8 +127,8 @@ namespace QS3D.Core.Diagnostics
                 element.Id));
         }
 
-        private static string Property(ProjectElement element, string key) =>
-            element.Properties.TryGetValue(key, out var raw) ? (raw ?? string.Empty).Trim() : string.Empty;
+        private static string RawProperty(ProjectElement element, string key) =>
+            element.Properties.TryGetValue(key, out var raw) ? raw ?? string.Empty : string.Empty;
 
         private static bool HasProperty(ProjectElement element, string key) =>
             element.Properties.TryGetValue(key, out var raw) && !string.IsNullOrWhiteSpace(raw);

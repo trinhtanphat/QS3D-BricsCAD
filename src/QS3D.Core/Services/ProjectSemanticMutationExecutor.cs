@@ -126,9 +126,9 @@ namespace QS3D.Core.Services
 
         private static string SafeDetail(Exception error)
         {
-            var message = error == null ? string.Empty : (error.GetType().Name + ": " + (error.Message ?? string.Empty));
-            if (message.Length > MaxDetailLength) message = message.Substring(0, MaxDetailLength);
-            return message;
+            var detail = (error == null ? "Exception" : error.GetType().Name) + " occurred.";
+            if (detail.Length > MaxDetailLength) detail = detail.Substring(0, MaxDetailLength);
+            return detail;
         }
 
         private static void TryRecord(

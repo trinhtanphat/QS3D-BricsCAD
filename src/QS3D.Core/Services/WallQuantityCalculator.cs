@@ -39,6 +39,8 @@ namespace QS3D.Core.Services
 
     public static class WallQuantityCalculator
     {
+        private const int MaxOpeningInputCount = 10000;
+
         public static WallQuantities Calculate(double lengthM, double heightM, double thicknessM, IEnumerable<OpeningCut>? openings = null)
         {
             RequireFiniteNonNegative(lengthM, nameof(lengthM));
@@ -49,8 +51,13 @@ namespace QS3D.Core.Services
             var openingArea = 0d;
             if (openings != null)
             {
+                EnsureKnownOpeningCountWithinBound(openings);
+                var inputCount = 0;
                 foreach (var opening in openings)
                 {
+                    if (inputCount >= MaxOpeningInputCount)
+                        throw new InvalidOperationException("Wall opening collection cannot exceed " + MaxOpeningInputCount + " input entries.");
+                    inputCount++;
                     if (opening == null)
                         throw new ArgumentException("Wall opening collection cannot contain null entries.", nameof(openings));
                     openingArea += opening.AreaM2;
@@ -74,6 +81,14 @@ namespace QS3D.Core.Services
                 NetVolumeM3 = grossVolume - deductionVolume,
                 TwoSideFinishAreaM2 = twoSideFinishArea
             };
+        }
+
+        private static void EnsureKnownOpeningCountWithinBound(IEnumerable<OpeningCut> openings)
+        {
+            if (openings is ICollection<OpeningCut> collection && collection.Count > MaxOpeningInputCount)
+                throw new InvalidOperationException("Wall opening collection cannot exceed " + MaxOpeningInputCount + " input entries.");
+            if (openings is IReadOnlyCollection<OpeningCut> readOnlyCollection && readOnlyCollection.Count > MaxOpeningInputCount)
+                throw new InvalidOperationException("Wall opening collection cannot exceed " + MaxOpeningInputCount + " input entries.");
         }
 
         private static void RequireFiniteNonNegative(double value, string name)
