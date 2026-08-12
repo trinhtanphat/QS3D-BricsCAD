@@ -159,7 +159,7 @@ namespace QS3D.Core.Selection
                 var zoneId = CanonicalOptionalReference(element.ZoneId, element.Id, "zone");
                 if (familyId.Length > 0)
                 {
-                    if (!familyIndex.TryGetValue(familyId, out var family))
+                    if (!familyIndex.TryGetValue(familyId, out var family) || family == null)
                         throw new InvalidOperationException("Selected element references missing family id: " + element.Id + "/" + familyId + ".");
                     if (family.Category != element.Category)
                         throw new InvalidOperationException("Selected element/family category mismatch: " + element.Id + "/" + family.Id + ".");
