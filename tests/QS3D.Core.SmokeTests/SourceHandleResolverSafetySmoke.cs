@@ -14,6 +14,8 @@ namespace QS3D.Core.SmokeTests
             DeepDependencyChainDoesNotUseProcessStack();
             DependencyCycleTerminatesDeterministically();
             DuplicateElementIdsFailClosed();
+            BlankSourceHandleFailsClosed();
+            NonCanonicalSourceHandleFailsClosed();
             ExactDuplicateSourceHandlesFailClosed();
             CaseAliasDuplicateSourceHandlesFailClosed();
             UniqueSourceHandlesRemainResolvable();
@@ -66,6 +68,42 @@ namespace QS3D.Core.SmokeTests
             try { SourceHandleResolver.Resolve(project, new[] { "A" }); }
             catch (InvalidOperationException) { threw = true; }
             if (!threw) throw new Exception("Duplicate semantic element ids must fail source-handle resolution closed.");
+        }
+
+        private static void BlankSourceHandleFailsClosed()
+        {
+            var project = new ProjectState("source-handle-blank", "Source Handle Blank");
+            var element = NewElement("E");
+            element.SourceHandles.Add(" ");
+            project.Elements.Add(element);
+
+            AssertInvalidDirectSourceHandleFailsClosed(project, element.Id, "empty SourceHandles entry at index 0");
+        }
+
+        private static void NonCanonicalSourceHandleFailsClosed()
+        {
+            var project = new ProjectState("source-handle-noncanonical", "Source Handle Noncanonical");
+            var element = NewElement("E");
+            element.SourceHandles.Add(" ABCD");
+            project.Elements.Add(element);
+
+            AssertInvalidDirectSourceHandleFailsClosed(project, element.Id, "non-canonical SourceHandles entry at index 0");
+        }
+
+        private static void AssertInvalidDirectSourceHandleFailsClosed(ProjectState project, string elementId, string expectedMessage)
+        {
+            try
+            {
+                SourceHandleResolver.Resolve(project, new[] { elementId });
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf(expectedMessage, StringComparison.Ordinal) < 0)
+                    throw new Exception("Malformed SourceHandles failure did not preserve the expected diagnostic: " + expectedMessage);
+                return;
+            }
+
+            throw new Exception("Malformed direct SourceHandles input must fail source-handle resolution closed.");
         }
 
         private static void ExactDuplicateSourceHandlesFailClosed()
