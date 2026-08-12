@@ -10,5 +10,29 @@
 - Shared files: `none`
 - Dependencies: `none`
 - Validation owner: `chatgpt-gpt56-sol-wall-pier-profile-underflow`
-- Test transfer: `Add a focused auto-registered smoke with positive finite inputs whose product underflows to zero and require fail-closed; keep ordinary rectangular/chamfered behavior owned by the existing WallPierProfileSmoke. Do not dispatch GitHub Actions.`
-- Status: `ACTIVE`
+- Status: `COMPLETED`
+
+## Implemented contract
+
+`WallPierProfilePlanner.Multiply` now validates both operands, preserves the existing non-finite overflow guard, and additionally throws when two non-zero finite operands multiply to literal zero. Positive wall-pier geometry therefore cannot silently collapse below the representable range.
+
+## Regression evidence
+
+The focused auto-registered `WallPierProfileUnderflowSmoke` covers:
+
+- cross-section area underflow from positive Width/Depth;
+- volume underflow after a still-representable positive area;
+- chamfer-square contribution underflow;
+- a tiny but representable rectangular profile that must remain valid and positive.
+
+## Landing evidence
+
+- Claim: `2ce3c089db99f926a2d380b09d1711c69d5e4444`
+- Regression-path reconciliation: `3e9a990ff955c2bdec3d04bd98ca6ec05e08b4aa`
+- Source fix: `aea768cb7530a892bdbc1d6227237568dcbd0ddb`
+- Regression: `30ab0293eea577281e3f557a4782c96d0ab0f7db`
+- Source blob readback: `9dfd260e3cfc1a26dc2a10298e2e270efd49e39f`
+
+## Validation boundary
+
+Remote commit diff/readback confirms the source and focused auto-registered smoke are present. The regression commit has no combined CI status attached. No GitHub Actions/full build or licensed BricsCAD runtime was executed for this lane, so no executable runtime PASS is claimed.
