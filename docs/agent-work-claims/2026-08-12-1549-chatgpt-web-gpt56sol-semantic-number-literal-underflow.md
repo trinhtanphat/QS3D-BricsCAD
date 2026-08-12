@@ -1,9 +1,10 @@
 # Agent Work Claim
 
 - Agent: `ChatGPT web / GPT-5.6 Sol`
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Started at: `2026-08-12T15:49:00+07:00`
+- Completed at: `2026-08-12T15:54:00+07:00`
 - Baseline main SHA: `b942ff6174cd3681e2afaa2a064b3c8c13791fd1`
 - Task Key: `CORE-SEMANTIC-NUMBER-LITERAL-UNDERFLOW`
 - Scope: Harden shared `SemanticNumber.Get()` parsing so a syntactically non-zero semantic numeric token that `double.TryParse` underflows to exact zero is rejected instead of flowing through regeneration as a false zero. Preserve true zero spellings, representable subnormal values, existing finite validation, caller-specific positivity semantics, and regeneration atomicity.
@@ -12,14 +13,24 @@
   - `tests/QS3D.Core.SmokeTests/SemanticOverflowSmoke.cs`
   - this claim file
 - Counterexample:
-  - A `WallFinish` with `PerimeterM = "1e-4000"` and `HeightM = "1"` currently parses the mathematically positive perimeter as `0d`; `RoomRegenerator` then publishes `NetFinishAreaM2 = 0` instead of failing closed.
-- Tests intended:
-  - Reject a non-zero underflowing semantic numeric token before any quantities are mutated.
-  - Preserve exact-zero scientific spelling such as `0e-4000`.
-  - Preserve the smallest representable positive token `5e-324` as `double.Epsilon`.
-  - Preserve existing overflow atomicity regressions.
+  - A `WallFinish` with `PerimeterM = "1e-4000"` and `HeightM = "1"` parsed the mathematically positive perimeter as `0d`; `RoomRegenerator` then could publish `NetFinishAreaM2 = 0` instead of failing closed.
+- Implementation evidence:
+  - Claim: `e4f2be9503d6239b4d28c62b57aafe7e3a652de5`
+  - Source: `47f468437d4ae9110d873cb29e49cc90c64fc301`
+  - Focused smoke: `7307796a6061dec53d6c2da8093e71ce7ac5d57f`
+  - Pull request: `#942`
+  - Squash merge: `63fbe2af2fc954846f74ba64d57e2edcf63e1945`
+  - Main source readback blob: `6b99b910a6739e8cebcc36a429e6cd9051bc3572`
+  - Main smoke readback blob: `60734ad55752aefb7da74fcbc187e4d3a819fbe1`
+- Regression evidence:
+  - `WallFinish.PerimeterM = "1e-4000"` now fails with `F-UNDER/PerimeterM underflowed to zero.` before any quantity writes; the sentinel-only quantity state is preserved.
+  - `AreaM2 = "0e-4000"` remains exact zero and `PerimeterM = "5e-324"` remains `double.Epsilon` through `RoomRegenerator`.
+  - Existing semantic overflow atomicity regressions remain in the same already registered smoke.
 - Coordination:
-  - Concurrent claim `b942ff6174cd3681e2afaa2a064b3c8c13791fd1` owns only `QuantityMath.Multiply/Divide`, `QuantityMathUnderflowSmoke`, and smoke registration. This lane occurs before `QuantityMath` and does not modify those surfaces.
+  - Concurrent `QuantityMath` arithmetic-underflow lane completed independently at `9c9b91836ba3e9ade19ecfb3abce9e64f0c1026d`; this lane did not modify `QuantityMath`, its focused smoke, or smoke registration.
+- Validation:
+  - PR patch was exactly two files; the large source file changed only by the 13-line `SemanticNumber` underflow guard/helper plus focused smoke changes.
+  - Source and smoke were read back from `main` after merge with the expected content.
+  - No GitHub Actions, full .NET build, executable smoke run, or BricsCAD V25/V26 runtime PASS was performed or claimed.
 - Notes:
   - Pure Core semantic parsing/regeneration boundary; no `QuantityMath` arithmetic, persistence/schema, measured-solid policy, geometry planners, generated handles, native CAD, or release workflow scope.
-  - No GitHub Actions, full .NET build, executable smoke run, or BricsCAD V25/V26 runtime PASS will be claimed unless actually performed.
