@@ -360,7 +360,7 @@ namespace QS3D.Core.Geometry
         private static double CrossFinite(double ax, double ay, double bx, double by, string label)
         {
             var first = MultiplyFinite(ax, by, label + " first product");
-            var second = MultiplyFinite(ay, bx, by, label + " second product");
+            var second = MultiplyFinite(ay, bx, label + " second product");
             return SubtractFinite(first, second, label);
         }
 

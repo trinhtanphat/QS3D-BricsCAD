@@ -11,7 +11,13 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
-            var elements = project.Elements.Where(x => x != null).ToList();
+            var elements = new List<ProjectElement>(project.Elements.Count);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Room-finish diagnostics cannot inspect a project containing a null semantic element.");
+                elements.Add(element);
+            }
             var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             var byId = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in elements)
