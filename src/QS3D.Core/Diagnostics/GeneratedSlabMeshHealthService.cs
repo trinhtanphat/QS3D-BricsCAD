@@ -54,7 +54,13 @@ namespace QS3D.Core.Diagnostics
 
                 if (!element.Properties.TryGetValue(CountKey, out var countText) ||
                     !int.TryParse(countText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var count) || count < 0 || count != validCount)
+                {
                     issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_COUNT_MISMATCH", HealthSeverity.Warning, CountKey + " không khớp số handle hợp lệ.", element.Id));
+                }
+                else if (!string.Equals(countText, count.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
+                {
+                    issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_COUNT_NON_CANONICAL", HealthSeverity.Warning, CountKey + " phải dùng canonical invariant integer text.", element.Id));
+                }
 
                 ValidatePositive(element, "GeneratedSlabMeshXDiameterMm", "SLAB_MESH_X_DIAMETER_INVALID", issues);
                 ValidatePositive(element, "GeneratedSlabMeshYDiameterMm", "SLAB_MESH_Y_DIAMETER_INVALID", issues);
