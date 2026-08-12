@@ -81,6 +81,8 @@ namespace QS3D.Core.Geometry
         {
             if (centerline == null) throw new ArgumentNullException(nameof(centerline));
             if (frames == null) throw new ArgumentNullException(nameof(frames));
+            if (frames.Count > MaxPieces)
+                throw new InvalidOperationException("Curtain path frame input cannot exceed " + MaxPieces + " rectangles.");
             var path = BuildPath(centerline);
             var pieces = new List<CurtainPathFramePiece>();
 
