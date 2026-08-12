@@ -215,7 +215,12 @@ namespace QS3D.Core.Export
                 else
                 {
                     value = cell.Element(ns + "v")?.Value ?? string.Empty;
-                    if (string.Equals(type, "s", StringComparison.OrdinalIgnoreCase) && int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var index) && index >= 0 && index < sharedStrings.Count) value = sharedStrings[index];
+                    if (string.Equals(type, "s", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var index) || index < 0 || index >= sharedStrings.Count)
+                            throw new InvalidDataException("Excel shared-string cell contains an invalid shared-string index.");
+                        value = sharedStrings[index];
+                    }
                 }
                 if (result.ContainsKey(column)) throw new InvalidDataException("Excel row contains duplicate cells in column " + (column + 1) + ".");
                 result.Add(column, value);
