@@ -177,6 +177,12 @@ Baseline audited and synchronized before this expansion: `origin/main@e4842c86`.
 
 Reserve only `src/QS3D.Core/Diagnostics/GeneratedCurtainPanelHealthService.cs` to treat a missing or exactly empty complete-build handle payload as zero tokens before validating list entries, while still rejecting whitespace-only payloads and leading/interior/trailing delimiter-empty tokens. Keep `CurtainPanelCoreSmoke.cs` and `preflight-curtain-panel-empty-handle-token.py` unchanged as complementary regression authorities. Do not change panel generation, count/build-state policy, ownership, live-solid or stale/release behavior. The empty-token claim is `COMPLETED`; no ACTIVE claim reserves this exact compatibility fix. Re-run the full Core smoke and the focused preflight.
 
+## 2026-08-12 Slab/Wall Mesh legacy null fixture reconciliation expansion
+
+Baseline audited and synchronized before this expansion: `origin/main@cc3d339a`. The next full Core smoke reaches `GeneratedSlabMeshHealthSmoke.IgnoresNullSemanticEntry()`, which contradicts the completed standalone fail-visible contract. `GeneratedWallMeshHealthSmoke.cs` likewise inserts a null semantic entry into an otherwise valid later-owner conflict scenario, so the provider now rejects malformed state before that scenario can exercise ownership ordering.
+
+Reserve only `tests/QS3D.Core.SmokeTests/GeneratedSlabMeshHealthSmoke.cs` and `tests/QS3D.Core.SmokeTests/GeneratedWallMeshHealthSmoke.cs`. Change the Slab method to require direct `InvalidOperationException`; split the Wall fixture into an explicit null-state rejection and a clean later-owner conflict project. Preserve all valid footprint, metadata, ownership and live-handle assertions. Do not edit either health provider, mesh generation or ownership policy/index. Both owning null-health claims are `COMPLETED`; no ACTIVE claim reserves these legacy smoke files. Re-run the complete Core smoke after this test-only batch.
+
 ## 2026-08-11 source-safe wave heartbeat
 
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
