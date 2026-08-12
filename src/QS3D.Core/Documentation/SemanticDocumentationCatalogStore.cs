@@ -292,16 +292,12 @@ namespace QS3D.Core.Documentation
             var result = new List<SemanticViewDefinition>();
             foreach (var item in container.Elements("view"))
             {
-                var kindText = Required(item, "kind");
-                if (!Enum.TryParse(kindText, true, out SemanticViewKind kind) || !Enum.IsDefined(typeof(SemanticViewKind), kind))
-                    throw new InvalidDataException("Semantic documentation view kind is invalid: " + kindText + ".");
+                var kind = NamedEnum<SemanticViewKind>(Required(item, "kind"), "view kind");
 
                 var categories = new List<ElementCategory>();
                 foreach (var categoryElement in item.Element("categories")?.Elements("category") ?? Enumerable.Empty<XElement>())
                 {
-                    var categoryText = Required(categoryElement, "value");
-                    if (!Enum.TryParse(categoryText, true, out ElementCategory category) || !Enum.IsDefined(typeof(ElementCategory), category))
-                        throw new InvalidDataException("Semantic documentation view category is invalid: " + categoryText + ".");
+                    var category = NamedEnum<ElementCategory>(Required(categoryElement, "value"), "view category");
                     categories.Add(category);
                 }
 
@@ -351,6 +347,16 @@ namespace QS3D.Core.Documentation
         {
             if (container == null) return Array.Empty<string>();
             return container.Elements("id").Select(x => Required(x, "value")).ToArray();
+        }
+
+        private static TEnum NamedEnum<TEnum>(string token, string label) where TEnum : struct
+        {
+            if (!Enum.TryParse(token, true, out TEnum value) || !Enum.IsDefined(typeof(TEnum), value))
+                throw new InvalidDataException("Semantic documentation " + label + " is invalid: " + token + ".");
+            var name = Enum.GetName(typeof(TEnum), value);
+            if (name == null || !string.Equals(token, name, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Semantic documentation " + label + " must use a named enum token.");
+            return value;
         }
 
         private static string Required(XElement element, string attribute)
