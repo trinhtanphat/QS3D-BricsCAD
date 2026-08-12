@@ -217,7 +217,7 @@ namespace QS3D.Core.Templates
                 if (profile.LayerMappings.ContainsKey(pattern)) throw new InvalidDataException("Duplicate template layer mapping: " + pattern);
                 profile.LayerMappings.Add(pattern, Required(item, "category"));
             }
-            foreach (var item in root.Element("bqColumns")?.Elements("column") ?? Enumerable.Empty<XElement>()) profile.VisibleBqColumns.Add(Required(item, "name"));
+            foreach (var column in ReadCanonicalBqColumns(root.Element("bqColumns"))) profile.VisibleBqColumns.Add(column);
             Validate(profile);
             return profile;
         }
@@ -341,6 +341,25 @@ namespace QS3D.Core.Templates
                 !string.Equals(raw, category.ToString(), StringComparison.Ordinal))
                 throw new InvalidDataException("Invalid or non-canonical template " + label + " category.");
             return category;
+        }
+
+        private static IReadOnlyList<string> ReadCanonicalBqColumns(XElement? container)
+        {
+            if (container == null) return Array.Empty<string>();
+            var values = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var column in container.Elements("column"))
+            {
+                var raw = column.Attribute("name")?.Value;
+                if (string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                    throw new InvalidDataException("Template BQ column name is empty or non-canonical.");
+                if (!seen.Add(raw)) throw new InvalidDataException("Duplicate template BQ column: " + raw);
+                values.Add(raw);
+            }
+            var canonical = values.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+            if (!values.SequenceEqual(canonical, StringComparer.Ordinal))
+                throw new InvalidDataException("Template BQ columns are not in canonical order.");
+            return values.AsReadOnly();
         }
 
         private static IEnumerable<string> SplitColumns(string value) => (value ?? string.Empty).Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase);

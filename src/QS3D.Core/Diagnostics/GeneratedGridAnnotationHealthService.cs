@@ -30,12 +30,7 @@ namespace QS3D.Core.Diagnostics
                 if (element.Category != ElementCategory.Grid) continue;
                 if (!element.Properties.TryGetValue(HandlesKey, out var rawHandles)) continue;
 
-                var tokens = (rawHandles ?? string.Empty)
-                    .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => x.Trim())
-                    .Where(x => x.Length > 0)
-                    .ToList();
-                if (tokens.Count == 0)
+                if (string.IsNullOrWhiteSpace(rawHandles))
                 {
                     issues.Add(new ModelHealthIssue(
                         "GRID_ANNOTATION_HANDLES_EMPTY",
@@ -45,9 +40,23 @@ namespace QS3D.Core.Diagnostics
                     continue;
                 }
 
+                var tokens = (rawHandles ?? string.Empty)
+                    .Split(new[] { ';' }, StringSplitOptions.None)
+                    .Select(x => (x ?? string.Empty).Trim())
+                    .ToList();
+
                 var distinct = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var handle in tokens)
                 {
+                    if (handle.Length == 0)
+                    {
+                        issues.Add(new ModelHealthIssue(
+                            "GRID_ANNOTATION_HANDLE_INVALID",
+                            HealthSeverity.Error,
+                            "Generated Grid annotation Handle không được rỗng.",
+                            element.Id));
+                        continue;
+                    }
                     if (!distinct.Add(handle))
                     {
                         issues.Add(new ModelHealthIssue(
