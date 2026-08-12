@@ -426,3 +426,11 @@ Baseline audited after a clean fetch and fast-forward: `origin/main@0a33c938f420
 The full Core smoke reaches `SourceHandleResolverMissingDependencySmoke.PreservesUnknownRootBehavior()`, which still expects an unknown requested root ID to return an empty handle list. The completed missing-requested-root contract now intentionally fails closed with an actionable diagnostic before traversal, so the old expectation is superseded. The missing-dependency, missing-root and structural-freshness claims are `COMPLETED`; the current ACTIVE/BLOCKED audit found no owner for this exact fixture.
 
 Reserve only `tests/QS3D.Core.SmokeTests/SourceHandleResolverMissingDependencySmoke.cs` to require `E-UNKNOWN` to throw `InvalidOperationException` with the missing root in its diagnostic. Preserve valid direct/dependent handle ordering, missing canonical dependency rejection and all production Locate/source-handle code. Re-run the complete Core smoke after this test-only supersession reconciliation.
+
+## 2026-08-12 diagnostic-summary null-issue fixture compile reconciliation expansion
+
+Baseline audited after a clean fetch and fast-forward: `origin/main@6b2da3495aca6bced29937ff8683da32c2c1fb88`.
+
+After the workspace semantic-version fixture reconciliation merged, the full Core smoke cannot compile because `ProjectDiagnosticSummaryPreflightSmoke.NullIssueDoesNotCreateDestinationDirectory()` intentionally supplies a null `ModelHealthIssue` to exercise exporter preflight before directory creation, but expresses that malformed entry as a raw `null` inside a non-nullable array. The warnings-as-errors build correctly reports `CS8625` before the runtime defense can be tested. The owning diagnostic-summary preflight claim is `COMPLETED`, and the current ACTIVE/BLOCKED audit found no reservation for this exact fixture.
+
+Reserve only `tests/QS3D.Core.SmokeTests/ProjectDiagnosticSummaryPreflightSmoke.cs` to mark that one deliberately malformed array entry with the null-forgiving operator. Preserve the runtime null rejection, no-directory-before-preflight assertion, lazy-enumeration failure case, valid export snapshot and all production diagnostic/export/file-I/O code. Re-run the complete Core smoke after this fixture-only nullable compile reconciliation.
