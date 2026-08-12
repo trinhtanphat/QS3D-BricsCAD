@@ -83,6 +83,15 @@ namespace QS3D.Core.Diagnostics
 
             var cycleMembers = FindCycleMembers(graph);
             var issues = new List<ModelHealthIssue>();
+            foreach (var elementId in duplicateIds.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+            {
+                issues.Add(new ModelHealthIssue(
+                    "DEPENDENCY_ELEMENT_ID_DUPLICATE",
+                    HealthSeverity.Error,
+                    "Project chứa nhiều semantic element cùng ID: " + elementId + ". Không thể dựng dependency graph an toàn.",
+                    elementId));
+            }
+
             foreach (var pair in nonCanonicalTargets
                 .OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Value, StringComparer.Ordinal))
