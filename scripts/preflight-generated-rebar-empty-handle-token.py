@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,13 +21,21 @@ else:
         block = text[start:end]
         required = (
             "var handles = raw.Split(new[] { ';' }, StringSplitOptions.None);",
-            "var handle = (item ?? string.Empty).Trim();",
             "if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))",
             '"INVALID_" + spec.CodePrefix + "_GENERATED_HANDLE"',
+            'spec.CodePrefix + "_GENERATED_HANDLE_NON_CANONICAL"',
+            "StringComparison.Ordinal",
         )
         for token in required:
             if token not in block:
-                errors.append("missing generated-rebar empty-token contract token: " + token)
+                errors.append("missing generated-rebar empty/canonical-token contract token: " + token)
+        normalization = re.search(
+            r"var\s+\w+\s*=\s*item\s*\?\?\s*string\.Empty;\s*var\s+handle\s*=\s*\w+\.Trim\(\);",
+            block,
+            re.DOTALL,
+        )
+        if normalization is None:
+            errors.append("InspectSet no longer preserves the raw generated-rebar token before null-safe trim normalization")
         if "StringSplitOptions.RemoveEmptyEntries" in block:
             errors.append("InspectSet still removes empty generated-rebar handle tokens before validation")
 
@@ -51,4 +60,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: GeneratedRebarHealthService preserves delimiter-empty tokens for both longitudinal and shape rebar validation.")
+print("PASS: GeneratedRebarHealthService preserves delimiter-empty tokens for both rebar sets, rejects invalid handles and flags padded/non-canonical tokens.")
