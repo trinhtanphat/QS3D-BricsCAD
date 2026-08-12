@@ -1,9 +1,12 @@
 # Work claim — XLSX Handle reader date-cell semantics
 
-- Status: `ACTIVE`
+- Status: `RELEASED`
 - Agent: `chatgpt-web-gpt56sol-xlsx-handle-date-cell-20260812-0822`
 - Registered: `2026-08-12T08:22:00+07:00`
+- Released: `2026-08-12T08:31:00+07:00`
 - Baseline main SHA: `1f0d8c2b165ca1f756fa13f484f7ee51c8489873`
+- Claim commit: `0662bb4f25e76d70be80cecc0ea4c781c9bf0af5`
+- Regression commit already on main: `bc72d58f6787d6f59d226ed9c986fe1504a6d5d0`
 - Priority: P2 evidence-driven remote-safe XLSX cell-semantics hardening
 
 ## Confirmed defect
@@ -40,8 +43,8 @@ Microsoft Learn/Open XML documentation defines `CellValues.Date` / `t="d"` as a 
 
 ## Coordination
 
-Recent current-main search found no active XLSX Handle date-cell owner. The error-cell claim is completed. This claim is limited to typed Date semantic preservation.
+The owner subsequently requested `continue all` and explicitly asked to commit/push every remaining unfinished change to `main`. At takeover time this reservation and its focused regression commit were already on `main`, but no Date-cell source fix or completion commit existed and no open PR/Date-cell branch was present. The owner-coordinated successor is `docs/agent-work-claims/2026-08-12-0831-chatgpt-web-gpt56sol-xlsx-handle-date-cell-takeover.md`. This original reservation is explicitly released rather than silently treated as abandoned.
 
 ## Completion condition
 
-Completed only when typed Date cells cannot be synthesized into CAD Handles or legacy `$decimal` fallback, focused regression source is on current `main`, exact integration SHAs are recorded and this claim is marked `COMPLETED`.
+Released to the owner-coordinated successor. No source implementation is claimed by this original session beyond the already-pushed regression source listed above.
