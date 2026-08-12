@@ -156,8 +156,11 @@ namespace QS3D.Core.Diagnostics
                     TransomWidthM = Number(element, family, "CurtainTransomWidthM", 0.05d, false, true),
                     FrameDepthM = Number(element, family, "CurtainFrameDepthM", storedDepth.Value, true)
                 });
-                if (!string.Equals(current, storedFingerprint.Trim(), StringComparison.OrdinalIgnoreCase))
+                var normalizedStored = storedFingerprint.Trim();
+                if (!string.Equals(current, normalizedStored, StringComparison.OrdinalIgnoreCase))
                     issues.Add(new ModelHealthIssue("CURTAIN_FRAME_CONFIG_STALE", HealthSeverity.Warning, "Panel grid/frame depth/offset hiện tại không còn khớp generated curtain frames; rebuild curtain frames.", element.Id));
+                else if (!string.Equals(current, storedFingerprint, StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue("CURTAIN_FRAME_CONFIG_FINGERPRINT_NON_CANONICAL", HealthSeverity.Error, "GeneratedCurtainFrameConfigFingerprint phải dùng đúng lowercase SHA-256 writer-owned spelling.", element.Id));
             }
             catch (Exception ex) when (IsConfigDataFailure(ex))
             {
