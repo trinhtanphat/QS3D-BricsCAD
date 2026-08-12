@@ -1,9 +1,11 @@
 using System;
 using System.IO;
 using System.Net;
+using System.Net.Http;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace QS3D.BricsCAD.V25.Updates
@@ -36,6 +38,8 @@ namespace QS3D.BricsCAD.V25.Updates
         private const string Product = "QS3D";
         private const string Target = "BricsCAD V26 x64";
         private const string RepositoryReleasePathPrefix = "/trinhtanphat/QS3D-BricsCAD/releases/download/";
+        private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
+        private static readonly HttpClient Http = CreateHttpClient();
         private static readonly Regex Sha256Pattern = new Regex("^[0-9A-Fa-f]{64}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex ThumbprintPattern = new Regex("^[0-9A-Fa-f]{40}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -55,33 +59,35 @@ namespace QS3D.BricsCAD.V25.Updates
 
             try
             {
-                var request = WebRequest.CreateHttp(manifestUri);
-                request.Method = "GET";
-                request.Accept = "application/json";
-                request.UserAgent = "QS3D-BricsCAD-V26-Updater";
-                request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
-                request.AllowAutoRedirect = true;
-                request.MaximumAutomaticRedirections = 5;
-                request.Timeout = 15000;
-                request.ReadWriteTimeout = 15000;
-
-                using (var response = (HttpWebResponse)await request.GetResponseAsync().ConfigureAwait(false))
+                using (var timeout = new CancellationTokenSource(RequestTimeout))
+                using (var request = new HttpRequestMessage(HttpMethod.Get, manifestUri))
                 {
-                    if (response.StatusCode != HttpStatusCode.OK)
-                        return UpdateManifestProbeResult.Rejected("GitHub update manifest trả HTTP " + (int)response.StatusCode + ".");
-                    if (response.ContentLength > MaxManifestBytes)
-                        return UpdateManifestProbeResult.Rejected("Update manifest vượt quá giới hạn 64 KiB.");
+                    request.Headers.Accept.ParseAdd("application/json");
+                    request.Headers.UserAgent.ParseAdd("QS3D-BricsCAD-V26-Updater");
 
-                    using (var source = response.GetResponseStream())
-                    using (var buffer = new MemoryStream())
+                    using (var response = await Http.SendAsync(
+                        request,
+                        HttpCompletionOption.ResponseHeadersRead,
+                        timeout.Token).ConfigureAwait(false))
                     {
-                        await CopyBoundedAsync(source, buffer, MaxManifestBytes).ConfigureAwait(false);
-                        buffer.Position = 0;
-                        var serializer = new DataContractJsonSerializer(typeof(UpdateManifestDto));
-                        var manifest = serializer.ReadObject(buffer) as UpdateManifestDto;
-                        if (manifest == null)
-                            return UpdateManifestProbeResult.Rejected("Update manifest không đọc được.");
-                        return ValidateManifest(release, manifest, expectedSigner);
+                        if (response.StatusCode != HttpStatusCode.OK)
+                            return UpdateManifestProbeResult.Rejected("GitHub update manifest trả HTTP " + (int)response.StatusCode + ".");
+
+                        var contentLength = response.Content.Headers.ContentLength;
+                        if (contentLength.HasValue && contentLength.Value > MaxManifestBytes)
+                            return UpdateManifestProbeResult.Rejected("Update manifest vượt quá giới hạn 64 KiB.");
+
+                        using (var source = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false))
+                        using (var buffer = new MemoryStream())
+                        {
+                            await CopyBoundedAsync(source, buffer, MaxManifestBytes, timeout.Token).ConfigureAwait(false);
+                            buffer.Position = 0;
+                            var serializer = new DataContractJsonSerializer(typeof(UpdateManifestDto));
+                            var manifest = serializer.ReadObject(buffer) as UpdateManifestDto;
+                            if (manifest == null)
+                                return UpdateManifestProbeResult.Rejected("Update manifest không đọc được.");
+                            return ValidateManifest(release, manifest, expectedSigner);
+                        }
                     }
                 }
             }
@@ -89,6 +95,20 @@ namespace QS3D.BricsCAD.V25.Updates
             {
                 return UpdateManifestProbeResult.Rejected("Không xác minh được V26 update manifest trước khi đóng BricsCAD: " + ex.Message);
             }
+        }
+
+        private static HttpClient CreateHttpClient()
+        {
+            var handler = new HttpClientHandler
+            {
+                AllowAutoRedirect = true,
+                MaxAutomaticRedirections = 5,
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+            };
+            return new HttpClient(handler, true)
+            {
+                Timeout = Timeout.InfiniteTimeSpan
+            };
         }
 
         private static UpdateManifestProbeResult ValidateManifest(UpdateReleaseInfo release, UpdateManifestDto manifest, string expectedSigner)
@@ -177,18 +197,18 @@ namespace QS3D.BricsCAD.V25.Updates
             return (value ?? string.Empty).Replace(" ", string.Empty).Trim().ToUpperInvariant();
         }
 
-        private static async Task CopyBoundedAsync(Stream? input, Stream output, int maxBytes)
+        private static async Task CopyBoundedAsync(Stream? input, Stream output, int maxBytes, CancellationToken cancellationToken)
         {
             if (input == null) throw new InvalidOperationException("Update manifest response body was empty.");
             var buffer = new byte[8192];
             var total = 0;
             while (true)
             {
-                var read = await input.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+                var read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false);
                 if (read <= 0) return;
                 total += read;
                 if (total > maxBytes) throw new InvalidOperationException("Update manifest exceeded the allowed size.");
-                await output.WriteAsync(buffer, 0, read).ConfigureAwait(false);
+                await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
             }
         }
 
