@@ -12,17 +12,19 @@
 
 As a result, non-canonical persisted timestamps such as an equivalent `+00:00` form or a non-zero-offset representation can be accepted even though the writer never emits them. That makes Revision Snapshot read-side canonicality weaker than its own write contract and weaker than the file's already-canonical category and numeric token handling.
 
+The auto-registered `RevisionSnapshotStoreIntegritySmoke` also still asserts the old tolerant contract by requiring a `+07:00` timestamp to normalize successfully. That assertion must change atomically with the parser hardening or the Core smoke executable will deterministically retain a stale expectation.
+
 ## Reserved scope
 
 - `src/QS3D.Core/Revisions/RevisionSnapshotStore.cs` (`Date(...)` timestamp parse/canonicality only)
-- `tests/QS3D.Core.SmokeTests/RevisionSnapshotTimestampCanonicalitySmoke.cs`
-- `tests/QS3D.Core.SmokeTests/RevisionSnapshotTimestampCanonicalityRegistration.cs`
+- `tests/QS3D.Core.SmokeTests/RevisionSnapshotStoreIntegritySmoke.cs` (timestamp contract alignment only)
 - this claim file
 
 ## Intended contract
 
 - `createdUtc` must parse as the exact invariant round-trip representation produced by a UTC `DateTime` writer.
 - Equivalent `+00:00`, non-zero-offset, padded, lowercase/alternate, or otherwise non-canonical timestamp spellings fail closed.
+- The existing auto-registered integrity smoke accepts canonical UTC writer output and rejects tolerant offset representations.
 - Writer serialization, backup recovery, size bounds, numeric/category canonicality, and revision semantics stay unchanged.
 
 ## Excluded scope
@@ -36,8 +38,8 @@ As a result, non-canonical persisted timestamps such as an equivalent `+00:00` f
 ## Validation plan
 
 - Publish this claim before source writes and verify it remains reachable from current `main`.
-- Re-fetch the exact `RevisionSnapshotStore.cs` blob after claim publication.
+- Re-fetch the exact production/test blobs after claim publication.
 - Tighten `Date(...)` to exact invariant `"O"` UTC parsing plus canonical round-trip equality.
-- Add focused module-initializer smoke covering canonical UTC acceptance and equivalent/non-zero-offset rejection.
-- Inspect exact source diff/read-back, close this claim with exact commit SHAs, then verify ancestry.
+- Align the existing auto-registered `RevisionSnapshotStoreIntegritySmoke` with canonical UTC acceptance and equivalent/non-zero-offset rejection.
+- Inspect exact source/test diffs and read-back, close this claim with exact commit SHAs, then verify ancestry.
 - No local compile/runtime PASS will be claimed unless actually executed.
