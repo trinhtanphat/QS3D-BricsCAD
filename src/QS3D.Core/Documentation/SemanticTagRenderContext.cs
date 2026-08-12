@@ -146,6 +146,8 @@ namespace QS3D.Core.Documentation
             Func<T, string> nameSelector)
         {
             var id = (rawId ?? string.Empty).Trim();
+            if (!string.Equals(rawId, id, StringComparison.Ordinal))
+                throw new InvalidOperationException("Semantic tag references non-canonical " + label + " \"" + rawId + "\" on element " + elementId + ".");
             if (ambiguous.Contains(id))
                 throw new InvalidOperationException("Semantic tag references ambiguous " + label + " " + id + " on element " + elementId + ".");
             if (!index.TryGetValue(id, out var match))
