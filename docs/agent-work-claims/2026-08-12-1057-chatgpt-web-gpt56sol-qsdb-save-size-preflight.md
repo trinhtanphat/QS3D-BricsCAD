@@ -1,37 +1,44 @@
 # Work claim — QSDB save-size preflight
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-12T10:57:00+07:00`
+- Completed: `2026-08-12T11:03:00+07:00`
 - Baseline main SHA: `9ea748b2fde921248287e0eeaae3e86aca1beb3b`
+- Claim commit: `ef3ea41e99f100bf1803b15a5bfee90f63b8db2c`
+- Source commit on branch: `a7ee811950a0afeadcaecd26e29654c25164647d`
+- Regression-source commit on branch: `d144c39f89d7a311de753b6032ca8c658f314393`
+- Pull request: `#795`
+- Squash merge commit: `88d301c5c3313037e17875a2c8a9dd2c4e8e8a71`
 - Priority: evidence-driven Core QSDB persistence filesystem atomicity
 
 ## Confirmed defect
 
-`QsdbProjectStore` enforces a hard 64 MiB load limit and validates the written temp file through that same bounded loader. On save, however, `SaveCore(...)` currently validates semantic/XML content, resolves the destination, creates the destination directory/temp path, mutates the in-memory persistence stamp (`SchemaVersion` / `Touch()`), serializes and writes the whole temp file, and only then discovers that an oversized serialized QSDB cannot be loaded.
+`QsdbProjectStore` enforces a hard 64 MiB load limit and validates the written temp file through that same bounded loader. Before this change, `SaveCore(...)` validated semantic/XML content, resolved the destination, created the destination directory/temp path, mutated the in-memory persistence stamp (`SchemaVersion` / `Touch()`), serialized and wrote the whole temp file, and only then discovered that an oversized serialized QSDB could not be loaded.
 
-The failed save rolls the project persistence stamp back, but an output that is guaranteed to exceed the supported 64 MiB contract can still create the destination directory and temp file before failing. The completed read-side `qsdb stream size bound` lane guards parsing; this lane is the distinct write-side preflight.
+The failed save restored the project persistence stamp, but output guaranteed to exceed the supported 64 MiB contract could still mutate the filesystem before failing. The completed read-side QSDB stream-size lane remains unchanged; this lane closes the distinct write-side preflight gap.
 
-## Intended scope
+## Implemented
 
-- preserve destination-path validation before any project persistence-stamp mutation;
-- preserve existing project/XML semantic validation before `Touch()`;
-- after establishing the exact post-`Touch()` document that would be written, bounded-count the same `XDocument.Save(Stream, SaveOptions.DisableFormatting)` byte stream against the existing 64 MiB limit before destination-directory/temp-file mutation;
-- use the already-preflighted document for the actual temp write;
-- on preflight failure, restore `SchemaVersion`, `UpdatedUtc` and `ChangeVersion` exactly as current failed-save semantics require;
-- preserve Save / SaveNew / SavePreservingValidatedBackup publication, backup and post-write validation semantics;
-- add focused Core smoke coverage with a small private test limit so no 64+ MiB fixture is allocated.
+- Existing project/XML validation and destination-path resolution remain before persistence-stamp mutation.
+- Public Save/SaveNew/SavePreservingValidatedBackup signatures and publication behavior are unchanged.
+- The exact post-`Touch()` `XDocument` is serialized into a bounded counting stream using the same `SaveOptions.DisableFormatting` stream path as the real temp write.
+- Oversized output is rejected with the existing 64 MiB `InvalidDataException` contract before destination-directory creation, temp-path creation or temp-file write.
+- The same preflighted document is used for the actual temp write.
+- On any pre-commit failure, `SchemaVersion`, `UpdatedUtc` and `ChangeVersion` are restored exactly as before.
+- Existing post-write validation, create-new publication, primary-only replacement and backup rotation semantics are preserved.
 
-## Reserved surfaces
+## Regression source
 
-- `src/QS3D.Core/Persistence/QsdbProjectStore.cs`
-- `tests/QS3D.Core.SmokeTests/QsdbSaveSizePreflightSmoke.cs`
-- this claim file
+`QsdbSaveSizePreflightSmoke` covers:
 
-## Excluded scope
+- oversized post-`Touch()` serialization using a small private test bound, proving the destination directory is not created and the original persistence stamp is restored;
+- a normal public Save/Load round trip preserving metadata and the persisted post-save `ChangeVersion`.
 
-Do not modify the completed QSDB read-stream size bound, schema/canonicality/relation/reference policy, save lifecycle coordination outside this store, backup fallback semantics, Project Interchange/Revision stores, CAD/UI adapters, build/release workflows, or other concurrent claims.
+## Integration evidence
+
+While the branch was open, `main` advanced 22 commits, but `QsdbProjectStore.cs` retained exact pre-patch blob SHA `e1b9418686c2b27a04cb68ffc34f15cddb8a3f57`; no concurrent source overlap was present. PR `#795` was squash-merged with expected head SHA `d144c39f89d7a311de753b6032ca8c658f314393` into `88d301c5c3313037e17875a2c8a9dd2c4e8e8a71`. Merged source was read back from `main` with blob SHA `f092e0c8500f71853114586d1eb9e26db8e5b1dc`.
 
 ## Validation boundary
 
-Remote/static source + regression review only. Do not dispatch/rerun GitHub Actions and do not claim executable .NET smoke/build or BricsCAD V25/V26 runtime PASS without actual execution.
+Remote/static source + regression review only. The available container does not have `dotnet`, so the smoke source was not executed here and no executable .NET smoke/build PASS is claimed. No GitHub Actions/build/release was dispatched and no BricsCAD V25/V26 runtime PASS is claimed.
