@@ -57,6 +57,50 @@ namespace QS3D.Core.SmokeTests
             DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(legacy, true, LengthUnit.Millimeter);
             Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(legacy, true, LengthUnit.Meter));
 
+            var legacyNamed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey] = "meter"
+            };
+            DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(legacyNamed, true, LengthUnit.Meter);
+
+            var malformedLegacySuffix = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey] = "Meter corrupted"
+            };
+            Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(malformedLegacySuffix, true, LengthUnit.Meter));
+
+            var paddedLegacy = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey] = " Meter "
+            };
+            Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(paddedLegacy, true, LengthUnit.Meter));
+
+            var numericLegacy = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey] = ((int)LengthUnit.Meter).ToString()
+            };
+            Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(numericLegacy, true, LengthUnit.Meter));
+
+            var assumedWithoutMarker = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey] = "Millimeter (assumed)"
+            };
+            Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(assumedWithoutMarker, true, LengthUnit.Millimeter));
+
+            var assumedWithWrongMarker = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey] = "Millimeter (assumed)",
+                [DrawingUnitResolutionPolicy.LegacyAssumptionMetadataKey] = "corrupted"
+            };
+            Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(assumedWithWrongMarker, true, LengthUnit.Millimeter));
+
+            var namedWithStaleAssumptionMarker = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey] = "Meter",
+                [DrawingUnitResolutionPolicy.LegacyAssumptionMetadataKey] = "INSUNITS unsupported/undefined; assumed Millimeter"
+            };
+            Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(namedWithStaleAssumptionMarker, true, LengthUnit.Meter));
+
             var lowercaseOverride = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 [DrawingUnitResolutionPolicy.OverrideMetadataKey] = "meter"
