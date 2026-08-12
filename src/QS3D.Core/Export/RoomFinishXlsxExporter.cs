@@ -18,12 +18,15 @@ namespace QS3D.Core.Export
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-            if (rows.Count > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Room-finish XLSX export supports at most " + MaxDataRows + " data rows.");
-            for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+            var rowCount = rows.Count;
+            if (rowCount > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Room-finish XLSX export supports at most " + MaxDataRows + " data rows.");
+            var snapshot = new List<RoomFinishScheduleRow>(rowCount);
+            for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
             {
-                var row = rows[rowIndex];
-                if (row == null)
+                var sourceRow = rows[rowIndex];
+                if (sourceRow == null)
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
+                var row = SnapshotRow(sourceRow, rowIndex);
                 ValidateCellText(row.Floor, rowIndex, "Floor");
                 ValidateCellText(row.Room, rowIndex, "Room");
                 ValidateCellText(row.Category, rowIndex, "Category");
@@ -35,6 +38,7 @@ namespace QS3D.Core.Export
                 ValidateFinite(row.PrimaryQuantity, rowIndex, "PrimaryQuantity");
                 ValidateFinite(row.LengthM, rowIndex, "LengthM");
                 ValidateFinite(row.AreaM2, rowIndex, "AreaM2");
+                snapshot.Add(row);
             }
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
@@ -50,12 +54,52 @@ namespace QS3D.Core.Export
                     Write(archive, "xl/workbook.xml", WorkbookXml);
                     Write(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml);
                     Write(archive, "xl/styles.xml", StylesXml);
-                    Write(archive, "xl/worksheets/sheet1.xml", BuildSheet(rows));
+                    Write(archive, "xl/worksheets/sheet1.xml", BuildSheet(snapshot));
                 }
                 Validate(tempPath);
                 AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
             }
             finally { AtomicFileCommit.TryDelete(tempPath); }
+        }
+
+        private static RoomFinishScheduleRow SnapshotRow(RoomFinishScheduleRow source, int rowIndex)
+        {
+            var row = new RoomFinishScheduleRow
+            {
+                Floor = source.Floor ?? string.Empty,
+                Room = source.Room ?? string.Empty,
+                Category = source.Category ?? string.Empty,
+                FamilyName = source.FamilyName ?? string.Empty,
+                Material = source.Material ?? string.Empty,
+                UnitHint = source.UnitHint ?? string.Empty,
+                Count = source.Count,
+                LengthM = source.LengthM,
+                AreaM2 = source.AreaM2,
+                PrimaryQuantity = source.PrimaryQuantity
+            };
+            SnapshotJoinedCellValues(source.ElementIds, row.ElementIds, rowIndex, "ElementIds");
+            SnapshotJoinedCellValues(source.RoomIds, row.RoomIds, rowIndex, "RoomIds");
+            return row;
+        }
+
+        private static void SnapshotJoinedCellValues(IList<string> source, IList<string> target, int rowIndex, string fieldName)
+        {
+            if (source == null)
+                throw new ArgumentException("Room-finish XLSX row " + rowIndex + " field " + fieldName + " collection is required.", "rows");
+
+            var count = source.Count;
+            long joinedLength = 0L;
+            for (var index = 0; index < count; index++)
+            {
+                var value = source[index] ?? string.Empty;
+                if (index > 0) joinedLength++;
+                joinedLength += value.Length;
+                if (joinedLength > MaxCellTextCharacters)
+                    throw new ArgumentOutOfRangeException(
+                        "rows",
+                        "Room-finish XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
+                target.Add(value);
+            }
         }
 
         private static string BuildSheet(IReadOnlyList<RoomFinishScheduleRow> rows)
