@@ -1,6 +1,6 @@
 # Work claim — Semantic Selection explicit property override parity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-semantic-selection-instance-override-20260812-1041`
 - Registered: `2026-08-12T10:41:00+07:00`
 - Baseline main SHA: `8583e783369fa87bf76551d3edbc31abe8c82ce1`
@@ -40,6 +40,18 @@ Add focused regression coverage that fails if `SetProperty(...)` uses Family fal
 
 This scope is separate from active Door/Opening XLSX row snapshot and other concurrent Core health/integrity claims. Existing BulkEdit generated-output freshness work is preserved rather than reimplemented.
 
+## Completion evidence
+
+- Source fix commit: `0ea3e2d1060ab10862a1950a7c0a2e2227ce92d5`
+- Focused regression commit: `6fb87e42d20536859752ff9ec83ba1a5d37a2551`
+- Pull request: `#927`
+- Merge commit on `main`: `8db23a0ff0ecaca56c99b2f64b1de84920db9138`
+- Post-merge source read-back blob: `e91c2097b5f8b9303f2401b7844158c32bb766e1`
+- Post-merge regression read-back blob: `75dda7b3f070a17c7bdfc580f6590c096d1e083b`
+- GitHub Actions/build/release dispatch: not run, per claim exclusions.
+- Local build: not run through this connector.
+- BricsCAD V25/V26 runtime: not run; no runtime PASS claim.
+
 ## Completion condition
 
-Source fix and focused regression are integrated on current `main`, read back after merge, and this claim is updated to `COMPLETED` with exact commit evidence and remote validation boundaries.
+Satisfied: source fix and focused regression are integrated on `main`, read back after merge, and this claim records exact commit evidence plus remote validation boundaries.
