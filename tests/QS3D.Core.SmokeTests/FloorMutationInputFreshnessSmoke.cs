@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
             MutatingLazyInputFailsBeforeFloorAssignment();
             MutatingEmptyInputFailsBeforeNoOp();
             MutatingBottomLevelInputUsesSharedGuard();
+            RemovedElementDuringLazyEnumerationFailsClosed();
+            RemovedTargetFloorDuringLazyEnumerationFailsClosed();
         }
 
         private static void StableLazyInputAssignsFloor()
@@ -68,6 +70,43 @@ namespace QS3D.Core.SmokeTests
             Equal(ElementDirtyFlags.None, element.Dirty);
         }
 
+        private static void RemovedElementDuringLazyEnumerationFailsClosed()
+        {
+            var project = CreateProject("P-FLOOR-FRESH-5", out var floor, out var element);
+            element.MarkClean(ElementDirtyFlags.All);
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdated = element.UpdatedUtc;
+
+            ThrowsContaining<InvalidOperationException>(
+                () => ProjectFloorService.AssignBottomLevel(project, floor.Id, YieldThenRemoveElement(project, element)),
+                "Element no longer belongs to the project after Floor mutation target enumeration");
+
+            Equal(beforeVersion, project.ChangeVersion);
+            False(project.Elements.Contains(element));
+            False(element.Properties.ContainsKey(ProjectFloorService.BottomLevelIdKey));
+            False(element.Properties.ContainsKey(ProjectFloorService.BottomLevelOffsetKey));
+            Equal(ElementDirtyFlags.None, element.Dirty);
+            Equal(beforeUpdated, element.UpdatedUtc);
+        }
+
+        private static void RemovedTargetFloorDuringLazyEnumerationFailsClosed()
+        {
+            var project = CreateProject("P-FLOOR-FRESH-6", out var floor, out var element);
+            element.MarkClean(ElementDirtyFlags.All);
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdated = element.UpdatedUtc;
+
+            ThrowsContaining<InvalidOperationException>(
+                () => ProjectFloorService.Assign(project, floor.Id, YieldThenRemoveFloor(project, floor, element)),
+                "Target Floor no longer belongs to the project after Floor mutation target enumeration");
+
+            Equal(beforeVersion, project.ChangeVersion);
+            False(project.Floors.Contains(floor));
+            Equal(string.Empty, element.FloorId);
+            Equal(ElementDirtyFlags.None, element.Dirty);
+            Equal(beforeUpdated, element.UpdatedUtc);
+        }
+
         private static ProjectState CreateProject(string id, out FloorDefinition floor, out ProjectElement element)
         {
             var project = new ProjectState(id, "Floor mutation freshness");
@@ -93,6 +132,18 @@ namespace QS3D.Core.SmokeTests
         {
             project.Touch();
             yield break;
+        }
+
+        private static IEnumerable<ProjectElement> YieldThenRemoveElement(ProjectState project, ProjectElement element)
+        {
+            yield return element;
+            project.Elements.Remove(element);
+        }
+
+        private static IEnumerable<ProjectElement> YieldThenRemoveFloor(ProjectState project, FloorDefinition floor, ProjectElement element)
+        {
+            yield return element;
+            project.Floors.Remove(floor);
         }
 
         private static void True(bool value)
