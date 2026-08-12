@@ -77,9 +77,9 @@ namespace QS3D.Core.Diagnostics
                         issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GRID_COUNT_MISMATCH", HealthSeverity.Warning, "Legacy curtain frame count không khớp Columns+Rows+2.", element.Id));
                 }
 
-                var storedDepth = PositiveValue(element, "GeneratedCurtainFrameDepthM", "CURTAIN_FRAME_DEPTH_INVALID", issues);
-                var storedLength = PositiveValue(element, "GeneratedCurtainFrameSourceLengthM", "CURTAIN_FRAME_SOURCE_LENGTH_INVALID", issues);
-                var storedHeight = PositiveValue(element, "GeneratedCurtainFrameHeightM", "CURTAIN_FRAME_HEIGHT_INVALID", issues);
+                var storedDepth = PositiveValue(element, "GeneratedCurtainFrameDepthM", "CURTAIN_FRAME_DEPTH_INVALID", "CURTAIN_FRAME_DEPTH_NON_CANONICAL", issues);
+                var storedLength = PositiveValue(element, "GeneratedCurtainFrameSourceLengthM", "CURTAIN_FRAME_SOURCE_LENGTH_INVALID", "CURTAIN_FRAME_SOURCE_LENGTH_NON_CANONICAL", issues);
+                var storedHeight = PositiveValue(element, "GeneratedCurtainFrameHeightM", "CURTAIN_FRAME_HEIGHT_INVALID", "CURTAIN_FRAME_HEIGHT_NON_CANONICAL", issues);
                 CompareCurrent(element, "LengthM", storedLength, "CURTAIN_FRAME_SOURCE_LENGTH_STALE", issues);
                 if (!LevelReferenceNativeIntegrationPolicy.HasConfiguredReferences(element))
                     CompareCurrent(element, "HeightM", storedHeight, "CURTAIN_FRAME_HEIGHT_STALE", issues);
@@ -210,13 +210,16 @@ namespace QS3D.Core.Diagnostics
             return value;
         }
 
-        private static double? PositiveValue(ProjectElement element, string key, string code, List<ModelHealthIssue> issues)
+        private static double? PositiveValue(ProjectElement element, string key, string code, string canonicalCode, List<ModelHealthIssue> issues)
         {
             if (!element.Properties.TryGetValue(key, out var raw) || !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || value <= 0d)
             {
                 issues.Add(new ModelHealthIssue(code, HealthSeverity.Warning, key + " thiếu hoặc không hợp lệ.", element.Id));
                 return null;
             }
+            var canonical = value.ToString("R", CultureInfo.InvariantCulture);
+            if (!string.Equals(raw, canonical, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue(canonicalCode, HealthSeverity.Error, key + " phải dùng đúng round-trip invariant numeric spelling: " + canonical + ".", element.Id));
             return value;
         }
 
