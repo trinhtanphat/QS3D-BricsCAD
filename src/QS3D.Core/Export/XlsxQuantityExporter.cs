@@ -31,6 +31,7 @@ namespace QS3D.Core.Export
                 if (row == null)
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
                 ValidateStandardRowText(row, rowIndex);
+                ValidateStandardRowNumbers(row, rowIndex);
             }
             ExportCore(path, rows, null);
         }
@@ -259,6 +260,30 @@ namespace QS3D.Core.Export
             ValidateJoinedNonBlankCellText(row.ElementIds, rowIndex, "ElementIds", "Quantity XLSX");
             ValidateJoinedNonBlankCellText(row.SourceHandles, rowIndex, "SourceHandles", "Quantity XLSX");
             ValidateCellText(row.DrawingFingerprint, rowIndex, "DrawingFingerprint", "Quantity XLSX");
+        }
+
+        private static void ValidateStandardRowNumbers(QuantityReportRow row, int rowIndex)
+        {
+            ValidateStandardNumber(row.GrossConcreteM3, rowIndex, "GrossConcreteM3");
+            ValidateStandardNumber(row.DeductionM3, rowIndex, "DeductionM3");
+            ValidateStandardNumber(row.NetConcreteM3, rowIndex, "NetConcreteM3");
+            ValidateStandardNumber(row.FormworkM2, rowIndex, "FormworkM2");
+            ValidateStandardNumber(row.LengthM, rowIndex, "LengthM");
+            ValidateStandardNumber(row.OuterPerimeterM, rowIndex, "OuterPerimeterM");
+            ValidateStandardNumber(row.InnerPerimeterM, rowIndex, "InnerPerimeterM");
+            ValidateStandardNumber(row.DoorAreaM2, rowIndex, "DoorAreaM2");
+            ValidateStandardNumber(row.SideAreaM2, rowIndex, "SideAreaM2");
+            ValidateStandardNumber(row.BottomAreaM2, rowIndex, "BottomAreaM2");
+            ValidateStandardNumber(row.TopAreaM2, rowIndex, "TopAreaM2");
+            ValidateStandardNumber(row.OtherAreaM2, rowIndex, "OtherAreaM2");
+        }
+
+        private static void ValidateStandardNumber(double value, int rowIndex, string fieldName)
+        {
+            if (!double.IsNaN(value) && !double.IsInfinity(value)) return;
+            throw new ArgumentOutOfRangeException(
+                "rows",
+                "Quantity XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be finite.");
         }
 
         private static void ValidateEd2RowText(QuantityReportRow row, int rowIndex, string sheetLabel)
