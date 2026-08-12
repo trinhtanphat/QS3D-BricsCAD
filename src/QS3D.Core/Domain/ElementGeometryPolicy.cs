@@ -15,6 +15,15 @@ namespace QS3D.Core.Domain
             ProjectFloorService.TopLevelOffsetKey
         };
 
+        private static readonly ISet<string> CurtainGeometryProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "CurtainMaxPanelWidthM",
+            "CurtainMaxPanelHeightM",
+            "CurtainPerimeterFrameWidthM",
+            "CurtainMullionWidthM",
+            "CurtainTransomWidthM"
+        };
+
         private static readonly ISet<string> GeneratedOutputProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "Material", "CurtainFrameMaterial"
@@ -38,16 +47,15 @@ namespace QS3D.Core.Domain
 
         public static bool AffectsGeneratedGeometry(ElementCategory category, string? propertyName)
         {
-            return RequiresGeneratedGeometry(category) &&
-                   !string.IsNullOrWhiteSpace(propertyName) &&
-                   GeometryProperties.Contains(propertyName!.Trim());
+            if (!RequiresGeneratedGeometry(category) || string.IsNullOrWhiteSpace(propertyName)) return false;
+            return IsGeometryProperty(category, propertyName!.Trim());
         }
 
         public static bool AffectsGeneratedOutput(ElementCategory category, string? propertyName)
         {
-            return RequiresGeneratedGeometry(category) &&
-                   !string.IsNullOrWhiteSpace(propertyName) &&
-                   (GeometryProperties.Contains(propertyName!.Trim()) || GeneratedOutputProperties.Contains(propertyName.Trim()));
+            if (!RequiresGeneratedGeometry(category) || string.IsNullOrWhiteSpace(propertyName)) return false;
+            var key = propertyName!.Trim();
+            return IsGeometryProperty(category, key) || GeneratedOutputProperties.Contains(key);
         }
 
         public static ElementDirtyFlags SemanticCleanFlags(ElementCategory category)
@@ -55,6 +63,12 @@ namespace QS3D.Core.Domain
             var flags = ElementDirtyFlags.Properties | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity;
             if (!RequiresGeneratedGeometry(category)) flags |= ElementDirtyFlags.Geometry;
             return flags;
+        }
+
+        private static bool IsGeometryProperty(ElementCategory category, string key)
+        {
+            return GeometryProperties.Contains(key) ||
+                   (category == ElementCategory.GlassWall && CurtainGeometryProperties.Contains(key));
         }
 
         private static void RequireDefinedCategory(ElementCategory category)
