@@ -54,6 +54,7 @@ namespace QS3D.Core.Rules
             if (!ReferenceEquals(project.FindElement(element.Id), element))
                 throw new InvalidOperationException("Quantity rule matching requires the canonical project-owned element instance.");
             ValidateRuleIdentities(project.QuantityRules);
+            ValidateFamilyIdentities(project.Families);
             var family = ResolveFamily(project, element);
 
             var rules = project.QuantityRules
@@ -123,6 +124,21 @@ namespace QS3D.Core.Rules
                     throw new InvalidOperationException("Project quantity rule collection contains a null rule.");
                 if (!seenIds.Add(rule.Id))
                     throw new InvalidOperationException("Project contains duplicate quantity rule id: " + rule.Id);
+            }
+        }
+
+        private static void ValidateFamilyIdentities(IEnumerable<ProjectFamily> families)
+        {
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var family in families)
+            {
+                if (family == null)
+                    throw new InvalidOperationException("Project family collection contains a null family.");
+                var id = family.Id ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(id) || !string.Equals(id, id.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Project family collection contains a blank or non-canonical family id.");
+                if (!seenIds.Add(id))
+                    throw new InvalidOperationException("Project contains duplicate family id: " + id + ".");
             }
         }
 
