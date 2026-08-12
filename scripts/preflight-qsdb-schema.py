@@ -22,15 +22,20 @@ if not errors:
     timestamp_smoke = TIMESTAMP_SMOKE.read_text(encoding="utf-8")
 
     migration = migrator.find("while (schema < ProjectState.CurrentSchemaVersion)")
-    backfill = migrator.find('if (root.Attribute("changeVersion") == null) root.SetAttributeValue("changeVersion", "0");', migration)
-    persistence = migrator.find("ValidateCurrentPersistenceState(root);")
-    shape = migrator.find("QsdbProjectXmlSchemaValidator.ValidateCurrent(root);")
+    persistence = migrator.find("ValidateCurrentPersistenceState(root);", migration)
+    shape = migrator.find("QsdbProjectXmlSchemaValidator.ValidateCurrent(root);", persistence)
     returned = migrator.find("return document;", shape)
-    if min(migration, backfill, persistence, shape, returned) < 0 or not migration < backfill < persistence < shape < returned:
-        errors.append("ProjectSchemaMigrator must migrate, backfill same-schema legacy changeVersion, validate persistence, then validate strict XML shape")
+    if min(migration, persistence, shape, returned) < 0 or not migration < persistence < shape < returned:
+        errors.append("ProjectSchemaMigrator must migrate legacy schemas, validate required current persistence state, then validate strict XML shape")
+
+    migrate_v2 = migrator.find("private static void MigrateV2ToV3")
+    legacy_backfill = migrator.find('if (root.Attribute("changeVersion") == null) root.SetAttributeValue("changeVersion", "0");', migrate_v2)
+    persistence_method = migrator.find("private static void ValidateCurrentPersistenceState", legacy_backfill)
+    if min(migrate_v2, legacy_backfill, persistence_method) < 0 or not migrate_v2 < legacy_backfill < persistence_method:
+        errors.append("ProjectSchemaMigrator must synthesize changeVersion only while migrating legacy schema 2 to schema 3, before strict current-state validation")
 
     if 'RequirePersistenceValue(root, "changeVersion", "Project root")' not in migrator:
-        errors.append("QSDB current persistence validation must still reject blank changeVersion after missing-value compatibility backfill")
+        errors.append("QSDB current persistence validation must reject missing or blank schema-3 changeVersion")
 
     required_validator_tokens = [
         '"schema", "projectId", "name", "updatedUtc", "changeVersion"',
@@ -70,12 +75,15 @@ if not errors:
         if token not in smoke:
             errors.append("QSDB schema regression smoke missing contract token: " + token)
 
-    compatibility_tokens = [
-        (save_smoke, "LegacyFileDefaultsChangeVersion();", "save smoke must cover schema-3 files written before changeVersion existed"),
-        (save_smoke, 'Attribute("changeVersion")?.Remove();', "save smoke must remove changeVersion from a real current QSDB before reload"),
-        (timestamp_smoke, "RejectsBlankCurrentChangeVersion();", "timestamp smoke must distinguish blank corruption from a missing legacy field"),
+    strict_persistence_tokens = [
+        (save_smoke, "MissingCurrentChangeVersionIsRejected();", "save smoke must reject schema-3 files whose required changeVersion was removed"),
+        (save_smoke, 'Attribute("changeVersion")?.Remove();', "save smoke must remove changeVersion from a real current QSDB before asserting rejection"),
+        (save_smoke, "Throws<InvalidDataException>", "save smoke must fail closed on missing current changeVersion"),
+        (timestamp_smoke, "RejectsMissingCurrentChangeVersion();", "timestamp smoke must reject missing schema-3 changeVersion"),
+        (timestamp_smoke, "RejectsBlankCurrentChangeVersion();", "timestamp smoke must reject blank schema-3 changeVersion"),
+        (timestamp_smoke, "LegacyV1MissingTimestampsStillMigrates();", "timestamp smoke must preserve explicit legacy-schema migration coverage"),
     ]
-    for source, token, message in compatibility_tokens:
+    for source, token, message in strict_persistence_tokens:
         if token not in source:
             errors.append(message)
 
@@ -86,4 +94,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: migrated QSDB XML fails closed on forward-unknown shape while same-schema legacy changeVersion compatibility remains covered.")
+print("PASS: current schema-3 QSDB requires explicit persistence state and fails closed on missing changeVersion, while legacy schema migration synthesizes the required field before strict XML-shape validation.")
