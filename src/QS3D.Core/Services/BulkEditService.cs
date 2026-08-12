@@ -29,6 +29,7 @@ namespace QS3D.Core.Services
             var beforeTargetEnumeration = project.ChangeVersion;
             var targets = OwnedDistinct(project, elements);
             RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk edit object target enumeration");
+            RequireCurrentElementOwnership(project, targets, "Bulk edit object target enumeration");
             var updates = new List<PendingPropertyUpdate>();
             var next = value ?? string.Empty;
             foreach (var element in targets)
@@ -62,6 +63,7 @@ namespace QS3D.Core.Services
             var beforeTargetEnumeration = project.ChangeVersion;
             var targets = OwnedDistinct(project, elements);
             RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk numeric object target enumeration");
+            RequireCurrentElementOwnership(project, targets, "Bulk numeric object target enumeration");
             var updates = new List<PendingPropertyUpdate>();
             foreach (var element in targets)
             {
@@ -217,6 +219,16 @@ namespace QS3D.Core.Services
                 unique[elementId] = owned;
             }
             return new List<ProjectElement>(unique.Values).AsReadOnly();
+        }
+
+        private static void RequireCurrentElementOwnership(ProjectState project, IReadOnlyList<ProjectElement> elements, string label)
+        {
+            foreach (var element in elements)
+            {
+                var current = project.FindElement(element.Id);
+                if (!ReferenceEquals(current, element))
+                    throw new InvalidOperationException(label + " target no longer belongs to the project after enumeration: " + element.Id + ".");
+            }
         }
 
         private static void RequireCurrentFamilyAssignmentOwnership(ProjectState project, ProjectFamily family, IReadOnlyList<ProjectElement> elements)
