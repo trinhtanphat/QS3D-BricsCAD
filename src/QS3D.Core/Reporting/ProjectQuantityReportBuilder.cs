@@ -120,7 +120,7 @@ namespace QS3D.Core.Reporting
                     row.MassKg = QuantityReportMath.NonNegative(row.MassKg.Value, element.Id + "/MassKg");
             }
 
-            return order.Select(x => rows[x]).ToList();
+            return order.Select(x => rows[x]).ToList().AsReadOnly();
         }
 
         private static HashSet<string>? ResolveSelection(ProjectState project, IEnumerable<string>? elementIds)
