@@ -37,7 +37,7 @@ namespace QS3D.Core.SmokeTests
                 var legacyPath = Path.Combine(directory, "legacy-optional.qsrev");
                 File.WriteAllText(legacyPath,
                     "<qs3dRevision id='legacy' createdUtc='2026-08-11T00:00:00.0000000Z'><elements>" +
-                    "<element id='E1' category='Beam'><properties/><quantities/><sourceHandles/></element>" +
+                    "<element id='E1' category='Beam'><properties/><quantities/><sourceHandles/><dependencies/></element>" +
                     "</elements></qs3dRevision>");
                 var legacy = store.Load(legacyPath);
                 Require(legacy.Elements[0].FamilyId.Length == 0, "missing legacy familyId did not load as empty");
