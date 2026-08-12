@@ -71,7 +71,7 @@ if release.is_file():
         "-ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT",
         "-ExpectedSignerThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT",
         "draft = $true",
-        "Expected release asset was not uploaded:",
+        "Expected exactly one uploaded release asset named",
         "$publishBody = @{ draft = $false }",
         "-Method Patch",
         "GitHub release remained a draft after publish request.",
@@ -124,8 +124,6 @@ if release.is_file():
     if "(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?" not in text:
         errors.append("release-v25.yml release tag validation must support separate prerelease/build-metadata components")
 
-    # A signed runtime probe must exercise the exact staged DLL that finalize packages,
-    # not the pre-sign bin output.
     signed_runtime_block = text[signed_runtime_index:checksum_index] if 0 <= signed_runtime_index < checksum_index else ""
     if "dist\\QS3D-BricsCAD-V25\\QS3D.BricsCAD.V25.dll" not in signed_runtime_block:
         errors.append("signed runtime gate must NETLOAD the exact finalized dist plugin payload")
@@ -134,7 +132,7 @@ if release.is_file():
 
     draft_index = text.find("draft = $true")
     upload_index = text.find("$uploadBase = $release.upload_url")
-    verify_assets_index = text.find("Expected release asset was not uploaded:")
+    verify_assets_index = text.find("Expected exactly one uploaded release asset named")
     publish_draft_index = text.find("$publishBody = @{ draft = $false }")
     if any(index < 0 for index in (draft_index, upload_index, verify_assets_index, publish_draft_index)) or not (
         draft_index < upload_index < verify_assets_index < publish_draft_index
@@ -153,5 +151,5 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 print(
-    "PASS: Authenticode uses the Windows certificate store/SHA-256/HTTPS timestamping; stable signed releases runtime-test the exact finalized plugin payload before publication; unsigned preview runtime remains isolated; and release publication stays draft-gated."
+    "PASS: Authenticode uses the Windows certificate store/SHA-256/HTTPS timestamping; stable signed releases runtime-test the exact finalized plugin payload before publication; unsigned preview runtime remains isolated; uploaded assets are unique/size/hash verified; and release publication stays draft-gated."
 )
