@@ -68,7 +68,9 @@ namespace QS3D.Core.Documentation
     public static class SemanticSheetAutoLayoutPlanner
     {
         private const int MaxItems = 10000;
-        private const int MaxSheetNumberPrefixLength = 62;
+        private const int MaxSheetNumberLength = 64;
+        private const int MaxSheetOrdinalLength = 5;
+        private const int MaxSheetNumberPrefixLength = MaxSheetNumberLength - MaxSheetOrdinalLength;
 
         public static IReadOnlyList<SemanticSheetPlan> Build(
             IEnumerable<SemanticSheetAutoLayoutItem> items,
