@@ -43,10 +43,11 @@ namespace QS3D.Core.Diagnostics
 
             var normalizedLiveSourceHandles = NormalizeHandleSet(liveSourceHandles);
             var normalizedLiveGeneratedSolidHandles = NormalizeGeneratedHandleSet(liveGeneratedSolidHandles);
+            var modelHealthLiveGeneratedSolidHandles = ExpandGeneratedHandleAliasesForModelHealth(project, normalizedLiveGeneratedSolidHandles);
             var issues = new List<ModelHealthIssue>();
             var seen = new HashSet<string>(StringComparer.Ordinal);
 
-            AddSafely(issues, seen, "ModelHealthService", () => new ModelHealthService().Inspect(project, normalizedLiveSourceHandles, normalizedLiveGeneratedSolidHandles));
+            AddSafely(issues, seen, "ModelHealthService", () => new ModelHealthService().Inspect(project, normalizedLiveSourceHandles, modelHealthLiveGeneratedSolidHandles));
             AddSafely(issues, seen, "RoomFinishHealthService", () => new RoomFinishHealthService().Inspect(project));
             AddSafely(issues, seen, "SemanticScheduleHealthService", () => new SemanticScheduleHealthService().Inspect(project));
             AddSafely(issues, seen, "DependencyHealthService", () => new DependencyHealthService().Inspect(project));
@@ -104,6 +105,25 @@ namespace QS3D.Core.Diagnostics
                 if (handle.Length > 0) normalized.Add(handle);
             }
             return normalized;
+        }
+
+        private static ISet<string>? ExpandGeneratedHandleAliasesForModelHealth(ProjectState project, ISet<string>? liveHandles)
+        {
+            if (liveHandles == null) return null;
+            var expanded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var raw in liveHandles)
+            {
+                var handle = (raw ?? string.Empty).Trim();
+                if (handle.Length > 0) expanded.Add(handle);
+            }
+
+            foreach (var element in project.Elements)
+            {
+                if (element == null || !element.Properties.TryGetValue("GeneratedSolidHandle", out var rawHandle)) continue;
+                var persistedHandle = (rawHandle ?? string.Empty).Trim();
+                if (persistedHandle.Length > 0 && liveHandles.Contains(persistedHandle)) expanded.Add(persistedHandle);
+            }
+            return expanded;
         }
 
         private static void AddSafely(
