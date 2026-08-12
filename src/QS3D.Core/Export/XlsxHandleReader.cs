@@ -57,6 +57,8 @@ namespace QS3D.Core.Export
         private const long MaxXmlCharacters = 64L * 1024L * 1024L;
         private const int MaxColumns = 16384;
         private const int MaxRows = 1048576;
+        private const string WorksheetRelationshipTypeHttp = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
+        private const string WorksheetRelationshipTypeHttps = "https://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
         private static readonly Regex DecimalHandlePattern = new Regex(@"\$(\d+)", RegexOptions.CultureInvariant);
         private static readonly Regex LegacyDecimalCellPattern = new Regex(@"^\s*(?:\$\d+\s*)+$", RegexOptions.CultureInvariant);
 
@@ -160,6 +162,10 @@ namespace QS3D.Core.Export
                     .Where(x => string.Equals((string?)x.Attribute("Id"), relationshipId, StringComparison.Ordinal))
                     .ToList();
                 if (matches.Count != 1) throw new InvalidDataException("Excel worksheet relationship is missing or ambiguous.");
+                var relationshipType = ((string?)matches[0].Attribute("Type") ?? string.Empty).Trim();
+                if (!string.Equals(relationshipType, WorksheetRelationshipTypeHttp, StringComparison.Ordinal) &&
+                    !string.Equals(relationshipType, WorksheetRelationshipTypeHttps, StringComparison.Ordinal))
+                    throw new InvalidDataException("Excel workbook sheet relationship is not a worksheet relationship.");
                 if (string.Equals((string?)matches[0].Attribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("External Excel worksheet relationships are not supported.");
                 var target = ((string?)matches[0].Attribute("Target") ?? string.Empty).Replace('\\', '/').TrimStart('/');
