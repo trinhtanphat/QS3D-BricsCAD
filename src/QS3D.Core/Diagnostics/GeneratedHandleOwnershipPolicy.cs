@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using QS3D.Core.Domain;
 
@@ -50,6 +51,21 @@ namespace QS3D.Core.Diagnostics
         public static bool AreSameLogicalOwnerSlots(string left, string right) =>
             string.Equals(CanonicalOwnerSlot(left), CanonicalOwnerSlot(right), StringComparison.OrdinalIgnoreCase);
 
+        public static string NormalizeHandleIdentity(string? handle)
+        {
+            var normalized = (handle ?? string.Empty).Trim();
+            if (normalized.Length == 0) return string.Empty;
+
+            var hex = normalized;
+            if (hex.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                hex = hex.Substring(2);
+            if (hex.Length == 0) return normalized;
+
+            if (!long.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value) || value <= 0L)
+                return normalized;
+            return value.ToString("X", CultureInfo.InvariantCulture);
+        }
+
         public static IEnumerable<KeyValuePair<string, string>> EnumerateOwnerHandles(ProjectElement element)
         {
             if (element == null) throw new ArgumentNullException(nameof(element));
@@ -89,7 +105,7 @@ namespace QS3D.Core.Diagnostics
         public static bool TryFindOwner(ProjectState project, string handle, out ProjectElement? owner, out string propertyKey)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var normalized = (handle ?? string.Empty).Trim();
+            var normalized = NormalizeHandleIdentity(handle);
             owner = null;
             propertyKey = string.Empty;
             if (normalized.Length == 0) return false;
@@ -155,7 +171,7 @@ namespace QS3D.Core.Diagnostics
         private static IEnumerable<string> SplitHandles(string raw) =>
             (raw ?? string.Empty)
                 .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(x => x.Trim())
+                .Select(NormalizeHandleIdentity)
                 .Where(x => x.Length > 0)
                 .Distinct(StringComparer.OrdinalIgnoreCase);
     }
