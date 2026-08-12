@@ -1,46 +1,35 @@
 # Work claim — release #30 Support Bundle privacy preflight reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-release30-support-bundle-privacy-preflight`
 - Registered: `2026-08-12T09:34:00+07:00`
+- Completed: `2026-08-12T09:36:00+07:00`
 - Baseline main SHA: `4721cc060f242edc67e4d2ec14cb2981ce8e6f60`
-- Priority: QS3D Cloud V25 Preview Build & Release #30 fails an older Support Bundle privacy gate after atomic publication replaced direct `File.WriteAllLines`; the stale split boundary now misclassifies local `ex.Message` UI/error reporting as exported bundle content.
+- Claim commit: `cba9c2140a986ac1c77f7187817ecacea187a992`
+- Implementation commit: `1b05b963375a6f01aac1d80802dc03e8bfeb54e1`
+- Priority: QS3D Cloud V25 Preview Build & Release #30 failed an older Support Bundle privacy gate after atomic publication replaced direct `File.WriteAllLines`; the stale split boundary misclassified local `ex.Message` UI/error reporting as exported bundle content.
 
-## Reserved scope
+## Completed scope
 
-Reconcile only `scripts/preflight-support-bundle-privacy.py` with the current `PublishSupportBundle(...)` atomic publication boundary. Preserve `SupportBundleCommands.cs` production behavior and the newer Support Bundle atomic/read-only/privacy gates unchanged.
+Reconciled only `scripts/preflight-support-bundle-privacy.py` with the current `PublishSupportBundle(...)` atomic publication boundary. `SupportBundleCommands.cs` production behavior and newer Support Bundle gates remained unchanged.
 
-## Canonical evidence
+## Implemented contract
 
-- Current `SupportBundleCommands.ExportSupportBundle()` builds only aggregate/version/privacy-safe `lines`, then calls `PublishSupportBundle(dialog.FileName, lines)` and `FinalizeSupportBundleUi(...)`.
-- `PublishSupportBundle` writes a same-directory temp through `StreamWriter`, flushes both writer and file stream durably, then `File.Replace`/`File.Move`s the final destination and cleans leftovers.
-- Local command/UI exception reporting uses `ex.Message` after/beyond the bundle-content construction boundary and does not append it to `lines`.
-- Run #30 passes the adjacent atomic-publish/read-only/current privacy gates; the older gate fails because it still searches for direct `File.WriteAllLines(dialog.FileName, lines, ...)` and uses that removed call as its privacy split marker.
+- Requires the current `PublishSupportBundle(dialog.FileName, lines);` boundary instead of obsolete direct destination writes.
+- Pins the atomic helper, UTF-8 StreamWriter, writer/file durable flush, `File.Replace` and `File.Move` paths.
+- Applies all sensitive/raw-input prohibitions only to bundle construction before the publication call.
+- Keeps drawing fingerprint presence-only validation.
+- Requires local `ex.Message` reporting after publication is attempted, so failures remain user-visible without becoming bundle content.
+- Fails if bundle `lines` are appended after the publication call and before the atomic helper definition.
 
-## Expected surfaces
+## Validation performed
 
-- `scripts/preflight-support-bundle-privacy.py`
-- this claim file for close-out
-
-## Excluded scope
-
-- No edits to `SupportBundleCommands.cs`, support diagnostics docs, atomic writer, privacy fields or UI behavior.
-- No weakening of sensitive-input prohibitions or drawing-fingerprint presence-only rule.
-- No unrelated run #30 failures, GitHub Actions dispatch, build/release publication or BricsCAD runtime qualification.
-
-## Validation plan
-
-- Replace the obsolete direct-write requirement with `PublishSupportBundle(dialog.FileName, lines);` and pin the atomic helper signature/writer/flush/replace/move tokens.
-- Define the exported-content privacy boundary as source before `PublishSupportBundle(dialog.FileName, lines);`, not before a removed `File.WriteAllLines` call.
-- Keep all sensitive/raw input prohibitions on bundle-construction code, including environment identity, DWG paths, project metadata, handles, file reads and raw exception text.
-- Keep drawing fingerprint presence-only validation.
-- Require local `ex.Message` reporting after the publication call so export failures can still be surfaced without entering bundle content.
-- Re-fetch exact gate before write, read back after commit, verify ancestry and close with exact SHA.
-
-## Coordination
-
-Repository search found no active reservation for this Support Bundle privacy preflight.
+- Verified claim commit `cba9c2140a986ac1c77f7187817ecacea187a992` remained an ancestor of moving `main`; intervening work was unrelated Selection Inspector/Level smoke coverage.
+- Re-fetched the exact privacy gate before implementation and read it back from `main` afterward at blob `b0c6fef1ba63a0335b642c114de0f0e1dc5b3a3b`.
+- Reviewed current `SupportBundleCommands.cs`: privacy-safe aggregate `lines` are finalized before `PublishSupportBundle`, while raw exception messages are only used by local reporting afterward.
+- No production source was changed.
+- No GitHub Actions/build/release dispatch was performed and no BricsCAD V25/V26 runtime PASS is claimed.
 
 ## Completion condition
 
-The legacy privacy gate follows the current atomic publication boundary without weakening privacy protections, is pushed to `main`, and this claim is closed with exact evidence.
+Completed. The legacy privacy gate now follows the current atomic publication boundary without weakening privacy protections, and this reservation is released.
