@@ -271,6 +271,15 @@ namespace QS3D.Core.Formulas
                 var token = _text.Substring(start, _index - start);
                 if (!double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value))
                     throw Error($"Invalid number '{token}'.");
+                if (value == 0d)
+                {
+                    for (var i = 0; i < token.Length; i++)
+                    {
+                        if (token[i] == 'e' || token[i] == 'E') break;
+                        if (token[i] >= '1' && token[i] <= '9')
+                            throw Error($"Number '{token}' underflowed to zero.");
+                    }
+                }
                 return value;
             }
 
