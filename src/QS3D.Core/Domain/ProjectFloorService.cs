@@ -277,6 +277,7 @@ namespace QS3D.Core.Domain
             var projectElements = ResolveProjectElements(project)
                 .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
 
+            var targetEnumerationVersion = project.ChangeVersion;
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in elements)
             {
@@ -286,6 +287,8 @@ namespace QS3D.Core.Domain
                     throw new InvalidOperationException("Element does not belong to the project instance: " + element.Id);
                 unique[element.Id] = owned;
             }
+            if (project.ChangeVersion != targetEnumerationVersion)
+                throw new InvalidOperationException("Project changed while Floor mutation targets were being enumerated. Retry the operation against the current project state.");
             return unique.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
         }
 
