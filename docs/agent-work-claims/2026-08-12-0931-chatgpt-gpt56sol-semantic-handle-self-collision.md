@@ -9,6 +9,10 @@
 - Claim commit: `09a6b76d7de4b05c6a7ef5c03b6f4a95ca56a56e`
 - Implementation commit: `693037003fe94b15ff6f8b069a9f048340a55487`
 - Regression-source commit: `8a93e27727f5f733477139555af558a02f6ef030`
+- Pull request: `#701`
+- Squash-merge commit: `244161b2e0df77d4085c68f0363a1f62bf057f81`
+- Main resolver blob after merge: `3b50d8106395d9329a0eb9ac5d9e820c04f2fcdb`
+- Main smoke blob after merge: `febc03ae5eefd532e67980561a164aeedb02ab92`
 - Task key: `CORE-SEMANTIC-HANDLE-SELF-COLLISION`
 
 ## Confirmed defect
@@ -53,8 +57,12 @@ A publicly constructible state such as one element with `SourceHandles = ["A1"]`
 - Re-read current resolver and ownership policy before editing.
 - Collision-checked recent commits and claim search for this exact resolver/self-collision lane before registering the claim.
 - Source and smoke were committed only on the claim branch after the claim landed on `main`.
+- Compared the branch against moving `main`; the reserved resolver blob remained unchanged before merge and the net PR patch contained only the three reserved surfaces.
+- Reviewed PR #701 patch; resolver product change was seven added lines and one removed line in `Add(...)`.
+- Squash-merged PR #701 with expected head SHA `5a9baba85d5f692d4d94949a52e3a2428f83bea0`.
+- Post-merge readback from `main` confirmed the resolver and smoke blobs listed above.
 - No GitHub Actions/build/release was dispatched. The smoke source was not executed, so no executable smoke PASS is claimed. No BricsCAD V25/V26 runtime PASS is claimed remotely.
 
-## Remaining merge gate
+## Outcome
 
-Compare the branch against moving `main`, confirm the reserved resolver source was not concurrently modified, review the exact PR patch, merge with expected head SHA only if clean, then perform post-merge readback on `main`.
+Selection-side semantic handle ownership now fails closed on the same ownership-channel conflicts already surfaced by Model Health while preserving intentional host-solid aliases. The lane is merged and read back from `main` without overwriting concurrent work.
