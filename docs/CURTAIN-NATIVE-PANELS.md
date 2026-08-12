@@ -86,7 +86,7 @@ Run on one clean, final merged SHA and one DLL built from that exact SHA. Record
 | Case | Minimum scenario | Required result/evidence | Status before local run |
 |---|---|---|---|
 | P01 | LINE GlassWall, multiple grid cells, no opening | backing host + frame + panel layers are distinct; panel count/geometry/ownership agree | LOCAL_PASS at `3da7b20013233a71eb174c77e87d4618b370ebd4` (bounded basic case only) |
-| P02 | LINE with Door/WallOpening fully and partially intersecting cells | no panel crosses the opening; positive fragments only; full-cover either records an explicit healthy complete-empty state or refuses before replacement according to the final source contract | PENDING_LOCAL |
+| P02 | LINE with Door/WallOpening fully and partially intersecting cells | no panel crosses the opening; positive fragments only; full-cover records the existing explicit healthy complete-empty state | PENDING_LOCAL — guarded runner prepared; not run |
 | P03 | open straight-segment POLYLINE | station-mapped panel fragments follow every path segment; owner resolves to one GlassWall | PENDING_LOCAL |
 | P04 | open bulged WCS-XY POLYLINE | bounded tessellated fragments follow the configured sagitta contract; no unbounded growth | PENDING_LOCAL |
 | P05 | grid, depth, height and linked-opening change followed by rebuild | panel stale state appears before rebuild and clears only after valid replacement | PENDING_LOCAL |
@@ -99,6 +99,12 @@ Run on one clean, final merged SHA and one DLL built from that exact SHA. Record
 | P12 | two open DWGs with modeless Curtain Hub | command and refresh remain bound to the intended active DWG/project | PENDING_LOCAL |
 
 For every case record before/after aggregate native counts, semantic `ChangeVersion`/stale state, result code and relevant health-code set. Screenshots may remain local; if a sanitized summary is committed, it must be tied to the exact SHA and must not contain customer content.
+
+### P02 licensed-runtime handoff
+
+`QS3DCURTAINOPENINGPROBE` and `scripts/test-bricscad-v25-curtain-panel-openings.ps1` prepare a bounded `LOCAL-002 / P02` run on two synthetic legacy/no-Level LINE GlassWalls in an ordinary fresh disposable copy. The partial Door case must remove at least one complete source cell, clip at least one other cell, emit only finite positive fragments, match every native extent uniquely to the authoritative Core plan, keep native/opening positive-area intersection at zero, and agree with panel count/area metadata. The complete-empty WallOpening case must fully remove every source cell while retaining `Complete` build state, opening-aware metadata, zero count/handles/area, and non-blocking Core/live/runtime panel Health. The non-empty case must also resolve one generated panel through Locate to exactly one canonical GlassWall; all source/opening/host/frame/panel ownership sets must be disjoint.
+
+Run `scripts/preflight-curtain-panel-opening-runtime-probe.py` before the licensed test. The PowerShell runner requires the exact repository x64 Release V25 DLL from a clean exact SHA, a nonblank initialized profile, an empty artifact directory outside the repository, no pre-existing BricsCAD process/sidecar/backup, and the exact `*.curtain-opening-probe-copy.dwg` suffix. It stops only its launched PID, deletes its private script, restores environment variables, proves process/sidecar cleanup and unchanged disposable-DWG SHA-256, and publishes aggregate-only metadata without handles, IDs, paths or customer content. This source-preparation work did not launch BricsCAD and is not runtime evidence: P02 and overall LOCAL-002 remain `PENDING_LOCAL`.
 
 ### P01 sanitized local evidence
 
