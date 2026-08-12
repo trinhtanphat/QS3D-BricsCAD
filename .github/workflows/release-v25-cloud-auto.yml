@@ -1,0 +1,137 @@
+name: QS3D TEMP V25 Auto Release Until Success
+# QS3D_TEMP_AUTO_RELEASE_V25_UNTIL_SUCCESS
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: qs3d-temp-v25-auto-release
+  cancel-in-progress: false
+
+jobs:
+  dispatch_release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TARGET_WORKFLOW: release-v25-cloud.yml
+      BASELINE_MANUAL_POLICY_SHA: b064215655e3da25c7855e18a85677ae5d4088f9
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Ignore superseded push
+        id: head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          remote_sha="$(git rev-parse origin/main)"
+          if [[ "$remote_sha" != "$GITHUB_SHA" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Push $GITHUB_SHA is superseded by $remote_sha; a newer dispatcher run owns validation."
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve current prerelease tag
+        if: ${{ steps.head.outputs.skip != 'true' }}
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj').getroot()
+          value = root.findtext('.//Version')
+          if value is None or not value.strip():
+              raise SystemExit('Missing V25 source Version')
+          print(value.strip())
+          PY
+          )"
+          release_tag="v${version}"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "Resolved release tag: $release_tag"
+
+      - name: Dispatch exact V25 cloud workflow
+        if: ${{ steps.head.outputs.skip != 'true' }}
+        id: dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "started_at=$started_at" >> "$GITHUB_OUTPUT"
+          gh api --method POST \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/release-v25-cloud.yml/dispatches" \
+            -f ref=main \
+            -f "inputs[release_tag]=${{ steps.version.outputs.release_tag }}" \
+            -f "inputs[confirm_release]=RELEASE" \
+            --silent
+          echo "Dispatched release-v25-cloud.yml for $GITHUB_SHA."
+
+      - name: Wait for exact dispatched release result
+        if: ${{ steps.head.outputs.skip != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_id=""
+          for attempt in $(seq 1 60); do
+            payload="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$TARGET_WORKFLOW/runs?event=workflow_dispatch&branch=main&per_page=50")"
+            run_id="$(printf '%s' "$payload" | jq -r \
+              --arg sha "$GITHUB_SHA" \
+              --arg started "${{ steps.dispatch.outputs.started_at }}" \
+              '[.workflow_runs[] | select(.head_sha == $sha and .created_at >= $started)] | sort_by(.created_at) | last | .id // empty')"
+            if [[ -n "$run_id" ]]; then
+              break
+            fi
+            sleep 10
+          done
+          if [[ -z "$run_id" ]]; then
+            echo "Could not locate dispatched release workflow run for $GITHUB_SHA." >&2
+            exit 1
+          fi
+
+          echo "Tracking release workflow run $run_id."
+          while true; do
+            run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id")"
+            status="$(printf '%s' "$run" | jq -r '.status')"
+            conclusion="$(printf '%s' "$run" | jq -r '.conclusion // ""')"
+            url="$(printf '%s' "$run" | jq -r '.html_url')"
+            echo "release run $run_id: status=$status conclusion=$conclusion url=$url"
+            if [[ "$status" == "completed" ]]; then
+              if [[ "$conclusion" != "success" ]]; then
+                echo "V25 cloud release failed with conclusion: $conclusion" >&2
+                exit 1
+              fi
+              echo "RELEASE_SUCCEEDED=true" >> "$GITHUB_ENV"
+              echo "V25 cloud release succeeded. Temporary auto dispatcher will now remove itself."
+              break
+            fi
+            sleep 20
+          done
+
+      - name: Restore manual-only policy and remove temporary dispatcher
+        if: ${{ env.RELEASE_SUCCEEDED == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          git show b064215655e3da25c7855e18a85677ae5d4088f9:scripts/preflight-ci-manual-only.py > scripts/preflight-ci-manual-only.py
+          git rm .github/workflows/release-v25-cloud-auto.yml
+          git add scripts/preflight-ci-manual-only.py
+          if git diff --cached --quiet; then
+            echo "Temporary dispatcher already disabled."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(ci): disable successful V25 auto-release loop"
+          git push origin HEAD:main
