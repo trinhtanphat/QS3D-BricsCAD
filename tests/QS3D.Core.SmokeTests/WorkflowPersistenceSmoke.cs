@@ -32,7 +32,7 @@ namespace QS3D.Core.SmokeTests
             var directory = TempDirectory("schema-v3"); var path = Path.Combine(directory, "legacy.qsdb");
             try
             {
-                File.WriteAllText(path, "<qs3d schema=\"2\" projectId=\"p\" name=\"Legacy\" updatedUtc=\"2026-08-10T00:00:00Z\"><metadata/><zones/><floors/><families/><elements/></qs3d>");
+                File.WriteAllText(path, "<qs3d schema=\"2\" projectId=\"p\" name=\"Legacy\" updatedUtc=\"2026-08-10T00:00:00.0000000Z\"><metadata/><zones/><floors/><families/><elements/></qs3d>");
                 var project = new QsdbProjectStore().Load(path);
                 Equal(3, project.SchemaVersion); Equal(0, project.QuantityRules.Count); Equal(0, project.AuditEvents.Count); Equal("2", project.Metadata["QS3D.SchemaMigratedFrom"]);
             }
