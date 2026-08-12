@@ -32,7 +32,9 @@ namespace QS3D.Core.SmokeTests
                     Floor = new string('F', MaxCellTextLength),
                     Category = "Door",
                     FamilyName = "Door family",
-                    Material = "Glass"
+                    Material = "Glass",
+                    WidthM = 0.9d,
+                    HeightM = 2.2d
                 };
                 row.ElementIds.Add(new string('E', 16383));
                 row.ElementIds.Add(new string('I', 16383));
@@ -59,7 +61,9 @@ namespace QS3D.Core.SmokeTests
                     Floor = "L1",
                     Category = "Door",
                     FamilyName = new string('F', MaxCellTextLength + 1),
-                    Material = "Glass"
+                    Material = "Glass",
+                    WidthM = 0.9d,
+                    HeightM = 2.2d
                 };
 
                 Throws<ArgumentOutOfRangeException>(() =>
@@ -117,7 +121,9 @@ namespace QS3D.Core.SmokeTests
                 Floor = "L1",
                 Category = "Door",
                 FamilyName = "Door family",
-                Material = "Glass"
+                Material = "Glass",
+                WidthM = 0.9d,
+                HeightM = 2.2d
             };
         }
 
