@@ -48,6 +48,7 @@ namespace QS3D.Core.Domain
             var floorId = CanonicalFloorId(floor.Id);
             var displayName = NormalizeName(floor.Name);
             var elevation = Finite(floor.ElevationM, nameof(floor.ElevationM));
+            if (elevation == 0d) elevation = 0d;
 
             var ownerKey = floorId.Length + ":" + floorId;
             var ownerToken = OwnerTokenPrefix + Sha256Hex(ownerKey);

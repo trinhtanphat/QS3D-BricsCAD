@@ -33,6 +33,8 @@ namespace QS3D.Core.Reporting
                     throw new InvalidOperationException(reportName + " cannot be built with a blank project " + identityName + " id.");
 
                 var id = rawId.Trim();
+                if (!string.Equals(rawId, id, StringComparison.Ordinal))
+                    throw new InvalidOperationException(reportName + " cannot be built because project " + identityName + " id '" + rawId + "' is not canonical.");
                 if (!seenIds.Add(id))
                     throw new InvalidOperationException(reportName + " cannot be built because project " + identityName + " id '" + id + "' is duplicated.");
                 index++;

@@ -91,7 +91,8 @@ require("proxy eligibility", eligibility, (
 ))
 require("proxy smoke", proxy_smoke, ("SurfaceAreaDrawingUnitsSquared", "double.NaN", "double.PositiveInfinity"))
 require("recognition engine", engine, (
-    "public bool IsCaptureReady", "!IsCaptureReady",
+    "public bool IsCaptureReady",
+    "!EntitySnapshotCaptureEligibility.IsReady(Snapshot, current.Top.Category, out _)",
     "private bool IsAutoAccepted(RecognitionResult result)", "IsAutoAccepted(x)",
     "result.IsCaptureReady", "capture-blocked:",
 ))
