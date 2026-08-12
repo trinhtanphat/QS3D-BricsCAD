@@ -22,6 +22,8 @@ namespace QS3D.Core.Domain
             var normalizedId = Required(id, nameof(id), 64);
             var normalizedName = Required(name, nameof(name), MaxNameLength);
             Finite(elevationM, nameof(elevationM));
+            if (project.Floors.Any(x => x == null))
+                throw new InvalidOperationException("Project floor collection contains a null floor.");
             if (project.Floors.Count >= MaxFloors) throw new InvalidOperationException("Project supports at most " + MaxFloors + " floors.");
             if (project.Floors.Any(x => string.Equals(x.Id, normalizedId, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Floor id already exists: " + normalizedId);
