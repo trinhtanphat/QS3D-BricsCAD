@@ -28,12 +28,15 @@ namespace QS3D.Core.Diagnostics
                 var validCount = 0;
                 foreach (var item in (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.None))
                 {
-                    var handle = (item ?? string.Empty).Trim();
+                    var handleText = item ?? string.Empty;
+                    var handle = handleText.Trim();
                     if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
                     {
                         issues.Add(new ModelHealthIssue("INVALID_SLAB_MESH_GENERATED_HANDLE", HealthSeverity.Error, HandlesKey + " chứa handle không hợp lệ.", element.Id));
                         continue;
                     }
+                    if (!string.Equals(handleText, handle, StringComparison.Ordinal))
+                        issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_HANDLE_NON_CANONICAL", HealthSeverity.Error, HandlesKey + " không được có khoảng trắng đầu/cuối ở từng handle.", element.Id));
                     if (!local.Add(handle))
                     {
                         issues.Add(new ModelHealthIssue("DUPLICATE_SLAB_MESH_GENERATED_HANDLE", HealthSeverity.Error, "Một slab mesh handle bị lặp trong cùng element: " + handle, element.Id));
