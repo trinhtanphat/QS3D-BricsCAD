@@ -114,7 +114,9 @@ namespace QS3D.Core.Geometry
         {
             var firstProduct = ax * by;
             var secondProduct = ay * bx;
-            if (Finite(firstProduct) && Finite(secondProduct))
+            var firstProductUnderflowed = firstProduct == 0d && ax != 0d && by != 0d;
+            var secondProductUnderflowed = secondProduct == 0d && ay != 0d && bx != 0d;
+            if (Finite(firstProduct) && Finite(secondProduct) && !firstProductUnderflowed && !secondProductUnderflowed)
             {
                 var direct = firstProduct - secondProduct;
                 if (Finite(direct)) return direct;
