@@ -141,6 +141,8 @@ namespace QS3D.Core.Domain
                 {
                     var previous = project.FindFamily(previousFamilyId) ??
                         throw new InvalidOperationException("Element " + element.Id + " references missing family id: " + previousFamilyId + ". Repair the relation before reassignment.");
+                    if (previous.Category != element.Category)
+                        throw new InvalidOperationException("Element " + element.Id + " references previous Family '" + previous.Id + "' category " + previous.Category + " while the element category is " + element.Category + ". Repair the relation before reassignment.");
                     if (!previousSnapshots.TryGetValue(previous.Id, out previousProperties))
                     {
                         previousProperties = SnapshotProperties(previous, "Previous", "assignment");
