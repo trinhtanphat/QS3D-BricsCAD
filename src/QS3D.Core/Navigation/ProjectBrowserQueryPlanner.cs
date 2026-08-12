@@ -78,8 +78,6 @@ namespace QS3D.Core.Navigation
             var query = NormalizeQuery(options.Query);
             var categories = NormalizeCategories(options.Categories);
             var isFiltered = query.Length > 0 || options.DirtyOnly || categories.Count > 0 || options.FloorIds.Count > 0 || options.ZoneIds.Count > 0;
-            if (!isFiltered)
-                return new ProjectBrowserQueryResult(ProjectBrowserPlanner.Build(project, grouping), project.Elements.Count, false);
 
             if (project.Elements.Count > MaxElements)
                 throw new InvalidOperationException("Project browser supports at most " + MaxElements + " semantic elements.");
@@ -94,6 +92,9 @@ namespace QS3D.Core.Navigation
             var floorIndex = BuildUniqueFloorIndex(project);
             var zoneIndex = BuildUniqueZoneIndex(project);
             ValidateElementReferences(project, familyIndex, floorIndex, zoneIndex);
+
+            if (!isFiltered)
+                return new ProjectBrowserQueryResult(ProjectBrowserPlanner.Build(project, grouping), project.Elements.Count, false);
 
             var floorIds = NormalizeReferenceIds(options.FloorIds, floorIndex, "floor");
             var zoneIds = NormalizeReferenceIds(options.ZoneIds, zoneIndex, "zone");
@@ -274,7 +275,7 @@ namespace QS3D.Core.Navigation
             var raw = value ?? string.Empty;
             if (raw.Length == 0) return string.Empty;
             if (string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
-                throw new InvalidOperationException("Project browser filtered query requires canonical " + label + " references without surrounding whitespace on element " + elementId + ".");
+                throw new InvalidOperationException("Project browser query requires canonical " + label + " references without surrounding whitespace on element " + elementId + ".");
             return raw;
         }
     }
