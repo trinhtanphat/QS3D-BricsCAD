@@ -34,7 +34,7 @@ namespace QS3D.Core.SmokeTests
         private static void ShapeAliasesCollapseToOneHandle()
         {
             var project = Project("SHAPE-DUP");
-            var element = new ProjectElement("E-1", ElementCategory.Wall);
+            var element = new ProjectElement("E-1", ElementCategory.StructuralWall);
             element.Properties["GeneratedShapeRebarHandles"] = "B;00B";
             element.Properties["GeneratedShapeRebarCount"] = "2";
             project.Elements.Add(element);
