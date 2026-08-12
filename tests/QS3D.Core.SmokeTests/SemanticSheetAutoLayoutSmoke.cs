@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             PacksAcrossSheetsDeterministically();
+            ResultIsReadOnly();
             ReservedTitleBlockAreaIsRespected();
             MissingViewFailsClosed();
             OversizedViewFailsClosed();
@@ -40,6 +41,30 @@ namespace QS3D.Core.SmokeTests
             Equal(10d, sheets[0].Placements[2].Xmm);
             Equal(100d, sheets[0].Placements[2].Ymm);
             Equal("V5", sheets[1].Placements[0].ViewId);
+        }
+
+        private static void ResultIsReadOnly()
+        {
+            var views = BuildViews(2);
+            var sheets = SemanticSheetAutoLayoutPlanner.Build(
+                new[]
+                {
+                    new SemanticSheetAutoLayoutItem("V1", 100d, 80d),
+                    new SemanticSheetAutoLayoutItem("V2", 100d, 80d)
+                },
+                views,
+                new SemanticSheetAutoLayoutOptions("RO", "RO-", "Read Only", 297d, 210d));
+
+            if (!(sheets is IList<SemanticSheetPlan> mutable))
+                throw new Exception("Automatic sheet layout result must expose the standard read-only IList contract.");
+
+            var originalCount = sheets.Count;
+            var first = sheets[0];
+            Throws<NotSupportedException>(() => mutable[0] = first);
+            Throws<NotSupportedException>(() => mutable.Add(first));
+            Throws<NotSupportedException>(() => mutable.Remove(first));
+            Equal(originalCount, sheets.Count);
+            Equal(first.Id, sheets[0].Id);
         }
 
         private static void ReservedTitleBlockAreaIsRespected()
@@ -152,6 +177,20 @@ namespace QS3D.Core.SmokeTests
             try { action(); }
             catch (InvalidOperationException) { failed = true; }
             if (!failed) throw new Exception(message);
+        }
+
+        private static void Throws<TException>(Action action) where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException)
+            {
+                return;
+            }
+
+            throw new Exception("Expected exception " + typeof(TException).Name + ".");
         }
 
         private static void Equal<T>(T expected, T actual)
