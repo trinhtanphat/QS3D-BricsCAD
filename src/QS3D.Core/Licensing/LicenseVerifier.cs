@@ -275,7 +275,10 @@ namespace QS3D.Core.Licensing
         {
             if (!DateTime.TryParseExact(value, "O", CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed))
                 throw new InvalidDataException("Invalid license UTC timestamp: " + label);
-            return DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+            var utc = DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+            if (!string.Equals(value, utc.ToString("O", CultureInfo.InvariantCulture), StringComparison.Ordinal))
+                throw new InvalidDataException("Non-canonical license UTC timestamp: " + label);
+            return utc;
         }
     }
 }
