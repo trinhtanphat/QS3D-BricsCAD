@@ -112,6 +112,7 @@ namespace QS3D.Core.Services
             var beforeTargetEnumeration = project.ChangeVersion;
             var targets = OwnedDistinctByIds(project, elementIds);
             RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk Family target-id enumeration");
+            RequireCurrentFamilyAssignmentOwnership(project, family, targets);
             foreach (var element in targets)
                 if (element.Category != family.Category)
                     throw new InvalidOperationException("Cannot assign family " + family.Id + " (" + family.Category + ") to element " + element.Id + " (" + element.Category + "). Bulk family assignment is all-or-nothing.");
@@ -216,6 +217,20 @@ namespace QS3D.Core.Services
                 unique[elementId] = owned;
             }
             return new List<ProjectElement>(unique.Values).AsReadOnly();
+        }
+
+        private static void RequireCurrentFamilyAssignmentOwnership(ProjectState project, ProjectFamily family, IReadOnlyList<ProjectElement> elements)
+        {
+            var currentFamily = project.FindFamily(family.Id);
+            if (!ReferenceEquals(currentFamily, family))
+                throw new InvalidOperationException("Target Family no longer belongs to the project after bulk assignment target enumeration: " + family.Id + ".");
+
+            foreach (var element in elements)
+            {
+                var current = project.FindElement(element.Id);
+                if (!ReferenceEquals(current, element))
+                    throw new InvalidOperationException("Element no longer belongs to the project after bulk Family assignment target enumeration: " + element.Id + ".");
+            }
         }
 
         private static void ValidateUniqueFamilyIds(ProjectState project)
