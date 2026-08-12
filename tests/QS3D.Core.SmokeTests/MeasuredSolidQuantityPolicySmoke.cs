@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
             PreservesIndependentVolumeOverride();
             RemovesPolicyOwnedVolumesWhenCategoryBecomesUnsupported();
             CleanupMarksPreviouslyCleanElementQuantityDirty();
+            RejectsNumericLiteralUnderflowAtomically();
+            PreservesZeroAndRepresentableSubnormalMetrics();
             NoRemovalLeavesCleanElementClean();
         }
 
@@ -73,6 +75,40 @@ namespace QS3D.Core.SmokeTests
             Missing(element, "NetVolumeM3");
         }
 
+        private static void RejectsNumericLiteralUnderflowAtomically()
+        {
+            var element = new ProjectElement("B-underflow", ElementCategory.Beam);
+            element.SetProperty(MeasuredSolidQuantityPolicy.SurfaceAreaProperty, "25");
+            element.SetProperty(MeasuredSolidQuantityPolicy.VolumeProperty, "1e-4000");
+            element.MarkClean(ElementDirtyFlags.All);
+
+            var error = Capture<InvalidOperationException>(() => MeasuredSolidQuantityPolicy.Apply(element));
+            Contains("B-underflow/MeasuredSolidVolumeM3 underflowed to zero.", error.Message);
+            Missing(element, "MeasuredSurfaceAreaM2");
+            Missing(element, "MeasuredSolidVolumeM3");
+            Missing(element, "GrossVolumeM3");
+            Missing(element, "NetVolumeM3");
+            if (element.Dirty != ElementDirtyFlags.None)
+                throw new Exception("Rejected measured literal underflow must not mutate dirty state.");
+        }
+
+        private static void PreservesZeroAndRepresentableSubnormalMetrics()
+        {
+            var zero = new ProjectElement("B-zero", ElementCategory.Beam);
+            zero.SetProperty(MeasuredSolidQuantityPolicy.VolumeProperty, "0e-4000");
+            if (!MeasuredSolidQuantityPolicy.Apply(zero))
+                throw new Exception("True zero measured metric must remain valid.");
+            Exact(0d, zero.Quantities["MeasuredSolidVolumeM3"]);
+
+            var subnormal = new ProjectElement("B-subnormal", ElementCategory.Beam);
+            subnormal.SetProperty(MeasuredSolidQuantityPolicy.VolumeProperty, "5e-324");
+            if (!MeasuredSolidQuantityPolicy.Apply(subnormal))
+                throw new Exception("Representable subnormal measured metric must remain valid.");
+            Exact(double.Epsilon, subnormal.Quantities["MeasuredSolidVolumeM3"]);
+            Exact(double.Epsilon, subnormal.Quantities["GrossVolumeM3"]);
+            Exact(double.Epsilon, subnormal.Quantities["NetVolumeM3"]);
+        }
+
         private static void NoRemovalLeavesCleanElementClean()
         {
             var element = new ProjectElement("R1", ElementCategory.Room);
@@ -107,6 +143,25 @@ namespace QS3D.Core.SmokeTests
         {
             if (Math.Abs(expected - actual) > 1e-12d)
                 throw new Exception("Expected " + expected + " but got " + actual + ".");
+        }
+
+        private static void Exact(double expected, double actual)
+        {
+            if (!expected.Equals(actual))
+                throw new Exception("Expected exact " + expected + " but got " + actual + ".");
+        }
+
+        private static T Capture<T>(Action action) where T : Exception
+        {
+            try { action(); }
+            catch (T ex) { return ex; }
+            throw new Exception("Expected exception " + typeof(T).Name + ".");
+        }
+
+        private static void Contains(string expected, string actual)
+        {
+            if (actual == null || actual.IndexOf(expected, StringComparison.Ordinal) < 0)
+                throw new Exception("Expected '" + actual + "' to contain '" + expected + "'.");
         }
     }
 }
