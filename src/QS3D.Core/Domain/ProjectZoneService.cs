@@ -120,14 +120,17 @@ namespace QS3D.Core.Domain
 
         private static void RequireCurrentAssignmentOwnership(ProjectState project, ZoneDefinition zone, IEnumerable<ProjectElement> elements)
         {
+            ValidateUniqueZoneIds(project);
+            var currentElements = ResolveProjectElements(project)
+                .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
+
             var currentZone = project.FindZone(zone.Id);
             if (!ReferenceEquals(currentZone, zone))
                 throw new InvalidOperationException("Target Zone no longer belongs to the project after assignment target enumeration: " + zone.Id + ".");
 
             foreach (var element in elements)
             {
-                var current = project.FindElement(element.Id);
-                if (!ReferenceEquals(current, element))
+                if (!currentElements.TryGetValue(element.Id, out var current) || !ReferenceEquals(current, element))
                     throw new InvalidOperationException("Element no longer belongs to the project after Zone assignment target enumeration: " + element.Id + ".");
             }
         }
