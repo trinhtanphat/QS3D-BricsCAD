@@ -1,33 +1,33 @@
 # Work claim — ProjectFamilyService.Assign lazy-input freshness
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-family-assign-input-freshness-20260812-1002`
 - Registered: `2026-08-12T10:02:00+07:00`
+- Completed: `2026-08-12T10:07:00+07:00`
 - Baseline main SHA: `790af584a2b356c04303913cfd750991a0f13961`
+- Pull Request: `#735`
+- Reviewed head: `1d5a6a8c67ca059dce1ee159807e51ccd583f892`
+- Merge SHA: `165ffee90a5b0df10165e5c43575eb44e0c70aa5`
 - Priority: P1 — prevent Family assignment from applying a stale target/property plan after lazy target enumeration mutates the project.
 
 ## Confirmed defect
 
-`ProjectFamilyService.Assign(project, familyId, IEnumerable<ProjectElement>)` resolves the target Family and snapshots its properties before enumerating the caller-supplied target sequence. `ResolveOwnedElements(...)` then enumerates that potentially lazy sequence without pinning `ProjectState.ChangeVersion`. A target enumerable can mutate/touch the project while being consumed; assignment then continues using the pre-enumeration target Family snapshot and may mutate elements again, or can return a false no-op after the project changed during enumeration. `BulkEditService` already guards the same lazy-input boundary with a before/after ChangeVersion check, and current Floor/Zone lanes are applying the same contract.
+`ProjectFamilyService.Assign(project, familyId, IEnumerable<ProjectElement>)` resolved the target Family and snapshotted its properties before enumerating the caller-supplied target sequence. A lazy target enumerable could mutate/touch the project while being consumed, after which assignment continued using the pre-enumeration plan or returned a false no-op.
 
-## Reserved surfaces
+## Completed implementation
 
-- `src/QS3D.Core/Domain/ProjectFamilyService.cs` — Assign target-enumeration freshness only plus one private helper
-- `tests/QS3D.Core.SmokeTests/FamilyAssignInputFreshnessSmoke.cs` — new focused regression
-- this claim file
+- Capture `project.ChangeVersion` immediately before target enumeration.
+- Require the same version immediately after `ResolveOwnedElements(...)` fully materializes/validates the sequence.
+- Mutating lazy inputs fail before assignment planning, including inputs that mutate then yield no targets.
+- Stable lazy input, target/property/category/ownership validation, duplicate collapsing and normal one-revision assignment semantics remain unchanged.
+- Focused ModuleInitializer smoke covers stable lazy input, touch-then-yield and touch-then-stop cases.
 
-## Intended fix
+## Evidence
 
-- Capture `project.ChangeVersion` immediately before `ResolveOwnedElements(project, elements, target)`.
-- After the enumerable has been fully materialized/validated, require the same ChangeVersion before planning assignments.
-- Fail even when a mutating lazy enumerable yields no targets, so project changes cannot be misreported as a Family-assignment no-op.
-- Preserve target/previous Family property canonicality, category/ownership checks, inherited override behavior, duplicate target collapsing and normal one-revision assignment semantics.
-- Add focused smoke for stable lazy input, touch-then-yield input and touch-then-stop empty input.
-
-## Coordination
-
-Floor/Zone mutation-input freshness lanes own their respective files. BulkEditService already has this guard and is not modified. No native/UI/persistence files are in scope.
+- PR #735 exact patch reviewed.
+- Moving-main comparison showed no overlap with `ProjectFamilyService.cs` or the new smoke before merge.
+- Squash merge: `165ffee90a5b0df10165e5c43575eb44e0c70aa5`.
 
 ## Validation boundary
 
-Committed deterministic Core smoke coverage plus exact source/diff review. No GitHub Actions dispatch; no licensed BricsCAD V25/V26 runtime PASS claimed.
+No GitHub Actions were dispatched. No local/full .NET build or licensed BricsCAD V25/V26 runtime PASS is claimed.
