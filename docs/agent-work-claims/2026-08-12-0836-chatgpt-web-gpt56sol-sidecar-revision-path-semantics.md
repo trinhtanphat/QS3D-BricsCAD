@@ -1,44 +1,55 @@
 # Work claim — Sidecar revision path semantics
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-sidecar-revision-path-semantics`
 - Registered: `2026-08-12T08:36:00+07:00`
+- Completed: `2026-08-12T08:43:00+07:00`
 - Baseline main SHA: `c559b1f7b843d618622db2caf86c1417bd0ebc7a`
+- Claim commit: `a12f5ed784ebd61715a94a672a5edcb258df4be1`
+- Source commit: `9668b21ba17b3c1a713464ad9656e8969ad7957d`
+- Regression commit: `98bf9af4a4eb2a57683bab1fa9f0de48e3e9e1bd`
 - Priority: P1 — persistence authority identity must follow the platform path contract.
 
 ## Confirmed defect
 
-`ProjectSidecarRevisionStamp` uses `StringComparison.OrdinalIgnoreCase` and `StringComparer.OrdinalIgnoreCase` unconditionally for primary-path identity in `IsForPath(...)`, `Equals(...)` and `GetHashCode()`. The same persistence layer already defines path distinctness in `AtomicFileCommit` using platform-aware comparison (`OrdinalIgnoreCase` on Windows, `Ordinal` on non-Windows). On a case-sensitive platform, two distinct QSDB paths that differ only by casing can therefore be treated as the same sidecar authority/stamp identity.
+`ProjectSidecarRevisionStamp` used `StringComparison.OrdinalIgnoreCase` and `StringComparer.OrdinalIgnoreCase` unconditionally for primary-path identity in `IsForPath(...)`, `Equals(...)` and `GetHashCode()`. The same persistence layer already defines path distinctness in `AtomicFileCommit` using platform-aware comparison (`OrdinalIgnoreCase` on Windows, `Ordinal` on non-Windows). On a case-sensitive platform, two distinct QSDB paths that differ only by casing could therefore be treated as the same sidecar authority/stamp identity.
 
-This is an identity bug in the Core persistence boundary, not a request to broaden supported host platforms. The fix aligns revision-stamp path identity with the path comparison policy already present in the same namespace.
+This lane aligned revision-stamp path identity with the existing persistence path policy; it did not broaden product host/platform claims.
 
-## Reserved scope
+## Completed scope
 
 - `src/QS3D.Core/Persistence/ProjectSidecarRevisionStamp.cs`
 - `tests/QS3D.Core.SmokeTests/ProjectSidecarRevisionPathSemanticsSmoke.cs`
 - this claim file
 
-## Intended contract
+## Resulting contract
 
 - Windows path identity remains case-insensitive.
 - Non-Windows path identity is case-sensitive, matching `AtomicFileCommit`'s current policy.
-- `IsForPath`, stamp equality and hash-code path contribution use the same comparison rule.
+- `IsForPath`, stamp equality and hash-code path contribution now use one shared platform comparer.
 - File digest/presence capture, size bounds and `MatchesCurrent()` behavior remain unchanged.
 
-## Excluded scope
+## Implementation
+
+`ProjectSidecarRevisionStamp` now defines one `PathComparer` using the same Windows/non-Windows distinction already used by `AtomicFileCommit`. `IsForPath(...)`, `Equals(...)` and `GetHashCode()` all consume that comparer so equality and hashing cannot disagree about path casing.
+
+The focused module-initializer smoke uses GUID-based non-existing temporary paths, so no private fixture or sidecar bytes are required. It verifies same-path normalization/equality/hash consistency and checks case-only path identity conditionally against the repository platform rule.
+
+## Validation actually performed
+
+- Re-fetched the claimed source after claim publication; the pre-fix blob remained `cbcfdfbe7d518e59ea92a825e305b3261443a3ef` before the successful source write.
+- Reviewed the exact source commit `9668b21ba17b3c1a713464ad9656e8969ad7957d`; its diff only adds the shared comparer and switches the three path-identity uses.
+- Read back current `main` source blob `93a6dc37165ec4524b85e23c8b8dfb81055e8e77` and smoke blob `ec14252735f836ce62b83412e73a157ac195e688`.
+- Multiple Git database fast-forward attempts were safely rejected because `main` advanced between commit creation and ref update. No force update was used. Intervening comparisons showed no overlap with the reserved source/test paths.
+- The final source and smoke were integrated through GitHub Contents API using the exact current source blob SHA, preserving concurrent `main` history.
+- GitHub Actions were not dispatched.
+- No local .NET/Core smoke execution or licensed BricsCAD V25/V26 runtime PASS is claimed from this remote session.
+
+## Excluded scope honored
 
 - No changes to `AtomicFileCommit`, `ProjectFileLock`, QSDB schema/store, BricsCAD adapters, save/reload workflow or local sidecar runtime probes.
-- No attempt to infer filesystem-specific case sensitivity beyond the repository's existing Windows/non-Windows path policy.
-- No GitHub Actions dispatch and no V25/V26 runtime qualification claim.
+- No filesystem-specific probing beyond the repository's existing Windows/non-Windows path policy.
 
-## Validation plan
+## Completion
 
-- Re-fetch the claimed source after claim publication and write against the exact blob.
-- Add a focused auto-registered Core smoke using missing sidecar paths (no private fixture required) to verify same-path identity plus case-only path behavior conditionally by platform.
-- Verify equality/hash consistency for equivalent paths and distinctness where the repository policy is case-sensitive.
-- Review exact pushed diff, read back current `main`, close claim with exact SHA, and ancestry-check without force-push.
-- No compile/test-runtime PASS will be claimed unless actually executed.
-
-## Completion condition
-
-Revision-stamp path identity uses the repository's platform path comparison consistently across lookup/equality/hash behavior, focused regression source is on `main`, and this claim is marked `COMPLETED` with truthful validation evidence.
+Revision-stamp path authority now follows the repository's platform path identity contract consistently across lookup, equality and hashing. Focused regression source is on `main`, and the claim is released as completed.
