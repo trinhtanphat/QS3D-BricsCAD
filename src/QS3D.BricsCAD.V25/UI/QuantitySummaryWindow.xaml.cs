@@ -162,7 +162,7 @@ namespace QS3D.BricsCAD.V25.UI
                 ReloadCategories();
                 ApplyFilter();
                 UpdateModePresentation();
-                MessageBox.Show(this, "Không thể đổi chế độ BQ: " + ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this, "Không thể đổi chế độ BQ. Hãy thử lại hoặc đóng bảng BQ và mở lại.", "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 
@@ -174,7 +174,7 @@ namespace QS3D.BricsCAD.V25.UI
                 EnsureCurrentProject("tính lại BQ");
                 RefreshRowsForCurrentMode(false);
             }
-            catch (Exception ex) { MessageBox.Show(this, "Không thể tính lại khối lượng: " + ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning); }
+            catch (Exception ex) { MessageBox.Show(this, "Không thể tính lại khối lượng. Hãy thử lại hoặc đóng bảng BQ và mở lại.", "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning); }
         }
 
         private void RefreshRowsForCurrentMode(bool requireLiveSummarySource)
@@ -245,7 +245,7 @@ namespace QS3D.BricsCAD.V25.UI
             catch (Exception ex)
             {
                 LoadColumnPreferences();
-                MessageBox.Show(this, ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this, "Không thể đổi cấu hình cột BQ. Cấu hình trước đó đã được khôi phục.", "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 
@@ -297,7 +297,7 @@ namespace QS3D.BricsCAD.V25.UI
                 EnsureCurrentProject("mở ED2 Excel");
                 _document.SendStringToExecute("QS3DED2 ", true, false, false);
             }
-            catch (Exception ex) { MessageBox.Show(this, ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning); }
+            catch (Exception ex) { MessageBox.Show(this, "Không thể mở ED2 Excel từ bảng BQ.", "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning); }
         }
 
         private void OnExcelLocateClick(object sender, RoutedEventArgs e)
@@ -307,7 +307,7 @@ namespace QS3D.BricsCAD.V25.UI
                 EnsureCurrentProject("định vị từ Excel");
                 _document.SendStringToExecute("QS3DEXCELLOCATE ", true, false, false);
             }
-            catch (Exception ex) { MessageBox.Show(this, ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning); }
+            catch (Exception ex) { MessageBox.Show(this, "Không thể mở định vị từ Excel trong bảng BQ.", "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning); }
         }
 
         private void LocateCurrent()
@@ -346,7 +346,7 @@ namespace QS3D.BricsCAD.V25.UI
 
                 PaletteCoordinator.SetStatus("BQ Định vị: dòng này không còn CAD handle hợp lệ để chọn.");
             }
-            catch (Exception ex) { MessageBox.Show(this, "Không thể định vị: " + ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning); }
+            catch (Exception ex) { MessageBox.Show(this, "Không thể định vị dòng BQ hiện tại. Hãy tính lại BQ và thử lại.", "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning); }
         }
 
         private QuantityReportRow ResolveCurrentRow(QuantityReportRow displayedRow)
@@ -469,7 +469,7 @@ namespace QS3D.BricsCAD.V25.UI
                 XlsxQuantityExporter.Export(dialog.FileName, visibleRows);
                 MessageBox.Show(this, _detailMode ? "Đã xuất diễn giải chi tiết hiện hành ra Excel." : "Đã tính lại dữ liệu hiện hành và xuất Excel thành công.", "QS3D", MessageBoxButton.OK, MessageBoxImage.Information);
             }
-            catch (Exception ex) { MessageBox.Show(this, "Không thể xuất Excel: " + ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Error); }
+            catch (Exception ex) { MessageBox.Show(this, "Không thể xuất Excel từ bảng BQ.", "QS3D", MessageBoxButton.OK, MessageBoxImage.Error); }
         }
 
         private static void RestoreOrThrow(QS3D.Core.Domain.ProjectState project, ProjectStateSnapshot rollback, Exception operationError)
