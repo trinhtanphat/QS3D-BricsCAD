@@ -32,7 +32,7 @@
                                        FontWeight="SemiBold" FontSize="9"/>
                         </Border>
                     </StackPanel>
-                    <TextBlock Text="Tổng hợp • diễn giải từng cấu kiện • click diễn giải để chọn và zoom nguồn CAD trong View 3D"
+                    <TextBlock Text="Tổng hợp • diễn giải từng cấu kiện • Bám 3D để click dòng và chọn/zoom nguồn CAD trong View 3D"
                                Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
                 </StackPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
@@ -74,7 +74,7 @@
                                  ToolTip="Một semantic element trên mỗi dòng"/>
                     <CheckBox x:Name="AutoRevealCheck" Content="Bám 3D" IsChecked="True"
                               Margin="12,0,0,0" VerticalAlignment="Center"
-                              ToolTip="Trong chế độ Diễn giải chi tiết, click một dòng sẽ chọn và zoom cấu kiện đó trong View 3D"/>
+                              ToolTip="Bật để click dòng tổng hợp và reveal cả nhóm, hoặc click dòng diễn giải để reveal cấu kiện tương ứng trong View 3D"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -157,7 +157,7 @@
                                            TextWrapping="Wrap" Margin="0,5,0,0"/>
                             </StackPanel>
                         </Border>
-                        <TextBlock Text="Ở chế độ Diễn giải chi tiết + Bám 3D: click dòng → revalidate semantic row → chọn Handle còn sống → zoom View 3D."
+                        <TextBlock Text="Bám 3D bật: click dòng tổng hợp → reveal cả nhóm; click dòng diễn giải → reveal cấu kiện. Tắt Bám 3D vẫn dùng double-click hoặc Định vị."
                                    Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,9"/>
                     </StackPanel>
 
@@ -200,7 +200,7 @@
                 <Border Background="{StaticResource SuccessBrush}" CornerRadius="5"
                         Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
                 <TextBlock x:Name="TotalsText" FontWeight="SemiBold"/>
-                <TextBlock DockPanel.Dock="Right" Text="DETAIL: CLICK → 3D • SUMMARY: DOUBLE-CLICK → LOCATE • EXPORT XLSX"
+                <TextBlock DockPanel.Dock="Right" Text="BÁM 3D: CLICK → LOCATE • TẮT BÁM 3D: DOUBLE-CLICK / ĐỊNH VỊ • EXPORT XLSX"
                            Style="{StaticResource Caption}" Margin="12,0,0,0"/>
             </DockPanel>
         </Border>
