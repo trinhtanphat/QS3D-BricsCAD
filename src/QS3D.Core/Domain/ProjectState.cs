@@ -137,8 +137,8 @@ namespace QS3D.Core.Domain
             {
                 var next = RequireProjectName(value);
                 if (string.Equals(_name, next, StringComparison.Ordinal)) return;
-                _name = next;
                 Touch();
+                _name = next;
             }
         }
         public string DrawingPath { get; set; } = string.Empty;
