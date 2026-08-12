@@ -44,11 +44,16 @@ namespace QS3D.Core.Reporting
 
         private static void RequireCanonicalElementReferences(IEnumerable<ProjectElement> elements, string reportName)
         {
+            var index = 0;
             foreach (var element in elements)
             {
+                if (element == null)
+                    throw new InvalidOperationException(reportName + " cannot be built because project element index " + index + " is null.");
+
                 RequireCanonicalReference(element.FamilyId, "family", element.Id, reportName);
                 RequireCanonicalReference(element.FloorId, "floor", element.Id, reportName);
                 RequireCanonicalReference(element.ZoneId, "zone", element.Id, reportName);
+                index++;
             }
         }
 
