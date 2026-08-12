@@ -15,7 +15,7 @@ namespace QS3D.Core.SmokeTests
             AcceptsPolygonFootprintMode();
             RejectsInvalidFootprintMode();
             DetectsLaterOwnershipConflict();
-            IgnoresNullSemanticEntry();
+            RejectsNullSemanticEntry();
         }
 
         private static void AcceptsLegacyMissingFootprintMode()
@@ -81,16 +81,20 @@ namespace QS3D.Core.SmokeTests
                 "slab health must detect a conflicting owner regardless of project order or future generated slot name");
         }
 
-        private static void IgnoresNullSemanticEntry()
+        private static void RejectsNullSemanticEntry()
         {
-            var project = new ProjectState("P-null", "Null-safe diagnostics");
+            var project = new ProjectState("P-null", "Fail-visible diagnostics");
             project.Elements.Add(null!);
-            var slab = MeshElement("S1", "AA", "1");
-            project.Elements.Add(slab);
+            try
+            {
+                Inspect(project, "AA");
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
 
-            var issues = Inspect(project, "AA");
-            Require(!issues.Any(x => x.Code == "SLAB_MESH_FOOTPRINT_MODE_INVALID"),
-                "null semantic entries must not break standalone slab mesh health");
+            throw new InvalidOperationException("GeneratedSlabMeshHealthSmoke: null semantic entries must fail visibly.");
         }
 
         private static IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project, params string[] liveHandles)

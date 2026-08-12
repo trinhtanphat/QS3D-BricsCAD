@@ -19,7 +19,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void BeamStirrupLaterOwnerIsConflict()
         {
-            var project = ProjectWithNull("beam");
+            var project = new ProjectState("P-beam", "beam");
             var beam = new ProjectElement("B1", ElementCategory.Beam, string.Empty, string.Empty, string.Empty);
             beam.Properties["GeneratedBeamStirrupHandles"] = "AA";
             beam.Properties["GeneratedBeamStirrupCount"] = "1";
@@ -35,7 +35,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void TieLaterOwnerIsConflict()
         {
-            var project = ProjectWithNull("tie");
+            var project = new ProjectState("P-tie", "tie");
             var column = new ProjectElement("C1", ElementCategory.Column, string.Empty, string.Empty, string.Empty);
             column.Properties["GeneratedTieRebarHandles"] = "AB";
             column.Properties["GeneratedTieRebarCount"] = "1";
@@ -51,7 +51,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void LongitudinalRebarLaterOwnerIsConflict()
         {
-            var project = ProjectWithNull("rebar");
+            var project = new ProjectState("P-rebar", "rebar");
             var column = new ProjectElement("C2", ElementCategory.Column, string.Empty, string.Empty, string.Empty);
             column.Properties["GeneratedRebarHandles"] = "AC";
             column.Properties["GeneratedRebarCount"] = "1";

@@ -10,23 +10,21 @@ namespace QS3D.Core.SmokeTests
         [ModuleInitializer]
         internal static void Initialize()
         {
-            var project = new ProjectState("P-null-health", "Null-safe standalone health");
+            var project = new ProjectState("P-null-health", "Fail-visible standalone health");
             project.Elements.Add(null!);
 
-            RequireNoThrow(() => new GeneratedFoundationMeshHealthService().Inspect(project), "foundation mesh health");
-            RequireNoThrow(() => new GeneratedCurtainFrameHealthService().Inspect(project), "curtain frame health");
-            RequireNoThrow(() => new GeneratedSemanticTagHealthService().Inspect(project), "semantic tag health");
-            RequireNoThrow(() => new GeneratedGridAnnotationHealthService().Inspect(project), "grid annotation health");
-            RequireNoThrow(() => new GeneratedRebarOwnershipHealthService().Inspect(project), "rebar ownership health");
+            RequireFailVisible(() => new GeneratedFoundationMeshHealthService().Inspect(project), "foundation mesh health");
+            RequireFailVisible(() => new GeneratedCurtainFrameHealthService().Inspect(project), "curtain frame health");
+            RequireFailVisible(() => new GeneratedSemanticTagHealthService().Inspect(project), "semantic tag health");
+            RequireFailVisible(() => new GeneratedGridAnnotationHealthService().Inspect(project), "grid annotation health");
+            RequireFailVisible(() => new GeneratedRebarOwnershipHealthService().Inspect(project), "rebar ownership health");
         }
 
-        private static void RequireNoThrow(Action action, string provider)
+        private static void RequireFailVisible(Action action, string provider)
         {
             try { action(); }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException("StandaloneGeneratedHealthNullSafetySmoke: " + provider + " crashed on a null semantic entry.", ex);
-            }
+            catch (InvalidOperationException) { return; }
+            throw new InvalidOperationException("StandaloneGeneratedHealthNullSafetySmoke: " + provider + " must reject a null semantic entry.");
         }
     }
 }

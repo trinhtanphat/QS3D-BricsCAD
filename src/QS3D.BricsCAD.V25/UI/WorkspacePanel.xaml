@@ -90,7 +90,10 @@
                   Focusable="False"
                   HorizontalContentAlignment="Stretch"
                   VerticalContentAlignment="Stretch">
-    <Grid x:Name="WorkspaceContentRoot" MinWidth="560" Background="{StaticResource Bg0Brush}">
+    <Grid x:Name="WorkspaceContentRoot"
+          Width="{Binding ViewportWidth, ElementName=WorkspaceOverflow}"
+          MinWidth="560"
+          Background="{StaticResource Bg0Brush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="44"/>
             <RowDefinition Height="*"/>

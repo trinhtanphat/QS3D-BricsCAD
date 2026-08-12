@@ -23,8 +23,8 @@ namespace QS3D.Core.Diagnostics
             }
 
             var issues = new List<ModelHealthIssue>();
-            issues.AddRange(new RoomFinishHealthService().Inspect(project));
-            issues.AddRange(new GeneratedCurtainPanelHealthService().Inspect(project, liveHandleIndex));
+            AddProviderIssues(issues, "RoomFinishHealthService", () => new RoomFinishHealthService().Inspect(project));
+            AddProviderIssues(issues, "GeneratedCurtainPanelHealthService", () => new GeneratedCurtainPanelHealthService().Inspect(project, liveHandleIndex));
 
             var included = new List<ProjectElement>();
             foreach (var element in project.Elements)
@@ -110,6 +110,24 @@ namespace QS3D.Core.Diagnostics
             }
 
             return issues.AsReadOnly();
+        }
+
+        private static void AddProviderIssues(
+            ICollection<ModelHealthIssue> issues,
+            string providerName,
+            Func<IReadOnlyList<ModelHealthIssue>> inspect)
+        {
+            try
+            {
+                foreach (var issue in inspect()) issues.Add(issue);
+            }
+            catch (Exception)
+            {
+                issues.Add(new ModelHealthIssue(
+                    "BOM_HEALTH_PROVIDER_FAILED",
+                    HealthSeverity.Error,
+                    providerName + " khÃ´ng thá»ƒ hoÃ n táº¥t kiá»ƒm tra phÃ¡t hÃ nh BQ an toÃ n."));
+            }
         }
     }
 }
