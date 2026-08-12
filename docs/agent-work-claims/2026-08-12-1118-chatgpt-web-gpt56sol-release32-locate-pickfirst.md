@@ -1,39 +1,37 @@
 # Work claim — release #32 QS3DLOCATE PICKFIRST preservation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-release32-locate-pickfirst`
 - Registered: `2026-08-12T11:18:00+07:00`
+- Completed: `2026-08-12T11:22:00+07:00`
 - Baseline main SHA: `591e1a8916cc79e61c882371b4b3415b5449a214`
-- Priority: release #32 reports `scripts/preflight-locate-selection.py` failing; current source also contains a confirmed zero-match PICKFIRST contradiction.
+- Claim commit: `f8493b172acf8ab7e7fa70495c3a3d5528ed94f2`
+- Scope-expansion commit: `6c0240503d8f24572524c579c3d57a20a308be70`
+- Priority: release #32 `scripts/preflight-locate-selection.py` failure plus confirmed zero-match PICKFIRST contradiction.
 
 ## Confirmed defect
 
-`QS3DLOCATE` reports that a zero-match Locate keeps the current selection, but calls `CadHandleService.Select(...)`. Current `Select(...)` always calls `SetImpliedSelection(...)`, including with an empty resolved id set, so a zero-match Locate clears PICKFIRST before reporting that it was preserved. `CadHandleService.SelectIfAny(...)` already implements the required no-change-on-zero contract.
+`QS3DLOCATE` reported that a zero-match Locate kept the current selection, but normal `CadHandleService.Select(...)` always called `SetImpliedSelection(...)`, including with an empty resolved id set. A zero-match Locate therefore cleared PICKFIRST before claiming it was preserved. Quantity validation-failure guards meanwhile intentionally needed a real pre-clear, overloading the same normal selection API with incompatible semantics.
 
-The release gate expects the historical global `Select => SelectIfAny` contract. Quantity validation-failure guards added later intentionally used `Select(empty)` to clear stale selection, which overloaded `Select` with two incompatible semantics. The robust reconciliation is to restore no-change-on-zero semantics for normal `Select` and provide an explicit `ClearSelection` API for the two validation pre-clear flows.
+## Completed implementation
 
-## Expanded reserved scope
+- `0ac5d4b7e0d6b6ed865c7f9e595d1ff57946f08c` — normal `CadHandleService.Select` now delegates to `SelectIfAny`, preserving PICKFIRST on zero live handles; added explicit `ClearSelection(Document)` which directly sets an empty implied selection.
+- `c807ae00e444fb9383229077ecfa6700e20da673` — Quantity Summary validation-failure pre-clear migrated to `ClearSelection` after its existing active-DWG/trigger guards.
+- `3df6fd6bb2265a5b48798e0c87d95c2b387f3023` — Quantity Insight validation-failure pre-clear migrated to `ClearSelection` after its existing active-DWG/trigger guards.
+- `408740551d5dcbaf213da7225ae196b39c700911` — quantity validation-failure preflight now requires the explicit clear API, pins its direct empty `SetImpliedSelection`, rejects re-use of normal `Select(empty)` in those guards, and preserves all existing Follow3D/wrong-DWG/locate/zoom checks.
+- `scripts/preflight-locate-selection.py` required no source edit after the production API fix: its existing `Select => SelectIfAny`, zero-before-SetImpliedSelection and QS3DLOCATE positive-zoom/zero-feedback assertions now match the corrected implementation.
 
-- `src/QS3D.BricsCAD.V25/Cad/CadHandleService.cs`: restore `Select => SelectIfAny` and add explicit `ClearSelection`.
-- `src/QS3D.BricsCAD.V25/UI/QuantitySummaryWindow.LocateSelectionFailureGuard.cs`: migrate intentional pre-clear to `ClearSelection`.
-- `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.LocateSelectionFailureGuard.cs`: migrate intentional pre-clear to `ClearSelection`.
-- `scripts/preflight-locate-selection.py`: retain/pin PICKFIRST-safe normal selection semantics.
-- `scripts/preflight-quantity-locate-validation-failure-clear.py`: pin explicit-clear semantics instead of relying on `Select(empty)`.
-- this claim file for close-out.
+## Resulting contract
 
-## Contract
+- Normal Locate/select operations do not destroy current PICKFIRST when no live target resolves.
+- Positive live selection still sets implied selection and zoom remains positive-count-only.
+- Explicit validation-failure pre-clear remains available only through `ClearSelection` and stays guarded to the same active DWG.
+- Source/boundary/generated owner fallback and existing resolver smoke coverage are unchanged.
 
-- Normal `CadHandleService.Select` preserves existing PICKFIRST when no live handles resolve by delegating to `SelectIfAny`.
-- Positive normal selection still sets implied selection and returns the live count.
-- `ClearSelection(document)` is the only explicit empty-selection API and directly clears implied selection.
-- Quantity Summary/Insight validation pre-clear use `ClearSelection` only after their active-DWG/trigger guards.
-- QS3DLOCATE can continue using normal `Select` and its existing zero-match message becomes truthful.
-- Source/boundary/generated owner fallback, zoom-on-positive-only, and existing smoke coverage remain unchanged.
+## Readback evidence
 
-## Excluded scope
+Current `main` readback confirms `Select => SelectIfAny`, the zero-count return before `SetImpliedSelection`, explicit `ClearSelection(Array.Empty<ObjectId>())`, both Quantity guards calling `ClearSelection`, and the updated quantity preflight pinning those semantics.
 
-No edits to resolver traversal, health/BQ canonical locate behavior beyond the two dedicated pre-clear guards, Excel locate, selection-state Core, or unrelated #32 gates. No Actions dispatch/build/release/runtime PASS claim.
+## Validation boundary
 
-## Completion condition
-
-Zero-match normal Locate preserves PICKFIRST, explicit validation-failure pre-clear still clears only the same active DWG, both gates pin the separated semantics, changes are read back on current `main`, and this claim is closed with exact SHAs.
+Remote/static source and regression-gate verification only. No GitHub Actions were dispatched. No executable .NET smoke/build, signing/package/release, or licensed BricsCAD V25/V26 runtime PASS is claimed.
