@@ -169,10 +169,11 @@ checks = {
     ),
     "health": (
         'Text="HEALTH REVIEW"', 'x:Name="SummaryText"', 'x:Name="IssueGrid"',
-        'Click="OnLocateClick"', 'MouseDoubleClick="OnGridDoubleClick"', 'Text="READ-ONLY TRIAGE • ISSUE → CAD LOCATE"',
+        'Click="OnLocateClick"', 'MouseDoubleClick="OnGridDoubleClick"',
+        'Text="READ-ONLY TRIAGE"', 'Text="DOUBLE-CLICK → CAD LOCATE"', 'Text="ISSUE → CAD LOCATE"',
     ),
     "audit": (
-        'Text="AUDIT TRAIL"', 'Text="Tìm nhật ký"', 'x:Name="SearchBox"',
+        'Text="AUDIT TRAIL"', 'Text="TÌM NHẬT KÝ"', 'x:Name="SearchBox"', 'TextChanged="OnSearchChanged"',
         'x:Name="Grid"', 'x:Name="Summary"', 'Text="MỚI NHẤT HIỂN THỊ TRƯỚC"',
     ),
     "room_finish": (
