@@ -49,4 +49,5 @@ All existing production builders, planners, Health services, ownership services,
 - Merge this claim-only reservation before any implementation edit, then re-fetch current active claims.
 - Parse the runner, run the new focused static gate plus Curtain native/orchestration/P01/P02/runtime-health/Level-Curtain and Direct Draw gates, aggregate preflight and installed-reference V25 `Release|x64` build without launching BricsCAD.
 - Deliver through normal PR/squash merge without force-push or Actions, close this source-preparation claim, and hand one clean exact merged-main SHA to the licensed local agent.
+- No BricsCAD launch, GitHub Actions dispatch, private/customer fixture or private runtime artifact access is authorized in this source-preparation batch.
 - Mark only P03 bounded `LOCAL_PASS` after a fresh exact-SHA run satisfies the complete marker and cleanup contract. Until then P03 and overall LOCAL-002 remain `PENDING_LOCAL`.
