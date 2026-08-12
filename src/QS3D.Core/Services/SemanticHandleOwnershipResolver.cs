@@ -80,12 +80,13 @@ namespace QS3D.Core.Services
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (selectedHandles == null) throw new ArgumentNullException(nameof(selectedHandles));
-            EnsureUniqueElementIds(project);
+            var elementOwnership = SnapshotElementOwnership(project);
 
             var inputVersion = project.ChangeVersion;
             var selected = MaterializeSelectedHandles(selectedHandles);
             if (project.ChangeVersion != inputVersion)
                 throw new InvalidOperationException("Project state changed while materializing semantic handle selection. Retry against the current project state.");
+            RequireElementOwnershipUnchanged(project, elementOwnership);
             if (selected.Count == 0) return Array.Empty<ProjectElement>();
 
             var owners = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
@@ -140,16 +141,39 @@ namespace QS3D.Core.Services
             return selected;
         }
 
-        private static void EnsureUniqueElementIds(ProjectState project)
+        private static IReadOnlyDictionary<string, ProjectElement> SnapshotElementOwnership(ProjectState project)
         {
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var result = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
                 if (element == null)
                     throw new InvalidOperationException("Project contains a null element entry.");
-                if (!seen.Add(element.Id))
+                if (!result.TryAdd(element.Id, element))
                     throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
             }
+            return result;
+        }
+
+        private static void RequireElementOwnershipUnchanged(
+            ProjectState project,
+            IReadOnlyDictionary<string, ProjectElement> expected)
+        {
+            if (project.Elements.Count != expected.Count)
+                throw new InvalidOperationException("Project element ownership changed while materializing semantic handle selection. Retry against the current project state.");
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null || !seen.Add(element.Id) ||
+                    !expected.TryGetValue(element.Id, out var original) ||
+                    !ReferenceEquals(original, element))
+                    throw new InvalidOperationException("Project element ownership changed while materializing semantic handle selection. Retry against the current project state.");
+            }
+        }
+
+        private static void EnsureUniqueElementIds(ProjectState project)
+        {
+            SnapshotElementOwnership(project);
         }
 
         private static IReadOnlyList<string> GetCanonicalUniqueStoredSourceHandles(ProjectElement element)
