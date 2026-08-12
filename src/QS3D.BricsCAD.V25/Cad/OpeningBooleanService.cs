@@ -243,9 +243,13 @@ namespace QS3D.BricsCAD.V25.Cad
         private static HashSet<string>? NormalizeRequestedOpenings(ProjectState project, IReadOnlyCollection<string>? openingIds)
         {
             if (openingIds == null) return null;
-            var requested = new HashSet<string>(
-                openingIds.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
-                StringComparer.OrdinalIgnoreCase);
+            var requested = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var raw in openingIds)
+            {
+                if (string.IsNullOrWhiteSpace(raw))
+                    throw new InvalidOperationException("Target opening id cannot be empty.");
+                requested.Add(raw.Trim());
+            }
             foreach (var id in requested)
             {
                 var opening = project.FindElement(id) ?? throw new InvalidOperationException("Target opening not found: " + id);

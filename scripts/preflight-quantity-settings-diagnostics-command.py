@@ -18,7 +18,8 @@ def main():
         "diagnostics.UnreferencedCategoryRuleCodes",
         "diagnostics.MissingDirectedPairs.Take(DetailLimit)",
         "private const int DetailLimit = 20;",
-        'WriteLine(document, "QS3DQSETTINGSHEALTH lỗi: " + ex.Message);',
+        "catch (System.Exception)",
+        'WriteLine(document, "QS3DQSETTINGSHEALTH lỗi: không thể đọc hoặc phân tích Quantity Settings. Kiểm tra cấu hình hoặc cập nhật QS3D.");',
     ]
     missing = [token for token in required if token not in text]
     if missing:
@@ -54,6 +55,11 @@ def main():
         "BooleanOperation",
         "Solid3d",
         "Brep",
+        "ex.Message",
+        "exception.Message",
+        ".StackTrace",
+        "Path.GetFullPath",
+        "Environment.GetFolderPath",
     ]
     present = [token for token in forbidden if token in text]
     if present:
@@ -66,7 +72,7 @@ def main():
         print("ERROR: diagnostic detail output must remain bounded.")
         return 1
 
-    print("PASS: QS3DQSETTINGSHEALTH is a bounded read-only Load -> Analyze diagnostic command with no project/settings/drawing writes or path disclosure.")
+    print("PASS: QS3DQSETTINGSHEALTH is a bounded read-only Load -> Analyze diagnostic command with redacted failures and no project/settings/drawing writes or path disclosure.")
     return 0
 
 

@@ -1,6 +1,6 @@
 # Work claim — Semantic Tag PICKFIRST preflight sync
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-12T13:49:00+07:00`
 - Baseline main SHA: `2857b2c5d5a81aa97d6e631f6dac919c9a01a746`
@@ -34,6 +34,13 @@ Reconcile the existing Semantic Tag static preflight with the already-implemente
 
 Recent active claims reserve Formula arithmetic underflow, Grid Annotation handle identity, Preview Review CDATA shape, interchange name canonicality, Room Finish XLSX round-trip, Curtain Frame/Wall Mesh handle identity, quantity-rule dirty propagation and semantic SourceHandle identity. This reservation does not modify those surfaces. Existing Semantic Tag runtime/local qualification remains separate.
 
+## Completion
+
+- Implementation commit: `cfdc3b34b2fd8652959d00ce7db058cadadd3743` (`test(preflight): track Semantic Tag PICKFIRST flags`).
+- Readback diff confirms exactly three stale command-registration tokens changed: `QS3DTAG`, `QS3DTAGREFRESH`, and `QS3DTAGREMOVE` now require `CommandFlags.Modal | CommandFlags.UsePickSet`.
+- Production command files were read-only and already carry the same intentional PICKFIRST flags.
+- No GitHub Actions were dispatched. No executable preflight/build or licensed BricsCAD runtime PASS is claimed in this remote connector-only lane.
+
 ## Completion condition
 
-A pushed `main` commit updates only the stale Semantic Tag command-flag preflight expectations, followed by this claim marked `COMPLETED` with the implementation SHA and validation actually performed.
+Satisfied by pushed implementation `cfdc3b34b2fd8652959d00ce7db058cadadd3743` and this completion record on `main`.
