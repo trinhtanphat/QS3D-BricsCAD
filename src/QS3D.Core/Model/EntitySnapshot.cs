@@ -5,6 +5,7 @@ namespace QS3D.Core.Model
 {
     public sealed class EntitySnapshot
     {
+        private string _layer = string.Empty;
         private double? _lengthDrawingUnits;
         private double? _areaDrawingUnitsSquared;
         private double? _surfaceAreaDrawingUnitsSquared;
@@ -19,7 +20,11 @@ namespace QS3D.Core.Model
         }
         public string Handle { get; }
         public string EntityType { get; }
-        public string Layer { get; set; }
+        public string Layer
+        {
+            get => _layer;
+            set => _layer = value ?? string.Empty;
+        }
         public double? LengthDrawingUnits
         {
             get => _lengthDrawingUnits;
