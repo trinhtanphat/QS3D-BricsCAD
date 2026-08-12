@@ -19,6 +19,7 @@ wall = read("src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs")
 path_wall = read("src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs")
 wall_pier = read("src/QS3D.BricsCAD.V25/Cad/WallPierProfileSolidBuilder.cs")
 structural = read("src/QS3D.BricsCAD.V25/Cad/StructuralSolidBuilder.cs")
+structural_regenerator = read("src/QS3D.Core/Services/StructuralRegenerator.cs")
 policy = read("src/QS3D.Core/Diagnostics/LevelReferenceNativeIntegrationPolicy.cs")
 
 for token in (
@@ -62,8 +63,17 @@ for label, text in (
 
 if "category == ElementCategory.Slab || category == ElementCategory.Foundation || category == ElementCategory.Column" not in structural:
     errors.append("Closed structural Level placement must stay limited to the quantity-qualified Slab/Foundation/Column host categories.")
-if "category == ElementCategory.Railing" not in structural or 'case ElementCategory.Earthwork:' not in structural:
-    errors.append("Railing/Stair/Earthwork must retain their legacy placement until their quantities and dependents share the Level resolver.")
+if 'case ElementCategory.Railing:' not in structural or structural.count("CadVerticalPlacementResolver.Resolve(") < 2:
+    errors.append("Railing LINE hosts must share the Level resolver used by other quantity-qualified structural LINE categories.")
+for token in (
+    "case ElementCategory.Railing: RegenerateRailing(project, element); break;",
+    "private static void RegenerateRailing(ProjectState project, ProjectElement element)",
+    "QualifiedVerticalQuantity.EffectiveHeight(project, element, legacyHeight)",
+):
+    if token not in structural_regenerator:
+        errors.append("Railing semantic quantities must share effective Level height: " + token)
+if 'case ElementCategory.Stair:' not in structural or 'case ElementCategory.Earthwork:' not in structural:
+    errors.append("Stair/Earthwork must retain their legacy placement until their distinct rise/depth semantics share the Level contract.")
 if "placement.BottomDrawingUnits, polyline.Elevation" not in structural:
     errors.append("Closed structural footprints must translate from source elevation to the resolved absolute bottom.")
 if 'update.Element.Properties["HeightM"] = update.HeightM' not in wall:

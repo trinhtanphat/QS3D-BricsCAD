@@ -132,6 +132,7 @@ require(smoke, "EffectiveHeightIsPreparedWhileProductionRegenerationStaysBlocked
 require(smoke, "ResolveEffectiveHeight(project, foundation, double.NaN)", "bounded effective height smoke")
 require(smoke, "Throws<InvalidOperationException>(() => new WallRegenerator().Regenerate(project, wall))", "unqualified wall quantity refusal smoke")
 require(smoke, "Throws<InvalidOperationException>(() => new StructuralRegenerator().Regenerate(project, foundation))", "unqualified structural quantity refusal smoke")
+require(smoke, "Throws<InvalidOperationException>(() => new StructuralRegenerator().Regenerate(project, railing))", "unqualified Railing quantity refusal smoke")
 require(smoke, "transitive.IsGeneratedSolidStale()", "transitive floor invalidation smoke")
 require(smoke, "bounded-ignores-all-legacy", "Bottom+Top legacy-independence smoke")
 require(smoke, "TopAssignmentRequiresBottomAndValidRange", "assignment safety smoke")

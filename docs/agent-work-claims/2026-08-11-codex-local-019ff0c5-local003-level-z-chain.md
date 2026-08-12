@@ -243,6 +243,6 @@ Reserve only that released smoke file to require successful atomic replacement w
 
 - The previous full-chain paragraph described work that is not present in the fetched repository and referenced an unavailable SHA. It is superseded by this correction and must not be used as source or runtime evidence.
 - Current source at the start of this correction was `b5a24dde25dcc32ff22a869f2f311bfcc80ce4c9`: hosts, hosted straight/curved openings, Auto Host and Curtain LINE/path frame/panel/live-state paths consume the shared placement resolver, but the policy still qualifies no category.
-- This bounded wave adds shared placement to Beam/Column longitudinal bars, Beam stirrups/Column ties, Slab/Foundation/StructuralWall meshes and Level-configured BBS shape origins. Stair/Railing, generated vertical snapshots and Bottom/Top/Clear UI are still absent.
+- This bounded wave adds shared placement to Beam/Column longitudinal bars, Beam stirrups/Column ties, Slab/Foundation/StructuralWall meshes, Level-configured BBS shape origins and Railing LINE height. Stair rise/thickness semantics, generated vertical snapshots and Bottom/Top/Clear UI are still absent.
 - `QS3DLEVELZPROBE` and `scripts/test-bricscad-v25-level-z.ps1` do not exist yet. Do not claim exact-V25 Level proof until a real automation-only probe and the broader local matrix are implemented and run against the exact clean candidate.
 - Claim remains `ACTIVE`; LOCAL-003 remains `OPEN / PENDING_LOCAL / NOT_LOCAL_PASS`.
