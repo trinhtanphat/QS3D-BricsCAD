@@ -52,6 +52,9 @@ namespace QS3D.Core.Audit
             var normalizedAction = (action ?? string.Empty).Trim();
             if (normalizedAction.Length == 0)
                 throw new ArgumentException("Audit action is required.", nameof(action));
+            foreach (var existing in _events)
+                if (existing == null)
+                    throw new InvalidOperationException("Audit trail contains a null event. Repair the existing audit history before recording a new event.");
 
             var item = new AuditEvent
             {
