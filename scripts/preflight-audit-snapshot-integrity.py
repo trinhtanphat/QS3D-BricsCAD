@@ -16,12 +16,18 @@ if AUDIT.is_file():
     text = AUDIT.read_text(encoding="utf-8")
     for token in (
         "var snapshot = new List<AuditEvent>(_events.Count);",
-        "snapshot.Add(Clone(item));",
+        "var validationError = GetStoredEventValidationError(item);",
+        "if (validationError != null) throw new InvalidOperationException(validationError);",
+        "snapshot.Add(Clone(item!));",
         "return snapshot.AsReadOnly();",
         "private static AuditEvent Clone(AuditEvent item)",
     ):
         if token not in text:
-            errors.append("AuditTrail.cs missing deep snapshot token: " + token)
+            errors.append("AuditTrail.cs missing validated deep snapshot token: " + token)
+    validation_pos = text.find("var validationError = GetStoredEventValidationError(item);")
+    clone_pos = text.find("snapshot.Add(Clone(item!));", validation_pos)
+    if validation_pos < 0 or clone_pos < 0 or validation_pos >= clone_pos:
+        errors.append("AuditTrail.Events must validate stored history before deep-cloning each event.")
     if "_events as IReadOnlyList<AuditEvent>" in text:
         errors.append("AuditTrail.Events still exposes the mutable backing list through an interface cast.")
 
@@ -45,4 +51,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: AuditTrail.Events returns a deep read snapshot and cannot mutate authoritative audit state by cast or entry editing.")
+print("PASS: AuditTrail.Events validates stored history, returns a deep read snapshot, and cannot mutate authoritative audit state by cast or entry editing.")
