@@ -53,9 +53,9 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                var message = "QS3DTAGHEALTH lỗi: " + ex.Message;
+                var message = "QS3DTAGHEALTH lỗi: không thể hoàn tất health check.";
                 try { PaletteCoordinator.SetStatus(message); } catch { }
                 try { document.Editor.WriteMessage("\nQS3D " + message); } catch { }
             }
