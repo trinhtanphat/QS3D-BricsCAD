@@ -1,6 +1,6 @@
 # Work claim — Room boundary structural read-only result
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-room-boundary-readonly-result-20260812-0856`
 - Registered: `2026-08-12T08:56:00+07:00`
 - Baseline main SHA: `407b715081b2d1937e49eedab90b959c094e7a27`
@@ -8,22 +8,24 @@
 
 ## Confirmed defect
 
-`RoomBoundaryEngine.Discover(...)` declares `IReadOnlyList<RoomBoundary>` but its successful final path returns `result.OrderBy(...).ToList()` directly. Callers can cast the returned value to `ICollection<RoomBoundary>` and structurally add/remove/clear discovered boundaries after the engine has published the result.
+`RoomBoundaryEngine.Discover(...)` declared `IReadOnlyList<RoomBoundary>` but its successful final path returned `result.OrderBy(...).ToList()` directly. Callers could cast the returned value to `ICollection<RoomBoundary>` and structurally add/remove/clear discovered boundaries after the engine published the result.
 
-## Reserved scope
+## Implemented fix
 
-- `src/QS3D.Core/Geometry/RoomBoundaryEngine.cs` — final successful result boundary only.
-- `tests/QS3D.Core.SmokeTests/RoomBoundaryReadOnlyResultSmoke.cs` — focused CAD-independent regression.
-- this claim file.
+The final sorted result is now wrapped with `.AsReadOnly()`. Existing input/subdivision bounds, geometry/intersection/topology math, canonical boundary ordering/key generation, per-boundary vertex/source snapshots, tolerance/minimum-area handling and empty-result behavior remain unchanged.
 
-## Contract
+## Integration evidence
 
-Return a structural read-only wrapper for the sorted discovered-boundary list while preserving the existing 5,000 input-segment bound, 20,000 subdivided-edge bound, intersection/topology math, boundary ordering/key generation, vertices/source-id snapshots, tolerance/minimum-area validation and empty-result behavior.
+- Claim registration: `9813f5061311c8e71fb41ce6a91729a7c64da1fb`.
+- Source fix: `8ba2de56562ca65ee104c59f21589451f349cf55`.
+- Focused smoke: `8c81351f804a745072a30beee6025f4a53952776`.
+- Source read-back on moving `main` confirmed `return result.OrderBy(...).ToList().AsReadOnly();`.
+- Smoke read-back confirmed a 4×3 rectangle still produces one boundary with area 12, perimeter 14, four vertices/four source IDs and a structural read-only `ICollection<RoomBoundary>` boundary.
 
 ## Coordination
 
-Previous Room Boundary bounded-enumeration, intersection-arithmetic and snap-cell-range claims are `COMPLETED`. This lane does not edit Auto Room lifecycle, command/native discovery, room persistence, boundary key semantics or existing Room Boundary smoke/preflight files.
+Previous Room Boundary bounded-enumeration, intersection-arithmetic and snap-cell-range claims are `COMPLETED`. This lane did not edit Auto Room lifecycle, command/native discovery, room persistence, boundary key semantics or existing Room Boundary smoke/preflight files.
 
-## Validation plan
+## Validation boundary
 
-Discover one ordinary rectangular face, preserve boundary count/key/area/perimeter and read-only child snapshots, require the returned `ICollection<RoomBoundary>` to be read-only, and prove structural `Add` throws `NotSupportedException`. Re-fetch the exact source before write; never force-push. No GitHub Actions dispatch, executable test PASS or BricsCAD runtime qualification claim.
+Deterministic source and focused smoke coverage were committed and read back. No GitHub Actions were dispatched, no executable full Core smoke/build PASS is claimed, and no licensed BricsCAD runtime qualification is claimed.
