@@ -123,6 +123,12 @@ Baseline audited before this expansion: `origin/main@3c332847`. The next full Co
 
 Reserve only that released smoke file to assert the two non-finite assignments fail at their domain boundaries while retaining the finite negative-area Quantity Engine rejection, mutable `ProjectElement` non-finite report rejection and non-finite `QuantityReportRow` totals rejection. Preserve every unrelated continuation regression. Do not edit `EntitySnapshot`, `ElementInstance`, Quantity Engine or reporting production code. Re-run the complete Core smoke after this test-boundary reconciliation.
 
+## 2026-08-12 released smoke compile reconciliation expansion
+
+Baseline audited before this expansion and synchronized through `origin/main@fac26bd8`. After the LOCAL-003 Core prerequisites compile, the full smoke project exposes two released test-only compiler errors: `SafeGeneratedHandleOwnershipMalformedProjectSmoke.cs` intentionally inserts a null semantic entry but does not use the null-forgiving operator required by the nullable build, and `PolygonRegionHolePointLocationOverflowSmoke.cs` uses `IReadOnlyList<T>` without importing `System.Collections.Generic`.
+
+Reserve only those two smoke files for the minimal compile reconciliation: add `!` to the intentional malformed null entry and add the missing framework namespace import. Preserve all runtime assertions, malformed-project behavior, polygon coordinates and production source. Both original claims are `COMPLETE/COMPLETED` and released. Re-run the complete Core smoke after these compile-only fixes.
+
 ## 2026-08-11 source-safe wave heartbeat
 
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
