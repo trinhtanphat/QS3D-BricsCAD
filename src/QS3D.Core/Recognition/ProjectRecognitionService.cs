@@ -68,7 +68,6 @@ namespace QS3D.Core.Recognition
                 if (!string.Equals(RecognitionText.Normalize(pattern), normalizedLayer, StringComparison.OrdinalIgnoreCase)) continue;
                 if (!TryParseNamedCategory(item.Value, out var category))
                     throw new InvalidOperationException("Invalid project layer mapping category: " + item.Value);
-                if (!RecognitionEngine.IsEntityTypeCompatible(category, snapshot.EntityType)) return null;
                 var candidate = new RecognitionCandidate { RuleId = "project-layer:" + pattern, Category = category, Confidence = 0.99d };
                 candidate.Evidence.Add("project-layer:" + pattern);
                 return candidate;
