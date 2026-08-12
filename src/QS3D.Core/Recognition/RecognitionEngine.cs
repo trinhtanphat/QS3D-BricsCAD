@@ -55,10 +55,18 @@ namespace QS3D.Core.Recognition
                 "Recognition rule term collection");
             return materialized
                 .Where(x => !string.IsNullOrWhiteSpace(x))
-                .Select(RecognitionText.Normalize)
+                .Select(NormalizeRequiredTerm)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList()
                 .AsReadOnly();
+        }
+
+        private static string NormalizeRequiredTerm(string value)
+        {
+            var normalized = RecognitionText.Normalize(value);
+            if (normalized.Length == 0)
+                throw new ArgumentException("Recognition rule term must contain at least one letter or digit after normalization.", nameof(value));
+            return normalized;
         }
     }
 
