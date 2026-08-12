@@ -160,7 +160,7 @@ namespace QS3D.BricsCAD.V25.UI
                 if (!(FloorList.SelectedItem is FloorDefinition selectedFloor))
                     throw new InvalidOperationException("Chọn một tầng trước khi thực hiện thao tác.");
                 var previewFloor = previewProject.Floors.FirstOrDefault(x => string.Equals(x.Id, selectedFloor.Id, StringComparison.OrdinalIgnoreCase))
-                    ?? throw new InvalidOperationException("Tầng đã chọn không còn tồn tại trong project hiện tại. Hãy Refresh và chọn lại tầng.");
+                    ?? throw new InvalidOperationException("Tầng đã chọn không còn tồn tại trong project hiện tại. Hãy Refresh và chọn lại.");
                 var expectedProjectId = previewProject.ProjectId;
                 var previewIds = SemanticSelectionResolver.ResolveImplied(_document, previewProject)
                     .Select(x => x.Id)
