@@ -56,9 +56,9 @@ namespace QS3D.BricsCAD.V25
                 var status = "BBS CSV: " + rows.Count + " bar mark • " + totalWeight.ToString("0.###") + " kg • " + dialog.FileName;
                 FinalizeUi(document, status);
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                Report(document, "QS3DBBSCSV lỗi: " + ex.Message);
+                Report(document, "QS3DBBSCSV lỗi: không thể xuất BBS CSV.");
             }
         }
 
@@ -69,11 +69,11 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status);
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
                 try
                 {
-                    document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau export: " + ex.Message);
+                    document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau export: không thể cập nhật giao diện sau khi file đã được xuất.");
                 }
                 catch
                 {
