@@ -25,7 +25,7 @@ namespace QS3D.Core.SmokeTests
         {
             var service = new RevisionService();
 
-            Throws<InvalidOperationException>(() => service.Capture(ProjectWithElement(new ProjectElement("E-\u0001-1", ElementCategory.Wall)), "REV-XML"));
+            Throws<InvalidOperationException>(() => service.Capture(ProjectWithElement(new ProjectElement("E-\u0001-1", ElementCategory.ArchitecturalWall)), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.FamilyId = "F-\u0001-1"), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.FloorId = "L-\u0001-1"), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.ZoneId = "Z-\u0001-1"), "REV-XML"));
@@ -52,7 +52,7 @@ namespace QS3D.Core.SmokeTests
 
         private static ProjectState ProjectWithMutation(Action<ProjectElement> mutate)
         {
-            var element = new ProjectElement("E-1", ElementCategory.Wall);
+            var element = new ProjectElement("E-1", ElementCategory.ArchitecturalWall);
             mutate(element);
             return ProjectWithElement(element);
         }
