@@ -85,10 +85,18 @@ namespace QS3D.Core.Diagnostics
                     CompareCurrent(element, "HeightM", storedHeight, "CURTAIN_FRAME_HEIGHT_STALE", issues);
                 ValidateConfigFingerprint(project, element, storedLength, storedHeight, storedDepth, issues);
 
-                var mode = element.Properties.TryGetValue("GeneratedCurtainFrameMode", out var modeRaw) ? (modeRaw ?? string.Empty).Trim() : string.Empty;
+                var rawMode = element.Properties.TryGetValue("GeneratedCurtainFrameMode", out var modeRaw) ? modeRaw ?? string.Empty : string.Empty;
+                var mode = rawMode.Trim();
                 var lineMode = string.Equals(mode, "LineFrameOverlay", StringComparison.OrdinalIgnoreCase) || string.Equals(mode, "LineFrameOverlay.OpeningAware", StringComparison.OrdinalIgnoreCase);
                 var pathMode = string.Equals(mode, "PathFrameOverlay", StringComparison.OrdinalIgnoreCase) || string.Equals(mode, "PathFrameOverlay.OpeningAware", StringComparison.OrdinalIgnoreCase);
                 var openingAware = string.Equals(mode, "LineFrameOverlay.OpeningAware", StringComparison.OrdinalIgnoreCase) || string.Equals(mode, "PathFrameOverlay.OpeningAware", StringComparison.OrdinalIgnoreCase);
+                var canonicalMode = lineMode
+                    ? (openingAware ? "LineFrameOverlay.OpeningAware" : "LineFrameOverlay")
+                    : pathMode
+                        ? (openingAware ? "PathFrameOverlay.OpeningAware" : "PathFrameOverlay")
+                        : string.Empty;
+                if (canonicalMode.Length > 0 && !string.Equals(rawMode, canonicalMode, StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue("CURTAIN_FRAME_MODE_NON_CANONICAL", HealthSeverity.Error, "GeneratedCurtainFrameMode phải dùng đúng writer-owned token: " + canonicalMode + ".", element.Id));
                 if (!lineMode && !pathMode)
                     issues.Add(new ModelHealthIssue("CURTAIN_FRAME_MODE_INVALID", HealthSeverity.Warning, "GeneratedCurtainFrameMode thiếu hoặc không hợp lệ.", element.Id));
                 else if (openingCount > 0 && !openingAware)
