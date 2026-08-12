@@ -65,8 +65,8 @@ namespace QS3D.BricsCAD.V25.Cad
                 foreach (var element in project.Elements)
                 {
                     if (element == null) continue;
-                    if (!element.Properties.TryGetValue(HandleKey, out var rawHandle) || string.IsNullOrWhiteSpace(rawHandle)) continue;
-                    var handle = rawHandle.Trim();
+                    if (!element.Properties.TryGetValue(HandleKey, out var rawHandle)) continue;
+                    var handle = (rawHandle ?? string.Empty).Trim();
                     if (!long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
                     {
                         issues.Add(new ModelHealthIssue(
