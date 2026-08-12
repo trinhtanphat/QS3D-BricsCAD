@@ -44,8 +44,7 @@ namespace QS3D.Core.Services
                 var changed = new List<string>(updates.Count);
                 foreach (var update in updates)
                 {
-                    update.Element.Properties[key] = update.Value;
-                    update.Element.MarkDirty(DirtyFlags(update.Element, key));
+                    update.Element.SetProperty(key, update.Value);
                     changed.Add(update.Element.Id);
                 }
                 project.Touch();
@@ -82,8 +81,7 @@ namespace QS3D.Core.Services
                 var changed = new List<string>(updates.Count);
                 foreach (var update in updates)
                 {
-                    update.Element.Properties[key] = update.Value;
-                    update.Element.MarkDirty(DirtyFlags(update.Element, key));
+                    update.Element.SetProperty(key, update.Value);
                     changed.Add(update.Element.Id);
                 }
                 project.Touch();
@@ -246,13 +244,6 @@ namespace QS3D.Core.Services
         {
             if (project.ChangeVersion != beforeVersion)
                 throw new InvalidOperationException(label + " changed the project while targets were being enumerated. Retry the bulk edit against the current project state.");
-        }
-
-        private static ElementDirtyFlags DirtyFlags(ProjectElement element, string propertyName)
-        {
-            var flags = ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity;
-            if (ElementGeometryPolicy.AffectsGeneratedGeometry(element.Category, propertyName)) flags |= ElementDirtyFlags.Geometry;
-            return flags;
         }
     }
 }
