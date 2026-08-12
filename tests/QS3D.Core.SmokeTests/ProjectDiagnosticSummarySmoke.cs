@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         {
             SummaryContainsCountsWithoutProjectPayload();
             NullIssuesFailClosedWithoutReplacingExport();
+            UndefinedSeverityFailsClosedWithoutReplacingExport();
             ExportReplacesAtomically();
         }
 
@@ -100,6 +101,49 @@ namespace QS3D.Core.SmokeTests
                 var persisted = File.ReadAllText(path);
                 if (!string.Equals(persisted, "old", StringComparison.Ordinal))
                     throw new Exception("Malformed diagnostic export must not replace the existing destination.");
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+            }
+        }
+
+        private static void UndefinedSeverityFailsClosedWithoutReplacingExport()
+        {
+            var project = new ProjectState("P-SEVERITY", "Diagnostic Severity");
+            var malformed = new[]
+            {
+                new ModelHealthIssue("INVALID_SEVERITY", (HealthSeverity)999, "invalid")
+            };
+
+            try
+            {
+                _ = ProjectDiagnosticSummaryExporter.Build(project, malformed);
+                throw new Exception("Diagnostic summary Build must reject an undefined health severity.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("undefined health severity", StringComparison.Ordinal) < 0)
+                    throw new Exception("Diagnostic summary Build rejected undefined severity for the wrong reason.", ex);
+            }
+
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-diagnostic-severity-" + Guid.NewGuid().ToString("N") + ".json");
+            try
+            {
+                File.WriteAllText(path, "old");
+                try
+                {
+                    ProjectDiagnosticSummaryExporter.Export(path, project, malformed);
+                    throw new Exception("Diagnostic summary Export must reject an undefined health severity.");
+                }
+                catch (InvalidOperationException ex)
+                {
+                    if (ex.Message.IndexOf("undefined health severity", StringComparison.Ordinal) < 0)
+                        throw new Exception("Diagnostic summary Export rejected undefined severity for the wrong reason.", ex);
+                }
+                var persisted = File.ReadAllText(path);
+                if (!string.Equals(persisted, "old", StringComparison.Ordinal))
+                    throw new Exception("Undefined diagnostic severity must not replace the existing destination.");
             }
             finally
             {
