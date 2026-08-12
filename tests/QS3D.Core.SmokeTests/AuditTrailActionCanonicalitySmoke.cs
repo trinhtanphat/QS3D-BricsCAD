@@ -34,6 +34,11 @@ namespace QS3D.Core.SmokeTests
             Require(project.ChangeVersion == beforeVersion, "Whitespace action changed project revision.");
             Require(project.UpdatedUtc == beforeUpdatedUtc, "Whitespace action changed project timestamp.");
             Require(project.AuditEvents.Count == beforeCount, "Whitespace action appended an audit event.");
+
+            Throws<ArgumentException>(() => trail.Record("APPLY\u0001_TEMPLATE", "E1", "detail"));
+            Require(project.ChangeVersion == beforeVersion, "Control-character action changed project revision.");
+            Require(project.UpdatedUtc == beforeUpdatedUtc, "Control-character action changed project timestamp.");
+            Require(project.AuditEvents.Count == beforeCount, "Control-character action appended an audit event.");
         }
 
         private static void CanonicalizesValidActionAndPreservesPayload()
