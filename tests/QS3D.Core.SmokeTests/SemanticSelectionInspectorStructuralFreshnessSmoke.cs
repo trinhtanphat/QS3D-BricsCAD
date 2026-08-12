@@ -56,7 +56,7 @@ namespace QS3D.Core.SmokeTests
             Equal(beforeVersion, project.ChangeVersion, "stable change version");
             Equal(1, inspection.Count, "stable selected count");
             Equal(element.Id, inspection.ElementIds[0], "stable element id");
-            Equal(family.Id, inspection.Family.Value, "stable family id");
+            Equal(family.Id, inspection.Family.Value ?? string.Empty, "stable family id");
             Equal("100", FindProperty(inspection, "Width"), "stable family property");
             Equal("A", FindProperty(inspection, "Mark"), "stable element property");
         }
@@ -97,10 +97,10 @@ namespace QS3D.Core.SmokeTests
             yield return elementId;
         }
 
-        private static string? FindProperty(SemanticSelectionInspection inspection, string name)
+        private static string FindProperty(SemanticSelectionInspection inspection, string name)
         {
             foreach (var property in inspection.Properties)
-                if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)) return property.Value;
+                if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)) return property.Value ?? string.Empty;
             throw new InvalidOperationException("Missing semantic selection property: " + name + ".");
         }
 
