@@ -129,6 +129,12 @@ Baseline audited before this expansion and synchronized through `origin/main@fac
 
 Reserve only those two smoke files for the minimal compile reconciliation: add `!` to the intentional malformed null entry and add the missing framework namespace import. Preserve all runtime assertions, malformed-project behavior, polygon coordinates and production source. Both original claims are `COMPLETE/COMPLETED` and released. Re-run the complete Core smoke after these compile-only fixes.
 
+## 2026-08-12 Grid LINE scale regression expansion
+
+Baseline audited before this expansion and synchronized through `origin/main@9109e05b`. The full Core smoke then reaches the completed `GridLineIntersectionScaleSmoke`, whose large near-parallel LINE result is finite but inaccurate. `GridIntersectionPlanner.Cross(...)` normalizes two nearly equal direction ratios before subtracting them, losing significant digits; the represented endpoints also cannot mathematically produce the ideal exact midpoint within the smoke's `1e-12` tolerance because their `1e160` coordinates quantize the `1e147` offset.
+
+Reserve `src/QS3D.Core/Geometry/GridIntersectionPlanner.cs` and `tests/QS3D.Core.SmokeTests/GridLineIntersectionScaleSmoke.cs` only for this released regression: when raw scale products overflow, use a finite well-conditioned algebraic determinant factorization when available, retain the existing normalized fail-closed fallback otherwise, and compare the smoke result to the exact intersection implied by the actually represented endpoints rather than the unrepresentable ideal midpoint. Preserve LINE/ARC, ARC/ARC, ambiguity, range and ownership behavior. The previous Grid claims are `COMPLETED`; no ACTIVE claim reserves these exact surfaces. Re-run the complete Core smoke after this focused numeric repair.
+
 ## 2026-08-11 source-safe wave heartbeat
 
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
