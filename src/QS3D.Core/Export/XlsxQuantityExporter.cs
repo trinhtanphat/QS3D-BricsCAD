@@ -80,15 +80,15 @@ namespace QS3D.Core.Export
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (detailRows == null) throw new ArgumentNullException(nameof(detailRows));
             if (summaryRows == null) throw new ArgumentNullException(nameof(summaryRows));
-            if (detailRows.Count > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(detailRows), "ED2 CHI_TIET supports at most " + MaxDataRows + " data rows.");
-            if (summaryRows.Count > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(summaryRows), "ED2 TONG_HOP supports at most " + MaxDataRows + " data rows.");
+            var detailSnapshot = SnapshotEd2Rows(detailRows, nameof(detailRows), "ED2 CHI_TIET");
+            var summarySnapshot = SnapshotEd2Rows(summaryRows, nameof(summaryRows), "ED2 TONG_HOP");
+
             var detailIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var detailHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             string? drawingFingerprint = null;
             var detailRowIndex = 0;
-            foreach (var row in detailRows)
+            foreach (var row in detailSnapshot)
             {
-                if (row == null) throw new InvalidDataException("ED2 CHI_TIET contains a null row.");
                 ValidateEd2RowText(row, detailRowIndex, "ED2 CHI_TIET");
                 ValidateEd2RowNumbers(row, detailRowIndex, "ED2 CHI_TIET");
                 if (row.Count != 1 || row.ElementIds.Count != 1)
@@ -103,15 +103,14 @@ namespace QS3D.Core.Export
                     throw new InvalidDataException("ED2 CHI_TIET contains conflicting drawing fingerprints.");
                 detailRowIndex++;
             }
-            if (detailRows.Count == 0) throw new InvalidDataException("ED2 CHI_TIET must contain at least one row.");
+            if (detailSnapshot.Count == 0) throw new InvalidDataException("ED2 CHI_TIET must contain at least one row.");
 
             var summaryIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var summaryHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var summaryCount = 0;
             var summaryRowIndex = 0;
-            foreach (var row in summaryRows)
+            foreach (var row in summarySnapshot)
             {
-                if (row == null) throw new InvalidDataException("ED2 TONG_HOP contains a null row.");
                 ValidateEd2RowText(row, summaryRowIndex, "ED2 TONG_HOP");
                 ValidateEd2RowNumbers(row, summaryRowIndex, "ED2 TONG_HOP");
                 summaryCount = checked(summaryCount + row.Count);
@@ -125,11 +124,59 @@ namespace QS3D.Core.Export
                 foreach (var handle in row.SourceHandles) summaryHandles.Add(ValidHandle(handle, "TONG_HOP"));
                 summaryRowIndex++;
             }
-            if (summaryRows.Count == 0) throw new InvalidDataException("ED2 TONG_HOP must contain at least one row.");
-            if (summaryCount != detailRows.Count || !summaryIds.SetEquals(detailIds) || !summaryHandles.SetEquals(detailHandles))
+            if (summarySnapshot.Count == 0) throw new InvalidDataException("ED2 TONG_HOP must contain at least one row.");
+            if (summaryCount != detailSnapshot.Count || !summaryIds.SetEquals(detailIds) || !summaryHandles.SetEquals(detailHandles))
                 throw new InvalidDataException("ED2 CHI_TIET and TONG_HOP do not describe the same semantic scope.");
-            ValidateEd2NumericParity(detailRows, summaryRows);
-            ExportCore(path, detailRows, summaryRows);
+            ValidateEd2NumericParity(detailSnapshot, summarySnapshot);
+            ExportCore(path, detailSnapshot, summarySnapshot);
+        }
+
+        private static IReadOnlyList<QuantityReportRow> SnapshotEd2Rows(
+            IReadOnlyList<QuantityReportRow> rows,
+            string parameterName,
+            string sheetLabel)
+        {
+            var count = rows.Count;
+            if (count > MaxDataRows)
+                throw new ArgumentOutOfRangeException(parameterName, sheetLabel + " supports at most " + MaxDataRows + " data rows.");
+
+            var snapshot = new List<QuantityReportRow>(count);
+            for (var rowIndex = 0; rowIndex < count; rowIndex++)
+            {
+                var source = rows[rowIndex];
+                if (source == null) throw new InvalidDataException(sheetLabel + " contains a null row.");
+                var row = new QuantityReportRow
+                {
+                    Floor = source.Floor ?? string.Empty,
+                    Zone = source.Zone ?? string.Empty,
+                    Category = source.Category ?? string.Empty,
+                    FamilyId = source.FamilyId ?? string.Empty,
+                    FamilyName = source.FamilyName ?? string.Empty,
+                    ElementName = source.ElementName ?? string.Empty,
+                    Material = source.Material ?? string.Empty,
+                    Note = source.Note ?? string.Empty,
+                    DrawingFingerprint = source.DrawingFingerprint ?? string.Empty,
+                    Count = source.Count,
+                    GrossConcreteM3 = source.GrossConcreteM3,
+                    DeductionM3 = source.DeductionM3,
+                    NetConcreteM3 = source.NetConcreteM3,
+                    FormworkM2 = source.FormworkM2,
+                    LengthM = source.LengthM,
+                    OuterPerimeterM = source.OuterPerimeterM,
+                    InnerPerimeterM = source.InnerPerimeterM,
+                    DoorAreaM2 = source.DoorAreaM2,
+                    SideAreaM2 = source.SideAreaM2,
+                    BottomAreaM2 = source.BottomAreaM2,
+                    TopAreaM2 = source.TopAreaM2,
+                    OtherAreaM2 = source.OtherAreaM2,
+                    DensityKgM3 = source.DensityKgM3,
+                    MassKg = source.MassKg
+                };
+                SnapshotStrings(source.ElementIds, row.ElementIds);
+                SnapshotStrings(source.SourceHandles, row.SourceHandles);
+                snapshot.Add(row);
+            }
+            return snapshot;
         }
 
         private static void ValidateEd2NumericParity(
