@@ -108,8 +108,12 @@ namespace QS3D.Core.Diagnostics
                 {
                     OptionalInteger(element, "GeneratedCurtainFramePathSegmentCount", false, issues, "CURTAIN_FRAME_PATH_SEGMENTS_INVALID");
                     OptionalInteger(element, "GeneratedCurtainFrameMappedFrameCount", true, issues, "CURTAIN_FRAME_MAPPED_COUNT_INVALID");
-                    if (!element.Properties.TryGetValue("GeneratedCurtainFrameSourceKind", out var sourceKind) || !string.Equals((sourceKind ?? string.Empty).Trim(), "OpenPolyline", StringComparison.OrdinalIgnoreCase))
+                    var rawSourceKind = element.Properties.TryGetValue("GeneratedCurtainFrameSourceKind", out var sourceKindRaw) ? sourceKindRaw ?? string.Empty : string.Empty;
+                    var sourceKind = rawSourceKind.Trim();
+                    if (!string.Equals(sourceKind, "OpenPolyline", StringComparison.OrdinalIgnoreCase))
                         issues.Add(new ModelHealthIssue("CURTAIN_FRAME_PATH_SOURCE_KIND_INVALID", HealthSeverity.Warning, "Path curtain frame cần GeneratedCurtainFrameSourceKind=OpenPolyline; rebuild curtain frames.", element.Id));
+                    else if (!string.Equals(rawSourceKind, "OpenPolyline", StringComparison.Ordinal))
+                        issues.Add(new ModelHealthIssue("CURTAIN_FRAME_PATH_SOURCE_KIND_NON_CANONICAL", HealthSeverity.Error, "GeneratedCurtainFrameSourceKind phải dùng đúng writer-owned token OpenPolyline.", element.Id));
                 }
 
                 if (element.Category != ElementCategory.GlassWall)
