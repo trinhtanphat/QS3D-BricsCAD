@@ -32,7 +32,7 @@ namespace QS3D.Core.Persistence
             if (string.IsNullOrWhiteSpace(primaryPath))
                 throw new ArgumentException("A QSDB primary path is required.", nameof(primaryPath));
 
-            var fullPath = Path.GetFullPath(primaryPath.Trim());
+            var fullPath = Path.GetFullPath(primaryPath);
             using (var primary = FileCapture.Open(fullPath))
             using (var backup = FileCapture.Open(fullPath + ".bak"))
             {
@@ -53,7 +53,7 @@ namespace QS3D.Core.Persistence
             if (string.IsNullOrWhiteSpace(primaryPath)) return false;
             try
             {
-                return PathComparer.Equals(_primaryPath, Path.GetFullPath(primaryPath.Trim()));
+                return PathComparer.Equals(_primaryPath, Path.GetFullPath(primaryPath));
             }
             catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException)
             {
