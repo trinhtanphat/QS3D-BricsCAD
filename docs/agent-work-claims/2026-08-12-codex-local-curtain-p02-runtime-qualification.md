@@ -1,6 +1,6 @@
 # Work claim — LOCAL-002/P02 licensed Curtain opening-clipping qualification
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local-curtain-p02-runtime-qualification-20260812` (`/root`)
 - Registered: `2026-08-12T12:10:00+07:00`
 - Baseline main SHA: `ef093faa058b39d9c246d90ca55c0b22591f5f76`
@@ -37,3 +37,10 @@
 - Ownership sets were disjoint, Health issue count was zero, Locate resolved one panel to one canonical owner, and source geometry was preserved.
 - The repository-generated disposable drawing hash remained `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`; launched-process exit, private-script deletion and sidecar/backup absence were independently verified. No customer/private/BLT artifact or GitHub Actions workflow was used.
 - This proves only bounded P02. P03-P12 and overall LOCAL-002 remain `PENDING_LOCAL`.
+
+## Close-out — 2026-08-12
+
+- Claim-only PR `#841` merged as `79782b0882f6e144f0549ce143d5364830b87eb4` before the licensed run.
+- The first sanitized V2 failure supported separately claimed centered-box correction PRs `#845`, `#850` and `#851`; the fresh post-fix exact-SHA run then satisfied every bounded P02 marker and cleanup invariant.
+- Evidence/docs PR `#859` merged as `ccd2196ad7d5727b17ba59d5a2e5bd7093c75547` and records the exact runtime identity, aggregate counts and narrow status boundary.
+- P02 is bounded `LOCAL_PASS`; P03-P12 and overall LOCAL-002 remain open and `PENDING_LOCAL`. No GitHub Actions, release, signing, package publication or private/customer/BLT artifact was used.
