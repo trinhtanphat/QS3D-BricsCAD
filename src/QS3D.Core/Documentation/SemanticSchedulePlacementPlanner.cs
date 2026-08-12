@@ -215,10 +215,10 @@ namespace QS3D.Core.Documentation
 
             foreach (var y in ys)
             {
-                if (y + item.HeightMm > bottom) continue;
+                if (y < options.MarginTopMm || y + item.HeightMm > bottom) continue;
                 foreach (var x in xs)
                 {
-                    if (x + item.WidthMm > right) continue;
+                    if (x < options.MarginLeftMm || x + item.WidthMm > right) continue;
                     var candidate = new Region(x, y, item.WidthMm, item.HeightMm);
                     if (occupied.Any(region => Conflicts(region, candidate, options.HorizontalGapMm, options.VerticalGapMm))) continue;
                     return new SemanticSchedulePlacement(item.ScheduleId, x, y, item.WidthMm, item.HeightMm);
