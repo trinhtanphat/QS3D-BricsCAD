@@ -1,6 +1,6 @@
 # Work claim — Curtain Panel SourceHandles numeric identity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-12T14:13:20+07:00`
 - Baseline main SHA: `f54e49495a11471f8374dcafd60f639903f0f3ef`
@@ -24,15 +24,15 @@ Make `GeneratedCurtainPanelHealthService` detect generated/source overlap using 
 
 ## Evidence
 
-Shared generated ownership treats valid positive hexadecimal aliases such as `A` and `0A` as one CAD identity. PR #918 normalized Curtain Panel generated-handle duplicate/ownership/live checks but intentionally left `SourceHandles` comparison as raw trimmed spelling. Current code therefore misses a generated/source collision when generated metadata says `A` and `SourceHandles` says `0A`. Slab Mesh and other hardened providers already normalize SourceHandles before this overlap check; Semantic Tag PR #925 fixed the same class of defect.
+Shared generated ownership treats valid positive hexadecimal aliases such as `A` and `0A` as one CAD identity. PR #918 normalized Curtain Panel generated-handle duplicate/ownership/live checks but intentionally left `SourceHandles` comparison as raw trimmed spelling. Current code therefore missed a generated/source collision when generated metadata said `A` and `SourceHandles` said `0A`. Slab Mesh and other hardened providers already normalize SourceHandles before this overlap check; Semantic Tag PR #925 fixed the same class of defect.
 
-## Validation plan
+## Validation
 
-- Normalize each SourceHandle with `GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(...)` and compare to the already-computed generated `identity`.
-- Extend existing auto-registered Curtain Panel numeric-handle smoke with alias-overlap rejection and a genuinely distinct source-handle control.
-- Preserve project immutability assertions and all existing numeric live/duplicate/missing cases.
-- Read back exact diffs; do not claim executable full smoke/build/Actions/V25 runtime PASS unless actually run.
+- Product fix: `48f827ceed0e4f54e817a5e8457282d873c55179` (`fix(health): normalize Curtain Panel SourceHandles identity`). Readback confirms exactly one production line changed: SourceHandles now normalize through `GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(...)` and compare against the already-normalized generated identity.
+- Regression: `36d794a04341bf956b5b9b928184b9900541f3eb` (`test(health): cover Curtain Panel SourceHandles aliases`). The existing module-initialized numeric-handle smoke now requires `A` vs `0A` source/generated overlap to report `CURTAIN_PANEL_GENERATED_HANDLE_IN_SOURCE` and keeps a distinct `B` control clean for that diagnostic.
+- Existing live-handle, duplicate-spelling, missing-live, project-version, ownership and count assertions remain intact.
+- No GitHub Actions were dispatched. No executable full smoke/build or licensed BricsCAD runtime PASS is claimed.
 
 ## Completion condition
 
-A pushed `main` implementation fixes source/generated alias overlap and adds focused regression coverage, followed by this claim marked `COMPLETED` with exact implementation SHA(s).
+Satisfied by pushed product fix `48f827ceed0e4f54e817a5e8457282d873c55179`, regression `36d794a04341bf956b5b9b928184b9900541f3eb`, and this completion record on `main`.
