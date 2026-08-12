@@ -3,13 +3,13 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-TOLERANT_FILES = [
-    ROOT / "src/QS3D.Core/Diagnostics/GeneratedWallMeshHealthService.cs",
-    ROOT / "src/QS3D.Core/Diagnostics/GeneratedBeamStirrupHealthService.cs",
-    ROOT / "src/QS3D.Core/Diagnostics/GeneratedTieRebarHealthService.cs",
-]
-REBAR = ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs"
-FILES = TOLERANT_FILES + [REBAR]
+FAIL_CLOSED_FILES = {
+    ROOT / "src/QS3D.Core/Diagnostics/GeneratedWallMeshHealthService.cs": "Wall mesh health cannot inspect a null project element.",
+    ROOT / "src/QS3D.Core/Diagnostics/GeneratedBeamStirrupHealthService.cs": "Beam stirrup health cannot inspect a null project element.",
+    ROOT / "src/QS3D.Core/Diagnostics/GeneratedTieRebarHealthService.cs": "Tie rebar health cannot inspect a null project element.",
+    ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarHealthService.cs": "Generated rebar health cannot inspect a null project element.",
+}
+FILES = list(FAIL_CLOSED_FILES)
 POLICY = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs"
 INDEX = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipIndex.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/GeneratedRebarProviderOwnershipSmoke.cs"
@@ -35,18 +35,12 @@ for path in FILES:
             errors.append(path.name + " missing order-independent diagnostic ownership token: " + token)
     if "normalized.Length == 0 || owners.ContainsKey(normalized)" in text:
         errors.append(path.name + " still uses first-owner-wins reservation logic.")
-
-for path in TOLERANT_FILES:
-    if path.is_file() and "if (element == null) continue;" not in path.read_text(encoding="utf-8"):
-        errors.append(path.name + " diagnostic provider no longer tolerates isolated null entries.")
-
-if REBAR.is_file():
-    text = REBAR.read_text(encoding="utf-8")
-    null_guard = 'throw new InvalidOperationException("Generated rebar health cannot inspect a null project element.")'
-    if text.count(null_guard) != 4:
-        errors.append("GeneratedRebarHealthService must fail closed in exactly four semantic traversals.")
+    null_message = FAIL_CLOSED_FILES[path]
+    null_guard = 'throw new InvalidOperationException("' + null_message + '")'
+    if null_guard not in text:
+        errors.append(path.name + " must reject null semantic entries fail closed: " + null_message)
     if "if (element == null) continue;" in text:
-        errors.append("GeneratedRebarHealthService must not silently skip null semantic entries.")
+        errors.append(path.name + " must not silently skip null semantic entries.")
 
 if POLICY.is_file():
     text = POLICY.read_text(encoding="utf-8")
@@ -66,10 +60,15 @@ if POLICY.is_file():
 
 if INDEX.is_file():
     text = INDEX.read_text(encoding="utf-8")
-    if "if (element == null) continue;" not in text:
-        errors.append("GeneratedHandleOwnershipIndex diagnostic cache no longer tolerates isolated null entries.")
-    if "if (entry.Ambiguity != null) throw new InvalidOperationException" not in text:
-        errors.append("GeneratedHandleOwnershipIndex must remain fail-closed on ambiguous generated owners.")
+    for token in (
+        "EnsureValidUniqueElementIds(project);",
+        'throw new InvalidOperationException("Generated handle ownership index cannot inspect a null project element.")',
+        "if (entry.Ambiguity != null) throw new InvalidOperationException",
+    ):
+        if token not in text:
+            errors.append("GeneratedHandleOwnershipIndex missing fail-closed ownership token: " + token)
+    if "if (element == null) continue;" in text:
+        errors.append("GeneratedHandleOwnershipIndex must not silently skip null semantic entries.")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
@@ -101,4 +100,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: generated wall/tie/stirrup diagnostics remain null-tolerant and order-independent; GeneratedRebar and canonical ownership policy fail closed on corrupt semantic element sets and ambiguity.")
+print("PASS: generated wall/tie/stirrup/rebar diagnostics and the canonical ownership index reject corrupt null semantic entries fail closed while preserving order-independent ownership ambiguity detection.")
