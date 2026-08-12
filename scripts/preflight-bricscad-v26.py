@@ -37,6 +37,7 @@ workflow = read(".github/workflows/bricscad-v26.yml")
 runtime = read("scripts/test-bricscad-v26-runtime.ps1")
 qualification = read("docs/LOCAL-V26-QUALIFICATION.md")
 core = read("src/QS3D.Core/QS3D.Core.csproj")
+build_props = read("Directory.Build.props")
 
 for token in ("<TargetFramework>net48</TargetFramework>", "QS3D.BricsCAD.V25", "BRICSCAD_V25_DIR"):
     require(v25, token, "V25 project")
@@ -100,9 +101,27 @@ require(v26_release_client, "QS3D-BricsCAD-V26-Updater", "V26 release client")
 for token in ("QS3D-BricsCAD-V25.update.json", "QS3D-BricsCAD-V25.zip", "QS3D-BricsCAD-V25-Updater"):
     forbid(v26_release_client, token, "V26 release client")
 
+# .NET 8 treats WebRequest/CreateHttp as obsolete (SYSLIB0014). The repository
+# builds with warnings-as-errors, so V26 networking must stay on HttpClient.
+for text, label in (
+    (v26_release_client, "V26 release client"),
+    (v26_manifest_probe, "V26 manifest probe"),
+):
+    for token in (
+        "using System.Net.Http;",
+        "HttpClient",
+        "HttpClientHandler",
+        "HttpCompletionOption.ResponseHeadersRead",
+        "CancellationTokenSource",
+        "Timeout.InfiniteTimeSpan",
+    ):
+        require(text, token, label)
+    for token in ("WebRequest.CreateHttp", "HttpWebRequest"):
+        forbid(text, token, label)
+
 for token in (
     'private const string Target = "BricsCAD V26 x64";',
-    'request.UserAgent = "QS3D-BricsCAD-V26-Updater";',
+    'request.Headers.UserAgent.ParseAdd("QS3D-BricsCAD-V26-Updater")',
     '"QS3D-BricsCAD-V26.zip"',
     "GitHubReleaseClient.UpdateManifestAssetName",
     "schemaVersion 2",
@@ -157,6 +176,7 @@ for token in ("LOCAL_ONLY", "DO_NOT_RETRY_REMOTE", "net8.0-windows", "BRICSCAD_V
     require(qualification, token, "V26 local qualification")
 
 require(core, "<TargetFramework>netstandard2.0</TargetFramework>", "Core project")
+require(build_props, "<TreatWarningsAsErrors>true</TreatWarningsAsErrors>", "Directory.Build.props")
 
 print("QS3D BricsCAD V26 source compatibility preflight")
 if errors:
@@ -165,4 +185,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: V25 remains net48; V26 is isolated on net8.0-windows with a dedicated solution, V26-only refs/runtime/update assets, shared updater lifecycle is host-neutral, and V25/V26 release discovery is manifest-channel isolated.")
+print("PASS: V25 remains net48; V26 is isolated on net8.0-windows with a dedicated solution, V26-only refs/runtime/update assets, HttpClient-only .NET 8 updater networking, and manifest-channel-isolated release discovery.")
