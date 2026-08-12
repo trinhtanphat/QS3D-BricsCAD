@@ -9,6 +9,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             RestorePreservesCapturedElementIdentity();
+            RestoreIntoDifferentSameIdProjectNeverInjectsCapturedElements();
             DetachedCopyNeverAliasesCanonicalElements();
         }
 
@@ -99,6 +100,31 @@ namespace QS3D.Core.SmokeTests
             Require(project.Metadata["SnapshotMarker"] == "before", "Rollback did not restore project metadata.");
             Require(project.ChangeVersion == projectChangeVersion, "Rollback did not restore project ChangeVersion.");
             Require(project.UpdatedUtc == projectUpdatedUtc, "Rollback did not restore project UpdatedUtc.");
+        }
+
+        private static void RestoreIntoDifferentSameIdProjectNeverInjectsCapturedElements()
+        {
+            var capturedProject = new ProjectState("snapshot-shared-id", "Captured project");
+            var capturedElement = new ProjectElement("E1", ElementCategory.Beam);
+            capturedElement.Properties["Name"] = "Captured";
+            capturedProject.Elements.Add(capturedElement);
+            var rollback = ProjectStateSnapshot.Capture(capturedProject);
+
+            var foreignProject = new ProjectState("snapshot-shared-id", "Foreign project");
+            var foreignElement = new ProjectElement("E1", ElementCategory.Column);
+            foreignElement.Properties["Name"] = "Foreign";
+            foreignProject.Elements.Add(foreignElement);
+
+            rollback.Restore(foreignProject);
+
+            var restoredElement = foreignProject.FindElement("E1") ?? throw new Exception("Foreign-target restore lost E1.");
+            Require(!ReferenceEquals(restoredElement, capturedElement), "Foreign-target restore injected a canonical element reference from the captured project.");
+            Require(!ReferenceEquals(restoredElement, foreignElement), "Foreign-target restore unexpectedly reused the foreign project's pre-restore element reference.");
+            Require(restoredElement.Category == ElementCategory.Beam, "Foreign-target restore did not copy captured element values.");
+            Require(restoredElement.Properties["Name"] == "Captured", "Foreign-target restore did not copy captured element properties.");
+
+            restoredElement.SetProperty("Name", "Restored foreign");
+            Require(capturedElement.Properties["Name"] == "Captured", "Mutating a foreign-target restored element changed the captured project's canonical element.");
         }
 
         private static void DetachedCopyNeverAliasesCanonicalElements()

@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         {
             NewResolvedAndPersistentIssuesAreClassified();
             DuplicateIssuesAreStable();
+            StaleMessageChangesRemainPersistent();
             CrossProjectDiffFailsClosed();
             SemanticCaptureIsReadOnly();
         }
@@ -57,6 +58,33 @@ namespace QS3D.Core.SmokeTests
             Equal(2, baseline.Issues.Count);
             Equal(1, baseline.WarningCount);
             Equal(1, baseline.InfoCount);
+        }
+
+        private static void StaleMessageChangesRemainPersistent()
+        {
+            var project = Project("P-STALE");
+            var service = new ModelHealthBaselineService();
+            var before = service.Capture(project, new[]
+            {
+                new ModelHealthIssue("GENERATED_SOLID_STALE", HealthSeverity.Warning, "reason A", "E1"),
+                new ModelHealthIssue("ORDINARY_WARNING", HealthSeverity.Warning, "message A", "E2")
+            });
+            var after = service.Capture(project, new[]
+            {
+                new ModelHealthIssue("GENERATED_SOLID_STALE", HealthSeverity.Warning, "reason B", "E1"),
+                new ModelHealthIssue("ORDINARY_WARNING", HealthSeverity.Warning, "message B", "E2")
+            });
+
+            var diff = service.Compare(before, after);
+            Equal(1, diff.PersistentIssues.Count);
+            Equal("GENERATED_SOLID_STALE", diff.PersistentIssues[0].Code);
+            Equal("reason B", diff.PersistentIssues[0].Message);
+            Equal(1, diff.NewIssues.Count);
+            Equal("ORDINARY_WARNING", diff.NewIssues[0].Code);
+            Equal("message B", diff.NewIssues[0].Message);
+            Equal(1, diff.ResolvedIssues.Count);
+            Equal("ORDINARY_WARNING", diff.ResolvedIssues[0].Code);
+            Equal("message A", diff.ResolvedIssues[0].Message);
         }
 
         private static void CrossProjectDiffFailsClosed()

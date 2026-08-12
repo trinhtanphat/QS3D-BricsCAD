@@ -18,13 +18,33 @@ namespace QS3D.Core.Diagnostics
             {
                 var index = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var handle in liveGeneratedHandles)
-                    if (handle != null) index.Add(handle);
+                    if (!string.IsNullOrWhiteSpace(handle)) index.Add(handle.Trim());
                 liveHandleIndex = index;
             }
 
             var issues = new List<ModelHealthIssue>();
-            AddProviderIssues(issues, "RoomFinishHealthService", () => new RoomFinishHealthService().Inspect(project));
-            AddProviderIssues(issues, "GeneratedCurtainPanelHealthService", () => new GeneratedCurtainPanelHealthService().Inspect(project, liveHandleIndex));
+            try
+            {
+                issues.AddRange(new RoomFinishHealthService().Inspect(project));
+            }
+            catch (InvalidOperationException)
+            {
+                issues.Add(new ModelHealthIssue(
+                    "BOM_ROOM_FINISH_HEALTH_FAILED",
+                    HealthSeverity.Error,
+                    "Không thể chạy chẩn đoán Room Finish an toàn; phát hành BQ bị chặn."));
+            }
+            try
+            {
+                issues.AddRange(new GeneratedCurtainPanelHealthService().Inspect(project, liveHandleIndex));
+            }
+            catch (InvalidOperationException)
+            {
+                issues.Add(new ModelHealthIssue(
+                    "BOM_CURTAIN_PANEL_HEALTH_FAILED",
+                    HealthSeverity.Error,
+                    "Không thể chạy chẩn đoán Curtain Panel an toàn; phát hành BQ bị chặn."));
+            }
 
             var included = new List<ProjectElement>();
             foreach (var element in project.Elements)
@@ -110,24 +130,6 @@ namespace QS3D.Core.Diagnostics
             }
 
             return issues.AsReadOnly();
-        }
-
-        private static void AddProviderIssues(
-            ICollection<ModelHealthIssue> issues,
-            string providerName,
-            Func<IReadOnlyList<ModelHealthIssue>> inspect)
-        {
-            try
-            {
-                foreach (var issue in inspect()) issues.Add(issue);
-            }
-            catch (Exception)
-            {
-                issues.Add(new ModelHealthIssue(
-                    "BOM_HEALTH_PROVIDER_FAILED",
-                    HealthSeverity.Error,
-                    providerName + " khÃ´ng thá»ƒ hoÃ n táº¥t kiá»ƒm tra phÃ¡t hÃ nh BQ an toÃ n."));
-            }
         }
     }
 }

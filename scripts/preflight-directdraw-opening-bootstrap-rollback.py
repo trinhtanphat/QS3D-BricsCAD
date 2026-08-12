@@ -46,9 +46,13 @@ def main():
         "projectPreview.ResolveForMutation(document, operation);",
         "ProjectStateSnapshot.Capture(project);")
 
-    require(execute, "new AutoHostLinkCommands().AutoLinkHosts();", "Auto Host preservation")
+    require(execute, "hostId = AutoHostLinkCommands.LinkSingleOpening(document, project, createdElementId);", "exact Auto Host preservation")
     require(execute, "string.Equals(x.Id, createdElementId, StringComparison.OrdinalIgnoreCase)", "stable-id re-resolution")
+    require(execute, 'createdElement.Properties.TryGetValue("HostWallId", out var recordedHostId)', "canonical host verification")
+    require(execute, 'string.Equals(recordedHostId.Trim(), hostId, StringComparison.OrdinalIgnoreCase)', "resolved host identity verification")
     require(execute, "RegenerateDirtySubset(project, new[] { createdElementId, hostId })", "scoped host regeneration")
+    if "new AutoHostLinkCommands().AutoLinkHosts()" in execute:
+        raise AssertionError("Opening Direct Draw must not re-enter broad pick-set AutoHost")
 
     require_order(
         execute,
@@ -61,7 +65,7 @@ def main():
     require(execute, "if (cleanupError != null || restoreError != null)", "rollback error aggregation")
     require(execute, "new AggregateException(errors)", "rollback aggregate preservation")
 
-    print("PASS: Door/WallOpening Direct Draw forgets only failed projectless bootstraps while preserving Auto Host guards.")
+    print("PASS: Door/WallOpening Direct Draw forgets only failed projectless bootstraps while preserving exact single-opening AutoHost, canonical host verification and rollback guards.")
     return 0
 
 

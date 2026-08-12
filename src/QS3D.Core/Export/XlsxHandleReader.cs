@@ -96,19 +96,21 @@ namespace QS3D.Core.Export
                     return new XlsxHandleLookupResult(Array.Empty<string>(), Array.Empty<string>(), string.Empty, false, worksheet.Name, false, worksheet.IsEd2Detail);
 
                 var targetCells = ReadCells(target, ns, sharedStrings);
-                var handleColumns = new HashSet<int>();
+                var exactHandleColumns = new HashSet<int>();
+                var fuzzyHandleColumns = new HashSet<int>();
                 var elementIdColumns = new HashSet<int>();
                 var fingerprintColumns = new HashSet<int>();
                 foreach (var headerRow in rows.Where(x => ParsePositiveInt((string?)x.Attribute("r")) < rowNumber).Take(10))
                     foreach (var cell in ReadCells(headerRow, ns, sharedStrings))
                     {
                         var header = (cell.Value ?? string.Empty).Trim();
-                        if (string.Equals(header, "CAD Handle (hex)", StringComparison.OrdinalIgnoreCase)) handleColumns.Add(cell.Key);
-                        else if (header.IndexOf("handle", StringComparison.OrdinalIgnoreCase) >= 0) handleColumns.Add(cell.Key);
+                        if (string.Equals(header, "CAD Handle (hex)", StringComparison.OrdinalIgnoreCase)) exactHandleColumns.Add(cell.Key);
+                        else if (header.IndexOf("handle", StringComparison.OrdinalIgnoreCase) >= 0) fuzzyHandleColumns.Add(cell.Key);
                         if (string.Equals(header, "QS3D Drawing Fingerprint", StringComparison.OrdinalIgnoreCase)) fingerprintColumns.Add(cell.Key);
                         if (string.Equals(header, "QS3D Element ID", StringComparison.OrdinalIgnoreCase)) elementIdColumns.Add(cell.Key);
                     }
 
+                var handleColumns = exactHandleColumns.Count > 0 ? exactHandleColumns : fuzzyHandleColumns;
                 var isModernSchema = elementIdColumns.Count > 0 || fingerprintColumns.Count > 0;
                 if (worksheet.IsEd2Detail && !isModernSchema)
                     throw new InvalidDataException("ED2 CHI_TIET is missing its modern QS3D identity headers and cannot be treated as a legacy BLT sheet.");
@@ -253,6 +255,12 @@ namespace QS3D.Core.Export
                         if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var index) || index < 0 || index >= sharedStrings.Count)
                             throw new InvalidDataException("Excel shared-string cell contains an invalid shared-string index.");
                         value = sharedStrings[index];
+                    }
+                    else if (string.Equals(type, "b", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (string.Equals(value, "0", StringComparison.Ordinal)) value = "FALSE";
+                        else if (string.Equals(value, "1", StringComparison.Ordinal)) value = "TRUE";
+                        else throw new InvalidDataException("Excel Boolean cell contains an invalid Boolean value.");
                     }
                 }
                 if (result.ContainsKey(column)) throw new InvalidDataException("Excel row contains duplicate cells in column " + (column + 1) + ".");

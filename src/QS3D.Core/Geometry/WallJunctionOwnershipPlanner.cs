@@ -109,6 +109,7 @@ namespace QS3D.Core.Geometry
         private const string GroupTokenPrefix = "WJP1:";
         private const string OwnerTokenPrefix = "WJX1:";
         private const string FingerprintPrefix = "WJF1:";
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         private sealed class NormalizedOwner
         {
@@ -398,7 +399,16 @@ namespace QS3D.Core.Geometry
             var normalized = value.Trim();
             if (normalized.Length > MaxIdentityLength)
                 throw new InvalidOperationException(label + " exceeds " + MaxIdentityLength + " characters.");
-            return normalized.ToUpperInvariant();
+            var canonical = normalized.ToUpperInvariant();
+            try
+            {
+                StrictUtf8.GetByteCount(canonical);
+            }
+            catch (EncoderFallbackException ex)
+            {
+                throw new InvalidOperationException(label + " must contain well-formed Unicode text.", ex);
+            }
+            return canonical;
         }
 
         private static void AppendPacked(StringBuilder builder, string value)
@@ -413,7 +423,7 @@ namespace QS3D.Core.Geometry
         {
             using (var sha = SHA256.Create())
             {
-                var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(value));
+                var bytes = sha.ComputeHash(StrictUtf8.GetBytes(value));
                 return BitConverter.ToString(bytes).Replace("-", string.Empty).ToLowerInvariant();
             }
         }

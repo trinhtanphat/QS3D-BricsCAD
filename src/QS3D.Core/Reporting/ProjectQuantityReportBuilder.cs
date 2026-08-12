@@ -132,7 +132,8 @@ namespace QS3D.Core.Reporting
             {
                 var id = (raw ?? string.Empty).Trim();
                 if (id.Length == 0) throw new ArgumentException("Quantity report element ids must not be blank.", nameof(elementIds));
-                if (!selected.Add(id)) continue;
+                if (!selected.Add(id))
+                    throw new ArgumentException("Quantity report element ids must be unique. Duplicate id: " + id + ".", nameof(elementIds));
                 if (project.FindElement(id) == null) throw new KeyNotFoundException("Unknown quantity report element: " + id);
             }
             return selected;

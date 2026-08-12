@@ -26,7 +26,7 @@ namespace QS3D.Core.Diagnostics
                 if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
                 var local = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var validCount = 0;
-                foreach (var item in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                foreach (var item in raw.Split(new[] { ';' }, StringSplitOptions.None))
                 {
                     var handle = (item ?? string.Empty).Trim();
                     if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))

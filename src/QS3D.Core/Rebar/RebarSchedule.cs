@@ -52,7 +52,7 @@ namespace QS3D.Core.Rebar
             var rows = new List<RebarScheduleRow>();
             foreach (var input in inputs) Append(input ?? throw new ArgumentException("Rebar schedule input cannot contain null.", nameof(inputs)), rows);
             ValidateAggregate(rows);
-            return rows;
+            return rows.AsReadOnly();
         }
 
         private static void Append(RebarScheduleInput input, ICollection<RebarScheduleRow> rows)

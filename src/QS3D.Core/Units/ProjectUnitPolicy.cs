@@ -1,4 +1,5 @@
 using System;
+using DrawingUnitValue = QS3D.Core.Units.DrawingUnit;
 
 namespace QS3D.Core.Units
 {
@@ -52,10 +53,36 @@ namespace QS3D.Core.Units
             return Math.Round(value, DisplayDecimals, MidpointRounding.AwayFromZero);
         }
 
-        public static DrawingUnit ToDrawingUnit(LengthUnit unit)
+        public static DrawingUnitValue ToDrawingUnit(LengthUnit unit)
         {
-            if (!Enum.IsDefined(typeof(LengthUnit), unit)) throw new ArgumentOutOfRangeException(nameof(unit));
-            return (DrawingUnit)(int)unit;
+            switch (unit)
+            {
+                case LengthUnit.Millimeter: return DrawingUnitValue.Millimeter;
+                case LengthUnit.Centimeter: return DrawingUnitValue.Centimeter;
+                case LengthUnit.Meter: return DrawingUnitValue.Meter;
+                case LengthUnit.Inch: return DrawingUnitValue.Inch;
+                case LengthUnit.Foot: return DrawingUnitValue.Foot;
+                case LengthUnit.Yard: return DrawingUnitValue.Yard;
+                case LengthUnit.Mile: return DrawingUnitValue.Mile;
+                case LengthUnit.Kilometer: return DrawingUnitValue.Kilometer;
+                case LengthUnit.Microinch: return DrawingUnitValue.Microinch;
+                case LengthUnit.Mil: return DrawingUnitValue.Mil;
+                case LengthUnit.Angstrom: return DrawingUnitValue.Angstrom;
+                case LengthUnit.Nanometer: return DrawingUnitValue.Nanometer;
+                case LengthUnit.Micrometer: return DrawingUnitValue.Micrometer;
+                case LengthUnit.Decimeter: return DrawingUnitValue.Decimeter;
+                case LengthUnit.Decameter: return DrawingUnitValue.Decameter;
+                case LengthUnit.Hectometer: return DrawingUnitValue.Hectometer;
+                case LengthUnit.Gigameter: return DrawingUnitValue.Gigameter;
+                case LengthUnit.AstronomicalUnit: return DrawingUnitValue.AstronomicalUnit;
+                case LengthUnit.LightYear: return DrawingUnitValue.LightYear;
+                case LengthUnit.Parsec: return DrawingUnitValue.Parsec;
+                case LengthUnit.USSurveyFoot: return DrawingUnitValue.USSurveyFoot;
+                case LengthUnit.USSurveyInch: return DrawingUnitValue.USSurveyInch;
+                case LengthUnit.USSurveyYard: return DrawingUnitValue.USSurveyYard;
+                case LengthUnit.USSurveyMile: return DrawingUnitValue.USSurveyMile;
+                default: throw new ArgumentOutOfRangeException(nameof(unit));
+            }
         }
     }
 }

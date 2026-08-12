@@ -52,6 +52,10 @@ namespace QS3D.Core.SmokeTests
             if (BomReleaseGuardService.Inspect(project, caseSensitiveLive).Any(x => x.Code == "BOM_GENERATED_HANDLE_MISSING"))
                 throw new Exception("BOM generated Handle liveness must be case-insensitive regardless of the caller set comparer.");
 
+            var paddedCaseSensitiveLive = new HashSet<string>(new[] { " 2b ", "   " }, StringComparer.Ordinal);
+            if (BomReleaseGuardService.Inspect(project, paddedCaseSensitiveLive).Any(x => x.Code == "BOM_GENERATED_HANDLE_MISSING"))
+                throw new Exception("BOM generated Handle liveness must trim surrounding whitespace and ignore blank caller entries.");
+
             element.Properties["GeneratedFuturePanelHandles"] = "3C;3D;3d";
             var partialFuture = new HashSet<string>(new[] { "2B", "3C" }, StringComparer.OrdinalIgnoreCase);
             Has(BomReleaseGuardService.Inspect(project, partialFuture), "BOM_GENERATED_HANDLE_MISSING");
@@ -140,8 +144,16 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(null!);
             var issues = BomReleaseGuardService.Inspect(project);
             Has(issues, "BOM_NULL_ELEMENT");
-            if (!issues.Any(x => x.Code == "BOM_NULL_ELEMENT" && x.Severity == HealthSeverity.Error))
-                throw new Exception("Null semantic BOM entry must be an Error-level release blocker.");
+            Has(issues, "BOM_ROOM_FINISH_HEALTH_FAILED");
+            Has(issues, "BOM_CURTAIN_PANEL_HEALTH_FAILED");
+            Equal(1, Count(issues, "BOM_ROOM_FINISH_HEALTH_FAILED"));
+            Equal(1, Count(issues, "BOM_CURTAIN_PANEL_HEALTH_FAILED"));
+            MessageEquals(issues, "BOM_ROOM_FINISH_HEALTH_FAILED", "Không thể chạy chẩn đoán Room Finish an toàn; phát hành BQ bị chặn.");
+            MessageEquals(issues, "BOM_CURTAIN_PANEL_HEALTH_FAILED", "Không thể chạy chẩn đoán Curtain Panel an toàn; phát hành BQ bị chặn.");
+            if (!issues.Any(x => x.Code == "BOM_NULL_ELEMENT" && x.Severity == HealthSeverity.Error) ||
+                !issues.Any(x => x.Code == "BOM_ROOM_FINISH_HEALTH_FAILED" && x.Severity == HealthSeverity.Error) ||
+                !issues.Any(x => x.Code == "BOM_CURTAIN_PANEL_HEALTH_FAILED" && x.Severity == HealthSeverity.Error))
+                throw new Exception("Malformed nested health-provider state must remain Error-level release blockers.");
         }
 
         private static void ExceptionDetailIsRedactedFromReleaseIssues()
