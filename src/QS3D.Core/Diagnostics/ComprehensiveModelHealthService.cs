@@ -121,14 +121,25 @@ namespace QS3D.Core.Diagnostics
             {
                 if (issue == null)
                     throw new InvalidOperationException("Model health providers must not return null issues.");
-                var code = issue.Code ?? string.Empty;
-                var elementId = issue.ElementId ?? string.Empty;
-                var message = issue.Message ?? string.Empty;
-                var key = code.EndsWith("_STALE", StringComparison.OrdinalIgnoreCase)
-                    ? ((int)issue.Severity) + "\n" + code.ToUpperInvariant() + "\n" + elementId.ToUpperInvariant()
-                    : ((int)issue.Severity) + "\n" + code.ToUpperInvariant() + "\n" + elementId.ToUpperInvariant() + "\n" + message;
-                if (seen.Add(key)) target.Add(issue);
+                if (seen.Add(IssueKey(issue))) target.Add(issue);
             }
+        }
+
+        private static string IssueKey(ModelHealthIssue issue)
+        {
+            var code = issue.Code ?? string.Empty;
+            var key = KeyPart(((int)issue.Severity).ToString(System.Globalization.CultureInfo.InvariantCulture)) +
+                      KeyPart(code.ToUpperInvariant()) +
+                      KeyPart((issue.ElementId ?? string.Empty).ToUpperInvariant());
+            return code.EndsWith("_STALE", StringComparison.OrdinalIgnoreCase)
+                ? key
+                : key + KeyPart(issue.Message ?? string.Empty);
+        }
+
+        private static string KeyPart(string value)
+        {
+            var text = value ?? string.Empty;
+            return text.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + text;
         }
     }
 }
