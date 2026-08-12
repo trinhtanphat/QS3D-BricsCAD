@@ -1,29 +1,37 @@
 # Work claim — Quantity report structural read-only result
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-quantity-report-readonly-result-20260812-0813`
 - Registered: `2026-08-12T08:13:00+07:00`
+- Completed: `2026-08-12T08:14:00+07:00`
 - Baseline main SHA: `9cc952dc2457c558dca2d81ffbc366a202b365e7`
+- Claim commit: `dc159e599696483cae4e730609c92393c3c0e163`
+- Source commit: `b3000e17411399e472639d869ae94f15d3f30ee1`
+- Regression commit: `f29c53b8de34dac8234c55fb3fdfbc6af5c1c2a5`
 - Priority: evidence-driven public Reporting result ownership during owner-requested `continue all`
 
-## Confirmed defect
+## Confirmed defect fixed
 
-`QuantityReportBuilder.Group(IEnumerable<ElementInstance>)` declares `IReadOnlyList<QuantityReportRow>` but returns its mutable backing `List<QuantityReportRow>` directly. A caller can cast the result to a mutable collection and structurally add, remove or clear grouped rows after aggregation has completed.
+`QuantityReportBuilder.Group(IEnumerable<ElementInstance>)` declares `IReadOnlyList<QuantityReportRow>` but previously returned its mutable backing `List<QuantityReportRow>` directly. A caller could cast the result to a mutable collection and structurally add, remove or clear grouped rows after aggregation had completed.
 
-## Reserved scope
+## Completed change
 
-- `src/QS3D.Core/Reporting/QuantityReportBuilder.cs` — return boundary only.
-- `tests/QS3D.Core.SmokeTests/QuantityReportReadOnlyResultSmoke.cs` — focused CAD-independent regression.
-- this claim file.
+- The completed grouped result is now returned through `result.AsReadOnly()`.
+- Grouping order/key semantics, row objects, source-handle provenance, count arithmetic, quantity accumulation, duplicate-element rejection and existing exception behavior are unchanged.
+- No deep-immutability redesign of `QuantityReportRow` was made.
 
-## Contract
+## Regression evidence
 
-Return a structural read-only wrapper for the completed grouped row list while preserving grouping order/key semantics, row objects, source-handle provenance, count arithmetic, quantity accumulation, duplicate-element rejection and every existing exception contract. No deep-immutability redesign of `QuantityReportRow` is included.
+`QuantityReportReadOnlyResultSmoke` builds two ordinary report groups from three elements, verifies first-seen group order, counts and GrossConcreteM3 aggregation, requires `ICollection<QuantityReportRow>.IsReadOnly`, and proves structural `Add` throws `NotSupportedException`.
 
-## Excluded scope
+## Read-back validation
 
-No ProjectQuantityReportBuilder selection logic, deduction rules, XLSX/export UI, CAD/native behavior, persistence, release/update or quantity arithmetic redesign.
+Current `main` source was re-fetched after the source/regression writes and still contains `return result.AsReadOnly();`. The focused smoke was also re-fetched from `main` and retains the intended grouping and structural-mutation checks.
 
-## Validation plan
+## Excluded scope respected
 
-Build two ordinary report groups, preserve row ordering/counts, require the returned `ICollection<QuantityReportRow>` to be read-only, and prove structural `Add` throws `NotSupportedException`. Re-fetch current source before write; never force-push. No GitHub Actions dispatch or BricsCAD runtime qualification claim.
+No ProjectQuantityReportBuilder selection logic, deduction rules, XLSX/export UI, CAD/native behavior, persistence, release/update or quantity arithmetic redesign was changed.
+
+## Validation boundary
+
+Remote source/smoke read-back only. No GitHub Actions were dispatched; no executable Core build/smoke PASS and no BricsCAD V25/V26 runtime qualification are claimed.
