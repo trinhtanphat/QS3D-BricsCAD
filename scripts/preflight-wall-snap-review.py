@@ -75,7 +75,7 @@ if wall_snap.is_file():
             "private static ProjectState RequireFreshMutationProject",
             "project.ChangeVersion != expectedChangeVersion",
             'RequireTouchHeadroom(project, 2, "Wall Snap Preview");',
-            'RequireTouchHeadroom(project, plan.Edits.Count == 0 ? 1 : 2, "Wall Snap Apply");',
+            'RequireTouchHeadroom(project, 1, "Wall Snap Apply");',
             "private static void RequireTouchHeadroom(ProjectState project, int requiredTouches, string operation)",
             "project.ChangeVersion > long.MaxValue - requiredTouches",
             "private static long NextChangeVersion(long current) => checked(current + 1L);",
@@ -100,10 +100,10 @@ if wall_snap.is_file():
             errors.append("Wall Snap Preview must reserve two version increments before any preview metadata/audit mutation and stamp exact final ChangeVersion")
 
         preview_count_check = apply.find("previewCount != plan.Edits.Count")
-        headroom_apply = apply.find('RequireTouchHeadroom(project, plan.Edits.Count == 0 ? 1 : 2, "Wall Snap Apply");')
+        headroom_apply = apply.find('RequireTouchHeadroom(project, 1, "Wall Snap Apply");')
         zero_branch = apply.find("if (plan.Edits.Count == 0)")
         if min(preview_count_check, headroom_apply, zero_branch) < 0 or not (preview_count_check < headroom_apply < zero_branch):
-            errors.append("Wall Snap Apply must reserve cleanup/apply version increments after freshness validation and before any metadata/native mutation")
+            errors.append("Wall Snap Apply must reserve its single cleanup/audit revision after freshness validation and before any metadata/native mutation")
 
 hub = ROOT / "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml"
 if hub.is_file():
@@ -124,4 +124,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: wall snap Preview/Apply preserve cancel-safe read-only selection, exact project/version preview freshness, pre-mutation ChangeVersion headroom, source/plan fingerprints, metadata cleanup versioning, CAD transaction safety and UI wiring.")
+print("PASS: wall snap Preview/Apply preserve cancel-safe read-only selection, exact project/version preview freshness, overflow-safe ChangeVersion headroom, source/plan fingerprints, metadata cleanup versioning, CAD transaction safety and UI wiring.")
