@@ -53,7 +53,7 @@ if not errors:
         'child.Name.Namespace != XNamespace.None || !children.Contains(child.Name)',
         '!allowText && !string.IsNullOrWhiteSpace(text.Value)',
         'element.Name.Namespace != XNamespace.None',
-        'string.Equals(element.Name.LocalName, expectedName, StringComparison.OrdinalIgnoreCase)',
+        'RootSections,\n                false,\n                false);',
         'parent.Elements(XName.Get(childName)).Skip(1).Any()',
     ]
     for token in required_validator_tokens:
@@ -62,7 +62,7 @@ if not errors:
 
     required_smoke_tokens = [
         "LegacyV1StillMigrates();",
-        "RootNameCasingRemainsCompatible();",
+        "RejectsNonCanonicalRootName();",
         "RejectsForeignNamespace();",
         "RejectsUnknownRootAttribute();",
         "RejectsUnknownChild();",
@@ -94,4 +94,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: current schema-3 QSDB requires explicit persistence state and fails closed on missing changeVersion, while legacy schema migration synthesizes the required field before strict XML-shape validation.")
+print("PASS: current schema-3 QSDB requires the canonical qs3d root, explicit persistence state, and fails closed on missing changeVersion, while legacy schema migration synthesizes the required field before strict XML-shape validation.")
