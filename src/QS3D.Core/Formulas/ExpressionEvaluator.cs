@@ -213,7 +213,7 @@ namespace QS3D.Core.Formulas
                         if (args.Count == 1) return EnsureFinite(Math.Round(args[0], MidpointRounding.AwayFromZero), "round produced a non-finite result.");
                         var digitsValue = args[1];
                         var roundedDigits = Math.Round(digitsValue, MidpointRounding.AwayFromZero);
-                        if (digitsValue < 0d || digitsValue > 15d || Math.Abs(digitsValue - roundedDigits) > 1e-12)
+                        if (digitsValue < 0d || digitsValue > 15d || digitsValue != roundedDigits)
                             throw Error("round(value, digits) requires an integer digits argument from 0 to 15.");
                         return EnsureFinite(Math.Round(args[0], (int)roundedDigits, MidpointRounding.AwayFromZero), "round produced a non-finite result.");
                     case "min":
