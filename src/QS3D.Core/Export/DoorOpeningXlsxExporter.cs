@@ -19,12 +19,20 @@ namespace QS3D.Core.Export
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-            if (rows.Count > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Door/opening XLSX export supports at most " + MaxDataRows + " data rows.");
-            for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
-                if (rows[rowIndex] == null)
+            var rowCount = rows.Count;
+            if (rowCount > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Door/opening XLSX export supports at most " + MaxDataRows + " data rows.");
+
+            var snapshot = new List<DoorOpeningScheduleRow>(rowCount);
+            for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
+            {
+                var sourceRow = rows[rowIndex];
+                if (sourceRow == null)
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
-            ValidateCellText(rows);
-            ValidateNumericValues(rows);
+                snapshot.Add(SnapshotRow(sourceRow, rowIndex));
+            }
+            ValidateCellText(snapshot);
+            ValidateNumericValues(snapshot);
+
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -39,12 +47,54 @@ namespace QS3D.Core.Export
                     Write(archive, "xl/workbook.xml", WorkbookXml);
                     Write(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml);
                     Write(archive, "xl/styles.xml", StylesXml);
-                    Write(archive, "xl/worksheets/sheet1.xml", BuildSheet(rows));
+                    Write(archive, "xl/worksheets/sheet1.xml", BuildSheet(snapshot));
                 }
                 Validate(tempPath);
                 AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
             }
             finally { AtomicFileCommit.TryDelete(tempPath); }
+        }
+
+        private static DoorOpeningScheduleRow SnapshotRow(DoorOpeningScheduleRow source, int rowIndex)
+        {
+            var row = new DoorOpeningScheduleRow
+            {
+                Floor = source.Floor ?? string.Empty,
+                Category = source.Category ?? string.Empty,
+                FamilyName = source.FamilyName ?? string.Empty,
+                Material = source.Material ?? string.Empty,
+                WidthM = source.WidthM,
+                HeightM = source.HeightM,
+                SillHeightM = source.SillHeightM,
+                ThicknessM = source.ThicknessM,
+                Count = source.Count,
+                OpeningAreaM2 = source.OpeningAreaM2,
+                HostCount = source.HostCount
+            };
+            var label = "worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " ";
+            SnapshotJoinedCellValues(source.ElementIds, row.ElementIds, label + "Element IDs");
+            SnapshotJoinedCellValues(source.HostIds, row.HostIds, label + "Host IDs");
+            return row;
+        }
+
+        private static void SnapshotJoinedCellValues(IList<string> source, IList<string> target, string label)
+        {
+            if (source == null)
+                throw new ArgumentException("Door/opening XLSX " + label + " collection is required.", "rows");
+
+            var count = source.Count;
+            long joinedLength = 0L;
+            for (var index = 0; index < count; index++)
+            {
+                var value = source[index] ?? string.Empty;
+                if (index > 0) joinedLength++;
+                joinedLength += value.Length;
+                if (joinedLength > MaxCellTextLength)
+                    throw new ArgumentOutOfRangeException(
+                        "rows",
+                        "Door/opening XLSX " + label + " exceeds Excel's " + MaxCellTextLength + "-character cell text limit.");
+                target.Add(value);
+            }
         }
 
         private static void ValidateCellText(IReadOnlyList<DoorOpeningScheduleRow> rows)
