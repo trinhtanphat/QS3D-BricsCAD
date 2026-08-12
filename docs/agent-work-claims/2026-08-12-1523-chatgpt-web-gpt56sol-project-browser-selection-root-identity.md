@@ -1,9 +1,10 @@
 # Agent Work Claim
 
 - Agent: `ChatGPT web / GPT-5.6 Sol`
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Started at: `2026-08-12T15:23:00+07:00`
+- Completed at: `2026-08-12T15:28:00+07:00`
 - Baseline main SHA: `7d00030f8c7cbbfc74f36687d8767284a45700eb`
 - Task Key: `CORE-PROJECT-BROWSER-SELECTION-ROOT-IDENTITY`
 - Scope: Make `ProjectBrowserSelectionPlanner.PlanReveal()` apply the established case-insensitive semantic element-id identity consistently when checking that selected ids belong to the root node. Preserve canonical whitespace rejection, duplicate/ambiguity handling, primary-selection behavior, tree indexing, paging, and returned selected-id spelling.
@@ -12,10 +13,21 @@
   - `tests/QS3D.Core.SmokeTests/ProjectBrowserSelectionPlannerSmoke.cs`
   - this claim file
 - Counterexample:
-  - A tree whose root contains semantic element id `B-001` currently rejects selection alias `b-001` at the root-membership check even though `ProjectState.FindElement`, planner membership indexes, selection duplicate detection, and the existing focused smoke all use case-insensitive element identity.
-- Tests intended:
-  - Explicitly pin that the fixture root contains `B-001` but not raw `b-001`, then require `PlanReveal(..., "b-001")` to resolve successfully.
-  - Preserve missing-id, case-duplicate, whitespace, primary-selection, deterministic paging, and immutable-result regressions.
+  - A tree whose root contains semantic element id `B-001` rejected selection alias `b-001` at the root-membership check even though `ProjectState.FindElement`, planner membership indexes, selection duplicate detection, and the focused smoke use case-insensitive element identity.
+- Implementation evidence:
+  - Claim: `da81d86bdff14edd5c7e86e520fdde1435a7215d`
+  - Source: `9b7a3a15ccd84c0a3da08aaec9e98feb4e3cc351`
+  - Focused smoke: `a98014f7b5fbc34eaa1b931a82ec694632ec33ee`
+  - Pull request: `#939`
+  - Squash merge: `6ffd4da5c99f0a340eef2415705eca16c6d4995b`
+  - Main source readback blob: `60ef6375c2177f42905c3572a1c64f3f568b0b56`
+  - Main smoke readback blob: `ff962f4d6db804f1f396a4ea1a2b12a9aa9040ea`
+- Regression evidence:
+  - The fixture explicitly proves the root contains raw `B-001` but not raw `b-001`, then requires `PlanReveal(..., "b-001", "B-001")` to resolve successfully.
+  - Existing missing-id, case-duplicate, whitespace, primary-selection, deterministic paging, and immutable-result regressions remain in the same focused smoke.
+- Validation:
+  - PR patch was exactly two files with one comparator replacement and two focused smoke assertions.
+  - Source and smoke were read back from `main` after merge with the expected content.
+  - No GitHub Actions, full .NET build, executable smoke run, or BricsCAD V25/V26 runtime PASS was performed or claimed.
 - Notes:
   - Pure Core/Navigation change; no persistence, QSDB, formulas, recognition/B4D, SourceHandle/generated-handle, UI/native CAD, or release workflow scope.
-  - No GitHub Actions, full .NET build, executable smoke run, or BricsCAD V25/V26 runtime PASS will be claimed unless actually performed.
