@@ -14,11 +14,13 @@ namespace QS3D.Core.SmokeTests
             MissingAndEmptyHostIdsRemainUnhosted();
             PaddedHostIdFailsClosed();
             WhitespaceOnlyHostIdFailsClosed();
+            OrphanHostIdFailsClosed();
+            NonWallHostIdFailsClosed();
         }
 
         private static void CanonicalHostIdIsReported()
         {
-            var project = Project("canonical", "W1", includeHostProperty: true);
+            var project = Project("canonical", "W1", includeHostProperty: true, addHost: true);
             var rows = DoorOpeningScheduleBuilder.Build(project);
             if (rows.Count != 1 || rows[0].HostCount != 1 || rows[0].HostIds.Count != 1 ||
                 !string.Equals(rows[0].HostIds[0], "W1", StringComparison.Ordinal))
@@ -38,18 +40,36 @@ namespace QS3D.Core.SmokeTests
         private static void PaddedHostIdFailsClosed()
         {
             Throws<InvalidOperationException>(() =>
-                DoorOpeningScheduleBuilder.Build(Project("padded", " W1 ", includeHostProperty: true)));
+                DoorOpeningScheduleBuilder.Build(Project("padded", " W1 ", includeHostProperty: true, addHost: true)));
         }
 
         private static void WhitespaceOnlyHostIdFailsClosed()
         {
             Throws<InvalidOperationException>(() =>
-                DoorOpeningScheduleBuilder.Build(Project("whitespace", "   ", includeHostProperty: true)));
+                DoorOpeningScheduleBuilder.Build(Project("whitespace", "   ", includeHostProperty: true, addHost: true)));
         }
 
-        private static ProjectState Project(string suffix, string hostId, bool includeHostProperty)
+        private static void OrphanHostIdFailsClosed()
+        {
+            Throws<InvalidOperationException>(() =>
+                DoorOpeningScheduleBuilder.Build(Project("orphan", "W-MISSING", includeHostProperty: true)));
+        }
+
+        private static void NonWallHostIdFailsClosed()
+        {
+            Throws<InvalidOperationException>(() =>
+                DoorOpeningScheduleBuilder.Build(Project("non-wall", "W1", includeHostProperty: true, addHost: true, hostCategory: ElementCategory.Beam)));
+        }
+
+        private static ProjectState Project(
+            string suffix,
+            string hostId,
+            bool includeHostProperty,
+            bool addHost = false,
+            ElementCategory hostCategory = ElementCategory.ArchitecturalWall)
         {
             var project = new ProjectState("P-DOOR-HOST-" + suffix, "Door host canonicality smoke");
+            if (addHost) project.Elements.Add(new ProjectElement("W1", hostCategory));
             var opening = new ProjectElement("D-" + suffix, ElementCategory.Door);
             if (includeHostProperty) opening.Properties["HostWallId"] = hostId;
             project.Elements.Add(opening);
