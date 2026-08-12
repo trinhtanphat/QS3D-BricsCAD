@@ -91,8 +91,7 @@ namespace QS3D.Core.Selection
                 if (!projectIndex.ContainsKey(id)) throw new InvalidOperationException("Semantic property inspector references missing element id: " + id + ".");
                 requested.Add(id);
             }
-            if (project.ChangeVersion != inspectionVersion)
-                throw new InvalidOperationException("Project state changed while materializing semantic selection ids.");
+            RequireProjectFresh(project, inspectionVersion, projectIndex, familyIndex);
 
             var selected = requested
                 .Select(id => projectIndex[id])
@@ -107,7 +106,7 @@ namespace QS3D.Core.Selection
                 .OrderBy(x => x.ToString(), StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
-            return new SemanticSelectionInspection(
+            var inspection = new SemanticSelectionInspection(
                 selected.Select(x => x.Id).ToArray(),
                 categories,
                 InspectReference("FamilyId", selected.Select(x => x.FamilyId).ToArray()),
@@ -115,6 +114,8 @@ namespace QS3D.Core.Selection
                 InspectReference("ZoneId", selected.Select(x => x.ZoneId).ToArray()),
                 InspectProperties(selected, familyIndex),
                 InspectQuantities(selected));
+            RequireProjectFresh(project, inspectionVersion, projectIndex, familyIndex);
+            return inspection;
         }
 
         private static Dictionary<string, ProjectElement> BuildUniqueProjectIndex(ProjectState project)
@@ -146,6 +147,45 @@ namespace QS3D.Core.Selection
             }
             return result;
         }
+
+        private static void RequireProjectFresh(
+            ProjectState project,
+            long expectedChangeVersion,
+            IReadOnlyDictionary<string, ProjectElement> expectedElements,
+            IReadOnlyDictionary<string, ProjectFamily> expectedFamilies)
+        {
+            if (project.ChangeVersion != expectedChangeVersion)
+                throw new InvalidOperationException("Project state changed while materializing semantic selection ids.");
+            if (project.Elements.Count != expectedElements.Count)
+                throw StructuralFreshnessError();
+
+            var seenElements = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null || string.IsNullOrWhiteSpace(element.Id)) throw StructuralFreshnessError();
+                var id = element.Id.Trim();
+                if (!seenElements.Add(id) ||
+                    !expectedElements.TryGetValue(id, out var original) ||
+                    !ReferenceEquals(original, element))
+                    throw StructuralFreshnessError();
+            }
+
+            if (project.Families.Count != expectedFamilies.Count)
+                throw StructuralFreshnessError();
+            var seenFamilies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var family in project.Families)
+            {
+                if (family == null || string.IsNullOrWhiteSpace(family.Id)) throw StructuralFreshnessError();
+                var id = family.Id.Trim();
+                if (!seenFamilies.Add(id) ||
+                    !expectedFamilies.TryGetValue(id, out var original) ||
+                    !ReferenceEquals(original, family))
+                    throw StructuralFreshnessError();
+            }
+        }
+
+        private static InvalidOperationException StructuralFreshnessError() =>
+            new InvalidOperationException("Project semantic ownership changed while inspecting semantic selection; retry the inspection.");
 
         private static void ValidateSemanticReferences(
             ProjectState project,
