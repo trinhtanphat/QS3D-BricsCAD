@@ -25,7 +25,8 @@ namespace QS3D.Core.Diagnostics
 
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Grid annotation health cannot inspect a null project element.");
                 if (element.Category != ElementCategory.Grid) continue;
                 if (!element.Properties.TryGetValue(HandlesKey, out var rawHandles)) continue;
 
