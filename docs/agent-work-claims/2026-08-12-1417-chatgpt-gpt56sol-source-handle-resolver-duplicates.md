@@ -1,31 +1,30 @@
 # Work claim — SourceHandleResolver duplicate SourceHandles
 
-- Status: `CANCELLED`
+- Status: `ACTIVE`
 - Agent: `chatgpt-gpt56sol-source-handle-resolver-duplicates-20260812-1417`
 - Registered: `2026-08-12T14:17:00+07:00`
-- Cancelled: `2026-08-12T14:46:00+07:00`
+- Erroneously cancelled: `2026-08-12T14:46:00+07:00`
+- Reactivated: `2026-08-12T14:47:00+07:00`
 - Priority: P1 ownership integrity parity
 
-## Original defect hypothesis
+## Confirmed defect
 
-`ProjectElement.SourceHandles` was assumed not to enforce uniqueness, and a `SourceHandleResolver` was assumed to accumulate per-element source handles through a case-insensitive `HashSet`, potentially silently deduplicating direct duplicates such as `ABCD` + `ABCD` or case aliases such as `ABCD` + `abcd`.
+The production resolver is `src/QS3D.Core/Services/SourceHandleResolver.cs`. Its `AddDirectHandles()` validates blank/non-canonical entries but merges every direct source handle directly into one traversal-wide case-insensitive `knownHandles` set. Therefore duplicate `ProjectElement.SourceHandles` entries in the same element, including case aliases such as `ABCD` + `abcd`, are silently deduplicated instead of failing closed as malformed ownership data.
 
-## Original reserved scope
+## Cancellation correction
 
-- `src/QS3D.Core/Rooms/SourceHandleResolver.cs`
-- one focused Core smoke under `tests/QS3D.Core.SmokeTests/`
+Commit `131b13a7fd13717132bfa9507f1b133c48d8c3d7` cancelled this claim after checking the stale/nonexistent path `src/QS3D.Core/Rooms/SourceHandleResolver.cs`. Git history and PR #784 identify the actual production path as `src/QS3D.Core/Services/SourceHandleResolver.cs`, and direct `main` readback confirms the defect remains present there. The cancellation premise was therefore invalid, so this claim is reactivated rather than replaced by a new overlapping lane.
+
+## Reserved scope
+
+- `src/QS3D.Core/Services/SourceHandleResolver.cs`
+- `tests/QS3D.Core.SmokeTests/SourceHandleResolverSafetySmoke.cs`
 - this claim file
 
-## Cancellation evidence
+## Intended contract
 
-Remote source readback disproved the prerequisite for this lane:
+Reject duplicate `SourceHandles` within the same semantic element using ordinal-ignore-case identity before merging that element's handles into the traversal-wide resolved-handle set. Preserve existing cross-element deduplication, direct/boundary/generated precedence, dependency traversal and deterministic ordering. Error text should identify the first and current duplicate indices so malformed ownership remains diagnosable.
 
-- `src/QS3D.Core/Rooms/SourceHandleResolver.cs` does not exist on current `main` and also does not exist at the original claim commit `c286e57fac58294272aa6e3563565d76e8d95994`.
-- The current `src/QS3D.Core` directory has no `Rooms` subtree.
-- Commit-history search for `SourceHandleResolver` finds only the original claim and `9b1bba1d0c25fad6d43e3b891893fbda261dcf0d`, which merely removed an accidental temporary probe file; there is no production implementation commit for the claimed class.
+## Validation boundary
 
-The original “confirmed defect” statement therefore was not source-grounded. Creating a new resolver/API merely to satisfy the claim would be speculative and outside a safe bug-fix scope.
-
-## Resolution
-
-Lane cancelled as an invalid/stale claim. No production source, schema, serialization, validation, smoke registration, or BricsCAD runtime behavior was changed for this lane. No GitHub Actions/full build/licensed BricsCAD runtime PASS is claimed.
+Extend the existing auto-registered `SourceHandleResolverSafetySmoke` with exact-duplicate, case-alias duplicate and unique-handle controls. Source-safe readback only unless an executable local smoke is actually run; no GitHub Actions/full build/licensed BricsCAD runtime PASS is claimed without execution.
