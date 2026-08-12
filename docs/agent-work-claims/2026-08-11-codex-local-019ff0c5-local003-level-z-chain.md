@@ -153,6 +153,12 @@ Baseline audited and synchronized before this expansion: `origin/main@3a766aeb`.
 
 Reserve only that released smoke file to use `GetValueOrDefault()` after the existing `HasValue` short-circuit, preserving the exact 200 mm assertion and all parser-boundary fixtures. Do not edit `RebarNotationParser`, notation capacities, grammar or production rebar behavior. The owning bounds claim is `COMPLETED`; the ACTIVE rebar-ownership health claim is unrelated and remains excluded. Re-run the complete Core smoke after this compile-only reconciliation.
 
+## 2026-08-12 released null-health fixture reconciliation expansion
+
+Baseline audited and synchronized before this expansion: `origin/main@c32edc9f`. The next full Core smoke reaches `GeneratedRebarModeNullSafetySmoke.cs`, which still expects a standalone provider to diagnose valid metadata while silently skipping a null semantic entry. The broader `StandaloneGeneratedHealthNullSafetySmoke.cs` retains the same obsolete no-throw expectation for Foundation Mesh, Curtain Frame, Semantic Tag, Grid Annotation and Rebar Ownership providers. Their completed fail-visible contracts now intentionally reject malformed null entries, with composite health responsible for surfacing provider failures.
+
+Reserve only `tests/QS3D.Core.SmokeTests/GeneratedRebarModeNullSafetySmoke.cs` and `tests/QS3D.Core.SmokeTests/StandaloneGeneratedHealthNullSafetySmoke.cs`. Split the first fixture into an explicit malformed-state rejection plus an independent valid-slab metadata check; change the second fixture's five direct-provider assertions to require `InvalidOperationException`. Preserve every valid-state diagnostic assertion and do not edit any health provider, composite health, generated geometry, ownership or project-domain source. All six owning null-health claims are `COMPLETED`; no ACTIVE claim reserves these two legacy fixture files. Re-run the complete Core smoke after this test-only batch.
+
 ## 2026-08-11 source-safe wave heartbeat
 
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
