@@ -9,6 +9,7 @@ namespace QS3D.Core.Services
     public static class SourceHandleResolver
     {
         private const int MaxRootElementIdInputCount = 10000;
+        private const int MaxBoundarySourceHandleCount = 5000;
 
         public static IReadOnlyList<string> Resolve(ProjectState project, IEnumerable<string> elementIds)
         {
@@ -142,7 +143,13 @@ namespace QS3D.Core.Services
         {
             hasBoundaryReference = false;
             if (!element.Properties.TryGetValue(AutoRoomLifecycle.BoundarySourceHandlesKey, out var boundaryHandles)) return;
-            foreach (var raw in (boundaryHandles ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+            var tokens = (boundaryHandles ?? string.Empty).Split(
+                new[] { ';' },
+                MaxBoundarySourceHandleCount + 1,
+                StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length > MaxBoundarySourceHandleCount)
+                throw new InvalidOperationException("Locate boundary source handles cannot exceed " + MaxBoundarySourceHandleCount + " entries.");
+            foreach (var raw in tokens)
             {
                 var handle = raw.Trim();
                 if (handle.Length == 0) continue;

@@ -426,7 +426,7 @@ namespace QS3D.BricsCAD.V25.Cad
             ParseFinite(project.Metadata[definition.PositionXKey], definition.PositionXKey);
             ParseFinite(project.Metadata[definition.PositionYKey], definition.PositionYKey);
             ParseFinite(project.Metadata[definition.PositionZKey], definition.PositionZKey);
-            if (!int.TryParse(project.Metadata[definition.RowCountKey], NumberStyles.None, CultureInfo.InvariantCulture, out var rows) || rows < 0 || rows > MaxRows)
+            if (!int.TryParse(project.Metadata[definition.RowCountKey], NumberStyles.None, CultureInfo.InvariantCulture, out var rows) || rows <= 0 || rows > MaxRows)
                 throw new InvalidOperationException(definition.RowCountKey + " is invalid.");
             if (!int.TryParse(project.Metadata[definition.ColumnCountKey], NumberStyles.None, CultureInfo.InvariantCulture, out var columns) || columns <= 0 || columns > MaxColumns)
                 throw new InvalidOperationException(definition.ColumnCountKey + " is invalid.");
