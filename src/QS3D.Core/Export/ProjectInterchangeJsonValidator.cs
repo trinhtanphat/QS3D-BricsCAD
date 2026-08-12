@@ -388,7 +388,7 @@ namespace QS3D.Core.Export
                 {
                     if (!string.Equals(raw, handle, StringComparison.Ordinal)) issues.Error("SOURCE_HANDLE_NON_CANONICAL", "Source handle must not contain leading/trailing whitespace.", itemPath);
                     if (handle.Length > MaxSourceHandleLength) issues.Error("SOURCE_HANDLE_TOO_LONG", "Source handle is too long.", itemPath);
-                    else if (!seen.Add(handle)) issues.Error("SOURCE_HANDLE_DUPLICATE", "Duplicate source handle within one element: " + handle, itemPath);
+                    else if (!seen.Add(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle))) issues.Error("SOURCE_HANDLE_DUPLICATE", "Duplicate source handle within one element: " + handle, itemPath);
                 }
             }
         }
