@@ -28,6 +28,8 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             var normalizedId = Required(id, nameof(id), 80);
             var normalizedName = Required(name, nameof(name), MaxNameLength);
+            if (project.Families.Any(x => x == null))
+                throw new InvalidOperationException("Project family collection contains a null family.");
             if (project.Families.Count >= MaxFamilies) throw new InvalidOperationException("Project supports at most " + MaxFamilies + " families.");
             if (project.Families.Any(x => string.Equals(x.Id, normalizedId, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Family id already exists: " + normalizedId);
