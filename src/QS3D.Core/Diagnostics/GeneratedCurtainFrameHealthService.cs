@@ -196,6 +196,7 @@ namespace QS3D.Core.Diagnostics
                 issues.Add(new ModelHealthIssue(code, HealthSeverity.Warning, key + " thiếu hoặc không hợp lệ.", element.Id));
                 return null;
             }
+            ValidateIntegerCanonicality(element, key, raw, value, issues);
             return value;
         }
 
@@ -207,7 +208,15 @@ namespace QS3D.Core.Diagnostics
                 issues.Add(new ModelHealthIssue(code, HealthSeverity.Warning, key + " không hợp lệ.", element.Id));
                 return null;
             }
+            ValidateIntegerCanonicality(element, key, raw, value, issues);
             return value;
+        }
+
+        private static void ValidateIntegerCanonicality(ProjectElement element, string key, string raw, int value, List<ModelHealthIssue> issues)
+        {
+            var canonical = value.ToString(CultureInfo.InvariantCulture);
+            if (!string.Equals(raw, canonical, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("CURTAIN_FRAME_INTEGER_METADATA_NON_CANONICAL", HealthSeverity.Error, key + " phải dùng đúng invariant integer spelling: " + canonical + ".", element.Id));
         }
 
         private static double? PositiveValue(ProjectElement element, string key, string code, string canonicalCode, List<ModelHealthIssue> issues)
