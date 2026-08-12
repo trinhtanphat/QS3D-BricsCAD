@@ -88,6 +88,7 @@ namespace QS3D.Core.Diagnostics
                 Positive(element, "GeneratedCurtainPanelDepthM", issues, "CURTAIN_PANEL_DEPTH_INVALID");
                 Positive(element, "GeneratedCurtainPanelSourceLengthM", issues, "CURTAIN_PANEL_SOURCE_LENGTH_INVALID");
                 Positive(element, "GeneratedCurtainPanelHeightM", issues, "CURTAIN_PANEL_HEIGHT_INVALID");
+                NonNegativeRoundTrip(element, "GeneratedCurtainPanelAreaM2", issues, "CURTAIN_PANEL_AREA_INVALID", "CURTAIN_PANEL_AREA_NON_CANONICAL");
                 Fingerprint(element, issues);
                 Mode(element, openingCount, issues);
 
@@ -164,6 +165,18 @@ namespace QS3D.Core.Diagnostics
         {
             if (!element.Properties.TryGetValue(key, out var raw) || !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || value <= 0d)
                 Add(issues, code, HealthSeverity.Warning, key + " is missing or invalid.", element);
+        }
+
+        private static void NonNegativeRoundTrip(ProjectElement element, string key, List<ModelHealthIssue> issues, string invalidCode, string nonCanonicalCode)
+        {
+            if (!element.Properties.TryGetValue(key, out var raw) || !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+            {
+                Add(issues, invalidCode, HealthSeverity.Warning, key + " is missing or invalid.", element);
+                return;
+            }
+            var canonical = value.ToString("R", CultureInfo.InvariantCulture);
+            if (!string.Equals(raw, canonical, StringComparison.Ordinal))
+                Add(issues, nonCanonicalCode, HealthSeverity.Error, key + " must use exact invariant round-trip spelling: " + canonical + ".", element);
         }
 
         private static void Add(ICollection<ModelHealthIssue> issues, string code, HealthSeverity severity, string message, ProjectElement element) =>
