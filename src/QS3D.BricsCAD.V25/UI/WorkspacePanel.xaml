@@ -82,26 +82,15 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <UserControl.Template>
-        <ControlTemplate TargetType="{x:Type UserControl}">
-            <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollBarVisibility="Disabled"
-                          CanContentScroll="False"
-                          PanningMode="HorizontalOnly"
-                          Focusable="False">
-                <ContentPresenter Content="{TemplateBinding Content}"
-                                  ContentTemplate="{TemplateBinding ContentTemplate}"
-                                  ContentStringFormat="{TemplateBinding ContentStringFormat}"
-                                  MinWidth="560"
-                                  Width="{Binding ViewportWidth, RelativeSource={RelativeSource AncestorType={x:Type ScrollViewer}}}"
-                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                  SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
-            </ScrollViewer>
-        </ControlTemplate>
-    </UserControl.Template>
-
-    <Grid MinWidth="560" Background="{StaticResource Bg0Brush}">
+    <ScrollViewer x:Name="WorkspaceOverflow"
+                  HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Disabled"
+                  CanContentScroll="False"
+                  PanningMode="HorizontalOnly"
+                  Focusable="False"
+                  HorizontalContentAlignment="Stretch"
+                  VerticalContentAlignment="Stretch">
+    <Grid x:Name="WorkspaceContentRoot" MinWidth="560" Background="{StaticResource Bg0Brush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="44"/>
             <RowDefinition Height="*"/>
@@ -617,4 +606,5 @@
             </DockPanel>
         </Border>
     </Grid>
+    </ScrollViewer>
 </UserControl>

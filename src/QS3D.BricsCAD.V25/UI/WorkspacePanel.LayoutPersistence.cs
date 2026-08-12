@@ -17,7 +17,8 @@ namespace QS3D.BricsCAD.V25.UI
         private void AttachLayoutPersistence()
         {
             if (_layoutPersistenceAttached) return;
-            if (!(Content is Grid root)) return;
+            var root = WorkspaceContentRoot;
+            if (root == null) return;
 
             var main = root.Children
                 .OfType<Grid>()
