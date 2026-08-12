@@ -110,6 +110,8 @@ namespace QS3D.Core.Persistence
                 ValidateRequiredCanonicalAttribute(rule, "id", "quantity rule id");
                 ValidateNamedCategoryAttribute(rule, "quantity rule category");
                 ValidateRequiredCanonicalAttribute(rule, "output", "quantity rule output");
+                ValidateRequiredCanonicalAttribute(rule, "expression", "quantity rule expression");
+                ValidateRequiredCanonicalAttribute(rule, "version", "quantity rule version");
             }
         }
 
