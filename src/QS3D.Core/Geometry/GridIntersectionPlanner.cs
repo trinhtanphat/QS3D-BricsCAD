@@ -94,6 +94,7 @@ namespace QS3D.Core.Geometry
         private const int MaxCurves = 2000;
         private const int MaxIntersections = 100000;
         private const double TwoPi = Math.PI * 2.0;
+        private const double RelativeNumericTolerance = 3.5527136788005009e-15;
 
         public static IReadOnlyList<GridIntersection> FindIntersections(
             IEnumerable<GridReferenceCurve> curves,
@@ -396,7 +397,9 @@ namespace QS3D.Core.Geometry
             var dy = point.Y - arc.Center.Y;
             EnsureFiniteDerived("Grid ARC point delta", dx, dy);
             var radius = Length(dx, dy);
-            if (Math.Abs(radius - arc.Radius) > tolerance) return false;
+            var radialTolerance = Math.Max(tolerance, RelativeNumericTolerance * Math.Max(radius, arc.Radius));
+            EnsureFiniteDerived("Grid ARC radial tolerance", radialTolerance);
+            if (Math.Abs(radius - arc.Radius) > radialTolerance) return false;
             if (arc.SweepAngleRad >= TwoPi - tolerance / Math.Max(arc.Radius, tolerance)) return true;
             var angle = NormalizeAngle(Math.Atan2(dy, dx));
             var start = NormalizeAngle(arc.StartAngleRad);
