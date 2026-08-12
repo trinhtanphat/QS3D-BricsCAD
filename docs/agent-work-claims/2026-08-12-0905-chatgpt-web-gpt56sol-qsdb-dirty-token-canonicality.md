@@ -1,34 +1,38 @@
 # Work claim — QSDB dirty-token canonicality
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-qsdb-dirty-token-canonicality`
 - Registered: `2026-08-12T09:05:00+07:00`
 - Baseline main SHA: `8f0b933ac03a737ec6dbc24d9b69aec7fd7677bd`
+- Regression commit: `7b4f3ea887af217d0d1b991f86062abd708a531b`
+- Completed source commit: `3dc131142cca0711b77415bccf564197895cfc4b`
+- Readback main SHA before close-out: `a41b81ea8b1251ad51cb5606bb645fc40f3b3c77`
 - Priority: P1 deterministic persistence / fail-closed token integrity found during owner-requested `continue all` audit.
 
 ## Confirmed defect
 
-`QsdbProjectStore.Serialize(...)` emits element dirty flags as `((int)x.Dirty).ToString(CultureInfo.InvariantCulture)`. Historical source at `f497819ad7de4178e42f25c070c38ac77b850412` already used that exact canonical representation when dirty-state persistence was present. The loader's `Dirty(...)`, however, uses `int.TryParse(..., NumberStyles.Integer, ...)`, which accepts semantically equivalent noncanonical tokens such as `+1`, `01`, or padded integer text and converts them to the same enum value. A later save silently rewrites the token.
+`QsdbProjectStore.Serialize(...)` emits element dirty flags as `((int)x.Dirty).ToString(CultureInfo.InvariantCulture)`. Historical source at `f497819ad7de4178e42f25c070c38ac77b850412` already used that exact canonical representation when dirty-state persistence was present. The previous `Dirty(...)` loader used `int.TryParse(..., NumberStyles.Integer, ...)`, which accepted semantically equivalent noncanonical tokens such as `+15`, `015`, or padded integer text and converted them to the same enum value. A later save silently rewrote the token.
 
-Legacy migration seeds a missing v1 dirty attribute with `((int)ElementDirtyFlags.All).ToString(CultureInfo.InvariantCulture)`, so enforcing canonical integer text does not reject values emitted or synthesized by supported repository writers/migrations.
+Legacy migration seeds a missing v1 dirty attribute with canonical invariant integer text, so enforcing canonical persisted tokens does not reject values emitted or synthesized by supported repository writers/migrations.
 
-## Reserved scope
+## Implemented contract
 
-- `src/QS3D.Core/Persistence/QsdbProjectStore.cs`
-- one focused Core smoke source under `tests/QS3D.Core.SmokeTests/`
-- this claim file for close-out
+1. Existing integer parse, non-negative check and `ElementDirtyFlags.All` bitmask validation remain unchanged.
+2. After validation, `Dirty(...)` derives `raw.ToString(CultureInfo.InvariantCulture)`.
+3. The original persisted value must exactly match that token with `StringComparison.Ordinal`; otherwise `Load()` fails closed with `InvalidDataException`.
+4. No `changeVersion`, schema migration, timestamp/numeric/category/list/map behavior changed.
+5. Focused smoke coverage saves a canonical QSDB and verifies `ElementDirtyFlags.All` round-trip, then independently rewrites the token to `+15` and `015` and requires `Load()` to reject each.
 
-## Plan
+## Verification
 
-1. Re-fetch moving `main`, current store/migrator and this claim before writes.
-2. Preserve existing valid-range/bitmask checks in `Dirty(...)`, then require the original persisted token to exactly match `raw.ToString(InvariantCulture)` using ordinal comparison.
-3. Do not alter `changeVersion`, schema migration, numeric/timestamp parsing, or in-memory dirty semantics.
-4. Add smoke coverage that saves canonical QSDB, preserves valid dirty round-trip, then mutates one element's dirty token to equivalent noncanonical `+N` and zero-padded forms and requires `Load()` to fail closed.
-5. Read back source/test on current `main`; do not dispatch GitHub Actions or claim BricsCAD runtime PASS.
-6. Close the claim after source/regression remain visible on current `main`.
+- Current-main source readback confirmed range/bitmask validation followed by exact canonical integer comparison.
+- Current-main smoke readback confirmed canonical round-trip plus signed and zero-padded token cases.
+- `3dc131142cca0711b77415bccf564197895cfc4b...main` compared as `ahead` with the source commit as merge base; six later concurrent commits touched unrelated Family/Recognition/docs/smoke files.
+- The smoke source is committed but was not executed from this remote connector session. Full Core smoke execution/build and GitHub Actions were not run; no PASS is fabricated.
+- This is Core persistence work and makes no licensed BricsCAD runtime claim.
 
 ## Excluded
 
-- No ProjectSchemaMigrator/changeVersion work; another active lane owns current changeVersion regression.
-- No timestamp/numeric/category/map/list/relation changes.
+- No ProjectSchemaMigrator/changeVersion work; concurrent ownership was respected.
+- No timestamp/numeric/category/map/list/relation changes beyond preserving already-merged contracts.
 - No BricsCAD adapter/UI or installer/release changes.
