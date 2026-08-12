@@ -30,8 +30,8 @@ namespace QS3D.Core.Documentation
             FloorId = floorId;
             ZoneId = zoneId;
             Categories = categories == null ? new List<ElementCategory>().AsReadOnly() : new List<ElementCategory>(categories).AsReadOnly();
-            IncludeElementIds = includeElementIds == null ? new List<string>().AsReadOnly() : new List<string>(includeElementIds).AsReadOnly();
-            ExcludeElementIds = excludeElementIds == null ? new List<string>().AsReadOnly() : new List<string>(excludeElementIds).AsReadOnly();
+            IncludeElementIds = SnapshotFilterIds(includeElementIds, "includeElementIds");
+            ExcludeElementIds = SnapshotFilterIds(excludeElementIds, "excludeElementIds");
         }
 
         public string Id { get; }
@@ -42,6 +42,22 @@ namespace QS3D.Core.Documentation
         public IReadOnlyList<ElementCategory> Categories { get; }
         public IReadOnlyList<string> IncludeElementIds { get; }
         public IReadOnlyList<string> ExcludeElementIds { get; }
+
+        private static IReadOnlyList<string> SnapshotFilterIds(IEnumerable<string>? values, string label)
+        {
+            if (values == null) return Array.Empty<string>();
+            var result = new List<string>(Math.Min(SemanticViewPlanner.MaxFilterIds, 256));
+            using (var enumerator = values.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= SemanticViewPlanner.MaxFilterIds)
+                        throw new InvalidOperationException("Semantic view supports at most " + SemanticViewPlanner.MaxFilterIds + " " + label + ".");
+                    result.Add(enumerator.Current);
+                }
+            }
+            return result.AsReadOnly();
+        }
     }
 
     public sealed class SemanticViewPlan
@@ -73,7 +89,7 @@ namespace QS3D.Core.Documentation
     public static class SemanticViewPlanner
     {
         private const int MaxCatalogViews = 10000;
-        private const int MaxFilterIds = 100000;
+        internal const int MaxFilterIds = 100000;
         private const int MaxIdLength = 128;
         private const int MaxNameLength = 160;
 
