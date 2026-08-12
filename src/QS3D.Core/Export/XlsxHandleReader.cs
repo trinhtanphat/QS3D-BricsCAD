@@ -121,7 +121,7 @@ namespace QS3D.Core.Export
 
                 var drawingFingerprint = ReadDrawingFingerprint(targetCells, fingerprintColumns);
                 var decimalHandles = ParseDecimalHandles(targetCells.Values);
-                var preferLegacy = !isModernSchema && decimalHandles.Count > 0 && string.IsNullOrWhiteSpace(drawingFingerprint);
+                var preferLegacy = !isModernSchema && handleColumns.Count == 0 && decimalHandles.Count > 0 && string.IsNullOrWhiteSpace(drawingFingerprint);
                 if (preferLegacy)
                     return new XlsxHandleLookupResult(decimalHandles, Array.Empty<string>(), drawingFingerprint, true, worksheet.Name, false, false);
                 var explicitHandles = new List<string>();
