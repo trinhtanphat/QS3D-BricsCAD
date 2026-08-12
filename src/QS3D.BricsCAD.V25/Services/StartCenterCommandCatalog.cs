@@ -37,6 +37,8 @@ namespace QS3D.BricsCAD.V25.Services
 
     internal static class StartCenterCommandCatalog
     {
+        private const int MaxSearchQueryChars = 512;
+        private const int MaxSearchTerms = 16;
         private static readonly IReadOnlyList<StartCenterCommandItem> Items = Build().AsReadOnly();
         private static readonly Dictionary<string, StartCenterCommandItem> ByCommand =
             Items.ToDictionary(x => x.Command, x => x, StringComparer.OrdinalIgnoreCase);
@@ -59,7 +61,18 @@ namespace QS3D.BricsCAD.V25.Services
         public static IReadOnlyList<StartCenterCommandItem> Search(string query, string group)
         {
             var normalizedQuery = (query ?? string.Empty).Trim();
-            var terms = normalizedQuery.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            if (normalizedQuery.Length > MaxSearchQueryChars)
+            {
+                var length = MaxSearchQueryChars;
+                if (char.IsHighSurrogate(normalizedQuery[length - 1]) && char.IsLowSurrogate(normalizedQuery[length]))
+                    length--;
+                normalizedQuery = normalizedQuery.Substring(0, length);
+            }
+
+            var terms = normalizedQuery
+                .Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)
+                .Take(MaxSearchTerms)
+                .ToArray();
             var normalizedGroup = (group ?? string.Empty).Trim();
             var hasGroup = normalizedGroup.Length > 0 &&
                            !string.Equals(normalizedGroup, "Tất cả", StringComparison.CurrentCultureIgnoreCase);
