@@ -74,6 +74,7 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (host == null) throw new ArgumentNullException(nameof(host));
 
+            ValidateProjectElements(project);
             var canonicalHost = project.FindElement(host.Id);
             if (canonicalHost == null)
                 throw new InvalidOperationException("Physical opening cut host does not belong to the project: " + host.Id + ".");
@@ -131,6 +132,21 @@ namespace QS3D.Core.Services
                     throw new InvalidOperationException("Physical opening target-state exceeds the " + MaxOpeningIds + " opening id limit.");
             }
             return result.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+        }
+
+        private static void ValidateProjectElements(ProjectState project)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry.");
+                var id = (element.Id ?? string.Empty).Trim();
+                if (id.Length == 0)
+                    throw new InvalidOperationException("Project contains an element with a blank semantic id.");
+                if (!seen.Add(id))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + id + ".");
+            }
         }
 
         private static bool IsOpening(ProjectElement element) =>
