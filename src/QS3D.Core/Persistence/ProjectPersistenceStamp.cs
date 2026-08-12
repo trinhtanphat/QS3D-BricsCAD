@@ -7,6 +7,7 @@ namespace QS3D.Core.Persistence
     public sealed class ProjectPersistenceStamp
     {
         private const string RecoveredFromBackupKey = "QS3D.RecoveredFromBackup";
+        private const string ProjectBrowserWorkspaceStateKey = "QS3D.ProjectBrowser.WorkspaceState";
         private readonly ProjectState _project;
         private long _savedChangeVersion;
         private string _savedDrawingPath;
@@ -69,20 +70,30 @@ namespace QS3D.Core.Persistence
         {
             var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in metadata)
+            {
+                if (!TracksSemanticDirtyState(item.Key)) continue;
                 snapshot[item.Key] = item.Value;
+            }
             return snapshot;
         }
 
         private static bool MetadataMatches(IDictionary<string, string> metadata, IReadOnlyDictionary<string, string> savedMetadata)
         {
-            if (metadata.Count != savedMetadata.Count) return false;
+            var trackedCount = 0;
             foreach (var item in metadata)
             {
+                if (!TracksSemanticDirtyState(item.Key)) continue;
+                trackedCount++;
                 if (!savedMetadata.TryGetValue(item.Key, out var savedValue) ||
                     !string.Equals(item.Value, savedValue, StringComparison.Ordinal))
                     return false;
             }
-            return true;
+            return trackedCount == savedMetadata.Count;
+        }
+
+        private static bool TracksSemanticDirtyState(string key)
+        {
+            return !string.Equals(key, ProjectBrowserWorkspaceStateKey, StringComparison.OrdinalIgnoreCase);
         }
     }
 }
