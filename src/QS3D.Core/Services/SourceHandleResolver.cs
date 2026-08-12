@@ -159,13 +159,15 @@ namespace QS3D.Core.Services
                 if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
                     throw new InvalidOperationException(
                         "Semantic element " + element.Id + " contains a non-canonical SourceHandles entry at index " + index + ". Repair source ownership before Locate.");
-                if (elementHandleIndices.TryGetValue(raw, out var firstIndex))
+
+                var identity = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(raw);
+                if (elementHandleIndices.TryGetValue(identity, out var firstIndex))
                     throw new InvalidOperationException(
                         "Semantic element " + element.Id + " contains duplicate SourceHandles entries at indices " + firstIndex + " and " + index + ": " + raw + ". Repair source ownership before Locate.");
-                elementHandleIndices[raw] = index;
+                elementHandleIndices[identity] = index;
 
                 hasDirectReference = true;
-                if (knownHandles.Add(raw)) handles.Add(raw);
+                if (knownHandles.Add(identity)) handles.Add(raw);
             }
         }
 
@@ -191,7 +193,8 @@ namespace QS3D.Core.Services
             hasBoundaryReference = true;
             foreach (var handle in tokens)
             {
-                if (knownHandles.Add(handle)) handles.Add(handle);
+                var identity = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
+                if (knownHandles.Add(identity)) handles.Add(handle);
             }
         }
 
@@ -206,7 +209,7 @@ namespace QS3D.Core.Services
         {
             foreach (var entry in GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles(element))
             {
-                var normalized = (entry.Key ?? string.Empty).Trim();
+                var normalized = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(entry.Key);
                 if (normalized.Length > 0 && knownHandles.Add(normalized)) handles.Add(normalized);
             }
         }
