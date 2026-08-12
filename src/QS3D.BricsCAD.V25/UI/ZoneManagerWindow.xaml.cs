@@ -113,8 +113,9 @@ namespace QS3D.BricsCAD.V25.UI
                 var rollback = ProjectStateSnapshot.Capture(project);
                 try
                 {
+                    var beforeVersion = project.ChangeVersion;
                     ProjectZoneService.SetActive(project, zone.Id);
-                    if (!string.Equals(previous, zone.Id, StringComparison.OrdinalIgnoreCase))
+                    if (project.ChangeVersion != beforeVersion)
                         AuditTrail.ForProject(project).Record("zone.activate", string.Empty, previous + " -> " + zone.Id + " • " + zone.Name);
                 }
                 catch (Exception operationError)
