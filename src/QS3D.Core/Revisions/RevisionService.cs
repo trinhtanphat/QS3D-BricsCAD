@@ -111,7 +111,7 @@ namespace QS3D.Core.Revisions
                 CompareQuantities(delta, a.Quantities, b.Quantities, id);
                 if (delta.Fields.Count > 0) result.Add(delta);
             }
-            return result;
+            return result.AsReadOnly();
         }
 
         private static IReadOnlyList<string> CanonicalSourceHandles(ProjectElement element) =>
