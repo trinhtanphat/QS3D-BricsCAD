@@ -80,14 +80,34 @@ namespace QS3D.Core.Licensing
 
     public sealed class LicenseVerificationResult
     {
+        private readonly LicenseDocument _license;
+
         public LicenseVerificationResult(LicenseStatus status, LicenseDocument license)
         {
             Status = status;
-            License = license ?? throw new ArgumentNullException(nameof(license));
+            _license = CloneLicense(license ?? throw new ArgumentNullException(nameof(license)));
         }
+
         public LicenseStatus Status { get; }
-        public LicenseDocument License { get; }
+        public LicenseDocument License => CloneLicense(_license);
         public bool IsValid => Status == LicenseStatus.Valid;
+
+        private static LicenseDocument CloneLicense(LicenseDocument source)
+        {
+            var clone = new LicenseDocument
+            {
+                LicenseId = source.LicenseId,
+                CustomerId = source.CustomerId,
+                ProductId = source.ProductId,
+                NotBeforeUtc = source.NotBeforeUtc,
+                ExpiresUtc = source.ExpiresUtc,
+                Nonce = source.Nonce,
+                Signature = source.Signature == null ? Array.Empty<byte>() : (byte[])source.Signature.Clone()
+            };
+            foreach (var feature in source.Features)
+                clone.Features.Add(feature);
+            return clone;
+        }
     }
 
     public sealed class LicenseVerifier
