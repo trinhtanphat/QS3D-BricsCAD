@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
         {
             NewResolvedAndPersistentIssuesAreClassified();
             DuplicateIssuesAreStable();
+            DelimiterCollisionIssuesRemainDistinct();
             MalformedIssuesFailClosed();
             StaleMessageChangesRemainPersistent();
             CrossProjectDiffFailsClosed();
@@ -60,6 +61,19 @@ namespace QS3D.Core.SmokeTests
             Equal(2, baseline.Issues.Count);
             Equal(1, baseline.WarningCount);
             Equal(1, baseline.InfoCount);
+        }
+
+        private static void DelimiterCollisionIssuesRemainDistinct()
+        {
+            var project = Project("P-DELIMITER");
+            var service = new ModelHealthBaselineService();
+            var baseline = service.Capture(project, new[]
+            {
+                new ModelHealthIssue("A\nB", HealthSeverity.Warning, "message", "C"),
+                new ModelHealthIssue("A", HealthSeverity.Warning, "message", "B\nC")
+            });
+
+            Equal(2, baseline.Issues.Count);
         }
 
         private static void MalformedIssuesFailClosed()
