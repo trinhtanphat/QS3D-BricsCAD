@@ -11,6 +11,7 @@ namespace QS3D.Core.Templates
         internal static void Validate(XElement root)
         {
             if (root == null) throw new ArgumentNullException(nameof(root));
+            ValidateDocumentShape(root);
             ValidateElement(root, "qs3dTemplate", new[] { "schema", "id", "name" }, new[] { "families", "rules", "layerMappings", "bqColumns" });
             RequireExactlyOne(root, "families");
             RequireExactlyOne(root, "rules");
@@ -61,6 +62,17 @@ namespace QS3D.Core.Templates
             }
         }
 
+        private static void ValidateDocumentShape(XElement root)
+        {
+            var document = root.Document;
+            if (document == null) return;
+            foreach (var node in document.Nodes())
+            {
+                if (ReferenceEquals(node, root)) continue;
+                throw new InvalidDataException("Unsupported QS3D template document-level XML content.");
+            }
+        }
+
         private static void ValidateElement(XElement element, string expectedName, IEnumerable<string> allowedAttributes, IEnumerable<string> allowedChildren)
         {
             var expected = XName.Get(expectedName);
@@ -77,6 +89,8 @@ namespace QS3D.Core.Templates
             var children = new HashSet<XName>(allowedChildren.Select(XName.Get));
             foreach (var node in element.Nodes())
             {
+                if (node is XCData)
+                    throw new InvalidDataException("Unsupported QS3D template CDATA content in " + element.Name.LocalName + ".");
                 if (node is XText text)
                 {
                     if (!string.IsNullOrWhiteSpace(text.Value))
