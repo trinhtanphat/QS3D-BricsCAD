@@ -160,7 +160,7 @@ namespace QS3D.BricsCAD.V25.UI
                 if (!(FloorList.SelectedItem is FloorDefinition selectedFloor))
                     throw new InvalidOperationException("Chọn một tầng trước khi thực hiện thao tác.");
                 var previewFloor = previewProject.Floors.FirstOrDefault(x => string.Equals(x.Id, selectedFloor.Id, StringComparison.OrdinalIgnoreCase))
-                    ?? throw new InvalidOperationException("Tầng đã chọn không còn tồn tại trong project hiện tại. Hãy Refresh và chọn lại.");
+                    ?? throw new InvalidOperationException("Tầng đã chọn không còn tồn tại trong project hiện tại. Hãy Refresh và chọn lại tầng.");
                 var expectedProjectId = previewProject.ProjectId;
                 var previewIds = SemanticSelectionResolver.ResolveImplied(_document, previewProject)
                     .Select(x => x.Id)
@@ -185,17 +185,19 @@ namespace QS3D.BricsCAD.V25.UI
                 if (!previewIds.SequenceEqual(currentIds, StringComparer.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Selection hoặc semantic ownership đã thay đổi trước khi gán Floor/Level. Không có mutation nào được áp dụng; hãy chọn lại và thử lại.");
 
-                var changedElements = elements
-                    .Where(element => !string.Equals(element.FloorId, floor.Id, StringComparison.OrdinalIgnoreCase))
-                    .Select(element => new { Element = element, Previous = element.FloorId })
-                    .ToList();
+                var previous = elements.ToDictionary(
+                    element => element.Id,
+                    element => element.FloorId,
+                    StringComparer.OrdinalIgnoreCase);
                 var rollback = ProjectStateSnapshot.Capture(project);
                 int changed;
                 try
                 {
                     changed = ProjectFloorService.Assign(project, floor.Id, elements);
-                    foreach (var item in changedElements)
-                        AuditTrail.ForProject(project).Record("floor.assign", item.Element.Id, item.Previous + " -> " + floor.Id + " • semantic only; CAD source position unchanged");
+                    foreach (var element in elements)
+                        if (previous.TryGetValue(element.Id, out var oldFloor) &&
+                            !string.Equals(oldFloor, element.FloorId, StringComparison.Ordinal))
+                            AuditTrail.ForProject(project).Record("floor.assign", element.Id, oldFloor + " -> " + floor.Id + " • semantic only; CAD source position unchanged");
                 }
                 catch (Exception operationError)
                 {
