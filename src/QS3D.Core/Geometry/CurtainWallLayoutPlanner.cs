@@ -171,7 +171,7 @@ namespace QS3D.Core.Geometry
         private static int DivisionCount(double spanM, double maximumM, string label)
         {
             var ratio = Divide(spanM, maximumM, label + " ratio");
-            var ceiling = Math.Ceiling(ratio - 1e-12d);
+            var ceiling = Math.Ceiling(ratio);
             if (double.IsNaN(ceiling) || double.IsInfinity(ceiling) || ceiling < 1d || ceiling > int.MaxValue)
                 throw new InvalidOperationException(label + " is outside supported integer range.");
             return (int)ceiling;
