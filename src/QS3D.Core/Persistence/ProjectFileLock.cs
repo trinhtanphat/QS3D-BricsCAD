@@ -38,7 +38,7 @@ namespace QS3D.Core.Persistence
             catch (IOException ex)
             {
                 stream?.Dispose();
-                throw new InvalidOperationException("Unable to acquire exclusive QS3D project write lock: " + lockPath, ex);
+                throw new InvalidOperationException("Unable to acquire exclusive QS3D project write lock.", ex);
             }
             catch
             {
