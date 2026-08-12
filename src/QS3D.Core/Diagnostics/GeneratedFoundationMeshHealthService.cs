@@ -92,7 +92,8 @@ namespace QS3D.Core.Diagnostics
         {
             if (!element.Properties.TryGetValue(key, out var text) ||
                 !double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
-                double.IsNaN(value) || double.IsInfinity(value) || value <= 0d)
+                double.IsNaN(value) || double.IsInfinity(value) || value <= 0d ||
+                !string.Equals(text, value.ToString("R", CultureInfo.InvariantCulture), StringComparison.Ordinal))
                 issues.Add(new ModelHealthIssue(code, HealthSeverity.Warning, key + " thiếu hoặc không hợp lệ.", element.Id));
         }
 
@@ -100,7 +101,8 @@ namespace QS3D.Core.Diagnostics
         {
             if (!element.Properties.TryGetValue(key, out var text) ||
                 !double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
-                double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+                double.IsNaN(value) || double.IsInfinity(value) || value < 0d ||
+                !string.Equals(text, value.ToString("R", CultureInfo.InvariantCulture), StringComparison.Ordinal))
                 issues.Add(new ModelHealthIssue(code, HealthSeverity.Warning, key + " thiếu hoặc không hợp lệ.", element.Id));
         }
 
