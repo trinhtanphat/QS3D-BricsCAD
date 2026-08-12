@@ -125,9 +125,9 @@ namespace QS3D.BricsCAD.V25
                 });
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                var message = "QS3DHEALTHALL lỗi: " + ex.Message;
+                var message = "QS3DHEALTHALL lỗi: không thể hoàn tất health check.";
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\n" + message);
             }
