@@ -20,6 +20,7 @@ namespace QS3D.Core.SmokeTests
             HardeningRegressionSmoke.Run();
             ReviewHardeningSmoke.Run();
             Ed2NumericParitySmoke.Run();
+            XlsxQuantityStandardNumericPreflightSmoke.Run();
             ContinuationRegressionSmoke.Run();
             LogicRegressionSmoke.Run();
             RevisionRegressionSmoke.Run();

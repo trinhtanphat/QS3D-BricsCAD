@@ -15,6 +15,7 @@ Harden the standard BQ and ED2 XLSX publication boundary so negative row counts 
 - `src/QS3D.Core/Export/XlsxQuantityExporter.cs`
 - `tests/QS3D.Core.SmokeTests/XlsxQuantityStandardNumericPreflightSmoke.cs`
 - `tests/QS3D.Core.SmokeTests/Ed2NumericParitySmoke.cs`
+- `tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs` for additive, exactly-once standard-smoke registration
 - one focused static preflight only if existing deterministic smoke coverage cannot guard the source ordering sufficiently
 - this claim file for close-out
 
@@ -32,7 +33,7 @@ Harden the standard BQ and ED2 XLSX publication boundary so negative row counts 
 
 ## Coordination
 
-All current `ACTIVE` / `BLOCKED` claims were inspected at the baseline. None reserves `XlsxQuantityExporter`, `XlsxQuantityStandardNumericPreflightSmoke` or `Ed2NumericParitySmoke`. The completed Core reporting non-negative claim explicitly excluded XLSX exporters; active quantity-revision and local BQ preflight claims reserve disjoint revision/test-only and adapter/static surfaces.
+All current `ACTIVE` / `BLOCKED` claims were inspected at the baseline. None reserves `XlsxQuantityExporter`, `XlsxQuantityStandardNumericPreflightSmoke` or `Ed2NumericParitySmoke`. The completed Core reporting non-negative claim explicitly excluded XLSX exporters; active quantity-revision and local BQ preflight claims reserve disjoint revision/test-only and adapter/static surfaces. After review exposed the standard smoke's legacy self-registration, the central registration file was added as an additive shared surface and the smoke's module initializer removed so the new coverage runs exactly once; concurrent registration entries remain untouched.
 
 ## Completion condition
 
