@@ -186,13 +186,15 @@ namespace QS3D.Core.Domain
 
         private static bool HasConfiguredProperty(ProjectElement element, string key)
         {
-            return element.Properties.TryGetValue(key, out var raw) && !string.IsNullOrWhiteSpace(raw);
+            return element.Properties.ContainsKey(key);
         }
 
         private static double OptionalFiniteProperty(ProjectElement element, string key, double fallback)
         {
-            if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return fallback;
-            if (!double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value))
+            if (!element.Properties.TryGetValue(key, out var raw)) return fallback;
+            if (string.IsNullOrWhiteSpace(raw) ||
+                !double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
+                double.IsNaN(value) || double.IsInfinity(value))
                 throw new InvalidOperationException(element.Id + "/" + key + " must be a finite invariant number.");
             return value;
         }
