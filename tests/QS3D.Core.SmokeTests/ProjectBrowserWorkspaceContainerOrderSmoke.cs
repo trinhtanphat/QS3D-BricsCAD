@@ -17,9 +17,8 @@ namespace QS3D.Core.SmokeTests
             var root = reordered.Root!;
             var categories = root.Element("Categories")!;
             var floorIds = root.Element("FloorIds")!;
-            categories.Remove();
-            categories.AddAfterSelf(floorIds);
-            floorIds.AddBeforeSelf(categories);
+            floorIds.Remove();
+            categories.AddBeforeSelf(floorIds);
 
             Throws<InvalidDataException>(() => store.Deserialize(reordered.ToString(SaveOptions.DisableFormatting)));
         }
