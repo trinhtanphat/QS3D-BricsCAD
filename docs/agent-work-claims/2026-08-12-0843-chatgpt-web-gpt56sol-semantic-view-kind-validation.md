@@ -1,6 +1,6 @@
 # Work claim — Semantic View kind validation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-12T08:43:00+07:00`
 - Baseline main SHA observed: `dab99a78ee217a1b552cef4161caac191fc85557`
@@ -8,7 +8,7 @@
 
 ## Confirmed defect
 
-`SemanticViewPlanner.Build(...)` validates IDs, references, categories and filter integrity but copies `SemanticViewDefinition.Kind` directly into `SemanticViewPlan`. Because .NET enums may carry undefined integral values, a malformed value such as `(SemanticViewKind)999` can enter a semantic view plan instead of failing closed.
+`SemanticViewPlanner.Build(...)` validated IDs, references, categories and filter integrity but copied `SemanticViewDefinition.Kind` directly into `SemanticViewPlan`. Because .NET enums may carry undefined integral values, a malformed value such as `(SemanticViewKind)999` could enter a semantic view plan instead of failing closed.
 
 ## Reserved scope
 
@@ -28,6 +28,15 @@
 - Do not alter `SemanticDocumentationCatalogStore`, nested/root XML cardinality, native MLeader/TableStyle/Layout/Viewport/PaperSpace paths, licensing, regeneration, XLSX/BOM/interchange/health lanes.
 - No GitHub Actions dispatch or release publication.
 
+## Completion evidence
+
+- Claim commit: `9e6aede187ca37fb3de493e7ba53e8dc3941b167`
+- Source fix: `6df6f3e81046c6c5c88a22fd36ba2419a3cdc5bb`
+- Smoke coverage: `1e415e2320e44200498ab7b43a80620e32708384`
+- Smoke registration: `3a6a714984b71e604734e654280acde213f23373`
+- Static regression gate: `837c07ddcceec13e4bf9d39b029b667ba2bd9869`
+- Remote source/readback evidence only; GitHub Actions, local compilation, Python execution and licensed BricsCAD V25/V26 runtime were not run or claimed PASS.
+
 ## Closure
 
-Claim first, exact source re-fetch on moving `main`, minimal fail-closed validation, focused regression using an undefined enum value plus defined-value coverage where existing test surfaces allow it, ancestry/readback verification, and truthful closure without unexecuted CI or BricsCAD V25 runtime PASS claims.
+Undefined semantic view kinds now fail closed through `RequiredKind(...)` before project enumeration, while `Model`, `Plan` and `Schedule` are regression-covered as accepted values. The legacy direct `definition.Kind` propagation is locked out by the static preflight.
