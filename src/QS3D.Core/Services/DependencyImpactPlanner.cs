@@ -51,8 +51,10 @@ namespace QS3D.Core.Services
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var sourceChangeVersion = project.ChangeVersion;
-            var sourceElementCount = project.Elements.Count;
+            var sourceElements = project.Elements.ToArray();
+            var sourceElementCount = sourceElements.Length;
             var requestedRoots = CanonicalRoots(sourceElementIds, sourceElementCount);
+            RequireStructuralFreshness(project, sourceElements);
 
             var graph = new DependencyGraph();
             graph.Rebuild(project.Elements);
@@ -95,6 +97,7 @@ namespace QS3D.Core.Services
                 }
             }
 
+            RequireStructuralFreshness(project, sourceElements);
             if (project.ChangeVersion != sourceChangeVersion)
                 throw new InvalidOperationException("Project changed while dependency impact was being planned; recompute the impact plan.");
 
@@ -103,6 +106,18 @@ namespace QS3D.Core.Services
                 .ThenBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             return new DependencyImpactPlan(project.ProjectId, sourceChangeVersion, roots, ordered);
+        }
+
+        private static void RequireStructuralFreshness(ProjectState project, IReadOnlyList<ProjectElement> sourceElements)
+        {
+            if (project.Elements.Count != sourceElements.Count)
+                throw new InvalidOperationException("Project element structure changed while dependency impact was being planned; recompute the impact plan.");
+
+            for (var index = 0; index < sourceElements.Count; index++)
+            {
+                if (!ReferenceEquals(project.Elements[index], sourceElements[index]))
+                    throw new InvalidOperationException("Project element structure changed while dependency impact was being planned; recompute the impact plan.");
+            }
         }
 
         private static IReadOnlyList<string> CanonicalRoots(IEnumerable<string> sourceElementIds, int maxRootCount)
