@@ -116,9 +116,14 @@ namespace QS3D.Core.Formulas
                     if (Match('*'))
                     {
                         var right = ParseUnary(depth);
-                        value = _evaluate
-                            ? EnsureFinite(value * right, "Multiplication produced a non-finite result.")
-                            : 0d;
+                        if (_evaluate)
+                        {
+                            var product = EnsureFinite(value * right, "Multiplication produced a non-finite result.");
+                            if (product == 0d && value != 0d && right != 0d)
+                                throw Error("Multiplication underflowed to zero.");
+                            value = product;
+                        }
+                        else value = 0d;
                     }
                     else if (Match('/'))
                     {
@@ -126,7 +131,10 @@ namespace QS3D.Core.Formulas
                         if (_evaluate)
                         {
                             if (divisor == 0d) throw Error("Division by zero.");
-                            value = EnsureFinite(value / divisor, "Division produced a non-finite result.");
+                            var quotient = EnsureFinite(value / divisor, "Division produced a non-finite result.");
+                            if (quotient == 0d && value != 0d)
+                                throw Error("Division underflowed to zero.");
+                            value = quotient;
                         }
                         else value = 0d;
                     }
