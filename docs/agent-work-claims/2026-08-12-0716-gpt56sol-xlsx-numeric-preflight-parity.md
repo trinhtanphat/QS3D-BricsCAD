@@ -1,43 +1,47 @@
 # Work claim — XLSX numeric preflight parity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-xlsx-numeric-preflight-parity-20260812-0716`
 - Registered: `2026-08-12T07:16:00+07:00`
+- Completed: `2026-08-12T07:28:00+07:00`
 - Baseline main SHA: `88574b56ad2bc6b07c383545afad9a88f46be9fd`
+- Integrated main SHA: `55692f337fc9278852880ca3ebd473643e9c8016`
+- PR: `#616`
 - Priority: evidence-driven remote-safe export atomicity hardening during owner-requested `continue all`
 
-## Reserved scope
+## Completed scope
 
-Fail closed on non-finite numeric cells before path resolution, directory creation, temp-package creation, or worksheet serialization for the direct schedule XLSX exporters that currently defer `NaN`/`Infinity` rejection to `NumberCell`/`AppendNumber` during package construction.
+Door/Opening, Material, Curtain, Room Finish and BBS/Rebar XLSX exporters now reject non-finite numeric cells during row preflight before path resolution, directory creation, temp-package creation or worksheet serialization.
 
-## Expected surfaces
+## Changes
 
-- `src/QS3D.Core/Export/DoorOpeningXlsxExporter.cs`
-- `src/QS3D.Core/Export/MaterialUsageXlsxExporter.cs`
-- `src/QS3D.Core/Export/CurtainWallXlsxExporter.cs`
-- `src/QS3D.Core/Export/RoomFinishXlsxExporter.cs`
-- `src/QS3D.Core/Export/XlsxRebarScheduleExporter.cs`
-- focused Core smoke coverage under `tests/QS3D.Core.SmokeTests/`
-- this claim file
+- Door/Opening: preflight `WidthM`, `HeightM`, `SillHeightM`, `ThicknessM` and `OpeningAreaM2`.
+- Material: preflight `PrimaryQuantity`, `LengthM`, `AreaM2`, `VolumeM3` and `MassKg`.
+- Curtain: preflight all emitted floating-point wall/glass/frame/panel-clear metrics.
+- Room Finish: preflight `PrimaryQuantity`, `LengthM` and `AreaM2`.
+- BBS/Rebar: preflight `DiameterMm`, `CuttingLengthM`, `TotalLengthM`, `UnitWeightKgM`, `NetWeightKg`, `WastePercent` and `TotalWeightKg`.
+- Each failure identifies `rows`, worksheet row and field.
+- Existing serializer-level finite checks remain as defense in depth.
+- Added `XlsxScheduleNumericPreflightSmoke` covering one non-finite rejection per exporter before invalid destination-directory creation plus ordinary finite export paths for all five.
 
 ## Excluded scope
 
-- `XlsxQuantityExporter.cs`, which remains reserved by active claim `2026-08-12-0127-gpt56sol-quantity-xlsx-structural-limits.md`.
-- XML text sanitization, text-cell limits, worksheet row limits, null-row handling, reporting/grouping/business rules, sign/domain validation beyond the exporters' existing finite-number contract, or shared XLSX package validation.
-- Native BricsCAD/UI/runtime work, GitHub Actions, release packaging, or LOCAL_ONLY qualification.
+- `XlsxQuantityExporter.cs` remained outside this lane. Its pre-existing structural-limits claim resumed concurrently, and a separate Quantity XLSX XML-sanitization claim also appeared while this lane was active.
+- XML text sanitization, text-cell limits, worksheet row limits, null-row handling, reporting/grouping/business rules, sign/domain validation beyond the existing finite-number contract, and shared XLSX package validation were unchanged.
+- Native BricsCAD/UI/runtime work, GitHub Actions, release packaging and LOCAL_ONLY qualification were not performed.
 
-## Validation plan
+## Validation actually performed
 
-- Every numeric value emitted by each owned exporter is checked for `NaN`/`Infinity` during existing row preflight.
-- Failure identifies `rows`, worksheet row and field, and occurs before any destination directory/file/temp-package mutation.
-- Existing ordinary finite-value export behavior, row/text/null/XML guards and package validation remain unchanged.
-- Add focused module-initializer smoke coverage for pre-filesystem rejection and at least one ordinary finite export path per owned exporter.
-- Re-read exact branch diff and current `main` immediately before integration; do not dispatch Actions.
+- Published and corrected the claim before any product-source changes.
+- Reviewed the exact feature-branch diff: exactly five exporter files plus one focused smoke file.
+- Re-read all five owned exporter blobs on moving `main`; none changed between the branch base and pre-integration `main`, despite 74 concurrent commits in other lanes.
+- Reviewed PR #616 patch after publication.
+- Confirmed exact PR head `5e1f589771f2c069a52110e70a987e25be0aa4d1` had no pull-request workflow runs; no Actions were dispatched.
+- First exact-head merge attempt was rejected because `main` moved. Refreshed the base, confirmed the four new commits touched only Quantity claims/tests and semantic-sheet coordination, then retried the same exact head successfully.
+- Squash-merged PR #616 into `main` as `55692f337fc9278852880ca3ebd473643e9c8016`.
+- Re-read merged Door/Opening and BBS/Rebar source plus the dedicated smoke from remote `main` after integration; the merged finite preflight and regression source are present.
+- No local `.NET` build/test, licensed BricsCAD V25/Windows/native runtime execution or `LOCAL_PASS` is claimed from this connector-only environment.
 
-## Coordination
+## Integration
 
-No open PRs existed at registration time. A concurrent formula-reference completion commit landed immediately before this claim and was verified non-overlapping; the baseline above records that actual parent. Quantity XLSX remains explicitly excluded because its older `ACTIVE` claim still reserves that exporter; repository takeover rules prohibit treating age alone as release.
-
-## Completion condition
-
-All five owned exporters and focused regression coverage are merged to current `main`, remote source is re-read, and this claim is marked `COMPLETED` with exact integration SHA and validation boundaries.
+PR #616 was squash-merged into `main` as `55692f337fc9278852880ca3ebd473643e9c8016` without force-push.
