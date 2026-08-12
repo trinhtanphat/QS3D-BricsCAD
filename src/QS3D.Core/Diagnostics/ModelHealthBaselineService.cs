@@ -117,12 +117,18 @@ namespace QS3D.Core.Diagnostics
         private static string Key(ModelHealthIssue issue)
         {
             var code = issue.Code ?? string.Empty;
-            var key = ((int)issue.Severity).ToString(System.Globalization.CultureInfo.InvariantCulture) + "\n" +
-                      code.ToUpperInvariant() + "\n" +
-                      (issue.ElementId ?? string.Empty).ToUpperInvariant();
+            var key = KeyPart(((int)issue.Severity).ToString(System.Globalization.CultureInfo.InvariantCulture)) +
+                      KeyPart(code.ToUpperInvariant()) +
+                      KeyPart((issue.ElementId ?? string.Empty).ToUpperInvariant());
             return code.EndsWith("_STALE", StringComparison.OrdinalIgnoreCase)
                 ? key
-                : key + "\n" + (issue.Message ?? string.Empty);
+                : key + KeyPart(issue.Message ?? string.Empty);
+        }
+
+        private static string KeyPart(string value)
+        {
+            var text = value ?? string.Empty;
+            return text.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + text;
         }
     }
 }
