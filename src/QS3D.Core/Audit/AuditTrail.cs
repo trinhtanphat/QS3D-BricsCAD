@@ -49,10 +49,14 @@ namespace QS3D.Core.Audit
 
         public void Record(string action, string elementId, string detail, string actor = "", string correlationId = "")
         {
+            var normalizedAction = (action ?? string.Empty).Trim();
+            if (normalizedAction.Length == 0)
+                throw new ArgumentException("Audit action is required.", nameof(action));
+
             var item = new AuditEvent
             {
                 Utc = DateTime.UtcNow,
-                Action = action ?? string.Empty,
+                Action = normalizedAction,
                 ElementId = elementId ?? string.Empty,
                 Detail = detail ?? string.Empty,
                 Actor = actor ?? string.Empty,
