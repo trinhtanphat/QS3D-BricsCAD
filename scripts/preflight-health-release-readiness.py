@@ -17,7 +17,10 @@ if SUMMARY.is_file():
     for token in (
         "public bool IsHealthy => Errors == 0;",
         "public bool IsReleaseReady => Errors == 0 && Warnings == 0;",
-        "Issues = issues.Where(x => x != null).ToList().AsReadOnly();",
+        "var normalized = issues.ToList();",
+        "if (normalized.Any(x => x == null))",
+        'throw new InvalidOperationException("Health summary cannot contain a null diagnostic issue.");',
+        "Issues = normalized.AsReadOnly();",
     ):
         if token not in text:
             errors.append("HealthSummary.cs missing readiness token: " + token)
@@ -28,7 +31,8 @@ if SMOKE.is_file():
         "WarningIsHealthyButNotReleaseReady",
         "ErrorBlocksHealthAndRelease",
         "InfoOnlyIsReleaseReady",
-        "NullIssueEntriesAreIgnored",
+        "NullIssueEntriesFailClosed",
+        "UndefinedSeverityFailsAtIssueBoundary",
     ):
         if token not in text:
             errors.append("HealthSummaryReadinessSmoke.cs missing regression scenario: " + token)
@@ -42,4 +46,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Core distinguishes health from release readiness: warnings preserve IsHealthy but block IsReleaseReady. This gate does not inspect V25 runtime/native files.")
+print("PASS: Core distinguishes health from release readiness, rejects null/undefined diagnostics fail-closed, and warnings block IsReleaseReady. This gate does not inspect V25 runtime/native files.")
