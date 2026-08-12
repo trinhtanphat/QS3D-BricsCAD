@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 
 namespace QS3D.Core.Domain
@@ -126,6 +127,7 @@ namespace QS3D.Core.Domain
                 return new ElementVerticalPlacement(false, false, bottom, top);
             }
 
+            ValidateFloorIdentityCollection(project);
             var bottomLevel = FindFloor(project, bottomLevelId, element.Id + "/BottomLevelId");
             var bottomOffset = OptionalFiniteProperty(element, ProjectFloorService.BottomLevelOffsetKey, 0d);
             var bottomElevation = Add(bottomLevel.ElevationM, bottomOffset, element.Id + "/bottom level elevation");
@@ -158,6 +160,18 @@ namespace QS3D.Core.Domain
         {
             return project.FindFloor(floorId)
                 ?? throw new InvalidOperationException(label + " references missing floor/level " + floorId + ".");
+        }
+
+        private static void ValidateFloorIdentityCollection(ProjectState project)
+        {
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var floor in project.Floors)
+            {
+                if (floor == null)
+                    throw new InvalidOperationException("Project floor collection contains a null floor.");
+                if (!seenIds.Add(floor.Id))
+                    throw new InvalidOperationException("Project contains duplicate floor id: " + floor.Id + ".");
+            }
         }
 
         private static string Property(ProjectElement element, string key)
