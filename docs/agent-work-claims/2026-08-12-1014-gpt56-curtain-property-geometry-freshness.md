@@ -1,39 +1,31 @@
 # Work claim — Curtain property geometry freshness
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `gpt-5.6-sol-chatgpt`
 - Registered: `2026-08-12T10:14:30+07:00`
+- Completed: `2026-08-12T10:21:30+07:00`
 - Baseline main SHA: `80805f5178ce981f1ba5185cc5d68157c2b07f58`
+- Claim commit: `c88d5898d382d64d659aac74f1372a7817513249`
+- Implementation PR: `#746`
+- Main merge commit: `21ca2d08427013f3ef8154708fef85fb2454ff8f`
 - Priority: owner-requested continue-all source-safe bug fixing
 
 ## Confirmed defect
 
-`ProjectElement.SetProperty()` delegates generated-geometry/output freshness to `ElementGeometryPolicy`. `WallRegenerator` uses GlassWall properties `CurtainMaxPanelWidthM`, `CurtainMaxPanelHeightM`, `CurtainPerimeterFrameWidthM`, `CurtainMullionWidthM`, and `CurtainTransomWidthM` to compute curtain panel/frame layout, but `ElementGeometryPolicy` does not classify those keys as geometry-affecting. Editing one therefore dirties Properties/Quantity without Geometry and without marking existing generated curtain output stale, allowing native curtain geometry to remain out of date after the semantic layout input changed.
+`ProjectElement.SetProperty()` delegates generated-geometry/output freshness to `ElementGeometryPolicy`. `WallRegenerator` uses GlassWall properties `CurtainMaxPanelWidthM`, `CurtainMaxPanelHeightM`, `CurtainPerimeterFrameWidthM`, `CurtainMullionWidthM`, and `CurtainTransomWidthM` to compute curtain panel/frame layout, but `ElementGeometryPolicy` did not classify those keys as geometry-affecting. Editing one therefore dirtied Properties/Quantity without Geometry and without marking existing generated curtain output stale, allowing native curtain geometry to remain out of date after the semantic layout input changed.
 
-## Non-overlap check
+## Implemented contract
 
-Recent curtain claims cover rectangle-area overflow, path/frame bounds, fingerprints, handles, health, schedule and native runner work. The active rectangle-area lane is reserved to `CurtainWallDetailPlanner.cs`; no current claim/commit was found for `ElementGeometryPolicy.cs` or curtain property freshness.
+- Added category-specific GlassWall curtain geometry keys for all five layout dimensions.
+- `AffectsGeneratedGeometry()` and `AffectsGeneratedOutput()` now share the category-aware geometry classification.
+- Editing those keys through `ProjectElement.SetProperty()` dirties Geometry and marks existing generated curtain frame/panel output stale.
+- The same curtain-only keys do not dirty unrelated generated categories.
+- `CurtainFrameMaterial` remains generated-output-only and does not dirty Geometry.
 
-## Reserved scope
+## Regression source
 
-- `src/QS3D.Core/Domain/ElementGeometryPolicy.cs`
-- focused Core smoke source for curtain property freshness
-- this claim file
+`tests/QS3D.Core.SmokeTests/CurtainPropertyGeometryFreshnessSmoke.cs` is a module-initializer smoke covering all five GlassWall layout keys, an unrelated Beam control, and the existing output-only material behavior. The source and smoke were read back directly from `main` after merge.
 
-## Excluded scope
+## Validation limits
 
-- `SemanticRegenerators.cs` and WallRegenerator implementation
-- curtain layout geometry algorithms, native materialization, health, fingerprints, reporting
-- WallPier property freshness (separate audit lane if needed)
-- BricsCAD V25/V26 runtime, packaging, signing, private DWG, GitHub Actions
-
-## Intended contract
-
-- For `ElementCategory.GlassWall`, each curtain layout dimension property is geometry-affecting and generated-output-affecting.
-- Editing those keys through `ProjectElement.SetProperty()` marks Geometry dirty and marks existing generated curtain frame/panel output stale.
-- The same curtain-specific keys remain irrelevant to unrelated generated categories rather than globally dirtying their geometry.
-- Existing generic geometry keys and output-only material keys retain current semantics.
-
-## Intended validation
-
-Add focused module-initializer smoke coverage for all five GlassWall layout keys plus a non-GlassWall control. No Actions/build/BricsCAD runtime PASS will be claimed unless explicitly executed.
+No GitHub Actions were dispatched. No local .NET build or BricsCAD V25/V26 runtime qualification was executed or claimed in this lane.
