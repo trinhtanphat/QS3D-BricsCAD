@@ -50,7 +50,7 @@ namespace QS3D.BricsCAD.V25.UI
             if (!(sender is DataGrid grid)) return;
             var owner = Window.GetWindow(grid) as QuantitySummaryWindow;
             if (owner == null || !owner._initialized || !ReferenceEquals(grid, owner.QuantityGrid)) return;
-            if (!owner._detailMode || owner.AutoRevealCheck?.IsChecked != true ||
+            if (owner.AutoRevealCheck?.IsChecked != true ||
                 !(grid.SelectedItem is QuantityReportRow) || e.AddedItems.Count == 0)
                 return;
 
@@ -62,7 +62,7 @@ namespace QS3D.BricsCAD.V25.UI
             if (!(sender is DataGrid grid)) return;
             var owner = Window.GetWindow(grid) as QuantitySummaryWindow;
             if (owner == null || !owner._initialized || !ReferenceEquals(grid, owner.QuantityGrid)) return;
-            if (owner._detailMode && owner.AutoRevealCheck?.IsChecked == true) return;
+            if (owner.AutoRevealCheck?.IsChecked == true) return;
             if (!(grid.SelectedItem is QuantityReportRow)) return;
 
             owner.TryClearLocateSelectionForCurrentDocument();
