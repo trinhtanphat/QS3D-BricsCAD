@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             PacksAcrossSheetsDeterministically();
             PerSheetPlacementCapPaginates();
+            SheetNumberPrefixReservesGeneratedSuffix();
             ResultIsReadOnly();
             ReservedTitleBlockAreaIsRespected();
             MissingViewFailsClosed();
@@ -65,6 +66,24 @@ namespace QS3D.Core.SmokeTests
             Equal(2, sheets.Count);
             Equal(128, sheets[0].Placements.Count);
             Equal(1, sheets[1].Placements.Count);
+        }
+
+        private static void SheetNumberPrefixReservesGeneratedSuffix()
+        {
+            var maxPrefix = new string('N', 62);
+            var sheets = SemanticSheetAutoLayoutPlanner.Build(
+                new[] { new SemanticSheetAutoLayoutItem("V1", 100d, 80d) },
+                BuildViews(1),
+                new SemanticSheetAutoLayoutOptions("S", maxPrefix, "Sheet", 297d, 210d));
+
+            Equal(1, sheets.Count);
+            Equal(64, sheets[0].Number.Length);
+            Equal(maxPrefix + "01", sheets[0].Number);
+
+            Throws<ArgumentException>(() => SemanticSheetAutoLayoutPlanner.Build(
+                new[] { new SemanticSheetAutoLayoutItem("V1", 100d, 80d) },
+                BuildViews(1),
+                new SemanticSheetAutoLayoutOptions("S", new string('N', 63), "Sheet", 297d, 210d)));
         }
 
         private static void ResultIsReadOnly()
