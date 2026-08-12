@@ -1,9 +1,10 @@
 # Work claim — BricsCAD V26 package/install/update/release lane
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-12T00:54:00+07:00`
 - Scope reconciled: `2026-08-12T01:08:00+07:00`
+- Completed: `2026-08-12T08:03:00+07:00`
 - Baseline main SHA: `8bcd4073e21d373293b90e33f802a4a594a181de`
 - Priority: owner requested full latest BricsCAD V26 support after the V26 .NET 8 host lane landed.
 
@@ -60,6 +61,30 @@ Before enabling V26 one-click update, this lane therefore also reserves the mini
 - Re-read exact committed V26 files from `main` after publication.
 - Record local-only clean-machine/runtime/signing evidence requirements precisely; no fabricated PASS claims.
 
+## Completion record
+
+Source-side scope is complete on `main`.
+
+Key implementation / hardening commits:
+
+- `6ff749868153a699d6e48b5fd5c727800f3b4830` — dedicated `QS3D.V26.sln` lane for Core + V26 adapter + smoke tests.
+- `a7091e19e183f7c99a78468488052e6415750d62` — harden manual V26 release publication with qualified-SHA/tag and uploaded-asset integrity checks before draft publication.
+- `64197086f40f71bba087de33a4c0cc713bdc2ce3` — make shared `QS3DRUNTIMECHECK` select BricsCAD major 25/26 from the V26 compile symbol instead of pinning V26 to major 25.
+- `adf3ac66a4d454e4d7abc7c2dae4bce0aea5d98c` — make the shared runtime-probe x64 failure text host-neutral.
+- `dba4cbf59ee3a45fa5895d5ec47d95194ed608b9` — make shared release-readiness qualification text select V25/V26 correctly.
+- `6a8cc0c44b711ad0da235f8aa67d9be1fa70e129` — lock the shared runtime host-major contract into `preflight-bricscad-v26.py`.
+- `a5f574196cf56f1af789468e96a36d1990a2a2b2` — document remote release-tag and per-asset size/SHA-256 revalidation before publication.
+
+Validation actually performed in this remote lane:
+
+- re-fetched current `main` after the runtime-host fixes and confirmed `RuntimeDiagnosticsCommands`, `RuntimeProbeCommands`, `ReleaseReadinessCommands`, the V26 preflight and the V26 release runbook retain the intended changes after concurrent commits;
+- confirmed the V26 adapter still targets `net8.0-windows`, defines `BRICSCAD_V26`, isolates V26 host references and links the shared V25 command source intentionally;
+- confirmed the current V26 runtime gate requires BricsCAD major 26 and the exact `QS3D.BricsCAD.V26.dll` payload;
+- confirmed the manual V26 release workflow remains `workflow_dispatch`-only and source-side publication integrity checks remain present;
+- no GitHub Actions were dispatched or rerun;
+- no local `dotnet`/PowerShell build was executed in this hosted session;
+- no licensed BricsCAD V26 runtime, clean-machine install/update/uninstall, real Authenticode certificate/timestamp or actual GitHub Release PASS is claimed. Those remain `LOCAL_ONLY` evidence items in `docs/LOCAL-V26-QUALIFICATION.md`.
+
 ## Completion condition
 
-V26 has a coherent source-safe package/install/update/manual-release lane on `main`, V25 security/transaction behavior remains preserved, host-major release discovery cannot cross channels, deterministic guards prevent cross-major package/update/install mistakes, LOCAL_ONLY qualification is explicit, and this claim is marked `COMPLETED` with exact implementation SHAs and validation actually performed.
+Satisfied source-side: V26 has a coherent package/install/update/manual-release lane on `main`, V25 security/transaction behavior remains preserved, host-major release discovery is isolated, shared runtime checks no longer false-fail V26 as V25, deterministic source guards cover the cross-major contracts, LOCAL_ONLY qualification is explicit, and this claim is released as `COMPLETED`.
