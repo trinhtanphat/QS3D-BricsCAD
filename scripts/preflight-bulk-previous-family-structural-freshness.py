@@ -27,8 +27,8 @@ version_check = method.index("RequireTargetEnumerationFreshness(project, beforeT
 family_check = method.index("RequireFamilyOwnershipUnchanged(project, familyOwnership);")
 existing_check = method.index("RequireCurrentFamilyAssignmentOwnership(project, family, targets);")
 previous_read = method.index("var previousFamily = project.FindFamily(previousFamilyId)")
-assert snapshot < version < enumeration < version_check < family_check < existing_check < previous_read, (
-    "bulk previous-Family structural freshness ordering drifted"
+assert snapshot < version < enumeration < version_check < existing_check < family_check < previous_read, (
+    "bulk Family structural freshness guard precedence drifted"
 )
 
 for token in (
@@ -38,6 +38,7 @@ for token in (
     "!seen.Add(family.Id)",
     "!expected.TryGetValue(family.Id, out var original)",
     "!ReferenceEquals(original, family)",
+    "Target Family no longer belongs to the project after bulk assignment target enumeration",
 ):
     assert token in source, f"missing bulk previous-Family ownership guard: {token}"
 
