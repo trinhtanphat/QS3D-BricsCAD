@@ -9,11 +9,13 @@ namespace QS3D.Core.Persistence
     public sealed class ProjectStateSnapshot
     {
         private readonly ProjectState _snapshot;
+        private readonly ProjectState _capturedProject;
         private readonly IReadOnlyDictionary<string, ProjectElement> _capturedElements;
 
-        private ProjectStateSnapshot(ProjectState snapshot, IReadOnlyDictionary<string, ProjectElement> capturedElements)
+        private ProjectStateSnapshot(ProjectState snapshot, ProjectState capturedProject, IReadOnlyDictionary<string, ProjectElement> capturedElements)
         {
             _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
+            _capturedProject = capturedProject ?? throw new ArgumentNullException(nameof(capturedProject));
             _capturedElements = capturedElements ?? throw new ArgumentNullException(nameof(capturedElements));
         }
 
@@ -21,7 +23,7 @@ namespace QS3D.Core.Persistence
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var capturedElements = CaptureElementReferences(project);
-            return new ProjectStateSnapshot(CreateDetachedCopy(project), capturedElements);
+            return new ProjectStateSnapshot(CreateDetachedCopy(project), project, capturedElements);
         }
 
         public static ProjectState CreateDetachedCopy(ProjectState project)
@@ -35,7 +37,8 @@ namespace QS3D.Core.Persistence
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (!string.Equals(project.ProjectId, _snapshot.ProjectId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Cannot restore a snapshot into a different project id.");
-            CopyInto(_snapshot, project, _capturedElements);
+            var preservedElements = ReferenceEquals(project, _capturedProject) ? _capturedElements : null;
+            CopyInto(_snapshot, project, preservedElements);
         }
 
         private static ProjectState Clone(ProjectState source)
