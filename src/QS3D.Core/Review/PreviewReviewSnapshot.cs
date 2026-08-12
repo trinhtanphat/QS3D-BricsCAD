@@ -399,7 +399,9 @@ namespace QS3D.Core.Review
         public PreviewReviewSnapshot Load(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Preview review path is required.", nameof(path));
-            var root = LoadDocument(path).Root ?? throw new InvalidDataException("Preview review file has no root.");
+            var document = LoadDocument(path);
+            ValidateXmlShape(document);
+            var root = document.Root ?? throw new InvalidDataException("Preview review file has no root.");
             if (!string.Equals(root.Name.LocalName, "qs3dPreviewReview", StringComparison.Ordinal)) throw new InvalidDataException("Invalid preview review root.");
             if (!string.Equals(Required(root, "format"), PreviewReviewSnapshotService.FormatName, StringComparison.Ordinal)) throw new InvalidDataException("Unsupported preview review format.");
             if (NonNegativeInt(root, "formatVersion") != PreviewReviewSnapshotService.FormatVersion) throw new InvalidDataException("Unsupported preview review format version.");
@@ -479,6 +481,72 @@ namespace QS3D.Core.Review
                         new XAttribute("after", x.After),
                         new XAttribute("beforeProvenance", x.BeforeProvenance),
                         new XAttribute("afterProvenance", x.AfterProvenance))))));
+        }
+
+        private static void ValidateXmlShape(XDocument document)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            var root = document.Root ?? throw new InvalidDataException("Preview review file has no root.");
+            ValidateElementShape(
+                root,
+                "qs3dPreviewReview",
+                new[]
+                {
+                    "format", "formatVersion", "name", "projectId", "kind", "sourceChangeVersion", "scope",
+                    "changedElementCount", "regeneratedElementCount", "newHealthIssueCount", "newHealthErrorCount",
+                    "resolvedHealthIssueCount", "omittedHandleFieldCount", "fingerprint"
+                },
+                new[] { "targets", "entries" });
+            EnsureSingleChild(root, "targets");
+            EnsureSingleChild(root, "entries");
+
+            var targets = root.Element("targets")!;
+            ValidateElementShape(targets, "targets", Array.Empty<string>(), new[] { "target" });
+            foreach (var target in targets.Elements("target"))
+                ValidateElementShape(target, "target", new[] { "id" }, Array.Empty<string>());
+
+            var entries = root.Element("entries")!;
+            ValidateElementShape(entries, "entries", Array.Empty<string>(), new[] { "entry" });
+            foreach (var entry in entries.Elements("entry"))
+                ValidateElementShape(
+                    entry,
+                    "entry",
+                    new[] { "elementId", "category", "change", "field", "before", "after", "beforeProvenance", "afterProvenance" },
+                    Array.Empty<string>());
+        }
+
+        private static void ValidateElementShape(XElement element, string expectedName, IReadOnlyCollection<string> requiredAttributes, IReadOnlyCollection<string> allowedChildren)
+        {
+            if (element.Name != XName.Get(expectedName))
+                throw new InvalidDataException("Preview review XML contains an unsupported element or namespace: " + element.Name + ".");
+
+            var expectedAttributes = new HashSet<XName>(requiredAttributes.Select(XName.Get));
+            foreach (var attribute in element.Attributes())
+                if (!expectedAttributes.Contains(attribute.Name))
+                    throw new InvalidDataException("Preview review XML contains an unsupported attribute on " + expectedName + ": " + attribute.Name + ".");
+            foreach (var attributeName in expectedAttributes)
+                if (element.Attribute(attributeName) == null)
+                    throw new InvalidDataException("Preview review XML is missing required attribute on " + expectedName + ": " + attributeName.LocalName + ".");
+
+            var expectedChildren = new HashSet<XName>(allowedChildren.Select(XName.Get));
+            foreach (var node in element.Nodes())
+            {
+                if (node is XElement child)
+                {
+                    if (!expectedChildren.Contains(child.Name))
+                        throw new InvalidDataException("Preview review XML contains an unsupported child of " + expectedName + ": " + child.Name + ".");
+                    continue;
+                }
+
+                if (node is XText text && string.IsNullOrWhiteSpace(text.Value)) continue;
+                throw new InvalidDataException("Preview review XML contains unsupported node content in " + expectedName + ".");
+            }
+        }
+
+        private static void EnsureSingleChild(XElement parent, string childName)
+        {
+            if (parent.Elements(XName.Get(childName)).Count() != 1)
+                throw new InvalidDataException("Preview review XML requires exactly one " + childName + " element.");
         }
 
         private static XDocument LoadDocument(string path)
