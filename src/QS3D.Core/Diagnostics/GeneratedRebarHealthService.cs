@@ -123,7 +123,7 @@ namespace QS3D.Core.Diagnostics
 
         private static void Reserve(OwnershipIndex index, string? handle, string token)
         {
-            var normalized = (handle ?? string.Empty).Trim();
+            var normalized = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
             if (normalized.Length == 0) return;
             if (!index.Owners.TryGetValue(normalized, out var existing))
             {
@@ -151,19 +151,20 @@ namespace QS3D.Core.Diagnostics
                 }
                 if (!string.Equals(handleText, handle, StringComparison.Ordinal))
                     issues.Add(new ModelHealthIssue(spec.CodePrefix + "_GENERATED_HANDLE_NON_CANONICAL", HealthSeverity.Error, spec.HandlesKey + " không được có khoảng trắng đầu/cuối ở từng handle.", element.Id));
-                if (!local.Add(handle))
+                var identity = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
+                if (!local.Add(identity))
                 {
-                    issues.Add(new ModelHealthIssue("DUPLICATE_" + spec.CodePrefix + "_GENERATED_HANDLE", HealthSeverity.Error, "Một " + spec.DisplayName + " handle bị lặp trong cùng element: " + handle, element.Id));
+                    issues.Add(new ModelHealthIssue("DUPLICATE_" + spec.CodePrefix + "_GENERATED_HANDLE", HealthSeverity.Error, "Một " + spec.DisplayName + " handle bị lặp trong cùng element: " + identity, element.Id));
                     continue;
                 }
                 validCount++;
                 var ownerToken = element.Id + "/" + spec.HandlesKey;
-                if (ownership.IsConflicted(handle, ownerToken))
-                    issues.Add(new ModelHealthIssue(spec.CodePrefix + "_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated rebar solid đang xung đột với owner/project handle khác: " + ownership.Describe(handle), element.Id));
-                if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
+                if (ownership.IsConflicted(identity, ownerToken))
+                    issues.Add(new ModelHealthIssue(spec.CodePrefix + "_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated rebar solid đang xung đột với owner/project handle khác: " + ownership.Describe(identity), element.Id));
+                if (element.SourceHandles.Any(x => string.Equals(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x), identity, StringComparison.OrdinalIgnoreCase)))
                     issues.Add(new ModelHealthIssue(spec.CodePrefix + "_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated rebar handle không được nằm trong SourceHandles.", element.Id));
-                if (liveSolidHandles != null && !liveSolidHandles.Contains(handle))
-                    issues.Add(new ModelHealthIssue(spec.CodePrefix + "_GENERATED_SOLID_MISSING", HealthSeverity.Error, "Không còn tìm thấy generated " + spec.DisplayName + " Solid3d: " + handle, element.Id));
+                if (liveSolidHandles != null && !liveSolidHandles.Contains(identity))
+                    issues.Add(new ModelHealthIssue(spec.CodePrefix + "_GENERATED_SOLID_MISSING", HealthSeverity.Error, "Không còn tìm thấy generated " + spec.DisplayName + " Solid3d: " + identity, element.Id));
             }
 
             if (element.Properties.TryGetValue(spec.CountKey, out var countText))
@@ -201,7 +202,7 @@ namespace QS3D.Core.Diagnostics
         private static IEnumerable<string> SplitHandles(string raw) =>
             (raw ?? string.Empty)
                 .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(x => x.Trim())
+                .Select(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity)
                 .Where(x => x.Length > 0)
                 .Distinct(StringComparer.OrdinalIgnoreCase);
     }

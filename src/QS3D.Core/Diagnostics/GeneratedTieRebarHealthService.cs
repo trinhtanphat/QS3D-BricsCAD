@@ -37,19 +37,20 @@ namespace QS3D.Core.Diagnostics
                     }
                     if (!string.Equals(handleText, handle, StringComparison.Ordinal))
                         issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_HANDLE_NON_CANONICAL", HealthSeverity.Error, HandlesKey + " không được có khoảng trắng đầu/cuối ở từng handle.", element.Id));
-                    if (!local.Add(handle))
+                    var identity = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
+                    if (!local.Add(identity))
                     {
-                        issues.Add(new ModelHealthIssue("DUPLICATE_TIE_REBAR_GENERATED_HANDLE", HealthSeverity.Error, "Generated tie handle bị lặp: " + handle, element.Id));
+                        issues.Add(new ModelHealthIssue("DUPLICATE_TIE_REBAR_GENERATED_HANDLE", HealthSeverity.Error, "Generated tie handle bị lặp: " + identity, element.Id));
                         continue;
                     }
                     valid++;
                     var expectedOwner = element.Id + "/" + HandlesKey;
-                    if (ownership.IsConflicted(handle, expectedOwner))
-                        issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated tie solid xung đột owner/project handle khác: " + ownership.Describe(handle), element.Id));
-                    if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
+                    if (ownership.IsConflicted(identity, expectedOwner))
+                        issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated tie solid xung đột owner/project handle khác: " + ownership.Describe(identity), element.Id));
+                    if (element.SourceHandles.Any(x => string.Equals(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x), identity, StringComparison.OrdinalIgnoreCase)))
                         issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated tie handle không được nằm trong SourceHandles.", element.Id));
-                    if (liveSolidHandles != null && !liveSolidHandles.Contains(handle))
-                        issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_SOLID_MISSING", HealthSeverity.Error, "Không còn tìm thấy generated tie Solid3d: " + handle, element.Id));
+                    if (liveSolidHandles != null && !liveSolidHandles.Contains(identity))
+                        issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_SOLID_MISSING", HealthSeverity.Error, "Không còn tìm thấy generated tie Solid3d: " + identity, element.Id));
                 }
 
                 if (!element.Properties.TryGetValue("GeneratedTieRebarCount", out var countText) ||
@@ -142,13 +143,13 @@ namespace QS3D.Core.Diagnostics
         private static void ReserveProperty(OwnershipIndex index, ProjectElement element, string key, string raw)
         {
             if (string.IsNullOrWhiteSpace(raw)) return;
-            foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
                 Reserve(index, handle, element.Id + "/" + key);
         }
 
         private static void Reserve(OwnershipIndex index, string? handle, string token)
         {
-            var normalized = (handle ?? string.Empty).Trim();
+            var normalized = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
             if (normalized.Length == 0) return;
             if (!index.Owners.TryGetValue(normalized, out var existing))
             {
