@@ -82,7 +82,10 @@ namespace QS3D.Core.Services
             if (selectedHandles == null) throw new ArgumentNullException(nameof(selectedHandles));
             EnsureUniqueElementIds(project);
 
+            var inputVersion = project.ChangeVersion;
             var selected = MaterializeSelectedHandles(selectedHandles);
+            if (project.ChangeVersion != inputVersion)
+                throw new InvalidOperationException("Project state changed while materializing semantic handle selection. Retry against the current project state.");
             if (selected.Count == 0) return Array.Empty<ProjectElement>();
 
             var owners = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
