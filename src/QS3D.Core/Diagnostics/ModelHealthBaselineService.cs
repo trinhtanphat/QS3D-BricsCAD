@@ -21,8 +21,15 @@ namespace QS3D.Core.Diagnostics
 
         private static List<ModelHealthIssue> Sort(IEnumerable<ModelHealthIssue> issues)
         {
-            return (issues ?? Enumerable.Empty<ModelHealthIssue>())
-                .Where(x => x != null)
+            var normalized = (issues ?? Enumerable.Empty<ModelHealthIssue>()).ToList();
+            if (normalized.Any(x => x == null))
+                throw new InvalidOperationException("Model health baseline cannot contain a null diagnostic issue.");
+            foreach (var issue in normalized)
+            {
+                if (!Enum.IsDefined(typeof(HealthSeverity), issue.Severity))
+                    throw new InvalidOperationException("Model health baseline contains an undefined severity: " + (int)issue.Severity + ".");
+            }
+            return normalized
                 .OrderByDescending(x => x.Severity)
                 .ThenBy(x => x.Code ?? string.Empty, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.ElementId ?? string.Empty, StringComparer.OrdinalIgnoreCase)
@@ -97,7 +104,10 @@ namespace QS3D.Core.Diagnostics
             var result = new Dictionary<string, ModelHealthIssue>(StringComparer.Ordinal);
             foreach (var issue in issues ?? Enumerable.Empty<ModelHealthIssue>())
             {
-                if (issue == null) continue;
+                if (issue == null)
+                    throw new InvalidOperationException("Model health baseline cannot contain a null diagnostic issue.");
+                if (!Enum.IsDefined(typeof(HealthSeverity), issue.Severity))
+                    throw new InvalidOperationException("Model health baseline contains an undefined severity: " + (int)issue.Severity + ".");
                 var key = Key(issue);
                 if (!result.ContainsKey(key)) result[key] = issue;
             }
