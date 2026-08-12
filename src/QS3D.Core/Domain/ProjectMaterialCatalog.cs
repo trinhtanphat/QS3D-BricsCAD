@@ -241,7 +241,7 @@ namespace QS3D.Core.Domain
 
         private static List<ProjectMaterial> ReadCustom(ProjectState project)
         {
-            if (!project.Metadata.TryGetValue(MetadataKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return new List<ProjectMaterial>();
+            if (!project.Metadata.TryGetValue(MetadataKey, out var raw) || string.IsNullOrEmpty(raw)) return new List<ProjectMaterial>();
             if (raw.Length > MaxSerializedLength)
                 throw new InvalidOperationException("Stored material catalog exceeds the serialized safety limit.");
             var lines = raw.Split(new[] { '\n' }, MaxCustomMaterials + 1, StringSplitOptions.None);

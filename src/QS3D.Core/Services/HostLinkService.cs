@@ -33,6 +33,9 @@ namespace QS3D.Core.Services
                 EnsureCanLeavePhysicalCutHost(project, opening, previousHostElement, previousHost, "re-host");
             }
 
+            if (matchingDependencies.Count == 0)
+                EnsureHostDependencyEdgeAcyclic(project, opening, wall);
+
             ProjectSemanticMutationExecutor.Execute(project, "host.link", () =>
             {
                 if (relationshipChanged)
@@ -109,6 +112,32 @@ namespace QS3D.Core.Services
                     throw new InvalidOperationException("Project contains a null semantic element entry.");
                 if (!seenIds.Add(element.Id))
                     throw new InvalidOperationException("Project contains duplicate semantic element id: " + element.Id + ".");
+            }
+        }
+
+        private static void EnsureHostDependencyEdgeAcyclic(ProjectState project, ProjectElement opening, ProjectElement wall)
+        {
+            var elementsById = project.Elements.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { wall.Id };
+            var pending = new Queue<ProjectElement>();
+            pending.Enqueue(wall);
+
+            while (pending.Count > 0)
+            {
+                var current = pending.Dequeue();
+                for (var index = 0; index < current.DependsOn.Count; index++)
+                {
+                    var dependencyId = current.DependsOn[index] ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(dependencyId))
+                        throw new InvalidOperationException("Cannot validate host dependency cycle because element " + current.Id + " contains a blank dependency at index " + index + ".");
+                    if (!string.Equals(dependencyId, dependencyId.Trim(), StringComparison.Ordinal))
+                        throw new InvalidOperationException("Cannot validate host dependency cycle because element " + current.Id + " contains a non-canonical dependency at index " + index + ".");
+                    if (string.Equals(dependencyId, opening.Id, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("Linking opening " + opening.Id + " to host " + wall.Id + " would create a semantic dependency cycle.");
+                    if (!elementsById.TryGetValue(dependencyId, out var dependency))
+                        throw new InvalidOperationException("Cannot validate host dependency cycle because element " + current.Id + " depends on missing semantic element " + dependencyId + ".");
+                    if (visited.Add(dependency.Id)) pending.Enqueue(dependency);
+                }
             }
         }
 

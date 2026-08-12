@@ -8,8 +8,33 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
+            MissingAndExactEmptyMetadataRemainEmpty();
+            WhitespaceOnlyMetadataFailsClosed();
             EmptyPersistedRecordFailsClosed();
             CanonicalCatalogStillRoundTrips();
+        }
+
+        private static void MissingAndExactEmptyMetadataRemainEmpty()
+        {
+            var missing = new ProjectState("material-missing-catalog", "Material missing catalog");
+            if (ProjectMaterialCatalog.GetCustom(missing).Count != 0)
+                throw new InvalidOperationException("Missing material catalog metadata must remain an empty custom catalog.");
+
+            var empty = new ProjectState("material-empty-catalog", "Material empty catalog");
+            empty.Metadata[ProjectMaterialCatalog.MetadataKey] = string.Empty;
+            if (ProjectMaterialCatalog.GetCustom(empty).Count != 0)
+                throw new InvalidOperationException("Exact-empty material catalog metadata must preserve the compatibility empty-catalog behavior.");
+        }
+
+        private static void WhitespaceOnlyMetadataFailsClosed()
+        {
+            var spaces = new ProjectState("material-space-catalog", "Material space catalog");
+            spaces.Metadata[ProjectMaterialCatalog.MetadataKey] = "   ";
+            Throws<InvalidOperationException>(() => ProjectMaterialCatalog.GetCustom(spaces));
+
+            var tab = new ProjectState("material-tab-catalog", "Material tab catalog");
+            tab.Metadata[ProjectMaterialCatalog.MetadataKey] = "\t";
+            Throws<InvalidOperationException>(() => ProjectMaterialCatalog.GetCustom(tab));
         }
 
         private static void EmptyPersistedRecordFailsClosed()

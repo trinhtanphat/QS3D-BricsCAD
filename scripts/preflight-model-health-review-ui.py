@@ -34,7 +34,8 @@ if XAML.is_file():
         'x:Name="IssueGrid"',
         'Click="OnLocateClick"',
         'MouseDoubleClick="OnGridDoubleClick"',
-        'Text="READ-ONLY TRIAGE • ISSUE → CAD LOCATE"',
+        'Text="READ-ONLY TRIAGE"',
+        'Text="ISSUE → CAD LOCATE"',
     ):
         if needle not in text:
             errors.append("ModelHealthWindow.xaml missing review UI contract: " + needle)
