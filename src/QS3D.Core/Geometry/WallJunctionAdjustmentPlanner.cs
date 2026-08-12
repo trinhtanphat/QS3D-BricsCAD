@@ -20,7 +20,7 @@ namespace QS3D.Core.Geometry
             To = to;
             Distance = distance;
             JunctionKind = junctionKind;
-            JunctionSegmentIds = junctionSegmentIds ?? throw new ArgumentNullException(nameof(junctionSegmentIds));
+            JunctionSegmentIds = new List<string>(junctionSegmentIds ?? throw new ArgumentNullException(nameof(junctionSegmentIds))).AsReadOnly();
         }
 
         public string SegmentId { get; }
@@ -36,8 +36,8 @@ namespace QS3D.Core.Geometry
     {
         public WallJunctionAdjustmentPlan(IReadOnlyList<WallJunction> junctions, IReadOnlyList<WallEndpointAdjustment> adjustments)
         {
-            Junctions = junctions ?? throw new ArgumentNullException(nameof(junctions));
-            Adjustments = adjustments ?? throw new ArgumentNullException(nameof(adjustments));
+            Junctions = new List<WallJunction>(junctions ?? throw new ArgumentNullException(nameof(junctions))).AsReadOnly();
+            Adjustments = new List<WallEndpointAdjustment>(adjustments ?? throw new ArgumentNullException(nameof(adjustments))).AsReadOnly();
         }
 
         public IReadOnlyList<WallJunction> Junctions { get; }
