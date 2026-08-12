@@ -14,7 +14,20 @@ namespace QS3D.Core.Services
             if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) ||
                 double.IsNaN(result) || double.IsInfinity(result))
                 throw new InvalidOperationException(element.Id + "/" + name + " must be a finite invariant numeric value.");
+            if (result == 0d && HasNonZeroSignificand(value))
+                throw new InvalidOperationException(element.Id + "/" + name + " underflowed to zero.");
             return result;
+        }
+
+        private static bool HasNonZeroSignificand(string value)
+        {
+            for (var i = 0; i < value.Length; i++)
+            {
+                var character = value[i];
+                if (character == 'e' || character == 'E') break;
+                if (character >= '1' && character <= '9') return true;
+            }
+            return false;
         }
     }
 
