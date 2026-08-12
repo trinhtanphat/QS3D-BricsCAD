@@ -372,7 +372,11 @@ namespace QS3D.Core.Templates
             foreach (var mapping in profile.LayerMappings)
             {
                 if (string.IsNullOrWhiteSpace(mapping.Key)) throw new InvalidDataException("Template layer mapping pattern is empty.");
-                if (!Enum.TryParse(mapping.Value, true, out ElementCategory _)) throw new InvalidDataException("Invalid template layer mapping category: " + mapping.Value);
+                if (string.IsNullOrWhiteSpace(mapping.Value) ||
+                    !Enum.TryParse(mapping.Value, false, out ElementCategory category) ||
+                    !Enum.IsDefined(typeof(ElementCategory), category) ||
+                    !string.Equals(mapping.Value, category.ToString(), StringComparison.Ordinal))
+                    throw new InvalidDataException("Invalid or non-canonical template layer mapping category: " + mapping.Value);
             }
             try { ProjectRecognitionService.ValidateLayerMappings(profile.LayerMappings, "Template layer mappings"); }
             catch (InvalidOperationException ex) { throw new InvalidDataException(ex.Message, ex); }
