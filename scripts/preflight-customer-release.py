@@ -76,8 +76,12 @@ if runtime.is_file():
     for needle in (
         '[CommandMethod("QS3DRUNTIMECHECK"',
         "Environment.Is64BitProcess",
-        "Major(brxAssembly) == 25",
-        "Major(tdAssembly) == 25",
+        "private const int ExpectedRuntimeMajor = 26;",
+        "private const int ExpectedRuntimeMajor = 25;",
+        "private const string ExpectedRuntimeLabel = \"V26\";",
+        "private const string ExpectedRuntimeLabel = \"V25\";",
+        "Major(brxAssembly) == ExpectedRuntimeMajor",
+        "Major(tdAssembly) == ExpectedRuntimeMajor",
         '"PACKAGE-METADATA.json"',
         'JsonString(text, "productVersion")',
         'JsonString(text, "signedPayloadSignerThumbprint")',
@@ -85,6 +89,8 @@ if runtime.is_file():
     ):
         if needle not in text:
             errors.append("RuntimeDiagnosticsCommands.cs missing runtime/customer guard: " + needle)
+    if "Major(brxAssembly) == 25" in text or "Major(tdAssembly) == 25" in text:
+        errors.append("shared runtime diagnostics must not bypass ExpectedRuntimeMajor with a literal V25 comparison")
 
 if package.is_file():
     text = package.read_text(encoding="utf-8")
@@ -160,7 +166,7 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: customer diagnostics are registered, V25/x64 is checked in-product, "
+    "PASS: customer diagnostics are registered, shared V25/V26 runtime major and x64 checks are pinned in-product, "
     "plugin/Core product versions are strict SemVer and exact-case aligned, RELEASE_TAG is exact-case/version-bound, "
     "release workflows execute the strict package boundary before publication, "
     "and finalized signed metadata records the verified publisher."
