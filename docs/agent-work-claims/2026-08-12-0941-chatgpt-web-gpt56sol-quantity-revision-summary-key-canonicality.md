@@ -26,18 +26,21 @@ Nonblank summary quantity names must now be canonical without surrounding whites
 - Claim commit on main: `2350159fd443279147c69cafa1a2dd30d996a020`.
 - Implementation commit on stable integration branch: `95a7c42960328380a58eb222648c721758202c1a` — validate canonical nonblank summary quantity names before grouping.
 - Regression commit on stable integration branch: `69cd84b2f1b46fd0b3fa7f5463bd91736ca30584` — reject padded quantity names and preserve blank-row skipping plus case-insensitive grouping/accumulation.
-- Direct main contents update was attempted twice after exact source re-fetch and returned non-forced `409` branch-head races while the target blob itself remained unchanged; the lane was therefore moved to a stable branch for merge back to main instead of forcing the ref.
+- Integrated to `main` by PR `#714`, merge commit `2b2b1479afbd61abed1fd43b0dfc3125a3b73c41`; the replay PR `#719` was closed unmerged as superseded.
+- Direct main contents update was attempted twice after exact source re-fetch and returned non-forced `409` branch-head races while the target blob itself remained unchanged; the lane was therefore moved to a stable branch instead of forcing the ref.
 - Validation actually performed:
   - exact-HEAD source fetch confirmed the candidate was still present after the branch races;
-  - dedicated smoke source added on the stable branch;
+  - implementation diff was reviewed and contained only the summary-key preflight;
+  - dedicated smoke source covers padded-key rejection, blank-row skipping and case-insensitive grouping;
+  - main was re-fetched after integration and contains the canonicality fix;
   - no repository `dotnet` tests were executed in this hosted session;
   - no GitHub Actions were dispatched or rerun;
   - no BricsCAD V25/V26 runtime PASS is claimed.
 
 ## Coordination
 
-Earlier quantity-revision readonly-result work was already completed and is disjoint. This claim was registered on main before the source edit. The stable branch was created only to avoid unrelated main-head races without force-pushing.
+Earlier quantity-revision readonly-result work was already completed and is disjoint. This claim was registered on main before the source edit. A stable branch was used only to avoid unrelated main-head races without force-pushing.
 
 ## Completion condition
 
-Satisfied pending integration: the stable branch fails closed on padded nonblank quantity summary keys and contains focused regression coverage; merge the branch to `main` and then re-fetch main before considering the lane fully integrated.
+Satisfied: current `main` rejects padded nonblank quantity summary keys, preserves blank-row skipping and case-insensitive grouping, focused regression coverage is integrated, and the claim is released as `COMPLETED`.
