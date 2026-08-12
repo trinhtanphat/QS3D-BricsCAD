@@ -437,11 +437,10 @@ namespace QS3D.Core.Persistence
                 target[key] = RawValue(item, "value");
             }
         }
-
         private static string RequiredCanonical(XElement element, string attribute)
         {
             var value = element.Attribute(attribute)?.Value;
-            if (string.IsNullOrWhiteSpace(value))
+            if (value == null || string.IsNullOrWhiteSpace(value))
                 throw new InvalidDataException("Missing attribute: " + attribute);
             if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
                 throw new InvalidDataException("Non-canonical QSDB attribute: " + attribute);
