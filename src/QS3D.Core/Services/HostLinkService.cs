@@ -81,9 +81,11 @@ namespace QS3D.Core.Services
             }
 
             var hostId = (value ?? string.Empty).Trim();
-            var host = hostId.Length > 0 ? project.FindElement(hostId) : null;
-            if (hostId.Length > 0)
-                EnsureCanLeavePhysicalCutHost(project, opening, host, hostId, "unlink");
+            if (hostId.Length == 0)
+                throw new InvalidOperationException("Opening " + opening.Id + " has blank HostWallId metadata. Repair the host relationship before unlinking it.");
+
+            var host = project.FindElement(hostId);
+            EnsureCanLeavePhysicalCutHost(project, opening, host, hostId, "unlink");
 
             ProjectSemanticMutationExecutor.Execute(project, "host.unlink", () =>
             {
