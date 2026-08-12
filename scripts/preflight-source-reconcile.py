@@ -90,16 +90,22 @@ checks = {
     ],
     engine: [
         "RegenerateDirtySubset(ProjectState project, IEnumerable<string> elementIds)",
-        "var unresolved = CanonicalTargetIds(elementIds);",
-        "private static HashSet<string> CanonicalTargetIds",
+        "var inputVersion = project.ChangeVersion;",
+        "var sourceElements = project.Elements.ToArray();",
+        "var unresolved = CanonicalTargetIds(elementIds, sourceElements.Length);",
+        "RequireElementStructureFresh(project, sourceElements);",
+        "private static HashSet<string> CanonicalTargetIds(IEnumerable<string> elementIds, int maxCount)",
         "Regeneration target id cannot be blank",
         "Regeneration target id must be canonical without surrounding whitespace",
         "Duplicate regeneration target id",
+        "Regeneration target set cannot exceed project element count",
         "var targets = new List<ProjectElement>(unresolved.Count);",
         "var seenProjectIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);",
+        "foreach (var element in sourceElements)",
         "if (!seenProjectIds.Add(element.Id))",
         "if (unresolved.Remove(element.Id)) targets.Add(element);",
         "Unknown regeneration target: ",
+        "ValidateSubsetDependencyExistence(targets, seenProjectIds);",
         "return RegenerateTransactional(project, targets, targets.Count);",
         "var dirty = _graph.TopologicalDirtyOrder(candidateList);",
         "_graph.TryGetElement(normalizedId, out var source)",
@@ -267,8 +273,20 @@ if engine.is_file():
         errors.append("Targeted regeneration must not build a full by-id dictionary and then scan the project again")
     if "project.Elements.Where" in subset:
         errors.append("Targeted regeneration must not perform a second full project scan to recover requested targets")
-    if subset.count("foreach (var element in project.Elements)") != 1:
-        errors.append("Targeted regeneration must resolve/validate requested IDs in exactly one project-order scan")
+    capture = subset.find("var sourceElements = project.Elements.ToArray();")
+    materialize_ids = subset.find("var unresolved = CanonicalTargetIds(elementIds, sourceElements.Length);")
+    first_freshness = subset.find("RequireElementStructureFresh(project, sourceElements);", materialize_ids)
+    captured_scan = subset.find("foreach (var element in sourceElements)")
+    dependency_validation = subset.find("ValidateSubsetDependencyExistence(targets, seenProjectIds);", captured_scan)
+    second_freshness = subset.find("RequireElementStructureFresh(project, sourceElements);", dependency_validation)
+    if min(capture, materialize_ids, first_freshness, captured_scan, dependency_validation, second_freshness) < 0 or not (
+        capture < materialize_ids < first_freshness < captured_scan < dependency_validation < second_freshness
+    ):
+        errors.append("Targeted regeneration must snapshot project membership before caller target enumeration, resolve in one captured project-order scan, then revalidate structure before commit")
+    if subset.count("foreach (var element in sourceElements)") != 1:
+        errors.append("Targeted regeneration must resolve requested IDs in exactly one captured project-order scan")
+    if "foreach (var element in project.Elements)" in subset:
+        errors.append("Targeted regeneration must not switch back to the live public project collection after caller target enumeration")
 
     regen_start = text.find("private int Regenerate(ProjectState project")
     regen_body = text[regen_start:] if regen_start >= 0 else ""
@@ -296,4 +314,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DSYNCSOURCE validates generated/source ownership read-only before a single canonical bind, revalidates project/target freshness, preserves AuditTrail-owned revision, bounded affected-closure regeneration, rollback, and explicit native rebuild boundaries.")
+print("PASS: QS3DSYNCSOURCE validates generated/source ownership read-only before a single canonical bind, revalidates project/target freshness, preserves AuditTrail-owned revision, bounded affected-closure regeneration, snapshot-first targeted regeneration freshness, rollback, and explicit native rebuild boundaries.")
