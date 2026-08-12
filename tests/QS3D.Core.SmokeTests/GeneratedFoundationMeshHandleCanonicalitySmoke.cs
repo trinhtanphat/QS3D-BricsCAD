@@ -14,6 +14,10 @@ namespace QS3D.Core.SmokeTests
         {
             PaddedHandleFailsVisibleButKeepsLiveLookup();
             LowercaseCanonicalHandleRemainsAccepted();
+            NumericEquivalentLiveHandleIsAccepted();
+            NumericEquivalentDuplicateSpellingsAreRejected();
+            NumericEquivalentSourceHandleIsRejected();
+            NumericEquivalentCrossOwnerConflictIsRejected();
             EmptyDelimiterTokenRemainsInvalid();
         }
 
@@ -37,6 +41,48 @@ namespace QS3D.Core.SmokeTests
             ForbidIssue(issues, setup.Element.Id, "FOUNDATION_MESH_GENERATED_HANDLE_NON_CANONICAL");
             ForbidIssue(issues, setup.Element.Id, "INVALID_FOUNDATION_MESH_GENERATED_HANDLE");
             ForbidIssue(issues, setup.Element.Id, "FOUNDATION_MESH_GENERATED_SOLID_MISSING");
+        }
+
+        private static void NumericEquivalentLiveHandleIsAccepted()
+        {
+            var setup = Create("LIVE-ALIAS", "000A", "1");
+            var live = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "A" };
+            var issues = new GeneratedFoundationMeshHealthService().Inspect(setup.Project, live);
+
+            ForbidIssue(issues, setup.Element.Id, "FOUNDATION_MESH_GENERATED_SOLID_MISSING");
+            ForbidIssue(issues, setup.Element.Id, "FOUNDATION_MESH_GENERATED_COUNT_MISMATCH");
+        }
+
+        private static void NumericEquivalentDuplicateSpellingsAreRejected()
+        {
+            var setup = Create("DUP-ALIAS", "A;000A", "1");
+            var live = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "A" };
+            var issues = new GeneratedFoundationMeshHealthService().Inspect(setup.Project, live);
+
+            RequireIssue(issues, setup.Element.Id, "DUPLICATE_FOUNDATION_MESH_GENERATED_HANDLE");
+            ForbidIssue(issues, setup.Element.Id, "FOUNDATION_MESH_GENERATED_COUNT_MISMATCH");
+            ForbidIssue(issues, setup.Element.Id, "FOUNDATION_MESH_GENERATED_SOLID_MISSING");
+        }
+
+        private static void NumericEquivalentSourceHandleIsRejected()
+        {
+            var setup = Create("SOURCE-ALIAS", "A", "1");
+            setup.Element.SourceHandles.Add("0A");
+            var issues = new GeneratedFoundationMeshHealthService().Inspect(setup.Project);
+
+            RequireIssue(issues, setup.Element.Id, "FOUNDATION_MESH_GENERATED_HANDLE_IN_SOURCE");
+        }
+
+        private static void NumericEquivalentCrossOwnerConflictIsRejected()
+        {
+            var setup = Create("OWNER-ALIAS", "A", "1");
+            var other = new ProjectElement("E-FOUNDATION-MESH-OTHER", ElementCategory.Foundation);
+            other.Properties["GeneratedFutureMeshHandles"] = "0A";
+            setup.Project.Elements.Add(other);
+
+            var issues = new GeneratedFoundationMeshHealthService().Inspect(setup.Project);
+
+            RequireIssue(issues, setup.Element.Id, "FOUNDATION_MESH_GENERATED_OWNERSHIP_CONFLICT");
         }
 
         private static void EmptyDelimiterTokenRemainsInvalid()
