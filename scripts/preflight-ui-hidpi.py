@@ -43,9 +43,9 @@ workspace = files["workspace"]
 if workspace.is_file():
     text = workspace.read_text(encoding="utf-8")
     for needle in (
-        'MinWidth="0"', 'MinHeight="0"', '<Grid MinWidth="560" Background="{StaticResource Bg0Brush}">',
+        'MinWidth="0"', 'MinHeight="0"', 'x:Name="WorkspaceContentRoot"', 'MinWidth="560"',
         'HorizontalScrollBarVisibility="Auto"', 'VerticalScrollBarVisibility="Disabled"',
-        'Width="{Binding ViewportWidth, RelativeSource={RelativeSource AncestorType={x:Type ScrollViewer}}}"',
+        'Width="{Binding ViewportWidth, ElementName=WorkspaceOverflow}"',
         'ResourceDictionary Source="Theme.xaml"',
         'TextTrimming="CharacterEllipsis"', 'ToolTip="{Binding Status}"',
         'ToolTip="Reset override về giá trị Family"', 'VIEWPORT BRICSCAD',
