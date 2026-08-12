@@ -24,7 +24,8 @@ namespace QS3D.Core.SmokeTests
         private static void CanonicalizesExplicitNegativeZero()
         {
             var policy = new ProjectUnitPolicy(LengthUnit.Millimeter, 3);
-            var rounded = policy.RoundForDisplay(-0d);
+            var negativeZero = BitConverter.Int64BitsToDouble(long.MinValue);
+            var rounded = policy.RoundForDisplay(negativeZero);
             if (BitConverter.DoubleToInt64Bits(rounded) != 0L)
                 throw new InvalidOperationException("Explicit IEEE negative zero was not canonicalized for display.");
         }
