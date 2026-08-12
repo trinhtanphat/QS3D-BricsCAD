@@ -1,4 +1,7 @@
 using System;
+using System.Globalization;
+using System.IO;
+using System.Xml.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Navigation;
 using QS3D.Core.Persistence;
@@ -8,6 +11,13 @@ namespace QS3D.Core.SmokeTests
     internal static class ProjectBrowserWorkspaceDirtyTrackingSmoke
     {
         internal static void Run()
+        {
+            DirtyTrackingFollowsWorkspaceMutations();
+            SaveOverflowLeavesWorkspaceMetadataUnchanged();
+            ClearOverflowLeavesWorkspaceMetadataUnchanged();
+        }
+
+        private static void DirtyTrackingFollowsWorkspaceMutations()
         {
             var project = new ProjectState("workspace-dirty-project", "Workspace Dirty Project");
             var store = new ProjectBrowserWorkspaceStateStore();
@@ -47,6 +57,71 @@ namespace QS3D.Core.SmokeTests
             False(store.Clear(project), "second clear should be a no-op");
             Equal(clearedVersion, project.ChangeVersion, "second workspace clear change version");
             False(stamp.RequiresSave(project), "second workspace clear should remain clean");
+        }
+
+        private static void SaveOverflowLeavesWorkspaceMetadataUnchanged()
+        {
+            var project = AtVersion(new ProjectState("workspace-save-overflow", "Workspace Save Overflow"), long.MaxValue);
+            var beforeUtc = project.UpdatedUtc;
+            var store = new ProjectBrowserWorkspaceStateStore();
+
+            Throws<OverflowException>(
+                () => store.Save(project, new ProjectBrowserWorkspaceState(query: "wall")),
+                "workspace save at maximum project version");
+
+            False(project.Metadata.ContainsKey(ProjectBrowserWorkspaceStateStore.MetadataKey), "failed workspace save must not add metadata");
+            Equal(long.MaxValue, project.ChangeVersion, "failed workspace save change version");
+            Equal(beforeUtc, project.UpdatedUtc, "failed workspace save UpdatedUtc");
+        }
+
+        private static void ClearOverflowLeavesWorkspaceMetadataUnchanged()
+        {
+            var source = new ProjectState("workspace-clear-overflow", "Workspace Clear Overflow");
+            var store = new ProjectBrowserWorkspaceStateStore();
+            True(store.Save(source, new ProjectBrowserWorkspaceState(query: "wall")), "clear overflow fixture workspace save");
+            var project = AtVersion(source, long.MaxValue);
+            var beforeUtc = project.UpdatedUtc;
+            var beforeMetadata = project.Metadata[ProjectBrowserWorkspaceStateStore.MetadataKey];
+
+            Throws<OverflowException>(() => store.Clear(project), "workspace clear at maximum project version");
+
+            True(project.Metadata.TryGetValue(ProjectBrowserWorkspaceStateStore.MetadataKey, out var afterMetadata), "failed workspace clear must preserve metadata");
+            Equal(beforeMetadata, afterMetadata, "failed workspace clear metadata");
+            Equal(long.MaxValue, project.ChangeVersion, "failed workspace clear change version");
+            Equal(beforeUtc, project.UpdatedUtc, "failed workspace clear UpdatedUtc");
+        }
+
+        private static ProjectState AtVersion(ProjectState source, long version)
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-workspace-revision-" + Guid.NewGuid().ToString("N") + ".qsdb");
+            try
+            {
+                var store = new QsdbProjectStore();
+                store.SaveNew(source, path);
+                var document = XDocument.Load(path);
+                var root = document.Root ?? throw new InvalidOperationException("Workspace revision fixture has no QSDB root.");
+                root.SetAttributeValue("changeVersion", version.ToString(CultureInfo.InvariantCulture));
+                document.Save(path, SaveOptions.DisableFormatting);
+                return store.Load(path);
+            }
+            finally
+            {
+                TryDelete(path);
+                TryDelete(path + ".bak");
+            }
+        }
+
+        private static void TryDelete(string path)
+        {
+            try { if (File.Exists(path)) File.Delete(path); }
+            catch { }
+        }
+
+        private static void Throws<T>(Action action, string label) where T : Exception
+        {
+            try { action(); }
+            catch (T) { return; }
+            throw new InvalidOperationException(label + ": expected " + typeof(T).Name + ".");
         }
 
         private static void True(bool value, string label)
