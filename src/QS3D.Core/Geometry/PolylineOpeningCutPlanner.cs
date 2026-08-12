@@ -50,10 +50,13 @@ namespace QS3D.Core.Geometry
 
     public static class PolylineOpeningCutPlanner
     {
+        private const int MaxCenterlinePoints = 8192;
+
         public static PolylineOpeningCutPlan Plan(PolylineOpeningCutInput input)
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
             if (input.Centerline == null || input.Centerline.Count < 2) throw new ArgumentException("Polyline opening host centerline requires at least two points.", nameof(input.Centerline));
+            if (input.Centerline.Count > MaxCenterlinePoints) throw new InvalidOperationException("Polyline opening host centerline exceeds the supported point budget of " + MaxCenterlinePoints + ".");
             Positive(input.HostThicknessM, nameof(input.HostThicknessM));
             Positive(input.HostHeightM, nameof(input.HostHeightM));
             Positive(input.OpeningWidthM, nameof(input.OpeningWidthM));
