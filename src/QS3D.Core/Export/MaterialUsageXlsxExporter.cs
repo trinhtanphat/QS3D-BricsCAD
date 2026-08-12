@@ -34,11 +34,12 @@ namespace QS3D.Core.Export
                 ValidateCellText(row.Component, rowIndex, "Component");
                 ValidateCellText(row.Category, rowIndex, "Category");
                 ValidateCellText(row.FamilyName, rowIndex, "FamilyName");
-                ValidateFinite(row.PrimaryQuantity, rowIndex, "PrimaryQuantity");
-                ValidateFinite(row.LengthM, rowIndex, "LengthM");
-                ValidateFinite(row.AreaM2, rowIndex, "AreaM2");
-                ValidateFinite(row.VolumeM3, rowIndex, "VolumeM3");
-                ValidateFinite(row.MassKg, rowIndex, "MassKg");
+                ValidateCount(row.ElementCount, rowIndex, "ElementCount");
+                ValidateNonNegative(row.PrimaryQuantity, rowIndex, "PrimaryQuantity");
+                ValidateNonNegative(row.LengthM, rowIndex, "LengthM");
+                ValidateNonNegative(row.AreaM2, rowIndex, "AreaM2");
+                ValidateNonNegative(row.VolumeM3, rowIndex, "VolumeM3");
+                ValidateNonNegative(row.MassKg, rowIndex, "MassKg");
                 snapshot.Add(row);
             }
             var fullPath = Path.GetFullPath(path);
@@ -143,12 +144,20 @@ namespace QS3D.Core.Export
                     "Material XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
         }
 
-        private static void ValidateFinite(double value, int rowIndex, string fieldName)
+        private static void ValidateCount(int value, int rowIndex, string fieldName)
         {
-            if (double.IsNaN(value) || double.IsInfinity(value))
+            if (value < 0)
                 throw new ArgumentOutOfRangeException(
                     "rows",
-                    "Material XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be finite.");
+                    "Material XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be non-negative.");
+        }
+
+        private static void ValidateNonNegative(double value, int rowIndex, string fieldName)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Material XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be finite and non-negative.");
         }
 
         private static void StringCell(StringBuilder sb, string cellRef, string value, int style)
