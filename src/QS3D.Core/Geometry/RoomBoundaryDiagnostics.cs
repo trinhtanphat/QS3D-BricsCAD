@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -158,10 +159,16 @@ namespace QS3D.Core.Geometry
                 .Select(x => x.Trim().ToUpperInvariant())
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(x => x, StringComparer.Ordinal);
-            var payload = string.Join("\n", normalized);
+            var payload = new StringBuilder();
+            foreach (var value in normalized)
+            {
+                payload.Append(value.Length.ToString(CultureInfo.InvariantCulture));
+                payload.Append(':');
+                payload.Append(value);
+            }
             using (var sha = SHA256.Create())
             {
-                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(payload));
+                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(payload.ToString()));
                 return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
             }
         }
