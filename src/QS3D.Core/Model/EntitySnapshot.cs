@@ -50,8 +50,8 @@ namespace QS3D.Core.Model
 
         private static double? RequireFinite(double? value, string parameterName)
         {
-            if (value.HasValue && (double.IsNaN(value.Value) || double.IsInfinity(value.Value)))
-                throw new ArgumentOutOfRangeException(parameterName, "Entity snapshot metric must be finite when provided.");
+            if (value.HasValue && (double.IsNaN(value.Value) || double.IsInfinity(value.Value) || value.Value < 0d))
+                throw new ArgumentOutOfRangeException(parameterName, "Entity snapshot metric must be finite and non-negative when provided.");
             return value;
         }
     }
