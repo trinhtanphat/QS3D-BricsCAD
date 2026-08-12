@@ -18,7 +18,10 @@ namespace QS3D.Core.SmokeTests
             NonCanonicalSourceHandleFailsClosed();
             ExactDuplicateSourceHandlesFailClosed();
             CaseAliasDuplicateSourceHandlesFailClosed();
+            NumericAliasDuplicateSourceHandlesFailClosed();
             UniqueSourceHandlesRemainResolvable();
+            NumericAliasesAcrossElementsResolveOnce();
+            BoundaryAndDirectNumericAliasesResolveOnce();
             DirectAndDependencyHandleOrderIsStable();
             SourceReferenceWinsOverGeneratedFallback();
             BoundaryReferenceWinsOverGeneratedFallback();
@@ -128,6 +131,17 @@ namespace QS3D.Core.SmokeTests
             AssertDuplicateSourceHandlesFailClosed(project, element.Id);
         }
 
+        private static void NumericAliasDuplicateSourceHandlesFailClosed()
+        {
+            var project = new ProjectState("source-handle-numeric-alias", "Source Handle Numeric Alias");
+            var element = NewElement("E");
+            element.SourceHandles.Add("A");
+            element.SourceHandles.Add("000A");
+            project.Elements.Add(element);
+
+            AssertDuplicateSourceHandlesFailClosed(project, element.Id);
+        }
+
         private static void UniqueSourceHandlesRemainResolvable()
         {
             var project = new ProjectState("source-handle-unique", "Source Handle Unique");
@@ -139,6 +153,38 @@ namespace QS3D.Core.SmokeTests
             var handles = SourceHandleResolver.Resolve(project, new[] { element.Id });
             if (handles.Count != 2 || handles[0] != "ABCD" || handles[1] != "EF01")
                 throw new Exception("Unique SourceHandles must preserve direct-handle resolution order.");
+        }
+
+        private static void NumericAliasesAcrossElementsResolveOnce()
+        {
+            var project = new ProjectState("source-handle-numeric-cross-element", "Source Handle Numeric Cross Element");
+            var root = NewElement("ROOT");
+            root.SourceHandles.Add("A");
+            root.DependsOn.Add("CHILD");
+            var child = NewElement("CHILD");
+            child.SourceHandles.Add("0A");
+            project.Elements.Add(root);
+            project.Elements.Add(child);
+
+            var handles = SourceHandleResolver.Resolve(project, new[] { root.Id });
+            if (handles.Count != 1 || handles[0] != "A")
+                throw new Exception("Numeric SourceHandles aliases across elements must resolve one CAD object and preserve the first raw spelling.");
+        }
+
+        private static void BoundaryAndDirectNumericAliasesResolveOnce()
+        {
+            var project = new ProjectState("source-handle-boundary-numeric", "Source Handle Boundary Numeric Alias");
+            var root = NewElement("ROOT");
+            root.Properties[AutoRoomLifecycle.BoundarySourceHandlesKey] = "A";
+            root.DependsOn.Add("CHILD");
+            var child = NewElement("CHILD");
+            child.SourceHandles.Add("000A");
+            project.Elements.Add(root);
+            project.Elements.Add(child);
+
+            var handles = SourceHandleResolver.Resolve(project, new[] { root.Id });
+            if (handles.Count != 1 || handles[0] != "A")
+                throw new Exception("Boundary/direct numeric handle aliases must resolve one CAD object and preserve the first raw spelling.");
         }
 
         private static void AssertDuplicateSourceHandlesFailClosed(ProjectState project, string elementId)
