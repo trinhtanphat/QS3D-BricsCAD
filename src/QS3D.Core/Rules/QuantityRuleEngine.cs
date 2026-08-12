@@ -53,6 +53,8 @@ namespace QS3D.Core.Rules
             if (element == null) throw new ArgumentNullException(nameof(element));
             if (!ReferenceEquals(project.FindElement(element.Id), element))
                 throw new InvalidOperationException("Quantity rule matching requires the canonical project-owned element instance.");
+            if (project.QuantityRules.Any(x => x == null))
+                throw new InvalidOperationException("Project quantity rule collection contains a null rule.");
 
             var rules = project.QuantityRules
                 .Where(x => x.Category == element.Category)
