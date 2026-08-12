@@ -77,7 +77,7 @@ namespace QS3D.Core.Documentation
         public static IReadOnlyList<SemanticScheduleDefinition> Load(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            if (!project.Metadata.TryGetValue(MetadataKey, out var payload) || string.IsNullOrWhiteSpace(payload))
+            if (!project.Metadata.TryGetValue(MetadataKey, out var payload) || string.IsNullOrEmpty(payload))
                 return Array.Empty<SemanticScheduleDefinition>();
             if (payload.Length > MaxPayloadChars) throw new InvalidDataException("Semantic schedule catalog exceeds the 1 MiB metadata limit.");
 
