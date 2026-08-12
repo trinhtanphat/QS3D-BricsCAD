@@ -125,6 +125,7 @@ namespace QS3D.Core.Diagnostics
             if (!path) return;
             Integer(element, "GeneratedCurtainPanelPathSegmentCount", false, issues, "CURTAIN_PANEL_PATH_SEGMENTS_INVALID");
             Integer(element, "GeneratedCurtainPanelMappedCount", true, issues, "CURTAIN_PANEL_MAPPED_COUNT_INVALID");
+            AtLeastRoundTrip(element, "GeneratedCurtainPanelPathSagittaM", 1e-6d, issues, "CURTAIN_PANEL_PATH_SAGITTA_INVALID", "CURTAIN_PANEL_PATH_SAGITTA_NON_CANONICAL");
             if (!element.Properties.TryGetValue("GeneratedCurtainPanelSourceKind", out var kind) || !string.Equals((kind ?? string.Empty).Trim(), "OpenPolyline", StringComparison.OrdinalIgnoreCase))
                 Add(issues, "CURTAIN_PANEL_PATH_SOURCE_KIND_INVALID", HealthSeverity.Warning, "Path curtain panels require GeneratedCurtainPanelSourceKind=OpenPolyline.", element);
             else if (!string.Equals(kind, "OpenPolyline", StringComparison.Ordinal))
@@ -170,6 +171,18 @@ namespace QS3D.Core.Diagnostics
         private static void NonNegativeRoundTrip(ProjectElement element, string key, List<ModelHealthIssue> issues, string invalidCode, string nonCanonicalCode)
         {
             if (!element.Properties.TryGetValue(key, out var raw) || !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+            {
+                Add(issues, invalidCode, HealthSeverity.Warning, key + " is missing or invalid.", element);
+                return;
+            }
+            var canonical = value.ToString("R", CultureInfo.InvariantCulture);
+            if (!string.Equals(raw, canonical, StringComparison.Ordinal))
+                Add(issues, nonCanonicalCode, HealthSeverity.Error, key + " must use exact invariant round-trip spelling: " + canonical + ".", element);
+        }
+
+        private static void AtLeastRoundTrip(ProjectElement element, string key, double minimum, List<ModelHealthIssue> issues, string invalidCode, string nonCanonicalCode)
+        {
+            if (!element.Properties.TryGetValue(key, out var raw) || !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || value < minimum)
             {
                 Add(issues, invalidCode, HealthSeverity.Warning, key + " is missing or invalid.", element);
                 return;
