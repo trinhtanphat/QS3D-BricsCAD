@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             AppendPlanIsReadOnlyAndRejectsNameCollision();
             CollisionFailsBeforeMutation();
             InvalidSnapshotFailsBeforeMutation();
+            DuplicateTargetDependenciesFailBeforeMutation();
             ApplyFailureRollsBackPartialMutation();
         }
 
@@ -153,6 +154,34 @@ namespace QS3D.Core.SmokeTests
             Equal(elements, target.Elements.Count);
             Equal(updated, target.UpdatedUtc);
             True(!target.Metadata.ContainsKey(ProjectInterchangeAppendOnlyImporter.LastModeKey));
+        }
+
+        private static void DuplicateTargetDependenciesFailBeforeMutation()
+        {
+            var sourceJson = ProjectInterchangeJsonExporter.Build(SourceProject());
+            foreach (var duplicate in new[] { "TGT-E1", "tgt-e1" })
+            {
+                var target = TargetProject();
+                var dependent = new ProjectElement("TGT-E2", ElementCategory.Beam, "TGT-FAM", "TGT-FLOOR", "TGT-ZONE");
+                dependent.DependsOn.Add("TGT-E1");
+                dependent.DependsOn.Add(duplicate);
+                target.Elements.Add(dependent);
+                var elements = target.Elements.Count;
+                var audits = target.AuditEvents.Count;
+                var metadata = target.Metadata.Count;
+                var updated = new DateTime(2026, 8, 10, 12, 45, 0, DateTimeKind.Utc);
+                target.UpdatedUtc = updated;
+
+                Throws<InvalidOperationException>(() => ProjectInterchangeAppendOnlyImporter.Plan(target, sourceJson));
+                Throws<InvalidOperationException>(() => ProjectInterchangeAppendOnlyImporter.Import(target, sourceJson));
+
+                Equal(elements, target.Elements.Count);
+                Equal(2, dependent.DependsOn.Count);
+                Equal(audits, target.AuditEvents.Count);
+                Equal(metadata, target.Metadata.Count);
+                Equal(updated, target.UpdatedUtc);
+                True(!target.Metadata.ContainsKey(ProjectInterchangeAppendOnlyImporter.LastModeKey));
+            }
         }
 
         private static void ApplyFailureRollsBackPartialMutation()
