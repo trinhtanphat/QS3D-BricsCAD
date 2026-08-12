@@ -94,7 +94,16 @@ namespace QS3D.Core.Diagnostics
                 }
 
                 var currentLabel = Property(element, GridNamingService.GridLabelKey);
-                var builtLabel = Property(element, BuiltLabelKey);
+                var rawBuiltLabel = RawProperty(element, BuiltLabelKey);
+                var builtLabel = rawBuiltLabel.Trim();
+                if (!string.Equals(rawBuiltLabel, builtLabel, StringComparison.Ordinal))
+                {
+                    issues.Add(new ModelHealthIssue(
+                        "GRID_ANNOTATION_BUILT_LABEL_NON_CANONICAL",
+                        HealthSeverity.Error,
+                        "GeneratedGridAnnotationLabel không được có khoảng trắng đầu/cuối.",
+                        element.Id));
+                }
                 if (currentLabel.Length == 0)
                 {
                     issues.Add(new ModelHealthIssue(
