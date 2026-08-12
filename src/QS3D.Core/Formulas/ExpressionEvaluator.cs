@@ -18,39 +18,10 @@ namespace QS3D.Core.Formulas
         {
             ValidateExpression(expression);
             var result = new List<string>();
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var index = 0;
-            while (index < expression.Length)
-            {
-                var current = expression[index];
-                if (char.IsWhiteSpace(current)) { index++; continue; }
-                if (char.IsDigit(current) || current == '.')
-                {
-                    var start = index;
-                    SkipNumberToken(expression, ref index);
-                    var token = expression.Substring(start, index - start);
-                    if (!double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value))
-                        throw new InvalidOperationException($"Invalid number '{token}'. Position {index}.");
-                    continue;
-                }
-                if (char.IsLetter(current) || current == '_')
-                {
-                    var start = index++;
-                    while (index < expression.Length)
-                    {
-                        var c = expression[index];
-                        if (char.IsLetterOrDigit(c) || c == '_' || c == '.') index++;
-                        else break;
-                    }
-                    var name = expression.Substring(start, index - start);
-                    var probe = index;
-                    while (probe < expression.Length && char.IsWhiteSpace(expression[probe])) probe++;
-                    if (probe >= expression.Length || expression[probe] != '(')
-                        if (seen.Add(name)) result.Add(name);
-                    continue;
-                }
-                index++;
-            }
+            new Parser(
+                expression,
+                new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase),
+                result).Parse();
             return result.AsReadOnly();
         }
 
@@ -79,38 +50,28 @@ namespace QS3D.Core.Formulas
             return normalized;
         }
 
-        private static void SkipNumberToken(string text, ref int index)
-        {
-            var seenDot = false;
-            var seenExponent = false;
-            while (index < text.Length)
-            {
-                var c = text[index];
-                if (char.IsDigit(c)) { index++; continue; }
-                if (c == '.' && !seenDot && !seenExponent) { seenDot = true; index++; continue; }
-                if ((c == 'e' || c == 'E') && !seenExponent)
-                {
-                    seenExponent = true;
-                    index++;
-                    if (index < text.Length && (text[index] == '+' || text[index] == '-')) index++;
-                    continue;
-                }
-                break;
-            }
-        }
-
         private sealed class Parser
         {
             private const int MaxDepth = 64;
             private const int MaxArguments = 128;
             private readonly string _text;
             private readonly IReadOnlyDictionary<string, double> _variables;
+            private readonly List<string>? _referencedVariables;
+            private readonly HashSet<string>? _seenReferencedVariables;
+            private readonly bool _evaluate;
             private int _index;
 
-            public Parser(string text, IReadOnlyDictionary<string, double> variables)
+            public Parser(
+                string text,
+                IReadOnlyDictionary<string, double> variables,
+                List<string>? referencedVariables = null)
             {
                 _text = text;
                 _variables = variables;
+                _referencedVariables = referencedVariables;
+                _evaluate = referencedVariables == null;
+                if (referencedVariables != null)
+                    _seenReferencedVariables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             }
 
             public double Parse()
@@ -128,8 +89,20 @@ namespace QS3D.Core.Formulas
                 while (true)
                 {
                     SkipWhiteSpace();
-                    if (Match('+')) value = EnsureFinite(value + ParseTerm(depth), "Addition produced a non-finite result.");
-                    else if (Match('-')) value = EnsureFinite(value - ParseTerm(depth), "Subtraction produced a non-finite result.");
+                    if (Match('+'))
+                    {
+                        var right = ParseTerm(depth);
+                        value = _evaluate
+                            ? EnsureFinite(value + right, "Addition produced a non-finite result.")
+                            : 0d;
+                    }
+                    else if (Match('-'))
+                    {
+                        var right = ParseTerm(depth);
+                        value = _evaluate
+                            ? EnsureFinite(value - right, "Subtraction produced a non-finite result.")
+                            : 0d;
+                    }
                     else return value;
                 }
             }
@@ -140,12 +113,22 @@ namespace QS3D.Core.Formulas
                 while (true)
                 {
                     SkipWhiteSpace();
-                    if (Match('*')) value = EnsureFinite(value * ParseUnary(depth), "Multiplication produced a non-finite result.");
+                    if (Match('*'))
+                    {
+                        var right = ParseUnary(depth);
+                        value = _evaluate
+                            ? EnsureFinite(value * right, "Multiplication produced a non-finite result.")
+                            : 0d;
+                    }
                     else if (Match('/'))
                     {
                         var divisor = ParseUnary(depth);
-                        if (divisor == 0d) throw Error("Division by zero.");
-                        value = EnsureFinite(value / divisor, "Division produced a non-finite result.");
+                        if (_evaluate)
+                        {
+                            if (divisor == 0d) throw Error("Division by zero.");
+                            value = EnsureFinite(value / divisor, "Division produced a non-finite result.");
+                        }
+                        else value = 0d;
                     }
                     else return value;
                 }
@@ -156,7 +139,13 @@ namespace QS3D.Core.Formulas
                 GuardDepth(depth);
                 SkipWhiteSpace();
                 if (Match('+')) return ParseUnary(depth + 1);
-                if (Match('-')) return EnsureFinite(-ParseUnary(depth + 1), "Unary negation produced a non-finite result.");
+                if (Match('-'))
+                {
+                    var value = ParseUnary(depth + 1);
+                    return _evaluate
+                        ? EnsureFinite(-value, "Unary negation produced a non-finite result.")
+                        : 0d;
+                }
                 return ParsePrimary(depth);
             }
 
@@ -176,6 +165,11 @@ namespace QS3D.Core.Formulas
                     var name = ParseIdentifier();
                     SkipWhiteSpace();
                     if (Match('(')) return ParseFunction(name, depth + 1);
+                    if (!_evaluate)
+                    {
+                        RecordReference(name);
+                        return 0d;
+                    }
                     if (_variables.TryGetValue(name, out var value)) return EnsureFinite(value, $"Variable '{name}' contains a non-finite value.");
                     throw Error($"Unknown variable '{name}'.");
                 }
@@ -199,33 +193,51 @@ namespace QS3D.Core.Formulas
                     }
                 }
                 Expect(')');
+                ValidateFunctionShape(name, args.Count);
+                if (!_evaluate) return 0d;
+
                 switch (name.ToLowerInvariant())
                 {
-                    case "abs": RequireArgCount(name, args, 1); return EnsureFinite(Math.Abs(args[0]), "abs produced a non-finite result.");
-                    case "ceil": RequireArgCount(name, args, 1); return EnsureFinite(Math.Ceiling(args[0]), "ceil produced a non-finite result.");
-                    case "floor": RequireArgCount(name, args, 1); return EnsureFinite(Math.Floor(args[0]), "floor produced a non-finite result.");
+                    case "abs": return EnsureFinite(Math.Abs(args[0]), "abs produced a non-finite result.");
+                    case "ceil": return EnsureFinite(Math.Ceiling(args[0]), "ceil produced a non-finite result.");
+                    case "floor": return EnsureFinite(Math.Floor(args[0]), "floor produced a non-finite result.");
                     case "round":
                         if (args.Count == 1) return EnsureFinite(Math.Round(args[0], MidpointRounding.AwayFromZero), "round produced a non-finite result.");
-                        if (args.Count == 2)
-                        {
-                            var digitsValue = args[1];
-                            var roundedDigits = Math.Round(digitsValue, MidpointRounding.AwayFromZero);
-                            if (digitsValue < 0d || digitsValue > 15d || Math.Abs(digitsValue - roundedDigits) > 1e-12)
-                                throw Error("round(value, digits) requires an integer digits argument from 0 to 15.");
-                            return EnsureFinite(Math.Round(args[0], (int)roundedDigits, MidpointRounding.AwayFromZero), "round produced a non-finite result.");
-                        }
-                        throw Error("round expects 1 or 2 arguments.");
+                        var digitsValue = args[1];
+                        var roundedDigits = Math.Round(digitsValue, MidpointRounding.AwayFromZero);
+                        if (digitsValue < 0d || digitsValue > 15d || Math.Abs(digitsValue - roundedDigits) > 1e-12)
+                            throw Error("round(value, digits) requires an integer digits argument from 0 to 15.");
+                        return EnsureFinite(Math.Round(args[0], (int)roundedDigits, MidpointRounding.AwayFromZero), "round produced a non-finite result.");
                     case "min":
-                        RequireAtLeast(name, args, 1);
                         var min = args[0];
                         for (var i = 1; i < args.Count; i++) min = Math.Min(min, args[i]);
                         return EnsureFinite(min, "min produced a non-finite result.");
                     case "max":
-                        RequireAtLeast(name, args, 1);
                         var max = args[0];
                         for (var i = 1; i < args.Count; i++) max = Math.Max(max, args[i]);
                         return EnsureFinite(max, "max produced a non-finite result.");
                     default: throw Error($"Unknown function '{name}'.");
+                }
+            }
+
+            private void ValidateFunctionShape(string name, int argumentCount)
+            {
+                switch (name.ToLowerInvariant())
+                {
+                    case "abs":
+                    case "ceil":
+                    case "floor":
+                        if (argumentCount != 1) throw Error($"{name} expects 1 argument(s).");
+                        return;
+                    case "round":
+                        if (argumentCount != 1 && argumentCount != 2) throw Error("round expects 1 or 2 arguments.");
+                        return;
+                    case "min":
+                    case "max":
+                        if (argumentCount < 1) throw Error($"{name} expects at least 1 argument(s).");
+                        return;
+                    default:
+                        throw Error($"Unknown function '{name}'.");
                 }
             }
 
@@ -266,6 +278,12 @@ namespace QS3D.Core.Formulas
                 return _text.Substring(start, _index - start);
             }
 
+            private void RecordReference(string name)
+            {
+                if (_referencedVariables == null || _seenReferencedVariables == null) return;
+                if (_seenReferencedVariables.Add(name)) _referencedVariables.Add(name);
+            }
+
             private double EnsureFinite(double value, string message)
             {
                 if (double.IsNaN(value) || double.IsInfinity(value)) throw Error(message);
@@ -301,8 +319,6 @@ namespace QS3D.Core.Formulas
             }
 
             private InvalidOperationException Error(string message) => new InvalidOperationException($"{message} Position {_index}.");
-            private void RequireArgCount(string name, IReadOnlyCollection<double> args, int count) { if (args.Count != count) throw Error($"{name} expects {count} argument(s)."); }
-            private void RequireAtLeast(string name, IReadOnlyCollection<double> args, int count) { if (args.Count < count) throw Error($"{name} expects at least {count} argument(s)."); }
         }
     }
 }
