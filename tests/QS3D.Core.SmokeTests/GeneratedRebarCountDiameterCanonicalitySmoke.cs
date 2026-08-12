@@ -100,7 +100,7 @@ namespace QS3D.Core.SmokeTests
         private static Setup CreateShape(string suffix)
         {
             var project = new ProjectState("P-Shape-Rebar-Canonical-" + suffix, "Generated shape rebar count canonicality smoke");
-            var element = new ProjectElement("Shape-Rebar-Canonical-" + suffix, ElementCategory.Wall);
+            var element = new ProjectElement("Shape-Rebar-Canonical-" + suffix, ElementCategory.ArchitecturalWall);
             element.Properties["GeneratedShapeRebarHandles"] = "A";
             element.Properties["GeneratedShapeRebarCount"] = "1";
             project.Elements.Add(element);

@@ -63,7 +63,7 @@ namespace QS3D.Core.SmokeTests
         private static Setup Create(string suffix, string? mode, bool addHandles)
         {
             var project = new ProjectState("P-Shape-Mode-" + suffix, "Shape Rebar mode health smoke");
-            var element = new ProjectElement("Shape-Mode-" + suffix, ElementCategory.Wall);
+            var element = new ProjectElement("Shape-Mode-" + suffix, ElementCategory.ArchitecturalWall);
             if (addHandles) element.Properties["GeneratedShapeRebarHandles"] = "A";
             if (mode != null) element.Properties[ModeKey] = mode;
             project.Elements.Add(element);
