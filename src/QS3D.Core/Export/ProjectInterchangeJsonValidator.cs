@@ -90,7 +90,7 @@ namespace QS3D.Core.Export
             if (!info.Exists) throw new FileNotFoundException("Semantic snapshot file does not exist.", fullPath);
             if (info.Length > MaxFileBytes) throw new InvalidDataException("Semantic snapshot exceeds the guarded " + MaxFileBytes.ToString(CultureInfo.InvariantCulture) + " byte limit.");
 
-            var bytes = File.ReadAllBytes(fullPath);
+            var bytes = ReadFileBytesBounded(fullPath);
             try
             {
                 return Validate(StrictUtf8.GetString(bytes));
@@ -100,6 +100,30 @@ namespace QS3D.Core.Export
                 var issues = new IssueCollector();
                 issues.Error("JSON_UTF8", "Semantic snapshot is not valid UTF-8: " + ex.Message, "$.");
                 return Result(null, issues);
+            }
+        }
+
+        private static byte[] ReadFileBytesBounded(string fullPath)
+        {
+            using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var buffer = new MemoryStream())
+            {
+                var chunk = new byte[81920];
+                long total = 0;
+                while (total < MaxFileBytes)
+                {
+                    var remaining = MaxFileBytes - total;
+                    var count = (int)Math.Min((long)chunk.Length, remaining);
+                    var read = stream.Read(chunk, 0, count);
+                    if (read == 0) return buffer.ToArray();
+                    buffer.Write(chunk, 0, read);
+                    total += read;
+                }
+
+                if (stream.ReadByte() != -1)
+                    throw new InvalidDataException("Semantic snapshot exceeds the guarded " + MaxFileBytes.ToString(CultureInfo.InvariantCulture) + " byte limit.");
+
+                return buffer.ToArray();
             }
         }
 
