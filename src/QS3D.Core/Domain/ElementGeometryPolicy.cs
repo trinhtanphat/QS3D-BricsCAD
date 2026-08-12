@@ -24,6 +24,12 @@ namespace QS3D.Core.Domain
             "CurtainTransomWidthM"
         };
 
+        private static readonly ISet<string> WallPierGeometryProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "WallPierProfileMode",
+            "WallPierChamferM"
+        };
+
         private static readonly ISet<string> GeneratedOutputProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "Material", "CurtainFrameMaterial"
@@ -68,7 +74,8 @@ namespace QS3D.Core.Domain
         private static bool IsGeometryProperty(ElementCategory category, string key)
         {
             return GeometryProperties.Contains(key) ||
-                   (category == ElementCategory.GlassWall && CurtainGeometryProperties.Contains(key));
+                   (category == ElementCategory.GlassWall && CurtainGeometryProperties.Contains(key)) ||
+                   (category == ElementCategory.WallPier && WallPierGeometryProperties.Contains(key));
         }
 
         private static void RequireDefinedCategory(ElementCategory category)
