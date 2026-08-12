@@ -43,7 +43,9 @@ for token in ("<TargetFramework>net48</TargetFramework>", "QS3D.BricsCAD.V25", "
     require(v25, token, "V25 project")
 
 for token in (
+    '<Project Sdk="Microsoft.NET.Sdk">',
     "<TargetFramework>net8.0-windows</TargetFramework>",
+    "<UseWPF>true</UseWPF>",
     "<AssemblyName>QS3D.BricsCAD.V26</AssemblyName>",
     "<RootNamespace>QS3D.BricsCAD.V25</RootNamespace>",
     "BRICSCAD_V26_DIR",
@@ -61,7 +63,7 @@ for token in (
 ):
     require(v26, token, "V26 project")
 
-for token in ("BRICSCAD_V25_DIR", "net48", "QS3D-BricsCAD-V25.update.json"):
+for token in ("Microsoft.NET.Sdk.WindowsDesktop", "BRICSCAD_V25_DIR", "net48", "QS3D-BricsCAD-V25.update.json"):
     forbid(v26, token, "V26 project")
 
 for token in (
@@ -185,4 +187,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: V25 remains net48; V26 is isolated on net8.0-windows with a dedicated solution, V26-only refs/runtime/update assets, HttpClient-only .NET 8 updater networking, and manifest-channel-isolated release discovery.")
+print("PASS: V25 remains net48; V26 uses the current Microsoft.NET.Sdk on net8.0-windows with WPF, a dedicated solution, V26-only refs/runtime/update assets, HttpClient-only updater networking, and manifest-channel-isolated release discovery.")
