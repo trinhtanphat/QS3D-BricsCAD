@@ -159,11 +159,13 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
+            var elementOwnership = SnapshotElementOwnership(project);
             var inputVersion = project.ChangeVersion;
             var sourceElementCount = project.Elements.Count;
             var requested = CanonicalTargetIds(elementIds, sourceElementCount);
             if (project.ChangeVersion != inputVersion)
                 throw new InvalidOperationException("Project changed while regeneration profile target ids were being materialized. Re-run the profile against the current semantic state.");
+            RequireElementOwnershipUnchanged(project, elementOwnership);
             if (requested.Count == 0)
                 return Build(project, RegenerationWorkScope.Subset, Array.Empty<string>(), Array.Empty<ProjectElement>());
 
@@ -276,6 +278,37 @@ namespace QS3D.Core.Services
                 categories,
                 edges,
                 maxDepth);
+        }
+
+        private static IReadOnlyDictionary<string, ProjectElement> SnapshotElementOwnership(ProjectState project)
+        {
+            var result = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry.");
+                if (result.ContainsKey(element.Id))
+                    throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
+                result.Add(element.Id, element);
+            }
+            return result;
+        }
+
+        private static void RequireElementOwnershipUnchanged(
+            ProjectState project,
+            IReadOnlyDictionary<string, ProjectElement> expected)
+        {
+            if (project.Elements.Count != expected.Count)
+                throw new InvalidOperationException("Project element ownership changed while regeneration profile target ids were being materialized. Re-run the profile against the current semantic state.");
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null || !seen.Add(element.Id) ||
+                    !expected.TryGetValue(element.Id, out var original) ||
+                    !ReferenceEquals(original, element))
+                    throw new InvalidOperationException("Project element ownership changed while regeneration profile target ids were being materialized. Re-run the profile against the current semantic state.");
+            }
         }
 
         private static IReadOnlyList<string> CanonicalTargetIds(IEnumerable<string> elementIds, int maxCount)
