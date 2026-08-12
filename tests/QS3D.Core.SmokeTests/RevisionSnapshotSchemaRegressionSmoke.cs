@@ -7,6 +7,8 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class RevisionSnapshotSchemaRegressionSmoke
     {
+        private const string CanonicalCreatedUtc = "2026-08-11T00:00:00.0000000Z";
+
         internal static void Run()
         {
             ValidMinimalRevisionLoads();
@@ -20,28 +22,33 @@ namespace QS3D.Core.SmokeTests
 
         private static void ValidMinimalRevisionLoads()
         {
-            var snapshot = Load("<qs3dRevision id='R' createdUtc='2026-08-11T00:00:00Z'/>");
+            var snapshot = Load(Root("<elements/>"));
             Equal("R", snapshot.Id);
             Equal(0, snapshot.Elements.Count);
         }
 
         private static void RejectsForeignNamespace() => Reject(
-            "<qs3dRevision xmlns='urn:qs3d:future' id='R' createdUtc='2026-08-11T00:00:00Z'><elements/></qs3dRevision>");
+            "<qs3dRevision xmlns='urn:qs3d:future' id='R' createdUtc='" + CanonicalCreatedUtc + "'><elements/></qs3dRevision>");
 
         private static void RejectsUnknownRootAttribute() => Reject(
-            "<qs3dRevision id='R' createdUtc='2026-08-11T00:00:00Z' future='1'><elements/></qs3dRevision>");
+            "<qs3dRevision id='R' createdUtc='" + CanonicalCreatedUtc + "' future='1'><elements/></qs3dRevision>");
 
         private static void RejectsUnknownChild() => Reject(
-            "<qs3dRevision id='R' createdUtc='2026-08-11T00:00:00Z'><future/></qs3dRevision>");
+            Root("<future/><elements/>"));
 
         private static void RejectsDuplicateElementsContainer() => Reject(
-            "<qs3dRevision id='R' createdUtc='2026-08-11T00:00:00Z'><elements/><elements/></qs3dRevision>");
+            Root("<elements/><elements/>"));
 
         private static void RejectsDuplicateNestedContainer() => Reject(
-            "<qs3dRevision id='R' createdUtc='2026-08-11T00:00:00Z'><elements><element id='E' category='Beam' familyId='' floorId='' zoneId=''><properties/><properties/></element></elements></qs3dRevision>");
+            Root("<elements><element id='E' category='Beam' familyId='' floorId='' zoneId=''>" +
+                 "<properties/><properties/><quantities/><sourceHandles/><dependencies/>" +
+                 "</element></elements>"));
 
         private static void RejectsMixedTextContent() => Reject(
-            "<qs3dRevision id='R' createdUtc='2026-08-11T00:00:00Z'>future<elements/></qs3dRevision>");
+            Root("future<elements/>"));
+
+        private static string Root(string content) =>
+            "<qs3dRevision id='R' createdUtc='" + CanonicalCreatedUtc + "'>" + content + "</qs3dRevision>";
 
         private static RevisionSnapshot Load(string xml)
         {
