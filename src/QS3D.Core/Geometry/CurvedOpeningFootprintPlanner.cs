@@ -64,22 +64,25 @@ namespace QS3D.Core.Geometry
             Validate(input.OpeningPoint, "opening point");
 
             var segments = BuildSegments(input.Centerline, input.ToleranceM);
-            var totalLength = segments[segments.Count - 1].StationStart + segments[segments.Count - 1].Length;
+            var lastSegment = segments[segments.Count - 1];
+            var totalLength = Add(lastSegment.StationStart, lastSegment.Length, "curved host centerline length");
             var projections = segments.Select(x => Project(input.OpeningPoint, x)).OrderBy(x => x.Distance).ThenBy(x => x.Station).ToList();
             var best = projections[0];
             if (best.Distance > input.MaximumCenterlineOffsetM)
                 throw new InvalidOperationException("Opening point lies too far from the curved host centerline.");
 
+            var ambiguityLimit = Add(best.Distance, input.AmbiguityMarginM, "curved host ambiguity distance");
             var competing = projections.Skip(1)
                 .Where(x => Math.Abs(x.Segment.Index - best.Segment.Index) > 1)
-                .FirstOrDefault(x => x.Distance <= best.Distance + input.AmbiguityMarginM);
+                .FirstOrDefault(x => x.Distance <= ambiguityLimit);
             if (competing != null)
                 throw new InvalidOperationException("Opening point is ambiguous between non-adjacent curved-host branches.");
 
             var halfWidth = input.OpeningWidthM / 2d;
-            var startStation = best.Station - halfWidth;
-            var endStation = best.Station + halfWidth;
-            if (startStation < -input.ToleranceM || endStation > totalLength + input.ToleranceM)
+            var startStation = Subtract(best.Station, halfWidth, "curved opening start station");
+            var endStation = Add(best.Station, halfWidth, "curved opening end station");
+            var maximumEndStation = Add(totalLength, input.ToleranceM, "curved host end tolerance");
+            if (startStation < -input.ToleranceM || endStation > maximumEndStation)
                 throw new InvalidOperationException("Opening width/position extends beyond the curved host centerline.");
             startStation = Math.Max(0d, startStation);
             endStation = Math.Min(totalLength, endStation);
@@ -141,10 +144,12 @@ namespace QS3D.Core.Geometry
         {
             if (!(endStation > startStation)) throw new InvalidOperationException("Opening cutter centerline range is degenerate.");
             var result = new List<Point2> { PointAtStation(segments, startStation) };
+            var interiorStartStation = Add(startStation, tolerance, "curved opening interior start tolerance");
+            var interiorEndStation = Subtract(endStation, tolerance, "curved opening interior end tolerance");
             foreach (var segment in segments)
             {
-                var vertexStation = segment.StationStart + segment.Length;
-                if (vertexStation > startStation + tolerance && vertexStation < endStation - tolerance)
+                var vertexStation = Add(segment.StationStart, segment.Length, "curved host vertex station");
+                if (vertexStation > interiorStartStation && vertexStation < interiorEndStation)
                     result.Add(segment.End);
             }
             result.Add(PointAtStation(segments, endStation));
@@ -159,9 +164,10 @@ namespace QS3D.Core.Geometry
         {
             foreach (var segment in segments)
             {
-                var end = segment.StationStart + segment.Length;
+                var end = Add(segment.StationStart, segment.Length, "curved host segment end station");
                 if (station > end && segment.Index < segments.Count - 1) continue;
-                var t = Math.Max(0d, Math.Min(1d, (station - segment.StationStart) / segment.Length));
+                var stationOffset = Subtract(station, segment.StationStart, "curved host station offset");
+                var t = Math.Max(0d, Math.Min(1d, stationOffset / segment.Length));
                 var point = new Point2(segment.Start.X + (segment.End.X - segment.Start.X) * t, segment.Start.Y + (segment.End.Y - segment.Start.Y) * t);
                 Validate(point, "curved host station point");
                 return point;
@@ -185,6 +191,14 @@ namespace QS3D.Core.Geometry
         {
             if (!Finite(left) || !Finite(right)) throw new OverflowException(label + " contains a non-finite value.");
             var value = left + right;
+            if (!Finite(value)) throw new OverflowException(label + " overflowed.");
+            return value;
+        }
+
+        private static double Subtract(double left, double right, string label)
+        {
+            if (!Finite(left) || !Finite(right)) throw new OverflowException(label + " contains a non-finite value.");
+            var value = left - right;
             if (!Finite(value)) throw new OverflowException(label + " overflowed.");
             return value;
         }
