@@ -96,7 +96,7 @@ namespace QS3D.Core.Export
                     return new XlsxHandleLookupResult(Array.Empty<string>(), Array.Empty<string>(), string.Empty, false, worksheet.Name, false, worksheet.IsEd2Detail);
 
                 var targetCells = ReadCells(target, ns, sharedStrings);
-                var exactHandleColumns = new HashSet<int>();
+                var handleColumns = new HashSet<int>();
                 var fuzzyHandleColumns = new HashSet<int>();
                 var elementIdColumns = new HashSet<int>();
                 var fingerprintColumns = new HashSet<int>();
@@ -104,13 +104,13 @@ namespace QS3D.Core.Export
                     foreach (var cell in ReadCells(headerRow, ns, sharedStrings))
                     {
                         var header = (cell.Value ?? string.Empty).Trim();
-                        if (string.Equals(header, "CAD Handle (hex)", StringComparison.OrdinalIgnoreCase)) exactHandleColumns.Add(cell.Key);
+                        if (string.Equals(header, "CAD Handle (hex)", StringComparison.OrdinalIgnoreCase)) handleColumns.Add(cell.Key);
                         else if (header.IndexOf("handle", StringComparison.OrdinalIgnoreCase) >= 0) fuzzyHandleColumns.Add(cell.Key);
                         if (string.Equals(header, "QS3D Drawing Fingerprint", StringComparison.OrdinalIgnoreCase)) fingerprintColumns.Add(cell.Key);
                         if (string.Equals(header, "QS3D Element ID", StringComparison.OrdinalIgnoreCase)) elementIdColumns.Add(cell.Key);
                     }
+                if (handleColumns.Count == 0) handleColumns.UnionWith(fuzzyHandleColumns);
 
-                var handleColumns = exactHandleColumns.Count > 0 ? exactHandleColumns : fuzzyHandleColumns;
                 var isModernSchema = elementIdColumns.Count > 0 || fingerprintColumns.Count > 0;
                 if (worksheet.IsEd2Detail && !isModernSchema)
                     throw new InvalidDataException("ED2 CHI_TIET is missing its modern QS3D identity headers and cannot be treated as a legacy BLT sheet.");

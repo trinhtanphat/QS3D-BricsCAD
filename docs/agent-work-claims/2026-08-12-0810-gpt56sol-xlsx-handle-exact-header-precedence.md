@@ -1,42 +1,43 @@
 # Work claim — XLSX Handle reader exact-header precedence
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-xlsx-handle-exact-header-precedence-20260812-0810`
 - Registered: `2026-08-12T08:10:00+07:00`
+- Completed: `2026-08-12T08:16:00+07:00`
 - Baseline main SHA: `68517455c46f688a74f4a1d6632c9b93e8d4bb3a`
 - Priority: P2 evidence-driven remote-safe XLSX header-resolution correctness
 
 ## Confirmed defect
 
-`XlsxHandleReader.ReadHandleLookup(...)` currently places both an exact `CAD Handle (hex)` header and every fuzzy header containing `handle` into the same `handleColumns` set. A valid modern QS3D worksheet can therefore be rejected as ambiguous merely because it also contains an unrelated descriptive column such as `Handle Notes`; the modern schema gate sees two Handle columns even though one exact semantic Handle header is present.
+`XlsxHandleReader.ReadHandleLookup(...)` placed both an exact `CAD Handle (hex)` header and every fuzzy header containing `handle` into the same `handleColumns` set. A valid modern QS3D worksheet could therefore be rejected as ambiguous merely because it also contained an unrelated descriptive column such as `Handle Notes`; the modern schema gate saw two Handle columns even though one exact semantic Handle header was present.
 
-## Reserved scope
+## Completed fix
 
-Give exact `CAD Handle (hex)` headers precedence over fuzzy compatibility headers. Use fuzzy `contains handle` columns only when no exact Handle header was discovered. Preserve duplicate-exact-header rejection, legacy/fuzzy compatibility when no exact header exists, explicit Handle precedence over `$decimal`, and modern Element ID/fingerprint schema checks.
+- Exact `CAD Handle (hex)` headers remain in the authoritative Handle-column set.
+- Fuzzy compatibility headers are collected separately and used only when no exact Handle header exists.
+- Duplicate exact Handle headers remain ambiguous and fail the existing modern-schema gate.
+- Legacy/fuzzy-only sheets remain readable through the existing compatibility path.
+- Explicit Handle precedence over `$decimal`, Element ID/fingerprint checks, worksheet selection and all unrelated XLSX parsing behavior remain unchanged.
 
-## Expected surfaces
+## Changed surfaces
 
 - `src/QS3D.Core/Export/XlsxHandleReader.cs`
-- `tests/QS3D.Core.SmokeTests/XlsxHandleExactHeaderPrecedenceSmoke.cs`
+- existing `tests/QS3D.Core.SmokeTests/XlsxHandleExactHeaderPrecedenceSmoke.cs`
 - this claim file
 
-## Excluded scope
+## Integration evidence
 
-- No redesign of fuzzy legacy header matching beyond exact-header precedence.
-- No XLSX exporter changes or BLT/ED2 handle semantics changes.
-- No UI/native BricsCAD/runtime, persistence or GitHub Actions work.
+- Claim registration: `480fbe6e757a7880ea675cef6e21a75bd6180ac9`.
+- Focused regression already on `main`: `bf80642a78cb715a088241453ef849cc5dcd146a`.
+- Source branch commit: `62e8bd4c6381a71b90c360966252d5e09fe25035`.
+- Source diff from branch base `b3000e17411399e472639d869ae94f15d3f30ee1` was exactly one file, +4/-2 in `XlsxHandleReader.cs`.
+- Moving-main comparison before merge showed 15 concurrent commits and no modification of `XlsxHandleReader.cs`.
+- PR `#640` squash-merged to `main` at `03d4072f469bfa2e6ab138a48997572711d47322` with expected-head lock.
 
-## Validation plan
+## Validation boundary
 
-- A modern QS3D row with exact `CAD Handle (hex)` plus unrelated `Handle Notes` must resolve the exact Handle column and remain modern.
-- Two exact `CAD Handle (hex)` headers must still fail the modern schema ambiguity guard.
-- A legacy/non-modern sheet with only a fuzzy Handle header must remain readable through the existing fuzzy compatibility path.
-- Re-read source/test after SHA-guarded integration and preserve concurrent history.
-
-## Coordination
-
-Recent searches found no active XlsxHandleReader header-resolution owner. The previous Boolean-cell claim is completed. This claim is limited to exact-vs-fuzzy Handle header precedence.
+The focused smoke source covers exact+fuzzy precedence, duplicate exact ambiguity, and fuzzy-only compatibility. Source and diff were re-read remotely. No GitHub Actions were dispatched and no BricsCAD runtime PASS is claimed from this web session.
 
 ## Completion condition
 
-Completed only when exact Handle headers cannot be made ambiguous by unrelated fuzzy Handle headers, fuzzy compatibility remains covered without an exact header, duplicate exact headers remain rejected, focused regression source is on current `main`, exact integration SHAs are recorded and this claim is marked `COMPLETED`.
+Satisfied: exact Handle headers cannot be made ambiguous by unrelated fuzzy Handle headers, fuzzy compatibility remains available without an exact header, duplicate exact headers remain rejected, focused regression source and implementation are on current `main`, and the claim is released as `COMPLETED`.

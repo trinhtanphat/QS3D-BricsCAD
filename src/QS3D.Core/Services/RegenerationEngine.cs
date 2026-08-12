@@ -82,7 +82,11 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
-            var unresolved = CanonicalTargetIds(elementIds, project.Elements.Count);
+            var maxCount = project.Elements.Count;
+            var inputVersion = project.ChangeVersion;
+            var unresolved = CanonicalTargetIds(elementIds, maxCount);
+            if (project.ChangeVersion != inputVersion)
+                throw new InvalidOperationException("Project state changed while materializing regeneration target ids.");
             if (unresolved.Count == 0) return 0;
 
             // Resolve the requested subset in one project-order scan. The previous implementation

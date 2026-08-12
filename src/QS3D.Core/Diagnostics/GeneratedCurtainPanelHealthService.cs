@@ -26,34 +26,37 @@ namespace QS3D.Core.Diagnostics
                 if (!hasBuildState || !string.Equals((buildState ?? string.Empty).Trim(), BuildCompleteValue, StringComparison.OrdinalIgnoreCase))
                     Add(issues, "CURTAIN_PANEL_BUILD_STATE_INVALID", HealthSeverity.Warning, BuildStateKey + " must be Complete, including for a valid zero-piece panel build.", element);
                 var handles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var token in (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                if (hasHandles)
                 {
-                    var handle = token.Trim();
-                    if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+                    foreach (var token in (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.None))
                     {
-                        Add(issues, "INVALID_CURTAIN_PANEL_GENERATED_HANDLE", HealthSeverity.Error, HandlesKey + " contains an invalid hexadecimal handle.", element);
-                        continue;
+                        var handle = token.Trim();
+                        if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+                        {
+                            Add(issues, "INVALID_CURTAIN_PANEL_GENERATED_HANDLE", HealthSeverity.Error, HandlesKey + " contains an invalid hexadecimal handle.", element);
+                            continue;
+                        }
+                        if (!handles.Add(handle))
+                        {
+                            Add(issues, "DUPLICATE_CURTAIN_PANEL_GENERATED_HANDLE", HealthSeverity.Error, "A generated curtain panel handle is repeated in the same owner: " + handle + ".", element);
+                            continue;
+                        }
+                        try
+                        {
+                            if (!GeneratedHandleOwnershipPolicy.TryFindOwner(project, handle, out var owner, out var ownerKey) ||
+                                !ReferenceEquals(owner, element) ||
+                                !string.Equals(ownerKey, HandlesKey, StringComparison.OrdinalIgnoreCase))
+                                Add(issues, "CURTAIN_PANEL_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated curtain panel ownership is not exclusive: " + handle + ".", element);
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            Add(issues, "CURTAIN_PANEL_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated curtain panel ownership is ambiguous: " + handle + ".", element);
+                        }
+                        if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
+                            Add(issues, "CURTAIN_PANEL_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "A generated curtain panel handle cannot also be a source handle.", element);
+                        if (livePanelHandles != null && !livePanelHandles.Contains(handle))
+                            Add(issues, "CURTAIN_PANEL_GENERATED_SOLID_MISSING", HealthSeverity.Error, "A generated curtain panel solid is missing: " + handle + ".", element);
                     }
-                    if (!handles.Add(handle))
-                    {
-                        Add(issues, "DUPLICATE_CURTAIN_PANEL_GENERATED_HANDLE", HealthSeverity.Error, "A generated curtain panel handle is repeated in the same owner: " + handle + ".", element);
-                        continue;
-                    }
-                    try
-                    {
-                        if (!GeneratedHandleOwnershipPolicy.TryFindOwner(project, handle, out var owner, out var ownerKey) ||
-                            !ReferenceEquals(owner, element) ||
-                            !string.Equals(ownerKey, HandlesKey, StringComparison.OrdinalIgnoreCase))
-                            Add(issues, "CURTAIN_PANEL_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated curtain panel ownership is not exclusive: " + handle + ".", element);
-                    }
-                    catch (InvalidOperationException)
-                    {
-                        Add(issues, "CURTAIN_PANEL_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated curtain panel ownership is ambiguous: " + handle + ".", element);
-                    }
-                    if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
-                        Add(issues, "CURTAIN_PANEL_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "A generated curtain panel handle cannot also be a source handle.", element);
-                    if (livePanelHandles != null && !livePanelHandles.Contains(handle))
-                        Add(issues, "CURTAIN_PANEL_GENERATED_SOLID_MISSING", HealthSeverity.Error, "A generated curtain panel solid is missing: " + handle + ".", element);
                 }
 
                 var count = Integer(element, "GeneratedCurtainPanelCount", true, issues, "CURTAIN_PANEL_COUNT_INVALID");

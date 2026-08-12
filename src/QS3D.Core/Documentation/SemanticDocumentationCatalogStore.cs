@@ -376,7 +376,9 @@ namespace QS3D.Core.Documentation
 
         private static int Integer(string? value, string label)
         {
-            if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result))
+            if (string.IsNullOrEmpty(value) ||
+                !int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var result) ||
+                !string.Equals(value, result.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
                 throw new InvalidDataException("Semantic documentation " + label + " is invalid.");
             return result;
         }

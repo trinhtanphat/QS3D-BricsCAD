@@ -10,7 +10,7 @@ namespace QS3D.Core.SmokeTests
             WarningIsHealthyButNotReleaseReady();
             ErrorBlocksHealthAndRelease();
             InfoOnlyIsReleaseReady();
-            NullIssueEntriesAreIgnored();
+            NullIssueEntriesFailClosed();
             UndefinedSeverityFailsAtIssueBoundary();
         }
 
@@ -47,15 +47,22 @@ namespace QS3D.Core.SmokeTests
             Require(summary.Info == 1, "Info counter is inconsistent.");
         }
 
-        private static void NullIssueEntriesAreIgnored()
+        private static void NullIssueEntriesFailClosed()
         {
-            var summary = new HealthSummary(new ModelHealthIssue[]
+            try
             {
-                null!,
-                new ModelHealthIssue("INFO", HealthSeverity.Info, "info")
-            });
-            Require(summary.Issues.Count == 1, "Null issue entries should not poison a read summary.");
-            Require(summary.IsReleaseReady, "Ignoring a null issue entry should preserve the valid info-only readiness result.");
+                _ = new HealthSummary(new ModelHealthIssue[]
+                {
+                    null!,
+                    new ModelHealthIssue("INFO", HealthSeverity.Info, "info")
+                });
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+
+            throw new Exception("Null health issue entries must fail closed instead of producing a false-clean summary.");
         }
 
         private static void UndefinedSeverityFailsAtIssueBoundary()
