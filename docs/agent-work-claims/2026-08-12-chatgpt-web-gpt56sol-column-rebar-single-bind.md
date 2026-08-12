@@ -2,17 +2,12 @@
 
 - Agent: ChatGPT Web / GPT-5.6 Sol
 - Started: 2026-08-12 (UTC+7)
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Scope: make PICKFIRST-only `QS3DREBAR3D` resolve selected semantic Column targets from read-only project state before canonical mutation binding, then revalidate project/target freshness before the unchanged native builder.
-- Files reserved:
-  - `src/QS3D.BricsCAD.V25/RebarGeometryCommands.cs`
-  - `scripts/preflight-column-rebar-single-bind.py`
-  - this claim file
-- Contract:
-  - preserve `CadSelectionGuard.ReadImpliedSelection(document)` and PICKFIRST-only UX; do not add interactive `GetSelection`/`AcquireCurrentSelection`;
-  - resolve `ElementCategory.Column` targets whose `SourceHandles` intersect implied CAD handles using `ProjectContextCoordinator.TryGetReadOnly` before mutation binding;
-  - missing project or zero semantic Column targets returns without `ExistingProjectMutationContext.Require`;
-  - freeze preview `ProjectId` + `ChangeVersion` + target IDs;
-  - bind canonical project exactly once, fail closed on project/version/target-set drift, then call unchanged `ColumnRebarSolidBuilder.BuildSelected`;
-  - preserve rectangle/planarity/RebarNotation validation, native ownership, batch limits, transaction/rollback/audit and post-commit UI;
-  - no GitHub Actions dispatch and no BricsCAD V25 runtime PASS from this web session.
+- Completed:
+  - source commit `e29cff8360b6b0a5be21514fd333451dcc816550` preserves `ReadImpliedSelection` PICKFIRST-only behavior, resolves semantic Column targets read-only, freezes ProjectId/ChangeVersion/target IDs, binds once and revalidates before the unchanged native builder;
+  - regression commit `71291bd05af41a287bd0db4ac85af4fae797377f` locks PICKFIRST-only behavior, zero-target no-op, single canonical bind and freshness ordering;
+  - existing aggregate `preflight-rebar-selection-project-lifecycle.py` remains compatible and continues to forbid interactive selection for Column Rebar;
+  - rectangle/planarity/RebarNotation validation, native ownership, batch limits, transaction/rollback/audit and post-commit UI were not changed;
+  - no GitHub Actions dispatched and no BricsCAD V25 runtime PASS claimed from this web session.
+- Reservation released.
