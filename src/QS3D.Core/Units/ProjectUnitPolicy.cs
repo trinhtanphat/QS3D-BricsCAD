@@ -49,7 +49,8 @@ namespace QS3D.Core.Units
         public double RoundForDisplay(double value)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value), "Display value must be finite.");
-            return Math.Round(value, DisplayDecimals, MidpointRounding.AwayFromZero);
+            var rounded = Math.Round(value, DisplayDecimals, MidpointRounding.AwayFromZero);
+            return rounded == 0d ? 0d : rounded;
         }
 
         public static DrawingUnit ToDrawingUnit(LengthUnit unit)
