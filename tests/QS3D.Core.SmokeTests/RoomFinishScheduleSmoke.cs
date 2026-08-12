@@ -152,6 +152,7 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("p", "Finish schedule");
             project.Floors.Add(new FloorDefinition("f1", "Tầng 1", 0d));
             var roomFamily = new ProjectFamily("room-family", "Phòng", ElementCategory.Room);
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
             project.Families.Add(roomFamily);
             var room = new ProjectElement("room-1", ElementCategory.Room, roomFamily.Id, "f1", "z");
             room.Properties["RoomName"] = "Phòng 101";

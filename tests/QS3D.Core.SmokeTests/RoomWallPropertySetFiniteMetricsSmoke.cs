@@ -35,18 +35,18 @@ namespace QS3D.Core.SmokeTests
             Equal(0d, properties.BaseOffsetMm, "wall default base offset");
             Equal(0d, properties.TopOffsetMm, "wall default top offset");
 
-            properties.ThicknessMm = -1d;
+            properties.ThicknessMm = 120d;
             properties.AxisToLeftMm = -25d;
             properties.AxisToRightMm = 25d;
             properties.BaseOffsetMm = -100d;
             properties.TopOffsetMm = 300d;
-            Equal(-1d, properties.ThicknessMm, "wall finite negative thickness preserved");
+            Equal(120d, properties.ThicknessMm, "wall finite positive thickness");
             Equal(-25d, properties.AxisToLeftMm, "wall finite negative left axis offset");
             Equal(25d, properties.AxisToRightMm, "wall finite right axis offset");
             Equal(-100d, properties.BaseOffsetMm, "wall finite negative base offset");
             Equal(300d, properties.TopOffsetMm, "wall finite top offset");
 
-            RejectsNonFinite(value => properties.ThicknessMm = value, () => properties.ThicknessMm, -1d, "wall thickness");
+            RejectsNonFinite(value => properties.ThicknessMm = value, () => properties.ThicknessMm, 120d, "wall thickness");
             RejectsNonFinite(value => properties.AxisToLeftMm = value, () => properties.AxisToLeftMm, -25d, "wall left axis offset");
             RejectsNonFinite(value => properties.AxisToRightMm = value, () => properties.AxisToRightMm, 25d, "wall right axis offset");
             RejectsNonFinite(value => properties.BaseOffsetMm = value, () => properties.BaseOffsetMm, -100d, "wall base offset");

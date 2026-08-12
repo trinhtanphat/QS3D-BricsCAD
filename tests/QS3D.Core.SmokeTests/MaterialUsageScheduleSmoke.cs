@@ -25,6 +25,7 @@ namespace QS3D.Core.SmokeTests
             glassFamily.Properties["Material"] = "Kính";
             glassFamily.Properties["CurtainFrameMaterial"] = "Nhôm";
             project.Families.Add(glassFamily);
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
             var glass = new ProjectElement("g1", ElementCategory.GlassWall, glassFamily.Id, "f1", "z");
             glass.Quantities["LengthM"] = 6d;
             glass.Quantities["CurtainNetGlassAreaM2"] = 14.4d;
@@ -53,6 +54,7 @@ namespace QS3D.Core.SmokeTests
             family.Properties["Material"] = "Gạch";
             project.Families.Add(family);
             ProjectMaterialCatalog.UpsertCustom(project, "aac", "Gạch AAC", "m²", "Tường nhẹ");
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
             var first = new ProjectElement("w1", ElementCategory.ArchitecturalWall, family.Id, "f1", "z");
             first.Properties["Material"] = "Gạch AAC";
             first.Quantities["LengthM"] = 5d;
@@ -81,6 +83,8 @@ namespace QS3D.Core.SmokeTests
             var family = new ProjectFamily("wall", "Tường", ElementCategory.ArchitecturalWall);
             family.Properties["Material"] = "Gạch";
             project.Families.Add(family);
+            project.Floors.Add(new FloorDefinition("floor", "Floor", 0d));
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
             var wall = new ProjectElement("w-primary", ElementCategory.ArchitecturalWall, family.Id, "floor", "z");
             wall.Quantities["NetVolumeM3"] = 2.4d;
             wall.Quantities["VolumeM3"] = -99d;
@@ -99,6 +103,8 @@ namespace QS3D.Core.SmokeTests
             var family = new ProjectFamily("wall", "Tường", ElementCategory.ArchitecturalWall);
             family.Properties["Material"] = "Gạch";
             project.Families.Add(family);
+            project.Floors.Add(new FloorDefinition("floor", "Floor", 0d));
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
             var wall = new ProjectElement("w-fallback", ElementCategory.ArchitecturalWall, family.Id, "floor", "z");
             wall.Quantities["SideAreaM2"] = -1d;
             project.Elements.Add(wall);
@@ -138,6 +144,8 @@ namespace QS3D.Core.SmokeTests
             var family = new ProjectFamily("wall", "Tường", ElementCategory.ArchitecturalWall);
             family.Properties["Material"] = "Gạch";
             project.Families.Add(family);
+            project.Floors.Add(new FloorDefinition("floor", "Floor", 0d));
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
             var wall = new ProjectElement("w", ElementCategory.ArchitecturalWall, family.Id, "floor", "z");
             wall.Quantities["NetWallAreaM2"] = -1d;
             project.Elements.Add(wall);

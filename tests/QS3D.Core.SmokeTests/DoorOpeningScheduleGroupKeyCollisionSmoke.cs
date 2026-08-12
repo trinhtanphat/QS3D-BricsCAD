@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
         {
             const string separator = "\u001f";
             var project = new ProjectState("P-DOOR-GROUP", "Door grouping");
+            project.Families.Add(new ProjectFamily("X" + separator + "1", "X" + separator + "1", ElementCategory.Door));
+            project.Families.Add(new ProjectFamily("X", "X", ElementCategory.Door));
 
             var first = Door("E1", "X" + separator + "1", 2d, 3d, 4d, 5d, "M");
             var identical = Door("E2", "X" + separator + "1", 2d, 3d, 4d, 5d, "M");

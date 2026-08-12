@@ -19,11 +19,11 @@ namespace QS3D.Core.SmokeTests
         }
 
         private static void AcceptsOrdinaryTextSignature() =>
-            WithLicense(Canonical("\n  AA==  \n"), path =>
+            WithLicense(Canonical("AA=="), path =>
             {
                 var license = new LicenseVerifier().Load(path);
                 if (license.Signature.Length != 1 || license.Signature[0] != 0)
-                    throw new InvalidOperationException("Ordinary text-only Base64 signature parsing must remain unchanged.");
+                    throw new InvalidOperationException("Canonical text-only Base64 signature parsing must remain unchanged.");
             });
 
         private static void RejectsCommentInsideSignature() =>

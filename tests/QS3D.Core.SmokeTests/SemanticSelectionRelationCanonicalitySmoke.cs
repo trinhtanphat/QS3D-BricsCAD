@@ -38,10 +38,10 @@ namespace QS3D.Core.SmokeTests
         private static ProjectState CreateProject(out ProjectElement element)
         {
             var project = new ProjectState("SELECTION-REL", "Selection Relation Canonicality");
-            project.Families.Add(new ProjectFamily("FAM-1", "Family 1", ElementCategory.Wall));
+            project.Families.Add(new ProjectFamily("FAM-1", "Family 1", ElementCategory.ArchitecturalWall));
             project.Floors.Add(new FloorDefinition("FLOOR-1", "Floor 1", 0d));
             project.Zones.Add(new ZoneDefinition("ZONE-1", "Zone 1"));
-            element = new ProjectElement("E-1", ElementCategory.Wall, "FAM-1", "FLOOR-1", "ZONE-1");
+            element = new ProjectElement("E-1", ElementCategory.ArchitecturalWall, "FAM-1", "FLOOR-1", "ZONE-1");
             project.Elements.Add(element);
             return project;
         }

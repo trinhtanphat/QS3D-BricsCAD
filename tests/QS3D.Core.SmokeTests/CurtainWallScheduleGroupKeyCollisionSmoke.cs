@@ -11,6 +11,10 @@ namespace QS3D.Core.SmokeTests
         {
             const string separator = "\u001f";
             var project = new ProjectState("P-CURTAIN-GROUP", "Curtain grouping");
+            project.Floors.Add(new FloorDefinition("A" + separator + "B", "A" + separator + "B", 0d));
+            project.Floors.Add(new FloorDefinition("A", "A", 3d));
+            project.Families.Add(new ProjectFamily("C", "C", ElementCategory.GlassWall));
+            project.Families.Add(new ProjectFamily("B" + separator + "C", "B" + separator + "C", ElementCategory.GlassWall));
 
             var first = Wall("E1", "A" + separator + "B", "C", 2d);
             var identical = Wall("E2", "A" + separator + "B", "C", 3d);

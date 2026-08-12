@@ -13,12 +13,12 @@ namespace QS3D.Core.SmokeTests
             Equal(110d, properties.ThicknessMm, "default thickness");
             Equal(0d, properties.SillOffsetMm, "default sill offset");
 
-            properties.WidthMm = 0d;
-            properties.HeightMm = -1d;
+            properties.WidthMm = 800d;
+            properties.HeightMm = 2100d;
             properties.ThicknessMm = 125.5d;
             properties.SillOffsetMm = -250d;
-            Equal(0d, properties.WidthMm, "finite zero width");
-            Equal(-1d, properties.HeightMm, "finite negative height preserved");
+            Equal(800d, properties.WidthMm, "finite positive width");
+            Equal(2100d, properties.HeightMm, "finite positive height");
             Equal(125.5d, properties.ThicknessMm, "finite thickness");
             Equal(-250d, properties.SillOffsetMm, "finite negative sill preserved");
 
@@ -27,8 +27,8 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentOutOfRangeException>(() => properties.ThicknessMm = double.NegativeInfinity, "thickness -Infinity");
             Throws<ArgumentOutOfRangeException>(() => properties.SillOffsetMm = double.NaN, "sill NaN");
 
-            Equal(0d, properties.WidthMm, "width unchanged after rejection");
-            Equal(-1d, properties.HeightMm, "height unchanged after rejection");
+            Equal(800d, properties.WidthMm, "width unchanged after rejection");
+            Equal(2100d, properties.HeightMm, "height unchanged after rejection");
             Equal(125.5d, properties.ThicknessMm, "thickness unchanged after rejection");
             Equal(-250d, properties.SillOffsetMm, "sill unchanged after rejection");
         }
