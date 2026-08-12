@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 
 namespace QS3D.Core.Features
 {
@@ -12,6 +13,7 @@ namespace QS3D.Core.Features
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Feature name is required.", nameof(name));
             _flags[name.Trim()] = enabled;
         }
-        public IReadOnlyDictionary<string, bool> Snapshot() => new Dictionary<string, bool>(_flags, StringComparer.OrdinalIgnoreCase);
+        public IReadOnlyDictionary<string, bool> Snapshot() =>
+            new ReadOnlyDictionary<string, bool>(new Dictionary<string, bool>(_flags, StringComparer.OrdinalIgnoreCase));
     }
 }
