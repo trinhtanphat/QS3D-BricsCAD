@@ -137,7 +137,7 @@ namespace QS3D.Core.Diagnostics
         private static void InspectSet(ProjectElement element, HandleSetSpec spec, ISet<string>? liveSolidHandles, OwnershipIndex ownership, List<ModelHealthIssue> issues)
         {
             if (!element.Properties.TryGetValue(spec.HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
-            var handles = raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+            var handles = raw.Split(new[] { ';' }, StringSplitOptions.None);
             var local = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var validCount = 0;
             foreach (var item in handles)
