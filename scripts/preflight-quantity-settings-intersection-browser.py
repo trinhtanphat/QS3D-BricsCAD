@@ -44,6 +44,8 @@ def main():
         'IsChecked="{Binding SubtractBottomFormworkByConcrete, Mode=TwoWay}"',
         'IsChecked="{Binding SubtractSideFormworkBySideFormwork, Mode=TwoWay}"',
         'IsChecked="{Binding SubtractBottomFormworkByBottomFormwork, Mode=TwoWay}"',
+        'x:Name="CreateSelectedRuleButton"',
+        'Click="CreateSelectedRule_Click"',
         'x:Name="ReverseRuleSummaryText"',
         'Click="ViewReverseRule_Click"',
         'Chỉ dòng A → B đang chọn được chỉnh.',
@@ -55,11 +57,17 @@ def main():
         '.Concat(IntersectionRows.Select(x => x.TargetCode))',
         'IntersectionRows.SingleOrDefault(x => x.SourceCode == source.CategoryCode && x.TargetCode == target.CategoryCode)',
         'IntersectionRows.SingleOrDefault(x => x.SourceCode == target.CategoryCode && x.TargetCode == source.CategoryCode)',
+        'private void CreateSelectedRule_Click(object sender, RoutedEventArgs e)',
+        'if (_persistentSettingsWriteBlocked)',
+        'IntersectionRows.Any(x => x.SourceCode == source.CategoryCode && x.TargetCode == target.CategoryCode)',
+        'MessageBoxButton.YesNo',
+        'IntersectionRows.Add(new QuantityIntersectionRuleRow(new QuantityIntersectionRuleSetting',
+        'Source = source.CategoryCode,',
+        'Target = target.CategoryCode',
         'private void ViewReverseRule_Click(object sender, RoutedEventArgs e)',
         'PrimaryCategoryList.SelectedItem = nextSource;',
         'ReferenceCategoryList.SelectedItem = nextTarget;',
         'IntersectionRules = IntersectionRows.Select(x => x.ToSetting()).ToList()',
-        'Template hiện tại không có dòng luật cho cặp này. QS3D không tự tạo luật mới',
     ], "code")
     if missing:
         print("ERROR: Quantity Settings intersection browser contract is incomplete:")
@@ -71,6 +79,11 @@ def main():
         code,
         "private void RefreshSelectedIntersectionRule()",
         "private void ClearIntersectionRuleDetail()",
+    )
+    create = method_body(
+        code,
+        "private void CreateSelectedRule_Click(object sender, RoutedEventArgs e)",
+        "private void ViewReverseRule_Click(object sender, RoutedEventArgs e)",
     )
     reverse = method_body(
         code,
@@ -85,6 +98,19 @@ def main():
 
     if "IntersectionRows.Add(" in refresh or "IntersectionRows.Add(" in reverse:
         print("ERROR: browsing a missing/reverse pair must not silently create intersection rules.")
+        return 1
+    if "IntersectionRows.Add(" not in create:
+        print("ERROR: explicit create handler must own directed-rule creation.")
+        return 1
+    blocked = create.find("if (_persistentSettingsWriteBlocked)")
+    duplicate = create.find("IntersectionRows.Any(")
+    confirm = create.find("MessageBoxButton.YesNo")
+    add = create.find("IntersectionRows.Add(")
+    if min(blocked, duplicate, confirm, add) < 0 or not blocked < duplicate < confirm < add:
+        print("ERROR: directed-rule creation must fail in read-only mode, reject duplicates, obtain explicit confirmation, then append exactly the selected A → B rule.")
+        return 1
+    if "Target = source.CategoryCode" in create or "Source = target.CategoryCode" in create:
+        print("ERROR: creating A → B must not auto-create or mirror the reverse B → A rule.")
         return 1
     if "IntersectionRules = IntersectionRows.Select(x => x.ToSetting()).ToList()" not in build:
         print("ERROR: save/export must retain the complete IntersectionRows payload, not only the selected pair.")
@@ -101,7 +127,7 @@ def main():
         print("ERROR: the Intersection Rules tab regressed to the flat all-row DataGrid instead of the directed browser.")
         return 1
 
-    print("PASS: Quantity Settings browses one directed pair at a time, preserves unknown category codes and serializes the complete intersection matrix without inventing missing rules.")
+    print("PASS: Quantity Settings browses one directed pair at a time, creates a missing A → B rule only through explicit confirmed writable UI, never mirrors B → A, and serializes the complete matrix.")
     return 0
 
 
