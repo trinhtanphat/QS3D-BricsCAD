@@ -151,7 +151,9 @@ namespace QS3D.Core.Selection
         {
             foreach (var element in selected)
             {
-                var familyId = (element.FamilyId ?? string.Empty).Trim();
+                var familyId = CanonicalOptionalReference(element.FamilyId, element.Id, "family");
+                var floorId = CanonicalOptionalReference(element.FloorId, element.Id, "floor");
+                var zoneId = CanonicalOptionalReference(element.ZoneId, element.Id, "zone");
                 if (familyId.Length > 0)
                 {
                     if (!familyIndex.TryGetValue(familyId, out var family))
@@ -159,11 +161,20 @@ namespace QS3D.Core.Selection
                     if (family.Category != element.Category)
                         throw new InvalidOperationException("Selected element/family category mismatch: " + element.Id + "/" + family.Id + ".");
                 }
-                if (!string.IsNullOrWhiteSpace(element.FloorId) && project.FindFloor(element.FloorId) == null)
-                    throw new InvalidOperationException("Selected element references missing floor id: " + element.Id + "/" + element.FloorId + ".");
-                if (!string.IsNullOrWhiteSpace(element.ZoneId) && project.FindZone(element.ZoneId) == null)
-                    throw new InvalidOperationException("Selected element references missing zone id: " + element.Id + "/" + element.ZoneId + ".");
+                if (floorId.Length > 0 && project.FindFloor(floorId) == null)
+                    throw new InvalidOperationException("Selected element references missing floor id: " + element.Id + "/" + floorId + ".");
+                if (zoneId.Length > 0 && project.FindZone(zoneId) == null)
+                    throw new InvalidOperationException("Selected element references missing zone id: " + element.Id + "/" + zoneId + ".");
             }
+        }
+
+        private static string CanonicalOptionalReference(string? value, string elementId, string label)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+            var normalized = value.Trim();
+            if (!string.Equals(value, normalized, StringComparison.Ordinal))
+                throw new InvalidOperationException("Selected element contains a non-canonical " + label + " id: " + elementId + "/" + value + ".");
+            return normalized;
         }
 
         private static SemanticSelectionTextValue InspectReference(string name, IReadOnlyList<string> values)
