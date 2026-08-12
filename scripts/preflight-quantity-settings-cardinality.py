@@ -55,13 +55,17 @@ def main():
         "IntersectionRules = intersectionRules.Select(CloneIntersectionRule).ToList()",
     ], "clone")
     missing += require(normalize, [
-        "RequireCollectionCardinality(CategoryRules, IntersectionRules);",
+        "var normalizedCategoryRules = CategoryRules ?? new List<QuantityCategoryRuleSetting>();",
+        "var normalizedIntersectionRules = IntersectionRules ?? new List<QuantityIntersectionRuleSetting>();",
+        "RequireCollectionCardinality(normalizedCategoryRules, normalizedIntersectionRules);",
         "var observedCategoryCodes = new HashSet<int>();",
         "AddObservedCategoryCode(observedCategoryCodes, rule.Category);",
         "AddObservedCategoryCode(observedCategoryCodes, rule.Source);",
         "AddObservedCategoryCode(observedCategoryCodes, rule.Target);",
         "var pairs = new HashSet<long>();",
         "var key = PairKey(rule.Source, rule.Target);",
+        "CategoryRules = normalizedCategoryRules;",
+        "IntersectionRules = normalizedIntersectionRules;",
     ], "normalize")
     missing += require(helper, [
         "List<QuantityCategoryRuleSetting> categoryRules",
@@ -107,11 +111,11 @@ def main():
         print("ERROR: Clone() must guard raw collection cardinality before deep-copy enumeration.")
         return 1
 
-    normalize_guard = normalize.find("RequireCollectionCardinality(CategoryRules, IntersectionRules);")
-    category_loop = normalize.find("foreach (var rule in CategoryRules)")
-    intersection_loop = normalize.find("foreach (var rule in IntersectionRules)")
+    normalize_guard = normalize.find("RequireCollectionCardinality(normalizedCategoryRules, normalizedIntersectionRules);")
+    category_loop = normalize.find("foreach (var rule in normalizedCategoryRules)")
+    intersection_loop = normalize.find("foreach (var rule in normalizedIntersectionRules)")
     if not (0 <= normalize_guard < category_loop and normalize_guard < intersection_loop):
-        print("ERROR: NormalizeAndValidate() must guard collection cardinality before rule traversal.")
+        print("ERROR: NormalizeAndValidate() must guard normalized collection cardinality before rule traversal.")
         return 1
 
     forbidden = [
@@ -131,7 +135,7 @@ def main():
             print(" -", item)
         return 1
 
-    print("PASS: Quantity Settings cardinality is guarded before Clone deep-copy amplification and before validation traversal while exact unknown integer codes remain supported.")
+    print("PASS: Quantity Settings cardinality is guarded on normalized local collections before Clone amplification/validation traversal while exact unknown integer codes remain supported.")
     return 0
 
 
