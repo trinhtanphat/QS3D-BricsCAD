@@ -56,30 +56,30 @@ namespace QS3D.Core.Units
         {
             switch (unit)
             {
-                case LengthUnit.Millimeter: return DrawingUnit.Millimeter;
-                case LengthUnit.Centimeter: return DrawingUnit.Centimeter;
-                case LengthUnit.Meter: return DrawingUnit.Meter;
-                case LengthUnit.Inch: return DrawingUnit.Inch;
-                case LengthUnit.Foot: return DrawingUnit.Foot;
-                case LengthUnit.Yard: return DrawingUnit.Yard;
-                case LengthUnit.Mile: return DrawingUnit.Mile;
-                case LengthUnit.Kilometer: return DrawingUnit.Kilometer;
-                case LengthUnit.Microinch: return DrawingUnit.Microinch;
-                case LengthUnit.Mil: return DrawingUnit.Mil;
-                case LengthUnit.Angstrom: return DrawingUnit.Angstrom;
-                case LengthUnit.Nanometer: return DrawingUnit.Nanometer;
-                case LengthUnit.Micrometer: return DrawingUnit.Micrometer;
-                case LengthUnit.Decimeter: return DrawingUnit.Decimeter;
-                case LengthUnit.Decameter: return DrawingUnit.Decameter;
-                case LengthUnit.Hectometer: return DrawingUnit.Hectometer;
-                case LengthUnit.Gigameter: return DrawingUnit.Gigameter;
-                case LengthUnit.AstronomicalUnit: return DrawingUnit.AstronomicalUnit;
-                case LengthUnit.LightYear: return DrawingUnit.LightYear;
-                case LengthUnit.Parsec: return DrawingUnit.Parsec;
-                case LengthUnit.USSurveyFoot: return DrawingUnit.USSurveyFoot;
-                case LengthUnit.USSurveyInch: return DrawingUnit.USSurveyInch;
-                case LengthUnit.USSurveyYard: return DrawingUnit.USSurveyYard;
-                case LengthUnit.USSurveyMile: return DrawingUnit.USSurveyMile;
+                case LengthUnit.Millimeter: return QS3D.Core.Units.DrawingUnit.Millimeter;
+                case LengthUnit.Centimeter: return QS3D.Core.Units.DrawingUnit.Centimeter;
+                case LengthUnit.Meter: return QS3D.Core.Units.DrawingUnit.Meter;
+                case LengthUnit.Inch: return QS3D.Core.Units.DrawingUnit.Inch;
+                case LengthUnit.Foot: return QS3D.Core.Units.DrawingUnit.Foot;
+                case LengthUnit.Yard: return QS3D.Core.Units.DrawingUnit.Yard;
+                case LengthUnit.Mile: return QS3D.Core.Units.DrawingUnit.Mile;
+                case LengthUnit.Kilometer: return QS3D.Core.Units.DrawingUnit.Kilometer;
+                case LengthUnit.Microinch: return QS3D.Core.Units.DrawingUnit.Microinch;
+                case LengthUnit.Mil: return QS3D.Core.Units.DrawingUnit.Mil;
+                case LengthUnit.Angstrom: return QS3D.Core.Units.DrawingUnit.Angstrom;
+                case LengthUnit.Nanometer: return QS3D.Core.Units.DrawingUnit.Nanometer;
+                case LengthUnit.Micrometer: return QS3D.Core.Units.DrawingUnit.Micrometer;
+                case LengthUnit.Decimeter: return QS3D.Core.Units.DrawingUnit.Decimeter;
+                case LengthUnit.Decameter: return QS3D.Core.Units.DrawingUnit.Decameter;
+                case LengthUnit.Hectometer: return QS3D.Core.Units.DrawingUnit.Hectometer;
+                case LengthUnit.Gigameter: return QS3D.Core.Units.DrawingUnit.Gigameter;
+                case LengthUnit.AstronomicalUnit: return QS3D.Core.Units.DrawingUnit.AstronomicalUnit;
+                case LengthUnit.LightYear: return QS3D.Core.Units.DrawingUnit.LightYear;
+                case LengthUnit.Parsec: return QS3D.Core.Units.DrawingUnit.Parsec;
+                case LengthUnit.USSurveyFoot: return QS3D.Core.Units.DrawingUnit.USSurveyFoot;
+                case LengthUnit.USSurveyInch: return QS3D.Core.Units.DrawingUnit.USSurveyInch;
+                case LengthUnit.USSurveyYard: return QS3D.Core.Units.DrawingUnit.USSurveyYard;
+                case LengthUnit.USSurveyMile: return QS3D.Core.Units.DrawingUnit.USSurveyMile;
                 default: throw new ArgumentOutOfRangeException(nameof(unit));
             }
         }
