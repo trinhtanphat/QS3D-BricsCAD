@@ -160,7 +160,7 @@ namespace QS3D.Core.Export
         private static void NumberCell(StringBuilder sb, string cellRef, double value)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value), "Material XLSX numeric values must be finite.");
-            sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"2\"><v>").Append(value.ToString("0.########", CultureInfo.InvariantCulture)).Append("</v></c>");
+            sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"2\"><v>").Append(value.ToString("R", CultureInfo.InvariantCulture)).Append("</v></c>");
         }
 
         private static string CellRef(int columnZeroBased, int row)
