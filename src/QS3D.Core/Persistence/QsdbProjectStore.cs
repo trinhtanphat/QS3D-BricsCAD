@@ -431,7 +431,11 @@ namespace QS3D.Core.Persistence
             var raw = value.Trim();
             if (!HasExplicitUtcOffset(raw) || !DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var result))
                 throw new InvalidDataException("Invalid QSDB UTC timestamp: " + value);
-            return result.UtcDateTime;
+            var utc = result.UtcDateTime;
+            var canonical = utc.ToString("O", CultureInfo.InvariantCulture);
+            if (!string.Equals(value, canonical, StringComparison.Ordinal))
+                throw new InvalidDataException("Non-canonical QSDB UTC timestamp: " + value);
+            return utc;
         }
 
         private static bool HasExplicitUtcOffset(string value)

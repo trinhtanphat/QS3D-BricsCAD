@@ -53,8 +53,7 @@ namespace QS3D.Core.Rules
             if (element == null) throw new ArgumentNullException(nameof(element));
             if (!ReferenceEquals(project.FindElement(element.Id), element))
                 throw new InvalidOperationException("Quantity rule matching requires the canonical project-owned element instance.");
-            if (project.QuantityRules.Any(x => x == null))
-                throw new InvalidOperationException("Project quantity rule collection contains a null rule.");
+            ValidateRuleIdentities(project.QuantityRules);
 
             var rules = project.QuantityRules
                 .Where(x => x.Category == element.Category)
@@ -112,6 +111,18 @@ namespace QS3D.Core.Rules
                 SetProvenance(element, item.Key.OutputName, item.Key.Id + "@" + item.Key.Version);
             }
             return rules.Count + staleOutputs.Count;
+        }
+
+        private static void ValidateRuleIdentities(IEnumerable<QuantityRule> rules)
+        {
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var rule in rules)
+            {
+                if (rule == null)
+                    throw new InvalidOperationException("Project quantity rule collection contains a null rule.");
+                if (!seenIds.Add(rule.Id))
+                    throw new InvalidOperationException("Project contains duplicate quantity rule id: " + rule.Id);
+            }
         }
 
         private static bool WaitsForManagedOutput(QuantityRule rule, IEnumerable<string> references, ISet<string> activeOutputs, ISet<string> resolvedOutputs)

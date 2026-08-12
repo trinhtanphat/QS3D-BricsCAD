@@ -166,9 +166,10 @@ namespace QS3D.BricsCAD.V25.UI
                 if (!previewIds.SequenceEqual(currentIds, StringComparer.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Selection hoặc semantic ownership đã thay đổi trước khi gán Zone. Không có mutation nào được áp dụng; hãy chọn lại và thử lại.");
 
-                var previous = elements
-                    .Where(x => !string.Equals(x.ZoneId, zone.Id, StringComparison.OrdinalIgnoreCase))
-                    .ToDictionary(x => x.Id, x => x.ZoneId, StringComparer.OrdinalIgnoreCase);
+                var previous = elements.ToDictionary(
+                    element => element.Id,
+                    element => element.ZoneId,
+                    StringComparer.OrdinalIgnoreCase);
 
                 var rollback = ProjectStateSnapshot.Capture(project);
                 int changed;
@@ -176,7 +177,8 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     changed = ProjectZoneService.Assign(project, zone.Id, elements);
                     foreach (var element in elements)
-                        if (previous.TryGetValue(element.Id, out var oldZone))
+                        if (previous.TryGetValue(element.Id, out var oldZone) &&
+                            !string.Equals(oldZone, element.ZoneId, StringComparison.Ordinal))
                             AuditTrail.ForProject(project).Record("zone.assign", element.Id, oldZone + " -> " + zone.Id + " • semantic only; CAD source position unchanged");
                 }
                 catch (Exception operationError)

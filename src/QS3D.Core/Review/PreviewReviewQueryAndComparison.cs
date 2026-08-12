@@ -239,7 +239,15 @@ namespace QS3D.Core.Review
             return result;
         }
 
-        private static string RowKey(string elementId, string field) => (elementId ?? string.Empty) + "\u001f" + (field ?? string.Empty);
+        private static string RowKey(string elementId, string field)
+        {
+            var safeElementId = elementId ?? string.Empty;
+            var safeField = field ?? string.Empty;
+            return safeElementId.Length.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + ":" + safeElementId
+                + safeField.Length.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + ":" + safeField;
+        }
 
         private static bool Equivalent(PreviewReviewEntry left, PreviewReviewEntry right)
         {

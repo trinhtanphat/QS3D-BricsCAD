@@ -67,6 +67,7 @@ namespace QS3D.Core.Services
                 ProjectSemanticMutationExecutor.Execute(project, "host.auto-provenance.clear", () =>
                 {
                     if (!ClearAutoHostMetadata(opening)) return false;
+                    opening.TouchPersistenceState();
                     AuditTrail.ForProject(project).Record("host.auto-provenance.clear", opening.Id, "stale metadata without HostWallId");
                     return true;
                 });

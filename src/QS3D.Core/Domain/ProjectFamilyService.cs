@@ -30,10 +30,7 @@ namespace QS3D.Core.Domain
             var normalizedName = Required(name, nameof(name), MaxNameLength);
             if (project.Families.Any(x => x == null))
                 throw new InvalidOperationException("Project family collection contains a null family.");
-            var seenFamilyIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var existing in project.Families)
-                if (!seenFamilyIds.Add(existing.Id))
-                    throw new InvalidOperationException("Project contains duplicate family id: " + existing.Id + ".");
+            ValidateUniqueFamilyIds(project);
             if (project.Families.Count >= MaxFamilies) throw new InvalidOperationException("Project supports at most " + MaxFamilies + " families.");
             if (project.Families.Any(x => string.Equals(x.Id, normalizedId, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Family id already exists: " + normalizedId);
@@ -251,7 +248,19 @@ namespace QS3D.Core.Domain
         private static ProjectFamily FindRequired(ProjectState project, string id)
         {
             var normalized = Required(id, nameof(id), 80);
+            ValidateUniqueFamilyIds(project);
             return project.FindFamily(normalized) ?? throw new InvalidOperationException("Family not found: " + normalized);
+        }
+
+        private static void ValidateUniqueFamilyIds(ProjectState project)
+        {
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var family in project.Families)
+            {
+                if (family == null) continue;
+                if (!seenIds.Add(family.Id))
+                    throw new InvalidOperationException("Project contains duplicate family id: " + family.Id + ".");
+            }
         }
 
         private static void EnsureUniqueName(ProjectState project, string name, ElementCategory category, string exceptId)

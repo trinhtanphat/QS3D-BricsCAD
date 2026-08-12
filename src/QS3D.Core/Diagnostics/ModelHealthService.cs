@@ -194,7 +194,10 @@ namespace QS3D.Core.Diagnostics
 
         private static void ValidateFamily(DiagnosticIdentityIndex identity, ProjectElement element, ICollection<ModelHealthIssue> issues)
         {
-            var familyId = (element.FamilyId ?? string.Empty).Trim();
+            var rawFamilyId = element.FamilyId ?? string.Empty;
+            var familyId = rawFamilyId.Trim();
+            if (!string.Equals(rawFamilyId, familyId, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("FAMILY_REFERENCE_NON_CANONICAL", HealthSeverity.Error, "FamilyId phải dùng đúng canonical semantic ID, không có khoảng trắng đầu/cuối.", element.Id));
             if (familyId.Length == 0 || !identity.Families.TryGetValue(familyId, out var family))
             {
                 issues.Add(new ModelHealthIssue("MISSING_FAMILY", HealthSeverity.Error, "Cấu kiện chưa liên kết Family hợp lệ.", element.Id));
@@ -210,7 +213,10 @@ namespace QS3D.Core.Diagnostics
 
         private static void ValidateFloor(DiagnosticIdentityIndex identity, ProjectElement element, ICollection<ModelHealthIssue> issues)
         {
-            var floorId = (element.FloorId ?? string.Empty).Trim();
+            var rawFloorId = element.FloorId ?? string.Empty;
+            var floorId = rawFloorId.Trim();
+            if (!string.Equals(rawFloorId, floorId, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("FLOOR_REFERENCE_NON_CANONICAL", HealthSeverity.Error, "FloorId phải dùng đúng canonical semantic ID, không có khoảng trắng đầu/cuối.", element.Id));
             if (floorId.Length == 0 || !identity.Floors.ContainsKey(floorId))
             {
                 issues.Add(new ModelHealthIssue("MISSING_FLOOR", HealthSeverity.Warning, "Cấu kiện chưa có tầng hợp lệ.", element.Id));
@@ -222,7 +228,10 @@ namespace QS3D.Core.Diagnostics
 
         private static void ValidateZone(DiagnosticIdentityIndex identity, ProjectElement element, ICollection<ModelHealthIssue> issues)
         {
-            var zoneId = (element.ZoneId ?? string.Empty).Trim();
+            var rawZoneId = element.ZoneId ?? string.Empty;
+            var zoneId = rawZoneId.Trim();
+            if (!string.Equals(rawZoneId, zoneId, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("ZONE_REFERENCE_NON_CANONICAL", HealthSeverity.Error, "ZoneId phải dùng đúng canonical semantic ID, không có khoảng trắng đầu/cuối.", element.Id));
             if (zoneId.Length == 0 || !identity.Zones.ContainsKey(zoneId))
             {
                 issues.Add(new ModelHealthIssue("MISSING_ZONE", HealthSeverity.Warning, "Cấu kiện chưa có Zone hợp lệ.", element.Id));

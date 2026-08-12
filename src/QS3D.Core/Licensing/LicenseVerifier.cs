@@ -176,15 +176,19 @@ namespace QS3D.Core.Licensing
                 throw new InvalidDataException("Invalid QS3D license root.");
             ValidateAttributes(root, "qs3dLicense", "schema", "id", "customer", "product", "nonce");
             if (!string.Equals(Required(root, "schema"), "1", StringComparison.Ordinal)) throw new InvalidDataException("Unsupported QS3D license schema.");
-            ValidateDirectChildren(root);
+            ValidateStructuredContent(root, "qs3dLicense", "valid", "features", "signature");
 
             var valid = RequiredSingleElement(root, "valid");
             var features = OptionalSingleElement(root, "features");
             var signatureElement = RequiredSingleElement(root, "signature");
             ValidateAttributes(valid, "valid", "notBeforeUtc", "expiresUtc");
-            if (features != null) ValidateAttributes(features, "features");
+            ValidateStructuredContent(valid, "valid");
+            if (features != null)
+            {
+                ValidateAttributes(features, "features");
+                ValidateStructuredContent(features, "features", "feature");
+            }
             ValidateAttributes(signatureElement, "signature", "algorithm");
-            ValidateFeatureChildren(features);
             var license = new LicenseDocument
             {
                 LicenseId = Required(root, "id"),
@@ -197,6 +201,7 @@ namespace QS3D.Core.Licensing
             foreach (var feature in features?.Elements("feature") ?? Enumerable.Empty<XElement>())
             {
                 ValidateAttributes(feature, "feature", "name");
+                ValidateStructuredContent(feature, "feature");
                 license.Features.Add(Required(feature, "name"));
             }
             if (!string.Equals(Required(signatureElement, "algorithm"), "RSA-SHA256", StringComparison.Ordinal))
@@ -210,29 +215,26 @@ namespace QS3D.Core.Licensing
             return license;
         }
 
-        private static void ValidateDirectChildren(XElement root)
+        private static void ValidateStructuredContent(XElement element, string label, params string[] allowedChildNames)
         {
-            foreach (var child in root.Elements())
+            var allowed = new HashSet<XName>(allowedChildNames.Select(XName.Get));
+            foreach (var node in element.Nodes())
             {
-                if (!string.IsNullOrEmpty(child.Name.NamespaceName))
-                    throw new InvalidDataException("License child elements must not use XML namespaces.");
-                var name = child.Name.LocalName;
-                if (string.Equals(name, "valid", StringComparison.Ordinal) ||
-                    string.Equals(name, "features", StringComparison.Ordinal) ||
-                    string.Equals(name, "signature", StringComparison.Ordinal))
+                if (node is XCData)
+                    throw new InvalidDataException("Unsupported CDATA content in license <" + label + ">.");
+                if (node is XText text)
+                {
+                    if (!string.IsNullOrWhiteSpace(text.Value))
+                        throw new InvalidDataException("Unsupported text content in license <" + label + ">.");
                     continue;
-                throw new InvalidDataException("Unexpected QS3D license child element: <" + name + ">.");
-            }
-        }
-
-        private static void ValidateFeatureChildren(XElement? features)
-        {
-            if (features == null) return;
-            foreach (var child in features.Elements())
-            {
-                if (!string.IsNullOrEmpty(child.Name.NamespaceName) ||
-                    !string.Equals(child.Name.LocalName, "feature", StringComparison.Ordinal))
-                    throw new InvalidDataException("License <features> may contain only unnamespaced <feature> elements.");
+                }
+                if (node is XElement child)
+                {
+                    if (child.Name.Namespace != XNamespace.None || !allowed.Contains(child.Name))
+                        throw new InvalidDataException("Unexpected QS3D license child element: <" + label + ">/<" + child.Name + ">.");
+                    continue;
+                }
+                throw new InvalidDataException("Unsupported XML content in license <" + label + ">.");
             }
         }
 
