@@ -33,6 +33,7 @@ namespace QS3D.Core.Rebar
             NonNegative(right, label);
             var result = left * right;
             if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException("Rebar multiplication overflow: " + label);
+            if (left != 0d && right != 0d && result == 0d) throw new OverflowException("Rebar multiplication underflow: " + label);
             return result;
         }
 
@@ -42,6 +43,7 @@ namespace QS3D.Core.Rebar
             Positive(denominator, label);
             var result = numerator / denominator;
             if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException("Rebar division overflow: " + label);
+            if (numerator != 0d && result == 0d) throw new OverflowException("Rebar division underflow: " + label);
             return result;
         }
 
