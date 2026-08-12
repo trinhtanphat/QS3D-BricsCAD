@@ -143,7 +143,7 @@ jobs:
 
       - name: Build V25 release package
         shell: powershell
-        run: .\scripts\package-v25.ps1
+        run: .\scripts\package-v25-release.ps1
 
       - name: Validate release tag and package version binding
         shell: powershell
