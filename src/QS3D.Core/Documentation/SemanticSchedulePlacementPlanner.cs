@@ -101,8 +101,11 @@ namespace QS3D.Core.Documentation
             PositiveFinite(sheet.WidthMm, nameof(sheet.WidthMm));
             PositiveFinite(sheet.HeightMm, nameof(sheet.HeightMm));
 
-            var right = sheet.WidthMm - options.MarginRightMm;
-            var bottom = sheet.HeightMm - options.MarginBottomMm - options.ReservedBottomMm;
+            var right = RetreatEdge(sheet.WidthMm, options.MarginRightMm, "semantic schedule right margin");
+            var bottom = RetreatEdge(
+                RetreatEdge(sheet.HeightMm, options.MarginBottomMm, "semantic schedule bottom margin"),
+                options.ReservedBottomMm,
+                "semantic schedule reserved bottom area");
             if (right <= options.MarginLeftMm || bottom <= options.MarginTopMm)
                 throw new InvalidOperationException("Semantic schedule placement margins/reserved area leave no usable paper region.");
 
@@ -119,7 +122,8 @@ namespace QS3D.Core.Documentation
                     throw new InvalidOperationException("Semantic schedule placement references missing schedule id: " + scheduleId + ".");
                 PositiveFinite(item.WidthMm, "items[" + i + "].WidthMm");
                 PositiveFinite(item.HeightMm, "items[" + i + "].HeightMm");
-                if (item.WidthMm > right - options.MarginLeftMm || item.HeightMm > bottom - options.MarginTopMm)
+                if (!FitsWithin(options.MarginLeftMm, item.WidthMm, right) ||
+                    !FitsWithin(options.MarginTopMm, item.HeightMm, bottom))
                     throw new InvalidOperationException("Schedule " + scheduleId + " does not fit inside the usable paper region.");
                 normalized.Add(new SemanticSchedulePlacementItem(scheduleId, item.WidthMm, item.HeightMm));
             }
@@ -190,8 +194,8 @@ namespace QS3D.Core.Documentation
                 NonNegativeFinite(placement.Ymm, "sheet.Placements.Ymm");
                 PositiveFinite(placement.WidthMm, "sheet.Placements.WidthMm");
                 PositiveFinite(placement.HeightMm, "sheet.Placements.HeightMm");
-                if (placement.Xmm + placement.WidthMm > sheet.WidthMm ||
-                    placement.Ymm + placement.HeightMm > sheet.HeightMm)
+                if (!FitsWithin(placement.Xmm, placement.WidthMm, sheet.WidthMm) ||
+                    !FitsWithin(placement.Ymm, placement.HeightMm, sheet.HeightMm))
                     throw new InvalidOperationException("Existing semantic view placement lies outside the paper bounds: " + placement.ViewId + ".");
                 result.Add(new Region(placement.Xmm, placement.Ymm, placement.WidthMm, placement.HeightMm));
             }
@@ -209,16 +213,18 @@ namespace QS3D.Core.Documentation
             var ys = new SortedSet<double> { options.MarginTopMm };
             foreach (var region in occupied)
             {
-                xs.Add(region.X + region.Width + options.HorizontalGapMm);
-                ys.Add(region.Y + region.Height + options.VerticalGapMm);
+                var x = AdvanceEdge(region.X, region.Width, options.HorizontalGapMm, "semantic schedule horizontal occupied edge");
+                var y = AdvanceEdge(region.Y, region.Height, options.VerticalGapMm, "semantic schedule vertical occupied edge");
+                if (Finite(x)) xs.Add(x);
+                if (Finite(y)) ys.Add(y);
             }
 
             foreach (var y in ys)
             {
-                if (y < options.MarginTopMm || y + item.HeightMm > bottom) continue;
+                if (y < options.MarginTopMm || !FitsWithin(y, item.HeightMm, bottom)) continue;
                 foreach (var x in xs)
                 {
-                    if (x < options.MarginLeftMm || x + item.WidthMm > right) continue;
+                    if (x < options.MarginLeftMm || !FitsWithin(x, item.WidthMm, right)) continue;
                     var candidate = new Region(x, y, item.WidthMm, item.HeightMm);
                     if (occupied.Any(region => Conflicts(region, candidate, options.HorizontalGapMm, options.VerticalGapMm))) continue;
                     return new SemanticSchedulePlacement(item.ScheduleId, x, y, item.WidthMm, item.HeightMm);
@@ -227,12 +233,56 @@ namespace QS3D.Core.Documentation
             return null;
         }
 
-        private static bool Conflicts(Region a, Region b, double horizontalGapMm, double verticalGapMm)
+        private static bool Conflicts(Region a, Region b, double horizontalGapMm, double verticalGapMm) =>
+            AxisConflicts(a.X, a.Width, b.X, b.Width, horizontalGapMm) &&
+            AxisConflicts(a.Y, a.Height, b.Y, b.Height, verticalGapMm);
+
+        private static bool AxisConflicts(double aStart, double aExtent, double bStart, double bExtent, double gap)
         {
-            return a.X < b.X + b.Width + horizontalGapMm &&
-                   b.X < a.X + a.Width + horizontalGapMm &&
-                   a.Y < b.Y + b.Height + verticalGapMm &&
-                   b.Y < a.Y + a.Height + verticalGapMm;
+            if (aStart <= bStart)
+                return SeparationViolatesGap(bStart - aStart, aExtent, gap);
+            return SeparationViolatesGap(aStart - bStart, bExtent, gap);
+        }
+
+        private static bool SeparationViolatesGap(double separation, double leadingExtent, double gap)
+        {
+            if (!Finite(separation)) return false;
+            if (separation < leadingExtent) return true;
+            if (separation == leadingExtent) return gap > 0d;
+            return separation - leadingExtent < gap;
+        }
+
+        private static bool FitsWithin(double start, double extent, double limit)
+        {
+            if (!Finite(start) || !Finite(extent) || !Finite(limit) || start > limit) return false;
+            return extent <= limit - start;
+        }
+
+        private static double AdvanceEdge(double start, double extent, double gap, string label)
+        {
+            var edge = start + extent;
+            if (double.IsInfinity(edge)) return double.PositiveInfinity;
+            if (double.IsNaN(edge)) throw new InvalidOperationException(label + " produced an invalid coordinate.");
+            if (extent > 0d && !(edge > start))
+                throw new InvalidOperationException(label + " lost positive extent to floating-point precision.");
+            if (gap == 0d) return edge;
+
+            var advanced = edge + gap;
+            if (double.IsInfinity(advanced)) return double.PositiveInfinity;
+            if (double.IsNaN(advanced)) throw new InvalidOperationException(label + " produced an invalid gap coordinate.");
+            if (!(advanced > edge))
+                throw new InvalidOperationException(label + " lost a positive gap to floating-point precision.");
+            return advanced;
+        }
+
+        private static double RetreatEdge(double start, double amount, string label)
+        {
+            var edge = start - amount;
+            if (double.IsNaN(edge) || double.IsInfinity(edge))
+                throw new InvalidOperationException(label + " produced a non-finite paper boundary.");
+            if (amount > 0d && !(edge < start))
+                throw new InvalidOperationException(label + " was lost to floating-point precision.");
+            return edge;
         }
 
         private static void ValidateOptions(SemanticSchedulePlacementOptions options)
@@ -265,6 +315,8 @@ namespace QS3D.Core.Documentation
             if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
                 throw new ArgumentOutOfRangeException(name, "Value must be finite and non-negative.");
         }
+
+        private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
         private sealed class Region
         {
