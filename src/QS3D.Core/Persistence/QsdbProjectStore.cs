@@ -108,7 +108,7 @@ namespace QS3D.Core.Persistence
             var updatedUtc = Date(root.Attribute("updatedUtc")?.Value);
             var changeVersion = ChangeVersion(root.Attribute("changeVersion")?.Value);
 
-            var project = new ProjectState(Required(root, "projectId"), Required(root, "name"))
+            var project = new ProjectState(RequiredCanonical(root, "projectId"), Required(root, "name"))
             {
                 SchemaVersion = ProjectState.CurrentSchemaVersion,
                 DrawingPath = Value(root, "drawingPath"),
@@ -438,6 +438,16 @@ namespace QS3D.Core.Persistence
                 if (target.ContainsKey(key)) throw new InvalidDataException("Duplicate QSDB map key: " + key);
                 target[key] = RawValue(item, "value");
             }
+        }
+
+        private static string RequiredCanonical(XElement element, string attribute)
+        {
+            var value = element.Attribute(attribute)?.Value;
+            if (string.IsNullOrWhiteSpace(value))
+                throw new InvalidDataException("Missing attribute: " + attribute);
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("Non-canonical QSDB attribute: " + attribute);
+            return value;
         }
 
         private static string Required(XElement element, string attribute) => element.Attribute(attribute)?.Value is string value && !string.IsNullOrWhiteSpace(value) ? value.Trim() : throw new InvalidDataException("Missing attribute: " + attribute);
