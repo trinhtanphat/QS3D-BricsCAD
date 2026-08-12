@@ -69,7 +69,7 @@ for token, label in (
     ('"2D → Tường 3D", "QS3DCONVERT2D"', "2D-to-3D ribbon entry"),
     ('"Vẽ Cửa Sổ", "QS3DDRAWWINDOW"', "window ribbon entry"),
     ('"Vật liệu", "QS3DMATERIALS"', "material ribbon entry"),
-    ('CollectionContainsId(items, spec.Id)', "idempotent ribbon insertion"),
+    ('var button = FindById(items, spec.Id);', "idempotent ribbon reconciliation"),
 ):
     if token not in ribbon:
         errors.append(label + " missing token: " + token)
