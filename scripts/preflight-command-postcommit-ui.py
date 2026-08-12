@@ -39,8 +39,8 @@ def main():
         "private static void FinalizeCommittedUi(Document document, string operation, Action ui)",
         "private static void Capture(ElementCategory category, string label)")
     require(helper, "ui();", "post-commit UI helper")
-    require(helper, "catch (System.Exception uiError)", "post-commit UI helper")
-    require(helper, 'operation + " đã hoàn tất; cảnh báo UI: " + uiError.Message', "post-commit UI warning")
+    require(helper, "catch (System.Exception)", "post-commit UI helper")
+    require(helper, 'operation + " đã hoàn tất; cảnh báo UI: không thể hoàn tất cập nhật giao diện."', "post-commit UI warning")
     if "throw" in helper:
         raise AssertionError("Post-commit UI helper must remain non-fatal after the business operation succeeds.")
 
