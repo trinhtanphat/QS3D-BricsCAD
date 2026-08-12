@@ -5,6 +5,7 @@ namespace QS3D.Core.SmokeTests
         internal static void RunAll()
         {
             ProjectQuantitySmoke.Run();
+            WallQuantityOpeningBoundSmoke.Run();
             QuantityCalculationBltCompatibilityPresetSmoke.Run();
             LegacyQuantityReportIdentitySmoke.Run();
             ScheduleReportingIdentitySmoke.Run();

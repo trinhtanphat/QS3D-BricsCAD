@@ -2,7 +2,7 @@
 
 - Agent: ChatGPT remote agent
 - Owner: OpenAI ChatGPT
-- Status: COMPLETE
+- Status: COMPLETED
 - Scope: Harden `ProjectInterchangeJsonExporter.Build(ProjectState)` so duplicate case-insensitive Zone/Floor/Family/Element semantic IDs are rejected before export instead of emitting a snapshot that downstream validated readers/import planners reject as ambiguous.
 - Claimed Files:
   - `src/QS3D.Core/Export/ProjectInterchangeJsonExporter.cs`
