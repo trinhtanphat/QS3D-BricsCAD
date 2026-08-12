@@ -1,29 +1,20 @@
 # Work claim — release #32 Model Health review UI preflight reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-release32-model-health-review-ui`
 - Registered: `2026-08-12T11:23:00+07:00`
+- Completed: `2026-08-12T11:25:00+07:00`
 - Baseline main SHA: `0a075eacbb9781bd4a782caaa17499abd8f061f4`
-- Priority: release #32 reports `scripts/preflight-model-health-review-ui.py` failing on a stale combined footer/header copy token.
+- Claim commit: `88953b37ef9c1bd73b6adb194f7491ea9a6fe060`
+- Implementation commit: `3536a8d5e98d647b11fed2489887b1341cf2f835`
+- Priority: release #32 reported `scripts/preflight-model-health-review-ui.py` failing on a stale combined footer/header copy token.
 
-## Reserved scope
+## Completed reconciliation
 
-Reconcile only `scripts/preflight-model-health-review-ui.py`; preserve ModelHealthWindow XAML/code-behind unchanged.
+Current `ModelHealthWindow.xaml` remains well-formed and exposes HEALTH REVIEW, search, severity filters, visible count, issue grid, locate click and double-click. The premium layout deliberately renders `READ-ONLY TRIAGE` and `ISSUE → CAD LOCATE` as separate status pills instead of the obsolete single literal `READ-ONLY TRIAGE • ISSUE → CAD LOCATE`.
 
-## Canonical evidence
+`3536a8d5e98d647b11fed2489887b1341cf2f835` updates only the gate to require both current markers independently. All existing code-behind assertions remain: in-memory filtering, project identity/UpdatedUtc/ChangeVersion/drawing fingerprint freshness, active-DWG guard, stale UI disablement and locate callback. All mutation/recompute/command-dispatch forbidden checks remain.
 
-- Current XAML remains well-formed and exposes HEALTH REVIEW, search, severity filters, visible count, issue grid, locate click and double-click.
-- Current premium layout deliberately renders `READ-ONLY TRIAGE` and `ISSUE → CAD LOCATE` as separate status pills instead of the obsolete single literal `READ-ONLY TRIAGE • ISSUE → CAD LOCATE`.
-- Code-behind still keeps in-memory filtering, project/DWG freshness identity, stale disablement and guarded locate callback; no mutation/health recomputation is performed by the window.
+## Validation boundary
 
-## Contract
-
-The gate must require both current read-only/locate UI markers independently while preserving all search/filter/freshness/read-only assertions and forbidden mutation checks.
-
-## Excluded scope
-
-No XAML/code-behind edits, no UI redesign, no health-service changes and no unrelated #32 work. No Actions/build/runtime PASS claim.
-
-## Completion condition
-
-The gate tracks the current split premium UI markers without weakening Model Health review safety, is read back on current `main`, and this claim is closed with exact evidence.
+Remote/static source and gate readback only. ModelHealthWindow production XAML/code-behind were not modified. No GitHub Actions/build/release or licensed BricsCAD V25/V26 runtime PASS is claimed.
