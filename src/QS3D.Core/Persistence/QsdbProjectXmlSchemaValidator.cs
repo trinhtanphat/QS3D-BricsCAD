@@ -44,6 +44,7 @@ namespace QS3D.Core.Persistence
             ValidateRules(root.Element("rules"));
             ValidateElements(root.Element("elements"));
             ValidateAudit(root.Element("audit"));
+            ValidateElementReferences(root);
         }
 
         private static void ValidateMap(XElement container, string owner)
@@ -193,6 +194,44 @@ namespace QS3D.Core.Persistence
                     Array.Empty<string>());
                 ValidateRequiredCanonicalAttribute(item, "action", "audit action");
             }
+        }
+
+        private static void ValidateElementReferences(XElement root)
+        {
+            var familyIds = ReadCatalogIds(root.Element("families"), "family");
+            var floorIds = ReadCatalogIds(root.Element("floors"), "floor");
+            var zoneIds = ReadCatalogIds(root.Element("zones"), "zone");
+            var elements = root.Element("elements") ?? throw new InvalidDataException("QSDB is missing the elements section.");
+
+            foreach (var element in elements.Elements("element"))
+            {
+                var elementId = element.Attribute("id")?.Value ?? string.Empty;
+                ValidateOptionalReference(element, "familyId", familyIds, "family", elementId);
+                ValidateOptionalReference(element, "floorId", floorIds, "floor", elementId);
+                ValidateOptionalReference(element, "zoneId", zoneIds, "zone", elementId);
+            }
+        }
+
+        private static HashSet<string> ReadCatalogIds(XElement container, string itemName)
+        {
+            if (container == null) throw new InvalidDataException("QSDB is missing the " + itemName + " catalog.");
+            return new HashSet<string>(
+                container.Elements(itemName).Select(x => x.Attribute("id")?.Value ?? string.Empty),
+                StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static void ValidateOptionalReference(
+            XElement element,
+            string attributeName,
+            ISet<string> validIds,
+            string targetName,
+            string elementId)
+        {
+            var reference = element.Attribute(attributeName)?.Value;
+            if (string.IsNullOrEmpty(reference)) return;
+            if (!validIds.Contains(reference))
+                throw new InvalidDataException(
+                    "QSDB element " + elementId + " " + attributeName + " does not reference an existing " + targetName + ": " + reference + ".");
         }
 
         private static void ValidateNamedCategoryAttribute(XElement element, string owner)
