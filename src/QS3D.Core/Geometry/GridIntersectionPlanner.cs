@@ -326,32 +326,57 @@ namespace QS3D.Core.Geometry
             if (distance <= tolerance && Math.Abs(first.Radius - second.Radius) <= tolerance)
                 throw Ambiguous(first, second, "coincident ARC support circles are intentionally rejected; split/review the Grid references explicitly");
             if (distance <= tolerance) return Array.Empty<Point2>();
-            var outerLimit = first.Radius + second.Radius + tolerance;
-            var innerLimit = Math.Abs(first.Radius - second.Radius) - tolerance;
-            EnsureFiniteDerived("Grid ARC separation limits", outerLimit, innerLimit);
-            if (distance > outerLimit) return Array.Empty<Point2>();
-            if (distance < innerLimit) return Array.Empty<Point2>();
 
-            var a = (first.Radius * first.Radius - second.Radius * second.Radius + distance * distance) / (2.0 * distance);
-            var h2 = first.Radius * first.Radius - a * a;
-            var hTolerance = tolerance * Math.Max(1.0, first.Radius * first.Radius);
+            var scale = Math.Max(distance, Math.Max(first.Radius, second.Radius));
+            if (!(scale > 0.0) || !IsFinite(scale))
+                throw new OverflowException("Grid ARC intersection scale is outside the supported numeric range.");
+            var inverseScale = 1.0 / scale;
+            var normalizedDistance = distance * inverseScale;
+            var normalizedFirstRadius = first.Radius * inverseScale;
+            var normalizedSecondRadius = second.Radius * inverseScale;
+            var normalizedTolerance = tolerance * inverseScale;
+            EnsureFiniteDerived(
+                "Grid ARC normalized geometry",
+                inverseScale,
+                normalizedDistance,
+                normalizedFirstRadius,
+                normalizedSecondRadius,
+                normalizedTolerance);
+
+            var outerLimit = normalizedFirstRadius + normalizedSecondRadius + normalizedTolerance;
+            var innerLimit = Math.Abs(normalizedFirstRadius - normalizedSecondRadius) - normalizedTolerance;
+            EnsureFiniteDerived("Grid ARC separation limits", outerLimit, innerLimit);
+            if (normalizedDistance > outerLimit) return Array.Empty<Point2>();
+            if (normalizedDistance < innerLimit) return Array.Empty<Point2>();
+
+            var a = (normalizedFirstRadius * normalizedFirstRadius -
+                     normalizedSecondRadius * normalizedSecondRadius +
+                     normalizedDistance * normalizedDistance) / (2.0 * normalizedDistance);
+            var h2 = normalizedFirstRadius * normalizedFirstRadius - a * a;
+            var inverseScaleSquared = inverseScale * inverseScale;
+            var hTolerance = tolerance * Math.Max(inverseScaleSquared, normalizedFirstRadius * normalizedFirstRadius);
             EnsureFiniteDerived("Grid ARC intersection geometry", a, h2, hTolerance);
             if (h2 < -hTolerance) return Array.Empty<Point2>();
             if (h2 < 0.0) h2 = 0.0;
             var h = Math.Sqrt(h2);
             var ux = dx / distance;
             var uy = dy / distance;
-            var px = first.Center.X + a * ux;
-            var py = first.Center.Y + a * uy;
-            EnsureFiniteDerived("Grid ARC intersection basis", h, ux, uy, px, py);
+            EnsureFiniteDerived("Grid ARC intersection basis", h, ux, uy);
+
+            var firstOffsetX = scale * (a * ux - h * uy);
+            var firstOffsetY = scale * (a * uy + h * ux);
+            EnsureFiniteDerived("Grid ARC first intersection offset", firstOffsetX, firstOffsetY);
+            var p1 = new Point2(first.Center.X + firstOffsetX, first.Center.Y + firstOffsetY);
+            EnsureFinitePoint(p1, "Grid ARC intersection");
 
             var points = new List<Point2>(2);
-            var p1 = new Point2(px - h * uy, py + h * ux);
-            EnsureFinitePoint(p1, "Grid ARC intersection");
             if (IsOnArc(p1, first, tolerance) && IsOnArc(p1, second, tolerance)) points.Add(p1);
-            if (h > tolerance)
+            if (h > normalizedTolerance)
             {
-                var p2 = new Point2(px + h * uy, py - h * ux);
+                var secondOffsetX = scale * (a * ux + h * uy);
+                var secondOffsetY = scale * (a * uy - h * ux);
+                EnsureFiniteDerived("Grid ARC second intersection offset", secondOffsetX, secondOffsetY);
+                var p2 = new Point2(first.Center.X + secondOffsetX, first.Center.Y + secondOffsetY);
                 EnsureFinitePoint(p2, "Grid ARC intersection");
                 if (IsOnArc(p2, first, tolerance) && IsOnArc(p2, second, tolerance)) points.Add(p2);
             }
