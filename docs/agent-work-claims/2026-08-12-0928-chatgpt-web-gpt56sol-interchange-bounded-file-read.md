@@ -1,24 +1,39 @@
 # Work claim — Project interchange bounded file read
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-12T09:28:00+07:00`
+- Completed: `2026-08-12T10:52:00+07:00`
 - Baseline main SHA: `d030e1655075b4055cdf46fc451f27b9c58b5a7a`
+- Source merge SHA: `4fa8d52221981f27185bd59df09ec6a694d76c58`
+- Source PR: `#783`
 - Priority: evidence-driven remote-safe interchange input hardening
 
 ## Reason
 
-`ProjectInterchangeJsonValidator.ValidateFile()` checks `FileInfo.Length` against the existing 16 MiB `MaxFileBytes` contract, then performs an unbounded `File.ReadAllBytes(fullPath)`. A file that grows after the metadata check can therefore be read/allocated beyond the guarded size before the later string validation rejects it.
+`ProjectInterchangeJsonValidator.ValidateFile()` checked `FileInfo.Length` against the existing 16 MiB `MaxFileBytes` contract, then performed an unbounded `File.ReadAllBytes(fullPath)`. A file that grew after the metadata check could therefore be read/allocated beyond the guarded size before the later string validation rejected it.
 
 ## Reserved scope
 
 Make the file-read boundary enforce the existing `MaxFileBytes` contract while bytes are read. Preserve path validation, not-found behavior, strict UTF-8 handling, validation result semantics, the exact 16 MiB public limit, JSON limits, and exporter/importer behavior.
 
-## Expected surfaces
+## Completed surfaces
 
 - `src/QS3D.Core/Export/ProjectInterchangeJsonValidator.cs`
-- focused regression coverage under `tests/QS3D.Core.SmokeTests/` or the repository's existing interchange validation test surface
+- `tests/QS3D.Core.SmokeTests/ProjectInterchangeValidationSmoke.cs`
+- `scripts/preflight-interchange-bounded-file-read.py`
 - this claim file
+
+## Completion evidence
+
+- PR `#783` squash-merged to `main` as `4fa8d52221981f27185bd59df09ec6a694d76c58`.
+- `ValidateFile()` now calls `ReadFileBytesBounded(fullPath)` instead of `File.ReadAllBytes(fullPath)`.
+- The bounded reader buffers at most `MaxFileBytes` and probes one additional byte with `ReadByte()` to reject post-check growth beyond the 16 MiB contract.
+- The existing strict UTF-8 decode path and oversize `InvalidDataException` text remain unchanged.
+- `ProjectInterchangeValidationSmoke` now locks the public oversize limit/error contract.
+- `scripts/preflight-interchange-bounded-file-read.py` fails if the bounded helper/sentinel contract is removed or `File.ReadAllBytes(fullPath)` returns.
+- Readback was performed against source merge `4fa8d52221981f27185bd59df09ec6a694d76c58`.
+- GitHub Actions were not dispatched. No full build/smoke suite or BricsCAD runtime PASS is claimed by this remote lane.
 
 ## Excluded scope
 
@@ -27,18 +42,10 @@ Make the file-read boundary enforce the existing `MaxFileBytes` contract while b
 - No BricsCAD command/UI changes.
 - No GitHub Actions dispatch.
 
-## Validation plan
-
-- Preserve rejection of an already-oversize file.
-- Lock a bounded streaming/read helper so no `File.ReadAllBytes` path can bypass `MaxFileBytes` after the initial metadata check.
-- Preserve valid UTF-8 validation and invalid UTF-8 error behavior.
-- Re-fetch current `main`, claims, and target blobs before implementation writes; never force-push.
-- Record static/exact-diff/ancestry verification only unless a test runner is actually invoked.
-
 ## Coordination
 
-Open-PR and current claim searches found no active reservation for `ProjectInterchangeJsonValidator` bounded file reading at registration time. Concurrent Grid/Wall and unrelated Core lanes remain out of scope.
+The concurrent LOCAL-003 interchange UTC fixture lane was scoped to `ProjectInterchangeExportSafetySmoke.cs` and did not overlap this validator/smoke/preflight implementation.
 
 ## Completion condition
 
-Current `main` enforces `MaxFileBytes` during file reading, focused regression coverage locks the boundary, and this claim is `COMPLETED`.
+Satisfied: current `main` enforces `MaxFileBytes` during file reading, focused regression/preflight coverage locks the boundary, and this claim is `COMPLETED`.
