@@ -70,11 +70,19 @@ namespace QS3D.Core.SmokeTests
 
             Throws<ArgumentOutOfRangeException>(() => new ProjectUnitPolicy((LengthUnit)999));
             Throws<ArgumentOutOfRangeException>(() => new ProjectUnitPolicy(LengthUnit.Meter, 10));
+            Throws<ArgumentOutOfRangeException>(() => ProjectUnitPolicy.ToDrawingUnit((LengthUnit)999));
             var unitPolicy = new ProjectUnitPolicy(LengthUnit.Centimeter, 2);
             if (unitPolicy.DrawingUnit != LengthUnit.Centimeter || unitPolicy.DisplayDecimals != 2 ||
                 Math.Abs(unitPolicy.ToMeters(123d) - 1.23d) > 1e-12d ||
                 Math.Abs(unitPolicy.RoundForDisplay(1.236d) - 1.24d) > 1e-12d)
                 throw new Exception("Defined ProjectUnitPolicy values must preserve conversion and display behavior.");
+
+            foreach (LengthUnit lengthUnit in Enum.GetValues(typeof(LengthUnit)))
+            {
+                var drawingUnit = ProjectUnitPolicy.ToDrawingUnit(lengthUnit);
+                if (!string.Equals(lengthUnit.ToString(), drawingUnit.ToString(), StringComparison.Ordinal))
+                    throw new Exception("ProjectUnitPolicy unit mapping changed semantic meaning for " + lengthUnit + ".");
+            }
 
             var path = Path.Combine(Path.GetTempPath(), "qs3d-unit-binding-" + Guid.NewGuid().ToString("N") + ".qsdb");
             try
