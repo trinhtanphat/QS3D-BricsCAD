@@ -18,8 +18,8 @@ for path in PROVIDERS + [SMOKE]:
         errors.append("missing standalone generated health contract file: " + str(path.relative_to(ROOT)))
 
 for path in PROVIDERS:
-    if path.is_file() and "if (element == null) continue;" not in path.read_text(encoding="utf-8"):
-        errors.append(path.name + " must skip null semantic entries so standalone diagnostics do not crash.")
+    if path.is_file() and "if (element == null) continue;" in path.read_text(encoding="utf-8"):
+        errors.append(path.name + " must fail visible instead of silently skipping null semantic entries.")
 
 curtain = PROVIDERS[1]
 if curtain.is_file():
@@ -33,6 +33,14 @@ if curtain.is_file():
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
+    required = (
+        "RequireFailVisible",
+        "catch (InvalidOperationException)",
+        "must reject a null semantic entry",
+    )
+    for token in required:
+        if token not in text:
+            errors.append("StandaloneGeneratedHealthNullSafetySmoke.cs missing fail-visible contract: " + token)
     for provider in (
         "GeneratedFoundationMeshHealthService",
         "GeneratedCurtainFrameHealthService",
@@ -49,4 +57,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: standalone generated Core health providers tolerate null semantic entries and curtain Family ambiguity is contained as a diagnostic issue.")
+print("PASS: standalone generated Core health providers reject corrupt null semantic entries fail visibly while curtain Family ambiguity remains contained as a diagnostic issue.")
