@@ -15,10 +15,12 @@ namespace QS3D.Core.SmokeTests
         {
             RejectsOversizedStandardWorksheetBeforeIndexingOrFilesystemMutation();
             RejectsOversizedEd2WorksheetBeforeIndexingOrFilesystemMutation();
+            RejectsOversizedEd2SummaryWorksheetBeforeIndexingOrFilesystemMutation();
             AcceptsExactCellTextLimit();
             RejectsOversizedStandardScalarCellBeforeFilesystemMutation();
             RejectsOversizedStandardJoinedCellBeforeFilesystemMutation();
             RejectsOversizedEd2DisplayCellBeforeFilesystemMutation();
+            RejectsOversizedEd2FloorZoneCellBeforeFilesystemMutation();
         }
 
         private static void RejectsOversizedStandardWorksheetBeforeIndexingOrFilesystemMutation()
@@ -41,6 +43,18 @@ namespace QS3D.Core.SmokeTests
             {
                 Throws<ArgumentOutOfRangeException>(() => XlsxQuantityExporter.ExportEd2(path, new OversizedRows(), new[] { new QuantityReportRow() }));
                 RequireNoDestinationMutation(root, path, "Oversized ED2 CHI_TIET worksheet");
+            }
+            finally { Delete(root); }
+        }
+
+        private static void RejectsOversizedEd2SummaryWorksheetBeforeIndexingOrFilesystemMutation()
+        {
+            var root = Root("ed2-summary-row-limit");
+            var path = Path.Combine(root, "quantity-ed2.xlsx");
+            try
+            {
+                Throws<ArgumentOutOfRangeException>(() => XlsxQuantityExporter.ExportEd2(path, new[] { new QuantityReportRow() }, new OversizedRows()));
+                RequireNoDestinationMutation(root, path, "Oversized ED2 TONG_HOP worksheet");
             }
             finally { Delete(root); }
         }
@@ -102,6 +116,22 @@ namespace QS3D.Core.SmokeTests
                 var summary = ValidEd2Row("E1");
                 Throws<ArgumentOutOfRangeException>(() => XlsxQuantityExporter.ExportEd2(path, new[] { detail }, new[] { summary }));
                 RequireNoDestinationMutation(root, path, "Oversized ED2 display text");
+            }
+            finally { Delete(root); }
+        }
+
+        private static void RejectsOversizedEd2FloorZoneCellBeforeFilesystemMutation()
+        {
+            var root = Root("ed2-floor-zone-reject");
+            var path = Path.Combine(root, "quantity-ed2.xlsx");
+            try
+            {
+                var detail = ValidEd2Row("E1");
+                detail.Floor = new string('F', 16383);
+                detail.Zone = new string('Z', 16382);
+                var summary = ValidEd2Row("E1");
+                Throws<ArgumentOutOfRangeException>(() => XlsxQuantityExporter.ExportEd2(path, new[] { detail }, new[] { summary }));
+                RequireNoDestinationMutation(root, path, "Oversized ED2 FloorZone text");
             }
             finally { Delete(root); }
         }
