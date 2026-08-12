@@ -1,1 +1,0 @@
-Temporary coordination note: PR #619 branch synchronization is being performed against current `main` while preserving only the reserved codec and isolated smoke files. This note is intentionally separate from source scope and will not be part of the PR branch.
