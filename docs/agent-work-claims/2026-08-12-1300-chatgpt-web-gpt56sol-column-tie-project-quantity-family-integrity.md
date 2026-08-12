@@ -14,6 +14,7 @@ Require any supplied `ProjectFamily` in `ColumnTieProjectQuantityService.Calcula
 
 - `src/QS3D.Core/Rebar/ColumnTieProjectQuantityService.cs`
 - `tests/QS3D.Core.SmokeTests/ColumnTieProjectQuantityFamilyIntegritySmoke.cs`
+- `tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs` (registration only)
 - this claim file
 
 ## Excluded scope
@@ -32,7 +33,7 @@ Require any supplied `ProjectFamily` in `ColumnTieProjectQuantityService.Calcula
 
 ## Coordination
 
-No current claim/commit was found for this supplied-family referential-integrity lane after repeated current-main refreshes. Refresh `main` before every write and stop/reconcile if a new overlapping reservation appears.
+No current claim/commit was found for this supplied-family referential-integrity lane after repeated current-main refreshes. `SmokeTestRegistration.cs` is reserved only for the single registration line needed by this focused smoke; refresh `main` before that write and preserve concurrent registrations. Refresh `main` before every write and stop/reconcile if a new overlapping reservation appears.
 
 ## Completion condition
 
