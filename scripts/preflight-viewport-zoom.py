@@ -12,6 +12,7 @@ else:
     text = viewport.read_text(encoding="utf-8")
     for needle in (
         'CommandMethod("QS3DZOOMSELECTED"',
+        "internal static bool TryZoomSelection(Document document)",
         "var worldToDisplay = WorldToDisplay(view)",
         "extents.TransformBy(worldToDisplay)",
         "Matrix3d.PlaneToWorld(view.ViewDirection)",
@@ -33,7 +34,7 @@ else:
     if command_count != 1:
         errors.append("QS3DZOOMSELECTED must have exactly one command owner; found %d" % command_count)
 
-    zoom_start = text.find("private static bool TryZoomSelection")
+    zoom_start = text.find("internal static bool TryZoomSelection(Document document)")
     transform_start = text.find("private static Matrix3d WorldToDisplay", zoom_start)
     if zoom_start < 0 or transform_start < 0:
         errors.append("TryZoomSelection/WorldToDisplay boundary is missing.")
