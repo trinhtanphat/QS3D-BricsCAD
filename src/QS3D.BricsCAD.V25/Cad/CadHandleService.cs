@@ -52,13 +52,7 @@ namespace QS3D.BricsCAD.V25.Cad
             return value.ToString("X", CultureInfo.InvariantCulture);
         }
 
-        public static int Select(Document document, IEnumerable<string> handles)
-        {
-            if (document == null) throw new ArgumentNullException(nameof(document));
-            var ids = Resolve(document, handles);
-            document.Editor.SetImpliedSelection(new List<ObjectId>(ids).ToArray());
-            return ids.Count;
-        }
+        public static int Select(Document document, IEnumerable<string> handles) => SelectIfAny(document, handles);
 
         public static int SelectIfAny(Document document, IEnumerable<string> handles)
         {
@@ -67,6 +61,12 @@ namespace QS3D.BricsCAD.V25.Cad
             if (ids.Count == 0) return 0;
             document.Editor.SetImpliedSelection(new List<ObjectId>(ids).ToArray());
             return ids.Count;
+        }
+
+        public static void ClearSelection(Document document)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            document.Editor.SetImpliedSelection(Array.Empty<ObjectId>());
         }
 
         public static ISet<string> GetLiveHandles(Document document, IEnumerable<string> handles)
