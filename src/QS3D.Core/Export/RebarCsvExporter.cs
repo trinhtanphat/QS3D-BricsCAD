@@ -84,7 +84,13 @@ namespace QS3D.Core.Export
             if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d) throw new ArgumentOutOfRangeException(name, "BBS CSV numeric value must be finite and non-negative.");
         }
 
-        private static string F(double value) => value.ToString("0.######", CultureInfo.InvariantCulture);
+        private static string F(double value)
+        {
+            var formatted = value.ToString("0.######", CultureInfo.InvariantCulture);
+            if (value != 0d && string.Equals(formatted, "0", StringComparison.Ordinal))
+                return value.ToString("R", CultureInfo.InvariantCulture);
+            return formatted;
+        }
 
         private static string Q(string value)
         {
