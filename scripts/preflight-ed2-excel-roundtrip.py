@@ -75,7 +75,10 @@ if "ProjectContextCoordinator.GetOrCreate(doc)" in texts.get("commands", "")[tex
 require("builder", (
     "public static IReadOnlyList<QuantityReportRow> Detail(ProjectState project, IEnumerable<string> elementIds)",
     "ResolveSelection(project, elementIds)",
-    "element.ZoneId + \"\\u001f\" + category",
+    '"ELEMENT\\u001f" + elementId',
+    "CanonicalGroupKey(floorId, zoneId, category, familyId, material, DensityKey(densityKgM3))",
+    "private static string CanonicalGroupKey(params string[] parts)",
+    'value.Length.ToString(CultureInfo.InvariantCulture) + ":" + value',
     'FirstInstanceProperty(element, "Name", "TenCauKien")',
     'Effective(element, family, "Material")',
     "EffectiveDensity(element, family)",
@@ -86,10 +89,13 @@ require("builder", (
     '"GrossVolumeM3"',
     '"VolumeM3"',
     '"MeasuredVolumeM3"',
-    'material + "\\u001f" + DensityKey(densityKgM3)',
+    "DensityKey(densityKgM3)",
     "QuantityReportMath.Add(current.Value, value.Value, label)",
     "row.ElementIds.Add(elementId)",
 ))
+if 'element.ZoneId + "\\u001f" + category' in texts.get("builder", "") or 'material + "\\u001f" + DensityKey(densityKgM3)' in texts.get("builder", ""):
+    errors.append("ProjectQuantityReportBuilder must not regress grouped ED2 identity to delimiter-concatenated keys")
+
 require("row", (
     "public string Zone { get; set; }",
     "public string FamilyId { get; set; }",
@@ -148,7 +154,8 @@ require("reader", (
     "QS3D Excel row is missing its Element ID.",
     "QS3D Excel row is missing its CAD Handle provenance.",
     "QS3D Excel row is missing its drawing fingerprint.",
-    "!isModernSchema && decimalHandles.Count > 0",
+    "var preferLegacy = !isModernSchema && handleColumns.Count == 0 && decimalHandles.Count > 0 && string.IsNullOrWhiteSpace(drawingFingerprint);",
+    "if (preferLegacy)",
     "worksheet.IsEd2Detail && !isModernSchema",
 ))
 require("window", ("OnEd2ExportClick", "OnExcelLocateClick", "BQ • 1 sheet",))
@@ -190,4 +197,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: ED2 scopes before aggregation on a detached read-only snapshot, preserves one-element CHI_TIET and Zone-aware TONG_HOP provenance, exports material/family/density/mass/note fields with readable formatting, and fails closed on schema, quantity, fingerprint or live-Handle drift.")
+print("PASS: ED2 scopes before aggregation on a detached read-only snapshot, preserves one-element CHI_TIET and collision-safe Zone/material/density-aware TONG_HOP provenance, exports material/family/density/mass/note fields with readable formatting, and fails closed on schema, quantity, fingerprint or live-Handle drift.")
