@@ -208,8 +208,8 @@ namespace QS3D.Core.Documentation
                 PositiveFinite(placement.WidthMm, "placements[" + i + "].WidthMm");
                 PositiveFinite(placement.HeightMm, "placements[" + i + "].HeightMm");
 
-                if (placement.Xmm + placement.WidthMm > definition.WidthMm ||
-                    placement.Ymm + placement.HeightMm > definition.HeightMm)
+                if (!FitsWithin(placement.Xmm, placement.WidthMm, definition.WidthMm) ||
+                    !FitsWithin(placement.Ymm, placement.HeightMm, definition.HeightMm))
                     throw new InvalidOperationException("Semantic sheet placement is outside the paper bounds for view id: " + viewId + ".");
 
                 var plan = new SemanticSheetPlacementPlan(viewId, placement.Xmm, placement.Ymm, placement.WidthMm, placement.HeightMm);
@@ -271,12 +271,23 @@ namespace QS3D.Core.Documentation
             return result;
         }
 
-        private static bool Overlaps(SemanticSheetPlacementPlan a, SemanticSheetPlacementPlan b)
+        private static bool Overlaps(SemanticSheetPlacementPlan a, SemanticSheetPlacementPlan b) =>
+            AxisOverlaps(a.Xmm, a.WidthMm, b.Xmm, b.WidthMm) &&
+            AxisOverlaps(a.Ymm, a.HeightMm, b.Ymm, b.HeightMm);
+
+        private static bool AxisOverlaps(double aStart, double aExtent, double bStart, double bExtent)
         {
-            return a.Xmm < b.Xmm + b.WidthMm &&
-                   b.Xmm < a.Xmm + a.WidthMm &&
-                   a.Ymm < b.Ymm + b.HeightMm &&
-                   b.Ymm < a.Ymm + a.HeightMm;
+            if (aStart <= bStart) return SeparationWithinExtent(bStart - aStart, aExtent);
+            return SeparationWithinExtent(aStart - bStart, bExtent);
+        }
+
+        private static bool SeparationWithinExtent(double separation, double leadingExtent) =>
+            !double.IsNaN(separation) && !double.IsInfinity(separation) && separation < leadingExtent;
+
+        private static bool FitsWithin(double start, double extent, double limit)
+        {
+            if (start > limit) return false;
+            return extent <= limit - start;
         }
 
         private static void PositiveFinite(double value, string name)
