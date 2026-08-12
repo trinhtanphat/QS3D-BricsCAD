@@ -1,6 +1,6 @@
 # Work claim — Project Interchange timestamp canonicality
 
-- Status: `ACTIVE`
+- Status: `DONE`
 - Agent: `chatgpt-web-gpt56sol-interchange-timestamp-canonicality`
 - Registered: `2026-08-12T11:35:00+07:00`
 - Baseline main SHA: `773f9e99111a9928c50de5e225613fea7f0694c1`
@@ -8,9 +8,9 @@
 
 ## Confirmed defect
 
-`ProjectInterchangeJsonExporter` requires `DateTimeKind.Utc` and emits project/element timestamps with `value.ToString("O", CultureInfo.InvariantCulture)`. `ProjectInterchangeJsonValidator.ValidateTimestamp(...)`, however, currently accepts any parseable timestamp with an explicit `Z` or numeric offset via `DateTimeOffset.TryParse(...)`.
+`ProjectInterchangeJsonExporter` requires `DateTimeKind.Utc` and emits project/element timestamps with `value.ToString("O", CultureInfo.InvariantCulture)`. The validator previously accepted any parseable timestamp with an explicit `Z` or numeric offset via `DateTimeOffset.TryParse(...)`, so non-canonical equivalents could pass canonical validation even though the exporter never emits them.
 
-This means non-canonical equivalents such as `+07:00` or `+00:00`, lowercase/alternate spellings, and other broad-parser forms can pass the canonical validator even though the exporter never emits them. `ProjectInterchangeValidatedSnapshotReader` calls the validator before typed reading, so tightening the validator closes the validated import path without changing reader APIs.
+`ProjectInterchangeValidatedSnapshotReader` validates before typed reading, so validator-side enforcement closes the validated read/import path without changing reader APIs.
 
 ## Reserved scope
 
@@ -18,26 +18,26 @@ This means non-canonical equivalents such as `+07:00` or `+00:00`, lowercase/alt
 - `tests/QS3D.Core.SmokeTests/ProjectInterchangeValidationSmoke.cs` (focused timestamp contract coverage only)
 - this claim file
 
-## Intended contract
+## Implemented contract
 
-- Non-empty interchange timestamps must be exact invariant `"O"` tokens produced from a UTC `DateTime`.
-- Canonical writer-form timestamps such as `2026-08-10T11:00:00.0000000Z` remain valid.
-- Equivalent `+07:00`, `+00:00`, missing-offset, short-form UTC, padded, or otherwise non-canonical timestamp tokens fail validation.
-- Preserve the existing missing-timestamp warning policy; this lane changes only validation of non-empty timestamp tokens.
-- Preserve all format/unit/category/reference/quantity semantics and validated-reader APIs.
+- Non-empty interchange timestamps now parse only with exact invariant `"O"` and `DateTimeStyles.RoundtripKind`.
+- Parsed values must retain `DateTimeKind.Utc` and reproduce the exact stored token with `ToString("O", CultureInfo.InvariantCulture)`.
+- Canonical exporter output remains valid.
+- Equivalent non-zero offset, `+00:00`, missing-offset, short-form UTC, and padded tokens fail validation.
+- Existing `TIMESTAMP_MISSING` warning behavior is unchanged.
+- No exporter, typed reader, format/unit/category/reference/quantity behavior changed.
 
-## Excluded scope
+## Commits
 
-- No exporter serialization changes.
-- No validated snapshot reader changes unless exact post-claim evidence proves validator-only enforcement is insufficient.
-- No Interchange append/import conflict policy changes.
-- No GitHub Actions dispatch and no BricsCAD runtime qualification claim.
+- Claim registration: `5e8b43078a165afbaed0708fe4e47b81d7b81dd1`
+- Product fix: `28fb849be9248c8532e908d6baebabd0b069f83d`
+- Regression: `ea5d5406344fa3578a5c4711f850d258e155fd3c`
 
-## Validation plan
+## Validation
 
-- Publish this claim before source writes and verify reachability from current `main`.
-- Re-fetch the exact validator/smoke blobs after claim publication.
-- Replace broad offset parsing with exact invariant `"O"` UTC parsing plus canonical round-trip equality.
-- Extend the existing auto-registered `ProjectInterchangeValidationSmoke` with canonical acceptance and non-canonical offset/short-form rejection.
-- Inspect exact diffs/read-back, close this claim with exact SHAs, then ancestry-check claim to current `main`.
-- No local compile/runtime PASS will be claimed unless actually executed.
+- Re-fetched exact validator/test blobs after claim publication.
+- Exact product diff changes only timestamp parsing and removes the obsolete permissive-offset helper.
+- Exact test diff adds only canonical timestamp validation coverage to the already auto-registered smoke.
+- Read-back from current `main` confirms the exact parser and regression are present.
+- No GitHub Actions dispatched.
+- No local C# compile or BricsCAD V25/V26 runtime PASS claimed.
