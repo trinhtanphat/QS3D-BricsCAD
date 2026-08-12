@@ -10,20 +10,27 @@ namespace QS3D.Core.Persistence
     {
         private readonly ProjectState _snapshot;
         private readonly ProjectState _capturedProject;
+        private readonly IReadOnlyDictionary<string, ProjectFamily> _capturedFamilies;
         private readonly IReadOnlyDictionary<string, ProjectElement> _capturedElements;
 
-        private ProjectStateSnapshot(ProjectState snapshot, ProjectState capturedProject, IReadOnlyDictionary<string, ProjectElement> capturedElements)
+        private ProjectStateSnapshot(
+            ProjectState snapshot,
+            ProjectState capturedProject,
+            IReadOnlyDictionary<string, ProjectFamily> capturedFamilies,
+            IReadOnlyDictionary<string, ProjectElement> capturedElements)
         {
             _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
             _capturedProject = capturedProject ?? throw new ArgumentNullException(nameof(capturedProject));
+            _capturedFamilies = capturedFamilies ?? throw new ArgumentNullException(nameof(capturedFamilies));
             _capturedElements = capturedElements ?? throw new ArgumentNullException(nameof(capturedElements));
         }
 
         public static ProjectStateSnapshot Capture(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            var capturedFamilies = CaptureFamilyReferences(project);
             var capturedElements = CaptureElementReferences(project);
-            return new ProjectStateSnapshot(CreateDetachedCopy(project), project, capturedElements);
+            return new ProjectStateSnapshot(CreateDetachedCopy(project), project, capturedFamilies, capturedElements);
         }
 
         public static ProjectState CreateDetachedCopy(ProjectState project)
@@ -37,15 +44,31 @@ namespace QS3D.Core.Persistence
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (!string.Equals(project.ProjectId, _snapshot.ProjectId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Cannot restore a snapshot into a different project id.");
-            var preservedElements = ReferenceEquals(project, _capturedProject) ? _capturedElements : null;
-            CopyInto(_snapshot, project, preservedElements);
+            var preservingIdentity = ReferenceEquals(project, _capturedProject);
+            var preservedFamilies = preservingIdentity ? _capturedFamilies : null;
+            var preservedElements = preservingIdentity ? _capturedElements : null;
+            CopyInto(_snapshot, project, preservedFamilies, preservedElements);
         }
 
         private static ProjectState Clone(ProjectState source)
         {
             var target = new ProjectState(source.ProjectId, source.Name);
-            CopyInto(source, target, null);
+            CopyInto(source, target, null, null);
             return target;
+        }
+
+        private static IReadOnlyDictionary<string, ProjectFamily> CaptureFamilyReferences(ProjectState project)
+        {
+            var result = new Dictionary<string, ProjectFamily>(StringComparer.OrdinalIgnoreCase);
+            foreach (var family in project.Families)
+            {
+                if (family == null || string.IsNullOrWhiteSpace(family.Id))
+                    throw new InvalidOperationException("Cannot capture a project containing a family without id.");
+                if (result.ContainsKey(family.Id))
+                    throw new InvalidOperationException("Cannot capture a project containing duplicate family id: " + family.Id + ".");
+                result.Add(family.Id, family);
+            }
+            return result;
         }
 
         private static IReadOnlyDictionary<string, ProjectElement> CaptureElementReferences(ProjectState project)
@@ -62,7 +85,11 @@ namespace QS3D.Core.Persistence
             return result;
         }
 
-        private static void CopyInto(ProjectState source, ProjectState target, IReadOnlyDictionary<string, ProjectElement>? preservedElements)
+        private static void CopyInto(
+            ProjectState source,
+            ProjectState target,
+            IReadOnlyDictionary<string, ProjectFamily>? preservedFamilies,
+            IReadOnlyDictionary<string, ProjectElement>? preservedElements)
         {
             ValidateCollectionEntries(source);
 
@@ -84,8 +111,16 @@ namespace QS3D.Core.Persistence
             target.Families.Clear();
             foreach (var family in source.Families)
             {
-                var copy = new ProjectFamily(family.Id, family.Name, family.Category);
-                foreach (var property in family.Properties) copy.Properties[property.Key] = property.Value;
+                ProjectFamily copy;
+                if (preservedFamilies != null && preservedFamilies.TryGetValue(family.Id, out var preserved))
+                {
+                    copy = preserved;
+                    CopyFamilyInto(family, copy);
+                }
+                else
+                {
+                    copy = CloneFamily(family);
+                }
                 target.Families.Add(copy);
             }
 
@@ -147,6 +182,24 @@ namespace QS3D.Core.Persistence
                     throw new InvalidOperationException("Cannot snapshot a project containing a null " + label + " entry at index " + index + ".");
                 index++;
             }
+        }
+
+        private static ProjectFamily CloneFamily(ProjectFamily source)
+        {
+            var target = new ProjectFamily(source.Id, source.Name, source.Category);
+            CopyFamilyInto(source, target);
+            return target;
+        }
+
+        private static void CopyFamilyInto(ProjectFamily source, ProjectFamily target)
+        {
+            if (!string.Equals(source.Id, target.Id, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Cannot restore family state into a different family id.");
+
+            target.Name = source.Name;
+            target.Category = source.Category;
+            target.Properties.Clear();
+            foreach (var property in source.Properties) target.Properties[property.Key] = property.Value;
         }
 
         private static ProjectElement CloneElement(ProjectElement source)
