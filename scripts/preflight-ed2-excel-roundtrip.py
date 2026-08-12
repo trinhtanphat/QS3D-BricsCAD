@@ -157,7 +157,28 @@ require("reader", (
     "var preferLegacy = !isModernSchema && handleColumns.Count == 0 && decimalHandles.Count > 0 && string.IsNullOrWhiteSpace(drawingFingerprint);",
     "if (preferLegacy)",
     "worksheet.IsEd2Detail && !isModernSchema",
+    "AddElementIds(elementIds, value, isModernSchema)",
+    "AddHexHandles(explicitHandles, value, isModernSchema)",
+    "duplicate Element ID token",
+    "duplicate CAD Handle token after hexadecimal normalization",
 ))
+
+duplicate_identity_smoke = ROOT / "tests/QS3D.Core.SmokeTests/XlsxHandleModernDuplicateIdentitySmoke.cs"
+if not duplicate_identity_smoke.is_file():
+    errors.append("missing ED2 duplicate identity smoke: " + str(duplicate_identity_smoke.relative_to(ROOT)))
+else:
+    duplicate_identity_text = duplicate_identity_smoke.read_text(encoding="utf-8")
+    for token in (
+        "RejectsDuplicateModernElementIds",
+        "RejectsDuplicateModernHandleAliases",
+        "PreservesUniqueModernIdentitySets",
+        "PreservesLegacyHandleDeduplication",
+        '"E1;e1"',
+        '"A;0xA"',
+        '"A;00A"',
+    ):
+        if token not in duplicate_identity_text:
+            errors.append("XlsxHandleModernDuplicateIdentitySmoke.cs missing ED2 duplicate identity token: " + token)
 require("window", ("OnEd2ExportClick", "OnExcelLocateClick", "BQ • 1 sheet",))
 require("window_code", ('SendStringToExecute("QS3DED2 "', 'SendStringToExecute("QS3DEXCELLOCATE "', '"Zone"',))
 require("hub", ('Tag="QS3DED2"', 'Tag="QS3DEXCELLOCATE"'))
