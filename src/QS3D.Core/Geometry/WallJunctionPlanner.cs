@@ -36,7 +36,7 @@ namespace QS3D.Core.Geometry
         {
             Point = point;
             Kind = kind;
-            SegmentIds = segmentIds ?? throw new ArgumentNullException(nameof(segmentIds));
+            SegmentIds = new List<string>(segmentIds ?? throw new ArgumentNullException(nameof(segmentIds))).AsReadOnly();
             RayCount = rayCount;
         }
 
@@ -360,7 +360,7 @@ namespace QS3D.Core.Geometry
         private static double CrossFinite(double ax, double ay, double bx, double by, string label)
         {
             var first = MultiplyFinite(ax, by, label + " first product");
-            var second = MultiplyFinite(ay, bx, label + " second product");
+            var second = MultiplyFinite(ay, bx, by, label + " second product");
             return SubtractFinite(first, second, label);
         }
 
