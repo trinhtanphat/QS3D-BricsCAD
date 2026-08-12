@@ -34,7 +34,6 @@ if BUILDER.is_file():
         'Math.Abs(start.Z - end.Z) > GeometryTolerance',
         'ValidateVector(annotationNormal, element.Id + "/arc normal")',
         'AuditTrail.ForProject(project).Record(',
-        'project.Touch();',
         'transaction.Commit();',
         'document.Editor.Regen()',
         'source is Line',
@@ -44,11 +43,10 @@ if BUILDER.is_file():
         if token not in text:
             errors.append("GridAnnotationBuilder.cs missing token: " + token)
 
-    touch = text.find('project.Touch();')
     commit = text.find('transaction.Commit();')
     regen = text.find('document.Editor.Regen()')
-    if touch < 0 or commit < 0 or touch > commit:
-        errors.append("Grid annotation semantic metadata/project Touch must happen before CAD commit")
+    if 'project.Touch();' in text:
+        errors.append("Grid annotation must keep redundant project.Touch removed because AuditTrail.Record owns revision advancement")
     if regen < 0 or commit < 0 or regen < commit:
         errors.append("Grid annotation Regen must be best-effort after CAD commit")
     if 'GeneratedSolidHandle' in text:
@@ -169,4 +167,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: native Grid annotation has explicit semantic labels, source-plane-aware geometry, generated ownership, replacement guards, persisted + live read-only health integration and cross-layer rollback; runtime remains separately qualified.")
+print("PASS: native Grid annotation has explicit semantic labels, source-plane-aware geometry, generated ownership, replacement guards, AuditTrail-owned revision, persisted + live read-only health integration and cross-layer rollback; runtime remains separately qualified.")
