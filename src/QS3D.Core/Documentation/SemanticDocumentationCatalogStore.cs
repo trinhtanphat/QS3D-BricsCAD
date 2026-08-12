@@ -65,8 +65,10 @@ namespace QS3D.Core.Documentation
         public SemanticDocumentationCatalog Load(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            if (!project.Metadata.TryGetValue(MetadataKey, out var payload) || string.IsNullOrEmpty(payload))
+            if (!project.Metadata.TryGetValue(MetadataKey, out var payload))
                 return new SemanticDocumentationCatalog(Array.Empty<SemanticViewDefinition>(), Array.Empty<SemanticSheetDefinition>());
+            if (string.IsNullOrEmpty(payload))
+                throw new InvalidDataException("Semantic documentation catalog payload is empty.");
             if (payload.Length > MaxCatalogChars)
                 throw new InvalidDataException("Semantic documentation catalog exceeds the 1 MiB metadata limit.");
 
