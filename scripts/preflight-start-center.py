@@ -80,6 +80,14 @@ def main():
     diagnostic_pos = show_method.find('document?.Editor.WriteMessage("\\nQS3DSTART error: " + ex.Message);')
     if cleanup_pos < 0 or diagnostic_pos < 0 or cleanup_pos > diagnostic_pos:
         raise AssertionError("failed-open Start Center ownership must be released before command diagnostics")
+    diagnostic_try_pos = show_method.find("try", cleanup_pos)
+    diagnostic_catch_pos = show_method.find("catch (System.Exception)", diagnostic_pos)
+    if diagnostic_try_pos < 0 or diagnostic_try_pos > diagnostic_pos or diagnostic_catch_pos < diagnostic_pos:
+        raise AssertionError("Start Center command diagnostics must be contained by their own exception boundary")
+    require(
+        show_method,
+        "Never let optional Start Center diagnostics escape the command failure boundary.",
+        "command diagnostic exception containment")
     activation_handler = section(
         commands,
         "private static void OnDocumentActivated",
@@ -232,7 +240,7 @@ def main():
     require(quantity_settings_health, '[CommandMethod("QS3DQSETTINGSHEALTHEXPORT", CommandFlags.Modal)]', "quantity-settings-health source registration")
     require(quantity_rule_create, '[CommandMethod("QS3DRULECREATE", CommandFlags.Modal)]', "quantity-rule-create source registration")
 
-    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, activation-fail-soft, failed-open-rollback-safe, optional-state-fail-soft, stream-size-bounded, write-size-bounded, malformed-Unicode-safe, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
+    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, activation-fail-soft, failed-open-rollback-safe, command-diagnostic-fail-soft, optional-state-fail-soft, stream-size-bounded, write-size-bounded, malformed-Unicode-safe, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
     return 0
 
 
