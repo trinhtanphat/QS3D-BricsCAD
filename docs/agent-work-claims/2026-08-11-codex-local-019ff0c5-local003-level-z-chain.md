@@ -262,3 +262,27 @@ Baseline audited after a clean fetch and fast-forward: `origin/main@c4a3e44b2552
 The required full Core gate still cannot compile after the earlier nullability repairs because later completed canonicality/reference-integrity lanes introduced three new nullable-flow diagnostics: `ReportingProjectIdentityGuard.RequireExistingReference(...)` passes a nullable value to `ISet<string>.Contains(...)`, `RequireCanonicalReference(...)` trims the same nullable value, and `SemanticSelectionInspector.CanonicalOptionalReference(...)` trims a nullable value after its existing blank guard. Runtime behavior already rejects/returns before all three dereferences; only the local warnings-as-errors compiler remains unconvinced. Every owning reporting/selection claim is `COMPLETED`, and the current ACTIVE/BLOCKED audit found no reservation for either exact file.
 
 Reserve only `src/QS3D.Core/Reporting/ReportingProjectIdentityGuard.cs` and `src/QS3D.Core/Selection/SemanticSelectionInspector.cs` to make those three already-guarded values explicitly non-null at their existing use sites. Preserve reference existence/canonicality, error text, selection freshness, all reporting/selection output and every test unchanged. Do not broaden this expansion into reporting identity policy, semantic selection behavior or new tests. Re-run the complete Core smoke after this nullable-flow-only reconciliation.
+
+## 2026-08-12 released smoke API reconciliation expansion
+
+Baseline audited after a clean fetch and fast-forward: `origin/main@f66500aec20a0704bbda4e6459829643a243ee35`.
+
+After the preceding nullable-flow blockers are removed, the full Core smoke project exposes eight compile errors in four completed-lane fixtures. `SemanticSelectionRelationCanonicalitySmoke.cs` and `SemanticSelectionInspectorInputFreshnessSmoke.cs` still use the removed generic `ElementCategory.Wall` member instead of the current `ArchitecturalWall` category. `ProjectFloorGlobalNullIntegritySmoke.cs` and `ProjectFamilyGlobalNullIntegritySmoke.cs` still call obsolete shortened `ProjectElement` constructors and omit the now-required Zone or Floor/Zone relation arguments. All four owning claims are `COMPLETED`, and the current ACTIVE/BLOCKED audit found no reservation for these exact fixtures.
+
+Reserve only those four smoke files for mechanical current-API alignment: replace `ElementCategory.Wall` with `ElementCategory.ArchitecturalWall`; append an empty Zone ID to the two Floor fixtures; append empty Floor and Zone IDs to the two Family fixtures. Preserve every malformed-null setup, relation/canonicality value, operation and assertion unchanged. Do not edit production selection, Family, Floor, domain constructor or category policy. Re-run the complete Core smoke after this test-only compile reconciliation.
+
+## 2026-08-12 bulk Family canonical no-op fixture reconciliation expansion
+
+Baseline audited after a clean fetch and fast-forward: `origin/main@fb0390b2969662348df1293cb16eb715c0621904`.
+
+The full Core smoke next reaches `BulkFamilyCanonicalNoOpSmoke.SelectionBulkAssignmentReportsCanonicalNoOp()`. The completed selection relation-canonicality contract now rejects its deliberately padded stored `FamilyId` during `SemanticSelectionInspector` validation, before the fixture can exercise the independently valid invariant that a padded/case-varied requested target is a canonical no-op. The direct `BulkEditService` case remains valid and continues to pin its existing padded stored-reference behavior. The fixture's owning bulk-Family claim and the later selection-canonicality claim are both `COMPLETED`; the current ACTIVE/BLOCKED audit found no reservation for this exact smoke file.
+
+Reserve only `tests/QS3D.Core.SmokeTests/BulkFamilyCanonicalNoOpSmoke.cs` to give the semantic-selection case a canonical stored `FamilyId` while retaining its padded/case-varied requested target, and make the shared no-mutation assertion compare against each scenario's captured starting `FamilyId` instead of one hard-coded padded value. Preserve changed counts, properties, dirty/timestamp/version state, direct bulk behavior and genuine reassignment behavior. Do not edit either bulk service, the selection inspector or Family identity policy. Re-run the complete Core smoke after this fixture-only reconciliation.
+
+## 2026-08-12 quantity-rule Family fixture constructor reconciliation expansion
+
+Baseline audited after a clean fetch and fast-forward: `origin/main@da6f7353291252f948b43667076e95d46adb3419`.
+
+The full Core smoke compile next reaches two obsolete three-argument `ProjectElement` calls in the newly completed `QuantityRuleFamilyGlobalIdentitySmoke.cs`. Both fixtures intentionally have no Floor or Zone relation, but the current domain constructor requires those explicit relation arguments. The owning quantity-rule Family identity claim is `COMPLETED`, and the current ACTIVE/BLOCKED audit found no reservation for this exact smoke file.
+
+Reserve only `tests/QS3D.Core.SmokeTests/QuantityRuleFamilyGlobalIdentitySmoke.cs` to append empty Floor and Zone IDs to those two constructor calls. Preserve Family identity/canonicality, malformed-global-state, rollback/no-op, rule result and every assertion unchanged. Do not edit quantity-rule production code, `ProjectElement`, Family policy or add new behavior. Re-run the complete Core smoke after this constructor-only fixture reconciliation.

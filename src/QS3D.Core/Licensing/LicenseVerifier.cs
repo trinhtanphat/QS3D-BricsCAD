@@ -99,6 +99,8 @@ namespace QS3D.Core.Licensing
 
         public LicenseVerificationResult(LicenseStatus status, LicenseDocument license)
         {
+            if (!Enum.IsDefined(typeof(LicenseStatus), status))
+                throw new ArgumentOutOfRangeException(nameof(status), status, "License verification status is not defined.");
             Status = status;
             _license = CloneLicense(license ?? throw new ArgumentNullException(nameof(license)));
         }

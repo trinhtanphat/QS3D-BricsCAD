@@ -127,6 +127,8 @@ namespace QS3D.Core.Services
             var result = new List<T>();
             foreach (var value in values)
             {
+                if (ReferenceEquals(value, null))
+                    throw new ArgumentException("Regeneration work profile " + label + " collection cannot contain null entries.", parameterName);
                 if (result.Count >= maxCount)
                     throw new ArgumentException("Regeneration work profile " + label + " collection cannot exceed project element count of " + maxCount.ToString(CultureInfo.InvariantCulture) + ".", parameterName);
                 result.Add(value);

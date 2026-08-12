@@ -26,9 +26,19 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (selectedHandles == null) throw new ArgumentNullException(nameof(selectedHandles));
 
-            var targets = SemanticHandleOwnershipResolver.Resolve(project, selectedHandles)
-                .Where(x => predicate == null || predicate(x))
-                .ToList();
+            var resolved = SemanticHandleOwnershipResolver.Resolve(project, selectedHandles);
+            List<ProjectElement> targets;
+            if (predicate == null)
+            {
+                targets = resolved.ToList();
+            }
+            else
+            {
+                var predicateVersion = project.ChangeVersion;
+                targets = resolved.Where(predicate).ToList();
+                if (project.ChangeVersion != predicateVersion)
+                    throw new InvalidOperationException("Project state changed while evaluating semantic untrack predicate. Retry against the current project state.");
+            }
             if (targets.Count == 0)
                 return new SemanticUntrackResult(Array.Empty<string>());
 
