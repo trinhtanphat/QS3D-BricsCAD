@@ -47,7 +47,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
                         ObjectId id;
                         try { id = document.Database.GetObjectId(false, new Handle(value), 0); }
-                        catch
+                        catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
                         {
                             AddMissing(issues, element, handle);
                             continue;
@@ -60,7 +60,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
                         Entity? entity;
                         try { entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity; }
-                        catch
+                        catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
                         {
                             AddMissing(issues, element, handle);
                             continue;
@@ -207,6 +207,13 @@ namespace QS3D.BricsCAD.V25.Cad
         }
 
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
+        private static bool IsRecoverableDiagnosticFailure(Exception exception)
+        {
+            return !(exception is OutOfMemoryException) &&
+                   !(exception is StackOverflowException) &&
+                   !(exception is AccessViolationException);
+        }
 
         private static string EncodePlainMText(string value)
         {
