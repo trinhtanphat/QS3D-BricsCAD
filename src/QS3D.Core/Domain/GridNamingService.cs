@@ -54,6 +54,7 @@ namespace QS3D.Core.Domain
             if (orderedGridElementIds == null) throw new ArgumentNullException(nameof(orderedGridElementIds));
             options ??= new GridNamingOptions();
 
+            var targetEnumerationVersion = project.ChangeVersion;
             var ids = new List<string>();
             foreach (var value in orderedGridElementIds)
             {
@@ -61,6 +62,8 @@ namespace QS3D.Core.Domain
                     throw new InvalidOperationException("A Grid renumber batch supports at most " + MaxGridBatch + " elements.");
                 ids.Add(Required(value, "orderedGridElementIds[" + ids.Count + "]", 128));
             }
+            if (project.ChangeVersion != targetEnumerationVersion)
+                throw new InvalidOperationException("Project changed while Grid renumber targets were being enumerated. Retry renumbering against the current project state.");
             if (ids.Count == 0) throw new InvalidOperationException("At least one Grid element is required for renumbering.");
             if (ids.Distinct(StringComparer.OrdinalIgnoreCase).Count() != ids.Count)
                 throw new InvalidOperationException("Grid renumber input contains duplicate element ids.");
