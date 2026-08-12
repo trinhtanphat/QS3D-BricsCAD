@@ -138,6 +138,7 @@ namespace QS3D.Core.Templates
 
                 var visibleColumns = profile.VisibleBqColumns.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
                 if (visibleColumns.Length > 0) project.Metadata[VisibleBqColumnsKey] = string.Join("|", visibleColumns);
+                else project.Metadata.Remove(VisibleBqColumnsKey);
 
                 foreach (var element in project.Elements)
                 {
