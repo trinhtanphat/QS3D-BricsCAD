@@ -38,8 +38,15 @@ namespace QS3D.BricsCAD.V25
                 if (createdWindow != null)
                     ReleaseStartCenterWindow(createdWindow);
 
-                var document = Application.DocumentManager.MdiActiveDocument;
-                document?.Editor.WriteMessage("\nQS3DSTART error: " + ex.Message);
+                try
+                {
+                    var document = Application.DocumentManager.MdiActiveDocument;
+                    document?.Editor.WriteMessage("\nQS3DSTART error: " + ex.Message);
+                }
+                catch (System.Exception)
+                {
+                    // Never let optional Start Center diagnostics escape the command failure boundary.
+                }
             }
         }
 
