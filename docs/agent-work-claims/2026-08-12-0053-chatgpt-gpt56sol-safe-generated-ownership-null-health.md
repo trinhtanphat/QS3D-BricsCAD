@@ -1,7 +1,7 @@
 # Work claim — Safe generated ownership malformed-project visibility
 
-- Status: `COMPLETE`
-- State: `COMPLETE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-gpt56sol-20260812-safe-generated-ownership-null-health`
 - Registered: `2026-08-12T00:53:00+07:00`
 - Completed: `2026-08-12` (source-side)
