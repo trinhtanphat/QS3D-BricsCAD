@@ -25,3 +25,12 @@
 - Re-pin clean exact `main`, require no BricsCAD process/sidecar, run the P03 gate and installed-reference V25 build, then execute one guarded run on a new disposable copy.
 - Verify exact marker contract, unchanged DWG hash, launched-PID exit, private-script deletion and sidecar/backup absence before recording any PASS.
 - Commit/push/PR/merge evidence and close-out normally without force-push or workflow dispatch. Only P03 may become bounded `LOCAL_PASS`; P04-P12 and overall LOCAL-002 remain `PENDING_LOCAL`.
+
+## Licensed result — 2026-08-12
+
+- Clean exact SHA `83b3f93274a60e8de3744cb8ae668ca7de381e5b` passed on BricsCAD `25.2.10` with exact x64 Release adapter SHA-256 `F42262DB54C21CEB4950F7CB9389D6BCB4830C4055EC2DB5013F5FB16AB62F6B`.
+- The legacy/no-Level open straight POLYLINE had three vertices, two segments and 7 m source length. Eighteen source cells mapped to 21 path pieces: 12 on segment 0 and 9 on segment 1.
+- All 21 native panel extents uniquely matched the authoritative plan, and native/Handle/metadata/path-piece counts agreed. One host and 15 frame solids remained distinct from the 21 panels.
+- Canonical path build state was complete; ownership sets were disjoint; Health issue count was zero; Locate returned one panel and one canonical GlassWall owner; source geometry was preserved.
+- The repository-generated disposable drawing SHA-256 remained `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`; launched-process exit, private-script deletion and sidecar/backup absence were independently verified. No customer/private/BLT artifact or GitHub Actions workflow was used.
+- This proves only bounded P03. P04-P12 and overall LOCAL-002 remain `PENDING_LOCAL`.
