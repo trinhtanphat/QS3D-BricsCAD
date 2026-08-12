@@ -132,13 +132,13 @@ namespace QS3D.Core.Geometry
 
             return new CurtainWallOpeningFramePlan
             {
-                Pieces = output
+                Pieces = Array.AsReadOnly(output
                     .OrderBy(x => x.SourceFrameIndex)
                     .ThenBy(x => x.Z_M)
                     .ThenBy(x => x.X_M)
                     .ThenBy(x => x.HeightM)
                     .ThenBy(x => x.WidthM)
-                    .ToArray(),
+                    .ToArray()),
                 OriginalFrameAreaM2 = originalArea,
                 RemainingFrameAreaM2 = remainingArea,
                 InterruptedFrameCount = interrupted
