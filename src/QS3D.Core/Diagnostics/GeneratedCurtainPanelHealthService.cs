@@ -18,7 +18,8 @@ namespace QS3D.Core.Diagnostics
             var issues = new List<ModelHealthIssue>();
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Curtain-panel diagnostics cannot inspect a project containing a null semantic element.");
                 var hasHandles = element.Properties.TryGetValue(HandlesKey, out var raw) && !string.IsNullOrWhiteSpace(raw);
                 var hasBuildState = element.Properties.TryGetValue(BuildStateKey, out var buildState);
                 if (!hasHandles && !hasBuildState) continue;
