@@ -51,7 +51,8 @@ namespace QS3D.Core.Services
             {
                 foreach (var opening in openings)
                 {
-                    if (opening == null) continue;
+                    if (opening == null)
+                        throw new ArgumentException("Wall opening collection cannot contain null entries.", nameof(openings));
                     openingArea += opening.AreaM2;
                     if (double.IsNaN(openingArea) || double.IsInfinity(openingArea)) throw new OverflowException("Total opening area is not finite.");
                 }
