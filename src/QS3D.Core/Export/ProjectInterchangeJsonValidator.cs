@@ -192,7 +192,7 @@ namespace QS3D.Core.Export
 
         private static void RequireUnit(string? actual, string expected, string name, IssueCollector issues)
         {
-            if (!string.Equals((actual ?? string.Empty).Trim(), expected, StringComparison.Ordinal))
+            if (!string.Equals(actual ?? string.Empty, expected, StringComparison.Ordinal))
                 issues.Error("UNIT_" + name.ToUpperInvariant(), "Expected " + name + " unit '" + expected + "'.", "$.units." + name);
         }
 

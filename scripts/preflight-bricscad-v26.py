@@ -35,6 +35,9 @@ v26_manifest_probe = read("src/QS3D.BricsCAD.V26/Updates/UpdateManifestProbe.cs"
 v26_launcher = read("src/QS3D.BricsCAD.V26/Updates/SecureUpdateLauncher.cs")
 workflow = read(".github/workflows/bricscad-v26.yml")
 runtime = read("scripts/test-bricscad-v26-runtime.ps1")
+runtime_probe = read("src/QS3D.BricsCAD.V25/RuntimeProbeCommands.cs")
+runtime_diagnostics = read("src/QS3D.BricsCAD.V25/RuntimeDiagnosticsCommands.cs")
+release_readiness = read("src/QS3D.BricsCAD.V25/ReleaseReadinessCommands.cs")
 qualification = read("docs/LOCAL-V26-QUALIFICATION.md")
 core = read("src/QS3D.Core/QS3D.Core.csproj")
 build_props = read("Directory.Build.props")
@@ -43,7 +46,9 @@ for token in ("<TargetFramework>net48</TargetFramework>", "QS3D.BricsCAD.V25", "
     require(v25, token, "V25 project")
 
 for token in (
+    '<Project Sdk="Microsoft.NET.Sdk">',
     "<TargetFramework>net8.0-windows</TargetFramework>",
+    "<UseWPF>true</UseWPF>",
     "<AssemblyName>QS3D.BricsCAD.V26</AssemblyName>",
     "<RootNamespace>QS3D.BricsCAD.V25</RootNamespace>",
     "BRICSCAD_V26_DIR",
@@ -61,7 +66,7 @@ for token in (
 ):
     require(v26, token, "V26 project")
 
-for token in ("BRICSCAD_V25_DIR", "net48", "QS3D-BricsCAD-V25.update.json"):
+for token in ("Microsoft.NET.Sdk.WindowsDesktop", "BRICSCAD_V25_DIR", "net48", "QS3D-BricsCAD-V25.update.json"):
     forbid(v26, token, "V26 project")
 
 for token in (
@@ -172,6 +177,42 @@ for token in (
 if "QS3D.BricsCAD.V25.dll" in runtime:
     errors.append("V26 runtime gate must reject/circumvent V25 adapter binaries, not load them")
 
+# V26 links shared V25 command sources. Their runtime identity checks and user-facing
+# qualification text therefore must be compile-selected by BRICSCAD_V26 rather than
+# semantically pinning the linked V26 adapter to host major 25.
+require(runtime_probe, "QS3D BricsCAD runtime must be 64-bit.", "shared runtime probe")
+for token in ("QS3D BricsCAD V25 runtime must be 64-bit.", "QS3D BricsCAD V26 runtime must be 64-bit."):
+    forbid(runtime_probe, token, "shared runtime probe")
+
+for token in (
+    "#if BRICSCAD_V26",
+    "private const int ExpectedRuntimeMajor = 26;",
+    'private const string ExpectedRuntimeLabel = "V26";',
+    "private const int ExpectedRuntimeMajor = 25;",
+    'private const string ExpectedRuntimeLabel = "V25";',
+    "Major(brxAssembly) == ExpectedRuntimeMajor",
+    "Major(tdAssembly) == ExpectedRuntimeMajor",
+    "expectedRuntime && x64Runtime && packageVersionMatches",
+    '"NOT " + ExpectedRuntimeLabel',
+    '"licensed " + ExpectedRuntimeLabel + " scenario suite',
+):
+    require(runtime_diagnostics, token, "shared runtime diagnostics")
+for token in (
+    "var v25Runtime = Major(brxAssembly) == 25",
+    '"V25 scenario suite',
+    '(v25Runtime ? "V25" : "NOT V25")',
+):
+    forbid(runtime_diagnostics, token, "shared runtime diagnostics")
+
+for token in (
+    "#if BRICSCAD_V26",
+    'private const string ExpectedRuntimeLabel = "V26";',
+    'private const string ExpectedRuntimeLabel = "V25";',
+    'ExpectedRuntimeLabel + " runtime/private-DWG gate',
+):
+    require(release_readiness, token, "shared release readiness")
+forbid(release_readiness, "V25 runtime/private-DWG gate vẫn là bước riêng.", "shared release readiness")
+
 for token in ("LOCAL_ONLY", "DO_NOT_RETRY_REMOTE", "net8.0-windows", "BRICSCAD_V26_DIR", "QS3D.BricsCAD.V26.dll", "BricsCAD V26", ".NET 8"):
     require(qualification, token, "V26 local qualification")
 
@@ -185,4 +226,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: V25 remains net48; V26 is isolated on net8.0-windows with a dedicated solution, V26-only refs/runtime/update assets, HttpClient-only .NET 8 updater networking, and manifest-channel-isolated release discovery.")
+print("PASS: V25 remains net48; V26 uses the current Microsoft.NET.Sdk on net8.0-windows with WPF, a dedicated solution, V26-only refs/runtime/update assets, HttpClient-only updater networking, manifest-channel-isolated release discovery, and host-major-aware shared runtime diagnostics.")

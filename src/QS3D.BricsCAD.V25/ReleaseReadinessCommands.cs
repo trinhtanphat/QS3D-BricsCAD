@@ -12,6 +12,12 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class ReleaseReadinessCommands
     {
+#if BRICSCAD_V26
+        private const string ExpectedRuntimeLabel = "V26";
+#else
+        private const string ExpectedRuntimeLabel = "V25";
+#endif
+
         [CommandMethod("QS3DRELEASECHECK", CommandFlags.Modal)]
         public void ReviewReleaseReadiness()
         {
@@ -69,7 +75,7 @@ namespace QS3D.BricsCAD.V25
                 var summary = new HealthSummary(issues);
                 var ready = summary.Errors == 0 && summary.Warnings == 0;
                 var message = ready
-                    ? "Release Check: READY • không có Error/Warning trong semantic/generated/live CAD health. V25 runtime/private-DWG gate vẫn là bước riêng."
+                    ? "Release Check: READY • không có Error/Warning trong semantic/generated/live CAD health. " + ExpectedRuntimeLabel + " runtime/private-DWG gate vẫn là bước riêng."
                     : "Release Check: BLOCKED • " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin.";
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);

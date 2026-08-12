@@ -21,6 +21,8 @@ namespace QS3D.Core.Licensing
 
     public sealed class LicenseDocument
     {
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
+
         public string LicenseId { get; set; } = string.Empty;
         public string CustomerId { get; set; } = string.Empty;
         public string ProductId { get; set; } = string.Empty;
@@ -45,7 +47,7 @@ namespace QS3D.Core.Licensing
                 "features=" + string.Join(",", features),
                 "nonce=" + Nonce
             });
-            return Encoding.UTF8.GetBytes(text);
+            return StrictUtf8.GetBytes(text);
         }
 
         public void Validate()
@@ -75,19 +77,47 @@ namespace QS3D.Core.Licensing
             if (value.Length > maximumLength) throw new InvalidDataException("License " + name + " is too long.");
             foreach (var ch in value)
                 if (char.IsControl(ch) || ch == '\n' || ch == '\r') throw new InvalidDataException("License " + name + " contains control characters.");
+            try
+            {
+                StrictUtf8.GetByteCount(value);
+            }
+            catch (EncoderFallbackException ex)
+            {
+                throw new InvalidDataException("License " + name + " must contain well-formed Unicode text.", ex);
+            }
         }
     }
 
     public sealed class LicenseVerificationResult
     {
+        private readonly LicenseDocument _license;
+
         public LicenseVerificationResult(LicenseStatus status, LicenseDocument license)
         {
             Status = status;
-            License = license ?? throw new ArgumentNullException(nameof(license));
+            _license = CloneLicense(license ?? throw new ArgumentNullException(nameof(license)));
         }
+
         public LicenseStatus Status { get; }
-        public LicenseDocument License { get; }
+        public LicenseDocument License => CloneLicense(_license);
         public bool IsValid => Status == LicenseStatus.Valid;
+
+        private static LicenseDocument CloneLicense(LicenseDocument source)
+        {
+            var clone = new LicenseDocument
+            {
+                LicenseId = source.LicenseId,
+                CustomerId = source.CustomerId,
+                ProductId = source.ProductId,
+                NotBeforeUtc = source.NotBeforeUtc,
+                ExpiresUtc = source.ExpiresUtc,
+                Nonce = source.Nonce,
+                Signature = source.Signature == null ? Array.Empty<byte>() : (byte[])source.Signature.Clone()
+            };
+            foreach (var feature in source.Features)
+                clone.Features.Add(feature);
+            return clone;
+        }
     }
 
     public sealed class LicenseVerifier

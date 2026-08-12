@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
+using QS3D.Core.Domain;
 
 namespace QS3D.Core.Persistence
 {
@@ -90,6 +91,7 @@ namespace QS3D.Core.Persistence
             {
                 ValidateElement(family, "family", new[] { "id", "name", "category" }, new[] { "properties" });
                 ValidateRequiredCanonicalAttribute(family, "id", "family id");
+                ValidateNamedCategoryAttribute(family, "family category");
                 RequireAtMostOne(family, "properties");
                 foreach (var properties in family.Elements("properties")) ValidateMap(properties, "family properties");
             }
@@ -102,6 +104,7 @@ namespace QS3D.Core.Persistence
             {
                 ValidateElement(rule, "rule", new[] { "id", "category", "output", "expression", "version" }, Array.Empty<string>());
                 ValidateRequiredCanonicalAttribute(rule, "id", "quantity rule id");
+                ValidateNamedCategoryAttribute(rule, "quantity rule category");
                 ValidateRequiredCanonicalAttribute(rule, "output", "quantity rule output");
             }
         }
@@ -122,6 +125,7 @@ namespace QS3D.Core.Persistence
                     new[] { "handles", "dependencies", "properties", "quantities" });
 
                 ValidateRequiredCanonicalAttribute(element, "id", "element id");
+                ValidateNamedCategoryAttribute(element, "element category");
                 ValidateOptionalCanonicalAttribute(element, "familyId", "element family id");
                 ValidateOptionalCanonicalAttribute(element, "floorId", "element floor id");
                 ValidateOptionalCanonicalAttribute(element, "zoneId", "element zone id");
@@ -183,6 +187,17 @@ namespace QS3D.Core.Persistence
                     Array.Empty<string>());
                 ValidateRequiredCanonicalAttribute(item, "action", "audit action");
             }
+        }
+
+        private static void ValidateNamedCategoryAttribute(XElement element, string owner)
+        {
+            ValidateRequiredCanonicalAttribute(element, "category", owner);
+            var token = element.Attribute("category")?.Value ?? string.Empty;
+            if (!Enum.TryParse(token, true, out ElementCategory category) || !Enum.IsDefined(typeof(ElementCategory), category))
+                throw new InvalidDataException("QSDB " + owner + " is invalid: " + token + ".");
+            var name = Enum.GetName(typeof(ElementCategory), category);
+            if (name == null || !string.Equals(token, name, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("QSDB " + owner + " must use a named ElementCategory token.");
         }
 
         private static void ValidateRequiredCanonicalAttribute(XElement element, string attributeName, string owner)

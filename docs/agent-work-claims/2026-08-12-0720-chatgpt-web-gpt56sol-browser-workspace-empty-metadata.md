@@ -1,44 +1,58 @@
 # Work claim — Browser workspace empty metadata fail-closed load
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-20260812-browser-workspace-empty-metadata`
 - Registered: `2026-08-12T07:20:00+07:00`
+- Completed: `2026-08-12T07:40:00+07:00`
 - Baseline main SHA: `1ee9cd3d18c30a9549ee056e3ccff838bc4d8981`
+- Initial claim commit: `c189e537bdafe296d403188c31b5bd60ee1efc9e`
+- Coordination commit: `38493fb44cfba32245d74ea0fed1b9cf292eb70a`
+- Implementation PR: `#623`
+- Main integration commit: `4cea54ffa1cbc5fffe1c1a6f62759beea69aba09`
 - Priority: evidence-driven remote-safe persistence hardening found during owner-requested `continue all`
 
-## Reserved scope
+## Confirmed defect
 
-Harden `ProjectBrowserWorkspaceStateStore.Load(ProjectState)` so a persisted workspace metadata key is treated as present persisted state and must deserialize validly. A missing metadata key may still produce the default workspace state, but a present empty/whitespace value must fail closed instead of being silently interpreted as “no saved state”.
+`ProjectBrowserWorkspaceStateStore.Load(ProjectState)` previously returned the default workspace state when the metadata key was either missing **or present with an empty/whitespace value**. That collapsed two distinct persistence states: `Clear(ProjectState)` represents intentional absence by removing the key, while `Deserialize(...)` already defines empty/whitespace serialized workspace state as invalid persisted data.
 
-## Expected surfaces
+The old `Load` path therefore silently hid corrupt persisted metadata instead of applying the store's own fail-closed deserialization contract.
 
-- `src/QS3D.Core/Navigation/ProjectBrowserWorkspaceStateStore.cs` — `Load(ProjectState)` presence/corruption boundary only
-- one focused CAD-independent Core smoke under `tests/QS3D.Core.SmokeTests/`
-- module-initializer registration for that smoke if needed
-- this claim file for completion close-out
+## Implemented scope
 
-## Excluded scope
+`Load(ProjectState)` now returns the default state only when `QS3D.ProjectBrowser.WorkspaceState` is genuinely absent. If the key exists, its value proceeds through the existing size check and canonical `Deserialize(...)`/project validation path; present empty/whitespace values consequently throw `InvalidDataException`.
 
-- no changes to workspace enum/boolean/query/primary canonicality lanes already completed on current `main`;
-- no changes to `ProjectBrowserWorkspaceStateStore.Save()` or `Clear()`; those methods are reserved by the concurrent `browser-workspace-revision-atomicity` claim at `3dc86e27db785071930110dbf710fe91554d8603`;
-- no selection, query, virtualization, Workspace WPF/UI, BricsCAD V25/V26 adapter/runtime, QSDB project schema, release/package or workflow changes;
-- no change to the semantics of a genuinely absent workspace metadata key.
+No `Save()` or `Clear()` behavior changed in this lane.
 
-## Validation plan
+## Regression source
 
-- absent `QS3D.ProjectBrowser.WorkspaceState` metadata returns the default workspace state without mutating project freshness;
-- present empty-string metadata throws `InvalidDataException`;
-- present whitespace-only metadata throws `InvalidDataException`;
-- canonical serialized metadata still round-trips through `Load` unchanged;
-- malformed-state load attempts do not mutate metadata, `UpdatedUtc`, or `ChangeVersion`;
-- review exact branch diff against moving `main` before merge; do not claim executable smoke/build or BricsCAD runtime PASS unless actually run.
+Added isolated CAD-independent Core smoke source:
 
-## Coordination
+- `tests/QS3D.Core.SmokeTests/ProjectBrowserWorkspaceEmptyMetadataSmoke.cs`
+- `tests/QS3D.Core.SmokeTests/ProjectBrowserWorkspaceEmptyMetadataSmokeRegistration.cs`
 
-Recent workspace canonicality claims for enum, boolean, query, and primaryElementId are completed. A concurrent claim registered at `3dc86e27db785071930110dbf710fe91554d8603` owns only workspace `Save()/Clear()` project-revision atomicity and explicitly excludes workspace XML/canonicality. This claim owns only `Load()` presence-vs-corruption semantics and will not edit `Save()/Clear()`. The two lanes are independently verifiable despite sharing the same source file.
+The regression source covers:
 
-This lane also does not overlap active XLSX, release, Grid, source-reconcile, rebar, floor/foundation, health or formula-token claims observed on current `main`.
+- missing metadata -> canonical default workspace state with no metadata/freshness mutation;
+- present empty metadata -> `InvalidDataException` with raw metadata and project freshness unchanged;
+- present whitespace metadata -> `InvalidDataException` with raw metadata and project freshness unchanged;
+- canonical serialized metadata -> successful round-trip with persisted text, `UpdatedUtc`, and `ChangeVersion` unchanged.
 
-## Completion condition
+## Coordination / exclusions preserved
 
-Current `main` distinguishes absent workspace metadata from present invalid empty/whitespace metadata, with focused regression source and exact integration evidence, and this claim is marked `COMPLETED`.
+A concurrent workspace revision-atomicity lane registered at `3dc86e27db785071930110dbf710fe91554d8603` owned only `Save()/Clear()` revision ordering and explicitly excluded XML/canonicality. This lane was limited to `Load()` presence-vs-corruption semantics. The concurrent lane completed without changing this `Load` contract, and PR `#623` preserved its `Save()/Clear()` surface.
+
+No selection/query/virtualization behavior, Workspace WPF/UI, BricsCAD V25/V26 adapter/runtime, QSDB schema, XLSX/export, release/package or workflow surface changed.
+
+## Validation evidence
+
+- Claim was committed to `main` before implementation at `c189e537bdafe296d403188c31b5bd60ee1efc9e`.
+- Coordination boundary was committed at `38493fb44cfba32245d74ea0fed1b9cf292eb70a` before source edits.
+- Immediately before merge, current `main` still had source blob `1e25c3fb92761ef21769175a91419e610bfd9904` with the defective `missing || whitespace` `Load` condition, so no concurrent source overlap existed.
+- PR `#623` exact diff contained three intended files, `+116/-1`; the production hunk only removed `|| string.IsNullOrWhiteSpace(serialized)` from the `Load` absence condition.
+- Server-side squash merge with exact expected head `282883512771123eda4ee33dd48ab3a2cc1e6e9d` produced `4cea54ffa1cbc5fffe1c1a6f62759beea69aba09`.
+- Post-merge readback shows source blob `d80437865953ba28394a96602f77a00aebc37819` on `main` with the corrected missing-key-only default path.
+- GitHub Actions were not dispatched. The smoke executable/build was not run or claimed in this connector-only environment, and no licensed BricsCAD V25/V26 runtime PASS is claimed.
+
+## Completion
+
+`COMPLETED`: current `main` distinguishes absent Project Browser workspace metadata from present invalid empty/whitespace persisted state and fails closed on the latter while preserving canonical load non-mutation behavior.

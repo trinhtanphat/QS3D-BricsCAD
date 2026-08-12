@@ -55,11 +55,12 @@ if workspace.is_file():
     text = workspace.read_text(encoding="utf-8")
     for needle in (
         'MinWidth="0" MinHeight="0"',
-        '<Grid MinWidth="560" Background="{StaticResource Bg0Brush}">',
+        'x:Name="WorkspaceOverflow"',
+        '<Grid x:Name="WorkspaceContentRoot" MinWidth="560" Background="{StaticResource Bg0Brush}">',
         'HorizontalScrollBarVisibility="Auto"',
         'VerticalScrollBarVisibility="Disabled"',
         'PanningMode="HorizontalOnly"',
-        'Width="{Binding ViewportWidth, RelativeSource={RelativeSource AncestorType={x:Type ScrollViewer}}}"',
+        'HorizontalContentAlignment="Stretch"',
         '<ColumnDefinition Width="160" MinWidth="135"/>',
         '<ColumnDefinition Width="245" MinWidth="220"/>',
         '<RowDefinition Height="250" MinHeight="160"/>',
@@ -68,12 +69,19 @@ if workspace.is_file():
         if needle not in text: errors.append("WorkspacePanel upgraded layout contract missing: " + needle)
     if 'MinWidth="560" MinHeight="540"' in text:
         errors.append("WorkspacePanel must not force its 560-DIP content width onto the compact palette host")
+    if "<UserControl.Template>" in text:
+        errors.append("WorkspacePanel must not replace the UserControl template just to provide compact horizontal overflow")
+    if 'Width="{Binding ViewportWidth, RelativeSource={RelativeSource AncestorType={x:Type ScrollViewer}}}"' in text:
+        errors.append("WorkspacePanel must not bind content Width to ScrollViewer.ViewportWidth; normal content composition owns overflow")
     try:
         root = ET.parse(workspace).getroot()
         wpf = "{http://schemas.microsoft.com/winfx/2006/xaml/presentation}"
+        xaml = "{http://schemas.microsoft.com/winfx/2006/xaml}"
         if root.attrib.get("MinWidth") != "0" or root.attrib.get("MinHeight") != "0":
             errors.append("WorkspacePanel host surface must remain shrinkable to the PaletteSet minimum")
-        scroller = root.find(wpf + "UserControl.Template/" + wpf + "ControlTemplate/" + wpf + "ScrollViewer")
+        if root.find(wpf + "UserControl.Template") is not None:
+            errors.append("WorkspacePanel host-safe overflow must use normal content, not a custom UserControl template")
+        scroller = root.find(wpf + "ScrollViewer")
         if scroller is None:
             errors.append("WorkspacePanel missing the explicit compact-host horizontal overflow viewport")
         else:
@@ -82,22 +90,22 @@ if workspace.is_file():
                 "VerticalScrollBarVisibility": "Disabled",
                 "CanContentScroll": "False",
                 "PanningMode": "HorizontalOnly",
+                "HorizontalContentAlignment": "Stretch",
+                "VerticalContentAlignment": "Stretch",
             }
             for key, value in expected.items():
                 if scroller.attrib.get(key) != value:
                     errors.append("WorkspacePanel overflow viewport must set " + key + "=" + value)
-            presenter = scroller.find(wpf + "ContentPresenter")
-            if presenter is None:
-                errors.append("WorkspacePanel overflow viewport must present the original root content")
+            if scroller.attrib.get(xaml + "Name") != "WorkspaceOverflow":
+                errors.append("WorkspacePanel overflow viewport must expose the stable WorkspaceOverflow name")
+            content_grid = scroller.find(wpf + "Grid")
+            if content_grid is None:
+                errors.append("WorkspacePanel overflow viewport must contain the three-column Grid directly")
             else:
-                if presenter.attrib.get("MinWidth") != "560":
-                    errors.append("WorkspacePanel overflow presenter must retain the 560-DIP design floor")
-                width_binding = presenter.attrib.get("Width", "")
-                if "ViewportWidth" not in width_binding or "AncestorType={x:Type ScrollViewer}" not in width_binding:
-                    errors.append("WorkspacePanel overflow presenter must follow the live viewport width above 560 DIP")
-        content_grid = root.find(wpf + "Grid")
-        if content_grid is None or content_grid.attrib.get("MinWidth") != "560":
-            errors.append("WorkspacePanel three-column content must retain its 560-DIP design width inside overflow")
+                if content_grid.attrib.get(xaml + "Name") != "WorkspaceContentRoot":
+                    errors.append("WorkspacePanel design surface must expose WorkspaceContentRoot for layout persistence")
+                if content_grid.attrib.get("MinWidth") != "560":
+                    errors.append("WorkspacePanel three-column content must retain its 560-DIP design width inside overflow")
     except ET.ParseError as exc:
         errors.append("WorkspacePanel.xaml is not well-formed: " + str(exc))
 
@@ -131,6 +139,7 @@ if splitter.is_file():
     text = splitter.read_text(encoding="utf-8")
     for needle in (
         "AttachLayoutPersistence",
+        "var root = WorkspaceContentRoot;",
         "Grid.GetRow(x) == 1",
         "Grid.GetColumn(x) == 2",
         "Grid.GetColumn(x) == 4",
@@ -142,6 +151,8 @@ if splitter.is_file():
         "UserUiLayoutStore.Update(layout =>",
     ):
         if needle not in text: errors.append("Workspace splitter persistence missing contract: " + needle)
+    if "Content is Grid" in text:
+        errors.append("Workspace splitter persistence must target WorkspaceContentRoot after host-safe ScrollViewer composition")
     if "SizeChanged" in text or "LayoutUpdated" in text:
         errors.append("Workspace splitter persistence must save on DragCompleted, not high-frequency layout/size events")
 
@@ -154,19 +165,21 @@ if runtime.is_file():
     text = runtime.read_text(encoding="utf-8")
     for needle in (
         "new(460d, 420d)",
+        "FindName('WorkspaceOverflow')",
+        "FindName('WorkspaceContentRoot')",
         "ComputedHorizontalScrollBarVisibility",
         "ComputedVerticalScrollBarVisibility",
         "$dataContextMarker = [object]::new()",
-        "ReferenceEquals($compact.Content.DataContext, $dataContextMarker)",
+        "ReferenceEquals($contentRoot.DataContext, $dataContextMarker)",
         "@('FamilySearch', 'PropertySearch')",
         "$focusTarget.IsTabStop",
     ):
         if needle not in text:
-            errors.append("offline WPF palette smoke missing compact overflow/content/focus assertion: " + needle)
+            errors.append("offline WPF palette smoke missing host-safe compact overflow/content/focus assertion: " + needle)
 
 print("QS3D per-user UI layout persistence preflight")
 if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: centralized palette minimums preserve a compact 460x420 Workspace host while its 560-DIP content overflows horizontally; RightPanel keeps its 255x480 floor, identical writes are skipped, and layout persistence remains atomic/best-effort.")
+print("PASS: centralized palette minimums preserve a compact 460x420 Workspace host while normal WPF content composition provides 560-DIP horizontal overflow without replacing the UserControl template; layout persistence remains atomic/best-effort.")

@@ -487,6 +487,12 @@ namespace QS3D.Core.Review
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             var root = document.Root ?? throw new InvalidDataException("Preview review file has no root.");
+            foreach (var node in document.Nodes())
+            {
+                if (ReferenceEquals(node, root)) continue;
+                if (node is XText text && string.IsNullOrWhiteSpace(text.Value)) continue;
+                throw new InvalidDataException("Preview review XML contains unsupported document-level node content.");
+            }
             ValidateElementShape(
                 root,
                 "qs3dPreviewReview",

@@ -139,13 +139,22 @@ namespace QS3D.Core.Navigation
         {
             foreach (var element in elements)
             {
-                var floorId = (element.FloorId ?? string.Empty).Trim();
+                var floorId = CanonicalOptionalReference(element.FloorId, "floor", element.Id);
                 if (floorId.Length > 0 && !floors.ContainsKey(floorId))
                     throw new InvalidOperationException("Project browser found missing floor reference " + floorId + " on element " + element.Id + ".");
-                var zoneId = (element.ZoneId ?? string.Empty).Trim();
+                var zoneId = CanonicalOptionalReference(element.ZoneId, "zone", element.Id);
                 if (zoneId.Length > 0 && !zones.ContainsKey(zoneId))
                     throw new InvalidOperationException("Project browser found missing zone reference " + zoneId + " on element " + element.Id + ".");
             }
+        }
+
+        private static string CanonicalOptionalReference(string value, string label, string elementId)
+        {
+            var raw = value ?? string.Empty;
+            if (raw.Length == 0) return string.Empty;
+            if (string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Project browser requires canonical " + label + " references without surrounding whitespace on element " + elementId + ".");
+            return raw;
         }
 
         private static IReadOnlyList<ProjectBrowserNode> BuildFloorNodes(

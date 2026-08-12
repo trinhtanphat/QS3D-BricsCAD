@@ -36,7 +36,7 @@ namespace QS3D.Core.Geometry
         {
             Point = point;
             Kind = kind;
-            SegmentIds = segmentIds ?? throw new ArgumentNullException(nameof(segmentIds));
+            SegmentIds = new List<string>(segmentIds ?? throw new ArgumentNullException(nameof(segmentIds))).AsReadOnly();
             RayCount = rayCount;
         }
 

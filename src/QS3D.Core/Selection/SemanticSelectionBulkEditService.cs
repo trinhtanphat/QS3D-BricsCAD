@@ -69,8 +69,8 @@ namespace QS3D.Core.Selection
                 var next = number * factor;
                 if (double.IsNaN(next) || double.IsInfinity(next))
                     throw new OverflowException("Bulk property multiplication overflow for " + element.Id + "/" + key + ".");
+                if (next.Equals(number)) continue;
                 var formatted = next.ToString("R", CultureInfo.InvariantCulture);
-                if (string.Equals(current, formatted, StringComparison.Ordinal)) continue;
                 updates.Add(new PendingValue(element, formatted));
             }
 

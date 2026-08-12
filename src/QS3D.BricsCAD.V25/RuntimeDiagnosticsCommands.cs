@@ -12,6 +12,14 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class RuntimeDiagnosticsCommands
     {
+#if BRICSCAD_V26
+        private const int ExpectedRuntimeMajor = 26;
+        private const string ExpectedRuntimeLabel = "V26";
+#else
+        private const int ExpectedRuntimeMajor = 25;
+        private const string ExpectedRuntimeLabel = "V25";
+#endif
+
         [CommandMethod("QS3DRUNTIMECHECK", CommandFlags.Modal)]
         public void RuntimeCheck()
         {
@@ -33,7 +41,7 @@ namespace QS3D.BricsCAD.V25
                 var metadata = ReadPackageMetadata(metadataPath);
                 var hasProject = ProjectContextCoordinator.TryGetReadOnly(document, out var project);
 
-                var v25Runtime = Major(brxAssembly) == 25 && Major(tdAssembly) == 25;
+                var expectedRuntime = Major(brxAssembly) == ExpectedRuntimeMajor && Major(tdAssembly) == ExpectedRuntimeMajor;
                 var x64Runtime = Environment.Is64BitProcess;
                 var packageVersionMatches = string.IsNullOrWhiteSpace(metadata.AssemblyVersion) ||
                     string.Equals(NormalizeVersion(metadata.AssemblyVersion), NormalizeVersion(pluginVersion), StringComparison.OrdinalIgnoreCase);
@@ -46,7 +54,7 @@ namespace QS3D.BricsCAD.V25
                 if (!string.IsNullOrWhiteSpace(metadata.ProductVersion))
                     document.Editor.WriteMessage("\n  Product version: " + metadata.ProductVersion);
                 document.Editor.WriteMessage("\n  BrxMgd: " + brxVersion + " • TD_Mgd: " + tdVersion);
-                document.Editor.WriteMessage("\n  Runtime: " + (v25Runtime ? "V25" : "NOT V25") + " • " + (x64Runtime ? "x64" : "NOT x64"));
+                document.Editor.WriteMessage("\n  Runtime: " + (expectedRuntime ? ExpectedRuntimeLabel : "NOT " + ExpectedRuntimeLabel) + " • " + (x64Runtime ? "x64" : "NOT x64"));
                 document.Editor.WriteMessage(hasProject
                     ? "\n  Project: " + project.Elements.Count + " element(s) • " + project.Families.Count + " family/families"
                     : "\n  Project: not loaded/persisted • runtime diagnostics remain read-only and do not create project state.");
@@ -63,9 +71,9 @@ namespace QS3D.BricsCAD.V25
                     document.Editor.WriteMessage("\n  Package metadata: not found beside plugin (manual NETLOAD/dev layout).");
                 }
 
-                var ok = v25Runtime && x64Runtime && packageVersionMatches;
+                var ok = expectedRuntime && x64Runtime && packageVersionMatches;
                 var summary = ok
-                    ? "QS3DRUNTIMECHECK PASS: adapter/runtime architecture is consistent. Run QS3DRELEASECHECK plus the licensed V25 scenario suite; use the signed installer/release gate for Authenticode verification."
+                    ? "QS3DRUNTIMECHECK PASS: adapter/runtime architecture is consistent. Run QS3DRELEASECHECK plus the licensed " + ExpectedRuntimeLabel + " scenario suite; use the signed installer/release gate for Authenticode verification."
                     : "QS3DRUNTIMECHECK FAIL: runtime/package mismatch detected; do not qualify this installation for release.";
                 document.Editor.WriteMessage("\n" + summary);
             }

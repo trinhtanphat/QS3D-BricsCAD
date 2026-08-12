@@ -56,6 +56,9 @@ namespace QS3D.Core.Export
         private const long MaxWorkbookBytes = 128L * 1024L * 1024L;
         private const long MaxXmlCharacters = 64L * 1024L * 1024L;
         private const int MaxColumns = 16384;
+        private const int MaxRows = 1048576;
+        private const string WorksheetRelationshipTypeHttp = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
+        private const string WorksheetRelationshipTypeHttps = "https://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
         private static readonly Regex DecimalHandlePattern = new Regex(@"\$(\d+)", RegexOptions.CultureInvariant);
         private static readonly Regex LegacyDecimalCellPattern = new Regex(@"^\s*(?:\$\d+\s*)+$", RegexOptions.CultureInvariant);
 
@@ -64,7 +67,7 @@ namespace QS3D.Core.Export
         public static XlsxHandleLookupResult ReadHandleLookup(string path, int rowNumber)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Excel path is required.", nameof(path));
-            if (rowNumber < 1) throw new ArgumentOutOfRangeException(nameof(rowNumber));
+            if (rowNumber < 1 || rowNumber > MaxRows) throw new ArgumentOutOfRangeException(nameof(rowNumber), "Excel row number must be between 1 and " + MaxRows + ".");
             var fullPath = Path.GetFullPath(path);
             var file = new FileInfo(fullPath);
             if (!file.Exists) throw new FileNotFoundException("Excel workbook was not found.", fullPath);
@@ -78,6 +81,14 @@ namespace QS3D.Core.Export
                 var sheet = LoadXml(sheetEntry);
                 XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
                 var rows = sheet.Descendants(ns + "row").ToList();
+                foreach (var row in rows)
+                {
+                    var declaredRowText = (string?)row.Attribute("r");
+                    if (declaredRowText == null) continue;
+                    var declaredRow = ParsePositiveInt(declaredRowText);
+                    if (declaredRow == int.MaxValue || declaredRow > MaxRows)
+                        throw new InvalidDataException("Excel worksheet row number is invalid or exceeds the XLSX row limit.");
+                }
                 var targets = rows.Where(x => ParsePositiveInt((string?)x.Attribute("r")) == rowNumber).ToList();
                 if (targets.Count > 1) throw new InvalidDataException("Excel worksheet contains duplicate row number " + rowNumber + ".");
                 var target = targets.SingleOrDefault();
@@ -110,7 +121,7 @@ namespace QS3D.Core.Export
 
                 var drawingFingerprint = ReadDrawingFingerprint(targetCells, fingerprintColumns);
                 var decimalHandles = ParseDecimalHandles(targetCells.Values);
-                var preferLegacy = !isModernSchema && decimalHandles.Count > 0 && string.IsNullOrWhiteSpace(drawingFingerprint);
+                var preferLegacy = !isModernSchema && handleColumns.Count == 0 && decimalHandles.Count > 0 && string.IsNullOrWhiteSpace(drawingFingerprint);
                 if (preferLegacy)
                     return new XlsxHandleLookupResult(decimalHandles, Array.Empty<string>(), drawingFingerprint, true, worksheet.Name, false, false);
                 var explicitHandles = new List<string>();
@@ -129,8 +140,10 @@ namespace QS3D.Core.Export
 
         private static WorksheetReference ResolveWorksheet(ZipArchive archive)
         {
-            var workbookEntry = archive.GetEntry("xl/workbook.xml");
-            var relationshipsEntry = archive.GetEntry("xl/_rels/workbook.xml.rels");
+            var workbookEntry = GetUniqueEntry(archive, "xl/workbook.xml");
+            var relationshipsEntry = GetUniqueEntry(archive, "xl/_rels/workbook.xml.rels");
+            if ((workbookEntry == null) != (relationshipsEntry == null))
+                throw new InvalidDataException("Excel workbook metadata is incomplete: workbook.xml and workbook.xml.rels must either both be present or both be absent.");
             if (workbookEntry != null && relationshipsEntry != null)
             {
                 var workbook = LoadXml(workbookEntry);
@@ -149,18 +162,31 @@ namespace QS3D.Core.Export
                     .Where(x => string.Equals((string?)x.Attribute("Id"), relationshipId, StringComparison.Ordinal))
                     .ToList();
                 if (matches.Count != 1) throw new InvalidDataException("Excel worksheet relationship is missing or ambiguous.");
+                var relationshipType = ((string?)matches[0].Attribute("Type") ?? string.Empty).Trim();
+                if (!string.Equals(relationshipType, WorksheetRelationshipTypeHttp, StringComparison.Ordinal) &&
+                    !string.Equals(relationshipType, WorksheetRelationshipTypeHttps, StringComparison.Ordinal))
+                    throw new InvalidDataException("Excel workbook sheet relationship is not a worksheet relationship.");
                 if (string.Equals((string?)matches[0].Attribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("External Excel worksheet relationships are not supported.");
                 var target = ((string?)matches[0].Attribute("Target") ?? string.Empty).Replace('\\', '/').TrimStart('/');
                 if (target.StartsWith("xl/", StringComparison.OrdinalIgnoreCase)) target = target.Substring(3);
                 if (target.IndexOf("..", StringComparison.Ordinal) >= 0) throw new InvalidDataException("Excel worksheet relationship target is invalid.");
-                var entry = archive.GetEntry("xl/" + target);
+                var entry = GetUniqueEntry(archive, "xl/" + target);
                 if (entry == null) throw new InvalidDataException("Excel worksheet part is missing: " + target + ".");
                 var name = ((string?)selected.Attribute("name") ?? string.Empty).Trim();
                 return new WorksheetReference(entry, name, string.Equals(name, "CHI_TIET", StringComparison.OrdinalIgnoreCase));
             }
 
-            var fallback = archive.GetEntry("xl/worksheets/sheet1.xml") ?? archive.Entries.FirstOrDefault(x => x.FullName.StartsWith("xl/worksheets/sheet", StringComparison.OrdinalIgnoreCase) && x.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
+            var fallback = GetUniqueEntry(archive, "xl/worksheets/sheet1.xml");
+            if (fallback == null)
+            {
+                var candidates = archive.Entries
+                    .Where(x => x.FullName.StartsWith("xl/worksheets/sheet", StringComparison.OrdinalIgnoreCase) && x.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                var duplicate = candidates.GroupBy(x => x.FullName, StringComparer.Ordinal).FirstOrDefault(x => x.Skip(1).Any());
+                if (duplicate != null) throw new InvalidDataException("Excel workbook contains duplicate worksheet part: " + duplicate.Key + ".");
+                fallback = candidates.FirstOrDefault();
+            }
             if (fallback == null) throw new InvalidDataException("Excel workbook does not contain a worksheet.");
             return new WorksheetReference(fallback, string.Empty, false);
         }
@@ -179,11 +205,18 @@ namespace QS3D.Core.Export
 
         private static IReadOnlyList<string> ReadSharedStrings(ZipArchive archive)
         {
-            var entry = archive.GetEntry("xl/sharedStrings.xml");
+            var entry = GetUniqueEntry(archive, "xl/sharedStrings.xml");
             if (entry == null) return Array.Empty<string>();
             var document = LoadXml(entry);
             XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
             return document.Descendants(ns + "si").Select(x => string.Concat(x.Descendants(ns + "t").Select(t => t.Value))).ToList();
+        }
+
+        private static ZipArchiveEntry? GetUniqueEntry(ZipArchive archive, string fullName)
+        {
+            var matches = archive.Entries.Where(x => string.Equals(x.FullName, fullName, StringComparison.Ordinal)).Take(2).ToList();
+            if (matches.Count > 1) throw new InvalidDataException("Excel workbook contains duplicate package part: " + fullName + ".");
+            return matches.Count == 0 ? null : matches[0];
         }
 
         private static XDocument LoadXml(ZipArchiveEntry entry)
@@ -203,7 +236,7 @@ namespace QS3D.Core.Export
         private static Dictionary<int, string> ReadCells(XElement row, XNamespace ns, IReadOnlyList<string> sharedStrings)
         {
             var rowNumber = ParsePositiveInt((string?)row.Attribute("r"));
-            if (rowNumber == int.MaxValue) throw new InvalidDataException("Excel worksheet row number is missing or invalid.");
+            if (rowNumber == int.MaxValue || rowNumber > MaxRows) throw new InvalidDataException("Excel worksheet row number is missing, invalid, or exceeds the XLSX row limit.");
             var result = new Dictionary<int, string>();
             foreach (var cell in row.Elements(ns + "c"))
             {
@@ -298,8 +331,8 @@ namespace QS3D.Core.Export
                 throw new InvalidDataException("Excel cell reference is invalid: " + reference + ".");
 
             var rowToken = reference.Substring(index);
-            if (!int.TryParse(rowToken, NumberStyles.None, CultureInfo.InvariantCulture, out var referencedRow) || referencedRow <= 0)
-                throw new InvalidDataException("Excel cell reference is invalid: " + reference + ".");
+            if (!int.TryParse(rowToken, NumberStyles.None, CultureInfo.InvariantCulture, out var referencedRow) || referencedRow <= 0 || referencedRow > MaxRows)
+                throw new InvalidDataException("Excel cell reference is invalid or exceeds the XLSX row limit: " + reference + ".");
             if (referencedRow != expectedRow)
                 throw new InvalidDataException("Excel cell reference " + reference + " does not match containing row " + expectedRow + ".");
             return value - 1;

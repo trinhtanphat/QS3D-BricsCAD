@@ -28,7 +28,16 @@ namespace QS3D.Core.Revisions
             {
                 Serialize(snapshot).Save(temp, SaveOptions.DisableFormatting);
                 ValidateSerializedFile(temp);
-                AtomicFileCommit.ReplaceWithBackup(temp, full, backup);
+                if (ShouldPreserveValidatedBackup(full, backup))
+                {
+                    AtomicFileCommit.ReplaceWithoutBackup(temp, full);
+                    Load(full);
+                    Load(backup);
+                }
+                else
+                {
+                    AtomicFileCommit.ReplaceWithBackup(temp, full, backup);
+                }
             }
             finally
             {
@@ -133,6 +142,28 @@ namespace QS3D.Core.Revisions
         private void ValidateSerializedFile(string path)
         {
             Load(path);
+        }
+
+        private bool ShouldPreserveValidatedBackup(string primaryPath, string backupPath)
+        {
+            if (!File.Exists(backupPath)) return false;
+            try
+            {
+                Load(primaryPath);
+                return false;
+            }
+            catch (Exception primaryError) when (IsRecoverableDataFailure(primaryError))
+            {
+                try
+                {
+                    Load(backupPath);
+                    return true;
+                }
+                catch (Exception backupError) when (IsRecoverableDataFailure(backupError))
+                {
+                    return false;
+                }
+            }
         }
 
         private static XDocument Serialize(RevisionSnapshot snapshot) => new XDocument(

@@ -81,12 +81,19 @@ namespace QS3D.BricsCAD.V25
 
         public static void Show()
         {
-            EnsureCreated();
-            if (_workspace != null) _workspace.Visible = true;
-            if (_right != null) _right.Visible = true;
-            if (_quantityInsight != null) _quantityInsight.Visible = true;
-            RefreshAll();
-            SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
+            try
+            {
+                EnsureCreated();
+                if (_workspace != null) _workspace.Visible = true;
+                if (_right != null) _right.Visible = true;
+                if (_quantityInsight != null) _quantityInsight.Visible = true;
+                RefreshAll();
+                SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
+            }
+            catch (Exception ex)
+            {
+                ReportPaletteFailure("Workspace", ex);
+            }
         }
 
         public static void Hide()
@@ -99,12 +106,19 @@ namespace QS3D.BricsCAD.V25
 
         public static void ShowSafeMode()
         {
-            EnsureCreated();
-            if (_workspace != null) _workspace.Visible = true;
-            if (_right != null) _right.Visible = false;
-            if (_quantityInsight != null) _quantityInsight.Visible = false;
-            _workspacePanel?.SetStatus("Safe Mode: panel bản vẽ/layer và diễn giải khối lượng đang tắt.");
-            SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
+            try
+            {
+                EnsureCreated();
+                if (_workspace != null) _workspace.Visible = true;
+                if (_right != null) _right.Visible = false;
+                if (_quantityInsight != null) _quantityInsight.Visible = false;
+                _workspacePanel?.SetStatus("Safe Mode: panel bản vẽ/layer và diễn giải khối lượng đang tắt.");
+                SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
+            }
+            catch (Exception ex)
+            {
+                ReportPaletteFailure("Safe Mode", ex);
+            }
         }
 
         public static void SetInspection(IReadOnlyList<EntitySnapshot> snapshots)
@@ -118,7 +132,18 @@ namespace QS3D.BricsCAD.V25
             _quantityInsightPanel?.SetInspectionReadOnly(snapshots, project);
         }
 
-        public static void SetStatus(string status) { EnsureCreated(); _workspacePanel?.SetStatus(status); }
+        public static void SetStatus(string status)
+        {
+            try
+            {
+                EnsureCreated();
+                _workspacePanel?.SetStatus(status);
+            }
+            catch (Exception ex)
+            {
+                ReportPaletteFailure("Status", ex);
+            }
+        }
 
         public static void RefreshProject()
         {
@@ -183,6 +208,35 @@ namespace QS3D.BricsCAD.V25
             {
                 // Native palette teardown is best-effort; one failed palette must not block the others.
             }
+        }
+
+        private static void ReportPaletteFailure(string operation, Exception error)
+        {
+            var message = DescribeException(error);
+            try
+            {
+                Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
+                    "\nQS3D " + operation + " UI error: " + message);
+            }
+            catch
+            {
+                // Error reporting must never recurse into palette creation or mask the original failure.
+            }
+        }
+
+        private static string DescribeException(Exception error)
+        {
+            if (error == null) return "unknown error";
+            var parts = new List<string>();
+            Exception? current = error;
+            for (var depth = 0; current != null && depth < 8; depth++, current = current.InnerException)
+            {
+                var text = (current.Message ?? string.Empty).Trim();
+                var part = current.GetType().Name + (text.Length == 0 ? string.Empty : ": " + text);
+                if (parts.Count == 0 || !string.Equals(parts[parts.Count - 1], part, StringComparison.Ordinal))
+                    parts.Add(part);
+            }
+            return string.Join(" -> ", parts);
         }
 
         private static void PersistPaletteLayout()

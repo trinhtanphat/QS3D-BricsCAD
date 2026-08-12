@@ -7,6 +7,8 @@ namespace QS3D.Core.Rebar
 {
     public static class RebarNotationParser
     {
+        private const int MaxNotationLength = 4096;
+        private const int MaxCompoundGroups = 128;
         private static readonly Regex SpacingPattern = new Regex(@"^\s*(?:Ø|Φ|D|d)?\s*(?<dia>\d+(?:\.\d+)?)\s*(?:@|a|A)\s*(?<spacing>\d+(?:\.\d+)?)\s*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex CountPattern = new Regex(@"^\s*(?:(?<sets>\d+)\s*[xX]\s*)?(?<qty>\d+)\s*(?:Ø|Φ|D|d)\s*(?<dia>\d+(?:\.\d+)?)\s*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex DiameterOnlyPattern = new Regex(@"^\s*(?:Ø|Φ|D|d)\s*(?<dia>\d+(?:\.\d+)?)\s*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -14,7 +16,11 @@ namespace QS3D.Core.Rebar
         public static IReadOnlyList<RebarGroup> Parse(string notation)
         {
             if (string.IsNullOrWhiteSpace(notation)) throw new ArgumentException("Rebar notation is required.", nameof(notation));
+            if (notation.Length > MaxNotationLength)
+                throw new FormatException("Rebar notation exceeds the supported " + MaxNotationLength + "-character limit.");
             var parts = notation.Split(new[] { '+' }, StringSplitOptions.None);
+            if (parts.Length > MaxCompoundGroups)
+                throw new FormatException("Rebar notation exceeds the supported " + MaxCompoundGroups + " compound-group limit.");
             var result = new List<RebarGroup>(parts.Length);
             foreach (var raw in parts)
             {

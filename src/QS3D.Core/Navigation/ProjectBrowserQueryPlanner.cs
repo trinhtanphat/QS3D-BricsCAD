@@ -61,6 +61,8 @@ namespace QS3D.Core.Navigation
     public static class ProjectBrowserQueryPlanner
     {
         private const int MaxElements = 250000;
+        private const int MaxFamilies = 10000;
+        private const int MaxReferenceDefinitions = 2000;
         private const int MaxQueryLength = 160;
         internal const int MaxFilterIds = 10000;
 
@@ -81,6 +83,12 @@ namespace QS3D.Core.Navigation
 
             if (project.Elements.Count > MaxElements)
                 throw new InvalidOperationException("Project browser supports at most " + MaxElements + " semantic elements.");
+            if (project.Families.Count > MaxFamilies)
+                throw new InvalidOperationException("Project browser query supports at most " + MaxFamilies + " family definitions.");
+            if (project.Floors.Count > MaxReferenceDefinitions)
+                throw new InvalidOperationException("Project browser query supports at most " + MaxReferenceDefinitions + " floor definitions.");
+            if (project.Zones.Count > MaxReferenceDefinitions)
+                throw new InvalidOperationException("Project browser query supports at most " + MaxReferenceDefinitions + " zone definitions.");
 
             var familyIndex = BuildUniqueFamilyIndex(project);
             var floorIndex = BuildUniqueFloorIndex(project);
@@ -244,7 +252,7 @@ namespace QS3D.Core.Navigation
                 if (!ids.Add(elementId)) throw new InvalidOperationException("Project browser found duplicate semantic element id: " + elementId + ".");
                 if (!Enum.IsDefined(typeof(ElementCategory), element.Category)) throw new InvalidOperationException("Project browser found undefined element category on: " + elementId + ".");
 
-                var familyId = (element.FamilyId ?? string.Empty).Trim();
+                var familyId = CanonicalOptionalReference(element.FamilyId, "family", elementId);
                 if (familyId.Length > 0)
                 {
                     if (!families.TryGetValue(familyId, out var family))
@@ -252,13 +260,22 @@ namespace QS3D.Core.Navigation
                     if (family.Category != element.Category)
                         throw new InvalidOperationException("Project browser found family/category mismatch on element " + elementId + ": family " + family.Id + " is " + family.Category + " while element is " + element.Category + ".");
                 }
-                var floorId = (element.FloorId ?? string.Empty).Trim();
+                var floorId = CanonicalOptionalReference(element.FloorId, "floor", elementId);
                 if (floorId.Length > 0 && !floors.ContainsKey(floorId))
                     throw new InvalidOperationException("Project browser found missing floor reference " + floorId + " on element " + elementId + ".");
-                var zoneId = (element.ZoneId ?? string.Empty).Trim();
+                var zoneId = CanonicalOptionalReference(element.ZoneId, "zone", elementId);
                 if (zoneId.Length > 0 && !zones.ContainsKey(zoneId))
                     throw new InvalidOperationException("Project browser found missing zone reference " + zoneId + " on element " + elementId + ".");
             }
+        }
+
+        private static string CanonicalOptionalReference(string? value, string label, string elementId)
+        {
+            var raw = value ?? string.Empty;
+            if (raw.Length == 0) return string.Empty;
+            if (string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Project browser filtered query requires canonical " + label + " references without surrounding whitespace on element " + elementId + ".");
+            return raw;
         }
     }
 }

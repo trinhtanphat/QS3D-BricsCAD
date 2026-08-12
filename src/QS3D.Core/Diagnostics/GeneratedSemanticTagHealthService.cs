@@ -30,7 +30,8 @@ namespace QS3D.Core.Diagnostics
 
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Semantic tag health cannot inspect a null project element.");
                 if (!element.Properties.TryGetValue(HandlesKey, out var rawHandles) || string.IsNullOrWhiteSpace(rawHandles)) continue;
                 var handles = ParseHandles(element, rawHandles, issues);
                 if (handles.Count == 0)

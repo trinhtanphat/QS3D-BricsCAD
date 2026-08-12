@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Xml.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Review;
 using QS3D.Core.Rules;
@@ -19,6 +20,7 @@ namespace QS3D.Core.SmokeTests
             TamperedReviewFailsClosed();
             HandleFieldInjectionFailsClosed();
             NonPortableGeneratedFieldInjectionFailsClosed();
+            UnsupportedXmlShapeFailsClosed();
         }
 
         private static void QuantityReviewIsImmutableAndRoundTrips()
@@ -129,6 +131,39 @@ namespace QS3D.Core.SmokeTests
                 if (!xml.Contains("field=\"Quantity:Cost\"")) throw new Exception("Expected serialized field was not found.");
                 File.WriteAllText(path, xml.Replace("field=\"Quantity:Cost\"", "field=\"Property:QS3D.GeneratedSolid.StaleSnapshot\""));
                 ThrowsInvalidDataContaining(() => store.Load(path), "forbidden drawing-local/native field");
+            }
+            finally
+            {
+                SafeDelete(path);
+                SafeDelete(path + ".bak");
+            }
+        }
+
+        private static void UnsupportedXmlShapeFailsClosed()
+        {
+            AssertXmlShapeRejected(document => document.Root!.SetAttributeValue("unexpected", "value"));
+            AssertXmlShapeRejected(document => document.Root!.Name = XName.Get("qs3dPreviewReview", "urn:qs3d:test"));
+            AssertXmlShapeRejected(document => document.Root!.Add(new XElement("targets")));
+            AssertXmlShapeRejected(document => document.Root!.Element("targets")!.Add(new XElement("unexpected")));
+            AssertXmlShapeRejected(document => document.Root!.Element("entries")!.Elements("entry").First().SetAttributeValue("unexpected", "value"));
+            AssertXmlShapeRejected(document => document.Root!.Element("entries")!.Elements("entry").First().Add(new XElement("unexpected")));
+            AssertXmlShapeRejected(document => document.Root!.Add(new XComment("unsupported")));
+            AssertXmlShapeRejected(document => document.AddFirst(new XComment("unsupported-before-root")));
+            AssertXmlShapeRejected(document => document.Add(new XProcessingInstruction("qs3d", "unsupported-after-root")));
+        }
+
+        private static void AssertXmlShapeRejected(Action<XDocument> mutate)
+        {
+            var snapshot = new PreviewReviewSnapshotService().Create("Cost review", new QuantityRulePreviewService().PreviewProject(RuleFixture()));
+            var path = TempPath();
+            try
+            {
+                var store = new PreviewReviewSnapshotStore();
+                store.Save(snapshot, path);
+                var document = XDocument.Load(path);
+                mutate(document);
+                document.Save(path, SaveOptions.DisableFormatting);
+                ThrowsInvalidDataContaining(() => store.Load(path), "Preview review XML");
             }
             finally
             {

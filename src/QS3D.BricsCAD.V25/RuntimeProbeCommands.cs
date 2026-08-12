@@ -22,7 +22,7 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
-                if (!Environment.Is64BitProcess) throw new InvalidOperationException("QS3D BricsCAD V25 runtime must be 64-bit.");
+                if (!Environment.Is64BitProcess) throw new InvalidOperationException("QS3D BricsCAD runtime must be 64-bit.");
                 PaletteCoordinator.Show();
                 var ribbonReady = RibbonBootstrapper.TryInitialize();
                 if (!ribbonReady) throw new InvalidOperationException("QS3D ribbon initialization did not complete.");

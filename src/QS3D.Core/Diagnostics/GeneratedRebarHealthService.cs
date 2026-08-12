@@ -60,7 +60,8 @@ namespace QS3D.Core.Diagnostics
             var ownership = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Generated rebar health cannot inspect a null project element.");
                 InspectSet(element, ColumnSpec, liveColumnSolidHandles, ownership, issues);
                 InspectSet(element, ShapeSpec, null, ownership, issues);
             }
@@ -74,7 +75,8 @@ namespace QS3D.Core.Diagnostics
             var ownership = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Generated rebar health cannot inspect a null project element.");
                 InspectSet(element, ShapeSpec, liveShapeSolidHandles, ownership, issues);
             }
             return issues.AsReadOnly();
@@ -87,7 +89,8 @@ namespace QS3D.Core.Diagnostics
             var ownership = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Generated rebar health cannot inspect a null project element.");
                 InspectSet(element, ColumnSpec, liveColumnSolidHandles, ownership, issues);
                 InspectSet(element, ShapeSpec, liveShapeSolidHandles, ownership, issues);
             }
@@ -99,7 +102,8 @@ namespace QS3D.Core.Diagnostics
             var index = new OwnershipIndex();
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Generated rebar health cannot inspect a null project element.");
                 foreach (var sourceHandle in element.SourceHandles)
                     Reserve(index, sourceHandle, element.Id + "/SourceHandles");
                 foreach (var property in element.Properties)
