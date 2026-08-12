@@ -67,16 +67,21 @@ namespace QS3D.Core.Diagnostics
                             element.Id));
                         continue;
                     }
-                    if (!distinct.Add(handle))
+
+                    var isValidHex = long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _);
+                    var identity = isValidHex
+                        ? GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle)
+                        : handle;
+                    if (!distinct.Add(identity))
                     {
                         issues.Add(new ModelHealthIssue(
                             "GRID_ANNOTATION_HANDLE_DUPLICATE",
                             HealthSeverity.Error,
-                            "GeneratedGridAnnotationHandles chứa Handle lặp: " + handle + ".",
+                            "GeneratedGridAnnotationHandles chứa Handle lặp: " + identity + ".",
                             element.Id));
                         continue;
                     }
-                    if (!long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+                    if (!isValidHex)
                     {
                         issues.Add(new ModelHealthIssue(
                             "GRID_ANNOTATION_HANDLE_INVALID",
@@ -84,12 +89,15 @@ namespace QS3D.Core.Diagnostics
                             "Generated Grid annotation Handle không phải hex hợp lệ: " + handle + ".",
                             element.Id));
                     }
-                    if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
+                    if (element.SourceHandles.Any(x => string.Equals(
+                        isValidHex ? GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x) : (x ?? string.Empty).Trim(),
+                        identity,
+                        StringComparison.OrdinalIgnoreCase)))
                     {
                         issues.Add(new ModelHealthIssue(
                             "GRID_ANNOTATION_HANDLE_IN_SOURCE",
                             HealthSeverity.Error,
-                            "Generated Grid annotation Handle không được nằm trong SourceHandles: " + handle + ".",
+                            "Generated Grid annotation Handle không được nằm trong SourceHandles: " + identity + ".",
                             element.Id));
                     }
                 }
