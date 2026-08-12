@@ -25,10 +25,15 @@ if not errors:
         "ElementCollision = InterchangeExistingIdentityAction.UseSourceSemanticData",
         "SourceHandles = InterchangeSourceHandlePolicy.Discard",
         "GeneratedOutputReset = InterchangeGeneratedOutputResetPolicy.ClearOwnershipAndRequireRebuild",
-        "ProjectStateSnapshot.Capture(project)",
-        "GeneratedDependentGeometryInvalidator.Prepare(document, transaction, project, invalidationTargets)",
-        "ApplyCatalogState(project, prepared.Source, prepared.Resolution)",
-        "ApplyElementState(project, prepared.Source, prepared.Resolution)",
+        "using (document.LockDocument())",
+        "var lockedProject = InterchangeMutationTargetGuard.RequireExact(",
+        "var lockedInvalidationTargets = ExpandInvalidationTargets(",
+        "rollback = ProjectStateSnapshot.Capture(lockedProject)",
+        "GeneratedDependentGeometryInvalidator.Prepare(",
+        "lockedProject,",
+        "lockedInvalidationTargets);",
+        "ApplyCatalogState(lockedProject, prepared.Source, prepared.Resolution)",
+        "ApplyElementState(lockedProject, prepared.Source, prepared.Resolution)",
         "invalidation.CommitMetadata();",
         "transaction.Commit();",
         "rollback.Restore(project)",
@@ -49,6 +54,7 @@ if not errors:
         "target.MarkDirty(ElementDirtyFlags.All);",
         "ProjectInterchangeKeepTargetImporter.Plan(project, json)",
         "One invalidation plan + one semantic mutation + one native commit",
+        "ProjectContextCoordinator.RequireBackingStoreUnchanged(",
     ]
     for needle in required_service:
         if needle not in s:
@@ -56,12 +62,13 @@ if not errors:
 
     if s.count("document.Database.TransactionManager.StartTransaction()") != 1:
         errors.append("all-scope service must own exactly one native CAD transaction")
-    if s.count("ProjectStateSnapshot.Capture(project)") != 1:
-        errors.append("all-scope service must own exactly one semantic rollback snapshot")
-    if s.index("GeneratedDependentGeometryInvalidator.Prepare") > s.index("ApplyCatalogState(project, prepared.Source, prepared.Resolution)"):
-        errors.append("all-scope invalidation must be prepared before catalog mutation")
-    if s.index("GeneratedDependentGeometryInvalidator.Prepare") > s.index("ApplyElementState(project, prepared.Source, prepared.Resolution)"):
-        errors.append("all-scope invalidation must be prepared before element mutation")
+    if s.count("ProjectStateSnapshot.Capture(lockedProject)") != 1:
+        errors.append("all-scope service must own exactly one locked semantic rollback snapshot")
+    prepare_index = s.find("GeneratedDependentGeometryInvalidator.Prepare")
+    catalog_index = s.find("ApplyCatalogState(lockedProject, prepared.Source, prepared.Resolution)")
+    element_index = s.find("ApplyElementState(lockedProject, prepared.Source, prepared.Resolution)")
+    if min(prepare_index, catalog_index, element_index) < 0 or not (prepare_index < catalog_index and prepare_index < element_index):
+        errors.append("all-scope locked invalidation must be prepared before catalog/element mutation")
     if s.index("invalidation.CommitMetadata();") > s.index("transaction.Commit();"):
         errors.append("all-scope generated ownership metadata must clear before CAD commit")
 
@@ -126,4 +133,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-use-source-all: PASS")
-print("All executable catalog + element UseSource collisions share one native transaction and one semantic rollback snapshot; Family inheritance/overrides and target source ownership are preserved while rebuild remains explicit.")
+print("All executable catalog + element UseSource collisions rebind the exact locked project, recompute one invalidation plan, use one native transaction and one semantic rollback snapshot; Family inheritance/overrides and target source ownership are preserved while rebuild remains explicit.")
