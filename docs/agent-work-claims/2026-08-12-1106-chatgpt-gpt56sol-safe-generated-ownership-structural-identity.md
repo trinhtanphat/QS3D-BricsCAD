@@ -1,38 +1,48 @@
 # Work claim — Safe generated ownership structural claim identity
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-gpt56sol-20260812-safe-generated-ownership-structural-identity`
 - Registered: `2026-08-12T11:06:00+07:00`
-- Last Updated: `2026-08-12T11:06:00+07:00`
+- Completed: `2026-08-12T11:08:00+07:00`
+- Last Updated: `2026-08-12T11:08:00+07:00`
 - Baseline main SHA: `f2a2f417a9997be3e72307ca3071fe91c925dd27`
 - Priority: P1 — distinct generated ownership claims must not collapse through delimiter-concatenated identity
 - Task Key: `CORE-SAFE-GENERATED-OWNERSHIP-STRUCTURAL-IDENTITY`
 
 ## Confirmed defect
 
-`SafeGeneratedHandleOwnershipHealthService` de-duplicates per-handle claims with `GroupBy(x => x.Token)` where `Token` is `ElementId + "/" + Slot`. `ProjectElement` IDs permit `/`, and `GeneratedHandleOwnershipPolicy.IsOwnerSlot(...)` intentionally accepts dynamic `Generated...Handle(s)` property keys, which can also contain `/`. Two distinct `(ElementId, Slot)` pairs can therefore produce the same concatenated token and be collapsed to one claim, causing a real generated-handle ownership conflict to false-clean.
+`SafeGeneratedHandleOwnershipHealthService` de-duplicated per-handle claims with `GroupBy(x => x.Token)` where `Token` was `ElementId + "/" + Slot`. `ProjectElement` IDs permit `/`, and `GeneratedHandleOwnershipPolicy.IsOwnerSlot(...)` accepts dynamic `Generated...Handle(s)` property keys which can also contain `/`. Distinct structural `(ElementId, Slot)` claims could therefore stringify identically and be collapsed, hiding a real ownership conflict.
 
-A concrete collision is `(ElementId="E", Slot="GeneratedA/GeneratedBHandles")` versus `(ElementId="E/GeneratedA", Slot="GeneratedBHandles")`; both are valid owner slots and both stringify to `E/GeneratedA/GeneratedBHandles`.
+Concrete collision: `(ElementId="E", Slot="GeneratedA/GeneratedBHandles")` and `(ElementId="E/GeneratedA", Slot="GeneratedBHandles")` both stringify as `E/GeneratedA/GeneratedBHandles`.
 
-## Reserved scope
+## Completed change
 
-- `src/QS3D.Core/Diagnostics/SafeGeneratedHandleOwnershipHealthService.cs`
-- `tests/QS3D.Core.SmokeTests/SafeGeneratedHandleOwnershipStructuralIdentitySmoke.cs`
-- this claim file
+- Removed delimiter-concatenated claim text from equality/de-duplication.
+- Preserved existing structural same-element/same-logical-slot de-duplication in `AddClaims`.
+- Deterministic conflict ordering now sorts by `ElementId` then `Slot`.
+- Peer selection for conflict messages uses object identity instead of concatenated text identity.
+- Malformed-project validation, SourceHandles conflicts, host-solid aliases, owner-slot recognition and inspection read-only behavior remain unchanged.
 
-## Intended contract
+## Regression evidence
 
-- Ownership identity remains structural: semantic element identity and logical owner slot are separate fields, never delimiter-concatenated for equality/deduplication.
-- The concrete slash-collision case must emit the existing `GENERATED_HANDLE_OWNERSHIP_CONFLICT` Error for both owners.
-- Existing same-element same-logical-slot de-duplication remains unchanged.
-- Existing SourceHandles/generated-owner conflicts and malformed-project validation remain unchanged.
-- Inspection stays read-only; do not change `GeneratedHandleOwnershipIndex`, owner-slot recognition, builders, persistence or CAD runtime code.
+`tests/QS3D.Core.SmokeTests/SafeGeneratedHandleOwnershipStructuralIdentitySmoke.cs` covers:
 
-## Validation plan
+- slash-delimiter collision remains two Error-level `GENERATED_HANDLE_OWNERSHIP_CONFLICT` issues, one per owner;
+- same-element `GeneratedSolidHandle` / `PhysicalOpeningCutSolidHandle` logical alias remains de-duplicated;
+- inspection does not change `ProjectState.ChangeVersion`.
 
-Add an auto-registered Core smoke covering the slash-collision false-clean and a same-logical-slot alias non-regression. Review exact PR diff, guarded squash-merge to moving `main`, read back source/test, verify merge ancestry and close this claim with exact evidence.
+## Integration evidence
+
+- Claim registration: `842cb306cd850861e674c9f68c00be12cae82328`.
+- Source fix branch commit: `92cf4c8fbc257c326aed05cde3125d6fe50b91b7`.
+- Focused smoke branch commit: `b50956de4fc4ec6d44299e066775eadd9770ca55`.
+- Pull Request: `#801`.
+- Squash merge: `2f84569519ac4cfd0f0d051159b6cec16b0696da`.
+- Main readback source blob: `a1abf2a22f342c2649c5292069597581a1267225`.
+- Main readback smoke blob: `a041899366ae6a575592a2a6077bdf9f05c2d980`.
+- Ancestry verification: `main` was ahead of the merge by 1 commit, behind by 0, with merge base exactly `2f84569519ac4cfd0f0d051159b6cec16b0696da`.
 
 ## Validation boundary
 
-No GitHub Actions, full build, executable smoke or licensed BricsCAD V25/V26 runtime PASS will be claimed unless actually executed.
+No GitHub Actions, full build, executable smoke or licensed BricsCAD V25/V26 runtime PASS was executed or claimed in this connector session.
