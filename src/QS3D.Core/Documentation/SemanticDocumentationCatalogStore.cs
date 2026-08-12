@@ -118,13 +118,13 @@ namespace QS3D.Core.Documentation
                 new XAttribute("version", FormatVersion),
                 new XElement("views",
                     views
-                        .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-                        .ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(x => CanonicalRequiredText(x.Name), StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(x => CanonicalRequiredText(x.Id), StringComparer.OrdinalIgnoreCase)
                         .Select(SerializeView)),
                 new XElement("sheets",
                     sheets
-                        .OrderBy(x => x.Number, StringComparer.OrdinalIgnoreCase)
-                        .ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(x => CanonicalRequiredText(x.Number), StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(x => CanonicalRequiredText(x.Id), StringComparer.OrdinalIgnoreCase)
                         .Select(SerializeSheet)));
             return root.ToString(SaveOptions.DisableFormatting);
         }
@@ -132,11 +132,11 @@ namespace QS3D.Core.Documentation
         private static XElement SerializeView(SemanticViewDefinition view)
         {
             return new XElement("view",
-                new XAttribute("id", view.Id ?? string.Empty),
-                new XAttribute("name", view.Name ?? string.Empty),
+                new XAttribute("id", CanonicalRequiredText(view.Id)),
+                new XAttribute("name", CanonicalRequiredText(view.Name)),
                 new XAttribute("kind", view.Kind),
-                new XAttribute("floorId", view.FloorId ?? string.Empty),
-                new XAttribute("zoneId", view.ZoneId ?? string.Empty),
+                new XAttribute("floorId", CanonicalOptionalText(view.FloorId)),
+                new XAttribute("zoneId", CanonicalOptionalText(view.ZoneId)),
                 new XElement("categories",
                     view.Categories
                         .Distinct()
@@ -144,32 +144,32 @@ namespace QS3D.Core.Documentation
                         .Select(x => new XElement("category", new XAttribute("value", x)))),
                 new XElement("include",
                     view.IncludeElementIds
-                        .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-                        .ThenBy(x => x, StringComparer.Ordinal)
-                        .Select(x => new XElement("id", new XAttribute("value", x ?? string.Empty)))),
+                        .OrderBy(x => CanonicalRequiredText(x), StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(x => CanonicalRequiredText(x), StringComparer.Ordinal)
+                        .Select(x => new XElement("id", new XAttribute("value", CanonicalRequiredText(x))))),
                 new XElement("exclude",
                     view.ExcludeElementIds
-                        .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-                        .ThenBy(x => x, StringComparer.Ordinal)
-                        .Select(x => new XElement("id", new XAttribute("value", x ?? string.Empty)))));
+                        .OrderBy(x => CanonicalRequiredText(x), StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(x => CanonicalRequiredText(x), StringComparer.Ordinal)
+                        .Select(x => new XElement("id", new XAttribute("value", CanonicalRequiredText(x))))));
         }
 
         private static XElement SerializeSheet(SemanticSheetDefinition sheet)
         {
             return new XElement("sheet",
-                new XAttribute("id", sheet.Id ?? string.Empty),
-                new XAttribute("number", sheet.Number ?? string.Empty),
-                new XAttribute("name", sheet.Name ?? string.Empty),
+                new XAttribute("id", CanonicalRequiredText(sheet.Id)),
+                new XAttribute("number", CanonicalRequiredText(sheet.Number)),
+                new XAttribute("name", CanonicalRequiredText(sheet.Name)),
                 new XAttribute("widthMm", Number(sheet.WidthMm)),
                 new XAttribute("heightMm", Number(sheet.HeightMm)),
-                new XAttribute("titleBlockName", sheet.TitleBlockName ?? string.Empty),
+                new XAttribute("titleBlockName", CanonicalOptionalText(sheet.TitleBlockName)),
                 new XElement("placements",
                     sheet.Placements
                         .OrderBy(x => x.Ymm)
                         .ThenBy(x => x.Xmm)
-                        .ThenBy(x => x.ViewId, StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(x => CanonicalRequiredText(x.ViewId), StringComparer.OrdinalIgnoreCase)
                         .Select(x => new XElement("placement",
-                            new XAttribute("viewId", x.ViewId ?? string.Empty),
+                            new XAttribute("viewId", CanonicalRequiredText(x.ViewId)),
                             new XAttribute("xMm", Number(x.Xmm)),
                             new XAttribute("yMm", Number(x.Ymm)),
                             new XAttribute("widthMm", Number(x.WidthMm)),
@@ -370,14 +370,18 @@ namespace QS3D.Core.Documentation
             var value = element.Attribute(attribute)?.Value;
             if (value == null || string.IsNullOrWhiteSpace(value))
                 throw new InvalidDataException("Semantic documentation catalog is missing attribute: " + attribute + ".");
-            return value.Trim();
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("Semantic documentation catalog attribute must use canonical text: " + attribute + ".");
+            return value;
         }
 
         private static string? Optional(XElement element, string attribute)
         {
             var value = element.Attribute(attribute)?.Value;
-            if (value == null || string.IsNullOrWhiteSpace(value)) return null;
-            return value.Trim();
+            if (value == null || value.Length == 0) return null;
+            if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("Semantic documentation catalog attribute must use canonical text: " + attribute + ".");
+            return value;
         }
 
         private static int Integer(string? value, string label)
@@ -412,6 +416,18 @@ namespace QS3D.Core.Documentation
             if (double.IsNaN(value) || double.IsInfinity(value))
                 throw new InvalidOperationException("Semantic documentation numeric values must be finite.");
             return value.ToString("R", CultureInfo.InvariantCulture);
+        }
+
+        private static string CanonicalRequiredText(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new InvalidOperationException("Semantic documentation required text must not be blank.");
+            return value!.Trim();
+        }
+
+        private static string CanonicalOptionalText(string? value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? string.Empty : value!.Trim();
         }
     }
 }
