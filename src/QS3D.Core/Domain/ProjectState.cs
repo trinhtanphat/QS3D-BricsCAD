@@ -133,7 +133,13 @@ namespace QS3D.Core.Domain
         public string Name
         {
             get => _name;
-            set => _name = RequireProjectName(value);
+            set
+            {
+                var next = RequireProjectName(value);
+                if (string.Equals(_name, next, StringComparison.Ordinal)) return;
+                _name = next;
+                Touch();
+            }
         }
         public string DrawingPath { get; set; } = string.Empty;
         public string DrawingFingerprint { get; set; } = string.Empty;
