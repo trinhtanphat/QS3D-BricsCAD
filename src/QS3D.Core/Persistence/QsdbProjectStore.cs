@@ -43,6 +43,7 @@ namespace QS3D.Core.Persistence
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Project path is required.", nameof(path));
 
             ValidateProject(project);
+            ValidateSerializedXmlText(project);
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
@@ -248,6 +249,26 @@ namespace QS3D.Core.Persistence
                     new XAttribute("detail", x.Detail ?? string.Empty),
                     new XAttribute("actor", x.Actor ?? string.Empty),
                     new XAttribute("correlationId", x.CorrelationId ?? string.Empty))))));
+        }
+
+        private static void ValidateSerializedXmlText(ProjectState project)
+        {
+            try
+            {
+                var root = Serialize(project).Root ?? throw new InvalidDataException("QSDB serialization produced no root element.");
+                foreach (var attribute in root.DescendantsAndSelf().Attributes())
+                    XmlConvert.VerifyXmlChars(attribute.Value);
+                foreach (var text in root.DescendantNodes().OfType<XText>())
+                    XmlConvert.VerifyXmlChars(text.Value);
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidDataException("QSDB project contains characters that are invalid in XML.", ex);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new InvalidDataException("QSDB project contains data that cannot be represented as XML.", ex);
+            }
         }
 
         private static XDocument LoadDocument(string path)
