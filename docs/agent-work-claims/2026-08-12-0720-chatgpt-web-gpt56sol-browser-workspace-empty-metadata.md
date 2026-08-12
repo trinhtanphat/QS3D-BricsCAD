@@ -12,7 +12,7 @@ Harden `ProjectBrowserWorkspaceStateStore.Load(ProjectState)` so a persisted wor
 
 ## Expected surfaces
 
-- `src/QS3D.Core/Navigation/ProjectBrowserWorkspaceStateStore.cs`
+- `src/QS3D.Core/Navigation/ProjectBrowserWorkspaceStateStore.cs` — `Load(ProjectState)` presence/corruption boundary only
 - one focused CAD-independent Core smoke under `tests/QS3D.Core.SmokeTests/`
 - module-initializer registration for that smoke if needed
 - this claim file for completion close-out
@@ -20,8 +20,9 @@ Harden `ProjectBrowserWorkspaceStateStore.Load(ProjectState)` so a persisted wor
 ## Excluded scope
 
 - no changes to workspace enum/boolean/query/primary canonicality lanes already completed on current `main`;
+- no changes to `ProjectBrowserWorkspaceStateStore.Save()` or `Clear()`; those methods are reserved by the concurrent `browser-workspace-revision-atomicity` claim at `3dc86e27db785071930110dbf710fe91554d8603`;
 - no selection, query, virtualization, Workspace WPF/UI, BricsCAD V25/V26 adapter/runtime, QSDB project schema, release/package or workflow changes;
-- no change to the semantics of a genuinely absent workspace metadata key or to `Clear(ProjectState)`, which intentionally removes the key.
+- no change to the semantics of a genuinely absent workspace metadata key.
 
 ## Validation plan
 
@@ -34,7 +35,9 @@ Harden `ProjectBrowserWorkspaceStateStore.Load(ProjectState)` so a persisted wor
 
 ## Coordination
 
-Recent workspace canonicality claims for enum, boolean, query, and primaryElementId are completed. This lane is limited to metadata presence-vs-corruption semantics at the `Load` boundary and does not overlap active XLSX, release, Grid, source-reconcile, rebar, floor/foundation, health or formula-token claims observed on current `main`.
+Recent workspace canonicality claims for enum, boolean, query, and primaryElementId are completed. A concurrent claim registered at `3dc86e27db785071930110dbf710fe91554d8603` owns only workspace `Save()/Clear()` project-revision atomicity and explicitly excludes workspace XML/canonicality. This claim owns only `Load()` presence-vs-corruption semantics and will not edit `Save()/Clear()`. The two lanes are independently verifiable despite sharing the same source file.
+
+This lane also does not overlap active XLSX, release, Grid, source-reconcile, rebar, floor/foundation, health or formula-token claims observed on current `main`.
 
 ## Completion condition
 
