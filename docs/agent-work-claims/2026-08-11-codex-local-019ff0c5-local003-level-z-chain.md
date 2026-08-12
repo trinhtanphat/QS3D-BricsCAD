@@ -374,3 +374,11 @@ Baseline audited after a clean fetch and fast-forward: `origin/main@c71fb530730d
 The full Core smoke cannot compile because the newly completed `RevisionCaptureXmlTextIntegritySmoke.cs` uses the removed `ElementCategory.Wall` enum member in two intended-valid fixture constructors. Current source exposes the specific `ArchitecturalWall` category used by the same semantic wall contract. The owning revision-capture claim is `COMPLETED`, and the current ACTIVE/BLOCKED audit found no reservation for this exact fixture.
 
 Reserve only `tests/QS3D.Core.SmokeTests/RevisionCaptureXmlTextIntegritySmoke.cs` to replace those two stale enum references with `ElementCategory.ArchitecturalWall`. Preserve the XML-invalid input cases, valid Unicode control, revision capture assertions and all production revision/persistence code. Re-run the complete Core smoke after this fixture-only compile reconciliation.
+
+## 2026-08-12 base door-schedule host-target fixture reconciliation expansion
+
+Baseline audited after a clean fetch and fast-forward: `origin/main@5818bcec8d0331f2a28ec43de8cb0da976815d4c`.
+
+After the completed Door/opening schedule host-target integrity contract landed, the full Core smoke reaches `DoorOpeningScheduleSmoke.cs`: its intended-valid grouped Door and WallOpening cases assign canonical `HostWallId` values (`wall-a`/`wall-b`) but never add the referenced semantic wall elements. The builder now correctly fails closed before the intended grouping/inheritance assertions. The host-target claim is `COMPLETED`; this fixture is already reserved by the active base-schedule reconciliation expansion, and the current ACTIVE/BLOCKED audit found no overlapping owner.
+
+Extend the existing reservation for `tests/QS3D.Core.SmokeTests/DoorOpeningScheduleSmoke.cs` only to add the minimum matching `ArchitecturalWall` host elements for the intended-valid host IDs. Preserve door/opening rows, dimensions, distinct-host counts, grouping, inheritance/override behavior, invalid numeric case and all production reporting/domain code. Re-run the complete Core smoke after this fixture-data-only reconciliation.
