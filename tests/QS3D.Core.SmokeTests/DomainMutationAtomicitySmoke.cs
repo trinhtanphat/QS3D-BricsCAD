@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
+            ProjectElementDirtyNoneDoesNotCommit();
             FamilyPropertyOverflowDoesNotCommit();
             FloorAssignmentOverflowDoesNotCommit();
             ZoneAssignmentOverflowDoesNotCommit();
@@ -22,6 +23,33 @@ namespace QS3D.Core.SmokeTests
             AutoRoomFamilySyncOverflowDoesNotCommit();
             MaterialRenameOverflowDoesNotCommit();
             MaterialDeleteOverflowDoesNotCommit();
+        }
+
+        private static void ProjectElementDirtyNoneDoesNotCommit()
+        {
+            var element = new ProjectElement("E-DIRTY-NONE", ElementCategory.Room);
+            var dirtyBefore = element.Dirty;
+            var dirtyUtcBefore = element.UpdatedUtc;
+
+            System.Threading.Thread.Sleep(50);
+            element.MarkDirty(ElementDirtyFlags.None);
+
+            Equal(dirtyBefore, element.Dirty, "MarkDirty(None) changed dirty flags.");
+            Equal(dirtyUtcBefore, element.UpdatedUtc, "MarkDirty(None) changed UpdatedUtc.");
+
+            element.MarkClean(ElementDirtyFlags.All);
+            Equal(ElementDirtyFlags.None, element.Dirty, "Fixture failed to establish a clean element.");
+            var cleanUtcBefore = element.UpdatedUtc;
+
+            System.Threading.Thread.Sleep(50);
+            element.MarkClean(ElementDirtyFlags.None);
+
+            Equal(ElementDirtyFlags.None, element.Dirty, "MarkClean(None) changed dirty flags.");
+            Equal(cleanUtcBefore, element.UpdatedUtc, "MarkClean(None) changed UpdatedUtc.");
+
+            var undefined = (ElementDirtyFlags)16;
+            Throws<ArgumentOutOfRangeException>(() => element.MarkDirty(undefined));
+            Throws<ArgumentOutOfRangeException>(() => element.MarkClean(undefined));
         }
 
         private static void FamilyPropertyOverflowDoesNotCommit()

@@ -1,0 +1,21 @@
+# Agent work claim — Semantic Untrack post-commit UI boundary
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-12 (UTC+7)
+- Status: `COMPLETED`
+- Scope: prevent `QS3DUNTRACK` / `QS3DUNTRACKFINISH` from reporting a committed semantic untrack as a business failure when only palette/editor finalization fails afterward.
+- Files reserved during implementation:
+  - `src/QS3D.BricsCAD.V25/ViewportCommands.cs`
+  - `scripts/preflight-untrack-postcommit-ui.py`
+  - this claim file
+- Implemented contract:
+  - selection, existing-project bind, `SemanticUntrackService.Untrack` and its dependency/atomic/revision semantics are unchanged;
+  - mutation/business exceptions are still reported as failures through best-effort error UI;
+  - after `SemanticUntrackService.Untrack` returns successfully, palette refresh/status/editor reporting runs only through best-effort `FinalizeUntrackUi` and cannot enter the business-failure path;
+  - zero-result untrack remains a successful semantic no-op with success-style reporting;
+  - zoom/view/model-space commands and native viewport behavior are untouched.
+- Source commit: `d1fdf6c045a8e80624d0fee46dc781c230580773` — `fix(viewport): isolate untrack post-commit UI`.
+- Regression guard: `a817371107538d5df7956cc7b535a413361c1ead` — `scripts/preflight-untrack-postcommit-ui.py`.
+- Validation actually performed: connector-side exact source diff review plus regression-guard source review. The preflight script was not executed in this web session.
+- No GitHub Actions dispatched. No BricsCAD V25 runtime PASS claimed.
+- Reservation released.

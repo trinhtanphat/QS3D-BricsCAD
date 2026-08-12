@@ -115,6 +115,12 @@ namespace QS3D.BricsCAD.V25.Updates
                 if (manifest != null && TryGitHubUri(manifest.BrowserDownloadUrl, out var candidate) && candidate != null)
                     manifestUri = candidate;
 
+                // Repository releases are shared by multiple BricsCAD host majors. A release
+                // belongs to this update channel only when it carries this client's exact
+                // host-major signed manifest asset. Ignore other-major/manual-only releases
+                // before latest-version selection instead of surfacing a false cross-channel update.
+                if (manifestUri == null) continue;
+
                 var publishedUtc = DateTime.MinValue;
                 var publishedAt = release.PublishedAt;
                 if (publishedAt != null && publishedAt.Trim().Length != 0)

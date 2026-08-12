@@ -12,7 +12,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             SaveLoadRoundTripsValidatedState();
-            PresentationStateDoesNotInvalidateSemanticVersion();
+            PresentationStateMutationsAdvanceProjectVersion();
             RepeatedSaveIsIdempotent();
             CorruptStateFailsClosed();
             UnsupportedSchemaShapeFailsClosed();
@@ -41,7 +41,7 @@ namespace QS3D.Core.SmokeTests
             var store = new ProjectBrowserWorkspaceStateStore();
             var beforeVersion = project.ChangeVersion;
             True(store.Save(project, state));
-            Equal(beforeVersion, project.ChangeVersion);
+            Equal(checked(beforeVersion + 1L), project.ChangeVersion);
             True(project.Metadata.ContainsKey(ProjectBrowserWorkspaceStateStore.MetadataKey));
 
             var loaded = store.Load(project);
@@ -59,16 +59,16 @@ namespace QS3D.Core.SmokeTests
             Equal("B-002", loaded.PrimaryElementId);
         }
 
-        private static void PresentationStateDoesNotInvalidateSemanticVersion()
+        private static void PresentationStateMutationsAdvanceProjectVersion()
         {
             var project = BuildProject();
             project.Touch();
             var semanticVersion = project.ChangeVersion;
             var store = new ProjectBrowserWorkspaceStateStore();
             True(store.Save(project, ValidState(project)));
-            Equal(semanticVersion, project.ChangeVersion);
+            Equal(checked(semanticVersion + 1L), project.ChangeVersion);
             True(store.Clear(project));
-            Equal(semanticVersion, project.ChangeVersion);
+            Equal(checked(semanticVersion + 2L), project.ChangeVersion);
         }
 
         private static void RepeatedSaveIsIdempotent()
@@ -107,6 +107,7 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidDataException>(() => store.Deserialize(valid.Replace("<Id>F-02</Id>", "<Id future=\"x\">F-02</Id>")));
             Throws<InvalidDataException>(() => store.Deserialize(valid.Replace("<Id>Z-A</Id>", "<Id><Future>Z-A</Future></Id>")));
             Throws<InvalidDataException>(() => store.Deserialize(valid.Replace("<SelectedElementIds>", "<SelectedElementIds><!--future-->")));
+            Throws<InvalidDataException>(() => store.Deserialize(valid.Replace("<Categories>", "<Categories/><future:Categories xmlns:future=\"urn:future\"><future:Category>Beam</future:Category></future:Categories><Categories>")));
         }
 
         private static void StaleSelectionFailsClosed()
@@ -126,10 +127,11 @@ namespace QS3D.Core.SmokeTests
             True(store.Save(project, ValidState(project)));
             var version = project.ChangeVersion;
             True(store.Clear(project));
-            Equal(version, project.ChangeVersion);
+            var afterClear = checked(version + 1L);
+            Equal(afterClear, project.ChangeVersion);
             True(!project.Metadata.ContainsKey(ProjectBrowserWorkspaceStateStore.MetadataKey));
             True(!store.Clear(project));
-            Equal(version, project.ChangeVersion);
+            Equal(afterClear, project.ChangeVersion);
         }
 
         private static ProjectBrowserWorkspaceState ValidState(ProjectState project)

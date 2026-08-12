@@ -47,9 +47,17 @@ namespace QS3D.Core.SmokeTests
                 }
                 File.WriteAllText(path, "ORIGINAL");
                 var invalidRow = new MaterialUsageRow { FamilyName = "Invalid\u0001Family" };
-                try { MaterialUsageXlsxExporter.Export(path, new List<MaterialUsageRow> { invalidRow }); throw new Exception("Invalid XML text must reject material XLSX export."); }
-                catch (XmlException) { }
-                if (File.ReadAllText(path) != "ORIGINAL") throw new Exception("Rejected material XLSX export replaced the existing destination.");
+                MaterialUsageXlsxExporter.Export(path, new List<MaterialUsageRow> { invalidRow });
+                using (var archive = ZipFile.OpenRead(path))
+                {
+                    var worksheet = archive.GetEntry("xl/worksheets/sheet1.xml") ?? throw new Exception("Sanitized material XLSX worksheet is missing.");
+                    using (var reader = new StreamReader(worksheet.Open()))
+                    {
+                        var xml = reader.ReadToEnd();
+                        if (xml.IndexOf('\u0001') >= 0) throw new Exception("Material XLSX retained an XML-invalid control character.");
+                        if (xml.IndexOf('\uFFFD') < 0) throw new Exception("Material XLSX did not preserve the sanitized replacement marker.");
+                    }
+                }
             }
             finally
             {

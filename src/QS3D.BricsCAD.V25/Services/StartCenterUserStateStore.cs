@@ -161,7 +161,7 @@ namespace QS3D.BricsCAD.V25.Services
                 normalized = full;
                 return true;
             }
-            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException)
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException || ex is System.Security.SecurityException)
             {
                 return false;
             }
@@ -172,48 +172,52 @@ namespace QS3D.BricsCAD.V25.Services
             var state = new StartCenterUserStateSnapshot();
             try
             {
-                var path = SettingsPath();
-                if (!File.Exists(path)) return state;
-                var info = new FileInfo(path);
-                if (info.Length < 0 || info.Length > MaxFileBytes) return state;
-
-                foreach (var raw in File.ReadAllLines(path, Encoding.UTF8))
+                if (!TrySettingsPath(out var path)) return state;
+                using (var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read))
                 {
-                    var line = (raw ?? string.Empty).Trim();
-                    if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal)) continue;
-
-                    if (line.StartsWith("F=", StringComparison.Ordinal))
+                    if (stream.Length < 0 || stream.Length > MaxFileBytes) return state;
+                    using (var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, false))
                     {
-                        var command = Decode(line.Substring(2));
-                        if (StartCenterCommandCatalog.TryGet(command, out var favorite)) state.FavoriteCommands.Add(favorite.Command);
-                        continue;
+                        string? raw;
+                        while ((raw = reader.ReadLine()) != null)
+                        {
+                            var line = raw.Trim();
+                            if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal)) continue;
+
+                            if (line.StartsWith("F=", StringComparison.Ordinal))
+                            {
+                                if (!TryDecode(line.Substring(2), out var command)) continue;
+                                if (StartCenterCommandCatalog.TryGet(command, out var favorite)) state.FavoriteCommands.Add(favorite.Command);
+                                continue;
+                            }
+
+                            if (line.StartsWith("C=", StringComparison.Ordinal))
+                            {
+                                if (!TryDecode(line.Substring(2), out var command)) continue;
+                                if (StartCenterCommandCatalog.TryGet(command, out var recent)) state.RecentCommands.Add(recent.Command);
+                                continue;
+                            }
+
+                            if (!line.StartsWith("P=", StringComparison.Ordinal)) continue;
+                            var parts = line.Substring(2).Split(new[] { '|' }, 3);
+                            if (parts.Length != 3) continue;
+                            if (!long.TryParse(parts[1], out var ticks) || ticks < DateTime.MinValue.Ticks || ticks > DateTime.MaxValue.Ticks) continue;
+                            if (!TryDecode(parts[2], out var decoded)) continue;
+                            if (!TryNormalizeDwgPath(decoded, out var normalized)) continue;
+                            state.RecentProjects.Add(new StartCenterRecentProject
+                            {
+                                IsPinned = string.Equals(parts[0], "1", StringComparison.Ordinal),
+                                LastOpenedUtc = new DateTime(ticks, DateTimeKind.Utc),
+                                Path = normalized
+                            });
+                        }
                     }
-
-                    if (line.StartsWith("C=", StringComparison.Ordinal))
-                    {
-                        var command = Decode(line.Substring(2));
-                        if (StartCenterCommandCatalog.TryGet(command, out var recent)) state.RecentCommands.Add(recent.Command);
-                        continue;
-                    }
-
-                    if (!line.StartsWith("P=", StringComparison.Ordinal)) continue;
-                    var parts = line.Substring(2).Split(new[] { '|' }, 3);
-                    if (parts.Length != 3) continue;
-                    if (!long.TryParse(parts[1], out var ticks) || ticks < DateTime.MinValue.Ticks || ticks > DateTime.MaxValue.Ticks) continue;
-                    var decoded = Decode(parts[2]);
-                    if (!TryNormalizeDwgPath(decoded, out var normalized)) continue;
-                    state.RecentProjects.Add(new StartCenterRecentProject
-                    {
-                        IsPinned = string.Equals(parts[0], "1", StringComparison.Ordinal),
-                        LastOpenedUtc = new DateTime(ticks, DateTimeKind.Utc),
-                        Path = normalized
-                    });
                 }
             }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
-            catch (FormatException) { }
             catch (ArgumentException) { }
+            catch (System.Security.SecurityException) { }
 
             return Normalize(state);
         }
@@ -262,12 +266,14 @@ namespace QS3D.BricsCAD.V25.Services
             string? temp = null;
             try
             {
-                var path = SettingsPath();
+                if (!TrySettingsPath(out var path)) return;
                 var directory = System.IO.Path.GetDirectoryName(path);
                 if (string.IsNullOrWhiteSpace(directory)) return;
+                var serialized = Serialize(state);
+                if (Encoding.UTF8.GetByteCount(serialized) > MaxFileBytes) return;
                 Directory.CreateDirectory(directory);
                 temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-                File.WriteAllText(temp, Serialize(state), new UTF8Encoding(false));
+                File.WriteAllText(temp, serialized, new UTF8Encoding(false));
                 if (!File.Exists(path))
                 {
                     File.Move(temp, path);
@@ -296,6 +302,7 @@ namespace QS3D.BricsCAD.V25.Services
             catch (UnauthorizedAccessException) { }
             catch (NotSupportedException) { }
             catch (ArgumentException) { }
+            catch (System.Security.SecurityException) { }
             finally
             {
                 if (!string.IsNullOrWhiteSpace(temp)) TryDelete(temp!);
@@ -321,15 +328,42 @@ namespace QS3D.BricsCAD.V25.Services
             return builder.ToString();
         }
 
-        private static string SettingsPath()
+        private static bool TrySettingsPath(out string path)
         {
-            var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            if (string.IsNullOrWhiteSpace(root)) throw new InvalidOperationException("LocalApplicationData is unavailable.");
-            return System.IO.Path.Combine(root, "QS3D", "BricsCAD-V25", "start-center-v1.txt");
+            path = string.Empty;
+            try
+            {
+                var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                if (string.IsNullOrWhiteSpace(root)) return false;
+                path = System.IO.Path.Combine(root, "QS3D", "BricsCAD-V25", "start-center-v1.txt");
+                return true;
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is System.Security.SecurityException)
+            {
+                path = string.Empty;
+                return false;
+            }
         }
 
         private static string Encode(string value) => Convert.ToBase64String(Encoding.UTF8.GetBytes(value ?? string.Empty));
-        private static string Decode(string value) => Encoding.UTF8.GetString(Convert.FromBase64String(value ?? string.Empty));
+
+        private static bool TryDecode(string value, out string decoded)
+        {
+            decoded = string.Empty;
+            try
+            {
+                decoded = Encoding.UTF8.GetString(Convert.FromBase64String(value ?? string.Empty));
+                return true;
+            }
+            catch (FormatException)
+            {
+                return false;
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+        }
 
         private static void RemoveCommand(IList<string> commands, string command)
         {
@@ -361,6 +395,7 @@ namespace QS3D.BricsCAD.V25.Services
             try { if (!string.IsNullOrWhiteSpace(path) && File.Exists(path)) File.Delete(path); }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
+            catch (System.Security.SecurityException) { }
         }
     }
 }

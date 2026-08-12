@@ -1,0 +1,26 @@
+# Agent work claim — Semantic Untrack read-only target resolve
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-12 (UTC+7)
+- Status: `COMPLETED`
+- Scope: make `QS3DUNTRACK` / `QS3DUNTRACKFINISH` resolve semantic ownership from read-only project state before canonical mutation binding, no-op zero targets without binding, and revalidate target freshness before the existing Core untrack executor.
+- Files reserved during implementation:
+  - `src/QS3D.BricsCAD.V25/ViewportCommands.cs`
+  - `scripts/preflight-untrack-single-bind.py`
+  - this claim file
+- Implemented contract:
+  - existing PICKFIRST-only selection behavior is preserved;
+  - ownership/predicate targets resolve from `ProjectContextCoordinator.TryGetReadOnly` before mutation binding;
+  - missing project remains a business failure while zero semantic targets use the successful zero-result/no-op path without `ExistingProjectMutationContext.Require`;
+  - preview `ProjectId` + `ChangeVersion` + resolved target IDs are frozen;
+  - canonical project is bound exactly once, project/version and target-set drift fail closed, then the unchanged `SemanticUntrackService.Untrack` performs dependency-safe atomic mutation;
+  - read-only target resolution is isolated from the mutation try so zero-target UI remains outside the post-commit business-failure boundary;
+  - dependency safety, rollback/revision semantics and post-commit UI isolation remain unchanged.
+- Source commits:
+  - `7ab6fe480a5b53a59dcdf5cde3e57de453ee1e2c` — `fix(viewport): resolve untrack targets before bind`.
+  - `12c2d8ae7caa8394576146bb60b54c120245f65a` — `fix(viewport): split untrack read-only preflight`.
+- Regression guard: `eb9fc91cd213ab732f152b78d36fbde5e55c9934` — `scripts/preflight-untrack-single-bind.py`.
+- Compatibility validation: reviewed current `scripts/preflight-untrack-postcommit-ui.py`; final source keeps zero-target UI outside the mutation try and preserves its post-commit boundary contract.
+- Validation actually performed: connector-side source/diff review plus both guard source reviews. Preflight scripts were not executed in this web session.
+- No GitHub Actions dispatched. No BricsCAD V25 runtime PASS claimed.
+- Reservation released.

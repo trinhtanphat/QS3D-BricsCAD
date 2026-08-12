@@ -102,8 +102,8 @@ namespace QS3D.Core.Domain
             if (normalized.Length == 0) return null;
             var matches = ResolveProjectElements(project)
                 .Where(IsAutoRoom)
-                .Where(x => string.Equals(x.FloorId, floorId ?? string.Empty, StringComparison.OrdinalIgnoreCase))
-                .Where(x => string.Equals(x.ZoneId, zoneId ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+                .Where(x => SameScopeId(x.FloorId, floorId))
+                .Where(x => SameScopeId(x.ZoneId, zoneId))
                 .Where(x => string.Equals(SourceSignature(x), normalized, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
@@ -121,8 +121,8 @@ namespace QS3D.Core.Domain
             var stale = ResolveProjectElements(project)
                 .Where(IsAutoRoom)
                 .Where(room => !activeRoomIds.Contains(room.Id))
-                .Where(room => string.Equals(room.FloorId, floorId ?? string.Empty, StringComparison.OrdinalIgnoreCase))
-                .Where(room => string.Equals(room.ZoneId, zoneId ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+                .Where(room => SameScopeId(room.FloorId, floorId))
+                .Where(room => SameScopeId(room.ZoneId, zoneId))
                 .Where(room =>
                 {
                     var handles = SourceSignature(room).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
@@ -267,11 +267,16 @@ namespace QS3D.Core.Domain
                     var room = project.FindElement(roomId);
                     if (room == null || room.Category != ElementCategory.Room) return true;
                     if (IsStaleAutoRoom(room)) return true;
-                    if (!string.Equals(room.FloorId, element.FloorId, StringComparison.OrdinalIgnoreCase) ||
-                        !string.Equals(room.ZoneId, element.ZoneId, StringComparison.OrdinalIgnoreCase)) return true;
+                    if (!SameScopeId(room.FloorId, element.FloorId) ||
+                        !SameScopeId(room.ZoneId, element.ZoneId)) return true;
                 }
             }
             return false;
+        }
+
+        private static bool SameScopeId(string? left, string? right)
+        {
+            return string.Equals((left ?? string.Empty).Trim(), (right ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
         private static IReadOnlyList<ProjectElement> ResolveProjectElements(ProjectState project)

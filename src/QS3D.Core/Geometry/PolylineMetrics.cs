@@ -8,18 +8,26 @@ namespace QS3D.Core.Geometry
         public static double Length(IReadOnlyList<Point2> points, bool closed)
         {
             if (points == null) throw new ArgumentNullException(nameof(points));
-            if (points.Count < 2) return 0d;
+            if (points.Count < 2)
+            {
+                EnsureFinite(points);
+                return 0d;
+            }
 
             double total = 0d;
             for (var i = 1; i < points.Count; i++) total = AddFinite(total, points[i - 1].DistanceTo(points[i]));
-            if (closed && points.Count > 2) total = AddFinite(total, points[points.Count - 1].DistanceTo(points[0]));
+            if (closed) total = AddFinite(total, points[points.Count - 1].DistanceTo(points[0]));
             return total;
         }
 
         public static double SignedArea(IReadOnlyList<Point2> points)
         {
             if (points == null) throw new ArgumentNullException(nameof(points));
-            if (points.Count < 3) return 0d;
+            if (points.Count < 3)
+            {
+                EnsureFinite(points);
+                return 0d;
+            }
 
             var origin = points[0];
             EnsureFinite(origin);
@@ -34,7 +42,7 @@ namespace QS3D.Core.Geometry
                 var ay = SubtractFinite(points[i].Y, origin.Y);
                 var bx = SubtractFinite(points[i + 1].X, origin.X);
                 var by = SubtractFinite(points[i + 1].Y, origin.Y);
-                var cross = SubtractFinite(MultiplyFinite(ax, by), MultiplyFinite(ay, bx));
+                var cross = CrossFinite(ax, ay, bx, by);
 
                 var corrected = cross - compensation;
                 var next = sum + corrected;
@@ -49,6 +57,11 @@ namespace QS3D.Core.Geometry
         }
 
         public static double Area(IReadOnlyList<Point2> points) => Math.Abs(SignedArea(points));
+
+        private static void EnsureFinite(IReadOnlyList<Point2> points)
+        {
+            for (var i = 0; i < points.Count; i++) EnsureFinite(points[i]);
+        }
 
         private static void EnsureFinite(Point2 point)
         {
@@ -70,9 +83,21 @@ namespace QS3D.Core.Geometry
             return value;
         }
 
-        private static double MultiplyFinite(double first, double second)
+        private static double CrossFinite(double ax, double ay, double bx, double by)
         {
-            var value = first * second;
+            var scaleA = Math.Max(Math.Abs(ax), Math.Abs(ay));
+            var scaleB = Math.Max(Math.Abs(bx), Math.Abs(by));
+            if (!Finite(scaleA) || !Finite(scaleB)) throw new OverflowException("Polyline area input exceeds the supported numeric range.");
+            if (scaleA == 0d || scaleB == 0d) return 0d;
+
+            var normalized = ax / scaleA * (by / scaleB) - ay / scaleA * (bx / scaleB);
+            if (!Finite(normalized)) throw new OverflowException("Polyline area exceeds the supported numeric range.");
+
+            var firstScale = Math.Min(scaleA, scaleB);
+            var secondScale = Math.Max(scaleA, scaleB);
+            var scaled = normalized * firstScale;
+            if (!Finite(scaled)) throw new OverflowException("Polyline area exceeds the supported numeric range.");
+            var value = scaled * secondScale;
             if (!Finite(value)) throw new OverflowException("Polyline area exceeds the supported numeric range.");
             return value;
         }

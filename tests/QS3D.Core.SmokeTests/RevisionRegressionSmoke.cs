@@ -9,9 +9,16 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             CaptureRejectsNonFiniteQuantities();
+            CaptureRejectsDuplicateElementIds();
+            CaptureRejectsPaddedReferenceIds();
+            CaptureRejectsNonCanonicalMapKeys();
             QuantityDiffRejectsOverflow();
+            QuantityDiffRejectsNonCanonicalPayload();
             SummaryRejectsOverflow();
             DuplicateElementIdsAreRejected();
+            PaddedElementIdsAreRejected();
+            CompareRejectsPaddedReferenceIds();
+            CompareRejectsMalformedElementPayload();
         }
 
         private static void CaptureRejectsNonFiniteQuantities()
@@ -23,12 +30,72 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => new RevisionService().Capture(project, "bad"));
         }
 
+        private static void CaptureRejectsDuplicateElementIds()
+        {
+            var project = NewProject();
+            project.Elements.Add(new ProjectElement("E1", ElementCategory.Beam, string.Empty, "f", "z"));
+            project.Elements.Add(new ProjectElement("e1", ElementCategory.Beam, string.Empty, "f", "z"));
+            Throws<InvalidOperationException>(() => new RevisionService().Capture(project, "duplicate-capture"));
+        }
+
+        private static void CaptureRejectsPaddedReferenceIds()
+        {
+            var familyProject = NewProject();
+            var familyElement = new ProjectElement("E-FAMILY", ElementCategory.Beam, string.Empty, "f", "z") { FamilyId = " F1 " };
+            familyProject.Elements.Add(familyElement);
+            Throws<InvalidOperationException>(() => new RevisionService().Capture(familyProject, "padded-family"));
+
+            var floorProject = NewProject();
+            var floorElement = new ProjectElement("E-FLOOR", ElementCategory.Beam, string.Empty, "f", "z") { FloorId = " f " };
+            floorProject.Elements.Add(floorElement);
+            Throws<InvalidOperationException>(() => new RevisionService().Capture(floorProject, "padded-floor"));
+
+            var zoneProject = NewProject();
+            var zoneElement = new ProjectElement("E-ZONE", ElementCategory.Beam, string.Empty, "f", "z") { ZoneId = " z " };
+            zoneProject.Elements.Add(zoneElement);
+            Throws<InvalidOperationException>(() => new RevisionService().Capture(zoneProject, "padded-zone"));
+        }
+
+        private static void CaptureRejectsNonCanonicalMapKeys()
+        {
+            var propertyProject = NewProject();
+            var propertyElement = new ProjectElement("E-PROP", ElementCategory.Beam, string.Empty, "f", "z");
+            propertyElement.Properties[" Mark "] = "B1";
+            propertyProject.Elements.Add(propertyElement);
+            Throws<InvalidOperationException>(() => new RevisionService().Capture(propertyProject, "padded-property-key"));
+
+            var quantityProject = NewProject();
+            var quantityElement = new ProjectElement("E-QUANTITY", ElementCategory.Beam, string.Empty, "f", "z");
+            quantityElement.Quantities[" Q "] = 1d;
+            quantityProject.Elements.Add(quantityElement);
+            Throws<InvalidOperationException>(() => new RevisionService().Capture(quantityProject, "padded-quantity-key"));
+        }
+
         private static void QuantityDiffRejectsOverflow()
         {
             var before = Snapshot("before", "E1", double.MaxValue);
             var after = Snapshot("after", "E1", -double.MaxValue);
             Throws<OverflowException>(() => new QuantityRevisionReport().Build(before, after));
             Throws<OverflowException>(() => new RevisionService().Compare(before, after));
+        }
+
+        private static void QuantityDiffRejectsNonCanonicalPayload()
+        {
+            var paddedBefore = Snapshot("quantity-padded-before", "E1", 1d);
+            paddedBefore.Elements[0].Quantities.Clear();
+            paddedBefore.Elements[0].Quantities[" Q "] = 1d;
+            var paddedAfter = Snapshot("quantity-padded-after", "E1", 1d);
+            paddedAfter.Elements[0].Quantities.Clear();
+            paddedAfter.Elements[0].Quantities[" Q "] = 1d;
+            Throws<InvalidOperationException>(() => new QuantityRevisionReport().Build(paddedBefore, paddedAfter));
+
+            var badCategory = Snapshot("quantity-bad-category", "E1", 1d);
+            badCategory.Elements[0].Category = "beam";
+            var empty = new RevisionSnapshot { Id = "empty", CreatedUtc = DateTime.UtcNow };
+            Throws<InvalidOperationException>(() => new QuantityRevisionReport().Build(empty, badCategory));
+
+            var nonFinite = Snapshot("quantity-non-finite", "E1", double.NaN);
+            Throws<InvalidOperationException>(() => new QuantityRevisionReport().Build(empty, nonFinite));
         }
 
         private static void SummaryRejectsOverflow()
@@ -50,6 +117,72 @@ namespace QS3D.Core.SmokeTests
             var empty = new RevisionSnapshot { Id = "empty", CreatedUtc = DateTime.UtcNow };
             Throws<InvalidOperationException>(() => new QuantityRevisionReport().Build(snapshot, empty));
             Throws<InvalidOperationException>(() => new RevisionService().Compare(snapshot, empty));
+        }
+
+        private static void PaddedElementIdsAreRejected()
+        {
+            var padded = Snapshot("padded", " E1 ", 1d);
+            var canonical = Snapshot("canonical", "E1", 1d);
+            Throws<InvalidOperationException>(() => new QuantityRevisionReport().Build(padded, canonical));
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(padded, canonical));
+
+            var collision = Snapshot("collision", "E1", 1d);
+            var paddedCollision = new RevisionElementSnapshot { ElementId = " E1 ", Category = "Beam" };
+            paddedCollision.Quantities["Q"] = 2d;
+            collision.Elements.Add(paddedCollision);
+            var empty = new RevisionSnapshot { Id = "empty", CreatedUtc = DateTime.UtcNow };
+            Throws<InvalidOperationException>(() => new QuantityRevisionReport().Build(collision, empty));
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(collision, empty));
+        }
+
+        private static void CompareRejectsPaddedReferenceIds()
+        {
+            var canonical = Snapshot("canonical-references", "E1", 1d);
+            canonical.Elements[0].FamilyId = "F1";
+            canonical.Elements[0].FloorId = "FLOOR-1";
+            canonical.Elements[0].ZoneId = "ZONE-1";
+
+            var paddedFamily = Snapshot("padded-family-reference", "E1", 1d);
+            paddedFamily.Elements[0].FamilyId = " F1 ";
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(paddedFamily, canonical));
+
+            var paddedFloor = Snapshot("padded-floor-reference", "E1", 1d);
+            paddedFloor.Elements[0].FloorId = " FLOOR-1 ";
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(paddedFloor, canonical));
+
+            var paddedZone = Snapshot("padded-zone-reference", "E1", 1d);
+            paddedZone.Elements[0].ZoneId = " ZONE-1 ";
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(paddedZone, canonical));
+        }
+
+        private static void CompareRejectsMalformedElementPayload()
+        {
+            var empty = new RevisionSnapshot { Id = "empty", CreatedUtc = DateTime.UtcNow };
+
+            var badCategory = Snapshot("compare-bad-category", "E1", 1d);
+            badCategory.Elements[0].Category = "beam";
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(empty, badCategory));
+
+            var badProperty = Snapshot("compare-bad-property", "E1", 1d);
+            badProperty.Elements[0].Properties[" Mark "] = "B1";
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(empty, badProperty));
+
+            var badQuantityKey = Snapshot("compare-bad-quantity-key", "E1", 1d);
+            badQuantityKey.Elements[0].Quantities.Clear();
+            badQuantityKey.Elements[0].Quantities[" Q "] = 1d;
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(empty, badQuantityKey));
+
+            var nonFinite = Snapshot("compare-non-finite", "E1", double.NaN);
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(empty, nonFinite));
+
+            var paddedSourceHandle = Snapshot("compare-padded-source", "E1", 1d);
+            paddedSourceHandle.Elements[0].SourceHandles.Add(" H1 ");
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(empty, paddedSourceHandle));
+
+            var duplicateDependency = Snapshot("compare-duplicate-dependency", "E1", 1d);
+            duplicateDependency.Elements[0].Dependencies.Add("D1");
+            duplicateDependency.Elements[0].Dependencies.Add("d1");
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(empty, duplicateDependency));
         }
 
         private static RevisionSnapshot Snapshot(string id, string elementId, double quantity)

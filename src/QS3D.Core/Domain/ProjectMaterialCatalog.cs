@@ -7,6 +7,8 @@ namespace QS3D.Core.Domain
 {
     public sealed class ProjectMaterial
     {
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
+
         public ProjectMaterial(string id, string name, string unit, string description, bool builtIn)
         {
             Id = Required(id, nameof(id), 64);
@@ -26,6 +28,7 @@ namespace QS3D.Core.Domain
         {
             var text = (value ?? string.Empty).Trim();
             if (text.Length == 0 || text.Length > max) throw new ArgumentException(name + " must contain 1.." + max + " characters.", name);
+            RequireWellFormedUnicode(text, name);
             return text;
         }
 
@@ -33,7 +36,20 @@ namespace QS3D.Core.Domain
         {
             var text = (value ?? string.Empty).Trim();
             if (text.Length > max) throw new ArgumentException(name + " must contain at most " + max + " characters.", name);
+            RequireWellFormedUnicode(text, name);
             return text;
+        }
+
+        private static void RequireWellFormedUnicode(string text, string name)
+        {
+            try
+            {
+                StrictUtf8.GetByteCount(text);
+            }
+            catch (EncoderFallbackException)
+            {
+                throw new ArgumentException(name + " must contain well-formed Unicode text.", name);
+            }
         }
     }
 
@@ -41,6 +57,7 @@ namespace QS3D.Core.Domain
     {
         public const string MetadataKey = "QS3D.MaterialCatalog.v1";
         private const int MaxCustomMaterials = 500;
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         private static readonly ProjectMaterial[] BuiltIns =
         {
@@ -88,7 +105,9 @@ namespace QS3D.Core.Domain
             string? previousName = null;
             if (byId >= 0)
             {
-                previousName = custom[byId].Name;
+                var existing = custom[byId];
+                if (SameMaterial(existing, material)) return existing;
+                previousName = existing.Name;
                 custom[byId] = material;
             }
             else
@@ -148,8 +167,9 @@ namespace QS3D.Core.Domain
             }
             foreach (var element in scope.Elements)
             {
-                RenameElementReference(element, "Material", previousName, nextName, inheritedMaterialFamilies.Contains(element.FamilyId));
-                RenameElementReference(element, "CurtainFrameMaterial", previousName, nextName, inheritedFrameFamilies.Contains(element.FamilyId));
+                var familyId = (element.FamilyId ?? string.Empty).Trim();
+                RenameElementReference(element, "Material", previousName, nextName, inheritedMaterialFamilies.Contains(familyId));
+                RenameElementReference(element, "CurtainFrameMaterial", previousName, nextName, inheritedFrameFamilies.Contains(familyId));
             }
         }
 
@@ -211,16 +231,25 @@ namespace QS3D.Core.Domain
             if (properties.TryGetValue("CurtainFrameMaterial", out var frame) && !string.IsNullOrWhiteSpace(frame)) names.Add(frame.Trim());
         }
 
+        private static bool SameMaterial(ProjectMaterial left, ProjectMaterial right)
+        {
+            return string.Equals(left.Name, right.Name, StringComparison.Ordinal) &&
+                   string.Equals(left.Unit, right.Unit, StringComparison.Ordinal) &&
+                   string.Equals(left.Description, right.Description, StringComparison.Ordinal);
+        }
+
         private static List<ProjectMaterial> ReadCustom(ProjectState project)
         {
             if (!project.Metadata.TryGetValue(MetadataKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return new List<ProjectMaterial>();
-            var lines = raw.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            var lines = raw.Split(new[] { '\n' }, StringSplitOptions.None);
             if (lines.Length > MaxCustomMaterials) throw new InvalidOperationException("Stored material catalog exceeds the supported custom-material limit.");
             var result = new List<ProjectMaterial>(lines.Length);
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (var index = 0; index < lines.Length; index++)
             {
+                if (string.IsNullOrWhiteSpace(lines[index]))
+                    throw new InvalidOperationException("Material catalog contains an empty record at line " + (index + 1) + ".");
                 var fields = lines[index].Split('|');
                 if (fields.Length != 4) throw new InvalidOperationException("Invalid material catalog record at line " + (index + 1) + ".");
                 var material = new ProjectMaterial(Decode(fields[0]), Decode(fields[1]), Decode(fields[2]), Decode(fields[3]), false);
@@ -255,8 +284,11 @@ namespace QS3D.Core.Domain
 
         private static string Decode(string value)
         {
-            try { return Encoding.UTF8.GetString(Convert.FromBase64String(value ?? string.Empty)); }
-            catch (FormatException ex) { throw new InvalidOperationException("Material catalog contains invalid Base64 data.", ex); }
+            try { return StrictUtf8.GetString(Convert.FromBase64String(value ?? string.Empty)); }
+            catch (Exception ex) when (ex is FormatException || ex is DecoderFallbackException)
+            {
+                throw new InvalidOperationException("Material catalog contains invalid Base64 or UTF-8 data.", ex);
+            }
         }
 
         private sealed class MaterialReferenceScope

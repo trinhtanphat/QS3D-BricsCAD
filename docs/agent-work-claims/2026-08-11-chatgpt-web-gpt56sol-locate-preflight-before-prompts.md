@@ -1,0 +1,22 @@
+# Agent work claim — Locate preflight before prompts
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-11 (UTC+7)
+- Status: `COMPLETED`
+- Scope: source-safe low-click lifecycle for generic `QS3DLOCATE` and `QS3DEXCELLOCATE` in `Commands.cs`.
+- Files reserved during implementation:
+  - `src/QS3D.BricsCAD.V25/Commands.cs`
+  - `scripts/preflight-locate-before-user-input.py`
+  - this claim file
+- Completed commits:
+  - `c5a508cc2a39a1d9dd706a13fcddffd5f37cbb78` — existing-project preflight now precedes generic Locate text prompt and Excel Locate file/row prompts.
+  - `e27bf9a17be1a29a20e84b65613ea21ccb6c1005` — focused static ordering/non-creation guard.
+- Verified source contract:
+  - `QS3DLOCATE` stays inside its existing Guard, requires `TryGetReadOnly` project, then asks for Element Id;
+  - `QS3DEXCELLOCATE` requires `TryGetReadOnly` project before `OpenFileDialog` and row prompt;
+  - modern Excel fingerprint resolution, legacy decimal-handle YES confirmation, partial-handle fail-closed behavior, implied-selection update and zoom gating are unchanged;
+  - neither command calls `GetOrCreate` or mutates project state.
+- Coordination: active quantity-locate stale-selection work reserves `CadHandleService`/Quantity UI and explicitly excludes Excel locate; no overlapping source was edited.
+- Validation performed: exact commit diff + current-source/preflight source review. The preflight was not executed in this web session and no GitHub Actions were dispatched.
+- Runtime boundary: no BricsCAD V25 runtime PASS claimed.
+- Reservation: released.

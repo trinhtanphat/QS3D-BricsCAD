@@ -10,17 +10,21 @@ namespace QS3D.Core.Domain
             if (double.IsNaN(bottomElevationM) || double.IsInfinity(bottomElevationM)) throw new ArgumentOutOfRangeException(nameof(bottomElevationM));
             if (double.IsNaN(topElevationM) || double.IsInfinity(topElevationM)) throw new ArgumentOutOfRangeException(nameof(topElevationM));
             if (topElevationM <= bottomElevationM) throw new ArgumentOutOfRangeException(nameof(topElevationM), "Top elevation must be above bottom elevation.");
+            var heightM = topElevationM - bottomElevationM;
+            if (double.IsNaN(heightM) || double.IsInfinity(heightM))
+                throw new ArgumentOutOfRangeException(nameof(topElevationM), "Vertical placement height must be finite.");
             UsesBottomLevel = usesBottomLevel;
             UsesTopLevel = usesTopLevel;
             BottomElevationM = bottomElevationM;
             TopElevationM = topElevationM;
+            HeightM = heightM;
         }
 
         public bool UsesBottomLevel { get; }
         public bool UsesTopLevel { get; }
         public double BottomElevationM { get; }
         public double TopElevationM { get; }
-        public double HeightM => TopElevationM - BottomElevationM;
+        public double HeightM { get; }
     }
 
     public sealed class HostedOpeningVerticalPlacement
@@ -55,7 +59,7 @@ namespace QS3D.Core.Domain
                 Property(element, ProjectFloorService.TopLevelIdKey).Length == 0 &&
                 !HasConfiguredProperty(element, ProjectFloorService.BottomLevelOffsetKey) &&
                 !HasConfiguredProperty(element, ProjectFloorService.TopLevelOffsetKey))
-                return legacyHeightM;
+                return Positive(legacyHeightM, nameof(legacyHeightM));
             return Resolve(project, element, 0d, legacyHeightM, 0d).HeightM;
         }
 

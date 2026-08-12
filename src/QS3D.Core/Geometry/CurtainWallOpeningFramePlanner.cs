@@ -65,12 +65,19 @@ namespace QS3D.Core.Geometry
             {
                 var opening = openings[i] ?? throw new InvalidOperationException("Curtain opening rectangle cannot be null.");
                 ValidateRect(opening.X_M, opening.Z_M, opening.WidthM, opening.HeightM, "opening[" + i + "]");
+
+                var expandedX = opening.X_M - clearanceM;
+                var expandedZ = opening.Z_M - clearanceM;
+                var expandedWidth = opening.WidthM + clearanceM * 2d;
+                var expandedHeight = opening.HeightM + clearanceM * 2d;
+                ValidateRect(expandedX, expandedZ, expandedWidth, expandedHeight, "expandedOpening[" + i + "]");
+
                 expandedOpenings.Add(new Rect
                 {
-                    X = opening.X_M - clearanceM,
-                    Z = opening.Z_M - clearanceM,
-                    Width = opening.WidthM + clearanceM * 2d,
-                    Height = opening.HeightM + clearanceM * 2d
+                    X = expandedX,
+                    Z = expandedZ,
+                    Width = expandedWidth,
+                    Height = expandedHeight
                 });
             }
 

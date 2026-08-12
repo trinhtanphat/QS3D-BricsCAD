@@ -49,8 +49,10 @@ namespace QS3D.Core.Services
             if (ReservedIdentityKeys.Contains(key) || LooksLikeIdentityReferenceKey(key))
                 return "Semantic identity/reference field cannot be edited as a generic property: ";
             if (key.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                key.StartsWith("Generated", StringComparison.OrdinalIgnoreCase) ||
                 key.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase) ||
-                key.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase))
+                key.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase) ||
+                key.StartsWith("QS3D.PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase))
                 return "Native/generated ownership state cannot be edited as a generic semantic property: ";
             return null;
         }

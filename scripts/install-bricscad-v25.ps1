@@ -55,6 +55,23 @@ elseif (-not [string]::Equals($signatureStatus, "Valid", [StringComparison]::Ord
     Write-Warning "Authenticode publisher validation was explicitly bypassed. Status='$signatureStatus', signer='$publisher'."
 }
 
+$windowsInstaller = New-Object -ComObject WindowsInstaller.Installer
+$database = $windowsInstaller.OpenDatabase($MsiPath, 0)
+$productNameView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductName''')
+$productNameView.Execute()
+$productNameRecord = $productNameView.Fetch()
+$productName = if ($productNameRecord) { [string]$productNameRecord.StringData(1) } else { "" }
+$productVersionView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')
+$productVersionView.Execute()
+$productVersionRecord = $productVersionView.Fetch()
+$productVersion = if ($productVersionRecord) { [string]$productVersionRecord.StringData(1) } else { "" }
+if ([string]::IsNullOrWhiteSpace($productName) -or $productName -notmatch '(?i)\bBricsCAD\b') {
+    throw "MSI ProductName does not identify BricsCAD: '$productName'."
+}
+if ([string]::IsNullOrWhiteSpace($productVersion) -or $productVersion -notmatch '^25(?:\.|$)') {
+    throw "MSI ProductVersion does not identify BricsCAD V25: '$productVersion'."
+}
+
 $arguments = New-Object System.Collections.Generic.List[string]
 $arguments.Add('/i')
 $arguments.Add('"' + $MsiPath + '"')
@@ -70,6 +87,7 @@ if (-not [string]::IsNullOrWhiteSpace($InstallDir)) {
 
 Write-Host "Verified MSI SHA-256: $actualSha256"
 if (-not [string]::IsNullOrWhiteSpace($publisher)) { Write-Host "Verified MSI signer: $publisher" }
+Write-Host "Verified MSI identity: $productName $productVersion"
 Write-Host "Installing BricsCAD V25 silently from: $MsiPath"
 $process = Start-Process -FilePath "msiexec.exe" -ArgumentList ([string]::Join(' ', $arguments)) -Wait -PassThru
 if ($process.ExitCode -ne 0 -and $process.ExitCode -ne 3010) {

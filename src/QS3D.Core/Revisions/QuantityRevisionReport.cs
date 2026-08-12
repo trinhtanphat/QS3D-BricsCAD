@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using QS3D.Core.Domain;
 
 namespace QS3D.Core.Revisions
 {
@@ -56,8 +57,18 @@ namespace QS3D.Core.Revisions
         public IReadOnlyList<QuantityRevisionSummary> Summarize(IEnumerable<QuantityRevisionRow> rows)
         {
             if (rows == null) throw new ArgumentNullException(nameof(rows));
+            var summarizable = new List<QuantityRevisionRow>();
+            var index = 0;
+            foreach (var row in rows)
+            {
+                if (row == null)
+                    throw new ArgumentException("Quantity revision summary contains a null row at index " + index + ".", nameof(rows));
+                if (!string.IsNullOrWhiteSpace(row.QuantityName)) summarizable.Add(row);
+                index++;
+            }
+
             var result = new List<QuantityRevisionSummary>();
-            foreach (var group in rows.Where(x => x != null && !string.IsNullOrWhiteSpace(x.QuantityName)).GroupBy(x => x.QuantityName, StringComparer.OrdinalIgnoreCase).OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+            foreach (var group in summarizable.GroupBy(x => x.QuantityName, StringComparer.OrdinalIgnoreCase).OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
             {
                 var before = 0d;
                 var after = 0d;
@@ -77,10 +88,33 @@ namespace QS3D.Core.Revisions
             foreach (var element in snapshot.Elements)
             {
                 if (element == null || string.IsNullOrWhiteSpace(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains an element without id.");
+                if (!string.Equals(element.ElementId, element.ElementId.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Revision " + label + " contains a non-canonical padded element id: " + element.ElementId + ".");
+                ValidateCanonicalCategory(element.Category, label + " element " + element.ElementId + " category");
+                foreach (var quantity in element.Quantities)
+                {
+                    ValidateCanonicalRequired(quantity.Key, label + " element " + element.ElementId + " quantity key");
+                    RevisionMath.Finite(quantity.Value, element.ElementId + "/" + quantity.Key + "/" + label);
+                }
                 if (result.ContainsKey(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains duplicate element id: " + element.ElementId);
                 result.Add(element.ElementId, element);
             }
             return result;
+        }
+
+        private static void ValidateCanonicalCategory(string? value, string label)
+        {
+            if (string.IsNullOrWhiteSpace(value) ||
+                !Enum.TryParse(value, true, out ElementCategory category) ||
+                !Enum.IsDefined(typeof(ElementCategory), category) ||
+                !string.Equals(value, category.ToString(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Revision " + label + " must use a canonical element category name.");
+        }
+
+        private static void ValidateCanonicalRequired(string? value, string label)
+        {
+            if (value == null || string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Revision " + label + " must be non-empty and must not contain leading/trailing whitespace.");
         }
     }
 }

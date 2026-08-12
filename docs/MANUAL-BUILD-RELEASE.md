@@ -53,7 +53,7 @@ The workflow deliberately has no automatic/event-driven trigger. Its release job
 11. when both `run_runtime=true` and `sign_package=true`, runs the real V25 NETLOAD/runtime gate against **`dist/QS3D-BricsCAD-V25/QS3D.BricsCAD.V25.dll`**, the exact signed plugin payload staged into the published package;
 12. for signed releases, creates the schema-v2 `QS3D-BricsCAD-V25.update.json` manifest after the signed-runtime gate succeeds;
 13. creates the release ZIP checksum and uploads package/runtime evidence artifacts;
-14. creates a draft GitHub Release, uploads/verifies expected assets, then publishes the draft only after all required preceding gates succeed.
+14. creates a draft GitHub Release, uploads each expected release asset, requires exactly one exact-name draft asset with the same byte length as the local artifact, re-downloads it through the GitHub asset API and requires matching SHA-256, then publishes the draft only after every required asset passes those byte-integrity checks and all earlier gates succeed.
 
 A stable release is forced to `run_runtime=true` and `sign_package=true`. Therefore stable runtime evidence must refer to the finalized signed plugin payload, not only the pre-sign build output. Authenticode signing changes PE bytes even when managed code is unchanged, so the signed staged DLL is the release binary that matters for publication evidence.
 
@@ -74,7 +74,11 @@ The machine must have a licensed BricsCAD V25 installation and repository variab
 - `BRICSCAD_V25_PROFILE` when runtime validation uses a dedicated profile;
 - `QS3D_SIGNING_CERT_THUMBPRINT` and `QS3D_TIMESTAMP_SERVER` when `sign_package=true`.
 
+The production signing helper requires the selected CurrentUser certificate to be currently valid, expose an accessible private key and include an explicit Enhanced Key Usage extension containing the Code Signing OID `1.3.6.1.5.5.7.3.3`. EKU authorization is read from the structured OID collection, not localized certificate display text.
+
 Runtime/screenshot validation requires an interactive Windows session.
+
+For provisioning a dedicated Windows runner from a local/cached MSI, `scripts/install-bricscad-v25.ps1` treats the filename only as an advisory. Before invoking `msiexec`, the helper verifies the optional requested SHA-256, enforces the configured Authenticode publisher policy, reads the MSI Property table, requires ProductName to identify BricsCAD, and requires ProductVersion major 25. A renamed Bricsys-signed MSI for another BricsCAD major version must therefore fail before installation. This source-side identity check does not replace licensed first-launch/runtime qualification.
 
 ## Project/DWG readiness before publication
 
@@ -87,9 +91,13 @@ A blank drawing is not meaningful private-DWG release evidence. `QS3DRELEASECHEC
 The source-side install/update path is hardened, but a production release should exercise it with an actually signed package before publication:
 
 - per-user DemandLoad installation/replacement snapshots the targeted prior payload and registry registration;
+- a forced replacement of an existing `InstallDirectory` must first prove that directory is a canonical QS3D BricsCAD V25 installation from its package metadata plus managed DLL assembly/product identities; `-Force` alone never authorizes moving/deleting an arbitrary existing file or foreign directory;
+- uninstall file removal always requires canonical QS3D V25 metadata plus matching plugin/Core assembly and ProductVersion identity; `-Force` only authorizes an intentional verified custom path outside the default QS3D LocalAppData scope and never bypasses ownership validation;
 - if a replacement fails, the installer restores the previous files/registration; if a first install fails, partial new state is removed;
+- signed-package finalization requires a `.zip` output outside `PackageDirectory`, then revalidates `QS3D / BricsCAD V25 x64`, metadata AssemblyVersion/productVersion and exact plugin/Core managed identities after executable signature verification and before mutating metadata, regenerating hashes, deleting any prior output ZIP or rebuilding the release ZIP;
+- signed update-manifest generation requires an external `.json` output that is outside signed staging and distinct from the package ZIP, and binds metadata AssemblyVersion/productVersion exactly to both signed plugin/Core managed identities before ZIP/staging verification or manifest writing;
 - the updater accepts only the intended HTTPS/package-host path and verifies archive/path/size limits, SHA-256 and Authenticode signer expectations;
-- update manifests use schema 2 and bind `productVersion` to package metadata and the signed plugin ProductVersion, while AssemblyVersion remains an independent binary/package check;
+- update manifests use schema 2 and carry the already-verified signed plugin product/assembly version after plugin/Core identity equality has been established;
 - product SemVer must advance monotonically; equal-AssemblyVersion prerelease upgrades are allowed only when product SemVer is strictly newer, and replay/downgrade is rejected;
 - expected-version mismatch, package substitution or replay/relabel conditions must fail before install;
 - installer/updater must never lower BricsCAD `SECURELOAD`.
@@ -102,6 +110,7 @@ Production certificate/key custody, timestamping and publication infrastructure 
 - Never dispatch a release merely because source landed; owner approval is a separate action.
 - Never mark a signed release runtime-verified unless the V25 runtime step actually completed successfully against the signed staged plugin payload that is packaged for publication.
 - Never silently skip a failed preflight/build/runtime step to force a release.
+- Never publish a draft whose expected GitHub assets have only been name-checked; require exact-name uniqueness, remote/local size equality and SHA-256 equality after re-downloading each asset from GitHub.
 - Never replace an existing release tag from this workflow.
 - Keep `confirm_release=RELEASE` as an explicit publication gate.
 - Keep `scripts/preflight-ci-manual-only.py` in the aggregate gate.

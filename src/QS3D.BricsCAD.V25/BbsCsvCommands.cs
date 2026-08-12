@@ -21,18 +21,6 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var drawingName = string.IsNullOrWhiteSpace(document.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(document.Name);
-                var dialog = new SaveFileDialog
-                {
-                    Title = "Xuất BBS CSV UTF-8",
-                    Filter = "CSV UTF-8 (*.csv)|*.csv",
-                    DefaultExt = ".csv",
-                    AddExtension = true,
-                    OverwritePrompt = true,
-                    FileName = drawingName + "-BBS.csv"
-                };
-                if (dialog.ShowDialog() != true) return;
-
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
                 {
                     Report(document, "BBS CSV: BLOCKED • chưa có QS3D project state/sidecar; export không tạo project mới.");
@@ -50,6 +38,18 @@ namespace QS3D.BricsCAD.V25
 
                 var totalWeight = 0d;
                 foreach (var row in rows) totalWeight = QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS CSV total weight");
+
+                var drawingName = string.IsNullOrWhiteSpace(document.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(document.Name);
+                var dialog = new SaveFileDialog
+                {
+                    Title = "Xuất BBS CSV UTF-8",
+                    Filter = "CSV UTF-8 (*.csv)|*.csv",
+                    DefaultExt = ".csv",
+                    AddExtension = true,
+                    OverwritePrompt = true,
+                    FileName = drawingName + "-BBS.csv"
+                };
+                if (dialog.ShowDialog() != true) return;
 
                 RebarCsvExporter.Export(dialog.FileName, rows);
 

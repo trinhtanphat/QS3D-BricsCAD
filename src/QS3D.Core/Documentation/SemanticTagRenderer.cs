@@ -145,6 +145,7 @@ namespace QS3D.Core.Documentation
             if (key.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)) return false;
             if (key.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase)) return false;
             if (key.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return false;
+            if (key.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0) return false;
             return true;
         }
 

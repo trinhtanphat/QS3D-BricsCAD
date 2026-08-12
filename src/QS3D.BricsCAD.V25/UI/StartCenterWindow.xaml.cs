@@ -14,6 +14,10 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class StartCenterWindow : Window
     {
         private const string AllGroups = "Tất cả";
+        private const string AllRecentProjects = "Tất cả";
+        private const string PinnedRecentProjects = "Đã ghim";
+        private const string AvailableRecentProjects = "Sẵn sàng";
+        private const string MissingRecentProjects = "Thiếu file";
         private bool _initialized;
 
         private enum NativeDocumentAction
@@ -48,6 +52,16 @@ namespace QS3D.BricsCAD.V25.UI
             groups.AddRange(StartCenterCommandCatalog.Groups);
             GroupFilter.ItemsSource = groups;
             GroupFilter.SelectedIndex = 0;
+
+            RecentProjectFilter.ItemsSource = new[]
+            {
+                AllRecentProjects,
+                PinnedRecentProjects,
+                AvailableRecentProjects,
+                MissingRecentProjects
+            };
+            RecentProjectFilter.SelectedIndex = 0;
+
             _initialized = true;
             RefreshCommands();
             RefreshStateLists();
@@ -71,9 +85,20 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
             }
 
-            if (e.Key == Key.Enter && CommandList.IsKeyboardFocusWithin)
+            if (e.Key == Key.Enter && (CommandList.IsKeyboardFocusWithin || SearchBox.IsKeyboardFocusWithin))
             {
                 RunSelectedCommand();
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == Key.Down && SearchBox.IsKeyboardFocusWithin && CommandList.Items.Count > 0)
+            {
+                if (CommandList.SelectedItem == null) CommandList.SelectedIndex = 0;
+                CommandList.Focus();
+                CommandList.ScrollIntoView(CommandList.SelectedItem);
+                if (CommandList.ItemContainerGenerator.ContainerFromItem(CommandList.SelectedItem) is ListBoxItem item)
+                    item.Focus();
                 e.Handled = true;
             }
         }
@@ -86,6 +111,16 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnGroupChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_initialized) RefreshCommands();
+        }
+
+        private void OnRecentProjectSearchChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_initialized) RefreshRecentProjectsOnly();
+        }
+
+        private void OnRecentProjectFilterChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_initialized) RefreshRecentProjectsOnly();
         }
 
         private void RefreshCommands()
@@ -102,7 +137,7 @@ namespace QS3D.BricsCAD.V25.UI
             var state = StartCenterUserStateStore.GetSnapshot();
             FavoriteList.ItemsSource = ResolveCommands(state.FavoriteCommands);
             RecentCommandList.ItemsSource = ResolveCommands(state.RecentCommands);
-            RecentProjectList.ItemsSource = state.RecentProjects;
+            RefreshRecentProjectsOnly(state);
         }
 
         private static IReadOnlyList<StartCenterCommandItem> ResolveCommands(IEnumerable<string> commands)
@@ -190,7 +225,31 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RefreshRecentProjectsOnly()
         {
-            RecentProjectList.ItemsSource = StartCenterUserStateStore.GetSnapshot().RecentProjects;
+            RefreshRecentProjectsOnly(StartCenterUserStateStore.GetSnapshot());
+        }
+
+        private void RefreshRecentProjectsOnly(StartCenterUserStateSnapshot state)
+        {
+            IEnumerable<StartCenterRecentProject> projects = state.RecentProjects;
+            var query = (RecentProjectSearchBox.Text ?? string.Empty).Trim();
+            if (query.Length > 0)
+            {
+                projects = projects.Where(x =>
+                    x.DisplayName.IndexOf(query, StringComparison.CurrentCultureIgnoreCase) >= 0 ||
+                    x.Path.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+
+            var filter = RecentProjectFilter.SelectedItem as string ?? AllRecentProjects;
+            if (string.Equals(filter, PinnedRecentProjects, StringComparison.CurrentCultureIgnoreCase))
+                projects = projects.Where(x => x.IsPinned);
+            else if (string.Equals(filter, AvailableRecentProjects, StringComparison.CurrentCultureIgnoreCase))
+                projects = projects.Where(x => x.Exists);
+            else if (string.Equals(filter, MissingRecentProjects, StringComparison.CurrentCultureIgnoreCase))
+                projects = projects.Where(x => !x.Exists);
+
+            var filtered = projects.ToList();
+            RecentProjectList.ItemsSource = filtered;
+            RecentProjectCountText.Text = filtered.Count + " / " + state.RecentProjects.Count;
         }
 
         private void OnRefreshClick(object sender, RoutedEventArgs e)
@@ -255,16 +314,28 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnToggleFavoriteClick(object sender, RoutedEventArgs e)
         {
-            var item = CommandList.SelectedItem as StartCenterCommandItem ?? FavoriteList.SelectedItem as StartCenterCommandItem;
-            if (item == null)
+            if (!(CommandList.SelectedItem is StartCenterCommandItem item))
             {
-                SetStatus("Chọn một command trước khi ghim.");
+                SetStatus("Chọn một command trong launcher trước khi ghim hoặc bỏ ghim.");
                 return;
             }
 
             StartCenterUserStateStore.ToggleFavorite(item.Command);
             RefreshStateLists();
             SetStatus("Đã cập nhật Favorites cho " + item.Command + ".");
+        }
+
+        private void OnRemoveFavoriteClick(object sender, RoutedEventArgs e)
+        {
+            if (!(FavoriteList.SelectedItem is StartCenterCommandItem item))
+            {
+                SetStatus("Chọn một mục trong Favorites trước khi bỏ ghim.");
+                return;
+            }
+
+            StartCenterUserStateStore.ToggleFavorite(item.Command);
+            RefreshStateLists();
+            SetStatus("Đã bỏ " + item.Command + " khỏi Favorites.");
         }
 
         private void OnNewDrawingClick(object sender, RoutedEventArgs e) => ExecuteNativeDocumentAction(NativeDocumentAction.NewDrawing);

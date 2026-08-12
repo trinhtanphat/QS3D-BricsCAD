@@ -56,15 +56,20 @@ namespace QS3D.Core.Services
     {
         public RegenerationPreview Preview(ProjectState project)
         {
-            return PreviewInternal(project, Array.Empty<string>());
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var sourceChangeVersion = project.ChangeVersion;
+            return PreviewInternal(project, Array.Empty<string>(), sourceChangeVersion);
         }
 
         public RegenerationPreview PreviewSubset(ProjectState project, IEnumerable<string> elementIds)
         {
+            if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
-            var targets = CanonicalPreviewTargets(elementIds);
+            var sourceChangeVersion = project.ChangeVersion;
+            var sourceElementCount = project.Elements.Count;
+            var targets = CanonicalPreviewTargets(elementIds, sourceElementCount);
             if (targets.Count == 0) throw new ArgumentException("Subset regeneration preview requires at least one target element id.", nameof(elementIds));
-            return PreviewInternal(project, targets);
+            return PreviewInternal(project, targets, sourceChangeVersion);
         }
 
         public RegenerationGuardedApplyResult Apply(ProjectState project, RegenerationPreview preview)
@@ -111,10 +116,11 @@ namespace QS3D.Core.Services
             }
         }
 
-        private RegenerationPreview PreviewInternal(ProjectState project, IReadOnlyList<string> targets)
+        private RegenerationPreview PreviewInternal(ProjectState project, IReadOnlyList<string> targets, long sourceChangeVersion)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var sourceChangeVersion = project.ChangeVersion;
+            if (project.ChangeVersion != sourceChangeVersion)
+                throw new InvalidOperationException("Project changed while regeneration preview scope was being established; recompute preview.");
             var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
             var revisions = new RevisionService();
             var health = new ModelHealthBaselineService();
@@ -137,7 +143,7 @@ namespace QS3D.Core.Services
                 health.Compare(beforeHealth, afterHealth));
         }
 
-        private static IReadOnlyList<string> CanonicalPreviewTargets(IEnumerable<string> elementIds)
+        private static IReadOnlyList<string> CanonicalPreviewTargets(IEnumerable<string> elementIds, int maxCount)
         {
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -149,8 +155,11 @@ namespace QS3D.Core.Services
                     throw new ArgumentException("Regeneration preview target cannot be blank at index " + index.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
                 if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
                     throw new ArgumentException("Regeneration preview target must be canonical without surrounding whitespace: " + raw + ".", nameof(elementIds));
-                if (!seen.Add(raw))
+                if (seen.Contains(raw))
                     throw new ArgumentException("Duplicate regeneration preview target: " + raw + ".", nameof(elementIds));
+                if (result.Count >= maxCount)
+                    throw new ArgumentException("Regeneration preview target set cannot exceed project element count of " + maxCount.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
+                seen.Add(raw);
                 result.Add(raw);
                 index++;
             }

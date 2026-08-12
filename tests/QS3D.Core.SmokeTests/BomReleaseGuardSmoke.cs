@@ -11,9 +11,12 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             BasicBomGuard();
+            NonCanonicalPropertyKeyBlocksRelease();
+            NonCanonicalQuantityKeyBlocksRelease();
             RoomFinishProvenanceReachesReleaseGuard();
             ProvenanceConflictDoesNotCrashReleaseGuard();
             NullSemanticEntryBlocksReleaseWithoutCrashing();
+            ExceptionDetailIsRedactedFromReleaseIssues();
         }
 
         private static void BasicBomGuard()
@@ -45,12 +48,49 @@ namespace QS3D.Core.SmokeTests
             if (BomReleaseGuardService.Inspect(project, live).Any(x => x.Code == "BOM_GENERATED_HANDLE_MISSING"))
                 throw new Exception("Live generated Handle must satisfy the BOM release guard.");
 
+            var caseSensitiveLive = new HashSet<string>(new[] { "2b" }, StringComparer.Ordinal);
+            if (BomReleaseGuardService.Inspect(project, caseSensitiveLive).Any(x => x.Code == "BOM_GENERATED_HANDLE_MISSING"))
+                throw new Exception("BOM generated Handle liveness must be case-insensitive regardless of the caller set comparer.");
+
             element.Properties["GeneratedFuturePanelHandles"] = "3C;3D;3d";
             var partialFuture = new HashSet<string>(new[] { "2B", "3C" }, StringComparer.OrdinalIgnoreCase);
             Has(BomReleaseGuardService.Inspect(project, partialFuture), "BOM_GENERATED_HANDLE_MISSING");
             var allFuture = new HashSet<string>(new[] { "2B", "3C", "3D" }, StringComparer.OrdinalIgnoreCase);
             if (BomReleaseGuardService.Inspect(project, allFuture).Any(x => x.Code == "BOM_GENERATED_HANDLE_MISSING"))
                 throw new Exception("Future Generated*Handles owner slot must use the shared BOM liveness registry without a hard-coded family update.");
+        }
+
+        private static void NonCanonicalPropertyKeyBlocksRelease()
+        {
+            var project = new ProjectState("bom-property-key", "BOM property key guard");
+            project.Families.Add(new ProjectFamily("beam", "Beam", ElementCategory.Beam));
+            var element = new ProjectElement("beam-property-key", ElementCategory.Beam, "beam", string.Empty, string.Empty);
+            element.SourceHandles.Add("1C");
+            element.Properties[" MaterialName "] = "C30";
+            element.SetQuantity("NetConcreteM3", 1.25d);
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+
+            var issues = BomReleaseGuardService.Inspect(project);
+            Has(issues, "BOM_PROPERTY_KEY_INVALID");
+            if (!issues.Any(x => x.Code == "BOM_PROPERTY_KEY_INVALID" && x.Severity == HealthSeverity.Error && x.ElementId == element.Id))
+                throw new Exception("Non-canonical property key must be an Error-level BOM release blocker for its owning element.");
+        }
+
+        private static void NonCanonicalQuantityKeyBlocksRelease()
+        {
+            var project = new ProjectState("bom-key", "BOM quantity key guard");
+            project.Families.Add(new ProjectFamily("beam", "Beam", ElementCategory.Beam));
+            var element = new ProjectElement("beam-key", ElementCategory.Beam, "beam", string.Empty, string.Empty);
+            element.SourceHandles.Add("1B");
+            element.Quantities[" NetConcreteM3 "] = 1.25d;
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+
+            var issues = BomReleaseGuardService.Inspect(project);
+            Has(issues, "BOM_QUANTITY_KEY_INVALID");
+            if (!issues.Any(x => x.Code == "BOM_QUANTITY_KEY_INVALID" && x.Severity == HealthSeverity.Error && x.ElementId == element.Id))
+                throw new Exception("Non-canonical quantity key must be an Error-level BOM release blocker for its owning element.");
         }
 
         private static void RoomFinishProvenanceReachesReleaseGuard()
@@ -90,6 +130,8 @@ namespace QS3D.Core.SmokeTests
             Has(issues, "ROOM_PROVENANCE_CONFLICT");
             Has(issues, "BOM_EXCLUSION_FAILED");
             Has(issues, "BOM_REPORT_FAILED");
+            MessageEquals(issues, "BOM_EXCLUSION_FAILED", "Không thể quyết định an toàn cấu kiện có được đưa vào BQ hay không.");
+            MessageEquals(issues, "BOM_REPORT_FAILED", "Không thể dựng bảng khối lượng an toàn.");
         }
 
         private static void NullSemanticEntryBlocksReleaseWithoutCrashing()
@@ -102,6 +144,25 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Null semantic BOM entry must be an Error-level release blocker.");
         }
 
+        private static void ExceptionDetailIsRedactedFromReleaseIssues()
+        {
+            var project = new ProjectState("bom-redaction", "BOM redaction");
+            project.Families.Add(new ProjectFamily("beam", "Beam", ElementCategory.Beam));
+
+            var first = new ProjectElement("duplicate-beam", ElementCategory.Beam, "beam", string.Empty, string.Empty);
+            first.SetQuantity("NetConcreteM3", 1d);
+            first.MarkClean(ElementDirtyFlags.All);
+            var second = new ProjectElement("duplicate-beam", ElementCategory.Beam, "beam", string.Empty, string.Empty);
+            second.SetQuantity("NetConcreteM3", 2d);
+            second.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(first);
+            project.Elements.Add(second);
+
+            var issues = BomReleaseGuardService.Inspect(project);
+            Has(issues, "BOM_TRACEABILITY_FAILED");
+            MessageEquals(issues, "BOM_TRACEABILITY_FAILED", "Không thể dựng provenance Handle an toàn cho cấu kiện.");
+        }
+
         private static void Empty(IReadOnlyList<ModelHealthIssue> issues)
         {
             if (issues.Count != 0) throw new Exception("Clean BOM fixture unexpectedly produced: " + string.Join(", ", issues.Select(x => x.Code)));
@@ -110,6 +171,15 @@ namespace QS3D.Core.SmokeTests
         private static void Has(IReadOnlyList<ModelHealthIssue> issues, string code)
         {
             if (!issues.Any(x => string.Equals(x.Code, code, StringComparison.Ordinal))) throw new Exception("Expected BOM issue " + code + ".");
+        }
+
+        private static void MessageEquals(IReadOnlyList<ModelHealthIssue> issues, string code, string expected)
+        {
+            var matches = issues.Where(x => string.Equals(x.Code, code, StringComparison.Ordinal)).ToList();
+            if (matches.Count == 0) throw new Exception("Expected BOM issue " + code + ".");
+            foreach (var issue in matches)
+                if (!string.Equals(issue.Message, expected, StringComparison.Ordinal))
+                    throw new Exception("Expected redacted message for " + code + ", got: " + issue.Message);
         }
 
         private static int Count(IReadOnlyList<ModelHealthIssue> issues, string code) =>

@@ -30,7 +30,7 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(Element("FOUNDATION", ElementCategory.Foundation, "GeneratedFoundationMeshHandles", "A7"));
             project.Elements.Add(Element("CURTAIN", ElementCategory.GlassWall, "GeneratedCurtainFrameHandles", "A8"));
 
-            var live = new HashSet<string>(new[] { "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8" }, StringComparer.OrdinalIgnoreCase);
+            var live = new HashSet<string>(new[] { " a1 ", " a2 ", " a3 ", " a4 ", " a5 ", " a6 ", " a7 ", " a8 " }, StringComparer.Ordinal);
             var issues = new ComprehensiveModelHealthService().Inspect(project, null, live);
 
             HasPrefix(issues, "LONG", "GENERATED_REBAR_");

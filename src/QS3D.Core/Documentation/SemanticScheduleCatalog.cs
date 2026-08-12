@@ -27,9 +27,18 @@ namespace QS3D.Core.Documentation
             Categories = new List<ElementCategory>(categories ?? Array.Empty<ElementCategory>()).AsReadOnly();
             FloorId = floorId ?? string.Empty;
             ZoneId = zoneId ?? string.Empty;
-            IncludeElementIds = new List<string>(includeElementIds ?? Array.Empty<string>()).AsReadOnly();
-            ExcludeElementIds = new List<string>(excludeElementIds ?? Array.Empty<string>()).AsReadOnly();
-            Columns = new List<SemanticDocumentationColumn>(columns ?? throw new ArgumentNullException(nameof(columns))).AsReadOnly();
+            IncludeElementIds = SnapshotBounded(
+                includeElementIds ?? Array.Empty<string>(),
+                SemanticScheduleCatalog.MaxIds,
+                "Semantic schedule include list exceeds 5000 ids.");
+            ExcludeElementIds = SnapshotBounded(
+                excludeElementIds ?? Array.Empty<string>(),
+                SemanticScheduleCatalog.MaxIds,
+                "Semantic schedule exclude list exceeds 5000 ids.");
+            Columns = SnapshotBounded(
+                columns ?? throw new ArgumentNullException(nameof(columns)),
+                SemanticScheduleCatalog.MaxColumns,
+                "Semantic schedule requires 1..32 columns.");
         }
 
         public string Id { get; }
@@ -41,14 +50,28 @@ namespace QS3D.Core.Documentation
         public IReadOnlyList<string> IncludeElementIds { get; }
         public IReadOnlyList<string> ExcludeElementIds { get; }
         public IReadOnlyList<SemanticDocumentationColumn> Columns { get; }
+
+        private static IReadOnlyList<T> SnapshotBounded<T>(IEnumerable<T> values, int maxCount, string capacityError)
+        {
+            var result = new List<T>(Math.Min(maxCount, 256));
+            using (var enumerator = values.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= maxCount) throw new InvalidOperationException(capacityError);
+                    result.Add(enumerator.Current);
+                }
+            }
+            return result.AsReadOnly();
+        }
     }
 
     public static class SemanticScheduleCatalog
     {
         public const string MetadataKey = "QS3D.Documentation.SemanticSchedules.v1";
         private const int MaxSchedules = 128;
-        private const int MaxIds = 5000;
-        private const int MaxColumns = 32;
+        internal const int MaxIds = 5000;
+        internal const int MaxColumns = 32;
         private const int MaxPayloadChars = 1024 * 1024;
 
         public static IReadOnlyList<SemanticScheduleDefinition> Load(ProjectState project)
@@ -71,7 +94,13 @@ namespace QS3D.Core.Documentation
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (definitions == null) throw new ArgumentNullException(nameof(definitions));
-            var list = definitions.ToList();
+            var list = new List<SemanticScheduleDefinition>(MaxSchedules);
+            foreach (var definition in definitions)
+            {
+                if (list.Count >= MaxSchedules)
+                    throw new InvalidOperationException("Semantic schedule catalog exceeds the supported 128 definitions.");
+                list.Add(definition);
+            }
             ValidateCatalog(list);
             if (list.Count == 0)
             {
@@ -129,8 +158,8 @@ namespace QS3D.Core.Documentation
             var categorySet = new HashSet<ElementCategory>(normalized.Categories);
             var ids = candidates
                 .Where(x => categorySet.Count == 0 || categorySet.Contains(x.Category))
-                .Where(x => normalized.FloorId.Length == 0 || string.Equals(x.FloorId, normalized.FloorId, StringComparison.OrdinalIgnoreCase))
-                .Where(x => normalized.ZoneId.Length == 0 || string.Equals(x.ZoneId, normalized.ZoneId, StringComparison.OrdinalIgnoreCase))
+                .Where(x => normalized.FloorId.Length == 0 || string.Equals((x.FloorId ?? string.Empty).Trim(), normalized.FloorId, StringComparison.OrdinalIgnoreCase))
+                .Where(x => normalized.ZoneId.Length == 0 || string.Equals((x.ZoneId ?? string.Empty).Trim(), normalized.ZoneId, StringComparison.OrdinalIgnoreCase))
                 .Where(x => include.Count == 0 || include.Contains(x.Id))
                 .Where(x => !exclude.Contains(x.Id))
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)

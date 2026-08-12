@@ -290,11 +290,20 @@ namespace QS3D.Core.SmokeTests
                 }));
                 Equal("quantity-sentinel", File.ReadAllText(quantityPath));
 
-                Throws<System.Xml.XmlException>(() => XlsxQuantityExporter.Export(quantityPath, new[]
+                XlsxQuantityExporter.Export(quantityPath, new[]
                 {
                     new QuantityReportRow { Floor = "F", Category = "Beam", FamilyName = "Bad\u0001Name", Count = 1 }
-                }));
-                Equal("quantity-sentinel", File.ReadAllText(quantityPath));
+                });
+                using (var archive = ZipFile.OpenRead(quantityPath))
+                {
+                    var worksheet = archive.GetEntry("xl/worksheets/sheet1.xml") ?? throw new Exception("Sanitized quantity worksheet is missing.");
+                    using (var reader = new StreamReader(worksheet.Open()))
+                    {
+                        var xml = reader.ReadToEnd();
+                        True(xml.IndexOf('\u0001') < 0);
+                        True(xml.IndexOf('\uFFFD') >= 0);
+                    }
+                }
 
                 File.WriteAllText(rebarPath, "rebar-sentinel");
                 Throws<ArgumentOutOfRangeException>(() => XlsxRebarScheduleExporter.Export(rebarPath, new[]

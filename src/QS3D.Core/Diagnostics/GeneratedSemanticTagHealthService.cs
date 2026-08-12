@@ -57,9 +57,13 @@ namespace QS3D.Core.Diagnostics
                         if (!string.Equals(current, built, StringComparison.Ordinal))
                             issues.Add(new ModelHealthIssue("SEMANTIC_TAG_TEXT_STALE", HealthSeverity.Warning, "Semantic tag text không còn khớp semantic state hiện tại; chạy QS3DTAGREFRESH.", element.Id));
                     }
-                    catch (Exception ex)
+                    catch (Exception ex) when (IsDiagnosticDataFailure(ex))
                     {
-                        issues.Add(new ModelHealthIssue("SEMANTIC_TAG_RENDER_INVALID", HealthSeverity.Error, "Không thể render lại semantic tag: " + ex.Message, element.Id));
+                        issues.Add(new ModelHealthIssue(
+                            "SEMANTIC_TAG_RENDER_INVALID",
+                            HealthSeverity.Error,
+                            "Không thể render lại semantic tag vì semantic/project data không hợp lệ.",
+                            element.Id));
                     }
                 }
 
@@ -114,6 +118,16 @@ namespace QS3D.Core.Diagnostics
             value = 0d;
             var text = Property(element, key);
             return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value) && !double.IsNaN(value) && !double.IsInfinity(value);
+        }
+
+        private static bool IsDiagnosticDataFailure(Exception exception)
+        {
+            return exception is InvalidOperationException ||
+                   exception is ArgumentException ||
+                   exception is FormatException ||
+                   exception is OverflowException ||
+                   exception is KeyNotFoundException ||
+                   exception is NullReferenceException;
         }
 
         private static string Property(ProjectElement element, string key) =>

@@ -13,6 +13,8 @@ namespace QS3D.Core.Geometry
             WidthM = Positive(widthM, nameof(widthM));
             HeightM = Positive(heightM, nameof(heightM));
             ClearanceM = NonNegative(clearanceM, nameof(clearanceM));
+
+            EnsureFiniteBounds();
         }
 
         public double X_M { get; }
@@ -25,6 +27,17 @@ namespace QS3D.Core.Geometry
         internal double Bottom => Z_M - ClearanceM;
         internal double Right => X_M + WidthM + ClearanceM;
         internal double Top => Z_M + HeightM + ClearanceM;
+
+        private void EnsureFiniteBounds()
+        {
+            if (!IsFinite(Left) ||
+                !IsFinite(Bottom) ||
+                !IsFinite(Right) ||
+                !IsFinite(Top))
+            {
+                throw new OverflowException("Curtain opening bounds must remain finite after applying size and clearance.");
+            }
+        }
 
         private static double Positive(double value, string label)
         {
@@ -43,6 +56,7 @@ namespace QS3D.Core.Geometry
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(label, "Value must be finite.");
             return value;
         }
+        private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
     }
 
     public static class CurtainFrameOpeningPlanner
@@ -93,8 +107,17 @@ namespace QS3D.Core.Geometry
                 double.IsNaN(frame.HeightM) || double.IsInfinity(frame.HeightM) ||
                 frame.WidthM <= 0d || frame.HeightM <= 0d)
                 throw new InvalidOperationException("Curtain frame rectangle is invalid.");
+
+            if (!IsFinite(frame.X_M + frame.WidthM) ||
+                !IsFinite(frame.Z_M + frame.HeightM))
+            {
+                throw new InvalidOperationException("Curtain frame rectangle bounds must remain finite.");
+            }
+
             return frame;
         }
+
+        private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
         private static void Subtract(CurtainWallRect frame, CurtainOpeningRect opening, ICollection<CurtainWallRect> output)
         {

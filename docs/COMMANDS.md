@@ -9,6 +9,7 @@ Updated for the integrated source baseline on 2026-08-10. These names are **Bric
 - `QS3DDOMAIN` — open Full Domain Hub.
 - `QS3DPROJECTTOOLS` — open the drawing-bound Project Tools hub.
 - `QS3DSCHEDULES` — open the drawing-bound Schedule Hub for BQ, Room Finish, Material, Curtain, Door/Opening and rebar schedules/exports.
+- `QS3DREFSEARCH` — open the drawing-bound **Tham khảo thi công** launcher for Hình ảnh/Web/Video/Mua sắm/Video ngắn/Tin tức. QS3D URL-encodes the query, uses fixed HTTPS search URLs with SafeSearch and opens results in the Windows default browser; it does not scrape/embed result pages. See `CONSTRUCTION-REFERENCE-SEARCH.md`.
 - `QS3DZONES` — Zone Manager: CRUD/active Zone/semantic assignment.
 - `QS3DLEVELS` — Floor/Level project editor.
 - `QS3DFAMILIES` — Family Manager: create/duplicate/rename/delete/properties/assignment while preserving true instance overrides. The **TẠO MỚI** Ribbon and Full Domain Hub expose it as the canonical Family / Type launcher before Direct Draw.

@@ -181,7 +181,7 @@ namespace QS3D.Core.Geometry
             if (!Finite(angularToleranceRadians) || angularToleranceRadians <= 0d || angularToleranceRadians >= Math.PI / 4d)
                 throw new ArgumentOutOfRangeException(nameof(angularToleranceRadians));
 
-            var raw = source.ToList();
+            var raw = source.Take(MaxSegments + 1).ToList();
             if (raw.Count > MaxSegments) throw new InvalidOperationException("Wall junction planning supports at most " + MaxSegments.ToString(CultureInfo.InvariantCulture) + " segments per batch.");
             var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var segments = new List<SegmentInfo>(raw.Count);

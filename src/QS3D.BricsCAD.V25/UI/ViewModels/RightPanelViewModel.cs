@@ -40,14 +40,30 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         public event PropertyChangedEventHandler? PropertyChanged;
     }
 
-    public sealed class DrawingItemViewModel
+    public sealed class DrawingItemViewModel : INotifyPropertyChanged
     {
+        private string _scaleText = "—";
+
         public string Name { get; set; } = string.Empty;
         public string Path { get; set; } = string.Empty;
         public string Kind { get; set; } = "DWG";
         public string LockState { get; set; } = "—";
         public string InstanceText { get; set; } = "—";
         public bool IsXref { get; set; }
+
+        public string ScaleText
+        {
+            get => _scaleText;
+            set
+            {
+                var normalized = string.IsNullOrWhiteSpace(value) ? "—" : value;
+                if (string.Equals(_scaleText, normalized, StringComparison.Ordinal)) return;
+                _scaleText = normalized;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ScaleText)));
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
     }
 
     public sealed class RightPanelViewModel : INotifyPropertyChanged

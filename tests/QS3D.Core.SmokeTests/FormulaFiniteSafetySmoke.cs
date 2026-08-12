@@ -27,13 +27,33 @@ namespace QS3D.Core.SmokeTests
 
             Near(5d, evaluator.Evaluate("min(10, 5)"), 1e-12);
             Near(6d, evaluator.Evaluate("2 * 3"), 1e-12);
+            Near(1d, evaluator.Evaluate(new string('-', 64) + "1"), 1e-12);
+
+            var depthBoundary = Capture<InvalidOperationException>(
+                () => evaluator.Evaluate(new string('-', 65) + "1"));
+            Contains("Expression nesting is too deep. Position 65.", depthBoundary.Message);
+
+            var longUnaryDepth = Capture<InvalidOperationException>(
+                () => evaluator.Evaluate(new string('-', 4000) + "1"));
+            Contains("Expression nesting is too deep. Position 65.", longUnaryDepth.Message);
         }
 
         private static void Throws<T>(Action action) where T : Exception
         {
+            Capture<T>(action);
+        }
+
+        private static T Capture<T>(Action action) where T : Exception
+        {
             try { action(); }
-            catch (T) { return; }
+            catch (T ex) { return ex; }
             throw new Exception("Expected " + typeof(T).Name + ".");
+        }
+
+        private static void Contains(string expected, string actual)
+        {
+            if (actual == null || actual.IndexOf(expected, StringComparison.Ordinal) < 0)
+                throw new Exception($"Expected '{actual}' to contain '{expected}'.");
         }
 
         private static void Near(double expected, double actual, double tolerance)

@@ -105,13 +105,23 @@ namespace QS3D.Core.Geometry
                     throw new ArgumentException("Polygon contains a zero-length edge at vertex " + i + ".", nameof(polygon));
             }
 
+            var origin = vertices[0];
             var twiceArea = 0d;
-            for (var i = 0; i < vertices.Count; i++)
+            var compensation = 0d;
+            for (var i = 1; i < vertices.Count - 1; i++)
             {
-                var a = vertices[i];
-                var b = vertices[(i + 1) % vertices.Count];
-                twiceArea += a.X * b.Y - b.X * a.Y;
-                if (!Finite(twiceArea)) throw new OverflowException("Polygon signed area exceeds the supported numeric range.");
+                var ax = vertices[i].X - origin.X;
+                var ay = vertices[i].Y - origin.Y;
+                var bx = vertices[i + 1].X - origin.X;
+                var by = vertices[i + 1].Y - origin.Y;
+                if (!Finite(ax) || !Finite(ay) || !Finite(bx) || !Finite(by))
+                    throw new OverflowException("Polygon coordinate delta exceeds the supported numeric range.");
+                var cross = CrossFinite(ax, ay, bx, by, "Polygon signed area");
+                var corrected = cross - compensation;
+                var next = twiceArea + corrected;
+                if (!Finite(next)) throw new OverflowException("Polygon signed area exceeds the supported numeric range.");
+                compensation = (next - twiceArea) - corrected;
+                twiceArea = next;
             }
             if (Math.Abs(twiceArea) <= Epsilon) throw new ArgumentException("Polygon area is zero or below tolerance.", nameof(polygon));
 
@@ -161,8 +171,30 @@ namespace QS3D.Core.Geometry
 
         private static double Orientation(Point2 a, Point2 b, Point2 c)
         {
-            var value = (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
-            if (!Finite(value)) throw new OverflowException("Polygon orientation exceeds the supported numeric range.");
+            var ax = b.X - a.X;
+            var ay = b.Y - a.Y;
+            var bx = c.X - a.X;
+            var by = c.Y - a.Y;
+            if (!Finite(ax) || !Finite(ay) || !Finite(bx) || !Finite(by))
+                throw new OverflowException("Polygon orientation delta exceeds the supported numeric range.");
+            return CrossFinite(ax, ay, bx, by, "Polygon orientation");
+        }
+
+        private static double CrossFinite(double ax, double ay, double bx, double by, string label)
+        {
+            var scaleA = Math.Max(Math.Abs(ax), Math.Abs(ay));
+            var scaleB = Math.Max(Math.Abs(bx), Math.Abs(by));
+            if (!Finite(scaleA) || !Finite(scaleB)) throw new OverflowException(label + " input exceeds the supported numeric range.");
+            if (scaleA == 0d || scaleB == 0d) return 0d;
+
+            var normalized = ax / scaleA * (by / scaleB) - ay / scaleA * (bx / scaleB);
+            if (!Finite(normalized)) throw new OverflowException(label + " exceeds the supported numeric range.");
+            var smallerScale = Math.Min(scaleA, scaleB);
+            var largerScale = Math.Max(scaleA, scaleB);
+            var scaled = normalized * smallerScale;
+            if (!Finite(scaled)) throw new OverflowException(label + " exceeds the supported numeric range.");
+            var value = scaled * largerScale;
+            if (!Finite(value)) throw new OverflowException(label + " exceeds the supported numeric range.");
             return value;
         }
 

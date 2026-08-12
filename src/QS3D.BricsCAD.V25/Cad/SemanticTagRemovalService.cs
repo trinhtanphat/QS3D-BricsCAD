@@ -60,7 +60,6 @@ namespace QS3D.BricsCAD.V25.Cad
                             "documentation.semantic-tag.remove",
                             element.Id,
                             erased.ToString(CultureInfo.InvariantCulture) + " live MText erased; tag ownership metadata cleared");
-                        project.Touch();
                         transaction.Commit();
                         cadCommitted = true;
                     }

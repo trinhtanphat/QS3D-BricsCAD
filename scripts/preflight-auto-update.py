@@ -74,7 +74,16 @@ def main() -> int:
     require(launcher, '"QS3D",\n                    "UpdateLogs"', "log path outside replaceable plugin directory")
     reject(launcher, "Stop-Process", "forced BricsCAD termination")
     reject(launcher, "taskkill", "forced BricsCAD termination")
-    reject(launcher, ".Kill(", "forced BricsCAD process kill")
+
+    # Readiness timeout may terminate only the detached PowerShell updater child before
+    # BricsCAD is asked to close. Generic/current-host process termination remains forbidden.
+    require(launcher, "private static void TryTerminateUnreadyWorker(Process updater)", "narrow detached-worker cleanup helper")
+    require(launcher, "updater.Kill();", "detached-worker readiness-timeout cleanup")
+    kill_lines = [line.strip() for line in launcher.splitlines() if ".Kill(" in line]
+    if kill_lines != ["updater.Kill();"]:
+        raise AssertionError("only detached updater.Kill() is permitted; found: " + repr(kill_lines))
+    if "process.Kill(" in launcher or "Process.GetCurrentProcess().Kill(" in launcher:
+        raise AssertionError("BricsCAD/current-process force termination is forbidden")
 
     require(commands, '[CommandMethod("QS3DUPDATE", CommandFlags.Modal)]', "QS3DUPDATE command")
     require(ui, 'MakeButton("Kiểm tra lại"', "manual refresh button")

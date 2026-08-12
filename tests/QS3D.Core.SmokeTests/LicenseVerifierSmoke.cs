@@ -14,6 +14,11 @@ namespace QS3D.Core.SmokeTests
             TamperedLicenseFailsSignature();
             ProductAndTimeWindowsAreEnforced();
             FeatureDelimiterIsRejected();
+            CanonicalTokenWhitespaceIsRejected();
+            LoadedCanonicalTokenWhitespaceIsRejected();
+            NamespacedLicenseRootsAreRejected();
+            DuplicateLicenseSectionsAreRejected();
+            NestedSignatureMarkupIsRejected();
             DtdLicenseIsRejected();
         }
 
@@ -60,6 +65,114 @@ namespace QS3D.Core.SmokeTests
             var license = License();
             license.Features.Add("admin,review");
             Throws<InvalidDataException>(() => license.CanonicalPayload());
+        }
+
+        private static void CanonicalTokenWhitespaceIsRejected()
+        {
+            var leadingScalar = License();
+            leadingScalar.LicenseId = " LIC-001";
+            Throws<InvalidDataException>(() => leadingScalar.CanonicalPayload());
+
+            var trailingScalar = License();
+            trailingScalar.Nonce = "nonce-001 ";
+            Throws<InvalidDataException>(() => trailingScalar.CanonicalPayload());
+
+            var paddedFeature = License();
+            paddedFeature.Features.Add(" admin ");
+            Throws<InvalidDataException>(() => paddedFeature.CanonicalPayload());
+        }
+
+        private static void LoadedCanonicalTokenWhitespaceIsRejected()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-license-token-load-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                const string valid = "<valid notBeforeUtc='2026-01-01T00:00:00.0000000Z' expiresUtc='2027-01-01T00:00:00.0000000Z'/>";
+                const string signature = "<signature algorithm='RSA-SHA256'>AA==</signature>";
+
+                var paddedIdPath = Path.Combine(directory, "padded-id.qslic");
+                File.WriteAllText(paddedIdPath, "<qs3dLicense schema='1' id=' LIC-001' customer='c' product='p' nonce='n'>" + valid + signature + "</qs3dLicense>");
+                Throws<InvalidDataException>(() => new LicenseVerifier().Load(paddedIdPath));
+
+                var paddedFeaturePath = Path.Combine(directory, "padded-feature.qslic");
+                File.WriteAllText(paddedFeaturePath, "<qs3dLicense schema='1' id='LIC-001' customer='c' product='p' nonce='n'>" + valid + "<features><feature name=' quantity '/></features>" + signature + "</qs3dLicense>");
+                Throws<InvalidDataException>(() => new LicenseVerifier().Load(paddedFeaturePath));
+            }
+            finally
+            {
+                try { Directory.Delete(directory, true); } catch { }
+            }
+        }
+
+        private static void NamespacedLicenseRootsAreRejected()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-license-namespace-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                var defaultNamespacePath = Path.Combine(directory, "default-namespace.qslic");
+                File.WriteAllText(defaultNamespacePath, "<qs3dLicense xmlns='urn:unexpected' schema='1' id='x' customer='c' product='p' nonce='n'><valid notBeforeUtc='2026-01-01T00:00:00.0000000Z' expiresUtc='2027-01-01T00:00:00.0000000Z'/><signature algorithm='RSA-SHA256'>AA==</signature></qs3dLicense>");
+                Throws<InvalidDataException>(() => new LicenseVerifier().Load(defaultNamespacePath));
+
+                var prefixedNamespacePath = Path.Combine(directory, "prefixed-namespace.qslic");
+                File.WriteAllText(prefixedNamespacePath, "<x:qs3dLicense xmlns:x='urn:unexpected' schema='1' id='x' customer='c' product='p' nonce='n'><valid notBeforeUtc='2026-01-01T00:00:00.0000000Z' expiresUtc='2027-01-01T00:00:00.0000000Z'/><signature algorithm='RSA-SHA256'>AA==</signature></x:qs3dLicense>");
+                Throws<InvalidDataException>(() => new LicenseVerifier().Load(prefixedNamespacePath));
+            }
+            finally
+            {
+                try { Directory.Delete(directory, true); } catch { }
+            }
+        }
+
+        private static void DuplicateLicenseSectionsAreRejected()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-license-cardinality-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                const string rootStart = "<qs3dLicense schema='1' id='x' customer='c' product='p' nonce='n'>";
+                const string valid = "<valid notBeforeUtc='2026-01-01T00:00:00.0000000Z' expiresUtc='2027-01-01T00:00:00.0000000Z'/>";
+                const string features = "<features><feature name='quantity'/></features>";
+                const string signature = "<signature algorithm='RSA-SHA256'>AA==</signature>";
+                const string rootEnd = "</qs3dLicense>";
+
+                var noFeaturesPath = Path.Combine(directory, "no-features.qslic");
+                File.WriteAllText(noFeaturesPath, rootStart + valid + signature + rootEnd);
+                Equal(0, new LicenseVerifier().Load(noFeaturesPath).Features.Count);
+
+                var duplicateValidPath = Path.Combine(directory, "duplicate-valid.qslic");
+                File.WriteAllText(duplicateValidPath, rootStart + valid + valid + signature + rootEnd);
+                Throws<InvalidDataException>(() => new LicenseVerifier().Load(duplicateValidPath));
+
+                var duplicateFeaturesPath = Path.Combine(directory, "duplicate-features.qslic");
+                File.WriteAllText(duplicateFeaturesPath, rootStart + valid + features + features + signature + rootEnd);
+                Throws<InvalidDataException>(() => new LicenseVerifier().Load(duplicateFeaturesPath));
+
+                var duplicateSignaturePath = Path.Combine(directory, "duplicate-signature.qslic");
+                File.WriteAllText(duplicateSignaturePath, rootStart + valid + signature + signature + rootEnd);
+                Throws<InvalidDataException>(() => new LicenseVerifier().Load(duplicateSignaturePath));
+            }
+            finally
+            {
+                try { Directory.Delete(directory, true); } catch { }
+            }
+        }
+
+        private static void NestedSignatureMarkupIsRejected()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-license-signature-shape-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "nested-signature.qslic");
+            try
+            {
+                File.WriteAllText(path, "<qs3dLicense schema='1' id='x' customer='c' product='p' nonce='n'><valid notBeforeUtc='2026-01-01T00:00:00.0000000Z' expiresUtc='2027-01-01T00:00:00.0000000Z'/><signature algorithm='RSA-SHA256'><shadow>AA==</shadow></signature></qs3dLicense>");
+                Throws<InvalidDataException>(() => new LicenseVerifier().Load(path));
+            }
+            finally
+            {
+                try { Directory.Delete(directory, true); } catch { }
+            }
         }
 
         private static void DtdLicenseIsRejected()

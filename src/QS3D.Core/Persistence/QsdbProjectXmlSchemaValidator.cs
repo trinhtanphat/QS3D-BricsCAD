@@ -29,6 +29,10 @@ namespace QS3D.Core.Persistence
                 false,
                 true);
 
+            ValidateRequiredCanonicalAttribute(root, "projectId", "project id");
+            ValidateOptionalCanonicalAttribute(root, "activeZoneId", "active zone id");
+            ValidateOptionalCanonicalAttribute(root, "activeFloorId", "active floor id");
+
             foreach (var section in RootSections) RequireExactlyOne(root, section);
 
             ValidateMap(root.Element("metadata"), "project metadata");
@@ -63,14 +67,20 @@ namespace QS3D.Core.Persistence
         {
             ValidateElement(zones, "zones", Array.Empty<string>(), new[] { "zone" });
             foreach (var zone in zones.Elements("zone"))
+            {
                 ValidateElement(zone, "zone", new[] { "id", "name" }, Array.Empty<string>());
+                ValidateRequiredCanonicalAttribute(zone, "id", "zone id");
+            }
         }
 
         private static void ValidateFloors(XElement floors)
         {
             ValidateElement(floors, "floors", Array.Empty<string>(), new[] { "floor" });
             foreach (var floor in floors.Elements("floor"))
+            {
                 ValidateElement(floor, "floor", new[] { "id", "name", "elevationM" }, Array.Empty<string>());
+                ValidateRequiredCanonicalAttribute(floor, "id", "floor id");
+            }
         }
 
         private static void ValidateFamilies(XElement families)
@@ -79,6 +89,7 @@ namespace QS3D.Core.Persistence
             foreach (var family in families.Elements("family"))
             {
                 ValidateElement(family, "family", new[] { "id", "name", "category" }, new[] { "properties" });
+                ValidateRequiredCanonicalAttribute(family, "id", "family id");
                 RequireAtMostOne(family, "properties");
                 foreach (var properties in family.Elements("properties")) ValidateMap(properties, "family properties");
             }
@@ -88,7 +99,11 @@ namespace QS3D.Core.Persistence
         {
             ValidateElement(rules, "rules", Array.Empty<string>(), new[] { "rule" });
             foreach (var rule in rules.Elements("rule"))
+            {
                 ValidateElement(rule, "rule", new[] { "id", "category", "output", "expression", "version" }, Array.Empty<string>());
+                ValidateRequiredCanonicalAttribute(rule, "id", "quantity rule id");
+                ValidateRequiredCanonicalAttribute(rule, "output", "quantity rule output");
+            }
         }
 
         private static void ValidateElements(XElement elements)
@@ -106,6 +121,11 @@ namespace QS3D.Core.Persistence
                     },
                     new[] { "handles", "dependencies", "properties", "quantities" });
 
+                ValidateRequiredCanonicalAttribute(element, "id", "element id");
+                ValidateOptionalCanonicalAttribute(element, "familyId", "element family id");
+                ValidateOptionalCanonicalAttribute(element, "floorId", "element floor id");
+                ValidateOptionalCanonicalAttribute(element, "zoneId", "element zone id");
+
                 RequireAtMostOne(element, "handles");
                 RequireAtMostOne(element, "dependencies");
                 RequireAtMostOne(element, "properties");
@@ -114,15 +134,27 @@ namespace QS3D.Core.Persistence
                 foreach (var handles in element.Elements("handles"))
                 {
                     ValidateElement(handles, "handles", Array.Empty<string>(), new[] { "h" });
+                    var seenHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     foreach (var handle in handles.Elements("h"))
+                    {
                         ValidateElement(handle, "h", Array.Empty<string>(), Array.Empty<string>(), true);
+                        ValidateCanonicalText(handle, "source handle");
+                        if (!seenHandles.Add(handle.Value))
+                            throw new InvalidDataException("QSDB element contains duplicate source handle: " + handle.Value + ".");
+                    }
                 }
 
                 foreach (var dependencies in element.Elements("dependencies"))
                 {
                     ValidateElement(dependencies, "dependencies", Array.Empty<string>(), new[] { "d" });
+                    var seenDependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     foreach (var dependency in dependencies.Elements("d"))
+                    {
                         ValidateElement(dependency, "d", Array.Empty<string>(), Array.Empty<string>(), true);
+                        ValidateCanonicalText(dependency, "dependency id");
+                        if (!seenDependencies.Add(dependency.Value))
+                            throw new InvalidDataException("QSDB element contains duplicate dependency id: " + dependency.Value + ".");
+                    }
                 }
 
                 foreach (var properties in element.Elements("properties")) ValidateMap(properties, "element properties");
@@ -131,7 +163,10 @@ namespace QS3D.Core.Persistence
                 {
                     ValidateElement(quantities, "quantities", Array.Empty<string>(), new[] { "q" });
                     foreach (var quantity in quantities.Elements("q"))
+                    {
                         ValidateElement(quantity, "q", new[] { "name", "value" }, Array.Empty<string>());
+                        ValidateRequiredCanonicalAttribute(quantity, "name", "quantity name");
+                    }
                 }
             }
         }
@@ -146,7 +181,34 @@ namespace QS3D.Core.Persistence
                     "event",
                     new[] { "utc", "action", "elementId", "detail", "actor", "correlationId" },
                     Array.Empty<string>());
+                ValidateRequiredCanonicalAttribute(item, "action", "audit action");
             }
+        }
+
+        private static void ValidateRequiredCanonicalAttribute(XElement element, string attributeName, string owner)
+        {
+            var value = element.Attribute(attributeName)?.Value;
+            if (value == null || string.IsNullOrWhiteSpace(value))
+                throw new InvalidDataException("QSDB " + owner + " must not be empty.");
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("QSDB " + owner + " must not contain leading/trailing whitespace.");
+        }
+
+        private static void ValidateOptionalCanonicalAttribute(XElement element, string attributeName, string owner)
+        {
+            var value = element.Attribute(attributeName)?.Value;
+            if (value == null || value.Length == 0) return;
+            if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("QSDB " + owner + " must not contain leading/trailing whitespace.");
+        }
+
+        private static void ValidateCanonicalText(XElement element, string owner)
+        {
+            var value = element.Value;
+            if (string.IsNullOrWhiteSpace(value))
+                throw new InvalidDataException("QSDB " + owner + " must not be empty.");
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("QSDB " + owner + " must not contain leading/trailing whitespace.");
         }
 
         private static void ValidateElement(

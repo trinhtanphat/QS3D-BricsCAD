@@ -24,7 +24,8 @@ namespace QS3D.Core.Recognition
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (snapshots == null) throw new ArgumentNullException(nameof(snapshots));
-            return new RecognitionBatch(snapshots.Select(x => Suggest(project, x)), autoAcceptConfidence, minimumMargin);
+            var materialized = RecognitionInputBounds.Materialize(snapshots, RecognitionInputBounds.MaxBatchItems, "Project recognition snapshot batch");
+            return new RecognitionBatch(materialized.Select(x => Suggest(project, x)), autoAcceptConfidence, minimumMargin);
         }
 
         internal static void ValidateLayerMappings(IEnumerable<KeyValuePair<string, string>> mappings, string label)
@@ -37,7 +38,8 @@ namespace QS3D.Core.Recognition
                 if (pattern.Length == 0) throw new InvalidOperationException(label + " contains an empty layer mapping pattern.");
                 var key = RecognitionText.Normalize(pattern);
                 if (key.Length == 0) throw new InvalidOperationException(label + " contains a layer mapping pattern that normalizes to empty: " + pattern);
-                if (!Enum.TryParse(item.Value, true, out ElementCategory _)) throw new InvalidOperationException(label + " contains an invalid layer mapping category for " + pattern + ": " + item.Value);
+                if (!Enum.TryParse(item.Value, true, out ElementCategory category) || !Enum.IsDefined(typeof(ElementCategory), category))
+                    throw new InvalidOperationException(label + " contains an invalid layer mapping category for " + pattern + ": " + item.Value);
                 if (normalized.TryGetValue(key, out var previous))
                     throw new InvalidOperationException(label + " contains ambiguous normalized layer mappings: " + previous + " and " + pattern + ".");
                 normalized.Add(key, pattern);
@@ -57,7 +59,8 @@ namespace QS3D.Core.Recognition
             {
                 var pattern = item.Key.Trim();
                 if (!string.Equals(RecognitionText.Normalize(pattern), normalizedLayer, StringComparison.OrdinalIgnoreCase)) continue;
-                if (!Enum.TryParse(item.Value, true, out ElementCategory category)) throw new InvalidOperationException("Invalid project layer mapping category: " + item.Value);
+                if (!Enum.TryParse(item.Value, true, out ElementCategory category) || !Enum.IsDefined(typeof(ElementCategory), category))
+                    throw new InvalidOperationException("Invalid project layer mapping category: " + item.Value);
                 if (!RecognitionEngine.IsEntityTypeCompatible(category, snapshot.EntityType)) return null;
                 var candidate = new RecognitionCandidate { RuleId = "project-layer:" + pattern, Category = category, Confidence = 0.99d };
                 candidate.Evidence.Add("project-layer:" + pattern);

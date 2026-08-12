@@ -27,12 +27,14 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
                 var expectedProjectId = previewProject.ProjectId;
+                var expectedChangeVersion = previewProject.ChangeVersion;
                 var point = document.Editor.GetPoint("\nChọn điểm đặt QS3D BBS Table: ");
                 if (point.Status != PromptStatus.OK) return;
                 var world = point.Value.TransformBy(document.Editor.CurrentUserCoordinateSystem);
                 var project = RequireExistingProject(document, "BBS Table");
-                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException("BBS Table: QS3D project đã thay đổi trong lúc chọn điểm đặt. Hãy chạy lại lệnh.");
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
+                    project.ChangeVersion != expectedChangeVersion)
+                    throw new InvalidOperationException("BBS Table: QS3D project/state đã thay đổi trong lúc chọn điểm đặt. Hãy chạy lại lệnh.");
                 var regenerated = RegenerateSemantic(project);
                 var handle = BbsNativeTableBuilder.Build(document, project, world);
                 FinalizeUi(document, "BBS Table: đã tạo/cập nhật native Table " + handle + " • regen " + regenerated + ".");

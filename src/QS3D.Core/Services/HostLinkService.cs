@@ -51,7 +51,6 @@ namespace QS3D.Core.Services
                     MarkHostOpeningRelationChanged(wall, opening.Id, "linked/re-hosted");
                 else
                     wall.MarkDirty(ElementDirtyFlags.Quantity);
-                project.Touch();
                 AuditTrail.ForProject(project).Record("host.link", opening.Id, (previousHost.Length == 0 ? "" : previousHost + " → ") + wall.Id);
                 return true;
             });
@@ -68,7 +67,6 @@ namespace QS3D.Core.Services
                 ProjectSemanticMutationExecutor.Execute(project, "host.auto-provenance.clear", () =>
                 {
                     if (!ClearAutoHostMetadata(opening)) return false;
-                    project.Touch();
                     AuditTrail.ForProject(project).Record("host.auto-provenance.clear", opening.Id, "stale metadata without HostWallId");
                     return true;
                 });
@@ -93,7 +91,6 @@ namespace QS3D.Core.Services
                     else
                         host.MarkDirty(ElementDirtyFlags.Quantity);
                 }
-                project.Touch();
                 AuditTrail.ForProject(project).Record("host.unlink", opening.Id, hostId);
                 return true;
             });

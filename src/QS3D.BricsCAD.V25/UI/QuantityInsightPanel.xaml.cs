@@ -149,7 +149,7 @@ namespace QS3D.BricsCAD.V25.UI
         }
 
         private static string DisplayFloor(string? floor) =>
-            string.IsNullOrWhiteSpace(floor) ? "Chưa gán tầng" : floor.Trim();
+            string.IsNullOrWhiteSpace(floor) ? "Chưa gán tầng" : (floor ?? string.Empty).Trim();
 
         private static string FormatSummary(QuantityReportRow row)
         {
@@ -264,6 +264,7 @@ namespace QS3D.BricsCAD.V25.UI
                 var handles = SourceHandleResolver.Resolve(project, currentRow.ElementIds);
                 if (handles.Count == 0)
                 {
+                    Cad.CadHandleService.Select(document, handles);
                     _viewModel.Status = "Dòng này chưa có semantic handle hiện hành để định vị trong CAD.";
                     return;
                 }

@@ -1,0 +1,23 @@
+# Agent work claim — Rebar Mesh Setup single canonical bind
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-12 (UTC+7)
+- Status: `COMPLETED`
+- Scope: make `QS3DREBARMESHSETUP` resolve its single supported semantic target from read-only project state before mutation binding, then bind/revalidate canonical state exactly once before opening the modeless setup window.
+- Files reserved during implementation:
+  - `src/QS3D.BricsCAD.V25/RebarMeshSetupCommands.cs`
+  - `scripts/preflight-rebar-mesh-setup-single-bind.py`
+  - this claim file
+- Implemented contract:
+  - PICKFIRST/interactive snapshots and normalized non-empty source handles are acquired before any project bind;
+  - Slab/StructuralWall/Foundation targets resolve against `TryGetReadOnly` preview state;
+  - missing project, zero targets or ambiguous target selection returns without `ExistingProjectMutationContext.Require`;
+  - preview `ProjectId` + `ChangeVersion` and target id/category are frozen;
+  - canonical mutation context is bound exactly once, then project/version and selected target identity are revalidated before window creation;
+  - existing `RebarMeshSetupWindow` modeless stale-DWG/project/element Save guards remain unchanged;
+  - callback/UI behavior and mesh quantity/geometry semantics remain unchanged.
+- Source commit: `4b15222b65635d6655f8ca23fa143e77b3c90c39` — `fix(rebar): resolve mesh setup before project bind`.
+- Regression guard: `227cc470be5f69846667962327b7194724f7f5dc` — `scripts/preflight-rebar-mesh-setup-single-bind.py`.
+- Validation actually performed: connector-side current-source review, exact command lifecycle review against the existing `RebarMeshSetupWindow` stale-write contract, and regression-guard source review. The preflight scripts were not executed in this web session.
+- No GitHub Actions dispatched. No BricsCAD V25 runtime PASS claimed; modeless editor/native qualification remains LOCAL_ONLY.
+- Reservation released.

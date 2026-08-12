@@ -16,7 +16,7 @@ namespace QS3D.Core.Export
         public static void Validate(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            foreach (var element in project.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+            foreach (var element in project.Elements.OrderBy(x => x?.Id, StringComparer.OrdinalIgnoreCase))
             {
                 if (element == null) throw new InvalidOperationException("Project contains a null semantic Element.");
                 ValidateRegisteredReferences(

@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             DuplicatePreviousFamilyBlocksBulkEditBatch();
             DanglingPreviousFamilyBlocksWholeAssignmentBatch();
             DanglingPreviousFamilyBlocksBulkEditBatch();
+            SemanticallyIdenticalTargetAssignmentIsNoOp();
             MalformedPreviousFamilyBlocksWholeAssignmentBeforeMutation();
             CorruptProjectElementListBlocksPropertyPropagationBeforeMutation();
             CorruptProjectElementListBlocksFamilyDeleteBeforeMutation();
@@ -53,6 +54,36 @@ namespace QS3D.Core.SmokeTests
 
             Throws<InvalidOperationException>(() => new BulkEditService().AssignFamily(setup.Project, new[] { setup.First.Id, setup.Second.Id }, setup.Target.Id));
             AssertDanglingUnchanged(setup, beforeUpdated, "BulkEditService.AssignFamily");
+        }
+
+        private static void SemanticallyIdenticalTargetAssignmentIsNoOp()
+        {
+            var project = new ProjectState("family-canonical-noop", "Canonical family assignment no-op");
+            var target = new ProjectFamily("TARGET", "Target", ElementCategory.ArchitecturalWall);
+            target.Properties["ThicknessM"] = "0.3";
+            project.Families.Add(target);
+
+            var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall, target.Id, string.Empty, string.Empty);
+            element.FamilyId = "  target  ";
+            element.Properties["InstanceOverride"] = "keep";
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+
+            var beforeProjectVersion = project.ChangeVersion;
+            var beforeProjectUpdated = project.UpdatedUtc;
+            var beforeElementUpdated = element.UpdatedUtc;
+            var beforeDirty = element.Dirty;
+
+            var changed = ProjectFamilyService.Assign(project, " target ", new[] { element });
+
+            if (changed != 0) throw new Exception("Semantically identical target Family assignment must report zero changes.");
+            Equal("  target  ", element.FamilyId, "Canonical no-op assignment rewrote the stored FamilyId.");
+            Equal("keep", element.Properties["InstanceOverride"], "Canonical no-op assignment changed instance properties.");
+            if (element.Properties.Count != 1) throw new Exception("Canonical no-op assignment changed the element property set.");
+            if (element.Dirty != beforeDirty || element.UpdatedUtc != beforeElementUpdated)
+                throw new Exception("Canonical no-op assignment dirtied or timestamped the element.");
+            if (project.ChangeVersion != beforeProjectVersion || project.UpdatedUtc != beforeProjectUpdated)
+                throw new Exception("Canonical no-op assignment touched project persistence state.");
         }
 
         private static void MalformedPreviousFamilyBlocksWholeAssignmentBeforeMutation()

@@ -35,7 +35,11 @@ namespace QS3D.Core.Services
         public RegenerationEngine(DependencyGraph graph, IEnumerable<IElementRegenerator> regenerators)
         {
             _graph = graph ?? throw new ArgumentNullException(nameof(graph));
-            _regenerators = new List<IElementRegenerator>(regenerators ?? throw new ArgumentNullException(nameof(regenerators)));
+            if (regenerators == null) throw new ArgumentNullException(nameof(regenerators));
+            var materialized = new List<IElementRegenerator>(regenerators);
+            if (materialized.Any(x => x == null))
+                throw new ArgumentException("Regenerator collection cannot contain null entries.", nameof(regenerators));
+            _regenerators = materialized;
             _ruleEngine = new QuantityRuleEngine();
         }
 
@@ -78,7 +82,7 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
-            var unresolved = CanonicalTargetIds(elementIds);
+            var unresolved = CanonicalTargetIds(elementIds, project.Elements.Count);
             if (unresolved.Count == 0) return 0;
 
             // Resolve the requested subset in one project-order scan. The previous implementation
@@ -113,7 +117,7 @@ namespace QS3D.Core.Services
             }
         }
 
-        private static HashSet<string> CanonicalTargetIds(IEnumerable<string> elementIds)
+        private static HashSet<string> CanonicalTargetIds(IEnumerable<string> elementIds, int maxCount)
         {
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
@@ -124,8 +128,11 @@ namespace QS3D.Core.Services
                     throw new ArgumentException("Regeneration target id cannot be blank at index " + index.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
                 if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
                     throw new ArgumentException("Regeneration target id must be canonical without surrounding whitespace: " + raw + ".", nameof(elementIds));
-                if (!result.Add(raw))
+                if (result.Contains(raw))
                     throw new ArgumentException("Duplicate regeneration target id: " + raw + ".", nameof(elementIds));
+                if (result.Count >= maxCount)
+                    throw new ArgumentException("Regeneration target set cannot exceed project element count of " + maxCount.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
+                result.Add(raw);
                 index++;
             }
             return result;

@@ -138,7 +138,6 @@ namespace QS3D.BricsCAD.V25.Cad
                         batchPanels = checked(batchPanels + update.Handles.Count);
                     }
                     foreach (var update in pending) Commit(project, update);
-                    if (pending.Count > 0) project.Touch();
                     transaction.Commit();
                     cadCommitted = true;
                 }

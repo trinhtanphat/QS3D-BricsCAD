@@ -1,0 +1,21 @@
+# Agent work claim — Auto Host post-commit UI boundary
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-12 (UTC+7)
+- Status: `COMPLETED`
+- Scope: prevent `QS3DAUTOLINKHOSTS` from reporting committed host-link/regeneration state as a business failure when only palette/editor finalization fails afterward.
+- Files reserved during implementation:
+  - `src/QS3D.BricsCAD.V25/AutoHostLinkCommands.cs`
+  - `scripts/preflight-autohost-postcommit-ui.py`
+  - this claim file
+- Implemented contract:
+  - selection, opening/host matching, ambiguity/unmatched handling, metadata updates, `HostLinkService`, scoped regeneration and rollback remain unchanged;
+  - planning-time editor output remains in the analysis path because no semantic mutation has committed yet;
+  - after planned host-link mutation/regeneration completes successfully, summary UI runs only through non-throwing `FinalizeAutoHostUi` and cannot enter the command business-failure path;
+  - business/mutation failures report through non-throwing `ReportAutoHostError`;
+  - `LinkSingleOpening`, Direct Draw exact-host lifecycle, AutoHost metadata revision semantics and physical-cut behavior remain unchanged.
+- Source commit: `fe4aadce282748ee6b13cf19bc96c9465905771d` — `fix(autohost): isolate post-commit UI failures`.
+- Regression guard: `4b86f4247e7614cde2e7b9fd130ddf670de919b3` — `scripts/preflight-autohost-postcommit-ui.py`.
+- Validation actually performed: connector-side exact commit diff review confirmed the source diff is limited to post-commit summary/error UI routing plus the two non-throwing helpers; regression-guard source was reviewed but not executed in this web session.
+- No GitHub Actions dispatched. No BricsCAD V25 runtime PASS claimed.
+- Reservation released.

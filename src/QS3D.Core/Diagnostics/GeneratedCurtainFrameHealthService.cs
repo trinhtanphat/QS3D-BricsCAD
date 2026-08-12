@@ -143,10 +143,19 @@ namespace QS3D.Core.Diagnostics
                 if (!string.Equals(current, storedFingerprint.Trim(), StringComparison.OrdinalIgnoreCase))
                     issues.Add(new ModelHealthIssue("CURTAIN_FRAME_CONFIG_STALE", HealthSeverity.Warning, "Panel grid/frame depth/offset hiện tại không còn khớp generated curtain frames; rebuild curtain frames.", element.Id));
             }
-            catch (Exception ex)
+            catch (Exception ex) when (IsConfigDataFailure(ex))
             {
-                issues.Add(new ModelHealthIssue("CURTAIN_FRAME_CONFIG_INVALID", HealthSeverity.Warning, "Không thể kiểm tra curtain-frame config hiện tại: " + ex.Message, element.Id));
+                issues.Add(new ModelHealthIssue(
+                    "CURTAIN_FRAME_CONFIG_INVALID",
+                    HealthSeverity.Warning,
+                    "Không thể kiểm tra curtain-frame config hiện tại vì semantic/family config không hợp lệ.",
+                    element.Id));
             }
+        }
+
+        private static bool IsConfigDataFailure(Exception exception)
+        {
+            return exception is InvalidOperationException || exception is ArgumentException;
         }
 
         private static double Number(ProjectElement element, ProjectFamily? family, string key, double fallback, bool positive, bool nonNegative = false)

@@ -41,9 +41,25 @@ namespace QS3D.BricsCAD.V25.Services
                 .ToList();
             if (snapshots.Count == 0) return new SourceReconcileResult();
 
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
+                throw new InvalidOperationException("Source Reconcile yêu cầu QS3D project hiện hữu; lệnh không tạo project mới.");
+
+            var expectedProjectId = previewProject.ProjectId;
+            var expectedChangeVersion = previewProject.ChangeVersion;
+            var previewTargets = ResolveTargets(previewProject, snapshots);
+            var expectedTargetIds = new HashSet<string>(
+                previewTargets.Select(x => x.Element.Id),
+                StringComparer.OrdinalIgnoreCase);
+
             var project = ExistingProjectMutationContext.Require(document, "Source Reconcile");
+            if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
+                project.ChangeVersion != expectedChangeVersion)
+                throw new InvalidOperationException("Source Reconcile: QS3D project đã thay đổi sau khi đọc selection; hãy chọn lại source target.");
+
             var targets = ResolveTargets(project, snapshots);
             if (targets.Count == 0) return new SourceReconcileResult();
+            if (!expectedTargetIds.SetEquals(targets.Select(x => x.Element.Id)))
+                throw new InvalidOperationException("Source Reconcile: semantic target set đã thay đổi sau khi đọc selection; hãy chọn lại source target.");
             EnsureActive(document, "Source reconcile / mutation");
 
             var invalidationTargets = ExpandInvalidationTargets(project, targets.Select(x => x.Element));
@@ -81,7 +97,6 @@ namespace QS3D.BricsCAD.V25.Services
                     foreach (var grid in annotatedGridTargets)
                         GridAnnotationBuilder.RebuildInTransaction(document, transaction, project, grid);
 
-                    project.Touch();
                     transaction.Commit();
                     cadCommitted = true;
                 }

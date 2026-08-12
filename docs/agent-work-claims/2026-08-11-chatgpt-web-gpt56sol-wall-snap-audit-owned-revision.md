@@ -1,0 +1,21 @@
+# Agent work claim — Wall Snap audit-owned revision
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-11 (UTC+7)
+- Status: `COMPLETED`
+- Scope: remove the redundant standalone ProjectState revision bump from non-empty `QS3DWALLSNAPAPPLY` while preserving the intentional two-step Preview version bookkeeping.
+- Files reserved during implementation:
+  - `src/QS3D.BricsCAD.V25/WallJunctionSnapCommands.cs`
+  - `scripts/preflight-wall-snap-audit-owned-revision.py`
+  - this claim file for close-out
+- Implemented contract:
+  - non-empty Apply now advances revision only through its `wall.junction.snap.apply` AuditTrail event;
+  - Apply touch-headroom now reserves one revision advance;
+  - zero-edit Apply still performs its standalone Touch only when clearing preview metadata, because no audit event is emitted there;
+  - Preview remains unchanged: audit Touch -> compute/store final PreviewChangeVersion -> second Touch, preserving exact approved-version validation;
+  - CAD/source edits, invalidation, source fingerprint, snapshot rollback and transaction ordering remain unchanged.
+- Source commit: `886f1d3cff38146781646d63c2e61603c30519ca` — `fix(wall): make snap apply revision audit-owned`.
+- Regression guard: `edb945f4ca5b316aa232bcfa196af64240f7b2d3` — `scripts/preflight-wall-snap-audit-owned-revision.py`.
+- Validation actually performed: connector-side exact diff review confirms only Apply headroom `2 -> 1`, removal of the non-empty standalone Touch, plus EOF newline normalization. Preview source did not change. Guard source was reviewed but not executed in this web session.
+- No GitHub Actions dispatched. No BricsCAD V25 runtime PASS claimed.
+- Reservation released.

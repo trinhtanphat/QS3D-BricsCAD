@@ -194,7 +194,10 @@ namespace QS3D.Core.Geometry
             for (var i = 0; i < rings.Count; i++)
             {
                 var ring = rings[i];
-                curves.Add(GridReferenceCurve.Arc(ring.ElementId, input.CenterM, ring.RadiusM, 0d, TwoPi));
+                var curve = GridReferenceCurve.Arc(ring.ElementId, input.CenterM, ring.RadiusM, 0d, TwoPi);
+                if (!Finite(curve.Start.X) || !Finite(curve.Start.Y) || !Finite(curve.End.X) || !Finite(curve.End.Y))
+                    throw new OverflowException("Radial Grid ring endpoint generation exceeded the supported numeric range for " + ring.ElementId + ".");
+                curves.Add(curve);
             }
             return curves.AsReadOnly();
         }
@@ -247,7 +250,9 @@ namespace QS3D.Core.Geometry
         private static void ValidateExtent(double min, double max, double tolerance, string label)
         {
             if (!Finite(min) || !Finite(max)) throw new ArgumentOutOfRangeException(label + "Extent", "Rectangular Grid extents must be finite.");
-            if (max - min <= tolerance) throw new InvalidOperationException("Rectangular Grid " + label + " extent must have positive span above tolerance.");
+            var span = max - min;
+            if (!Finite(span)) throw new OverflowException("Rectangular Grid " + label + " extent span exceeds the supported numeric range.");
+            if (span <= tolerance) throw new InvalidOperationException("Rectangular Grid " + label + " extent must have positive span above tolerance.");
         }
 
         private static Point2 Scale(Point2 value, double scalar)

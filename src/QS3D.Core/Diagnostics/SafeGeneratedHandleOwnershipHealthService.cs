@@ -7,6 +7,8 @@ namespace QS3D.Core.Diagnostics
 {
     public sealed class SafeGeneratedHandleOwnershipHealthService
     {
+        private const string InvalidProjectIssueCode = "GENERATED_HANDLE_OWNERSHIP_INVALID_PROJECT";
+
         private sealed class Claim
         {
             public string ElementId { get; set; } = string.Empty;
@@ -17,10 +19,25 @@ namespace QS3D.Core.Diagnostics
         public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+
+            try
+            {
+                GeneratedHandleOwnershipIndex.Build(project);
+            }
+            catch (InvalidOperationException)
+            {
+                return new[]
+                {
+                    new ModelHealthIssue(
+                        InvalidProjectIssueCode,
+                        HealthSeverity.Error,
+                        "Generated handle ownership cannot be inspected safely because the semantic project is invalid.")
+                };
+            }
+
             var claims = new Dictionary<string, List<Claim>>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
                 AddClaims(claims, element, "SourceHandles", element.SourceHandles);
                 foreach (var group in GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element).GroupBy(x => x.Value, StringComparer.OrdinalIgnoreCase))
                     AddClaims(claims, element, group.Key, group.Select(x => x.Key));

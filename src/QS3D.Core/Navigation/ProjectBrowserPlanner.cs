@@ -50,6 +50,7 @@ namespace QS3D.Core.Navigation
     public static class ProjectBrowserPlanner
     {
         private const int MaxElements = 250000;
+        private const int MaxReferenceDefinitions = 2000;
         private const string UnassignedFloorKey = "@unassigned-floor";
         private const string UnassignedZoneKey = "@unassigned-zone";
 
@@ -58,6 +59,8 @@ namespace QS3D.Core.Navigation
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (!Enum.IsDefined(typeof(ProjectBrowserGrouping), grouping)) throw new ArgumentOutOfRangeException(nameof(grouping));
             if (project.Elements.Count > MaxElements) throw new InvalidOperationException("Project browser supports at most " + MaxElements + " semantic elements.");
+            if (project.Floors.Count > MaxReferenceDefinitions) throw new InvalidOperationException("Project browser supports at most " + MaxReferenceDefinitions + " floor definitions.");
+            if (project.Zones.Count > MaxReferenceDefinitions) throw new InvalidOperationException("Project browser supports at most " + MaxReferenceDefinitions + " zone definitions.");
 
             var elements = ValidateAndOrderElements(project);
             var floors = BuildFloorIndex(project);

@@ -117,7 +117,6 @@ namespace QS3D.BricsCAD.V25.Cad
                     }
 
                     foreach (var item in pending) CommitSemanticUpdate(project, item);
-                    if (pending.Count > 0) project.Touch();
                     transaction.Commit();
                     cadCommitted = true;
                 }

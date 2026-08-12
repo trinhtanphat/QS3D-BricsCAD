@@ -10,11 +10,11 @@ namespace QS3D.Core.Services
     {
         public static double Get(ProjectElement element, string name, double fallback = 0d)
         {
-            if (element.Properties.TryGetValue(name, out var value) &&
-                double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) &&
-                !double.IsNaN(result) && !double.IsInfinity(result))
-                return result;
-            return fallback;
+            if (!element.Properties.TryGetValue(name, out var value)) return fallback;
+            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) ||
+                double.IsNaN(result) || double.IsInfinity(result))
+                throw new InvalidOperationException(element.Id + "/" + name + " must be a finite invariant numeric value.");
+            return result;
         }
     }
 

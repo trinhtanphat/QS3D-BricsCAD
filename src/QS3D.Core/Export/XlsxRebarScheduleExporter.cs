@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
-using System.Security;
 using System.Text;
 using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
@@ -12,10 +11,16 @@ namespace QS3D.Core.Export
 {
     public static class XlsxRebarScheduleExporter
     {
+        private const int MaxWorksheetRows = 1048576;
+        private const int HeaderRows = 1;
+        private const int MaxDataRows = MaxWorksheetRows - HeaderRows;
+        private const int MaxCellTextLength = 32767;
+
         public static void Export(string path, IReadOnlyList<RebarScheduleRow> rows)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
+            var rowCount = ValidateRows(rows);
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -30,7 +35,7 @@ namespace QS3D.Core.Export
                     WriteEntry(archive, "xl/workbook.xml", WorkbookXml);
                     WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml);
                     WriteEntry(archive, "xl/styles.xml", StylesXml);
-                    WriteEntry(archive, "xl/worksheets/sheet1.xml", BuildSheet(rows));
+                    WriteEntry(archive, "xl/worksheets/sheet1.xml", BuildSheet(rows, rowCount));
                 }
                 ValidatePackage(tempPath);
                 AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
@@ -41,7 +46,60 @@ namespace QS3D.Core.Export
             }
         }
 
-        private static string BuildSheet(IReadOnlyList<RebarScheduleRow> rows)
+        private static int ValidateRows(IReadOnlyList<RebarScheduleRow> rows)
+        {
+            var count = rows.Count;
+            if (count < 0 || count > MaxDataRows)
+                throw new ArgumentOutOfRangeException(
+                    nameof(rows),
+                    count,
+                    "BBS XLSX data rows must be between 0 and " + MaxDataRows.ToString(CultureInfo.InvariantCulture) + " so the worksheet stays within its row limit.");
+
+            for (var index = 0; index < count; index++)
+            {
+                var row = rows[index];
+                if (row == null)
+                    throw new ArgumentException(
+                        "BBS row cannot be null. Invalid row index: " + index.ToString(CultureInfo.InvariantCulture) + ".",
+                        nameof(rows));
+
+                ValidateCellText(row.ElementId, index, "Element");
+                ValidateCellText(row.BarMark, index, "Bar Mark");
+                ValidateCellText(row.ShapeCode, index, "Shape");
+                ValidateCellText(row.Notation, index, "Notation");
+                ValidateCellText(row.FabricationStatus, index, "Fabrication Status");
+                ValidateCellText(row.FabricationStandardCode, index, "Standard Code");
+                ValidateCellText(row.FabricationDetailingRevision, index, "Detailing Revision");
+                ValidateFinite(row.DiameterMm, index, "DiameterMm");
+                ValidateFinite(row.CuttingLengthM, index, "CuttingLengthM");
+                ValidateFinite(row.TotalLengthM, index, "TotalLengthM");
+                ValidateFinite(row.UnitWeightKgM, index, "UnitWeightKgM");
+                ValidateFinite(row.NetWeightKg, index, "NetWeightKg");
+                ValidateFinite(row.WastePercent, index, "WastePercent");
+                ValidateFinite(row.TotalWeightKg, index, "TotalWeightKg");
+            }
+            return count;
+        }
+
+        private static void ValidateCellText(string value, int rowIndex, string field)
+        {
+            if ((value ?? string.Empty).Length <= MaxCellTextLength) return;
+            throw new ArgumentOutOfRangeException(
+                "rows",
+                "BBS XLSX worksheet row " + (rowIndex + HeaderRows + 1).ToString(CultureInfo.InvariantCulture) +
+                " field '" + field + "' exceeds Excel's " + MaxCellTextLength.ToString(CultureInfo.InvariantCulture) + "-character cell text limit.");
+        }
+
+        private static void ValidateFinite(double value, int rowIndex, string field)
+        {
+            if (!double.IsNaN(value) && !double.IsInfinity(value)) return;
+            throw new ArgumentOutOfRangeException(
+                "rows",
+                "BBS XLSX worksheet row " + (rowIndex + HeaderRows + 1).ToString(CultureInfo.InvariantCulture) +
+                " field '" + field + "' must be finite.");
+        }
+
+        private static string BuildSheet(IReadOnlyList<RebarScheduleRow> rows, int rowCount)
         {
             var headers = new[]
             {
@@ -49,7 +107,7 @@ namespace QS3D.Core.Export
                 "kg/m", "KL net (kg)", "Hao hụt (%)", "KL tổng (kg)",
                 "Fabrication Status", "Standard Code", "Detailing Revision"
             };
-            var lastRow = Math.Max(1, rows.Count + 1);
+            var lastRow = Math.Max(1, rowCount + HeaderRows);
             var range = "A1:O" + lastRow.ToString(CultureInfo.InvariantCulture);
             var sb = new StringBuilder();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
@@ -58,7 +116,7 @@ namespace QS3D.Core.Export
             sb.Append("<row r=\"1\">");
             for (var c = 0; c < headers.Length; c++) AppendText(sb, CellRef(c, 1), headers[c], 1);
             sb.Append("</row>");
-            for (var i = 0; i < rows.Count; i++)
+            for (var i = 0; i < rowCount; i++)
             {
                 var row = rows[i] ?? throw new ArgumentException("BBS row cannot be null.", nameof(rows));
                 var r = i + 2;
@@ -91,7 +149,7 @@ namespace QS3D.Core.Export
 
         private static void AppendText(StringBuilder sb, string cellRef, string value, int style)
         {
-            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is><t>").Append(SecurityElement.Escape(value ?? string.Empty)).Append("</t></is></c>");
+            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is><t>").Append(XlsxXmlText.Escape(value ?? string.Empty)).Append("</t></is></c>");
         }
 
         private static void AppendNumber(StringBuilder sb, string cellRef, double value)

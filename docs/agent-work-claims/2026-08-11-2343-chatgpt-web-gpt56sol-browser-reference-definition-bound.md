@@ -1,0 +1,33 @@
+# Agent Work Claim
+
+- Agent/session: `chatgpt-web-gpt56sol-browser-reference-definition-bound-2026-08-11`
+- Status: `COMPLETED`
+- Objective: Bound Project Browser floor/zone reference-definition enumeration to the existing domain limit so malformed or directly constructed `ProjectState` inputs cannot force indexing beyond supported Floor/Zone capacity.
+- Owned files/symbols:
+  - `src/QS3D.Core/Navigation/ProjectBrowserPlanner.cs` (`ProjectBrowserPlanner.Build` Floor/Zone definition bounds only)
+  - `tests/QS3D.Core.SmokeTests/ProjectBrowserReferenceDefinitionBoundsSmoke.cs`
+  - `tests/QS3D.Core.SmokeTests/ProjectBrowserReferenceDefinitionBoundsSmokeRegistration.cs`
+- Coordination-only files:
+  - `docs/agent-work-claims/2026-08-11-2343-chatgpt-web-gpt56sol-browser-reference-definition-bound.md`
+- Acceptance checks:
+  - More than 2000 Floor definitions fail before Project Browser index construction.
+  - More than 2000 Zone definitions fail before Project Browser index construction.
+  - The bound matches the existing `ProjectFloorService` / `ProjectZoneService` supported capacity.
+  - Existing supported Project Browser groupings remain unchanged at or below the bound.
+  - Focused Core smoke coverage records both guardrails and the exact 2000-definition boundary.
+  - No BricsCAD V25 runtime qualification claim.
+- Completion evidence:
+  - `ProjectBrowserPlanner.Build` now rejects `project.Floors.Count > 2000` and `project.Zones.Count > 2000` before validating/enumerating semantic elements or building Floor/Zone indexes.
+  - `ProjectFloorService` and `ProjectZoneService` were re-read on current `main`; both retain their existing capacity of 2000 definitions.
+  - `ProjectBrowserReferenceDefinitionBoundsSmoke` covers oversized Floor and Zone collections with a null sentinel so the expected cardinality exception proves the guard executes before index enumeration.
+  - The smoke also builds all defined Project Browser groupings with exactly 2000 Floor definitions and exactly 2000 Zone definitions to preserve the supported boundary.
+  - The smoke is registered through the repository's existing `[ModuleInitializer]` convention; no shared smoke runner edit is required.
+  - Source implementation commit: `8810ff3aaa9b302596feb4bf63dd0ed0226a00dd`.
+  - Smoke implementation commit: `6432233e718643757befcec600286332e16a373e`.
+  - Smoke registration commit: `e675bffe3c59772859e9d9a15d81c792a08d73f5`.
+  - Remote connector validation inspected source/test registration and branch ancestry only; no local `dotnet` or BricsCAD V25 runtime execution was claimed.
+- Overlap/coordination notes:
+  - `main` was compared from the claim-only commit through the final pre-write snapshots; `src/QS3D.Core/Navigation/ProjectBrowserPlanner.cs` and the two owned smoke paths were not changed by intervening sessions.
+  - Scope excludes Project Browser query-option bounds, workspace persistence/XML, selection/reveal, and UI lanes.
+  - The previously investigated Model Health severity lane is owned by another session and is intentionally excluded.
+  - No GitHub Actions were run.

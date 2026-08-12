@@ -151,6 +151,7 @@ namespace QS3D.Core.Navigation
                 throw new InvalidOperationException("Project browser workspace state exceeds the maximum persisted size.");
             if (project.Metadata.TryGetValue(MetadataKey, out var existing) && string.Equals(existing, serialized, StringComparison.Ordinal))
                 return false;
+            project.Touch();
             project.Metadata[MetadataKey] = serialized;
             return true;
         }
@@ -158,7 +159,10 @@ namespace QS3D.Core.Navigation
         public bool Clear(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            return project.Metadata.Remove(MetadataKey);
+            if (!project.Metadata.ContainsKey(MetadataKey)) return false;
+            project.Touch();
+            project.Metadata.Remove(MetadataKey);
+            return true;
         }
 
         public string Serialize(ProjectBrowserWorkspaceState state)
@@ -206,38 +210,59 @@ namespace QS3D.Core.Navigation
             RequireAttribute(root, "format", FormatName);
             RequireAttribute(root, "version", FormatVersion.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
-            if (!Enum.TryParse((string)root.Attribute("grouping"), false, out ProjectBrowserGrouping grouping) ||
-                !Enum.IsDefined(typeof(ProjectBrowserGrouping), grouping))
+            var groupingRaw = (string)root.Attribute("grouping");
+            if (!Enum.TryParse(groupingRaw, false, out ProjectBrowserGrouping grouping) ||
+                !Enum.IsDefined(typeof(ProjectBrowserGrouping), grouping) ||
+                !string.Equals(groupingRaw, grouping.ToString(), StringComparison.Ordinal))
                 throw new InvalidDataException("Project browser workspace grouping is invalid.");
             var dirtyRaw = (string)root.Attribute("dirtyOnly");
-            if (!bool.TryParse(dirtyRaw, out var dirtyOnly)) throw new InvalidDataException("Project browser workspace dirtyOnly is invalid.");
+            if (!bool.TryParse(dirtyRaw, out var dirtyOnly) ||
+                !string.Equals(dirtyRaw, dirtyOnly ? "true" : "false", StringComparison.Ordinal))
+                throw new InvalidDataException("Project browser workspace dirtyOnly is invalid.");
 
-            var expectedChildren = new[] { "Categories", "FloorIds", "ZoneIds", "ExpandedPaths", "SelectedElementIds" };
+            var expectedChildren = new HashSet<XName>(new[]
+            {
+                XName.Get("Categories"), XName.Get("FloorIds"), XName.Get("ZoneIds"),
+                XName.Get("ExpandedPaths"), XName.Get("SelectedElementIds")
+            });
             foreach (var child in root.Elements())
-                if (!expectedChildren.Contains(child.Name.LocalName, StringComparer.Ordinal))
+                if (!expectedChildren.Contains(child.Name))
                     throw new InvalidDataException("Project browser workspace contains an unsupported element: " + child.Name + ".");
             foreach (var name in expectedChildren)
                 if (root.Elements(name).Count() != 1)
-                    throw new InvalidDataException("Project browser workspace requires exactly one " + name + " element.");
+                    throw new InvalidDataException("Project browser workspace requires exactly one " + name.LocalName + " element.");
 
             var categories = ReadCategories(root.Element("Categories"));
             var floorIds = ReadValues(root.Element("FloorIds"), "Id");
             var zoneIds = ReadValues(root.Element("ZoneIds"), "Id");
             var expanded = ReadValues(root.Element("ExpandedPaths"), "Path");
             var selected = ReadValues(root.Element("SelectedElementIds"), "Id");
+            var queryRaw = (string)root.Attribute("query");
+            var primaryRaw = (string)root.Attribute("primaryElementId");
 
             try
             {
-                return new ProjectBrowserWorkspaceState(
+                var state = new ProjectBrowserWorkspaceState(
                     grouping,
-                    (string)root.Attribute("query"),
+                    queryRaw,
                     dirtyOnly,
                     categories,
                     floorIds,
                     zoneIds,
                     expanded,
                     selected,
-                    (string)root.Attribute("primaryElementId"));
+                    primaryRaw);
+                if (!string.Equals(queryRaw, state.Query, StringComparison.Ordinal))
+                    throw new InvalidDataException("Project browser workspace query is non-canonical.");
+                if (!string.Equals(primaryRaw, state.PrimaryElementId, StringComparison.Ordinal))
+                    throw new InvalidDataException("Project browser workspace primary element id is non-canonical.");
+                if (!categories.SequenceEqual(state.Categories) ||
+                    !floorIds.SequenceEqual(state.FloorIds, StringComparer.Ordinal) ||
+                    !zoneIds.SequenceEqual(state.ZoneIds, StringComparer.Ordinal) ||
+                    !expanded.SequenceEqual(state.ExpandedPaths, StringComparer.Ordinal) ||
+                    !selected.SequenceEqual(state.SelectedElementIds, StringComparer.Ordinal))
+                    throw new InvalidDataException("Project browser workspace collections are non-canonical.");
+                return state;
             }
             catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
             {
@@ -265,7 +290,9 @@ namespace QS3D.Core.Navigation
             foreach (var element in container.Elements("Category"))
             {
                 ValidateItemShape(element, "Category");
-                if (!Enum.TryParse(element.Value, false, out ElementCategory value) || !Enum.IsDefined(typeof(ElementCategory), value))
+                if (!Enum.TryParse(element.Value, false, out ElementCategory value) ||
+                    !Enum.IsDefined(typeof(ElementCategory), value) ||
+                    !string.Equals(element.Value, value.ToString(), StringComparison.Ordinal))
                     throw new InvalidDataException("Project browser workspace category is invalid: " + element.Value + ".");
                 result.Add(value);
             }

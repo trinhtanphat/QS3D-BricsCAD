@@ -21,6 +21,14 @@ doc = ROOT / "docs/SOURCE-EDIT-WORKFLOW.md"
 checks = {
     service: [
         "EntitySnapshotReader.ReadCurrentSelection(document)",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject)",
+        "var expectedProjectId = previewProject.ProjectId;",
+        "var expectedChangeVersion = previewProject.ChangeVersion;",
+        "var previewTargets = ResolveTargets(previewProject, snapshots);",
+        "var expectedTargetIds = new HashSet<string>(",
+        "ExistingProjectMutationContext.Require(document, \"Source Reconcile\")",
+        "project.ChangeVersion != expectedChangeVersion",
+        "expectedTargetIds.SetEquals(targets.Select(x => x.Element.Id))",
         "var generatedOwners = GeneratedHandleOwnershipIndex.Build(project);",
         "var sourceOwners = BuildSourceOwnerIndex(project);",
         "generatedOwners.TryFindOwner(snapshot.Handle, out var generatedOwner, out var generatedSlot)",
@@ -48,7 +56,6 @@ checks = {
         "engine.RegenerateDirtySubset(project, affectedIds)",
         "affected\n                .Where(HasSemanticDirty)",
         "invalidation.CommitMetadata()",
-        "project.Touch()",
         "transaction.Commit();",
         "cadCommitted = true;",
         "rollback.Restore(project)",
@@ -168,16 +175,36 @@ for path, needles in checks.items():
 
 if service.is_file():
     text = service.read_text(encoding="utf-8")
+
+    selection = text.find("EntitySnapshotReader.ReadCurrentSelection(document)")
+    empty = text.find("if (snapshots.Count == 0) return new SourceReconcileResult();", selection)
+    readonly = text.find("ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject)", empty)
+    preview_resolve = text.find("var previewTargets = ResolveTargets(previewProject, snapshots);", readonly)
+    bind = text.find('var project = ExistingProjectMutationContext.Require(document, "Source Reconcile");', preview_resolve)
+    freshness = text.find("project.ChangeVersion != expectedChangeVersion", bind)
+    canonical_resolve = text.find("var targets = ResolveTargets(project, snapshots);", freshness)
+    target_freshness = text.find("expectedTargetIds.SetEquals(targets.Select(x => x.Element.Id))", canonical_resolve)
+    snapshot = text.find("ProjectStateSnapshot.Capture(project)", target_freshness)
+    if min(selection, empty, readonly, preview_resolve, bind, freshness, canonical_resolve, target_freshness, snapshot) < 0 or not (
+        selection < empty < readonly < preview_resolve < bind < freshness < canonical_resolve < target_freshness < snapshot
+    ):
+        errors.append("Source reconcile must complete selection, validate ownership read-only, bind canonical project once, revalidate project/target freshness, then snapshot before mutation")
+    if text.count("ExistingProjectMutationContext.Require(document, \"Source Reconcile\")") != 1:
+        errors.append("Source reconcile must bind canonical mutation context exactly once")
+    if "ProjectContextCoordinator.GetOrCreate(document)" in text:
+        errors.append("Source reconcile must not bootstrap project state")
+
     prepare = text.find("GeneratedDependentGeometryInvalidator.Prepare")
     refresh = text.find("RefreshSourceDerivedState(project")
     regen = text.find("RegenerateAffectedToStable(project")
     metadata = text.find("invalidation.CommitMetadata()")
-    touch = text.find("project.Touch()", metadata)
-    commit = text.find("transaction.Commit();", touch)
+    commit = text.find("transaction.Commit();", metadata)
     flag = text.find("cadCommitted = true;", commit)
     restore = text.find("rollback.Restore(project)", flag)
-    if min(prepare, refresh, regen, metadata, touch, commit, flag, restore) < 0 or not (prepare < refresh < regen < metadata < touch < commit < flag < restore):
-        errors.append("Source reconcile must invalidate CAD -> refresh authoritative semantic state -> converge regeneration -> commit generated metadata/revision -> CAD commit, with project restore only on pre-commit failure")
+    if min(prepare, refresh, regen, metadata, commit, flag, restore) < 0 or not (prepare < refresh < regen < metadata < commit < flag < restore):
+        errors.append("Source reconcile must invalidate CAD -> refresh authoritative semantic state -> converge regeneration -> commit generated metadata -> CAD commit, with project restore only on pre-commit failure")
+    if "project.Touch();" in text:
+        errors.append("Source reconcile revision must remain AuditTrail-owned; standalone project.Touch is redundant")
 
     resolve_start = text.find("private static List<Target> ResolveTargets")
     resolve_end = text.find("private static Dictionary<string, List<ProjectElement>> BuildSourceOwnerIndex", resolve_start)
@@ -186,7 +213,7 @@ if service.is_file():
     source_build = resolve.find("BuildSourceOwnerIndex(project)")
     selection_loop = resolve.find("foreach (var snapshot in snapshots)")
     if min(generated_build, source_build, selection_loop) < 0 or not (generated_build < selection_loop and source_build < selection_loop):
-        errors.append("Source reconcile ownership indexes must be built once before the selected-snapshot loop")
+        errors.append("Source reconcile ownership indexes must be built once per validation phase before the selected-snapshot loop")
     if "GeneratedHandleOwnershipPolicy.TryFindOwner(project, snapshot.Handle" in resolve:
         errors.append("Source reconcile must not rescan the whole project for generated ownership on every selected handle")
     if ".Where(x => x.SourceHandles.Any" in resolve:
@@ -269,4 +296,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DSYNCSOURCE builds generated/source ownership plus reverse-dependency/element indexes once per operation, uses canonical fail-closed subset targets, scans only the affected closure, preserves rollback, and keeps native rebuild explicit.")
+print("PASS: QS3DSYNCSOURCE validates generated/source ownership read-only before a single canonical bind, revalidates project/target freshness, preserves AuditTrail-owned revision, bounded affected-closure regeneration, rollback, and explicit native rebuild boundaries.")

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Xml.Linq;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
@@ -14,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             PaddedMapKeyFailsBeforePersistence();
             PaddedMapKeyFailsOnLoad();
             PaddedQuantityNameFailsBeforePersistence();
+            DuplicateQuantityNameFailsOnLoad();
             NonCanonicalHandleAndDependencyFailBeforePersistence();
             NullAuditEventFailsClosed();
             NonUtcTimestampFailsBeforePersistence();
@@ -68,6 +70,50 @@ namespace QS3D.Core.SmokeTests
             RejectSave(project, "Padded quantity name was silently persisted/normalized.");
         }
 
+        private static void DuplicateQuantityNameFailsOnLoad()
+        {
+            RejectDuplicateQuantityOnLoad("AreaM2");
+            RejectDuplicateQuantityOnLoad("aream2");
+        }
+
+        private static void RejectDuplicateQuantityOnLoad(string duplicateName)
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-duplicate-quantity-load-" + Guid.NewGuid().ToString("N") + ".qsdb");
+            try
+            {
+                var project = NewProject("duplicate-quantity-load");
+                var first = AddElement(project);
+                first.SetQuantity("AreaM2", 3d);
+                var second = new ProjectElement("E2", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+                second.SetQuantity("AreaM2", 4d);
+                project.Elements.Add(second);
+
+                var store = new QsdbProjectStore();
+                store.Save(project, path);
+                var baseline = store.Load(path);
+                if (baseline.Elements.Count != 2 || baseline.Elements[0].Quantities["AreaM2"] != 3d || baseline.Elements[1].Quantities["AreaM2"] != 4d)
+                    throw new Exception("Unique per-element quantities did not roundtrip before duplicate-quantity tampering.");
+
+                var document = XDocument.Load(path, LoadOptions.None);
+                var firstPersistedElement = document.Root?.Element("elements")?.Element("element")
+                    ?? throw new Exception("Serialized QSDB element fixture was not found.");
+                var quantities = firstPersistedElement.Element("quantities")
+                    ?? throw new Exception("Serialized QSDB quantity fixture was not found.");
+                quantities.Add(new XElement("q", new XAttribute("name", duplicateName), new XAttribute("value", "99")));
+                document.Save(path, SaveOptions.DisableFormatting);
+
+                var rejected = false;
+                try { store.Load(path); }
+                catch (InvalidDataException) { rejected = true; }
+                if (!rejected) throw new Exception("Duplicate persisted element quantity name was silently overwritten while loading QSDB: " + duplicateName);
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+                try { if (File.Exists(path + ".bak")) File.Delete(path + ".bak"); } catch { }
+            }
+        }
+
         private static void NonCanonicalHandleAndDependencyFailBeforePersistence()
         {
             var project = NewProject("handle-key");
@@ -84,6 +130,30 @@ namespace QS3D.Core.SmokeTests
             element = AddElement(project);
             element.SourceHandles.Add("   ");
             RejectSave(project, "Blank source handle was silently dropped during persistence.");
+
+            project = NewProject("duplicate-handle-exact");
+            element = AddElement(project);
+            element.SourceHandles.Add("1A");
+            element.SourceHandles.Add("1A");
+            RejectSave(project, "Exact duplicate source handles were persisted even though the QSDB reader rejects them.");
+
+            project = NewProject("duplicate-handle-case");
+            element = AddElement(project);
+            element.SourceHandles.Add("1A");
+            element.SourceHandles.Add("1a");
+            RejectSave(project, "Case-only duplicate source handles were persisted even though source identity is case-insensitive.");
+
+            project = NewProject("duplicate-dependency-exact");
+            element = AddElement(project);
+            element.DependsOn.Add("E2");
+            element.DependsOn.Add("E2");
+            RejectSave(project, "Exact duplicate dependency ids were persisted even though the QSDB reader rejects them.");
+
+            project = NewProject("duplicate-dependency-case");
+            element = AddElement(project);
+            element.DependsOn.Add("E2");
+            element.DependsOn.Add("e2");
+            RejectSave(project, "Case-only duplicate dependency ids were persisted even though dependency identity is case-insensitive.");
         }
 
         private static void NullAuditEventFailsClosed()
@@ -118,11 +188,11 @@ namespace QS3D.Core.SmokeTests
                 () => new ProjectElement("E1", (ElementCategory)999, string.Empty, string.Empty, string.Empty),
                 "Undefined element category reached persistence instead of failing at the domain boundary.");
 
-            var project = NewProject("rule-category");
-            project.QuantityRules.Add(new QuantityRule("R1", (ElementCategory)999, "Area", "1", "v1"));
-            RejectSave(project, "Undefined quantity-rule category was persisted.");
+            ThrowsArgumentOutOfRange(
+                () => new QuantityRule("R1", (ElementCategory)999, "Area", "1", "v1"),
+                "Undefined quantity-rule category reached persistence instead of failing at the domain boundary.");
 
-            project = NewProject("load-category");
+            var project = NewProject("load-category");
             project.Families.Add(new ProjectFamily("F1", "Family", ElementCategory.ArchitecturalWall));
             var path = Path.Combine(Path.GetTempPath(), "qs3d-category-load-" + Guid.NewGuid().ToString("N") + ".qsdb");
             try

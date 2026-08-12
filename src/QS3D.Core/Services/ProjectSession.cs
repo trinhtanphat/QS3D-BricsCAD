@@ -9,6 +9,7 @@ namespace QS3D.Core.Services
     {
         private readonly QsdbProjectStore _store;
         private ProjectFileLock? _lock;
+        private bool _recoveredFromBackup;
 
         public ProjectSession(ProjectState project, string path, QsdbProjectStore? store = null)
         {
@@ -32,7 +33,11 @@ namespace QS3D.Core.Services
             Audit.Record("PROJECT_SAVE", string.Empty, Path);
             try
             {
-                _store.Save(Project, Path);
+                if (_recoveredFromBackup)
+                    _store.SavePreservingValidatedBackup(Project, Path);
+                else
+                    _store.Save(Project, Path);
+                _recoveredFromBackup = false;
             }
             catch (Exception saveError)
             {
@@ -51,11 +56,13 @@ namespace QS3D.Core.Services
         public void Reload()
         {
             if (_lock == null) throw new InvalidOperationException("Acquire the project write lock before reloading.");
-            var project = _store.Load(Path);
+            var result = _store.LoadWithBackupFallback(Path);
+            var project = result.Project;
             var audit = AuditTrail.ForProject(project);
             audit.Record("PROJECT_RELOAD", string.Empty, Path);
             Project = project;
             Audit = audit;
+            _recoveredFromBackup = result.RecoveredFromBackup;
         }
 
         public void Dispose()

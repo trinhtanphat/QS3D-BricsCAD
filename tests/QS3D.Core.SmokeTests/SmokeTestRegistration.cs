@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
             XlsxScheduleNullRowSmoke.Run();
             XlsxQuantityNullRowSmoke.Run();
             XlsxHandleReaderCoordinateSmoke.Run();
+            XlsxExporterRowBoundSmoke.Run();
             QuantityReportRevisionReviewSmoke.Run();
             PersistenceHardeningSmoke.Run();
             LicenseVerifierSmoke.Run();
@@ -49,10 +50,12 @@ namespace QS3D.Core.SmokeTests
             CurtainWallDetailSmoke.Run();
             GeneratedOutputHealthStaleSmoke.Run();
             CurtainFrameOpeningSmoke.Run();
+            CurtainWallOpeningFramePlannerSmoke.Run();
             CurtainFrameOpeningHealthSmoke.Run();
             BomReleaseGuardSmoke.Run();
             HealthSummaryReadinessSmoke.Run();
             DependencyHealthMissingTargetSmoke.Run();
+            DependencyHealthBlankTargetSmoke.Run();
             LevelReferenceSmoke.Run();
             FloorGeneratedIdentitySmoke.Run();
             ModelHealthIdentityAmbiguitySmoke.Run();
@@ -69,9 +72,12 @@ namespace QS3D.Core.SmokeTests
             GeneratedSemanticTagHealthSmoke.Run();
             SemanticDocumentationTableSmoke.Run();
             SemanticViewSheetPlannerSmoke.Run();
+            SemanticViewNullReferenceSmoke.Run();
             SemanticSheetAutoLayoutSmoke.Run();
+            SemanticSchedulePlacementSmoke.Run();
             SemanticDocumentationCatalogStoreSmoke.Run();
             SemanticDocumentationCatalogEditorSmoke.Run();
+            SemanticDocumentationCanonicalIdSmoke.Run();
             ProjectBrowserPlannerSmoke.Run();
             ProjectBrowserQueryPlannerSmoke.Run();
             ProjectBrowserVirtualizationSmoke.Run();
@@ -91,6 +97,7 @@ namespace QS3D.Core.SmokeTests
             GeneratedHandleOwnershipIndexSmoke.Run();
             DependencyGraphDirectDependentsSmoke.Run();
             ProjectStateLookupSmoke.Run();
+            ProjectStateSnapshotElementIdentitySmoke.Run();
             ProjectElementCategoryIntegritySmoke.Run();
             SelectionStateSmoke.Run();
             BulkEditCanonicalizationSmoke.Run();

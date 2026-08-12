@@ -16,9 +16,9 @@ namespace QS3D.Core.Navigation
         {
             Query = query;
             DirtyOnly = dirtyOnly;
-            Categories = categories == null ? new List<ElementCategory>().AsReadOnly() : new List<ElementCategory>(categories).AsReadOnly();
-            FloorIds = floorIds == null ? new List<string>().AsReadOnly() : new List<string>(floorIds).AsReadOnly();
-            ZoneIds = zoneIds == null ? new List<string>().AsReadOnly() : new List<string>(zoneIds).AsReadOnly();
+            Categories = CopyBounded(categories, nameof(categories));
+            FloorIds = CopyBounded(floorIds, nameof(floorIds));
+            ZoneIds = CopyBounded(zoneIds, nameof(zoneIds));
         }
 
         public string? Query { get; }
@@ -26,6 +26,21 @@ namespace QS3D.Core.Navigation
         public IReadOnlyList<ElementCategory> Categories { get; }
         public IReadOnlyList<string> FloorIds { get; }
         public IReadOnlyList<string> ZoneIds { get; }
+
+        private static IReadOnlyList<T> CopyBounded<T>(IEnumerable<T>? values, string parameterName)
+        {
+            if (values == null) return new List<T>().AsReadOnly();
+            var result = new List<T>();
+            foreach (var value in values)
+            {
+                if (result.Count >= ProjectBrowserQueryPlanner.MaxFilterIds)
+                    throw new InvalidOperationException(
+                        "Project browser query option " + parameterName + " supports at most " +
+                        ProjectBrowserQueryPlanner.MaxFilterIds + " values.");
+                result.Add(value);
+            }
+            return result.AsReadOnly();
+        }
     }
 
     public sealed class ProjectBrowserQueryResult
@@ -47,7 +62,7 @@ namespace QS3D.Core.Navigation
     {
         private const int MaxElements = 250000;
         private const int MaxQueryLength = 160;
-        private const int MaxFilterIds = 10000;
+        internal const int MaxFilterIds = 10000;
 
         public static ProjectBrowserQueryResult Build(
             ProjectState project,
@@ -230,8 +245,13 @@ namespace QS3D.Core.Navigation
                 if (!Enum.IsDefined(typeof(ElementCategory), element.Category)) throw new InvalidOperationException("Project browser found undefined element category on: " + elementId + ".");
 
                 var familyId = (element.FamilyId ?? string.Empty).Trim();
-                if (familyId.Length > 0 && !families.ContainsKey(familyId))
-                    throw new InvalidOperationException("Project browser found missing family reference " + familyId + " on element " + elementId + ".");
+                if (familyId.Length > 0)
+                {
+                    if (!families.TryGetValue(familyId, out var family))
+                        throw new InvalidOperationException("Project browser found missing family reference " + familyId + " on element " + elementId + ".");
+                    if (family.Category != element.Category)
+                        throw new InvalidOperationException("Project browser found family/category mismatch on element " + elementId + ": family " + family.Id + " is " + family.Category + " while element is " + element.Category + ".");
+                }
                 var floorId = (element.FloorId ?? string.Empty).Trim();
                 if (floorId.Length > 0 && !floors.ContainsKey(floorId))
                     throw new InvalidOperationException("Project browser found missing floor reference " + floorId + " on element " + elementId + ".");

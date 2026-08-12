@@ -47,7 +47,7 @@ namespace QS3D.Core.Documentation
             {
                 var previous = views[matches[0]];
                 views[matches[0]] = definition;
-                if (!string.Equals(previous.Id, definition.Id, StringComparison.Ordinal))
+                if (!IdsEqualOrdinal(previous.Id, definition.Id))
                     sheets = RewriteViewReferences(sheets, previous.Id, definition.Id, out rewritten);
             }
 
@@ -70,14 +70,14 @@ namespace QS3D.Core.Documentation
             if (matches.Count == 0) throw new KeyNotFoundException("Unknown semantic view: " + existingId);
 
             var previous = views[matches[0]];
-            var changesIdentity = !string.Equals(previous.Id, replacement.Id, StringComparison.OrdinalIgnoreCase);
+            var changesIdentity = !IdsEqual(previous.Id, replacement.Id);
             var referenceCount = CountViewReferences(sheets, previous.Id);
             if (changesIdentity && referenceCount > 0 && !rewriteSheetReferences)
                 throw new InvalidOperationException("Cannot change semantic view id while sheets still reference it: " + previous.Id + ". Enable explicit sheet-reference rewrite.");
 
             views[matches[0]] = replacement;
             var rewritten = 0;
-            if (referenceCount > 0 && (changesIdentity || !string.Equals(previous.Id, replacement.Id, StringComparison.Ordinal)))
+            if (referenceCount > 0 && (changesIdentity || !IdsEqualOrdinal(previous.Id, replacement.Id)))
                 sheets = RewriteViewReferences(sheets, previous.Id, replacement.Id, out rewritten);
 
             return Save(project, "ReplaceView", replacement.Id, views, sheets, rewritten);
@@ -161,7 +161,7 @@ namespace QS3D.Core.Documentation
             var normalized = RequiredId(id, label + "Id");
             var result = new List<int>();
             for (var i = 0; i < items.Count; i++)
-                if (string.Equals(selector(items[i]), normalized, StringComparison.OrdinalIgnoreCase)) result.Add(i);
+                if (IdsEqual(selector(items[i]), normalized)) result.Add(i);
             if (result.Count > 1) throw new InvalidOperationException("Semantic documentation catalog contains duplicate " + label + " id: " + normalized + ".");
             return result;
         }
@@ -171,7 +171,7 @@ namespace QS3D.Core.Documentation
             var count = 0;
             foreach (var sheet in sheets)
                 foreach (var placement in sheet.Placements)
-                    if (string.Equals(placement.ViewId, viewId, StringComparison.OrdinalIgnoreCase)) count++;
+                    if (IdsEqual(placement.ViewId, viewId)) count++;
             return count;
         }
 
@@ -188,7 +188,7 @@ namespace QS3D.Core.Documentation
                 var placements = new List<SemanticSheetPlacementDefinition>();
                 foreach (var placement in sheet.Placements)
                 {
-                    if (string.Equals(placement.ViewId, oldViewId, StringComparison.OrdinalIgnoreCase))
+                    if (IdsEqual(placement.ViewId, oldViewId))
                     {
                         placements.Add(ClonePlacement(placement, newViewId));
                         rewritten++;
@@ -212,7 +212,7 @@ namespace QS3D.Core.Documentation
                 var placements = new List<SemanticSheetPlacementDefinition>();
                 foreach (var placement in sheet.Placements)
                 {
-                    if (string.Equals(placement.ViewId, viewId, StringComparison.OrdinalIgnoreCase))
+                    if (IdsEqual(placement.ViewId, viewId))
                     {
                         removed++;
                         continue;
@@ -222,6 +222,21 @@ namespace QS3D.Core.Documentation
                 result.Add(CloneSheet(sheet, placements));
             }
             return result;
+        }
+
+        private static bool IdsEqual(string? left, string? right)
+        {
+            return string.Equals(NormalizedId(left), NormalizedId(right), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IdsEqualOrdinal(string? left, string? right)
+        {
+            return string.Equals(NormalizedId(left), NormalizedId(right), StringComparison.Ordinal);
+        }
+
+        private static string NormalizedId(string? value)
+        {
+            return (value ?? string.Empty).Trim();
         }
 
         private static SemanticSheetDefinition CloneSheet(SemanticSheetDefinition sheet, IEnumerable<SemanticSheetPlacementDefinition> placements)

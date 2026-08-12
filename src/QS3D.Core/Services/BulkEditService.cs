@@ -7,6 +7,8 @@ namespace QS3D.Core.Services
 {
     public sealed class BulkEditService
     {
+        private const int MaxTargetInputCount = 10000;
+
         private sealed class PendingPropertyUpdate
         {
             public ProjectElement Element { get; set; } = null!;
@@ -28,8 +30,8 @@ namespace QS3D.Core.Services
             var next = value ?? string.Empty;
             foreach (var element in OwnedDistinct(project, elements))
             {
-                element.Properties.TryGetValue(key, out var before);
-                if (string.Equals(before ?? string.Empty, next, StringComparison.Ordinal)) continue;
+                var hadBefore = element.Properties.TryGetValue(key, out var before);
+                if (hadBefore && string.Equals(before ?? string.Empty, next, StringComparison.Ordinal)) continue;
                 updates.Add(new PendingPropertyUpdate { Element = element, Value = next });
             }
 
@@ -103,9 +105,9 @@ namespace QS3D.Core.Services
             var pending = new List<PendingFamilyAssignment>();
             foreach (var element in targets)
             {
-                if (string.Equals(element.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase)) continue;
-
                 var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();
+                if (string.Equals(previousFamilyId, family.Id, StringComparison.OrdinalIgnoreCase)) continue;
+
                 ProjectFamily? previousFamily = null;
                 if (previousFamilyId.Length > 0)
                 {
@@ -133,7 +135,7 @@ namespace QS3D.Core.Services
                             element.Properties[property.Key] = property.Value ?? string.Empty;
 
                     element.FamilyId = family.Id;
-                    var dirty = ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity;
+                    var dirty = ElementDirtyFlags.Properties | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity;
                     if (ElementGeometryPolicy.RequiresGeneratedGeometry(element.Category)) dirty |= ElementDirtyFlags.Geometry;
                     element.MarkDirty(dirty);
                 }
@@ -144,9 +146,10 @@ namespace QS3D.Core.Services
 
         private static IReadOnlyList<ProjectElement> OwnedDistinctByIds(ProjectState project, IEnumerable<string> elementIds)
         {
+            var rawIds = MaterializeBounded(elementIds, "Bulk edit target list");
             var resolved = new List<ProjectElement>();
             var requested = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var id in elementIds)
+            foreach (var id in rawIds)
             {
                 if (string.IsNullOrWhiteSpace(id))
                     throw new ArgumentException("Bulk edit target id is required.", nameof(elementIds));
@@ -161,6 +164,8 @@ namespace QS3D.Core.Services
 
         private static IReadOnlyList<ProjectElement> OwnedDistinct(ProjectState project, IEnumerable<ProjectElement> elements)
         {
+            EnsureKnownCountWithinBound(elements, "Bulk edit target collection");
+
             var projectElements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var projectElement in project.Elements)
             {
@@ -175,9 +180,14 @@ namespace QS3D.Core.Services
             }
 
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            var inputCount = 0;
             foreach (var element in elements)
             {
-                if (element == null) continue;
+                if (inputCount >= MaxTargetInputCount)
+                    throw new InvalidOperationException("Bulk edit target collection cannot exceed " + MaxTargetInputCount + " input entries.");
+                inputCount++;
+                if (element == null)
+                    throw new InvalidOperationException("Bulk edit target collection contains a null semantic element entry.");
                 var elementId = (element.Id ?? string.Empty).Trim();
                 if (elementId.Length == 0)
                     throw new InvalidOperationException("Bulk edit target contains an element with a blank semantic id.");
@@ -186,6 +196,29 @@ namespace QS3D.Core.Services
                 unique[elementId] = owned;
             }
             return new List<ProjectElement>(unique.Values).AsReadOnly();
+        }
+
+        private static IReadOnlyList<string> MaterializeBounded(IEnumerable<string> values, string label)
+        {
+            EnsureKnownCountWithinBound(values, label);
+            var result = new List<string>();
+            var inputCount = 0;
+            foreach (var value in values)
+            {
+                if (inputCount >= MaxTargetInputCount)
+                    throw new InvalidOperationException(label + " cannot exceed " + MaxTargetInputCount + " input entries.");
+                inputCount++;
+                result.Add(value);
+            }
+            return result.AsReadOnly();
+        }
+
+        private static void EnsureKnownCountWithinBound<T>(IEnumerable<T> values, string label)
+        {
+            if (values is ICollection<T> collection && collection.Count > MaxTargetInputCount)
+                throw new InvalidOperationException(label + " cannot exceed " + MaxTargetInputCount + " input entries.");
+            if (values is IReadOnlyCollection<T> readOnlyCollection && readOnlyCollection.Count > MaxTargetInputCount)
+                throw new InvalidOperationException(label + " cannot exceed " + MaxTargetInputCount + " input entries.");
         }
 
         private static ElementDirtyFlags DirtyFlags(ProjectElement element, string propertyName)

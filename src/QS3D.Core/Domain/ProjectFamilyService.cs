@@ -129,8 +129,8 @@ namespace QS3D.Core.Domain
 
             foreach (var element in owned)
             {
-                if (string.Equals(element.FamilyId, target.Id, StringComparison.OrdinalIgnoreCase)) continue;
                 var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();
+                if (string.Equals(previousFamilyId, target.Id, StringComparison.OrdinalIgnoreCase)) continue;
                 IReadOnlyList<KeyValuePair<string, string>> previousProperties = Array.Empty<KeyValuePair<string, string>>();
                 if (previousFamilyId.Length > 0)
                 {
@@ -170,7 +170,7 @@ namespace QS3D.Core.Domain
             var references = ResolveFamilyMembers(project, family.Id).Count;
             if (references > 0)
                 throw new InvalidOperationException("Family '" + family.Name + "' is referenced by " + references + " semantic element(s). Reassign them before deletion.");
-            if (project.Metadata.TryGetValue("ActiveFamilyId", out var active) && string.Equals(active, family.Id, StringComparison.OrdinalIgnoreCase))
+            if (project.Metadata.TryGetValue("ActiveFamilyId", out var active) && string.Equals((active ?? string.Empty).Trim(), family.Id, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Cannot delete the active Family. Activate another Family first.");
             project.Touch();
             return project.Families.Remove(family);
@@ -213,7 +213,7 @@ namespace QS3D.Core.Domain
             {
                 if (element == null) throw new InvalidOperationException("Project contains a null semantic element entry.");
                 if (!ids.Add(element.Id)) throw new InvalidOperationException("Project contains duplicate semantic element id: " + element.Id);
-                if (string.Equals(element.FamilyId, familyId, StringComparison.OrdinalIgnoreCase)) result.Add(element);
+                if (string.Equals((element.FamilyId ?? string.Empty).Trim(), familyId, StringComparison.OrdinalIgnoreCase)) result.Add(element);
             }
             result.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.Id, right.Id));
             return result.AsReadOnly();
@@ -233,7 +233,7 @@ namespace QS3D.Core.Domain
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in elements)
             {
-                if (element == null) continue;
+                if (element == null) throw new ArgumentException("Family assignment elements cannot contain null entries.", nameof(elements));
                 if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
                     throw new InvalidOperationException("Element does not belong to the project instance: " + element.Id);
                 if (owned.Category != target.Category)

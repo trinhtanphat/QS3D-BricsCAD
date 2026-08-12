@@ -20,8 +20,10 @@ namespace QS3D.Core.Rebar
     {
         public ColumnTieLayout(IReadOnlyList<Point2> closedPath, IReadOnlyList<double> elevationsM, double actualSpacingM, double pathPerimeterM)
         {
-            ClosedPath = closedPath ?? throw new ArgumentNullException(nameof(closedPath));
-            ElevationsM = elevationsM ?? throw new ArgumentNullException(nameof(elevationsM));
+            if (closedPath == null) throw new ArgumentNullException(nameof(closedPath));
+            if (elevationsM == null) throw new ArgumentNullException(nameof(elevationsM));
+            ClosedPath = new List<Point2>(closedPath).AsReadOnly();
+            ElevationsM = new List<double>(elevationsM).AsReadOnly();
             ActualSpacingM = actualSpacingM;
             PathPerimeterM = pathPerimeterM;
         }
@@ -48,7 +50,8 @@ namespace QS3D.Core.Rebar
             NonNegative(input.BottomClearanceM, nameof(input.BottomClearanceM));
             NonNegative(input.TopClearanceM, nameof(input.TopClearanceM));
 
-            var radiusM = input.DiameterMm / 2000d;
+            var diameterM = input.DiameterMm / 1000d;
+            var radiusM = diameterM / 2d;
             var halfWidth = input.WidthM / 2d - input.CoverM - radiusM;
             var halfDepth = input.DepthM / 2d - input.CoverM - radiusM;
             if (!(halfWidth > 0d) || !(halfDepth > 0d))
@@ -82,6 +85,8 @@ namespace QS3D.Core.Rebar
                 Finite(actualSpacing, nameof(actualSpacing));
                 if (actualSpacing > requestedSpacingM + 1e-12d)
                     throw new InvalidOperationException("Computed tie spacing exceeds the requested maximum spacing.");
+                if (actualSpacing + 1e-12d < diameterM)
+                    throw new InvalidOperationException("Column tie centers are closer than one tie diameter.");
             }
 
             var elevations = new List<double>(tieCount);

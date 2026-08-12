@@ -9,6 +9,8 @@ namespace QS3D.Core.Recognition
         public static bool IsReady(EntitySnapshot snapshot, ElementCategory category, out string reason)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            if (!Enum.IsDefined(typeof(ElementCategory), category))
+                throw new ArgumentOutOfRangeException(nameof(category), category, "Capture eligibility requires a defined ElementCategory.");
             if (snapshot.HasQs3dGeneratedOwnershipMarker)
             {
                 reason = "CAD object has a native QS3D generated-output ownership marker and cannot be captured as a semantic source.";

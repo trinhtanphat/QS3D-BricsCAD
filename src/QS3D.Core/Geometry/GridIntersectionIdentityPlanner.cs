@@ -51,7 +51,7 @@ namespace QS3D.Core.Geometry
             if (!Finite(pointTolerance) || pointTolerance <= 0d)
                 throw new ArgumentOutOfRangeException(nameof(pointTolerance), "Grid intersection identity tolerance must be finite and > 0.");
 
-            var input = intersections.ToList();
+            var input = intersections.Take(MaxIntersections + 1).ToList();
             if (input.Count > MaxIntersections)
                 throw new InvalidOperationException("Grid intersection identity supports at most " + MaxIntersections + " intersections.");
             if (input.Count == 0) return Array.Empty<GridIntersectionIdentity>();

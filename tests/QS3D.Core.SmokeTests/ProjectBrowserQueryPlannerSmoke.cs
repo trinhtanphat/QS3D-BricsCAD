@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             FloorAndZoneFiltersCompose();
             EmptySearchReturnsWholeTree();
             MissingFamilyReferenceFailsClosed();
+            FamilyCategoryMismatchFailsClosed();
             FilteredPathStillValidatesUnmatchedReferences();
             InvalidFilterReferenceFailsClosed();
         }
@@ -93,6 +94,20 @@ namespace QS3D.Core.SmokeTests
             MustFail(
                 () => ProjectBrowserQueryPlanner.Build(project, ProjectBrowserGrouping.Category, new ProjectBrowserQueryOptions("beam")),
                 "Search must not silently hide an element with a missing family reference.");
+        }
+
+        private static void FamilyCategoryMismatchFailsClosed()
+        {
+            var project = BuildProject();
+            var bad = new ProjectElement("BAD-FAMILY-CATEGORY", ElementCategory.Beam, "FAM-C", "F-02", "Z-EAST");
+            bad.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(bad);
+            MustFail(
+                () => ProjectBrowserQueryPlanner.Build(
+                    project,
+                    ProjectBrowserGrouping.Category,
+                    new ProjectBrowserQueryOptions(dirtyOnly: true, categories: new[] { ElementCategory.Column })),
+                "Filtered browser query must reject Family/category corruption even when the corrupt element would not match the filter.");
         }
 
         private static void FilteredPathStillValidatesUnmatchedReferences()

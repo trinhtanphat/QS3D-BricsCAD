@@ -17,14 +17,21 @@ namespace QS3D.Core.Export
         private const int WrappedTextStyle = 3;
         private const int IntegerStyle = 4;
         private const int Decimal3Style = 5;
+        private const int MaxDataRows = 1048575;
+        private const int MaxCellTextCharacters = 32767;
 
         public static void Export(string path, IReadOnlyList<QuantityReportRow> rows)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
+            if (rows.Count > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Quantity XLSX export supports at most " + MaxDataRows + " data rows.");
             for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
-                if (rows[rowIndex] == null)
+            {
+                var row = rows[rowIndex];
+                if (row == null)
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
+                ValidateStandardRowText(row, rowIndex);
+            }
             ExportCore(path, rows, null);
         }
 
@@ -33,12 +40,16 @@ namespace QS3D.Core.Export
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (detailRows == null) throw new ArgumentNullException(nameof(detailRows));
             if (summaryRows == null) throw new ArgumentNullException(nameof(summaryRows));
+            if (detailRows.Count > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(detailRows), "ED2 CHI_TIET supports at most " + MaxDataRows + " data rows.");
+            if (summaryRows.Count > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(summaryRows), "ED2 TONG_HOP supports at most " + MaxDataRows + " data rows.");
             var detailIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var detailHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             string? drawingFingerprint = null;
+            var detailRowIndex = 0;
             foreach (var row in detailRows)
             {
                 if (row == null) throw new InvalidDataException("ED2 CHI_TIET contains a null row.");
+                ValidateEd2RowText(row, detailRowIndex, "ED2 CHI_TIET");
                 if (row.Count != 1 || row.ElementIds.Count != 1)
                     throw new InvalidDataException("ED2 CHI_TIET must contain exactly one semantic element per row.");
                 var elementId = Required(row.ElementIds[0], "ED2 CHI_TIET Element ID");
@@ -49,15 +60,18 @@ namespace QS3D.Core.Export
                 if (drawingFingerprint == null) drawingFingerprint = fingerprint;
                 else if (!string.Equals(drawingFingerprint, fingerprint, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("ED2 CHI_TIET contains conflicting drawing fingerprints.");
+                detailRowIndex++;
             }
             if (detailRows.Count == 0) throw new InvalidDataException("ED2 CHI_TIET must contain at least one row.");
 
             var summaryIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var summaryHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var summaryCount = 0;
+            var summaryRowIndex = 0;
             foreach (var row in summaryRows)
             {
                 if (row == null) throw new InvalidDataException("ED2 TONG_HOP contains a null row.");
+                ValidateEd2RowText(row, summaryRowIndex, "ED2 TONG_HOP");
                 summaryCount = checked(summaryCount + row.Count);
                 if (!string.Equals(Required(row.DrawingFingerprint, "ED2 TONG_HOP drawing fingerprint"), drawingFingerprint, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("ED2 TONG_HOP drawing fingerprint does not match CHI_TIET.");
@@ -67,6 +81,7 @@ namespace QS3D.Core.Export
                     if (!summaryIds.Add(elementId)) throw new InvalidDataException("ED2 TONG_HOP repeats Element ID: " + elementId + ".");
                 }
                 foreach (var handle in row.SourceHandles) summaryHandles.Add(ValidHandle(handle, "TONG_HOP"));
+                summaryRowIndex++;
             }
             if (summaryRows.Count == 0) throw new InvalidDataException("ED2 TONG_HOP must contain at least one row.");
             if (summaryCount != detailRows.Count || !summaryIds.SetEquals(detailIds) || !summaryHandles.SetEquals(detailHandles))
@@ -235,6 +250,77 @@ namespace QS3D.Core.Export
             return number.ToString("X", CultureInfo.InvariantCulture);
         }
 
+        private static void ValidateStandardRowText(QuantityReportRow row, int rowIndex)
+        {
+            ValidateCellText(row.Floor, rowIndex, "Floor", "Quantity XLSX");
+            ValidateCellText(row.Zone, rowIndex, "Zone", "Quantity XLSX");
+            ValidateCellText(row.Category, rowIndex, "Category", "Quantity XLSX");
+            ValidateCellText(row.FamilyName, rowIndex, "FamilyName", "Quantity XLSX");
+            ValidateJoinedNonBlankCellText(row.ElementIds, rowIndex, "ElementIds", "Quantity XLSX");
+            ValidateJoinedNonBlankCellText(row.SourceHandles, rowIndex, "SourceHandles", "Quantity XLSX");
+            ValidateCellText(row.DrawingFingerprint, rowIndex, "DrawingFingerprint", "Quantity XLSX");
+        }
+
+        private static void ValidateEd2RowText(QuantityReportRow row, int rowIndex, string sheetLabel)
+        {
+            ValidateCellText(string.IsNullOrWhiteSpace(row.ElementName) ? row.FamilyName : row.ElementName, rowIndex, "DisplayName", sheetLabel);
+            ValidateCellText(row.Category, rowIndex, "Category", sheetLabel);
+            ValidateCellText(row.Material, rowIndex, "Material", sheetLabel);
+            ValidateCellText(row.FamilyId, rowIndex, "FamilyId", sheetLabel);
+            ValidateFloorZoneCellText(row, rowIndex, sheetLabel);
+            ValidateCellText(row.Note, rowIndex, "Note", sheetLabel);
+            ValidateJoinedNonBlankCellText(row.ElementIds, rowIndex, "ElementIds", sheetLabel);
+            ValidateJoinedNonBlankCellText(row.SourceHandles, rowIndex, "SourceHandles", sheetLabel);
+            ValidateCellText(row.DrawingFingerprint, rowIndex, "DrawingFingerprint", sheetLabel);
+        }
+
+        private static void ValidateFloorZoneCellText(QuantityReportRow row, int rowIndex, string sheetLabel)
+        {
+            var floor = row.Floor ?? string.Empty;
+            var zone = row.Zone ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(floor))
+            {
+                ValidateCellText(zone, rowIndex, "FloorZone", sheetLabel);
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(zone))
+            {
+                ValidateCellText(floor, rowIndex, "FloorZone", sheetLabel);
+                return;
+            }
+            if ((long)floor.Length + 3L + zone.Length > MaxCellTextCharacters)
+                ThrowCellTextLimit(rowIndex, "FloorZone", sheetLabel);
+        }
+
+        private static void ValidateCellText(string? value, int rowIndex, string fieldName, string sheetLabel)
+        {
+            if ((value ?? string.Empty).Length > MaxCellTextCharacters)
+                ThrowCellTextLimit(rowIndex, fieldName, sheetLabel);
+        }
+
+        private static void ValidateJoinedNonBlankCellText(IList<string> values, int rowIndex, string fieldName, string sheetLabel)
+        {
+            long length = 0;
+            var hasValue = false;
+            for (var index = 0; index < values.Count; index++)
+            {
+                var value = values[index];
+                if (string.IsNullOrWhiteSpace(value)) continue;
+                if (hasValue) length++;
+                length += value.Length;
+                if (length > MaxCellTextCharacters)
+                    ThrowCellTextLimit(rowIndex, fieldName, sheetLabel);
+                hasValue = true;
+            }
+        }
+
+        private static void ThrowCellTextLimit(int rowIndex, string fieldName, string sheetLabel)
+        {
+            throw new ArgumentOutOfRangeException(
+                "rows",
+                sheetLabel + " row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
+        }
+
         private static void ExportCore(string path, IReadOnlyList<QuantityReportRow> rows, IReadOnlyList<QuantityReportRow>? summaryRows)
         {
             var fullPath = Path.GetFullPath(path);
@@ -393,7 +479,7 @@ namespace QS3D.Core.Export
         private static void AppendInlineStringCell(StringBuilder sb, string cellRef, string value, int style)
         {
             sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is><t>")
-                .Append(SecurityElement.Escape(value ?? string.Empty)).Append("</t></is></c>");
+                .Append(XlsxXmlText.Escape(value)).Append("</t></is></c>");
         }
 
         private static void AppendNumberCell(StringBuilder sb, string cellRef, double value, int style = Decimal2Style)

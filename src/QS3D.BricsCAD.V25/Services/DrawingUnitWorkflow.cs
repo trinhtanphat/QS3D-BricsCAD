@@ -13,16 +13,28 @@ namespace QS3D.BricsCAD.V25.Services
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             var readOnlyExportPreparation = string.Equals(operation, "QS3DED2", StringComparison.OrdinalIgnoreCase);
+            var readOnlyBqPreparation = string.Equals(operation, "QS3DBQ", StringComparison.OrdinalIgnoreCase);
+            var readOnlyQuantityPreparation = readOnlyExportPreparation || readOnlyBqPreparation;
+
+            if (readOnlyBqPreparation && !ProjectContextCoordinator.TryGetReadOnly(document, out _))
+            {
+                document.Editor.WriteMessage("\nQS3DBQ: chưa có QS3D project hiện hữu; bảng tổng hợp chỉ đọc không tạo project mới.");
+                return false;
+            }
+
             if (CadUnitService.TryGetPolicy(document, out _, out var resolution))
             {
-                if (!readOnlyExportPreparation)
+                if (!readOnlyQuantityPreparation)
                     PersistLegacyBindingIfNeeded(document, resolution);
                 return true;
             }
 
-            if (readOnlyExportPreparation)
+            if (readOnlyQuantityPreparation)
             {
-                document.Editor.WriteMessage("\nQS3DED2: drawing unit is undefined/unsupported. Run QS3DUNITS first; ED2 export preparation does not create or persist project/unit state before Save confirmation.");
+                if (readOnlyExportPreparation)
+                    document.Editor.WriteMessage("\nQS3DED2: drawing unit is undefined/unsupported. Run QS3DUNITS first; ED2 export preparation does not create or persist project/unit state before Save confirmation.");
+                else
+                    document.Editor.WriteMessage("\nQS3DBQ: drawing unit is undefined/unsupported. Run QS3DUNITS first; BQ read-only preparation does not create or persist project/unit state.");
                 return false;
             }
 

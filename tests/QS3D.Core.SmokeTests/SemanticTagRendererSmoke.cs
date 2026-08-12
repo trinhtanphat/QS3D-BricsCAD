@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
             StableSemanticReferencesRender();
             OptionalPropertyAndQuantityRender();
             GeneratedOwnershipCannotLeakIntoTag();
+            NativeHandleMetadataCannotLeakIntoTag();
             UnsupportedTokenFailsClosed();
             MalformedBraceGrammarFailsClosed();
             MissingReferenceFailsClosed();
@@ -44,6 +45,19 @@ namespace QS3D.Core.SmokeTests
             try { SemanticTagRenderer.Render(fixture.Project, fixture.Element, "{P:GeneratedSolidHandle}"); }
             catch (InvalidOperationException) { failed = true; }
             if (!failed) throw new Exception("Semantic tag must not expose generated CAD owner handles.");
+        }
+
+        private static void NativeHandleMetadataCannotLeakIntoTag()
+        {
+            var fixture = BuildFixture();
+            fixture.Element.Properties["CadHandle"] = "ABCD";
+            fixture.Element.Properties["SourceHandleRef"] = "EF12";
+            MustFail(
+                () => SemanticTagRenderer.Render(fixture.Project, fixture.Element, "{P:cAdHaNdLe}"),
+                "Semantic tag must not expose arbitrary CAD handle metadata.");
+            MustFail(
+                () => SemanticTagRenderer.Render(fixture.Project, fixture.Element, "{P:SOURCEHANDLEREF}"),
+                "Semantic tag must reject handle-bearing property names case-insensitively.");
         }
 
         private static void UnsupportedTokenFailsClosed()

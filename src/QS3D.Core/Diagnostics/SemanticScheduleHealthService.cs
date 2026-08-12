@@ -30,7 +30,7 @@ namespace QS3D.Core.Diagnostics
                     new ModelHealthIssue(
                         "SEMANTIC_SCHEDULE_CATALOG_INVALID",
                         HealthSeverity.Error,
-                        "Catalog SemanticSchedule không hợp lệ và không thể chẩn đoán chi tiết: " + ex.Message)
+                        "Catalog SemanticSchedule không hợp lệ và không thể chẩn đoán chi tiết.")
                 };
             }
 
@@ -116,7 +116,7 @@ namespace QS3D.Core.Diagnostics
                 }
                 catch (Exception ex) when (IsTemplateFailure(ex))
                 {
-                    invalid.Add(column.Header + " (" + ex.Message + ")");
+                    invalid.Add(column.Header);
                 }
             }
 

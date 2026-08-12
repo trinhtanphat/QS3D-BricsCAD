@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
+using QS3D.BricsCAD.V25;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
@@ -74,55 +75,105 @@ namespace QS3D.BricsCAD.V25.Services
                 .Select(id => project.FindElement(id) ?? throw new InvalidOperationException("Replacement target disappeared before mutation: " + id + "."))
                 .ToList();
             var invalidationTargets = ExpandInvalidationTargets(project, replacementTargets, prepared.Source, prepared.Resolution);
-            var rollback = ProjectStateSnapshot.Capture(project);
-            var cadCommitted = false;
 
-            var targetHadZones = project.Zones.Count > 0;
-            var targetHadFloors = project.Floors.Count > 0;
-            var targetHadFamilies = project.Families.Count > 0;
-            var previousActiveZoneId = project.ActiveZoneId ?? string.Empty;
-            var previousActiveFloorId = project.ActiveFloorId ?? string.Empty;
-            var hadActiveFamilyMetadata = project.Metadata.TryGetValue("ActiveFamilyId", out var previousActiveFamilyId);
-            previousActiveFamilyId = previousActiveFamilyId ?? string.Empty;
+            // Fail closed before taking a native transaction if Core recognizes an owner slot that
+            // the current BricsCAD invalidator cannot prove it can erase safely.
+            GeneratedNativeCleanupCoverageGuard.EnsureSupported(invalidationTargets);
+
+            ProjectStateSnapshot? rollback = null;
+            var cadCommitted = false;
+            var generatedElementsInvalidated = 0;
 
             try
             {
                 using (document.LockDocument())
-                using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    var invalidation = GeneratedDependentGeometryInvalidator.Prepare(document, transaction, project, invalidationTargets);
-
-                    ApplyCatalogAdds(project, prepared.Source, prepared.Resolution);
-                    ApplyElements(project, prepared.Source, prepared.Resolution);
-                    RestoreExistingActiveContext(
+                    EnsureActive(document, "Interchange source-element import / locked mutation");
+                    var lockedProject = InterchangeMutationTargetGuard.RequireExact(
+                        document,
                         project,
+                        "Interchange source-element import / locked mutation");
+                    var lockedReplacementTargets = prepared.Plan.ReplacementElementIds
+                        .Select(id => lockedProject.FindElement(id) ?? throw new InvalidOperationException("Replacement target disappeared under the document lock: " + id + "."))
+                        .ToList();
+                    var lockedInvalidationTargets = ExpandInvalidationTargets(
+                        lockedProject,
+                        lockedReplacementTargets,
                         prepared.Source,
-                        targetHadZones,
-                        targetHadFloors,
-                        targetHadFamilies,
-                        previousActiveZoneId,
-                        previousActiveFloorId,
-                        hadActiveFamilyMetadata,
-                        previousActiveFamilyId);
+                        prepared.Resolution);
 
-                    foreach (var element in invalidationTargets)
-                        element.MarkDirty(ElementDirtyFlags.All);
+                    using (var transaction = document.Database.TransactionManager.StartTransaction())
+                    {
+                        rollback = ProjectStateSnapshot.Capture(lockedProject);
 
-                    // Native erasure was prepared from the old target-owned handle metadata while the
-                    // CAD transaction is still rollback-capable. Clearing semantic ownership now keeps
-                    // DWG and project state atomic if a later validation/commit step fails.
-                    invalidation.CommitMetadata();
+                        // Repeat against the exact locked closure immediately before native preparation.
+                        GeneratedNativeCleanupCoverageGuard.EnsureSupported(lockedInvalidationTargets);
+                        ProjectContextCoordinator.RequireBackingStoreUnchanged(
+                            document,
+                            lockedProject,
+                            "Interchange source-element import / pre-native cleanup");
 
-                    ValidateCombinedProject(project, json);
-                    RecordImportMetadata(project, prepared.Source, prepared.Plan, invalidation.ElementCount);
-                    project.Touch();
-                    transaction.Commit();
-                    cadCommitted = true;
+                        var invalidation = GeneratedDependentGeometryInvalidator.Prepare(
+                            document,
+                            transaction,
+                            lockedProject,
+                            lockedInvalidationTargets);
+
+                        // The document lock cannot prevent another process replacing the sidecar.
+                        // Refuse semantic mutation after native prepare if the authoritative revision moved.
+                        ProjectContextCoordinator.RequireBackingStoreUnchanged(
+                            document,
+                            lockedProject,
+                            "Interchange source-element import / pre-semantic apply");
+
+                        var targetHadZones = lockedProject.Zones.Count > 0;
+                        var targetHadFloors = lockedProject.Floors.Count > 0;
+                        var targetHadFamilies = lockedProject.Families.Count > 0;
+                        var previousActiveZoneId = lockedProject.ActiveZoneId ?? string.Empty;
+                        var previousActiveFloorId = lockedProject.ActiveFloorId ?? string.Empty;
+                        var hadActiveFamilyMetadata = lockedProject.Metadata.TryGetValue("ActiveFamilyId", out var previousActiveFamilyId);
+                        previousActiveFamilyId = previousActiveFamilyId ?? string.Empty;
+
+                        ApplyCatalogAdds(lockedProject, prepared.Source, prepared.Resolution);
+                        ApplyElements(lockedProject, prepared.Source, prepared.Resolution);
+                        RestoreExistingActiveContext(
+                            lockedProject,
+                            prepared.Source,
+                            targetHadZones,
+                            targetHadFloors,
+                            targetHadFamilies,
+                            previousActiveZoneId,
+                            previousActiveFloorId,
+                            hadActiveFamilyMetadata,
+                            previousActiveFamilyId);
+
+                        foreach (var element in lockedInvalidationTargets)
+                            element.MarkDirty(ElementDirtyFlags.All);
+
+                        // Native erasure was prepared from the old target-owned handle metadata while the
+                        // CAD transaction is still rollback-capable. Clearing semantic ownership now keeps
+                        // DWG and project state atomic if a later validation/commit step fails.
+                        invalidation.CommitMetadata();
+
+                        ValidateCombinedProject(lockedProject, json);
+                        RecordImportMetadata(lockedProject, prepared.Source, prepared.Plan, invalidation.ElementCount);
+                        lockedProject.Touch();
+
+                        // Semantic state and native erasure are still rollback-capable at this point.
+                        ProjectContextCoordinator.RequireBackingStoreUnchanged(
+                            document,
+                            lockedProject,
+                            "Interchange source-element import / pre-CAD commit");
+
+                        transaction.Commit();
+                        cadCommitted = true;
+                        generatedElementsInvalidated = invalidation.ElementCount;
+                    }
                 }
             }
             catch (Exception operationError)
             {
-                if (!cadCommitted)
+                if (!cadCommitted && rollback != null)
                 {
                     try { rollback.Restore(project); }
                     catch (Exception restoreError)
@@ -142,7 +193,7 @@ namespace QS3D.BricsCAD.V25.Services
                 FamiliesAdded = prepared.Plan.FamiliesToAdd,
                 ElementsAdded = prepared.Plan.ElementsToAdd,
                 ElementsReplaced = prepared.Plan.ElementsToReplace,
-                GeneratedElementsInvalidated = invalidationTargets.Count,
+                GeneratedElementsInvalidated = generatedElementsInvalidated,
                 SourceHandlesDiscarded = prepared.Plan.SourceHandlesToDiscard,
                 TargetSourceHandlesPreserved = prepared.Plan.TargetSourceHandlesToPreserve
             };

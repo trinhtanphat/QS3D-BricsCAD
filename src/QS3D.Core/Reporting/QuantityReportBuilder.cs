@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Reporting
@@ -20,7 +22,7 @@ namespace QS3D.Core.Reporting
                 if (!seenElementIds.Add(element.Id))
                     throw new InvalidOperationException("Quantity report contains duplicate element id: " + element.Id + ".");
                 var material = NormalizeMaterial(element.Family.Material);
-                var key = element.Floor + "\u001f" + element.Family.Category + "\u001f" + element.Family.Name + "\u001f" + material;
+                var key = GroupKey(element.Floor, element.Family.Category.ToString(), element.Family.Name, material);
                 if (!grouped.TryGetValue(key, out var row))
                 {
                     row = new QuantityReportRow
@@ -52,6 +54,19 @@ namespace QS3D.Core.Reporting
             var result = new List<QuantityReportRow>(order.Count);
             foreach (var key in order) result.Add(grouped[key]);
             return result;
+        }
+
+        private static string GroupKey(params string[] tokens)
+        {
+            var key = new StringBuilder();
+            foreach (var raw in tokens)
+            {
+                var token = raw ?? string.Empty;
+                key.Append(token.Length.ToString(CultureInfo.InvariantCulture))
+                    .Append(':')
+                    .Append(token);
+            }
+            return key.ToString();
         }
 
         private static string NormalizeMaterial(string material) =>

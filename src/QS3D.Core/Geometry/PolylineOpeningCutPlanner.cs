@@ -93,10 +93,34 @@ namespace QS3D.Core.Geometry
                 var uy = dy / length;
                 var fromStartX = Finite(input.OpeningCenter.X - start.X, "opening projection dx");
                 var fromStartY = Finite(input.OpeningCenter.Y - start.Y, "opening projection dy");
-                var along = Finite(fromStartX * ux + fromStartY * uy, "opening projection along segment");
-                if (along < 0d) along = 0d;
-                else if (along > length) along = length;
-                var projected = new Point2(start.X + ux * along, start.Y + uy * along);
+                var projectionScale = Math.Max(Math.Abs(fromStartX), Math.Abs(fromStartY));
+                double along;
+                if (projectionScale == 0d)
+                {
+                    along = 0d;
+                }
+                else
+                {
+                    var scaledAlong = Finite(
+                        fromStartX / projectionScale * ux + fromStartY / projectionScale * uy,
+                        "opening scaled projection along segment");
+                    if (scaledAlong <= 0d)
+                    {
+                        along = 0d;
+                    }
+                    else
+                    {
+                        var scaledLength = length / projectionScale;
+                        along = scaledAlong >= scaledLength
+                            ? length
+                            : Finite(scaledAlong * projectionScale, "opening projection along segment");
+                    }
+                }
+                var projected = along <= 0d
+                    ? start
+                    : along >= length
+                        ? end
+                        : new Point2(start.X + ux * along, start.Y + uy * along);
                 ValidatePoint(projected, "projected opening center");
                 var distance = Distance(projected, input.OpeningCenter, "opening centerline offset");
 

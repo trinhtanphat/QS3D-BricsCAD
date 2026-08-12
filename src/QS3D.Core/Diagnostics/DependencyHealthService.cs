@@ -22,6 +22,9 @@ namespace QS3D.Core.Diagnostics
             var uniqueIds = new HashSet<string>(counts.Where(x => x.Value == 1).Select(x => x.Key), StringComparer.OrdinalIgnoreCase);
             var graph = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
             var selfReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var blankTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var nonCanonicalTargets = new List<KeyValuePair<string, string>>();
+            var duplicateTargets = new List<KeyValuePair<string, string>>();
             var ambiguousTargets = new List<KeyValuePair<string, string>>();
             var missingTargets = new List<KeyValuePair<string, string>>();
 
@@ -30,10 +33,27 @@ namespace QS3D.Core.Diagnostics
                 if (duplicateIds.Contains(element.Id) || graph.ContainsKey(element.Id)) continue;
                 var dependencies = new List<string>();
                 var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var reportedDuplicates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var raw in element.DependsOn)
                 {
-                    var dependencyId = (raw ?? string.Empty).Trim();
-                    if (dependencyId.Length == 0 || !seen.Add(dependencyId)) continue;
+                    var rawDependencyId = raw ?? string.Empty;
+                    var dependencyId = rawDependencyId.Trim();
+                    if (dependencyId.Length == 0)
+                    {
+                        blankTargets.Add(element.Id);
+                        continue;
+                    }
+                    if (!string.Equals(rawDependencyId, dependencyId, StringComparison.Ordinal))
+                    {
+                        nonCanonicalTargets.Add(new KeyValuePair<string, string>(element.Id, rawDependencyId));
+                        continue;
+                    }
+                    if (!seen.Add(dependencyId))
+                    {
+                        if (reportedDuplicates.Add(dependencyId))
+                            duplicateTargets.Add(new KeyValuePair<string, string>(element.Id, dependencyId));
+                        continue;
+                    }
                     if (string.Equals(dependencyId, element.Id, StringComparison.OrdinalIgnoreCase))
                     {
                         selfReferences.Add(element.Id);
@@ -57,6 +77,28 @@ namespace QS3D.Core.Diagnostics
 
             var cycleMembers = FindCycleMembers(graph);
             var issues = new List<ModelHealthIssue>();
+            foreach (var pair in nonCanonicalTargets
+                .OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Value, StringComparer.Ordinal))
+            {
+                issues.Add(new ModelHealthIssue(
+                    "DEPENDENCY_TARGET_NON_CANONICAL",
+                    HealthSeverity.Error,
+                    "Dependency ID chứa khoảng trắng đầu/cuối và không đúng canonical form: \"" + pair.Value + "\". Cần sửa relation trước khi regenerate/release.",
+                    pair.Key));
+            }
+
+            foreach (var pair in duplicateTargets
+                .OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Value, StringComparer.OrdinalIgnoreCase))
+            {
+                issues.Add(new ModelHealthIssue(
+                    "DEPENDENCY_TARGET_DUPLICATE",
+                    HealthSeverity.Error,
+                    "Element chứa dependency ID lặp lại: " + pair.Value + ". Cần loại bỏ relation trùng trước khi regenerate/release.",
+                    pair.Key));
+            }
+
             foreach (var pair in ambiguousTargets
                 .OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Value, StringComparer.OrdinalIgnoreCase))
@@ -67,6 +109,13 @@ namespace QS3D.Core.Diagnostics
                     "Dependency trỏ tới mã semantic element bị trùng: " + pair.Value + ". Không thể xác định cạnh graph an toàn.",
                     pair.Key));
             }
+
+            foreach (var elementId in blankTargets.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+                issues.Add(new ModelHealthIssue(
+                    "DEPENDENCY_TARGET_BLANK",
+                    HealthSeverity.Error,
+                    "Element chứa dependency ID rỗng; cần sửa dependency trước khi regenerate/release.",
+                    elementId));
 
             foreach (var pair in missingTargets
                 .OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)

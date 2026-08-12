@@ -92,7 +92,13 @@ jobs:
             if (-not [Uri]::TryCreate($env:BRICSCAD_V25_MSI_URL, [UriKind]::Absolute, [ref]$fallbackUri) -or $fallbackUri.Scheme -ne 'https') {
               throw "BRICSCAD_V25_MSI_URL must be an absolute HTTPS URL when configured."
             }
-            if (-not $env:BRICSCAD_V25_MSI_URL.StartsWith($env:BRICSCAD_V25_PUBLIC_MSI_URL, [StringComparison]::OrdinalIgnoreCase)) {
+            if (-not [string]::IsNullOrEmpty($fallbackUri.UserInfo) -or -not [string]::IsNullOrEmpty($fallbackUri.Fragment)) {
+              throw "BRICSCAD_V25_MSI_URL must not contain embedded credentials or a fragment."
+            }
+            if (-not [string]::Equals($fallbackUri.Scheme, $publicUri.Scheme, [StringComparison]::OrdinalIgnoreCase) -or
+                -not [string]::Equals($fallbackUri.Host, $publicUri.Host, [StringComparison]::OrdinalIgnoreCase) -or
+                $fallbackUri.Port -ne $publicUri.Port -or
+                -not [string]::Equals($fallbackUri.AbsolutePath, $publicUri.AbsolutePath, [StringComparison]::Ordinal)) {
               throw "BRICSCAD_V25_MSI_URL must point to the pinned official BricsCAD V25.2.10 x64 en_US object; only its signed query string may differ."
             }
           }

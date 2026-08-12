@@ -1,12 +1,57 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import sys
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/release-v25-cloud.yml"
 DOC = ROOT / "docs/CLOUD-V25-PREVIEW-RELEASE.md"
 PINNED_SHA256 = "F44DF674C0E165D96BF579E243B20A8301E3F395F929779F47BF39A7D9DACDE1"
+PINNED_PUBLIC_URL = "https://storage.googleapis.com/production-boa-storage/ftp/release/en_US/BricsCAD/Windows/25.2.10/BricsCAD-V25.2.10-1-en_US%28x64%29.msi"
 errors = []
+
+
+def normalized_port(parts):
+    if parts.port is not None:
+        return parts.port
+    if parts.scheme.lower() == "https":
+        return 443
+    if parts.scheme.lower() == "http":
+        return 80
+    return None
+
+
+def is_same_pinned_object(candidate):
+    try:
+        expected = urlsplit(PINNED_PUBLIC_URL)
+        actual = urlsplit(candidate)
+        return (
+            actual.scheme.lower() == expected.scheme.lower()
+            and (actual.hostname or "").lower() == (expected.hostname or "").lower()
+            and normalized_port(actual) == normalized_port(expected)
+            and actual.path == expected.path
+            and actual.username is None
+            and actual.password is None
+            and not actual.fragment
+        )
+    except ValueError:
+        return False
+
+
+for value in (PINNED_PUBLIC_URL, PINNED_PUBLIC_URL + "?X-Goog-Signature=abc&X-Goog-Expires=600"):
+    if not is_same_pinned_object(value):
+        errors.append("cloud fallback URI regression unexpectedly rejected approved object: " + value)
+for value in (
+    PINNED_PUBLIC_URL + ".bak",
+    PINNED_PUBLIC_URL + "/other",
+    PINNED_PUBLIC_URL.replace("storage.googleapis.com", "storage.googleapis.com.evil.example"),
+    PINNED_PUBLIC_URL.replace("https://", "http://"),
+    PINNED_PUBLIC_URL.replace("https://storage.googleapis.com/", "https://storage.googleapis.com:444/"),
+    PINNED_PUBLIC_URL.replace("https://", "https://user:pass@"),
+    PINNED_PUBLIC_URL + "#fragment",
+):
+    if is_same_pinned_object(value):
+        errors.append("cloud fallback URI regression unexpectedly accepted different object: " + value)
 
 if not WORKFLOW.is_file():
     errors.append("missing .github/workflows/release-v25-cloud.yml")
@@ -48,10 +93,20 @@ else:
         "([string]$metadata.productVersion).Trim()",
         "PACKAGE-METADATA productVersion must match source product version.",
         "PACKAGE-METADATA assembly version is missing.",
+        "$fallbackUri.UserInfo",
+        "$fallbackUri.Fragment",
+        "[string]::Equals($fallbackUri.Scheme, $publicUri.Scheme, [StringComparison]::OrdinalIgnoreCase)",
+        "[string]::Equals($fallbackUri.Host, $publicUri.Host, [StringComparison]::OrdinalIgnoreCase)",
+        "$fallbackUri.Port -ne $publicUri.Port",
+        "[string]::Equals($fallbackUri.AbsolutePath, $publicUri.AbsolutePath, [StringComparison]::Ordinal)",
+        "only its signed query string may differ",
     )
     for token in required:
         if token not in text:
-            errors.append("cloud V25 workflow missing Node24/cache/pinning/signature/version/manual-release token: " + token)
+            errors.append("cloud V25 workflow missing cache/pinning/signature/version/URI/manual-release token: " + token)
+
+    if ".StartsWith($env:BRICSCAD_V25_PUBLIC_MSI_URL" in text:
+        errors.append("cloud V25 fallback URI must not use string-prefix matching for pinned-object identity")
 
     restore_index = text.find("- name: Restore BricsCAD V25 installer cache")
     acquire_index = text.find("- name: Acquire BricsCAD V25 compile references")
@@ -67,6 +122,12 @@ else:
         errors.append("cloud V25 workflow must define approved HTTP mirror and pinned HTTPS public candidates")
     elif not candidates_index < mirror_index < public_index:
         errors.append("approved mirror must be attempted before the pinned HTTPS public candidate after cache miss")
+
+    uri_parse_index = text.find("[Uri]::TryCreate($env:BRICSCAD_V25_MSI_URL")
+    uri_path_index = text.find("$fallbackUri.AbsolutePath", uri_parse_index if uri_parse_index >= 0 else 0)
+    candidates_index_after_uri = text.find("$candidates = @(", uri_path_index if uri_path_index >= 0 else 0)
+    if min(uri_parse_index, uri_path_index, candidates_index_after_uri) < 0 or not uri_parse_index < uri_path_index < candidates_index_after_uri:
+        errors.append("cloud V25 secret fallback must be bound to the pinned URI object before it can enter the download candidate list")
 
     cache_hash_index = text.find("$cachedHash = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash")
     download_index = text.find("Invoke-WebRequest -Uri $candidate.Url", acquire_index if acquire_index >= 0 else 0)
@@ -101,9 +162,10 @@ else:
         "MSI ProductVersion must identify V25.2.10",
         "download timeout",
         "administrative extraction timeout",
+        "only its query string may differ",
     ):
         if token not in doc:
-            errors.append("cloud V25 release documentation missing integrity/cache statement: " + token)
+            errors.append("cloud V25 release documentation missing integrity/cache/URI statement: " + token)
 
 print("QS3D cloud V25 preview release preflight")
 if errors:
@@ -112,4 +174,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: cloud V25 preview remains manual-only on current Node 24 action majors; the exact V25.2.10 MSI digest is pinned, cache hits are re-verified, the approved mirror is bounded by digest + Bricsys Authenticode + MSI identity checks, and download/extraction waits are finite.")
+print("PASS: cloud V25 preview remains manual-only; secret fallback is bound to the exact pinned official MSI object except query, the V25.2.10 digest is pinned, cache hits are re-verified, Bricsys Authenticode + MSI identity checks precede bounded extraction, and download/extraction waits are finite.")

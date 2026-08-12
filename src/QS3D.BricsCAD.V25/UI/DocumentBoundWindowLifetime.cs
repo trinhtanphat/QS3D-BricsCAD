@@ -39,13 +39,26 @@ namespace QS3D.BricsCAD.V25.UI
                     throw new InvalidOperationException("A modeless QS3D window cannot be rebound to a different BricsCAD document.");
                 if (_attached) return;
 
-                BindProjectAffinityIfPresent();
-                BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
-                _window.Activated += OnWindowActivated;
-                _window.PreviewMouseDown += OnPreviewMouseDown;
-                _window.PreviewKeyDown += OnPreviewKeyDown;
-                _window.Closed += OnWindowClosed;
-                _attached = true;
+                try
+                {
+                    BindProjectAffinityIfPresent();
+                    BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
+                    _window.Activated += OnWindowActivated;
+                    _window.PreviewMouseDown += OnPreviewMouseDown;
+                    _window.PreviewKeyDown += OnPreviewKeyDown;
+                    _window.Closed += OnWindowClosed;
+                    _attached = true;
+                }
+                catch
+                {
+                    // Detach owns best-effort removal of every handler. Mark the partial attempt as
+                    // attached only long enough to make that cleanup path authoritative.
+                    _attached = true;
+                    Detach();
+                    _projectAffinityBound = false;
+                    _projectId = string.Empty;
+                    throw;
+                }
             }
 
             private void BindProjectAffinityIfPresent()

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Reporting
@@ -41,7 +42,9 @@ namespace QS3D.Core.Reporting
                 .Where(x => x.Category == ElementCategory.Door || x.Category == ElementCategory.WallOpening)
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
-                families.TryGetValue(element.FamilyId, out var family);
+                var floorId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FloorId);
+                var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
+                families.TryGetValue(familyId, out var family);
                 var widthM = Positive(Number(element, family, "WidthM", 0.9d), element.Id + "/WidthM");
                 var heightM = Positive(Number(element, family, "HeightM", 2.2d), element.Id + "/HeightM");
                 var sillM = NonNegative(Number(element, family, "SillHeightM", Number(element, family, "BottomOffsetM", 0d)), element.Id + "/SillHeightM");
@@ -50,14 +53,14 @@ namespace QS3D.Core.Reporting
                 var areaM2 = element.Quantities.TryGetValue("OpeningAreaM2", out var storedArea)
                     ? NonNegative(storedArea, element.Id + "/OpeningAreaM2")
                     : Multiply(widthM, heightM, element.Id + "/OpeningAreaM2");
-                var floor = floors.TryGetValue(element.FloorId, out var floorName) ? floorName : element.FloorId;
-                var familyName = family?.Name ?? element.FamilyId;
+                var floor = floors.TryGetValue(floorId, out var floorName) ? floorName : floorId;
+                var familyName = family?.Name ?? familyId;
                 var category = ScheduleCategory(element);
                 var hostId = element.Properties.TryGetValue("HostWallId", out var hostRaw) ? (hostRaw ?? string.Empty).Trim() : string.Empty;
-                var key = string.Join("\u001f",
-                    element.FloorId,
+                var key = GroupKey(
+                    floorId,
                     category,
-                    element.FamilyId,
+                    familyId,
                     widthM.ToString("R", CultureInfo.InvariantCulture),
                     heightM.ToString("R", CultureInfo.InvariantCulture),
                     sillM.ToString("R", CultureInfo.InvariantCulture),
@@ -90,6 +93,19 @@ namespace QS3D.Core.Reporting
 
             foreach (var row in rows.Values) row.HostCount = row.HostIds.Count;
             return order.Select(x => rows[x]).ToList().AsReadOnly();
+        }
+
+        private static string GroupKey(params string[] tokens)
+        {
+            var key = new StringBuilder();
+            foreach (var raw in tokens)
+            {
+                var token = raw ?? string.Empty;
+                key.Append(token.Length.ToString(CultureInfo.InvariantCulture))
+                    .Append(':')
+                    .Append(token);
+            }
+            return key.ToString();
         }
 
         private static string ScheduleCategory(ProjectElement element)

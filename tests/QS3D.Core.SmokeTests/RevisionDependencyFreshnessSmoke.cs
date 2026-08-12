@@ -42,17 +42,14 @@ namespace QS3D.Core.SmokeTests
         {
             var service = new RevisionService();
             var project = NewProject(out var element);
-            element.DependsOn.Add(" host-b ");
-            element.DependsOn.Add(string.Empty);
+            element.DependsOn.Add("host-b");
             element.DependsOn.Add("HOST-A");
-            element.DependsOn.Add("HOST-B");
             var before = service.Capture(project, "before");
 
             Require(before.Elements.Single().Dependencies.Count == 2, "capture did not canonicalize dependency set");
             element.DependsOn.Clear();
             element.DependsOn.Add("host-a");
             element.DependsOn.Add("HOST-B");
-            element.DependsOn.Add("HOST-A");
             var after = service.Capture(project, "after");
 
             Require(service.Compare(before, after).Count == 0, "equivalent dependency sets produced a false revision diff");

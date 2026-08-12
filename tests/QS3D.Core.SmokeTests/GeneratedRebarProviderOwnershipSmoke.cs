@@ -14,7 +14,7 @@ namespace QS3D.Core.SmokeTests
             BeamStirrupLaterOwnerIsConflict();
             TieLaterOwnerIsConflict();
             LongitudinalRebarLaterOwnerIsConflict();
-            OwnershipPolicyFailsClosedWhileDiagnosticIndexToleratesNullEntries();
+            OwnershipPoliciesFailClosedOnNullEntries();
         }
 
         private static void BeamStirrupLaterOwnerIsConflict()
@@ -64,7 +64,7 @@ namespace QS3D.Core.SmokeTests
                 "longitudinal rebar later-owner conflict was missed");
         }
 
-        private static void OwnershipPolicyFailsClosedWhileDiagnosticIndexToleratesNullEntries()
+        private static void OwnershipPoliciesFailClosedOnNullEntries()
         {
             var project = ProjectWithNull("index");
             var owner = new ProjectElement("O1", ElementCategory.Beam, string.Empty, string.Empty, string.Empty);
@@ -76,9 +76,8 @@ namespace QS3D.Core.SmokeTests
             RequireThrows<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.TryFindOwner(project, "AD", out _, out _),
                 "ownership policy lookup must reject a corrupt null semantic entry");
 
-            var index = GeneratedHandleOwnershipIndex.Build(project);
-            Require(index.TryFindOwner("AD", out var found, out _) && ReferenceEquals(found, owner),
-                "diagnostic ownership index failed to resolve unique owner while tolerating a null entry");
+            RequireThrows<InvalidOperationException>(() => GeneratedHandleOwnershipIndex.Build(project),
+                "diagnostic ownership index must reject a corrupt null semantic entry");
         }
 
         private static ProjectState ProjectWithNull(string id)

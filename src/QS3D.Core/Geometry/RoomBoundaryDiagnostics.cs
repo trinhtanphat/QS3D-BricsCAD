@@ -98,6 +98,8 @@ namespace QS3D.Core.Geometry
     /// </summary>
     public sealed class RoomBoundaryDiagnosticService
     {
+        private const int MaxInputSegments = 5000;
+
         public RoomBoundaryDiagnosticAnalysis Analyze(
             IEnumerable<BoundarySegment> source,
             double tolerance = 0.001d,
@@ -107,7 +109,9 @@ namespace QS3D.Core.Geometry
             if (double.IsNaN(minimumArea) || double.IsInfinity(minimumArea) || minimumArea < 0d)
                 throw new ArgumentOutOfRangeException(nameof(minimumArea));
 
-            var segments = source.ToList();
+            var segments = source.Take(MaxInputSegments + 1).ToList();
+            if (segments.Count > MaxInputSegments)
+                throw new InvalidOperationException("Room boundary input exceeds the supported segment limit.");
             var candidates = new RoomBoundaryEngine().Discover(segments, tolerance, 0d)
                 .OrderBy(x => x.Key, StringComparer.Ordinal)
                 .ToList();

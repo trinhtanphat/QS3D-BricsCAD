@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
             AmbiguousPreviousHostFailsBeforeMutation();
             CanonicalRelinkIsSideEffectFree();
             MissingHostUnlinkIsSideEffectFree();
+            AuditedHostMutationsAdvanceRevisionOnce();
+            StaleAutoHostCleanupAdvancesRevisionOnce();
         }
 
         private static void RelinkCollapsesLegacyDependencyVariants()
@@ -113,6 +115,45 @@ namespace QS3D.Core.SmokeTests
             Equal(ElementDirtyFlags.None, wallB.Dirty);
             Equal(1, opening.DependsOn.Count);
             Equal(wallB.Id, opening.DependsOn.Single());
+        }
+
+        private static void AuditedHostMutationsAdvanceRevisionOnce()
+        {
+            var project = Project(out var wallA, out _, out var opening);
+            var service = new HostLinkService();
+            var beforeLinkVersion = project.ChangeVersion;
+            var beforeLinkAudits = project.AuditEvents.Count;
+
+            service.LinkOpening(project, opening.Id, wallA.Id);
+
+            Equal(beforeLinkVersion + 1L, project.ChangeVersion);
+            Equal(beforeLinkAudits + 1, project.AuditEvents.Count);
+            Equal("host.link", project.AuditEvents.Last().Action);
+
+            var beforeUnlinkVersion = project.ChangeVersion;
+            var beforeUnlinkAudits = project.AuditEvents.Count;
+            service.UnlinkOpening(project, opening.Id);
+
+            Equal(beforeUnlinkVersion + 1L, project.ChangeVersion);
+            Equal(beforeUnlinkAudits + 1, project.AuditEvents.Count);
+            Equal("host.unlink", project.AuditEvents.Last().Action);
+        }
+
+        private static void StaleAutoHostCleanupAdvancesRevisionOnce()
+        {
+            var project = Project(out _, out _, out var opening);
+            opening.Properties["AutoHostMatched"] = "true";
+            opening.Properties["AutoHostGapM"] = "0.01";
+            var beforeVersion = project.ChangeVersion;
+            var beforeAudits = project.AuditEvents.Count;
+
+            new HostLinkService().UnlinkOpening(project, opening.Id);
+
+            Equal(beforeVersion + 1L, project.ChangeVersion);
+            Equal(beforeAudits + 1, project.AuditEvents.Count);
+            Equal("host.auto-provenance.clear", project.AuditEvents.Last().Action);
+            if (opening.Properties.ContainsKey("AutoHostMatched") || opening.Properties.ContainsKey("AutoHostGapM"))
+                throw new Exception("Stale AutoHost provenance cleanup did not clear legacy metadata.");
         }
 
         private static ProjectState Project(out ProjectElement wallA, out ProjectElement wallB, out ProjectElement opening)

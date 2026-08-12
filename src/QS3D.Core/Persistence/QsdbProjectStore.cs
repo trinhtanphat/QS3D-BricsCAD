@@ -153,7 +153,16 @@ namespace QS3D.Core.Persistence
                     ReadStringMap(item.Element("properties"), "p", element.Properties);
                     var quantities = item.Element("quantities");
                     if (quantities != null)
-                        foreach (var q in quantities.Elements("q")) element.SetQuantity(Required(q, "name"), Double(q.Attribute("value")?.Value));
+                    {
+                        foreach (var q in quantities.Elements("q"))
+                        {
+                            var quantityName = Required(q, "name");
+                            var quantityValue = Double(q.Attribute("value")?.Value);
+                            if (element.Quantities.ContainsKey(quantityName))
+                                throw new InvalidDataException("Duplicate QSDB element quantity name: " + element.Id + "/" + quantityName);
+                            element.SetQuantity(quantityName, quantityValue);
+                        }
+                    }
                     element.RestorePersistenceState(Dirty(item.Attribute("dirty")?.Value), Date(item.Attribute("updatedUtc")?.Value));
                     project.Elements.Add(element);
                 }
@@ -321,7 +330,10 @@ namespace QS3D.Core.Persistence
                 }
             }
             foreach (var audit in project.AuditEvents)
+            {
                 ValidateUtcTimestamp(audit.Utc, "audit event UTC timestamp");
+                ValidateCanonicalKey(audit.Action, "audit event action");
+            }
         }
 
         private static void ValidateStringMap(System.Collections.Generic.IDictionary<string, string> values, string label)
@@ -331,12 +343,15 @@ namespace QS3D.Core.Persistence
 
         private static void ValidateCanonicalStringList(System.Collections.Generic.IEnumerable<string> values, string label)
         {
+            var seen = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var value in values)
             {
                 if (string.IsNullOrWhiteSpace(value)) throw new InvalidDataException("QSDB " + label + " contains an empty value at index " + index + ".");
                 if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
                     throw new InvalidDataException("QSDB " + label + " contains a non-canonical padded value at index " + index + ".");
+                if (!seen.Add(value))
+                    throw new InvalidDataException("QSDB " + label + " contains a duplicate value at index " + index + ": " + value + ".");
                 index++;
             }
         }

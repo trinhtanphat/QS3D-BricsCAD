@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             SetPropertyUsesCanonicalKeyAndGeometryDirtyPolicy();
             MultiplyNumericPropertyUsesCanonicalKey();
             CorruptProjectFailsBeforeBulkMutation();
+            ObjectBasedBulkEditsRejectNullTargets();
             IdBasedBulkEditsRejectIncompleteTargetSets();
             FamilyAssignmentRejectsIncompatibleBatch();
         }
@@ -68,6 +69,27 @@ namespace QS3D.Core.SmokeTests
 
             Throws<InvalidOperationException>(() => new BulkEditService().AssignFamily(project, new[] { wall.Id }, familyB.Id));
             if (wall.FamilyId != familyA.Id) throw new Exception("Rejected bulk family assignment must not partially mutate a target.");
+        }
+
+        private static void ObjectBasedBulkEditsRejectNullTargets()
+        {
+            var project = new ProjectState("P-OBJECT-NULL", "Bulk object target atomicity");
+            var wall = new ProjectElement("W1", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            wall.Properties["WidthM"] = "0.2";
+            wall.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(wall);
+            var service = new BulkEditService();
+            var version = project.ChangeVersion;
+            var dirty = wall.Dirty;
+            var targets = new ProjectElement[] { wall, null! };
+
+            Throws<InvalidOperationException>(() => service.SetProperty(project, targets, "WidthM", "0.25"));
+            if (wall.Properties["WidthM"] != "0.2" || wall.Dirty != dirty || project.ChangeVersion != version)
+                throw new Exception("Null object target must reject bulk set before any semantic mutation.");
+
+            Throws<InvalidOperationException>(() => service.MultiplyNumericProperty(project, targets, "WidthM", 2d));
+            if (wall.Properties["WidthM"] != "0.2" || wall.Dirty != dirty || project.ChangeVersion != version)
+                throw new Exception("Null object target must reject bulk multiply before any semantic mutation.");
         }
 
         private static void IdBasedBulkEditsRejectIncompleteTargetSets()

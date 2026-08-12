@@ -500,7 +500,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             value = 0d;
             return !string.IsNullOrWhiteSpace(text) &&
-                   double.TryParse(text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value) &&
+                   double.TryParse((text ?? string.Empty).Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value) &&
                    IsFiniteNonNegative(value);
         }
 
@@ -529,7 +529,7 @@ namespace QS3D.BricsCAD.V25.UI
         private static string FirstNonEmpty(params string?[] values)
         {
             foreach (var value in values)
-                if (!string.IsNullOrWhiteSpace(value)) return value.Trim();
+                if (!string.IsNullOrWhiteSpace(value)) return (value ?? string.Empty).Trim();
             return string.Empty;
         }
 

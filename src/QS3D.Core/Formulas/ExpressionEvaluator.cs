@@ -26,7 +26,11 @@ namespace QS3D.Core.Formulas
                 if (char.IsWhiteSpace(current)) { index++; continue; }
                 if (char.IsDigit(current) || current == '.')
                 {
+                    var start = index;
                     SkipNumberToken(expression, ref index);
+                    var token = expression.Substring(start, index - start);
+                    if (!double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value))
+                        throw new InvalidOperationException($"Invalid number '{token}'. Position {index}.");
                     continue;
                 }
                 if (char.IsLetter(current) || current == '_')
@@ -149,6 +153,7 @@ namespace QS3D.Core.Formulas
 
             private double ParseUnary(int depth)
             {
+                GuardDepth(depth);
                 SkipWhiteSpace();
                 if (Match('+')) return ParseUnary(depth + 1);
                 if (Match('-')) return EnsureFinite(-ParseUnary(depth + 1), "Unary negation produced a non-finite result.");

@@ -225,7 +225,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             if (status != null)
             {
-                status.Margin = narrow ? new Thickness(4, 0) : new Thickness(8, 0);
+                status.Margin = narrow ? new Thickness(4, 0, 4, 0) : new Thickness(8, 0, 8, 0);
                 status.MinWidth = 0;
                 status.TextAlignment = TextAlignment.Center;
             }
@@ -235,7 +235,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             foreach (var button in actions.Children.OfType<Button>())
             {
-                button.Padding = narrow ? new Thickness(5, 2) : new Thickness(6, 2);
+                button.Padding = narrow ? new Thickness(5, 2, 5, 2) : new Thickness(6, 2, 6, 2);
 
                 var label = button.Content as string;
                 if (string.Equals(label, "Xoay 3D", StringComparison.Ordinal) ||
@@ -263,7 +263,7 @@ namespace QS3D.BricsCAD.V25.UI
             var header = titleStack == null
                 ? null
                 : VisualTreeHelper.GetParent(titleStack) as DockPanel;
-            if (header == null || VisualTreeHelper.GetParent(refreshButton) != header)
+            if (titleStack == null || header == null || VisualTreeHelper.GetParent(refreshButton) != header)
                 return;
 
             // The original DockPanel lets its final child fill the remaining width. In the narrow
@@ -321,11 +321,11 @@ namespace QS3D.BricsCAD.V25.UI
             if (element.ToolTip != null && current == null)
                 return;
 
-            if (!string.IsNullOrWhiteSpace(current) &&
+            if (current != null && !string.IsNullOrWhiteSpace(current) &&
                 current.IndexOf(shortcut, StringComparison.OrdinalIgnoreCase) >= 0)
                 return;
 
-            element.ToolTip = string.IsNullOrWhiteSpace(current)
+            element.ToolTip = current == null || string.IsNullOrWhiteSpace(current)
                 ? shortcut
                 : current.TrimEnd() + "  •  " + shortcut;
             ToolTipService.SetShowDuration(element, 10000);

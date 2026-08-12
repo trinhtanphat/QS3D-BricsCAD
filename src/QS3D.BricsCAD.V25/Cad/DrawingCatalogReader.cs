@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using Bricscad.ApplicationServices;
 using Teigha.DatabaseServices;
 
@@ -24,10 +25,18 @@ namespace QS3D.BricsCAD.V25.Cad
         public int InstanceCount { get; set; }
         public int LockedInstanceCount { get; set; }
         public string LockState { get; set; } = "—";
+        public bool HasScale { get; set; }
+        public bool MixedScale { get; set; }
+        public double ScaleX { get; set; } = 1d;
+        public double ScaleY { get; set; } = 1d;
+        public double ScaleZ { get; set; } = 1d;
+        public string ScaleText { get; set; } = "—";
     }
 
     internal static class DrawingCatalogReader
     {
+        private const double ScaleTolerance = 1e-9;
+
         public static IReadOnlyList<LayerSnapshot> ReadLayers(Document document)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
@@ -89,6 +98,21 @@ namespace QS3D.BricsCAD.V25.Cad
                         snapshot.InstanceCount = checked(snapshot.InstanceCount + 1);
                         var layer = tr.GetObject(reference.LayerId, OpenMode.ForRead, false) as LayerTableRecord;
                         if (layer != null && layer.IsLocked) snapshot.LockedInstanceCount = checked(snapshot.LockedInstanceCount + 1);
+
+                        var scale = reference.ScaleFactors;
+                        if (!snapshot.HasScale)
+                        {
+                            snapshot.HasScale = true;
+                            snapshot.ScaleX = scale.X;
+                            snapshot.ScaleY = scale.Y;
+                            snapshot.ScaleZ = scale.Z;
+                        }
+                        else if (!SameScale(snapshot.ScaleX, scale.X) ||
+                                 !SameScale(snapshot.ScaleY, scale.Y) ||
+                                 !SameScale(snapshot.ScaleZ, scale.Z))
+                        {
+                            snapshot.MixedScale = true;
+                        }
                     }
                 }
 
@@ -98,11 +122,45 @@ namespace QS3D.BricsCAD.V25.Cad
                     else if (snapshot.LockedInstanceCount == 0) snapshot.LockState = "Mở";
                     else if (snapshot.LockedInstanceCount == snapshot.InstanceCount) snapshot.LockState = "Khóa";
                     else snapshot.LockState = "Hỗn hợp";
+
+                    snapshot.ScaleText = snapshot.InstanceCount == 0 || !snapshot.HasScale
+                        ? "—"
+                        : snapshot.MixedScale
+                            ? "Hỗn hợp"
+                            : FormatScale(snapshot.ScaleX, snapshot.ScaleY, snapshot.ScaleZ);
                 }
                 tr.Commit();
             }
             result.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase));
             return result;
         }
+
+        private static bool SameScale(double left, double right)
+        {
+            if (double.IsNaN(left) || double.IsNaN(right) || double.IsInfinity(left) || double.IsInfinity(right))
+                return left.Equals(right);
+            var magnitude = Math.Max(1d, Math.Max(Math.Abs(left), Math.Abs(right)));
+            return Math.Abs(left - right) <= ScaleTolerance * magnitude;
+        }
+
+        private static string FormatScale(double x, double y, double z)
+        {
+            if (!IsFinite(x) || !IsFinite(y) || !IsFinite(z)) return "Không hợp lệ";
+            var uniform = SameScale(x, y) && SameScale(y, z);
+            if (uniform && x > 0d)
+            {
+                if (SameScale(x, 1d)) return "1:1";
+                return x < 1d
+                    ? "1:" + FormatScaleNumber(1d / x)
+                    : FormatScaleNumber(x) + ":1";
+            }
+
+            return "X/Y/Z " + FormatScaleNumber(x) + "/" + FormatScaleNumber(y) + "/" + FormatScaleNumber(z);
+        }
+
+        private static string FormatScaleNumber(double value) =>
+            value.ToString("0.######", CultureInfo.InvariantCulture);
+
+        private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
     }
 }

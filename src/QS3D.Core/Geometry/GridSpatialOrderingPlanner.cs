@@ -42,7 +42,7 @@ namespace QS3D.Core.Geometry
             if (!Finite(ux) || !Finite(uy))
                 throw new InvalidOperationException("Grid ordering axis normalization overflowed the supported numeric range.");
 
-            var list = curves.ToList();
+            var list = curves.Take(MaxCurves + 1).ToList();
             if (list.Count == 0) throw new InvalidOperationException("At least one Grid LINE is required for spatial ordering.");
             if (list.Count > MaxCurves)
                 throw new InvalidOperationException("Grid spatial ordering supports at most " + MaxCurves + " curves.");

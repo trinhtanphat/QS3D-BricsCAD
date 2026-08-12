@@ -35,22 +35,35 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                var project = ExistingProjectMutationContext.Require(document, "Selected physical opening cut");
-                var handles = new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
-                var openingIds = project.Elements
-                    .Where(IsOpening)
-                    .Where(x => SemanticReferenceHandles.MatchesSelection(x, handles))
-                    .Select(x => x.Id)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                var handles = new HashSet<string>(
+                    snapshots.Select(x => x.Handle).Where(x => !string.IsNullOrWhiteSpace(x)),
+                    StringComparer.OrdinalIgnoreCase);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
+                {
+                    FinalizeUi(document, "Physical opening chọn: chưa có QS3D project hiện hữu để resolve Door/WallOpening.");
+                    return;
+                }
+
+                var expectedProjectId = previewProject.ProjectId;
+                var expectedChangeVersion = previewProject.ChangeVersion;
+                var openingIds = ResolveOpeningIds(previewProject, handles);
                 if (openingIds.Count == 0)
                 {
                     FinalizeUi(document, "Physical opening chọn: selection không resolve tới Door/WallOpening QS3D.");
                     return;
                 }
 
-                Execute(document, openingIds, "QS3DCUTSELECTEDOPENINGS", "Physical opening chọn");
+                var project = ExistingProjectMutationContext.Require(document, "Selected physical opening cut");
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
+                    project.ChangeVersion != expectedChangeVersion)
+                    throw new InvalidOperationException("Selected physical opening cut: QS3D project đã thay đổi sau khi đọc selection; hãy chọn lại target.");
+
+                var currentOpeningIds = ResolveOpeningIds(project, handles);
+                var expectedTargets = new HashSet<string>(openingIds, StringComparer.OrdinalIgnoreCase);
+                if (!expectedTargets.SetEquals(currentOpeningIds))
+                    throw new InvalidOperationException("Selected physical opening cut: Door/WallOpening target set đã thay đổi sau khi đọc selection; hãy chọn lại target.");
+
+                Execute(document, openingIds, "QS3DCUTSELECTEDOPENINGS", "Physical opening chọn", project);
             }
             catch (Exception ex)
             {
@@ -58,11 +71,16 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void Execute(Document document, IReadOnlyCollection<string>? openingIds, string operation, string label)
+        private static void Execute(
+            Document document,
+            IReadOnlyCollection<string>? openingIds,
+            string operation,
+            string label,
+            ProjectState? boundProject = null)
         {
             try
             {
-                var project = ExistingProjectMutationContext.Require(document, label);
+                var project = boundProject ?? ExistingProjectMutationContext.Require(document, label);
                 if (openingIds == null)
                     OpeningBooleanCutGuard.RequireFreshGeneratedHosts(project, null);
                 else
@@ -97,6 +115,15 @@ namespace QS3D.BricsCAD.V25
                 FinalizeError(document, operation, ex);
             }
         }
+
+        private static IReadOnlyList<string> ResolveOpeningIds(ProjectState project, HashSet<string> handles) =>
+            project.Elements
+                .Where(IsOpening)
+                .Where(x => SemanticReferenceHandles.MatchesSelection(x, handles))
+                .Select(x => x.Id)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
         private static bool IsOpening(ProjectElement element) =>
             element.Category == ElementCategory.WallOpening || element.Category == ElementCategory.Door;

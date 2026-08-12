@@ -13,6 +13,9 @@ namespace QS3D.Core.Diagnostics
     {
         public ModelHealthIssue(string code, HealthSeverity severity, string message, string elementId = "")
         {
+            if (!Enum.IsDefined(typeof(HealthSeverity), severity))
+                throw new ArgumentOutOfRangeException(nameof(severity), severity, "Health severity must be defined.");
+
             Code = code ?? string.Empty;
             Severity = severity;
             Message = message ?? string.Empty;
@@ -47,8 +50,7 @@ namespace QS3D.Core.Diagnostics
 
             if (project.Metadata.TryGetValue("QS3D.ReadOnlyRecoveryRequired", out var recoveryRequired) && string.Equals(recoveryRequired, "true", StringComparison.OrdinalIgnoreCase))
             {
-                var detail = project.Metadata.TryGetValue("QS3D.LoadWarning", out var warning) ? warning : "QSDB could not be loaded.";
-                issues.Add(new ModelHealthIssue("PROJECT_LOAD_FAILED", HealthSeverity.Error, "Project đang ở chế độ bảo vệ và sẽ không ghi đè .qsdb: " + detail));
+                issues.Add(new ModelHealthIssue("PROJECT_LOAD_FAILED", HealthSeverity.Error, "Project đang ở chế độ bảo vệ vì .qsdb chính không thể tải; dữ liệu sẽ không được ghi đè. Hãy kiểm tra file project hoặc bản sao lưu trước khi lưu lại."));
             }
             else if (project.Metadata.TryGetValue("QS3D.RecoveredFromBackup", out var recovered) && string.Equals(recovered, "true", StringComparison.OrdinalIgnoreCase))
             {

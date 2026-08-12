@@ -38,9 +38,43 @@ namespace QS3D.Core.SmokeTests
             DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(legacy, true, LengthUnit.Millimeter);
             Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(legacy, true, LengthUnit.Meter));
 
+            var lowercaseOverride = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.OverrideMetadataKey] = "meter"
+            };
+            if (!DrawingUnitResolutionPolicy.TryResolve(null, lowercaseOverride, out var lowercaseResolution) ||
+                lowercaseResolution.Unit != LengthUnit.Meter)
+                throw new Exception("Named drawing-unit metadata must remain case-insensitive.");
+
+            var numericOverride = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.OverrideMetadataKey] = ((int)LengthUnit.Meter).ToString()
+            };
+            Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.TryResolve(null, numericOverride, out _));
+
+            var lowercaseBound = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.BoundMetadataKey] = "meter"
+            };
+            DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(lowercaseBound, true, LengthUnit.Meter);
+
+            var numericBound = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.BoundMetadataKey] = ((int)LengthUnit.Meter).ToString()
+            };
+            Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(numericBound, true, LengthUnit.Meter));
+
             metadata[DrawingUnitResolutionPolicy.OverrideMetadataKey] = "NotAUnit";
             Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.TryResolve(null, metadata, out _));
             Throws<ArgumentOutOfRangeException>(() => DrawingUnitResolutionPolicy.SetProjectOverride(metadata, (LengthUnit)999));
+
+            Throws<ArgumentOutOfRangeException>(() => new ProjectUnitPolicy((LengthUnit)999));
+            Throws<ArgumentOutOfRangeException>(() => new ProjectUnitPolicy(LengthUnit.Meter, 10));
+            var unitPolicy = new ProjectUnitPolicy(LengthUnit.Centimeter, 2);
+            if (unitPolicy.DrawingUnit != LengthUnit.Centimeter || unitPolicy.DisplayDecimals != 2 ||
+                Math.Abs(unitPolicy.ToMeters(123d) - 1.23d) > 1e-12d ||
+                Math.Abs(unitPolicy.RoundForDisplay(1.236d) - 1.24d) > 1e-12d)
+                throw new Exception("Defined ProjectUnitPolicy values must preserve conversion and display behavior.");
 
             var path = Path.Combine(Path.GetTempPath(), "qs3d-unit-binding-" + Guid.NewGuid().ToString("N") + ".qsdb");
             try

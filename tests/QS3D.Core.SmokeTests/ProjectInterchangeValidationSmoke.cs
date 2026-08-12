@@ -56,9 +56,9 @@ namespace QS3D.Core.SmokeTests
 
         private static void DependencyCycleFailsClosed()
         {
-            var project = BuildFixture();
-            project.FindElement("E-ROOT")!.DependsOn.Add("E-001");
-            RequireError(ProjectInterchangeJsonValidator.Validate(ProjectInterchangeJsonExporter.Build(project)), "DEPENDENCY_CYCLE");
+            var json = ProjectInterchangeJsonExporter.Build(BuildFixture())
+                .Replace("\"dependencies\": []", "\"dependencies\": [\"E-001\"]");
+            RequireError(ProjectInterchangeJsonValidator.Validate(json), "DEPENDENCY_CYCLE");
         }
 
         private static void InvalidUtf8FileFailsClosed()

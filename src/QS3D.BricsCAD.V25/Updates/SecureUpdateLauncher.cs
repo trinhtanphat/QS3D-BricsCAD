@@ -19,6 +19,7 @@ namespace QS3D.BricsCAD.V25.Updates
         private const uint WtdStateActionVerify = 1;
         private const uint WtdStateActionClose = 2;
         private const string UpdateMutexPrefix = "Global\\QS3D-BricsCAD-V25-Update-";
+        private const int WorkerReadyTimeoutMilliseconds = 5000;
         private static int _scheduled;
         private static Mutex? _crossProcessReservation;
 
@@ -112,29 +113,52 @@ namespace QS3D.BricsCAD.V25.Updates
                     "UpdateLogs");
                 Directory.CreateDirectory(logDirectory);
 
-                var worker = BuildWorkerScript(
-                    updaterPath,
-                    manifestUri.AbsoluteUri,
-                    signerThumbprint,
-                    installDirectory,
-                    bricscadPath,
-                    logDirectory,
-                    mutexName);
-                var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(worker));
-
-                var startInfo = new ProcessStartInfo
+                var handoffId = Guid.NewGuid().ToString("N");
+                var readyEventName = mutexName + "-Ready-" + handoffId;
+                var cancelEventName = mutexName + "-Cancel-" + handoffId;
+                using (var readyEvent = new EventWaitHandle(false, EventResetMode.ManualReset, readyEventName))
+                using (var cancelEvent = new EventWaitHandle(false, EventResetMode.ManualReset, cancelEventName))
                 {
-                    FileName = "powershell.exe",
-                    Arguments = "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -EncodedCommand " + encoded,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    WindowStyle = ProcessWindowStyle.Hidden,
-                    WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
-                };
+                    var worker = BuildWorkerScript(
+                        updaterPath,
+                        manifestUri.AbsoluteUri,
+                        signerThumbprint,
+                        installDirectory,
+                        bricscadPath,
+                        logDirectory,
+                        mutexName,
+                        readyEventName,
+                        cancelEventName);
+                    var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(worker));
 
-                var updater = Process.Start(startInfo);
-                if (updater == null) throw new InvalidOperationException("Không thể khởi động tiến trình updater tách rời.");
-                updater.Dispose();
+                    var startInfo = new ProcessStartInfo
+                    {
+                        FileName = "powershell.exe",
+                        Arguments = "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -EncodedCommand " + encoded,
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        WindowStyle = ProcessWindowStyle.Hidden,
+                        WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
+                    };
+
+                    var updater = Process.Start(startInfo);
+                    if (updater == null) throw new InvalidOperationException("Không thể khởi động tiến trình updater tách rời.");
+                    try
+                    {
+                        if (!readyEvent.WaitOne(WorkerReadyTimeoutMilliseconds))
+                        {
+                            cancelEvent.Set();
+                            TryTerminateUnreadyWorker(updater);
+                            throw new InvalidOperationException(
+                                "Updater worker không xác nhận readiness trong 5 giây. QS3D đã hủy worker trước khi cài đặt; BricsCAD vẫn mở và bạn có thể thử lại.");
+                        }
+                    }
+                    finally
+                    {
+                        updater.Dispose();
+                    }
+                }
+
                 return true;
             }
             catch (Exception ex)
@@ -211,6 +235,21 @@ namespace QS3D.BricsCAD.V25.Updates
             finally { reservation.Dispose(); }
         }
 
+        private static void TryTerminateUnreadyWorker(Process updater)
+        {
+            try
+            {
+                if (updater.HasExited) return;
+                updater.Kill();
+                updater.WaitForExit(WorkerReadyTimeoutMilliseconds);
+            }
+            catch
+            {
+                // Best effort only. Readiness timeout signals the worker cancellation event
+                // before this cleanup, so a surviving child remains fail-closed before install.
+            }
+        }
+
         private static bool TryVerifyAuthenticode(string filePath, out string reason)
         {
             reason = string.Empty;
@@ -273,7 +312,9 @@ namespace QS3D.BricsCAD.V25.Updates
             string installDirectory,
             string bricscadPath,
             string logDirectory,
-            string mutexName)
+            string mutexName,
+            string readyEventName,
+            string cancelEventName)
         {
             var script = new StringBuilder();
             script.AppendLine("$ErrorActionPreference = 'Stop'");
@@ -284,22 +325,39 @@ namespace QS3D.BricsCAD.V25.Updates
             script.AppendLine("$bricscad = " + PsLiteral(bricscadPath));
             script.AppendLine("$logDirectory = " + PsLiteral(logDirectory));
             script.AppendLine("$mutexName = " + PsLiteral(mutexName));
+            script.AppendLine("$readyEventName = " + PsLiteral(readyEventName));
+            script.AppendLine("$cancelEventName = " + PsLiteral(cancelEventName));
             script.AppendLine("New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null");
             script.AppendLine("$log = Join-Path $logDirectory ('update-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '.log')");
             script.AppendLine("Start-Transcript -Path $log -Force | Out-Null");
             script.AppendLine("$updateMutex = $null");
+            script.AppendLine("$readyEvent = $null");
+            script.AppendLine("$cancelEvent = $null");
             script.AppendLine("$ownsUpdateMutex = $false");
+            script.AppendLine("$hostClosed = $false");
             script.AppendLine("try {");
-            script.AppendLine("  $updateMutex = New-Object System.Threading.Mutex($false, $mutexName)");
+            script.AppendLine("  $updateMutex = [System.Threading.Mutex]::new($false, $mutexName)");
+            script.AppendLine("  $readyEvent = [System.Threading.EventWaitHandle]::OpenExisting($readyEventName)");
+            script.AppendLine("  $cancelEvent = [System.Threading.EventWaitHandle]::OpenExisting($cancelEventName)");
+            script.AppendLine("  $readyEvent.Set() | Out-Null");
+            script.AppendLine("  $readyEvent.Dispose()");
+            script.AppendLine("  $readyEvent = $null");
+            script.AppendLine("  if ($cancelEvent.WaitOne(0)) { throw 'QS3D updater was cancelled before mutex ownership.' }");
             script.AppendLine("  try { $ownsUpdateMutex = $updateMutex.WaitOne() }");
             script.AppendLine("  catch [System.Threading.AbandonedMutexException] { $ownsUpdateMutex = $true }");
             script.AppendLine("  if (-not $ownsUpdateMutex) { throw 'Could not acquire the QS3D cross-process update reservation.' }");
-            script.AppendLine("  while (Get-Process -Name bricscad -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 2 }");
+            script.AppendLine("  if ($cancelEvent.WaitOne(0)) { throw 'QS3D updater was cancelled after mutex ownership.' }");
+            script.AppendLine("  while (Get-Process -Name bricscad -ErrorAction SilentlyContinue) {");
+            script.AppendLine("    if ($cancelEvent.WaitOne(0)) { throw 'QS3D updater was cancelled while waiting for BricsCAD to close.' }");
+            script.AppendLine("    Start-Sleep -Seconds 2");
+            script.AppendLine("  }");
+            script.AppendLine("  $hostClosed = $true");
             script.AppendLine("  if (-not (Test-Path -LiteralPath $updater -PathType Leaf)) { throw 'Installed QS3D updater script is missing.' }");
             script.AppendLine("  $signature = Get-AuthenticodeSignature -LiteralPath $updater");
             script.AppendLine("  if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or -not $signature.SignerCertificate) { throw ('Installed updater signature is not valid: ' + $signature.Status) }");
             script.AppendLine("  $actualSigner = $signature.SignerCertificate.Thumbprint.Replace(' ', '').ToUpperInvariant()");
             script.AppendLine("  if ($actualSigner -ne $expectedSigner) { throw ('Installed updater signer mismatch. Expected ' + $expectedSigner + ', got ' + $actualSigner) }");
+            script.AppendLine("  if ($cancelEvent.WaitOne(0)) { throw 'QS3D updater was cancelled before installer execution.' }");
             script.AppendLine("  & $updater -ManifestUri $manifest -ExpectedSignerThumbprint $expectedSigner -InstallDirectory $install -AllowedPackageHost @('github.com') -AllowSameVersion -Confirm:$false");
             script.AppendLine("  if (-not $?) { throw 'QS3D update script reported failure.' }");
             script.AppendLine("  Stop-Transcript | Out-Null");
@@ -307,11 +365,18 @@ namespace QS3D.BricsCAD.V25.Updates
             script.AppendLine("  exit 0");
             script.AppendLine("}");
             script.AppendLine("catch {");
-            script.AppendLine("  Write-Error $_");
+            script.AppendLine("  $updateFailure = $_");
+            script.AppendLine("  Write-Error $updateFailure -ErrorAction Continue");
+            script.AppendLine("  if ($hostClosed -and (Test-Path -LiteralPath $bricscad -PathType Leaf) -and -not (Get-Process -Name bricscad -ErrorAction SilentlyContinue)) {");
+            script.AppendLine("    try { Start-Process -FilePath $bricscad | Out-Null }");
+            script.AppendLine("    catch { Write-Warning ('QS3D update failed and BricsCAD recovery restart also failed: ' + $_.Exception.Message) }");
+            script.AppendLine("  }");
             script.AppendLine("  try { Stop-Transcript | Out-Null } catch { }");
             script.AppendLine("  exit 1");
             script.AppendLine("}");
             script.AppendLine("finally {");
+            script.AppendLine("  if ($readyEvent) { try { $readyEvent.Dispose() } catch { } }");
+            script.AppendLine("  if ($cancelEvent) { try { $cancelEvent.Dispose() } catch { } }");
             script.AppendLine("  if ($ownsUpdateMutex -and $updateMutex) { try { $updateMutex.ReleaseMutex() } catch { } }");
             script.AppendLine("  if ($updateMutex) { $updateMutex.Dispose() }");
             script.AppendLine("}");

@@ -28,7 +28,7 @@ namespace QS3D.Core.SmokeTests
             wall.MarkClean(ElementDirtyFlags.All);
             source.Elements.Add(wall);
 
-            var project = AtVersion(source, long.MaxValue - 1L);
+            var project = AtVersion(source, long.MaxValue);
             var beforeUtc = project.UpdatedUtc;
             var beforeAudits = project.AuditEvents.Count;
 
@@ -59,7 +59,7 @@ namespace QS3D.Core.SmokeTests
             if (project.Metadata.ContainsKey(TemplateProfileStore.VisibleBqColumnsKey))
                 throw new Exception("Failed template apply persisted visible BQ columns.");
             Equal(beforeAudits, project.AuditEvents.Count, "Failed template apply appended an audit event.");
-            Equal(long.MaxValue - 1L, project.ChangeVersion, "Failed template apply did not restore the project version.");
+            Equal(long.MaxValue, project.ChangeVersion, "Failed template apply did not restore the project version.");
             Equal(beforeUtc, project.UpdatedUtc, "Failed template apply did not restore UpdatedUtc.");
         }
 

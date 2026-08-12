@@ -70,6 +70,8 @@ namespace QS3D.Core.Licensing
         private static void ValidateToken(string value, string name, int maximumLength)
         {
             if (string.IsNullOrWhiteSpace(value)) throw new InvalidDataException("License " + name + " is required.");
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("License " + name + " must not contain leading or trailing whitespace.");
             if (value.Length > maximumLength) throw new InvalidDataException("License " + name + " is too long.");
             foreach (var ch in value)
                 if (char.IsControl(ch) || ch == '\n' || ch == '\r') throw new InvalidDataException("License " + name + " contains control characters.");
@@ -139,10 +141,16 @@ namespace QS3D.Core.Licensing
                 document = XDocument.Load(reader, LoadOptions.None);
 
             var root = document.Root ?? throw new InvalidDataException("License has no root element.");
-            if (!string.Equals(root.Name.LocalName, "qs3dLicense", StringComparison.Ordinal)) throw new InvalidDataException("Invalid QS3D license root.");
+            if (!string.IsNullOrEmpty(root.Name.NamespaceName) ||
+                !string.Equals(root.Name.LocalName, "qs3dLicense", StringComparison.Ordinal))
+                throw new InvalidDataException("Invalid QS3D license root.");
             if (!string.Equals(Required(root, "schema"), "1", StringComparison.Ordinal)) throw new InvalidDataException("Unsupported QS3D license schema.");
+            ValidateDirectChildren(root);
 
-            var valid = root.Element("valid") ?? throw new InvalidDataException("License is missing validity data.");
+            var valid = RequiredSingleElement(root, "valid");
+            var features = OptionalSingleElement(root, "features");
+            var signatureElement = RequiredSingleElement(root, "signature");
+            ValidateFeatureChildren(features);
             var license = new LicenseDocument
             {
                 LicenseId = Required(root, "id"),
@@ -152,11 +160,12 @@ namespace QS3D.Core.Licensing
                 ExpiresUtc = ParseUtc(Required(valid, "expiresUtc"), "expiresUtc"),
                 Nonce = Required(root, "nonce")
             };
-            foreach (var feature in root.Element("features")?.Elements("feature") ?? Enumerable.Empty<XElement>())
+            foreach (var feature in features?.Elements("feature") ?? Enumerable.Empty<XElement>())
                 license.Features.Add(Required(feature, "name"));
-            var signatureElement = root.Element("signature") ?? throw new InvalidDataException("License is missing signature.");
             if (!string.Equals(Required(signatureElement, "algorithm"), "RSA-SHA256", StringComparison.Ordinal))
                 throw new InvalidDataException("Unsupported license signature algorithm.");
+            if (signatureElement.HasElements)
+                throw new InvalidDataException("License signature must contain text only.");
             try { license.Signature = Convert.FromBase64String((signatureElement.Value ?? string.Empty).Trim()); }
             catch (FormatException ex) { throw new InvalidDataException("License signature is not valid Base64.", ex); }
             if (license.Signature.Length > 1024) throw new InvalidDataException("License signature is too large.");
@@ -164,11 +173,53 @@ namespace QS3D.Core.Licensing
             return license;
         }
 
+        private static void ValidateDirectChildren(XElement root)
+        {
+            foreach (var child in root.Elements())
+            {
+                if (!string.IsNullOrEmpty(child.Name.NamespaceName))
+                    throw new InvalidDataException("License child elements must not use XML namespaces.");
+                var name = child.Name.LocalName;
+                if (string.Equals(name, "valid", StringComparison.Ordinal) ||
+                    string.Equals(name, "features", StringComparison.Ordinal) ||
+                    string.Equals(name, "signature", StringComparison.Ordinal))
+                    continue;
+                throw new InvalidDataException("Unexpected QS3D license child element: <" + name + ">.");
+            }
+        }
+
+        private static void ValidateFeatureChildren(XElement? features)
+        {
+            if (features == null) return;
+            foreach (var child in features.Elements())
+            {
+                if (!string.IsNullOrEmpty(child.Name.NamespaceName) ||
+                    !string.Equals(child.Name.LocalName, "feature", StringComparison.Ordinal))
+                    throw new InvalidDataException("License <features> may contain only unnamespaced <feature> elements.");
+            }
+        }
+
+        private static XElement RequiredSingleElement(XElement parent, string name)
+        {
+            var matches = parent.Elements(name).Take(2).ToArray();
+            if (matches.Length != 1)
+                throw new InvalidDataException("License must contain exactly one <" + name + "> element.");
+            return matches[0];
+        }
+
+        private static XElement? OptionalSingleElement(XElement parent, string name)
+        {
+            var matches = parent.Elements(name).Take(2).ToArray();
+            if (matches.Length > 1)
+                throw new InvalidDataException("License must contain at most one <" + name + "> element.");
+            return matches.Length == 0 ? null : matches[0];
+        }
+
         private static string Required(XElement element, string attribute)
         {
             var value = (string?)element.Attribute(attribute);
             if (string.IsNullOrWhiteSpace(value)) throw new InvalidDataException("License attribute is required: " + attribute);
-            return value!.Trim();
+            return value!;
         }
 
         private static DateTime ParseUtc(string value, string label)

@@ -37,6 +37,7 @@ Examples of explicit approval:
 - "run Actions"
 - "run the Core CI"
 - "run the BricsCAD V25 workflow"
+- "run the BricsCAD V26 workflow"
 - "build/test this commit on GitHub Actions"
 - "build bản release"
 - "build và release app"
@@ -55,33 +56,45 @@ When wording is ambiguous, do not spend Actions minutes and do not publish a rel
 
 ## Manual workflows
 
-Current workflows are expected to remain manual-only:
+Current workflows are expected to remain manual-only. This inventory is not exhaustive; `scripts/preflight-ci-manual-only.py` scans every workflow file regardless of whether it is listed here.
+
+Core and host integration:
 
 - `.github/workflows/ci.yml` — Core/static validation on a hosted Windows runner.
 - `.github/workflows/bricscad-v25.yml` — V25 build/runtime integration on the licensed self-hosted runner.
-- `.github/workflows/curved-opening.yml` — focused curved-opening gate.
-- `.github/workflows/geometry-extensions.yml` — focused geometry-extension gate.
-- `.github/workflows/project-data-gate.yml` — focused Zone/Floor/Family/Material/Project Tools/integrity gate.
-- `.github/workflows/schedule-gate.yml` — focused Schedule Hub / Room Finish / Material / Door-Opening schedule-export gate.
-- `.github/workflows/release-v25.yml` — owner-approved **build + package + GitHub Release** workflow.
+- `.github/workflows/bricscad-v26.yml` — V26 .NET 8 build/runtime integration on the licensed self-hosted runner.
+
+Representative focused gates include:
+
+- `.github/workflows/curved-opening.yml`;
+- `.github/workflows/geometry-extensions.yml`;
+- `.github/workflows/project-data-gate.yml`;
+- `.github/workflows/schedule-gate.yml`.
+
+Release tools:
+
+- `.github/workflows/release-v25.yml` — owner-approved V25 **build + package + GitHub Release** flow.
+- `.github/workflows/release-v25-cloud.yml` — owner-approved V25 cloud release helper where applicable.
+- `.github/workflows/release-v26.yml` — owner-approved V26 **build + package + signed update manifest + GitHub Release** flow.
 
 Every focused workflow must run `scripts/preflight-ci-manual-only.py` as part of its source gate so policy drift is detected inside an explicitly requested run as well.
 
-`release-v25.yml` is not a continuous-deployment pipeline. It is a manual release tool. Publishing requires an explicit `workflow_dispatch` plus the `RELEASE` confirmation input. It must not be dispatched until the owner requests the release.
+All release workflows are manual release tools, not continuous-deployment pipelines. Publishing requires an explicit `workflow_dispatch` plus `confirm_release=RELEASE`. They must not be dispatched until the owner requests the release.
 
 ## Manual build/release sequence
 
 When the owner explicitly requests a release, the preferred sequence is:
 
 1. resolve the exact `main` commit/tag to release;
-2. dispatch the manual V25 release workflow with an explicit release tag and `confirm_release=RELEASE`;
-3. run repository preflights and deterministic Core smoke tests;
-4. compile the BricsCAD V25 adapter against the licensed V25 installation;
-5. optionally run real NETLOAD/runtime validation and collect evidence;
-6. package `QS3D-BricsCAD-V25.zip` and its SHA-256 checksum;
-7. publish the GitHub Release only after the preceding steps succeed.
+2. choose the requested host-major workflow (`release-v25.yml` or `release-v26.yml`);
+3. dispatch it manually with an explicit release tag and `confirm_release=RELEASE`;
+4. run repository preflights and deterministic Core smoke tests;
+5. compile the matching host adapter against the licensed BricsCAD installation;
+6. run the required host-major runtime/signing gates for the requested release type;
+7. package only the matching host-major ZIP/checksum/update-manifest assets;
+8. publish the GitHub Release only after the workflow's release-integrity checks succeed.
 
-See `docs/MANUAL-BUILD-RELEASE.md` for operator details.
+See `docs/MANUAL-BUILD-RELEASE.md` for V25 and `docs/MANUAL-BUILD-RELEASE-V26.md` for V26 operator details.
 
 ## Multi-agent repository rule
 
@@ -91,20 +104,33 @@ Do not overwrite, revert, squash away, or silently replace another agent's newer
 
 Detailed agent coordination rules live in `AGENTS.md` at the repository root.
 
-## BricsCAD V25 workflow
+## BricsCAD host workflows
 
-`.github/workflows/bricscad-v25.yml` and `.github/workflows/release-v25.yml` require a licensed Windows x64 self-hosted runner with BricsCAD V25. They must never be dispatched automatically. Runtime/NETLOAD/screenshot validation and release publication run only after an explicit owner request and when the required runner is available.
+V25:
+
+- `.github/workflows/bricscad-v25.yml` and `.github/workflows/release-v25.yml` require a licensed Windows x64 self-hosted runner labeled `bricscad-v25` with `BRICSCAD_V25_DIR`.
+- Managed adapter target: `net48`.
+
+V26:
+
+- `.github/workflows/bricscad-v26.yml` and `.github/workflows/release-v26.yml` require a licensed Windows x64 self-hosted runner labeled `bricscad-v26` with `BRICSCAD_V26_DIR`.
+- `bricscad.exe` must identify major 26 and the runner requires .NET 8 Windows Desktop support.
+- Managed adapter target: `net8.0-windows`.
+
+These workflows must never be dispatched automatically. Runtime/NETLOAD/UI validation and release publication run only after an explicit owner request and when the required runner is available.
 
 ## Local/static validation
 
-Repository-local or static checks may be used during review without starting GitHub Actions. Passing static review is not the same as a successful GitHub CI or BricsCAD V25 runtime test; do not claim CI/runtime verification unless that run actually completed.
+Repository-local or static checks may be used during review without starting GitHub Actions. Passing static review is not the same as a successful GitHub CI or licensed BricsCAD runtime test; do not claim CI/runtime verification unless that run actually completed.
+
+V25 and V26 runtime proof are independent. Source sharing between host adapters does not allow a V25 runtime PASS to be reported as V26 evidence or vice versa.
 
 ## Enforcement
 
-- `scripts/preflight.py` retains the original manual-CI trigger guard and private/reference artifact policy.
-- `scripts/preflight-ci-manual-only.py` is the strict policy gate: every workflow must expose `workflow_dispatch` only, **every executable job** must hard-guard the manual event, and any other trigger is rejected.
+- `scripts/preflight.py` retains the manual-CI trigger guard and private/reference artifact policy.
+- `scripts/preflight-ci-manual-only.py` is the strict policy gate: every workflow must expose `workflow_dispatch` only, **every executable job** must hard-guard the manual event, and release workflows must retain explicit `RELEASE` confirmation.
 - `scripts/preflight-all.py` auto-discovers the strict CI policy gate along with the other feature preflights.
 
 Keep these guards in place unless the repository owner explicitly changes this policy.
 
-Related documentation: `AGENTS.md`, `README.md`, `docs/CI.md`, `docs/CI-READINESS.md`, `docs/MANUAL-BUILD-RELEASE.md`, `docs/V25-RUNNER.md`, `docs/REVIEW-2026-08-10-CONTINUE-ALL-AUDIT.md`.
+Related documentation: `AGENTS.md`, `README.md`, `docs/CI.md`, `docs/CI-READINESS.md`, `docs/MANUAL-BUILD-RELEASE.md`, `docs/MANUAL-BUILD-RELEASE-V26.md`, `docs/LOCAL-V25-QUALIFICATION.md`, `docs/LOCAL-V26-QUALIFICATION.md`.

@@ -108,6 +108,8 @@ namespace QS3D.Core.Domain
         public void MarkClean(ElementDirtyFlags flags)
         {
             if ((flags & ~ElementDirtyFlags.All) != 0) throw new ArgumentOutOfRangeException(nameof(flags));
+            if (flags == ElementDirtyFlags.None) return;
+            if ((Dirty & flags) == ElementDirtyFlags.None) return;
             Dirty &= ~flags;
             UpdatedUtc = DateTime.UtcNow;
         }
@@ -130,7 +132,9 @@ namespace QS3D.Core.Domain
         {
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Quantity name is required.", nameof(name));
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value));
-            Quantities[name.Trim()] = value;
+            var key = name.Trim();
+            if (Quantities.TryGetValue(key, out var existing) && existing.Equals(value)) return;
+            Quantities[key] = value;
             UpdatedUtc = DateTime.UtcNow;
         }
 
@@ -165,7 +169,7 @@ namespace QS3D.Core.Domain
 
         public bool IsGeneratedGeometryStale()
         {
-            var stale =
+            return
                 IsGeneratedSolidStale() ||
                 IsGeneratedRebarStale() ||
                 IsGeneratedShapeRebarStale() ||
@@ -176,12 +180,6 @@ namespace QS3D.Core.Domain
                 IsGeneratedFoundationMeshStale() ||
                 IsGeneratedCurtainFrameStale() ||
                 IsGeneratedCurtainPanelStale();
-            if (!stale)
-            {
-                Remove(GeneratedGeometryStateKey);
-                Remove(GeneratedGeometryStaleReasonKey);
-            }
-            return stale;
         }
 
         public bool IsGeneratedSolidStale() => IsGeneratedOutputStale(GeneratedSolidHandleKey, GeneratedSolidStateKey, GeneratedSolidStaleSnapshotKey);
@@ -208,6 +206,7 @@ namespace QS3D.Core.Domain
 
         public void ClearGeneratedGeometryStale()
         {
+            var propertyCount = Properties.Count;
             Remove(GeneratedSolidStateKey);
             Remove(GeneratedSolidStaleSnapshotKey);
             Remove(GeneratedRebarStateKey);
@@ -230,6 +229,7 @@ namespace QS3D.Core.Domain
             Remove(GeneratedCurtainPanelStaleSnapshotKey);
             Remove(GeneratedGeometryStateKey);
             Remove(GeneratedGeometryStaleReasonKey);
+            if (Properties.Count != propertyCount) UpdatedUtc = DateTime.UtcNow;
         }
 
         internal void RestorePersistenceState(ElementDirtyFlags dirty, DateTime updatedUtc)
@@ -239,9 +239,15 @@ namespace QS3D.Core.Domain
             UpdatedUtc = updatedUtc.Kind == DateTimeKind.Utc ? updatedUtc : updatedUtc.ToUniversalTime();
         }
 
+        internal void TouchPersistenceState()
+        {
+            UpdatedUtc = DateTime.UtcNow;
+        }
+
         private void MarkDirtyCore(ElementDirtyFlags flags, bool markGeneratedGeometryStale)
         {
             if ((flags & ~ElementDirtyFlags.All) != 0) throw new ArgumentOutOfRangeException(nameof(flags));
+            if (flags == ElementDirtyFlags.None) return;
             if (markGeneratedGeometryStale)
                 MarkGeneratedGeometryStale("Semantic/source state changed.");
             Dirty |= flags;
@@ -277,14 +283,10 @@ namespace QS3D.Core.Domain
         {
             if (!Properties.TryGetValue(GeneratedCurtainPanelStateKey, out var state) || !string.Equals(state, StaleValue, StringComparison.OrdinalIgnoreCase)) return false;
             var current = CurtainPanelOutputSignature();
-            if (!Properties.TryGetValue(GeneratedCurtainPanelStaleSnapshotKey, out var snapshot) || string.IsNullOrWhiteSpace(snapshot) ||
-                current.Length == 0 || !string.Equals(snapshot.Trim(), current, StringComparison.OrdinalIgnoreCase))
-            {
-                Remove(GeneratedCurtainPanelStateKey);
-                Remove(GeneratedCurtainPanelStaleSnapshotKey);
-                return false;
-            }
-            return true;
+            return Properties.TryGetValue(GeneratedCurtainPanelStaleSnapshotKey, out var snapshot) &&
+                   !string.IsNullOrWhiteSpace(snapshot) &&
+                   current.Length > 0 &&
+                   string.Equals(snapshot.Trim(), current, StringComparison.OrdinalIgnoreCase);
         }
 
         private string CurtainPanelOutputSignature()
@@ -301,14 +303,10 @@ namespace QS3D.Core.Domain
         {
             if (!Properties.TryGetValue(stateKey, out var state) || !string.Equals(state, StaleValue, StringComparison.OrdinalIgnoreCase)) return false;
             var current = OutputSignature(outputKey);
-            if (!Properties.TryGetValue(snapshotKey, out var snapshot) || string.IsNullOrWhiteSpace(snapshot) ||
-                current.Length == 0 || !string.Equals(snapshot.Trim(), current, StringComparison.OrdinalIgnoreCase))
-            {
-                Remove(stateKey);
-                Remove(snapshotKey);
-                return false;
-            }
-            return true;
+            return Properties.TryGetValue(snapshotKey, out var snapshot) &&
+                   !string.IsNullOrWhiteSpace(snapshot) &&
+                   current.Length > 0 &&
+                   string.Equals(snapshot.Trim(), current, StringComparison.OrdinalIgnoreCase);
         }
 
         private string OutputSignature(string outputKey)
@@ -328,7 +326,9 @@ namespace QS3D.Core.Domain
 
         private void ClearGeneratedOutputStale(string stateKey, string snapshotKey)
         {
+            var propertyCount = Properties.Count;
             Remove(stateKey); Remove(snapshotKey); ClearAggregateStaleIfResolved();
+            if (Properties.Count != propertyCount) UpdatedUtc = DateTime.UtcNow;
         }
 
         private void ClearAggregateStaleIfResolved()

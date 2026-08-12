@@ -1,0 +1,24 @@
+# Agent work claim — Column Tie QTY read-only target resolve
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-12 (UTC+7)
+- Status: `COMPLETED`
+- Scope: make `QS3DREBARTIEQTY` resolve selected Column semantic targets from read-only project state before canonical mutation binding, then revalidate freshness before quantity mutation.
+- Files reserved during implementation:
+  - `src/QS3D.BricsCAD.V25/ColumnTieQuantityCommands.cs`
+  - `scripts/preflight-column-tie-single-bind.py`
+  - this claim file
+- Implemented contract:
+  - PICKFIRST/interactive selection behavior and existing-project-only semantics are preserved;
+  - Column source-handle targets resolve against `ProjectContextCoordinator.TryGetReadOnly` before canonical mutation binding;
+  - missing project or zero Column targets returns without `ExistingProjectMutationContext.TryGet`;
+  - preview `ProjectId` + `ChangeVersion` + target IDs are frozen;
+  - canonical mutation context is obtained exactly once, project/version and target-set drift fail closed, then the existing calculation/five quantity assignments execute;
+  - per-target `quantity.rebar.column.tie` AuditTrail remains the revision owner and `ProjectStateSnapshot` rollback remains unchanged;
+  - post-commit UI behavior is unchanged.
+- Source commit: `2490cb3d1074141a5cd080098caff4e538098ad0` — `fix(rebar): resolve tie quantity targets before bind`.
+- Regression guard: `1a4c69101ed5d8881941fb4e3ec293b39953d975` — `scripts/preflight-column-tie-single-bind.py`.
+- Compatibility validation: reviewed current `scripts/preflight-column-tie-audit-revision.py`; canonical target -> snapshot -> audit -> rollback ordering and the no-standalone-Touch contract remain intact.
+- Validation actually performed: connector-side current source and guard source review. Preflight scripts were not executed in this web session.
+- No GitHub Actions dispatched. No BricsCAD V25 runtime PASS claimed.
+- Reservation released.

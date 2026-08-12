@@ -40,8 +40,16 @@ function Get-CodeSigningCertificate {
     if (-not $eku) {
         throw "Certificate $normalized does not expose an Enhanced Key Usage extension."
     }
-    $formatted = $eku.Format($false)
-    if ($formatted -notmatch [regex]::Escape($codeSigningOid) -and $formatted -notmatch 'Code Signing') {
+    $enhancedEku = New-Object Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension
+    $enhancedEku.CopyFrom($eku)
+    $hasCodeSigningEku = $false
+    foreach ($usage in $enhancedEku.EnhancedKeyUsages) {
+        if ([string]::Equals([string]$usage.Value, $codeSigningOid, [StringComparison]::Ordinal)) {
+            $hasCodeSigningEku = $true
+            break
+        }
+    }
+    if (-not $hasCodeSigningEku) {
         throw "Certificate $normalized is not valid for Code Signing ($codeSigningOid)."
     }
     return $certificate

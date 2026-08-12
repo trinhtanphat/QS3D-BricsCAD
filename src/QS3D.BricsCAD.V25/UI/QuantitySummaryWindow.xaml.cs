@@ -25,6 +25,7 @@ namespace QS3D.BricsCAD.V25.UI
         private readonly Action<QuantityReportRow>? _locate;
         private readonly Func<IReadOnlyList<QuantityReportRow>>? _recalculate;
         private readonly Document _document;
+        private readonly string _projectId;
         private bool _detailMode;
         private bool _initialized;
         private bool _applyingFilter;
@@ -37,6 +38,11 @@ namespace QS3D.BricsCAD.V25.UI
         public QuantitySummaryWindow(Document document, IReadOnlyList<QuantityReportRow> rows, Action<QuantityReportRow>? locate = null, Func<IReadOnlyList<QuantityReportRow>>? recalculate = null)
         {
             _document = document ?? throw new ArgumentNullException(nameof(document));
+            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+                throw new InvalidOperationException("BQ cần một QS3D project hiện hữu; bảng modeless không tạo replacement project khi mở.");
+            _projectId = string.IsNullOrWhiteSpace(project.ProjectId)
+                ? throw new InvalidOperationException("BQ không thể bind modeless window vào project thiếu ProjectId hợp lệ.")
+                : project.ProjectId;
             _rows = rows ?? throw new ArgumentNullException(nameof(rows));
             _locate = locate;
             _recalculate = recalculate;
@@ -74,6 +80,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             var raw = string.Empty;
             var hasSaved = ProjectContextCoordinator.TryGetReadOnly(_document, out var project) &&
+                           SameProjectIdentity(project) &&
                            project.Metadata.TryGetValue(TemplateProfileStore.VisibleBqColumnsKey, out raw) &&
                            !string.IsNullOrWhiteSpace(raw);
             var visible = hasSaved
@@ -104,6 +111,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             if (!ExistingProjectMutationContext.TryGet(_document, out var project))
                 throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Đóng bảng BQ và mở lại trước khi đổi cấu hình cột.");
+            EnsureProjectIdentity(project, "lưu cấu hình cột BQ");
             var rollback = ProjectStateSnapshot.Capture(project);
             try
             {
@@ -201,6 +209,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var currentProject))
                 throw new InvalidOperationException("BQ Diễn giải cần một QS3D project hiện hữu; chế độ chi tiết không tạo replacement project khi chỉ đọc.");
+            EnsureProjectIdentity(currentProject, "tính lại diễn giải BQ");
 
             var previewProject = ProjectStateSnapshot.CreateDetachedCopy(currentProject);
             new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(previewProject);
@@ -324,6 +333,7 @@ namespace QS3D.BricsCAD.V25.UI
                     return;
                 }
 
+                Cad.CadHandleService.Select(_document, liveHandles);
                 if (_locate != null)
                 {
                     _locate(currentRow);
@@ -358,6 +368,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var currentProject))
                 throw new InvalidOperationException("BQ Định vị cần một QS3D project hiện hữu để xác nhận drawing hiện hành.");
+            EnsureProjectIdentity(currentProject, "định vị BQ");
 
             var unit = Cad.CadUnitService.GetDrawingUnit(_document);
             var snapshots = Cad.EntitySnapshotReader.ReadHandles(_document, expectedHandles);
@@ -471,8 +482,19 @@ namespace QS3D.BricsCAD.V25.UI
         private void EnsureCurrentProject(string operation)
         {
             EnsureActive(operation);
-            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out _))
+            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
                 throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Đóng bảng BQ và mở lại trước khi " + operation + ".");
+            EnsureProjectIdentity(project, operation);
+        }
+
+        private bool SameProjectIdentity(QS3D.Core.Domain.ProjectState project) =>
+            project != null && string.Equals(project.ProjectId, _projectId, StringComparison.OrdinalIgnoreCase);
+
+        private void EnsureProjectIdentity(QS3D.Core.Domain.ProjectState project, string operation)
+        {
+            if (SameProjectIdentity(project)) return;
+            throw new InvalidOperationException(
+                "QS3D project của bản vẽ đã được thay thế kể từ khi bảng BQ được mở. Đóng bảng BQ và mở lại trước khi " + operation + ".");
         }
 
         private void EnsureActive(string operation)

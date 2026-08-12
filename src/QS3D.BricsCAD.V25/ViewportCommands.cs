@@ -50,20 +50,88 @@ namespace QS3D.BricsCAD.V25
             }
 
             var handles = snapshots.Select(x => x.Handle).ToArray();
+            if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var previewProject))
+            {
+                ReportUntrackError(doc, label, new InvalidOperationException("Untrack semantic elements yêu cầu QS3D project hiện hữu; lệnh không tạo project mới."));
+                return;
+            }
+
+            var expectedProjectId = previewProject.ProjectId;
+            var expectedChangeVersion = previewProject.ChangeVersion;
+            List<string> previewTargetIds;
             try
             {
-                var project = ExistingProjectMutationContext.Require(doc, "Untrack semantic elements");
-                var result = SemanticUntrackService.Untrack(project, handles, predicate);
-                PaletteCoordinator.RefreshProject();
-                PaletteCoordinator.SetStatus("Đã bỏ theo dõi " + result.Count + " " + label + "; hình học CAD được giữ nguyên.");
-                doc.Editor.WriteMessage("\nQS3D: untracked " + result.Count + " " + label + "; CAD geometry was not erased.");
+                previewTargetIds = ResolveUntrackTargetIds(previewProject, handles, predicate);
             }
             catch (Exception ex)
             {
-                var message = "Không thể bỏ theo dõi " + label + ": " + ex.Message;
-                PaletteCoordinator.SetStatus(message);
-                doc.Editor.WriteMessage("\nQS3D: " + message);
+                ReportUntrackError(doc, label, ex);
+                return;
             }
+
+            if (previewTargetIds.Count == 0)
+            {
+                FinalizeUntrackUi(doc, 0, label);
+                return;
+            }
+
+            SemanticUntrackResult result;
+            try
+            {
+                var project = ExistingProjectMutationContext.Require(doc, "Untrack semantic elements");
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
+                    project.ChangeVersion != expectedChangeVersion)
+                    throw new InvalidOperationException("Untrack semantic elements: QS3D project đã thay đổi sau khi đọc selection; hãy chọn lại target.");
+
+                var currentTargetIds = ResolveUntrackTargetIds(project, handles, predicate);
+                var expectedTargets = new HashSet<string>(previewTargetIds, StringComparer.OrdinalIgnoreCase);
+                if (!expectedTargets.SetEquals(currentTargetIds))
+                    throw new InvalidOperationException("Untrack semantic elements: semantic target set đã thay đổi sau khi đọc selection; hãy chọn lại target.");
+
+                result = SemanticUntrackService.Untrack(project, handles, predicate);
+            }
+            catch (Exception ex)
+            {
+                ReportUntrackError(doc, label, ex);
+                return;
+            }
+
+            FinalizeUntrackUi(doc, result.Count, label);
+        }
+
+        private static List<string> ResolveUntrackTargetIds(
+            ProjectState project,
+            IEnumerable<string> handles,
+            Func<ProjectElement, bool>? predicate) =>
+            SemanticHandleOwnershipResolver.Resolve(project, handles)
+                .Where(x => predicate == null || predicate(x))
+                .Select(x => x.Id)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+        private static void FinalizeUntrackUi(Document document, int count, string label)
+        {
+            var status = "Đã bỏ theo dõi " + count + " " + label + "; hình học CAD được giữ nguyên.";
+            Exception? warning = null;
+            try { PaletteCoordinator.RefreshProject(); }
+            catch (Exception ex) { warning = ex; }
+            try { PaletteCoordinator.SetStatus(status); }
+            catch (Exception ex) { if (warning == null) warning = ex; }
+            try { document.Editor.WriteMessage("\nQS3D: untracked " + count + " " + label + "; CAD geometry was not erased."); }
+            catch (Exception ex) { if (warning == null) warning = ex; }
+            if (warning == null) return;
+            try { document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau untrack commit: " + warning.Message); }
+            catch { }
+        }
+
+        private static void ReportUntrackError(Document document, string label, Exception ex)
+        {
+            var message = "Không thể bỏ theo dõi " + label + ": " + ex.Message;
+            try { PaletteCoordinator.SetStatus(message); }
+            catch { }
+            try { document.Editor.WriteMessage("\nQS3D: " + message); }
+            catch { }
         }
 
         private static void EnsureTiledModelSpace(Document document)
@@ -74,7 +142,7 @@ namespace QS3D.BricsCAD.V25
             document.Editor.UpdateScreen();
         }
 
-        private static bool TryZoomSelection(Document document)
+        internal static bool TryZoomSelection(Document document)
         {
             var result = document.Editor.SelectImplied();
             if (result.Status != PromptStatus.OK || result.Value == null) return false;

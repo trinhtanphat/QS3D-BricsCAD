@@ -13,6 +13,8 @@ namespace QS3D.Core.SmokeTests
             ExactDuplicateIdsFailClosed();
             CaseVariantDuplicateIdsFailClosed();
             NullProjectElementsFailClosed();
+            MalformedReferenceIdentitiesFailClosed();
+            MutableReferenceIdsAreNormalized();
             UniqueIdsRemainAccepted();
             ProvenanceIsRetainedAcrossSchedules();
         }
@@ -33,12 +35,63 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(new ProjectElement("E1", ElementCategory.Slab, "family", "floor", "zone"));
             project.Elements.Add(null!);
 
-            ExpectThrowsContaining<InvalidOperationException>(() => MaterialUsageScheduleBuilder.Build(project), "index 1");
-            ExpectThrows<InvalidOperationException>(() => CurtainWallScheduleBuilder.Build(project));
-            ExpectThrows<InvalidOperationException>(() => DoorOpeningScheduleBuilder.Build(project));
-            ExpectThrows<InvalidOperationException>(() => RoomFinishScheduleBuilder.Build(project));
-            ExpectThrows<InvalidOperationException>(() => ProjectQuantityReportBuilder.Group(project));
-            ExpectThrows<InvalidOperationException>(() => ProjectQuantityReportBuilder.Detail(project));
+            AssertAllProjectReportBuildersReject(project, "element index 1");
+        }
+
+        private static void MalformedReferenceIdentitiesFailClosed()
+        {
+            var nullFloor = new ProjectState("schedule-null-floor", "Schedule null floor");
+            nullFloor.Floors.Add(new FloorDefinition("floor", "Floor", 0d));
+            nullFloor.Floors.Add(null!);
+            AssertAllProjectReportBuildersReject(nullFloor, "floor index 1");
+
+            var duplicateFloor = new ProjectState("schedule-duplicate-floor", "Schedule duplicate floor");
+            duplicateFloor.Floors.Add(new FloorDefinition("Floor-A", "Floor A", 0d));
+            duplicateFloor.Floors.Add(new FloorDefinition(" floor-a ", "Floor duplicate", 3d));
+            AssertAllProjectReportBuildersReject(duplicateFloor, "floor id 'floor-a'");
+
+            var nullZone = new ProjectState("schedule-null-zone", "Schedule null zone");
+            nullZone.Zones.Add(new ZoneDefinition("zone", "Zone"));
+            nullZone.Zones.Add(null!);
+            AssertAllProjectReportBuildersReject(nullZone, "zone index 1");
+
+            var duplicateZone = new ProjectState("schedule-duplicate-zone", "Schedule duplicate zone");
+            duplicateZone.Zones.Add(new ZoneDefinition("Zone-A", "Zone A"));
+            duplicateZone.Zones.Add(new ZoneDefinition(" zone-a ", "Zone duplicate"));
+            AssertAllProjectReportBuildersReject(duplicateZone, "zone id 'zone-a'");
+
+            var nullFamily = new ProjectState("schedule-null-family", "Schedule null family");
+            nullFamily.Families.Add(new ProjectFamily("family", "Family", ElementCategory.Slab));
+            nullFamily.Families.Add(null!);
+            AssertAllProjectReportBuildersReject(nullFamily, "family index 1");
+
+            var duplicateFamily = new ProjectState("schedule-duplicate-family", "Schedule duplicate family");
+            duplicateFamily.Families.Add(new ProjectFamily("Family-A", "Family A", ElementCategory.Slab));
+            duplicateFamily.Families.Add(new ProjectFamily(" family-a ", "Family duplicate", ElementCategory.Slab));
+            AssertAllProjectReportBuildersReject(duplicateFamily, "family id 'family-a'");
+        }
+
+        private static void MutableReferenceIdsAreNormalized()
+        {
+            var project = BaseScheduleProject("schedule-reference-normalization", ElementCategory.Slab, out var family);
+            var canonical = new ProjectElement("REF-1", ElementCategory.Slab, family.Id, "floor", "zone");
+            canonical.Quantities["LengthM"] = 1d;
+            project.Elements.Add(canonical);
+
+            var padded = new ProjectElement("REF-2", ElementCategory.Slab, family.Id, "floor", "zone");
+            padded.FamilyId = " FAMILY ";
+            padded.FloorId = " floor ";
+            padded.ZoneId = " ZONE ";
+            padded.Quantities["LengthM"] = 2d;
+            project.Elements.Add(padded);
+
+            var grouped = ProjectQuantityReportBuilder.Group(project).Single();
+            if (grouped.Count != 2 || grouped.Floor != "Floor" || grouped.Zone != "Zone" || grouped.FamilyId != "family" || grouped.FamilyName != "Family" || Math.Abs(grouped.LengthM - 3d) > 1e-12)
+                throw new Exception("Project quantity grouping must normalize mutable Family/Floor/Zone reference ids before lookup and grouping.");
+
+            var detail = ProjectQuantityReportBuilder.Detail(project, new[] { padded.Id }).Single();
+            if (detail.Floor != "Floor" || detail.Zone != "Zone" || detail.FamilyId != "family" || detail.FamilyName != "Family")
+                throw new Exception("Project quantity detail must resolve padded mutable references through canonical project identities.");
         }
 
         private static void UniqueIdsRemainAccepted()
@@ -70,34 +123,46 @@ namespace QS3D.Core.SmokeTests
             var project = BaseScheduleProject("schedule-material", ElementCategory.Slab, out var family);
             family.Properties["Material"] = "Concrete";
             var element = new ProjectElement("MAT-1", ElementCategory.Slab, family.Id, "floor", "zone");
+            element.FamilyId = " FAMILY ";
+            element.FloorId = " floor ";
             AddHandles(element);
             element.Quantities["VolumeM3"] = 1.25d;
             project.Elements.Add(element);
 
             var row = MaterialUsageScheduleBuilder.Build(project).Single();
             AssertProvenance(project, row.ProjectId, row.DrawingFingerprint, row.SourceHandles);
+            if (row.Floor != "Floor" || row.FamilyName != "Family")
+                throw new Exception("Material schedule must normalize mutable Floor/Family references before lookup/grouping.");
         }
 
         private static void CurtainProvenance()
         {
             var project = BaseScheduleProject("schedule-curtain", ElementCategory.GlassWall, out var family);
             var element = new ProjectElement("CW-1", ElementCategory.GlassWall, family.Id, "floor", "zone");
+            element.FamilyId = " family ";
+            element.FloorId = " FLOOR ";
             AddHandles(element);
             project.Elements.Add(element);
 
             var row = CurtainWallScheduleBuilder.Build(project).Single();
             AssertProvenance(project, row.ProjectId, row.DrawingFingerprint, row.SourceHandles);
+            if (row.Floor != "Floor" || row.FamilyName != "Family")
+                throw new Exception("Curtain wall schedule must normalize mutable Floor/Family references before lookup/grouping.");
         }
 
         private static void DoorProvenance()
         {
             var project = BaseScheduleProject("schedule-door", ElementCategory.Door, out var family);
             var element = new ProjectElement("D-1", ElementCategory.Door, family.Id, "floor", "zone");
+            element.FamilyId = " FAMILY ";
+            element.FloorId = " floor ";
             AddHandles(element);
             project.Elements.Add(element);
 
             var row = DoorOpeningScheduleBuilder.Build(project).Single();
             AssertProvenance(project, row.ProjectId, row.DrawingFingerprint, row.SourceHandles);
+            if (row.Floor != "Floor" || row.FamilyName != "Family")
+                throw new Exception("Door/opening schedule must normalize mutable Floor/Family references before lookup/grouping.");
         }
 
         private static void RoomFinishProvenance()
@@ -118,6 +183,8 @@ namespace QS3D.Core.SmokeTests
                 finishFamily.Id,
                 room.FloorId,
                 room.ZoneId);
+            finish.FamilyId = " finish-family ";
+            finish.FloorId = " FLOOR ";
             finish.Properties[AutoRoomLifecycle.RoomSourceIdKey] = room.Id;
             finish.Quantities["NetFinishAreaM2"] = 10d;
             finish.MarkClean(ElementDirtyFlags.All);
@@ -126,6 +193,8 @@ namespace QS3D.Core.SmokeTests
 
             var row = RoomFinishScheduleBuilder.Build(project).Single();
             AssertProvenance(project, row.ProjectId, row.DrawingFingerprint, row.SourceHandles);
+            if (row.Floor != "Floor" || row.FamilyName != "Finish")
+                throw new Exception("Room finish schedule must normalize mutable Floor/Family references before lookup/grouping.");
         }
 
         private static ProjectState BaseScheduleProject(string id, ElementCategory category, out ProjectFamily family)
@@ -160,6 +229,16 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(new ProjectElement("E1", ElementCategory.Slab, "family", "floor", "zone"));
             project.Elements.Add(new ProjectElement(secondId, ElementCategory.Slab, "family", "floor", "zone"));
             return project;
+        }
+
+        private static void AssertAllProjectReportBuildersReject(ProjectState project, string messagePart)
+        {
+            ExpectThrowsContaining<InvalidOperationException>(() => MaterialUsageScheduleBuilder.Build(project), messagePart);
+            ExpectThrowsContaining<InvalidOperationException>(() => CurtainWallScheduleBuilder.Build(project), messagePart);
+            ExpectThrowsContaining<InvalidOperationException>(() => DoorOpeningScheduleBuilder.Build(project), messagePart);
+            ExpectThrowsContaining<InvalidOperationException>(() => RoomFinishScheduleBuilder.Build(project), messagePart);
+            ExpectThrowsContaining<InvalidOperationException>(() => ProjectQuantityReportBuilder.Group(project), messagePart);
+            ExpectThrowsContaining<InvalidOperationException>(() => ProjectQuantityReportBuilder.Detail(project), messagePart);
         }
 
         private static void AssertAllScheduleBuildersReject(ProjectState project)

@@ -28,6 +28,8 @@ namespace QS3D.Core.Documentation
         public const string MetadataKey = "QS3D.Documentation.Catalog.v1";
         private const int FormatVersion = 1;
         private const int MaxCatalogChars = 1024 * 1024;
+        private const int MaxCatalogViews = 10000;
+        private const int MaxCatalogSheets = 10000;
 
         public void Save(
             ProjectState project,
@@ -84,9 +86,11 @@ namespace QS3D.Core.Documentation
 
         private static IReadOnlyList<SemanticViewDefinition> MaterializeViews(IEnumerable<SemanticViewDefinition> values)
         {
-            var result = new List<SemanticViewDefinition>();
+            var result = new List<SemanticViewDefinition>(Math.Min(MaxCatalogViews, 256));
             foreach (var value in values)
             {
+                if (result.Count >= MaxCatalogViews)
+                    throw new InvalidOperationException("Semantic view catalog supports at most " + MaxCatalogViews + " views.");
                 if (value == null) throw new ArgumentException("Semantic documentation view cannot be null.", nameof(values));
                 result.Add(value);
             }
@@ -95,9 +99,11 @@ namespace QS3D.Core.Documentation
 
         private static IReadOnlyList<SemanticSheetDefinition> MaterializeSheets(IEnumerable<SemanticSheetDefinition> values)
         {
-            var result = new List<SemanticSheetDefinition>();
+            var result = new List<SemanticSheetDefinition>(Math.Min(MaxCatalogSheets, 256));
             foreach (var value in values)
             {
+                if (result.Count >= MaxCatalogSheets)
+                    throw new InvalidOperationException("Semantic sheet catalog supports at most " + MaxCatalogSheets + " sheets.");
                 if (value == null) throw new ArgumentException("Semantic documentation sheet cannot be null.", nameof(values));
                 result.Add(value);
             }
@@ -217,7 +223,6 @@ namespace QS3D.Core.Documentation
                         foreach (var category in categories.Elements("category"))
                             ValidateElement(category, "category", new[] { "value" }, Array.Empty<string>());
                     }
-
                     ValidateIdContainer(view.Element("include"), "include");
                     ValidateIdContainer(view.Element("exclude"), "exclude");
                 }

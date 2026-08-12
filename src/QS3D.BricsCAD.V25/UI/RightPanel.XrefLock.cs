@@ -13,7 +13,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void SetSelectedXrefInstanceLayerLocks(bool locked)
         {
-            var document = Application.DocumentManager.MdiActiveDocument;
+            var document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
             var item = SelectedXref();
             if (document == null || item == null) return;
 

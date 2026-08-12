@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             CommonAndMixedValuesAreStable();
+            ReferencePresenceCountsActualAssignments();
             FamilyDefaultsParticipateInEffectiveValues();
             InternalOwnershipPropertiesStayHidden();
             MissingSelectionFailsClosed();
@@ -51,6 +52,22 @@ namespace QS3D.Core.SmokeTests
             Equal(2, length.PresentCount);
         }
 
+        private static void ReferencePresenceCountsActualAssignments()
+        {
+            var project = BuildProject();
+            project.Elements[0].ZoneId = string.Empty;
+            var partial = SemanticSelectionInspector.Inspect(project, new[] { "B-001", "B-002" });
+            Equal(true, partial.Zone.IsMixed);
+            Equal(1, partial.Zone.PresentCount);
+            Equal(null, partial.Zone.Value);
+
+            project.Elements[1].ZoneId = "   ";
+            var unassigned = SemanticSelectionInspector.Inspect(project, new[] { "B-001", "B-002" });
+            Equal(false, unassigned.Zone.IsMixed);
+            Equal(0, unassigned.Zone.PresentCount);
+            Equal(string.Empty, unassigned.Zone.Value);
+        }
+
         private static void FamilyDefaultsParticipateInEffectiveValues()
         {
             var project = BuildProject();
@@ -73,6 +90,7 @@ namespace QS3D.Core.SmokeTests
             project.Elements[0].Properties["GeneratedSolidHandle"] = "AB12";
             project.Elements[0].Properties[ProjectElement.GeneratedGeometryStateKey] = "stale";
             project.Elements[0].Properties["PhysicalOpeningCutHandle"] = "CD34";
+            project.Elements[0].Properties["QS3D.PhysicalOpeningCutOpeningIds"] = "T1|T2";
             project.Families[0].Properties["GeneratedFamilyHandle"] = "EF56";
             var result = SemanticSelectionInspector.Inspect(project, new[] { project.Elements[0].Id });
             if (result.Properties.Any(x => x.Name.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0))
@@ -80,7 +98,9 @@ namespace QS3D.Core.SmokeTests
             if (result.Properties.Any(x => x.Name.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase)))
                 throw new Exception("Property inspector must not expose internal generated-state keys as editable semantic properties.");
             if (result.Properties.Any(x => x.Name.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)))
-                throw new Exception("Property inspector must not expose physical opening cut ownership state.");
+                throw new Exception("Property inspector must not expose legacy physical opening cut ownership state.");
+            if (result.Properties.Any(x => x.Name.StartsWith("QS3D.PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)))
+                throw new Exception("Property inspector must not expose namespaced physical opening cut ownership state.");
         }
 
         private static void MissingSelectionFailsClosed()

@@ -12,6 +12,8 @@ namespace QS3D.Core.Rules
         public QuantityRule(string id, ElementCategory category, string outputName, string expression, string version)
         {
             Id = Required(id, nameof(id));
+            if (!Enum.IsDefined(typeof(ElementCategory), category))
+                throw new ArgumentOutOfRangeException(nameof(category), category, "Quantity rule category must be a defined ElementCategory.");
             Category = category;
             OutputName = Required(outputName, nameof(outputName));
             Expression = Required(expression, nameof(expression));
@@ -42,13 +44,15 @@ namespace QS3D.Core.Rules
 
             var result = _evaluator.Evaluate(rule.Expression, variables);
             element.SetQuantity(rule.OutputName, result);
-            element.Properties[ProvenancePrefix + rule.OutputName] = rule.Id + "@" + rule.Version;
+            SetProvenance(element, rule.OutputName, rule.Id + "@" + rule.Version);
         }
 
         public int ApplyMatching(ProjectState project, ProjectElement element)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (element == null) throw new ArgumentNullException(nameof(element));
+            if (!ReferenceEquals(project.FindElement(element.Id), element))
+                throw new InvalidOperationException("Quantity rule matching requires the canonical project-owned element instance.");
 
             var rules = project.QuantityRules
                 .Where(x => x.Category == element.Category)
@@ -103,7 +107,7 @@ namespace QS3D.Core.Rules
             foreach (var item in staged)
             {
                 element.SetQuantity(item.Key.OutputName, item.Value);
-                element.Properties[ProvenancePrefix + item.Key.OutputName] = item.Key.Id + "@" + item.Key.Version;
+                SetProvenance(element, item.Key.OutputName, item.Key.Id + "@" + item.Key.Version);
             }
             return rules.Count + staleOutputs.Count;
         }
@@ -130,20 +134,32 @@ namespace QS3D.Core.Rules
             var result = new List<string>();
             foreach (var key in element.Properties.Keys.Where(x => x.StartsWith(ProvenancePrefix, StringComparison.OrdinalIgnoreCase)).ToArray())
             {
-                var output = key.Substring(ProvenancePrefix.Length).Trim();
-                if (output.Length == 0 || activeOutputs.Contains(output)) continue;
+                var output = key.Substring(ProvenancePrefix.Length);
+                if (string.IsNullOrWhiteSpace(output) || !string.Equals(output, output.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Element " + element.Id + " contains malformed quantity-rule provenance key: " + key + ".");
+                if (activeOutputs.Contains(output)) continue;
                 if (!result.Contains(output, StringComparer.OrdinalIgnoreCase)) result.Add(output);
             }
             return result;
         }
 
+        private static void SetProvenance(ProjectElement element, string output, string provenance)
+        {
+            var key = ProvenancePrefix + output;
+            if (element.Properties.TryGetValue(key, out var existing) && string.Equals(existing, provenance, StringComparison.Ordinal)) return;
+            element.Properties[key] = provenance;
+            element.TouchPersistenceState();
+        }
+
         private static void CleanupStaleOutputs(ProjectElement element, IEnumerable<string> staleOutputs)
         {
+            var changed = false;
             foreach (var output in staleOutputs)
             {
-                element.Quantities.Remove(output);
-                element.Properties.Remove(ProvenancePrefix + output);
+                changed |= element.Quantities.Remove(output);
+                changed |= element.Properties.Remove(ProvenancePrefix + output);
             }
+            if (changed) element.TouchPersistenceState();
         }
 
         private static Dictionary<string, double> BuildVariables(ProjectState project, ProjectElement element)
@@ -155,7 +171,7 @@ namespace QS3D.Core.Rules
             foreach (var quantity in element.Quantities)
             {
                 if (double.IsNaN(quantity.Value) || double.IsInfinity(quantity.Value)) throw new InvalidOperationException("Rule variable quantity is not finite: " + element.Id + "/" + quantity.Key);
-                variables[quantity.Key] = quantity.Value;
+                AddVariable(variables, quantity.Key, quantity.Value);
             }
             if (!variables.ContainsKey("Count")) variables["Count"] = 1d;
             return variables;
@@ -165,9 +181,16 @@ namespace QS3D.Core.Rules
         {
             foreach (var item in source)
             {
+                if (string.IsNullOrWhiteSpace(item.Key)) continue;
                 if (double.TryParse(item.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && !double.IsNaN(value) && !double.IsInfinity(value))
-                    target[item.Key] = value;
+                    AddVariable(target, item.Key, value);
             }
+        }
+
+        private static void AddVariable(IDictionary<string, double> target, string name, double value)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return;
+            target[name.Trim()] = value;
         }
     }
 }

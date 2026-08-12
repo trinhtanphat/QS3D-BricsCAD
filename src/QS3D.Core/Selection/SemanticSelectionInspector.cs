@@ -170,9 +170,10 @@ namespace QS3D.Core.Selection
         {
             if (values.Count == 0) return new SemanticSelectionTextValue(name, 0, false, null);
             var normalized = values.Select(x => (x ?? string.Empty).Trim()).ToArray();
+            var present = normalized.Count(x => x.Length > 0);
             var first = normalized[0];
             var mixed = normalized.Skip(1).Any(x => !string.Equals(x, first, StringComparison.OrdinalIgnoreCase));
-            return new SemanticSelectionTextValue(name, values.Count, mixed, mixed ? null : first);
+            return new SemanticSelectionTextValue(name, present, mixed, mixed ? null : first);
         }
 
         private static IReadOnlyList<SemanticSelectionTextValue> InspectProperties(
@@ -269,6 +270,7 @@ namespace QS3D.Core.Selection
             var normalized = key.Trim();
             if (normalized.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             if (normalized.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase)) return true;
+            if (normalized.StartsWith("QS3D.PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return true;
             if (normalized.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return true;
             return false;
         }

@@ -147,7 +147,6 @@ namespace QS3D.Core.Templates
                 }
 
                 result.AffectedElements = affected.Count;
-                project.Touch();
                 AuditTrail.ForProject(project).Record("template.apply", string.Empty, profile.Id + " • families +" + result.FamiliesAdded + "/~" + result.FamiliesUpdated + " • rules +" + result.RulesAdded + "/~" + result.RulesUpdated + " • mappings " + result.LayerMappingsApplied);
                 return result;
             }
@@ -197,7 +196,8 @@ namespace QS3D.Core.Templates
 
             foreach (var item in root.Element("families")?.Elements("family") ?? Enumerable.Empty<XElement>())
             {
-                if (!Enum.TryParse(Required(item, "category"), true, out ElementCategory category)) throw new InvalidDataException("Invalid template family category.");
+                if (!Enum.TryParse(Required(item, "category"), true, out ElementCategory category) || !Enum.IsDefined(typeof(ElementCategory), category))
+                    throw new InvalidDataException("Invalid template family category.");
                 var family = new ProjectFamily(Required(item, "id"), Required(item, "name"), category);
                 foreach (var property in item.Element("properties")?.Elements("p") ?? Enumerable.Empty<XElement>())
                 {
@@ -209,7 +209,8 @@ namespace QS3D.Core.Templates
             }
             foreach (var item in root.Element("rules")?.Elements("rule") ?? Enumerable.Empty<XElement>())
             {
-                if (!Enum.TryParse(Required(item, "category"), true, out ElementCategory category)) throw new InvalidDataException("Invalid template rule category.");
+                if (!Enum.TryParse(Required(item, "category"), true, out ElementCategory category) || !Enum.IsDefined(typeof(ElementCategory), category))
+                    throw new InvalidDataException("Invalid template rule category.");
                 profile.QuantityRules.Add(new QuantityRule(Required(item, "id"), category, Required(item, "output"), Required(item, "expression"), Required(item, "version")));
             }
             foreach (var item in root.Element("layerMappings")?.Elements("map") ?? Enumerable.Empty<XElement>())

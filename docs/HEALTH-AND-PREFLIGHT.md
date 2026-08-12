@@ -36,6 +36,22 @@ The aggregate runner discovers every `scripts/preflight-*.py` gate except itself
 
 `scripts/preflight.py` is intentionally run separately as the generic source guard; CI then runs the aggregate feature/repository-health gates.
 
+### Package hash-manifest integrity — `scripts/preflight-package-hash-manifest-coverage.py`
+
+Release package producers hash every regular payload file that exists before the root `SHA256SUMS.txt` is created. Only that **root manifest** is excluded from the final package-file coverage contract; a nested payload such as `Samples/SHA256SUMS.txt` remains an ordinary hashed file. The installer mirrors the same root-only contract at the final mutation boundary: manifest names are case-insensitively unique and the manifest set must exactly equal the recursively enumerated regular package-file set, excluding only the root manifest itself. An unlisted file, stale manifest-only entry or case-colliding duplicate therefore fails before payload copy or DemandLoad registration.
+
+The secure updater keeps a separate outer boundary: it verifies the SHA-256 of the complete downloaded ZIP before extraction, validates archive safety, and only then delegates installation to the packaged installer. The package-integrity regression protects this producer → whole-ZIP hash → exact internal manifest coverage chain without duplicating the installer algorithm inside the updater.
+
+### Update ZIP/staging parity — `scripts/preflight-update-zip-staging-parity.py`
+
+Before `new-v25-update-manifest.ps1` publishes the whole-archive SHA-256, the candidate ZIP must match signed staging for **every regular file**. Staging and ZIP paths are case-insensitively unique, their file sets must be identical, and each ZIP entry is stream-hashed against the corresponding staged file. Extra, missing, case-colliding or changed ZIP payloads therefore fail before the update manifest can bless the archive. Authenticode verification of the executable payloads remains an additional check after full file parity.
+
+### Customer release / strict SemVer — `scripts/preflight-customer-release.py`
+
+The product `<Version>` values in the V25 plugin and Core projects are release identities, not arbitrary strings. `package-v25.ps1` validates both as strict SemVer before creating distribution output, then requires exact **ordinal/case-sensitive** equality and preserves an exact ordinal `RELEASE_TAG == v<productVersion>` binding. Core numeric components therefore cannot contain leading zeroes, prerelease/build dot identifiers cannot be empty, numeric prerelease identifiers cannot contain leading zeroes, and case-only changes such as `preview` versus `PREVIEW` are not silently treated as the same release identity.
+
+The customer-release preflight carries deterministic valid/invalid SemVer and exact-case identity cases, validates the current project versions independently, checks that the strict parser and ordinal comparisons remain wired into both project-version reads/tag binding, and verifies that both manual release workflows execute aggregate preflight and `package-v25.ps1` before their GitHub release/prerelease publication step. The workflow regexes remain an early shape check; the package/preflight boundary is the semantic authority.
+
 ## Command/UI wiring
 
 `scripts/preflight-command-wiring.py` collects QS3D `CommandMethod` registrations and checks command references from XAML buttons, Ribbon specs and simple UI dispatch paths. UI/Ribbon references must resolve to registered commands so multi-agent rename races do not become BricsCAD `Unknown command` failures.
@@ -45,6 +61,8 @@ Other feature preflights protect product-boundary, Direct Draw and additional so
 ## CI policy
 
 GitHub Actions workflows remain `workflow_dispatch` only unless [`../CI_POLICY.md`](../CI_POLICY.md) is explicitly changed. A commit, push, documentation update, review, handoff or `continue all` request does **not** authorize running a manual workflow.
+
+`scripts/preflight-ci-manual-only.py` treats the job-level event condition as a semantic safety boundary rather than a substring check. Every executable job must use `github.event_name == 'workflow_dispatch'` as the leading conjunction; YAML comments, negated equality and `||` bypass branches cannot satisfy the guard. Both `release-v25.yml` and `release-v25-cloud.yml` additionally require the canonical `inputs.confirm_release == 'RELEASE'` conjunction on their `release` job. The parser carries deterministic positive/negative regression cases so comment-only or bypassing expressions fail closed.
 
 A manually approved validation should run the generic/source guards before relevant Core/V25 build, smoke or runtime stages.
 

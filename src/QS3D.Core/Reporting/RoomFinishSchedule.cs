@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Reporting
@@ -53,19 +54,27 @@ namespace QS3D.Core.Reporting
             foreach (var element in project.Elements.Where(x => FinishCategories.Contains(x.Category)).OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
                 if (AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) continue;
-                families.TryGetValue(element.FamilyId, out var family);
+                var floorId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FloorId);
+                var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
+                families.TryGetValue(familyId, out var family);
                 var material = Effective(element, family, "Material");
                 var roomId = AutoRoomLifecycle.ResolveRoomReferenceId(project, element);
                 var roomLabel = RoomLabel(roomId, rooms);
-                var floor = floors.TryGetValue(element.FloorId, out var floorName) ? floorName : element.FloorId;
-                var familyName = family?.Name ?? element.FamilyId;
+                var floor = floors.TryGetValue(floorId, out var floorName) ? floorName : floorId;
+                var familyName = family?.Name ?? familyId;
                 var metrics = Metrics(element);
                 var unitHint = metrics.DefaultUnit;
                 if (material.Length > 0 && units.TryGetValue(material, out var unit) && SameDimension(unit, metrics.DefaultUnit)) unitHint = unit;
                 var primary = Primary(unitHint, metrics.LengthM, metrics.AreaM2);
 
                 var roomKey = roomId.Length > 0 ? roomId : "(unlinked)";
-                var key = string.Join("\u001f", element.FloorId, roomKey, element.Category.ToString(), element.FamilyId, material, unitHint);
+                var key = GroupKey(
+                    floorId,
+                    roomKey,
+                    element.Category.ToString(),
+                    familyId,
+                    material,
+                    unitHint);
                 if (!rows.TryGetValue(key, out var row))
                 {
                     row = new RoomFinishScheduleRow
@@ -91,6 +100,19 @@ namespace QS3D.Core.Reporting
                 if (roomId.Length > 0 && !row.RoomIds.Contains(roomId, StringComparer.OrdinalIgnoreCase)) row.RoomIds.Add(roomId);
             }
             return order.Select(x => rows[x]).ToList().AsReadOnly();
+        }
+
+        private static string GroupKey(params string[] tokens)
+        {
+            var key = new StringBuilder();
+            foreach (var raw in tokens)
+            {
+                var token = raw ?? string.Empty;
+                key.Append(token.Length.ToString(CultureInfo.InvariantCulture))
+                    .Append(':')
+                    .Append(token);
+            }
+            return key.ToString();
         }
 
         private sealed class FinishMetrics

@@ -80,9 +80,7 @@ namespace QS3D.Core.Documentation
 
             ValidateOptions(options);
             var views = BuildViewIndex(availableViews);
-            var materialized = items.ToList();
-            if (materialized.Count > MaxItems)
-                throw new InvalidOperationException("Automatic sheet layout supports at most " + MaxItems + " views.");
+            var materialized = MaterializeItemsBounded(items);
             if (materialized.Count == 0) return Array.Empty<SemanticSheetPlan>();
 
             var uniqueItemIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -153,11 +151,30 @@ namespace QS3D.Core.Documentation
             return result;
         }
 
+        private static List<SemanticSheetAutoLayoutItem> MaterializeItemsBounded(IEnumerable<SemanticSheetAutoLayoutItem> items)
+        {
+            var result = new List<SemanticSheetAutoLayoutItem>(Math.Min(MaxItems, 256));
+            using (var enumerator = items.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= MaxItems)
+                        throw new InvalidOperationException("Automatic sheet layout supports at most " + MaxItems + " views.");
+                    result.Add(enumerator.Current);
+                }
+            }
+            return result;
+        }
+
         private static Dictionary<string, SemanticViewPlan> BuildViewIndex(IEnumerable<SemanticViewPlan> availableViews)
         {
             var result = new Dictionary<string, SemanticViewPlan>(StringComparer.OrdinalIgnoreCase);
+            var count = 0;
             foreach (var view in availableViews)
             {
+                count++;
+                if (count > MaxItems)
+                    throw new InvalidOperationException("Automatic sheet layout supports at most " + MaxItems + " available views.");
                 if (view == null) throw new ArgumentException("Available semantic view cannot be null.", nameof(availableViews));
                 var id = Required(view.Id, "availableViews.Id");
                 if (result.ContainsKey(id)) throw new InvalidOperationException("Available semantic views contain duplicate id: " + id + ".");

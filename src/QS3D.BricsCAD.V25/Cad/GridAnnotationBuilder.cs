@@ -53,7 +53,6 @@ namespace QS3D.BricsCAD.V25.Cad
                 using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
                     foreach (var element in elements) ReplaceOne(document, transaction, project, element);
-                    project.Touch();
                     transaction.Commit();
                 }
             }

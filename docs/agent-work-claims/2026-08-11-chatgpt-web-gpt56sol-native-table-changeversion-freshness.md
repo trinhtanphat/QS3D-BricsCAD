@@ -1,0 +1,31 @@
+# Agent work claim — Native Table ChangeVersion freshness
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-11 (UTC+7)
+- Status: `COMPLETED`
+- Scope: close the pre-prompt semantic freshness gap for the six fixed native Table placement commands.
+- Files reserved during implementation:
+  - `src/QS3D.BricsCAD.V25/BqNativeTableCommands.cs`
+  - `src/QS3D.BricsCAD.V25/BbsNativeTableCommands.cs`
+  - `src/QS3D.BricsCAD.V25/DoorOpeningNativeTableCommands.cs`
+  - `src/QS3D.BricsCAD.V25/MaterialUsageNativeTableCommands.cs`
+  - `src/QS3D.BricsCAD.V25/RoomFinishNativeTableCommands.cs`
+  - `src/QS3D.BricsCAD.V25/SemanticElementTableCommands.cs`
+  - `scripts/preflight-native-table-changeversion-freshness.py`
+  - this claim file for close-out
+- Implemented contract:
+  - all six placement commands now capture `previewProject.ChangeVersion` together with `ProjectId` before `GetPoint`;
+  - after canonical existing-project bind, either ProjectId drift or same-project ChangeVersion drift fails closed before regeneration/native Table mutation;
+  - cancel-before-bind behavior, UCS/modelspace checks, refresh/remove/health behavior, builders, native ownership/transaction/audit rollback, and UI finalization are unchanged;
+  - Custom Semantic Schedule Table remains unchanged because it already implements the same stronger freshness contract.
+- Source commits:
+  - `8ae9a7296c718c300ebc4e87dc3271e3cab47e71` — BQ Table.
+  - `b0e8b37ccdd22add043a38caa23e9f9a82a7c478` — BBS Table.
+  - `28421b758902834ee4e91e929b397b6f5f79eef1` — Door/Opening Table.
+  - `be3e592a87e3f12e07731e4e147cbcd799a5135a` — Material Usage Table.
+  - `aee95e62004c716fa234c314279d70d6b7df514b` — Room Finish Table.
+  - `7137e373c1459db86a1184adbd81287e0a65ba47` — Semantic Element Table.
+- Regression guard: `c7011d557c48c8b92ecc6657f9cfd9aa1b4f93d2` — `scripts/preflight-native-table-changeversion-freshness.py`.
+- Validation actually performed: connector-side exact diff review of all six source commits confirmed each diff is limited to the ChangeVersion snapshot + dual freshness predicate (plus harmless EOF newline normalization on some files). Guard source was reviewed but not executed in this web session because no local checkout/runtime execution was used.
+- No GitHub Actions dispatched. No BricsCAD V25 runtime PASS claimed; exact editor/modeless qualification remains LOCAL_ONLY under the existing local qualification queue.
+- Reservation released.

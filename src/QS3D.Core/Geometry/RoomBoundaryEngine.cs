@@ -48,7 +48,7 @@ namespace QS3D.Core.Geometry
             if (!FinitePositive(tolerance)) throw new ArgumentOutOfRangeException(nameof(tolerance));
             if (!FiniteNonNegative(minimumArea)) throw new ArgumentOutOfRangeException(nameof(minimumArea));
 
-            var segments = source.ToList();
+            var segments = source.Take(MaxInputSegments + 1).ToList();
             if (segments.Count > MaxInputSegments) throw new InvalidOperationException("Room boundary input exceeds the supported segment limit.");
             foreach (var segment in segments) ValidateSegment(segment, tolerance);
             if (segments.Count < 3) return Array.Empty<RoomBoundary>();
@@ -230,12 +230,47 @@ namespace QS3D.Core.Geometry
         {
             var dx = segment.End.X - segment.Start.X;
             var dy = segment.End.Y - segment.Start.Y;
-            var lengthSquared = dx * dx + dy * dy;
-            if (!(lengthSquared > 0d)) return;
-            var t = ((point.X - segment.Start.X) * dx + (point.Y - segment.Start.Y) * dy) / lengthSquared;
-            if (t < 0d || t > 1d) return;
+            if (!Finite(dx) || !Finite(dy)) throw new OverflowException("Room boundary endpoint projection direction exceeds the supported numeric range.");
+            var length = segment.Start.DistanceTo(segment.End);
+            if (!(length > 0d)) return;
+            var ux = dx / length;
+            var uy = dy / length;
+            if (!Finite(ux) || !Finite(uy)) throw new OverflowException("Room boundary endpoint projection direction is not finite.");
+
+            var qx = point.X - segment.Start.X;
+            var qy = point.Y - segment.Start.Y;
+            if (!Finite(qx) || !Finite(qy)) throw new OverflowException("Room boundary endpoint projection delta exceeds the supported numeric range.");
+            var scale = Math.Max(Math.Abs(qx), Math.Abs(qy));
+            if (scale == 0d)
+            {
+                cuts.Add(new Cut(0d, segment.Start));
+                return;
+            }
+
+            var scaledAlong = qx / scale * ux + qy / scale * uy;
+            if (!Finite(scaledAlong)) throw new OverflowException("Room boundary endpoint scaled projection is not finite.");
+            if (scaledAlong < 0d) return;
+            var scaledLength = length / scale;
+            if (!(scaledLength > 0d) || scaledAlong > scaledLength) return;
+            var t = scaledAlong / scaledLength;
+            if (!Finite(t) || t < 0d || t > 1d) return;
             var projected = new Point2(segment.Start.X + dx * t, segment.Start.Y + dy * t);
-            if (projected.DistanceTo(point) <= tolerance) cuts.Add(new Cut(Clamp01(t), projected));
+            if (projected.DistanceTo(point) > tolerance)
+            {
+                var dominantDirection = Math.Abs(dx) >= Math.Abs(dy) ? dx : dy;
+                var dominantDelta = Math.Abs(dx) >= Math.Abs(dy) ? qx : qy;
+                if (dominantDirection == 0d) return;
+                var dominantT = dominantDelta / dominantDirection;
+                if (!Finite(dominantT) || dominantT < 0d || dominantT > 1d) return;
+                dominantT = Clamp01(dominantT);
+                var dominantProjected = new Point2(
+                    segment.Start.X + dx * dominantT,
+                    segment.Start.Y + dy * dominantT);
+                if (dominantProjected.DistanceTo(point) > tolerance) return;
+                t = dominantT;
+                projected = dominantProjected;
+            }
+            cuts.Add(new Cut(Clamp01(t), projected));
         }
 
         private static IReadOnlyList<Cut> DeduplicateCuts(IEnumerable<Cut> source, BoundarySegment segment, double tolerance)
@@ -461,7 +496,23 @@ namespace QS3D.Core.Geometry
             if (a > b) { var temp = a; a = b; b = temp; }
             return a.ToString(CultureInfo.InvariantCulture) + ":" + b.ToString(CultureInfo.InvariantCulture);
         }
-        private static double Cross(double ax, double ay, double bx, double by) => ax * by - ay * bx;
+        private static double Cross(double ax, double ay, double bx, double by)
+        {
+            var scaleA = Math.Max(Math.Abs(ax), Math.Abs(ay));
+            var scaleB = Math.Max(Math.Abs(bx), Math.Abs(by));
+            if (!Finite(scaleA) || !Finite(scaleB)) throw new OverflowException("Room boundary determinant input exceeds the supported numeric range.");
+            if (scaleA == 0d || scaleB == 0d) return 0d;
+
+            var normalized = ax / scaleA * (by / scaleB) - ay / scaleA * (bx / scaleB);
+            if (!Finite(normalized)) throw new OverflowException("Room boundary determinant exceeds the supported numeric range.");
+            var smallerScale = Math.Min(scaleA, scaleB);
+            var largerScale = Math.Max(scaleA, scaleB);
+            var scaled = normalized * smallerScale;
+            if (!Finite(scaled)) throw new OverflowException("Room boundary determinant exceeds the supported numeric range.");
+            var value = scaled * largerScale;
+            if (!Finite(value)) throw new OverflowException("Room boundary determinant exceeds the supported numeric range.");
+            return value;
+        }
         private static double Clamp01(double value) => value < 0d ? 0d : value > 1d ? 1d : value;
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
         private static bool FinitePositive(double value) => Finite(value) && value > 0d;
@@ -511,10 +562,12 @@ namespace QS3D.Core.Geometry
 
             public int GetOrAdd(Point2 point)
             {
-                var cellX = Cell(point.X); var cellY = Cell(point.Y);
-                var best = -1; var bestDistance = double.MaxValue;
-                for (var x = cellX - 1; x <= cellX + 1; x++)
-                    for (var y = cellY - 1; y <= cellY + 1; y++)
+                var centerX = CellToken(point.X);
+                var centerY = CellToken(point.Y);
+                var best = -1;
+                var bestDistance = double.MaxValue;
+                foreach (var x in NeighborCellTokens(point.X))
+                    foreach (var y in NeighborCellTokens(point.Y))
                         if (_cells.TryGetValue(CellKey(x, y), out var candidates))
                             foreach (var index in candidates)
                             {
@@ -525,14 +578,40 @@ namespace QS3D.Core.Geometry
                 if (best >= 0) return best;
                 var created = _points.Count;
                 _points.Add(point);
-                var key = CellKey(cellX, cellY);
+                var key = CellKey(centerX, centerY);
                 if (!_cells.TryGetValue(key, out var list)) { list = new List<int>(); _cells[key] = list; }
                 list.Add(created);
                 return created;
             }
 
-            private long Cell(double value) => checked((long)Math.Floor(value / _tolerance));
-            private static string CellKey(long x, long y) => x.ToString(CultureInfo.InvariantCulture) + ":" + y.ToString(CultureInfo.InvariantCulture);
+            private IReadOnlyList<string> NeighborCellTokens(double value)
+            {
+                var scaled = value / _tolerance;
+                if (!Finite(scaled)) return new[] { ExactValueToken(value) };
+
+                var cell = Math.Floor(scaled);
+                var result = new List<string>(3);
+                AddCellToken(result, cell - 1d);
+                AddCellToken(result, cell);
+                AddCellToken(result, cell + 1d);
+                return result;
+            }
+
+            private string CellToken(double value)
+            {
+                var scaled = value / _tolerance;
+                return Finite(scaled) ? CellIndexToken(Math.Floor(scaled)) : ExactValueToken(value);
+            }
+
+            private static void AddCellToken(ICollection<string> target, double cell)
+            {
+                var token = CellIndexToken(cell);
+                if (!target.Contains(token)) target.Add(token);
+            }
+
+            private static string CellIndexToken(double cell) => "C:" + cell.ToString("R", CultureInfo.InvariantCulture);
+            private static string ExactValueToken(double value) => "V:" + value.ToString("R", CultureInfo.InvariantCulture);
+            private static string CellKey(string x, string y) => x + "|" + y;
         }
 
         private sealed class Cut { public Cut(double t, Point2 point) { T = t; Point = point; } public double T { get; } public Point2 Point { get; } }

@@ -49,6 +49,8 @@ namespace QS3D.Core.Domain
             var referencedElements = projectElements
                 .Where(x => ReferencesFloor(x, floor.Id))
                 .ToList();
+            if (elevationChanged)
+                ValidateVerticalReferencesForFloorElevation(project, referencedElements, floor.Id, elevationM);
             var referencedIds = new HashSet<string>(referencedElements.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
             var dependencyGraph = new DependencyGraph();
             dependencyGraph.Rebuild(projectElements);
@@ -60,7 +62,7 @@ namespace QS3D.Core.Domain
 
             project.Touch();
             floor.Name = normalizedName;
-            floor.ElevationM = elevationM;
+            if (elevationChanged) floor.ElevationM = elevationM;
             foreach (var element in referencedElements)
             {
                 var flags = ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity;
@@ -76,7 +78,7 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var floor = FindRequired(project, floorId);
-            if (string.Equals(project.ActiveFloorId, floor.Id, StringComparison.OrdinalIgnoreCase)) return;
+            if (string.Equals((project.ActiveFloorId ?? string.Empty).Trim(), floor.Id, StringComparison.OrdinalIgnoreCase)) return;
             project.Touch();
             project.ActiveFloorId = floor.Id;
         }
@@ -87,7 +89,7 @@ namespace QS3D.Core.Domain
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var floor = FindRequired(project, floorId);
             var targets = ResolveOwnedElements(project, elements);
-            var changed = targets.Where(x => !string.Equals(x.FloorId, floor.Id, StringComparison.OrdinalIgnoreCase)).ToList();
+            var changed = targets.Where(x => !string.Equals((x.FloorId ?? string.Empty).Trim(), floor.Id, StringComparison.OrdinalIgnoreCase)).ToList();
             if (changed.Count == 0) return 0;
 
             project.Touch();
@@ -109,10 +111,12 @@ namespace QS3D.Core.Domain
             foreach (var element in targets)
             {
                 var bottomOffset = LevelOffset(element, BottomLevelOffsetKey);
+                var bottomElevation = AddFinite(floor.ElevationM, bottomOffset, element.Id + "/bottom level elevation");
                 if (!element.Properties.TryGetValue(TopLevelIdKey, out var topId) || string.IsNullOrWhiteSpace(topId)) continue;
                 var top = FindRequired(project, topId);
                 var topOffset = LevelOffset(element, TopLevelOffsetKey);
-                if (top.ElevationM + topOffset <= floor.ElevationM + bottomOffset)
+                var topElevation = AddFinite(top.ElevationM, topOffset, element.Id + "/top level elevation");
+                if (topElevation <= bottomElevation)
                     throw new InvalidOperationException("Cannot assign bottom level '" + floor.Name + "' because top level is not above it for element " + element.Id + ".");
             }
 
@@ -148,8 +152,10 @@ namespace QS3D.Core.Domain
                     throw new InvalidOperationException("Assign Bottom Level before Top Level for element " + element.Id + ".");
                 var bottom = FindRequired(project, bottomId);
                 var bottomOffset = LevelOffset(element, BottomLevelOffsetKey);
+                var bottomElevation = AddFinite(bottom.ElevationM, bottomOffset, element.Id + "/bottom level elevation");
                 var topOffset = LevelOffset(element, TopLevelOffsetKey);
-                if (top.ElevationM + topOffset <= bottom.ElevationM + bottomOffset)
+                var topElevation = AddFinite(top.ElevationM, topOffset, element.Id + "/top level elevation");
+                if (topElevation <= bottomElevation)
                     throw new InvalidOperationException("Top level '" + top.Name + "' must be above bottom level for element " + element.Id + ".");
             }
 
@@ -199,7 +205,7 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var floor = FindRequired(project, floorId);
-            if (string.Equals(project.ActiveFloorId, floor.Id, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals((project.ActiveFloorId ?? string.Empty).Trim(), floor.Id, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Cannot delete the active floor. Activate another floor first.");
             var references = ResolveProjectElements(project).Count(x => ReferencesFloor(x, floor.Id));
             if (references > 0)
@@ -218,16 +224,49 @@ namespace QS3D.Core.Domain
         public static bool ReferencesFloor(ProjectElement element, string floorId)
         {
             if (element == null || string.IsNullOrWhiteSpace(floorId)) return false;
-            return string.Equals(element.FloorId, floorId, StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(Property(element, BottomLevelIdKey), floorId, StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(Property(element, TopLevelIdKey), floorId, StringComparison.OrdinalIgnoreCase);
+            var normalizedFloorId = floorId.Trim();
+            return string.Equals((element.FloorId ?? string.Empty).Trim(), normalizedFloorId, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(Property(element, BottomLevelIdKey), normalizedFloorId, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(Property(element, TopLevelIdKey), normalizedFloorId, StringComparison.OrdinalIgnoreCase);
         }
 
         public static bool ReferencesVerticalLevel(ProjectElement element, string floorId)
         {
             if (element == null || string.IsNullOrWhiteSpace(floorId)) return false;
-            return string.Equals(Property(element, BottomLevelIdKey), floorId, StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(Property(element, TopLevelIdKey), floorId, StringComparison.OrdinalIgnoreCase);
+            var normalizedFloorId = floorId.Trim();
+            return string.Equals(Property(element, BottomLevelIdKey), normalizedFloorId, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(Property(element, TopLevelIdKey), normalizedFloorId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void ValidateVerticalReferencesForFloorElevation(ProjectState project, IEnumerable<ProjectElement> elements, string floorId, double elevationM)
+        {
+            foreach (var element in elements)
+            {
+                var bottomId = Property(element, BottomLevelIdKey);
+                var topId = Property(element, TopLevelIdKey);
+                var updatesBottom = string.Equals(bottomId, floorId, StringComparison.OrdinalIgnoreCase);
+                var updatesTop = string.Equals(topId, floorId, StringComparison.OrdinalIgnoreCase);
+                if (!updatesBottom && !updatesTop) continue;
+
+                double? bottomElevation = null;
+                if (bottomId.Length > 0)
+                {
+                    var bottom = FindRequired(project, bottomId);
+                    var baseElevation = updatesBottom ? elevationM : bottom.ElevationM;
+                    bottomElevation = AddFinite(baseElevation, LevelOffset(element, BottomLevelOffsetKey), element.Id + "/bottom level elevation");
+                }
+
+                double? topElevation = null;
+                if (topId.Length > 0)
+                {
+                    var top = FindRequired(project, topId);
+                    var baseElevation = updatesTop ? elevationM : top.ElevationM;
+                    topElevation = AddFinite(baseElevation, LevelOffset(element, TopLevelOffsetKey), element.Id + "/top level elevation");
+                }
+
+                if (bottomElevation.HasValue && topElevation.HasValue && topElevation.Value <= bottomElevation.Value)
+                    throw new InvalidOperationException("Floor elevation update would make Top Level not above Bottom Level for element " + element.Id + ".");
+            }
         }
 
         private static IReadOnlyList<ProjectElement> ResolveOwnedElements(ProjectState project, IEnumerable<ProjectElement> elements)
@@ -238,7 +277,8 @@ namespace QS3D.Core.Domain
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Floor mutation target collection contains a null element.");
                 if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
                     throw new InvalidOperationException("Element does not belong to the project instance: " + element.Id);
                 unique[element.Id] = owned;
@@ -300,6 +340,14 @@ namespace QS3D.Core.Domain
         private static double Finite(double value, string parameterName)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(parameterName, "Value must be finite.");
+            return value;
+        }
+
+        private static double AddFinite(double left, double right, string label)
+        {
+            var value = left + right;
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                throw new InvalidOperationException(label + " must be finite.");
             return value;
         }
 

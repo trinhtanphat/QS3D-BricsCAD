@@ -44,6 +44,10 @@ namespace QS3D.BricsCAD.V25.UI
                     _persistentSettingsWriteBlocked = true;
                     SaveSettingsButton.IsEnabled = false;
                     SettingsPathText.Text = _store.SettingsPath + "  •  CHỈ ĐỌC: schema mới hơn";
+                    UpdateCreateSelectedRuleButton(
+                        PrimaryCategoryList.SelectedItem != null &&
+                        ReferenceCategoryList.SelectedItem != null &&
+                        SelectedRuleEditor.DataContext == null);
                 }
 
                 MessageBox.Show(
@@ -189,8 +193,11 @@ namespace QS3D.BricsCAD.V25.UI
             var selected = IntersectionRows.SingleOrDefault(x => x.SourceCode == source.CategoryCode && x.TargetCode == target.CategoryCode);
             SelectedRuleEditor.DataContext = selected;
             SelectedRuleEditor.IsEnabled = selected != null;
+            UpdateCreateSelectedRuleButton(selected == null);
             SelectedRuleStateText.Text = selected == null
-                ? "Template hiện tại không có dòng luật cho cặp này. QS3D không tự tạo luật mới để tránh làm thay đổi payload ngoài ý muốn."
+                ? (_persistentSettingsWriteBlocked
+                    ? "Template hiện tại không có dòng luật cho cặp này. Cửa sổ đang ở chế độ chỉ đọc vì file cấu hình dùng schema mới hơn."
+                    : "Template hiện tại chưa có luật cho cặp này. Bạn có thể tạo một luật A → B mới; các phép trừ mặc định sẽ TẮT cho tới khi bạn chủ động bật.")
                 : "Đang chỉnh đúng một luật có hướng trong ma trận hiện tại.";
 
             var reverse = IntersectionRows.SingleOrDefault(x => x.SourceCode == target.CategoryCode && x.TargetCode == source.CategoryCode);
@@ -211,8 +218,61 @@ namespace QS3D.BricsCAD.V25.UI
             SelectedRuleStateText.Text = "Chọn Cấu kiện chính và Cấu kiện tham chiếu để xem một luật có hướng.";
             SelectedRuleEditor.DataContext = null;
             SelectedRuleEditor.IsEnabled = false;
+            UpdateCreateSelectedRuleButton(false);
             ReverseRuleSummaryText.Text = "Chưa có cặp luật để đối chiếu.";
             ViewReverseRuleButton.IsEnabled = false;
+        }
+
+        private void UpdateCreateSelectedRuleButton(bool isMissingRule)
+        {
+            var button = FindName("CreateSelectedRuleButton") as Button;
+            if (button == null) return;
+            button.Visibility = isMissingRule ? Visibility.Visible : Visibility.Collapsed;
+            button.IsEnabled = isMissingRule && !_persistentSettingsWriteBlocked;
+        }
+
+        private void CreateSelectedRule_Click(object sender, RoutedEventArgs e)
+        {
+            if (_persistentSettingsWriteBlocked)
+            {
+                MessageBox.Show(
+                    this,
+                    "Không thể tạo luật trong cửa sổ chỉ đọc vì file cấu hình theo máy dùng schema mới hơn phiên bản QS3D này. Hãy cập nhật plugin trước.",
+                    "QS3D • Tạo luật bị khóa",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
+            var source = PrimaryCategoryList.SelectedItem as QuantityCategoryChoice;
+            var target = ReferenceCategoryList.SelectedItem as QuantityCategoryChoice;
+            if (source == null || target == null)
+            {
+                RefreshSelectedIntersectionRule();
+                return;
+            }
+
+            if (IntersectionRows.Any(x => x.SourceCode == source.CategoryCode && x.TargetCode == target.CategoryCode))
+            {
+                RefreshSelectedIntersectionRule();
+                return;
+            }
+
+            var answer = MessageBox.Show(
+                this,
+                "Tạo luật " + source.DisplayName + " → " + target.DisplayName +
+                " với mọi phép trừ mặc định TẮT?\n\nLuật chiều ngược không được tự tạo. Thay đổi chỉ được ghi xuống máy khi bạn nhấn ‘Lưu Cài Đặt’.",
+                "QS3D • Tạo luật giao cắt",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (answer != MessageBoxResult.Yes) return;
+
+            IntersectionRows.Add(new QuantityIntersectionRuleRow(new QuantityIntersectionRuleSetting
+            {
+                Source = source.CategoryCode,
+                Target = target.CategoryCode
+            }));
+            RefreshSelectedIntersectionRule();
         }
 
         private void ViewReverseRule_Click(object sender, RoutedEventArgs e)
@@ -267,7 +327,13 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 var imported = _store.Import(dialog.FileName);
                 LoadIntoView(imported);
-                var unknown = imported.CategoryRules.Count(x => !QuantityCategoryDisplayName.IsKnown(x.Category));
+                var unknown = imported.CategoryRules.Select(x => x.Category)
+                    .Concat(imported.IntersectionRules.Select(x => x.Source))
+                    .Concat(imported.IntersectionRules.Select(x => x.Target))
+                    .Where(code => !QuantityCategoryDisplayName.IsKnown(code))
+                    .Distinct()
+                    .OrderBy(code => code)
+                    .Count();
                 var note = unknown == 0
                     ? string.Empty
                     : "\n\nCó " + unknown + " mã cấu kiện chưa có tên QS3D; mã số vẫn được giữ nguyên để không làm mất luật.";
@@ -302,11 +368,11 @@ namespace QS3D.BricsCAD.V25.UI
                     FileName = "QS3D_quantity_settings.json"
                 };
                 if (dialog.ShowDialog(this) != true) return;
-                if (_persistentSettingsWriteBlocked && SamePath(dialog.FileName, _store.SettingsPath))
+                if (_persistentSettingsWriteBlocked && IsProtectedSettingsPath(dialog.FileName))
                 {
                     MessageBox.Show(
                         this,
-                        "Không thể xuất đè lên file cấu hình theo máy đang dùng schema mới hơn. Hãy chọn một file khác hoặc cập nhật QS3D trước.",
+                        "Không thể xuất đè lên file cấu hình theo máy hoặc bản sao lưu đang được bảo vệ bởi schema mới hơn. Hãy chọn một file khác hoặc cập nhật QS3D trước.",
                         "QS3D • File cấu hình đang được bảo vệ",
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
@@ -369,6 +435,12 @@ namespace QS3D.BricsCAD.V25.UI
         {
             return exception is System.IO.InvalidDataException
                 && Equals(exception.Data[UnsupportedSchemaMarker], true);
+        }
+
+        private bool IsProtectedSettingsPath(string path)
+        {
+            return SamePath(path, _store.SettingsPath) ||
+                SamePath(path, _store.SettingsPath + ".bak");
         }
 
         private static bool SamePath(string left, string right)

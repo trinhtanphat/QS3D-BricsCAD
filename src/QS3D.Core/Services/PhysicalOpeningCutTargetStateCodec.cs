@@ -33,24 +33,30 @@ namespace QS3D.Core.Services
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var token in tokens)
             {
-                var encoded = (token ?? string.Empty).Trim();
-                if (encoded.Length == 0)
-                    throw new InvalidOperationException("Host " + host.Id + " has malformed physical opening target-state.");
+                var encoded = token ?? string.Empty;
+                if (encoded.Length == 0 || !string.Equals(encoded, encoded.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Host " + host.Id + " has malformed or non-canonical physical opening target-state.");
                 if (encoded.Length > MaxEncodedIdLength)
                     throw new InvalidOperationException("Host " + host.Id + " has an encoded physical opening target id above the safety limit.");
 
                 string id;
                 try
                 {
-                    id = StrictUtf8.GetString(Convert.FromBase64String(encoded)).Trim();
+                    var bytes = Convert.FromBase64String(encoded);
+                    if (!string.Equals(Convert.ToBase64String(bytes), encoded, StringComparison.Ordinal))
+                        throw new InvalidOperationException("Host " + host.Id + " has non-canonical Base64 physical opening target-state.");
+                    id = StrictUtf8.GetString(bytes);
                 }
                 catch (Exception ex) when (ex is FormatException || ex is DecoderFallbackException)
                 {
                     throw new InvalidOperationException("Host " + host.Id + " has undecodable physical opening target-state.", ex);
                 }
 
-                if (id.Length == 0 || id.Length > MaxElementIdLength || !seen.Add(id))
-                    throw new InvalidOperationException("Host " + host.Id + " physical opening target-state contains an empty, overlong or duplicate id.");
+                if (id.Length == 0 ||
+                    id.Length > MaxElementIdLength ||
+                    !string.Equals(id, id.Trim(), StringComparison.Ordinal) ||
+                    !seen.Add(id))
+                    throw new InvalidOperationException("Host " + host.Id + " physical opening target-state contains an empty, overlong, non-canonical or duplicate id.");
                 parsed.Add(id);
             }
 
@@ -64,6 +70,13 @@ namespace QS3D.Core.Services
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (host == null) throw new ArgumentNullException(nameof(host));
+
+            var canonicalHost = project.FindElement(host.Id);
+            if (canonicalHost == null)
+                throw new InvalidOperationException("Physical opening cut host does not belong to the project: " + host.Id + ".");
+            if (!ReferenceEquals(canonicalHost, host))
+                throw new InvalidOperationException("Physical opening cut host is detached from the current project instance: " + host.Id + ".");
+
             var ids = Normalize(openingIds);
             if (ids.Count == 0)
                 throw new InvalidOperationException("Host " + host.Id + " physical opening target-state cannot be empty.");
@@ -76,8 +89,8 @@ namespace QS3D.Core.Services
                 if (!IsOpening(opening))
                     throw new InvalidOperationException("Physical opening target is no longer a Door/WallOpening: " + id + ". Rebuild the host 3D geometry.");
                 if (!opening.Properties.TryGetValue("HostWallId", out var linkedHostId) ||
-                    !string.Equals(linkedHostId?.Trim(), host.Id, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException("Physical opening target " + id + " is no longer linked to host " + host.Id + ". Rebuild the host 3D geometry.");
+                    !string.Equals(linkedHostId?.Trim(), canonicalHost.Id, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Physical opening target " + id + " is no longer linked to host " + canonicalHost.Id + ". Rebuild the host 3D geometry.");
                 result.Add(opening);
             }
             return result.AsReadOnly();
@@ -101,8 +114,9 @@ namespace QS3D.Core.Services
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var raw in openingIds ?? Array.Empty<string>())
             {
-                var id = (raw ?? string.Empty).Trim();
-                if (id.Length == 0) continue;
+                if (string.IsNullOrWhiteSpace(raw))
+                    throw new InvalidOperationException("Physical opening target-state contains an empty opening id.");
+                var id = raw.Trim();
                 if (id.Length > MaxElementIdLength)
                     throw new InvalidOperationException("Physical opening target id exceeds " + MaxElementIdLength + " characters.");
                 if (!result.Add(id))

@@ -12,53 +12,110 @@
     </Window.Resources>
 
     <Grid Background="{StaticResource Bg0Brush}">
-        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
-        <Border Background="{StaticResource Bg1Brush}" Padding="16,12" BorderThickness="0,0,0,1">
-            <StackPanel>
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="NHẬT KÝ THAY ĐỔI" FontWeight="Bold" FontSize="18"/>
-                    <Border Background="{StaticResource AccentSoftBrush}" BorderBrush="{StaticResource BorderStrongBrush}"
-                            BorderThickness="1" CornerRadius="8" Padding="7,1" Margin="8,0,0,0">
-                        <TextBlock Text="AUDIT TRAIL" Foreground="{StaticResource LuxuryBrush}" FontWeight="SemiBold" FontSize="9"/>
-                    </Border>
-                </StackPanel>
-                <TextBlock Text="Theo dõi thao tác project, template và workflow QS3D"
-                           Style="{StaticResource Caption}" Margin="0,4,0,0"/>
-            </StackPanel>
-        </Border>
-
-        <Border Grid.Row="1" Style="{StaticResource Card}" Padding="8" Margin="12,10,12,0">
+        <Border Background="{StaticResource BgRaisedBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,0,0,1" Padding="16,12">
             <Grid>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="300"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                <TextBlock Text="Tìm nhật ký" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="0,0,7,0"/>
-                <TextBox x:Name="SearchBox" Grid.Column="1"
-                         ToolTip="Tìm action, element, nội dung, actor hoặc correlation id"
-                         TextChanged="OnSearchChanged"/>
-                <TextBlock Grid.Column="2" Text="Action • Element • Detail • Actor • Correlation"
-                           Style="{StaticResource Caption}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="3"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="{StaticResource LuxuryBrush}"
+                        CornerRadius="2" Margin="0,2,0,2"/>
+                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="NHẬT KÝ THAY ĐỔI" FontWeight="Bold" FontSize="18"/>
+                        <Border Style="{StaticResource StatusPill}" Margin="8,0,0,0">
+                            <TextBlock Text="AUDIT TRAIL" Foreground="{StaticResource LuxuryBrush}"
+                                       FontWeight="SemiBold" FontSize="9"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="Theo dõi thao tác project, template và workflow QS3D"
+                               Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                </StackPanel>
+                <Border Grid.Column="2" Style="{StaticResource StatusPill}"
+                        VerticalAlignment="Center" Margin="12,0,0,0">
+                    <TextBlock Text="READ ONLY" Style="{StaticResource Caption}" FontWeight="SemiBold"/>
+                </Border>
             </Grid>
         </Border>
 
-        <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0" Margin="12,10">
-            <DataGrid x:Name="Grid" AutoGenerateColumns="False" IsReadOnly="True"
-                      CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" BorderThickness="0">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Thời gian UTC" Binding="{Binding Utc, StringFormat={}{0:yyyy-MM-dd HH:mm:ss}}" Width="145"/>
-                    <DataGridTextColumn Header="Hành động" Binding="{Binding Action}" Width="150"/>
-                    <DataGridTextColumn Header="Element" Binding="{Binding ElementId}" Width="120"/>
-                    <DataGridTextColumn Header="Nội dung" Binding="{Binding Detail}" Width="*" MinWidth="240"/>
-                    <DataGridTextColumn Header="Người thực hiện" Binding="{Binding Actor}" Width="120"/>
-                    <DataGridTextColumn Header="Correlation" Binding="{Binding CorrelationId}" Width="135"/>
-                </DataGrid.Columns>
-            </DataGrid>
+        <Border Grid.Row="1" Style="{StaticResource PremiumCard}"
+                Padding="10,9" Margin="12,10,12,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="300"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
+                    <Border Background="{StaticResource LuxuryBrush}" CornerRadius="2"
+                            Width="3" Height="15" Margin="0,0,7,0"/>
+                    <TextBlock Text="TÌM NHẬT KÝ" Style="{StaticResource Caption}"
+                               FontWeight="SemiBold" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBox x:Name="SearchBox" Grid.Column="1" MinHeight="28"
+                         VerticalContentAlignment="Center"
+                         ToolTip="Tìm action, element, nội dung, actor hoặc correlation id"
+                         TextChanged="OnSearchChanged"/>
+                <TextBlock Grid.Column="2" Text="Action • Element • Detail • Actor • Correlation"
+                           Style="{StaticResource Caption}" HorizontalAlignment="Right"
+                           VerticalAlignment="Center" Margin="12,0,0,0"
+                           TextTrimming="CharacterEllipsis"/>
+            </Grid>
         </Border>
 
-        <Border Grid.Row="3" Background="{StaticResource Bg1Brush}" BorderThickness="0,1,0,0" Padding="11,7">
-            <DockPanel>
-                <Border Background="{StaticResource AccentHoverBrush}" CornerRadius="5" Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
-                <TextBlock x:Name="Summary" FontWeight="SemiBold"/>
-                <TextBlock DockPanel.Dock="Right" Text="MỚI NHẤT HIỂN THỊ TRƯỚC" Style="{StaticResource Caption}"/>
+        <Border Grid.Row="2" Style="{StaticResource PremiumCard}" Padding="0" Margin="12,10">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Background="{StaticResource BgRaisedBrush}"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="0,0,0,1" Padding="10,7">
+                    <DockPanel>
+                        <TextBlock Text="DÒNG SỰ KIỆN" Style="{StaticResource GroupHeader}"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock DockPanel.Dock="Right" Text="UTC • PROJECT AUDIT"
+                                   Style="{StaticResource Caption}" VerticalAlignment="Center"/>
+                    </DockPanel>
+                </Border>
+                <DataGrid x:Name="Grid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
+                          CanUserAddRows="False" CanUserDeleteRows="False"
+                          SelectionMode="Single" BorderThickness="0">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Thời gian UTC" Binding="{Binding Utc, StringFormat={}{0:yyyy-MM-dd HH:mm:ss}}" Width="145"/>
+                        <DataGridTextColumn Header="Hành động" Binding="{Binding Action}" Width="150"/>
+                        <DataGridTextColumn Header="Element" Binding="{Binding ElementId}" Width="120"/>
+                        <DataGridTextColumn Header="Nội dung" Binding="{Binding Detail}" Width="*" MinWidth="240"/>
+                        <DataGridTextColumn Header="Người thực hiện" Binding="{Binding Actor}" Width="120"/>
+                        <DataGridTextColumn Header="Correlation" Binding="{Binding CorrelationId}" Width="135"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="3" Background="{StaticResource BgRaisedBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,1,0,0" Padding="11,7">
+            <DockPanel LastChildFill="True">
+                <Border Background="{StaticResource AccentHoverBrush}" CornerRadius="5"
+                        Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                <Border DockPanel.Dock="Right" Style="{StaticResource StatusPill}" Margin="12,0,0,0">
+                    <TextBlock Text="MỚI NHẤT HIỂN THỊ TRƯỚC"
+                               Style="{StaticResource Caption}" FontWeight="SemiBold"/>
+                </Border>
+                <TextBlock x:Name="Summary" FontWeight="SemiBold" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"/>
             </DockPanel>
         </Border>
     </Grid>

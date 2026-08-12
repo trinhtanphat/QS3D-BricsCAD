@@ -84,6 +84,10 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DED2", () =>
             {
+                if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
+                    throw new InvalidOperationException("ED2 cần một QS3D project hiện hữu; export không tạo project mới.");
+                if (project.Elements.Count == 0)
+                    throw new InvalidOperationException("ED2 chưa có semantic element để xuất. Chạy QS3DB4D/capture trước.");
                 if (!DrawingUnitWorkflow.EnsureResolved(doc, "QS3DED2")) return;
 
                 var implied = Cad.EntitySnapshotReader.ReadImpliedSelection(doc);
@@ -100,23 +104,6 @@ namespace QS3D.BricsCAD.V25
                          !string.Equals(scope, "Zone", StringComparison.OrdinalIgnoreCase) &&
                          !string.Equals(scope, "All", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("ED2 scope không được hỗ trợ: " + scope + ".");
-
-                var drawingName = string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name);
-                var dialog = new SaveFileDialog
-                {
-                    Title = "ED2 • Xuất CHI_TIET / TONG_HOP",
-                    Filter = "Excel Workbook (*.xlsx)|*.xlsx",
-                    DefaultExt = ".xlsx",
-                    AddExtension = true,
-                    OverwritePrompt = true,
-                    FileName = drawingName + "-ED2.xlsx"
-                };
-                if (dialog.ShowDialog() != true) return;
-
-                if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
-                    throw new InvalidOperationException("ED2 cần một QS3D project hiện hữu; export không tạo project mới.");
-                if (project.Elements.Count == 0)
-                    throw new InvalidOperationException("ED2 chưa có semantic element để xuất. Chạy QS3DB4D/capture trước.");
 
                 IReadOnlyList<string>? elementIds = null;
                 if (string.Equals(scope, "Selection", StringComparison.OrdinalIgnoreCase))
@@ -152,6 +139,19 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("ED2 scope " + scope + " không có cấu kiện hợp lệ để xuất.");
 
                 EnsureEd2HandlesAreLive(doc, details);
+
+                var drawingName = string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name);
+                var dialog = new SaveFileDialog
+                {
+                    Title = "ED2 • Xuất CHI_TIET / TONG_HOP",
+                    Filter = "Excel Workbook (*.xlsx)|*.xlsx",
+                    DefaultExt = ".xlsx",
+                    AddExtension = true,
+                    OverwritePrompt = true,
+                    FileName = drawingName + "-ED2.xlsx"
+                };
+                if (dialog.ShowDialog() != true) return;
+
                 XlsxQuantityExporter.ExportEd2(dialog.FileName, details, summary);
 
                 var status = "ED2 " + scope + ": " + details.Count + " CHI_TIET • " + summary.Count +
@@ -169,10 +169,6 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DBBS", () =>
             {
-                var drawingName = string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name);
-                var dialog = new SaveFileDialog { Title = "Xuất Bar Bending Schedule", Filter = "Excel Workbook (*.xlsx)|*.xlsx", DefaultExt = ".xlsx", AddExtension = true, OverwritePrompt = true, FileName = drawingName + "-BBS.xlsx" };
-                if (dialog.ShowDialog() != true) return;
-
                 if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
                     throw new InvalidOperationException("BBS cần một QS3D project hiện hữu; export không tạo project mới.");
                 var previewProject = ProjectStateSnapshot.CreateDetachedCopy(project);
@@ -185,6 +181,11 @@ namespace QS3D.BricsCAD.V25
                     if (row == null) throw new InvalidOperationException("BBS không được chứa dòng null.");
                     totalWeight = QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS command total weight");
                 }
+
+                var drawingName = string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name);
+                var dialog = new SaveFileDialog { Title = "Xuất Bar Bending Schedule", Filter = "Excel Workbook (*.xlsx)|*.xlsx", DefaultExt = ".xlsx", AddExtension = true, OverwritePrompt = true, FileName = drawingName + "-BBS.xlsx" };
+                if (dialog.ShowDialog() != true) return;
+
                 XlsxRebarScheduleExporter.Export(dialog.FileName, rows);
                 var status = "BBS: " + rows.Count + " bar mark • " + totalWeight.ToString("0.###") + " kg • " + dialog.FileName;
                 FinalizeExportUi(doc, status);
@@ -457,12 +458,12 @@ namespace QS3D.BricsCAD.V25
         public void Locate()
         {
             var doc = Active(); if (doc == null) return;
-            var options = new PromptStringOptions("\nNhập QS3D Element Id: ") { AllowSpaces = false };
-            var result = doc.Editor.GetString(options); if (result.Status != PromptStatus.OK) return;
             Guard(doc, "QS3DLOCATE", () =>
             {
                 if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
                     throw new InvalidOperationException("QS3D Locate cần một project hiện hữu; lệnh định vị không tạo project mới.");
+                var options = new PromptStringOptions("\nNhập QS3D Element Id: ") { AllowSpaces = false };
+                var result = doc.Editor.GetString(options); if (result.Status != PromptStatus.OK) return;
                 var element = project.FindElement(result.StringResult);
                 if (element == null) { doc.Editor.WriteMessage("\nKhông tìm thấy QS3D element."); return; }
                 var count = Cad.CadHandleService.Select(doc, SourceHandleResolver.Resolve(project, new[] { element.Id }));
@@ -484,13 +485,13 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DEXCELLOCATE", () =>
             {
+                if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
+                    throw new InvalidOperationException("Excel Locate cần một QS3D project hiện hữu; lệnh định vị không tạo project mới.");
                 var dialog = new OpenFileDialog { Title = "Chọn bảng Excel QS3D/BLT để định vị", Filter = "Excel Workbook (*.xlsx)|*.xlsx", CheckFileExists = true, Multiselect = false };
                 if (dialog.ShowDialog() != true) return;
                 var prompt = new PromptIntegerOptions("\nNhập số dòng Excel cần định vị: ") { AllowNone = false, LowerLimit = 1, UseDefaultValue = true, DefaultValue = 2 };
                 var row = doc.Editor.GetInteger(prompt); if (row.Status != PromptStatus.OK) return;
                 var lookup = XlsxHandleReader.ReadHandleLookup(dialog.FileName, row.Value);
-                if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
-                    throw new InvalidOperationException("Excel Locate cần một QS3D project hiện hữu; lệnh định vị không tạo project mới.");
                 IReadOnlyList<string> handles;
                 IReadOnlyList<ObjectId> resolved;
                 if (lookup.IsModernSchema)

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
-using System.Security;
 using System.Text;
 using QS3D.Core.Persistence;
 using QS3D.Core.Reporting;
@@ -12,13 +11,31 @@ namespace QS3D.Core.Export
 {
     public static class RoomFinishXlsxExporter
     {
+        private const int MaxDataRows = 1048575;
+        private const int MaxCellTextCharacters = 32767;
+
         public static void Export(string path, IReadOnlyList<RoomFinishScheduleRow> rows)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
+            if (rows.Count > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Room-finish XLSX export supports at most " + MaxDataRows + " data rows.");
             for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
-                if (rows[rowIndex] == null)
+            {
+                var row = rows[rowIndex];
+                if (row == null)
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
+                ValidateCellText(row.Floor, rowIndex, "Floor");
+                ValidateCellText(row.Room, rowIndex, "Room");
+                ValidateCellText(row.Category, rowIndex, "Category");
+                ValidateCellText(row.FamilyName, rowIndex, "FamilyName");
+                ValidateCellText(row.Material, rowIndex, "Material");
+                ValidateCellText(row.UnitHint, rowIndex, "UnitHint");
+                ValidateJoinedCellText(row.ElementIds, rowIndex, "ElementIds");
+                ValidateJoinedCellText(row.RoomIds, rowIndex, "RoomIds");
+                ValidateFinite(row.PrimaryQuantity, rowIndex, "PrimaryQuantity");
+                ValidateFinite(row.LengthM, rowIndex, "LengthM");
+                ValidateFinite(row.AreaM2, rowIndex, "AreaM2");
+            }
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -89,9 +106,40 @@ namespace QS3D.Core.Export
                 "xl/worksheets/sheet1.xml");
         }
 
+        private static void ValidateCellText(string value, int rowIndex, string fieldName)
+        {
+            var text = value ?? string.Empty;
+            if (text.Length > MaxCellTextCharacters)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Room-finish XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
+        }
+
+        private static void ValidateJoinedCellText(IList<string> values, int rowIndex, string fieldName)
+        {
+            long length = 0;
+            for (var index = 0; index < values.Count; index++)
+            {
+                if (index > 0) length++;
+                length += (values[index] ?? string.Empty).Length;
+                if (length > MaxCellTextCharacters)
+                    throw new ArgumentOutOfRangeException(
+                        "rows",
+                        "Room-finish XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
+            }
+        }
+
+        private static void ValidateFinite(double value, int rowIndex, string fieldName)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Room-finish XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be finite.");
+        }
+
         private static void StringCell(StringBuilder sb, string cellRef, string value, int style)
         {
-            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is><t>").Append(SecurityElement.Escape(value ?? string.Empty)).Append("</t></is></c>");
+            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is><t>").Append(XlsxXmlText.Escape(value)).Append("</t></is></c>");
         }
 
         private static void NumberCell(StringBuilder sb, string cellRef, double value)

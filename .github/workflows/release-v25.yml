@@ -254,6 +254,37 @@ jobs:
             "X-GitHub-Api-Version" = "2022-11-28"
             "User-Agent" = "QS3D-Manual-Release"
           }
+
+          function Assert-RemoteReleaseTagTargetsWorkflowSha {
+            $tagRef = "refs/tags/$env:RELEASE_TAG"
+            $peeledRef = $tagRef + '^{}'
+            $lines = @(git ls-remote --tags origin $tagRef $peeledRef)
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to resolve remote release tag $env:RELEASE_TAG from origin. Release remains a draft."
+            }
+
+            $exact = New-Object System.Collections.Generic.List[string]
+            $peeled = New-Object System.Collections.Generic.List[string]
+            foreach ($line in $lines) {
+              if ($line -notmatch '^([0-9a-fA-F]{40})\s+(.+)$') {
+                throw "Malformed git ls-remote output while resolving release tag $env:RELEASE_TAG. Release remains a draft."
+              }
+              $sha = $Matches[1]
+              $refName = $Matches[2]
+              if ([string]::Equals($refName, $tagRef, [StringComparison]::Ordinal)) { $exact.Add($sha) }
+              elseif ([string]::Equals($refName, $peeledRef, [StringComparison]::Ordinal)) { $peeled.Add($sha) }
+              else { throw "Unexpected remote ref while resolving release tag: $refName. Release remains a draft." }
+            }
+            if ($exact.Count -ne 1 -or $peeled.Count -gt 1) {
+              throw "Release tag $env:RELEASE_TAG did not resolve to exactly one remote tag identity. Release remains a draft."
+            }
+
+            $resolvedSha = if ($peeled.Count -eq 1) { $peeled[0] } else { $exact[0] }
+            if (-not [string]::Equals($resolvedSha, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+              throw "Release tag $env:RELEASE_TAG targets $resolvedSha instead of qualified workflow SHA $env:GITHUB_SHA. Release remains a draft."
+            }
+          }
+
           $isPrerelease = $env:RELEASE_PRERELEASE -eq 'true'
           $signPackage = $env:RELEASE_SIGN_PACKAGE -eq 'true'
           $runtimeState = if ($env:RELEASE_RUN_RUNTIME -eq 'true') {
@@ -277,13 +308,18 @@ jobs:
             -ContentType "application/json" `
             -Body $body
 
+          Assert-RemoteReleaseTagTargetsWorkflowSha
+
           $releaseAssets = @('dist\QS3D-BricsCAD-V25.zip', 'dist\QS3D-BricsCAD-V25.zip.sha256')
           if ($signPackage) { $releaseAssets += 'dist\QS3D-BricsCAD-V25.update.json' }
+          $localAssets = @{}
 
           $uploadBase = $release.upload_url -replace '\{\?name,label\}$', ''
           foreach ($assetPath in $releaseAssets) {
             $asset = (Resolve-Path $assetPath).Path
             $name = [System.IO.Path]::GetFileName($asset)
+            if ($localAssets.ContainsKey($name)) { throw "Duplicate local release asset name: $name" }
+            $localAssets[$name] = $asset
             $encodedName = [Uri]::EscapeDataString($name)
             $contentType = if ($name.EndsWith('.zip')) { 'application/zip' } elseif ($name.EndsWith('.json')) { 'application/json' } else { 'text/plain' }
             Invoke-RestMethod `
@@ -298,11 +334,48 @@ jobs:
           $draftRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
           $expectedAssets = @('QS3D-BricsCAD-V25.zip', 'QS3D-BricsCAD-V25.zip.sha256')
           if ($signPackage) { $expectedAssets += 'QS3D-BricsCAD-V25.update.json' }
+          $assetDownloadHeaders = @{}
+          foreach ($key in $headers.Keys) { $assetDownloadHeaders[$key] = $headers[$key] }
+          $assetDownloadHeaders['Accept'] = 'application/octet-stream'
+          $verificationRoot = if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) { [IO.Path]::GetTempPath() } else { $env:RUNNER_TEMP }
+
           foreach ($expectedAsset in $expectedAssets) {
-            if ($expectedAsset -notin @($draftRelease.assets | ForEach-Object { $_.name })) {
-              throw "Expected release asset was not uploaded: $expectedAsset. Release remains a draft."
+            $matches = @($draftRelease.assets | Where-Object { [string]$_.name -ceq $expectedAsset })
+            if ($matches.Count -ne 1) {
+              throw "Expected exactly one uploaded release asset named $expectedAsset, found $($matches.Count). Release remains a draft."
+            }
+            if (-not $localAssets.ContainsKey($expectedAsset)) {
+              throw "Local release asset mapping is missing for $expectedAsset. Release remains a draft."
+            }
+
+            $uploadedAsset = $matches[0]
+            $localAsset = [string]$localAssets[$expectedAsset]
+            $localLength = [int64](Get-Item -LiteralPath $localAsset).Length
+            $remoteLength = [int64]$uploadedAsset.size
+            if ($remoteLength -ne $localLength) {
+              throw "Uploaded release asset size mismatch for $expectedAsset. Local=$localLength Remote=$remoteLength. Release remains a draft."
+            }
+
+            $downloadedAsset = Join-Path $verificationRoot ('qs3d-release-asset-' + [Guid]::NewGuid().ToString('N'))
+            try {
+              Invoke-WebRequest `
+                -Method Get `
+                -Uri ([string]$uploadedAsset.url) `
+                -Headers $assetDownloadHeaders `
+                -OutFile $downloadedAsset `
+                -UseBasicParsing
+              $localHash = (Get-FileHash -LiteralPath $localAsset -Algorithm SHA256).Hash
+              $remoteHash = (Get-FileHash -LiteralPath $downloadedAsset -Algorithm SHA256).Hash
+              if (-not [string]::Equals($localHash, $remoteHash, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Uploaded release asset SHA-256 mismatch for $expectedAsset. Release remains a draft."
+              }
+            }
+            finally {
+              if (Test-Path -LiteralPath $downloadedAsset) { Remove-Item -LiteralPath $downloadedAsset -Force -ErrorAction SilentlyContinue }
             }
           }
+
+          Assert-RemoteReleaseTagTargetsWorkflowSha
 
           $publishBody = @{ draft = $false } | ConvertTo-Json
           $publishedRelease = Invoke-RestMethod `

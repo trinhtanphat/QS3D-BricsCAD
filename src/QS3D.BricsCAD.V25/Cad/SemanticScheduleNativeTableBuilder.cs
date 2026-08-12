@@ -136,7 +136,6 @@ namespace QS3D.BricsCAD.V25.Cad
                         "BuildSemanticCustomScheduleTable",
                         currentDefinition.Id,
                         "Generated native custom schedule Table " + table.Handle + " for " + currentDefinition.Name + ".");
-                    project.Touch();
 
                     transaction.Commit();
                     committed = true;
@@ -182,7 +181,6 @@ namespace QS3D.BricsCAD.V25.Cad
                         "RemoveSemanticCustomScheduleTable",
                         normalizedId,
                         "Removed project-owned native custom schedule Table metadata/entity.");
-                    project.Touch();
                     transaction.Commit();
                     committed = true;
                 }

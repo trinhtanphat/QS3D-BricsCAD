@@ -88,6 +88,9 @@ namespace QS3D.Core.Reporting
 
         private static int[] LookupCodes(ElementCategory category)
         {
+            if (!Enum.IsDefined(typeof(ElementCategory), category))
+                throw new ArgumentOutOfRangeException(nameof(category), "Quantity rule lookup category must be defined.");
+
             var native = (int)category;
             switch (category)
             {

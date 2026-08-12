@@ -1,0 +1,23 @@
+# Agent work claim — Active Floor/Zone canonical identity repair
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-12 (UTC+7)
+- Status: `COMPLETED`
+- Outcome: `REVERTED` — the proposed behavior was based on an incorrect interpretation of the existing canonical no-op contract.
+- Baseline main SHA: `cad2ea8b733dbfc9037b2846e7e91fbb4dda732d`
+- Original merged PR: `#590`
+- Original implementation SHA: `3fa9a709307fbd9e9f1614f6b072efd2affe449f`
+- Corrective PR: `#592`
+- Corrective main SHA: `0ce741622c31fe794aa3784ac45c304309d8c2a4`
+- Original scope: make Core Floor/Zone activation persist the exact canonical project-owned ID even when the current active value differs only by whitespace or casing.
+- Audit correction:
+  - existing PR #545 intentionally defines trimmed, case-insensitive Floor/Zone active identity as a semantic no-op;
+  - semantic aliases such as padded/case-varied IDs are intentionally preserved rather than rewritten;
+  - `preflight-project-floor-zone-mutation-integrity.py` explicitly guards that behavior;
+  - therefore PR #590 was reverted and its rewrite-specific smoke assertions were removed.
+- Current contract after correction:
+  - `SetActive` resolves the requested Floor/Zone first and compares the stored active id after trimming using `OrdinalIgnoreCase`;
+  - semantic same-target activation does not `Touch()` or rewrite raw stored identity;
+  - missing targets still fail before mutation;
+  - prior #545 assignment/null-target hardening remains unchanged.
+- Validation: corrective PR #592 diff was reviewed before squash merge. GitHub Actions were not manually dispatched and no BricsCAD V25 runtime PASS is claimed from this web session.
