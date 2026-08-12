@@ -108,14 +108,14 @@ namespace QS3D.Core.Reporting
             string elementId,
             string reportName)
         {
-            if (string.IsNullOrWhiteSpace(rawId)) return;
+            if (rawId == null || string.IsNullOrWhiteSpace(rawId)) return;
             if (!existingIds.Contains(rawId))
                 throw new InvalidOperationException(reportName + " cannot be built because element '" + elementId + "' references missing " + identityName + " id '" + rawId + "'.");
         }
 
         private static void RequireCanonicalReference(string? rawId, string identityName, string elementId, string reportName)
         {
-            if (string.IsNullOrWhiteSpace(rawId)) return;
+            if (rawId == null || string.IsNullOrWhiteSpace(rawId)) return;
             var id = rawId.Trim();
             if (!string.Equals(rawId, id, StringComparison.Ordinal))
                 throw new InvalidOperationException(reportName + " cannot be built because element '" + elementId + "' has a noncanonical " + identityName + " reference id '" + rawId + "'.");
