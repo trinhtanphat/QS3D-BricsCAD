@@ -31,6 +31,7 @@ namespace QS3D.Core.Persistence
                 true);
 
             ValidateRequiredCanonicalAttribute(root, "projectId", "project id");
+            ValidateRequiredCanonicalAttribute(root, "name", "project name");
             ValidateOptionalCanonicalAttribute(root, "activeZoneId", "active zone id");
             ValidateOptionalCanonicalAttribute(root, "activeFloorId", "active floor id");
 
@@ -71,6 +72,7 @@ namespace QS3D.Core.Persistence
             {
                 ValidateElement(zone, "zone", new[] { "id", "name" }, Array.Empty<string>());
                 ValidateRequiredCanonicalAttribute(zone, "id", "zone id");
+                ValidateRequiredCanonicalAttribute(zone, "name", "zone name");
             }
         }
 
@@ -81,6 +83,7 @@ namespace QS3D.Core.Persistence
             {
                 ValidateElement(floor, "floor", new[] { "id", "name", "elevationM" }, Array.Empty<string>());
                 ValidateRequiredCanonicalAttribute(floor, "id", "floor id");
+                ValidateRequiredCanonicalAttribute(floor, "name", "floor name");
             }
         }
 
@@ -91,6 +94,7 @@ namespace QS3D.Core.Persistence
             {
                 ValidateElement(family, "family", new[] { "id", "name", "category" }, new[] { "properties" });
                 ValidateRequiredCanonicalAttribute(family, "id", "family id");
+                ValidateRequiredCanonicalAttribute(family, "name", "family name");
                 ValidateNamedCategoryAttribute(family, "family category");
                 RequireAtMostOne(family, "properties");
                 foreach (var properties in family.Elements("properties")) ValidateMap(properties, "family properties");
