@@ -77,6 +77,7 @@ namespace QS3D.Core.Selection
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
+            var inspectionVersion = project.ChangeVersion;
             var projectIndex = BuildUniqueProjectIndex(project);
             var familyIndex = BuildUniqueFamilyIndex(project);
             var requested = new List<string>();
@@ -90,6 +91,8 @@ namespace QS3D.Core.Selection
                 if (!projectIndex.ContainsKey(id)) throw new InvalidOperationException("Semantic property inspector references missing element id: " + id + ".");
                 requested.Add(id);
             }
+            if (project.ChangeVersion != inspectionVersion)
+                throw new InvalidOperationException("Project state changed while materializing semantic selection ids.");
 
             var selected = requested
                 .Select(id => projectIndex[id])
