@@ -64,7 +64,7 @@ namespace QS3D.Core.Navigation
             var index = BuildIndex(root);
 
             foreach (var elementId in selected)
-                if (!index.Root.ElementIds.Contains(elementId))
+                if (!index.Root.ElementIds.Contains(elementId, StringComparer.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Project browser selection references missing semantic element id: " + elementId + ".");
 
             var primary = NormalizePrimary(primaryElementId, selected);
