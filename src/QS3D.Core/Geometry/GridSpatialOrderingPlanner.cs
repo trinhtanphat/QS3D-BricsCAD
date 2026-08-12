@@ -70,11 +70,25 @@ namespace QS3D.Core.Geometry
                 if (!Finite(dx) || !Finite(dy))
                     throw new OverflowException("Grid LINE direction exceeds the supported numeric range for element " + id + ".");
                 var lineLength = Hypot(dx, dy);
-                if (!(lineLength > coordinateTolerance) || !Finite(lineLength))
+                if (!(lineLength > coordinateTolerance))
                     throw new InvalidOperationException("Grid LINE is degenerate within the ordering tolerance for element " + id + ".");
 
-                var lx = dx / lineLength;
-                var ly = dy / lineLength;
+                double lx;
+                double ly;
+                if (Finite(lineLength))
+                {
+                    lx = dx / lineLength;
+                    ly = dy / lineLength;
+                }
+                else
+                {
+                    var lineScale = Math.Max(Math.Abs(dx), Math.Abs(dy));
+                    var scaledLineX = dx / lineScale;
+                    var scaledLineY = dy / lineScale;
+                    var scaledLineLength = Math.Sqrt(scaledLineX * scaledLineX + scaledLineY * scaledLineY);
+                    lx = scaledLineX / scaledLineLength;
+                    ly = scaledLineY / scaledLineLength;
+                }
                 var alignment = Math.Abs(lx * ux + ly * uy);
                 if (!Finite(alignment))
                     throw new OverflowException("Grid LINE alignment exceeded the supported numeric range for element " + id + ".");
