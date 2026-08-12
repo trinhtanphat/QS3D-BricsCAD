@@ -1,6 +1,6 @@
 # Work claim — LOCAL-002/P04 Curtain bulged-path runtime probe
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local002-p04-curtain-bulged-path-runtime-probe-20260812` (`/root/audit_preflight_latest`)
 - Registered: `2026-08-12T12:40:00+07:00`
 - Baseline main SHA: `1df800d9e3c997b5ddd4a94b6f960248815664ae`
@@ -45,3 +45,10 @@ All existing production builders, readers, tessellators, planners, Health/owners
 - Merge this claim-only reservation before implementation and re-fetch active claims. Parse the runner; run focused P04/P03/P02/native/path/orchestration/runtime-health/Level/command-wiring gates, aggregate preflight and installed-reference V25 `Release|x64` build without launching BricsCAD.
 - Deliver through normal PR/squash merge without force-push or Actions, close this source-preparation claim and hand one clean exact merged-main SHA to the local licensed agent.
 - No BricsCAD launch, GitHub Actions dispatch, private/customer fixture or private runtime artifact access is authorized in this source batch. P04 and overall LOCAL-002 remain `PENDING_LOCAL` until a fresh exact-SHA run returns the full PASS/cleanup contract.
+
+## Completion
+
+- Claim-only reservation merged in PR `#883` at `3d3fc35b8b864ab47e7272a70be6ba1621a71bee`.
+- Additive probe, runner, focused gate and bounded handoff merged in PR `#892` at `0d8ecbf4589a21239b863f58d609d2a28127bcc7`.
+- Installed-reference BricsCAD V25 `Release|x64` build passed with 0 warnings / 0 errors. PowerShell parsing, P04/P03/P02, Curtain native/path/orchestration/runtime-health, Level placement, command wiring, Direct Draw P1/authoring and aggregate preflights passed.
+- No BricsCAD process, Actions workflow, private drawing or private runtime artifact was opened. The exact merged rerun candidate is `0d8ecbf4589a21239b863f58d609d2a28127bcc7`; P04 and overall LOCAL-002 remain `PENDING_LOCAL` until its guarded licensed run returns the complete PASS/cleanup contract.
