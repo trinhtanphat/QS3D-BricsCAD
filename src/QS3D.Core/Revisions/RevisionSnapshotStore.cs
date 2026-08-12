@@ -342,20 +342,12 @@ namespace QS3D.Core.Revisions
         private static double Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value) ? value : throw new InvalidDataException("Revision quantity must be finite.");
         private static DateTime Date(string? value)
         {
-            if (value == null || value.Length == 0 || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
-                throw new InvalidDataException("Invalid revision timestamp.");
-            if (!HasExplicitUtcOffset(value) || !DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var result))
-                throw new InvalidDataException("Invalid revision timestamp.");
-            return result.UtcDateTime;
-        }
-
-        private static bool HasExplicitUtcOffset(string value)
-        {
-            if (value.EndsWith("Z", StringComparison.OrdinalIgnoreCase)) return true;
-            var timeSeparator = value.IndexOf('T');
-            if (timeSeparator < 0) return false;
-            var offsetSeparator = Math.Max(value.LastIndexOf('+'), value.LastIndexOf('-'));
-            return offsetSeparator > timeSeparator;
+            if (value == null || value.Length == 0 || !string.Equals(value, value.Trim(), StringComparison.Ordinal) ||
+                !DateTime.TryParseExact(value, "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var result) ||
+                result.Kind != DateTimeKind.Utc ||
+                !string.Equals(value, result.ToString("O", CultureInfo.InvariantCulture), StringComparison.Ordinal))
+                throw new InvalidDataException("Invalid or non-canonical revision timestamp.");
+            return result;
         }
 
         private sealed class BoundedCountingStream : Stream
