@@ -10,7 +10,7 @@ namespace QS3D.Core.SmokeTests
         {
             SourceDerivedAndOwnershipFieldsAreReadOnly();
             PropertyDirtyFlagsStayPrecise();
-            SameInheritedValueIsANoOp();
+            SameInheritedValueMaterializesInstanceOverride();
             NumericMultiplyPreflightsBeforeMutation();
             FamilyAssignmentIsAllOrNothingAcrossCategories();
             DuplicateSelectionFailsBeforeMutation();
@@ -51,17 +51,26 @@ namespace QS3D.Core.SmokeTests
                 Equal(true, (element.Dirty & ElementDirtyFlags.Geometry) != 0);
         }
 
-        private static void SameInheritedValueIsANoOp()
+        private static void SameInheritedValueMaterializesInstanceOverride()
         {
             var project = BuildProject();
             foreach (var element in project.Elements) element.MarkClean(ElementDirtyFlags.All);
             var version = project.ChangeVersion;
             var service = new SemanticSelectionBulkEditService();
+
             var result = service.SetProperty(project, new[] { "B-1", "B-2" }, "FireRating", "R60");
-            Equal(0, result.ChangedCount);
+            Equal(2, result.ChangedCount);
+            Equal(true, project.ChangeVersion > version);
+            Equal("R60", project.Elements[0].Properties["FireRating"]);
+            Equal("R60", project.Elements[1].Properties["FireRating"]);
+
+            foreach (var element in project.Elements) element.MarkClean(ElementDirtyFlags.All);
+            version = project.ChangeVersion;
+            var noOp = service.SetProperty(project, new[] { "B-1", "B-2" }, "FireRating", "R60");
+            Equal(0, noOp.ChangedCount);
             Equal(version, project.ChangeVersion);
-            Equal(false, project.Elements[0].Properties.ContainsKey("FireRating"));
-            Equal(false, project.Elements[1].Properties.ContainsKey("FireRating"));
+            Equal(ElementDirtyFlags.None, project.Elements[0].Dirty);
+            Equal(ElementDirtyFlags.None, project.Elements[1].Dirty);
         }
 
         private static void NumericMultiplyPreflightsBeforeMutation()
