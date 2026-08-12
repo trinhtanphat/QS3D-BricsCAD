@@ -7,6 +7,7 @@ errors = []
 
 runtime = ROOT / "src/QS3D.BricsCAD.V25/RuntimeDiagnosticsCommands.cs"
 package = ROOT / "scripts/package-v25.ps1"
+release_package = ROOT / "scripts/package-v25-release.ps1"
 finalize = ROOT / "scripts/finalize-v25-signed-package.ps1"
 plugin_project = ROOT / "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"
 core_project = ROOT / "src/QS3D.Core/QS3D.Core.csproj"
@@ -67,7 +68,7 @@ for product, core, tag in (
     if exact_release_identity(product, core, tag):
         errors.append("exact release identity regression must reject case-only version differences")
 
-for path in (runtime, package, finalize, plugin_project, core_project) + release_workflows:
+for path in (runtime, package, release_package, finalize, plugin_project, core_project) + release_workflows:
     if not path.is_file():
         errors.append("missing customer-release source: " + str(path.relative_to(ROOT)))
 
@@ -114,6 +115,20 @@ if package.is_file():
     if "[StringComparison]::OrdinalIgnoreCase" in text:
         errors.append("package-v25.ps1 must not use case-insensitive comparison for exact release identity")
 
+if release_package.is_file():
+    text = release_package.read_text(encoding="utf-8")
+    for needle in (
+        "$packer = Join-Path $PSScriptRoot 'package-v25.ps1'",
+        "Assert-CleanRepository -Phase 'before package creation'",
+        "& $packer",
+        "Repository HEAD changed during release packaging",
+        "Assert-CleanRepository -Phase 'after package creation'",
+        "PACKAGE-METADATA gitCommit",
+        "does not match the exact clean package source HEAD",
+    ):
+        if needle not in text:
+            errors.append("package-v25-release.ps1 missing release provenance contract: " + needle)
+
 if finalize.is_file():
     text = finalize.read_text(encoding="utf-8")
     for needle in (
@@ -145,18 +160,19 @@ for workflow in release_workflows:
         continue
     text = workflow.read_text(encoding="utf-8")
     preflight_index = text.find("python scripts/preflight-all.py")
-    package_index = text.find("package-v25.ps1")
+    package_boundary = "package-v25-release.ps1" if workflow.name == "release-v25.yml" else "package-v25.ps1"
+    package_index = text.find(package_boundary)
     publish_index = text.lower().find("publish github ")
     if preflight_index < 0:
         errors.append(workflow.name + " must run aggregate preflight before release packaging")
     if package_index < 0:
-        errors.append(workflow.name + " must use package-v25.ps1 as the release package boundary")
+        errors.append(workflow.name + " must use " + package_boundary + " as the release package boundary")
     if publish_index < 0:
         errors.append(workflow.name + " is missing the GitHub release/prerelease publish step")
     if preflight_index >= 0 and package_index >= 0 and preflight_index >= package_index:
-        errors.append(workflow.name + " must run aggregate preflight before package-v25.ps1")
+        errors.append(workflow.name + " must run aggregate preflight before " + package_boundary)
     if package_index >= 0 and publish_index >= 0 and package_index >= publish_index:
-        errors.append(workflow.name + " must run package-v25.ps1 before publishing the GitHub release/prerelease")
+        errors.append(workflow.name + " must run " + package_boundary + " before publishing the GitHub release/prerelease")
 
 print("QS3D customer release preflight")
 if errors:
@@ -168,6 +184,6 @@ if errors:
 print(
     "PASS: customer diagnostics are registered, shared V25/V26 runtime major and x64 checks are pinned in-product, "
     "plugin/Core product versions are strict SemVer and exact-case aligned, RELEASE_TAG is exact-case/version-bound, "
-    "release workflows execute the strict package boundary before publication, "
+    "stable release packaging is provenance-wrapped while cloud preview retains its canonical package boundary, "
     "and finalized signed metadata records the verified publisher."
 )
