@@ -4,7 +4,7 @@ This repository is expected to have multiple agents working concurrently. Every 
 
 ## Locked product form: BricsCAD plugin
 
-QS3D is a **BricsCAD V25 x64 .NET plugin**, not a standalone CAD desktop executable. BricsCAD is required at runtime; the native BricsCAD viewport/database/editor remain the CAD host. `QS3D.BricsCAD.V25` builds as a library/DLL and is loaded by DemandLoad or `NETLOAD`.
+QS3D is a **BricsCAD V25 + V26 Windows x64 hosted plugin**, not a standalone CAD desktop executable. A matching licensed BricsCAD host is required at runtime; the native BricsCAD viewport/database/editor remain the CAD host. V25 loads the `QS3D.BricsCAD.V25` Library/DLL built for `net48`, while V26 loads the `QS3D.BricsCAD.V26` Library/DLL built for `net8.0-windows`; each host-major assembly is loaded by the matching BricsCAD host through DemandLoad or `NETLOAD` and must never be relabeled across majors.
 
 `BLT-like`, `BLT-style`, `BLT3D-familiar`, “giống BLT” and similar wording refer to clean-room **workflow/UX familiarity only**. Do not reinterpret those phrases, modeless/full-screen window wording, or the CAD-independent `QS3D.Core` layer as a requirement for `QS3D.exe` or a QS3D-owned CAD engine.
 
