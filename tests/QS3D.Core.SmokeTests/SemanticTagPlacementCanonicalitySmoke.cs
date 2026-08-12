@@ -96,7 +96,7 @@ namespace QS3D.Core.SmokeTests
         private static Setup Create(string suffix)
         {
             var project = new ProjectState("P-Semantic-Tag-Placement-" + suffix, "Semantic Tag placement canonicality smoke");
-            var element = new ProjectElement("Semantic-Tag-Placement-" + suffix, ElementCategory.Wall);
+            var element = new ProjectElement("Semantic-Tag-Placement-" + suffix, ElementCategory.ArchitecturalWall);
             element.Properties[GeneratedSemanticTagHealthService.HandlesKey] = "A";
             element.Properties[GeneratedSemanticTagHealthService.TemplateKey] = "{Id}";
             element.Properties[GeneratedSemanticTagHealthService.TextKey] = element.Id;
