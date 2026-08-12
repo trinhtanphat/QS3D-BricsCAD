@@ -147,6 +147,12 @@ Baseline audited and synchronized before this expansion: `origin/main@522d06ff`.
 
 Reserve only `src/QS3D.Core/Geometry/RoomBoundaryEngine.cs` to compute the same orthogonal projection parameter from separately scaled direction and delta components, avoiding component-product overflow and the avoidable square-root round trip. Keep `tests/QS3D.Core.SmokeTests/RoomBoundaryIntersectionArithmeticSmoke.cs` unchanged as the regression authority. Preserve graph topology, snapping, collinearity/tolerance policy, endpoint reconstruction, face traversal and all native/UI behavior. The owning claim `2026-08-12-0720-gpt56sol-room-boundary-intersection-arithmetic.md` and neighboring snap-cell claim are `COMPLETED`; no ACTIVE claim reserves this exact arithmetic surface. Re-run the complete Core smoke after the focused production repair.
 
+## 2026-08-12 Rebar notation bounds smoke compile reconciliation expansion
+
+Baseline audited and synchronized before this expansion: `origin/main@3a766aeb`. The next full Core smoke compile reaches `tests/QS3D.Core.SmokeTests/RebarNotationBoundsSmoke.cs`, where the completed regression checks `SpacingMm.HasValue` and then re-reads the nullable property through `.Value`; nullable flow analysis does not assume two property reads return the same value, so the strict warnings-as-errors build fails with `CS8629`.
+
+Reserve only that released smoke file to use `GetValueOrDefault()` after the existing `HasValue` short-circuit, preserving the exact 200 mm assertion and all parser-boundary fixtures. Do not edit `RebarNotationParser`, notation capacities, grammar or production rebar behavior. The owning bounds claim is `COMPLETED`; the ACTIVE rebar-ownership health claim is unrelated and remains excluded. Re-run the complete Core smoke after this compile-only reconciliation.
+
 ## 2026-08-11 source-safe wave heartbeat
 
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
