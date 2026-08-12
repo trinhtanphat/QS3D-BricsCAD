@@ -65,17 +65,41 @@ def main():
     require(commands, "Application.DocumentManager.DocumentActivated -= OnDocumentActivated;", "active-DWG refresh unsubscription")
     require(commands, "private static void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)", "BricsCAD document activation handler")
     require(commands, "window.RefreshFromActiveDocument();", "active-DWG refresh callback")
-    require(commands, "_window.Closed += OnStartCenterClosed;", "named Start Center close lifecycle")
+    require(commands, "StartCenterWindow? createdWindow = null;", "new Start Center ownership tracking")
+    require(commands, "createdWindow = new StartCenterWindow();", "new Start Center instance capture")
+    require(commands, "createdWindow.Closed += OnStartCenterClosed;", "named Start Center close lifecycle")
     require(commands, "_documentActivatedSubscribed", "idempotent activation subscription guard")
+    show_method = section(
+        commands,
+        "public void ShowStartCenter()",
+        "private static void SubscribeToDocumentActivation",
+        "Start Center show lifecycle")
+    require(show_method, "if (createdWindow != null)", "failed-open ownership check")
+    require(show_method, "ReleaseStartCenterWindow(createdWindow);", "failed-open lifecycle rollback")
+    cleanup_pos = show_method.find("ReleaseStartCenterWindow(createdWindow);")
+    diagnostic_pos = show_method.find('document?.Editor.WriteMessage("\\nQS3DSTART error: " + ex.Message);')
+    if cleanup_pos < 0 or diagnostic_pos < 0 or cleanup_pos > diagnostic_pos:
+        raise AssertionError("failed-open Start Center ownership must be released before command diagnostics")
     activation_handler = section(
         commands,
         "private static void OnDocumentActivated",
-        "private static void OnStartCenterClosed",
+        "private static void ReleaseStartCenterWindow",
         "BricsCAD document activation handler")
     require(activation_handler, "try", "activation refresh exception boundary")
     require(activation_handler, "catch (System.Exception ex)", "activation refresh exception containment")
     require(activation_handler, 'e.Document?.Editor.WriteMessage("\\nQS3DSTART refresh warning: " + ex.Message);', "activation refresh diagnostic")
     require(activation_handler, "catch (System.Exception)", "activation diagnostic exception containment")
+    release_handler = section(
+        commands,
+        "private static void ReleaseStartCenterWindow",
+        "private static void OnStartCenterClosed",
+        "Start Center lifecycle release")
+    require(release_handler, "if (!ReferenceEquals(window, _window)) return;", "exact Start Center ownership guard")
+    require(release_handler, "window.Closed -= OnStartCenterClosed;", "failed/closed window handler release")
+    require(release_handler, "UnsubscribeFromDocumentActivation();", "failed/closed activation subscription release")
+    require(release_handler, "_window = null;", "failed/closed singleton release")
+    require(commands, "if (sender is StartCenterWindow window)", "typed Start Center close owner")
+    require(commands, "ReleaseStartCenterWindow(window);", "normal close shared lifecycle release")
     forbid(commands, "_window.Closed += (_, __) => _window = null;", "anonymous Start Center close lifecycle")
     forbid(commands, "Process.Start", "Start Center command surface")
 
@@ -208,7 +232,7 @@ def main():
     require(quantity_settings_health, '[CommandMethod("QS3DQSETTINGSHEALTHEXPORT", CommandFlags.Modal)]', "quantity-settings-health source registration")
     require(quantity_rule_create, '[CommandMethod("QS3DRULECREATE", CommandFlags.Modal)]', "quantity-rule-create source registration")
 
-    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, activation-fail-soft, optional-state-fail-soft, stream-size-bounded, write-size-bounded, malformed-Unicode-safe, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
+    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, activation-fail-soft, failed-open-rollback-safe, optional-state-fail-soft, stream-size-bounded, write-size-bounded, malformed-Unicode-safe, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
     return 0
 
 
