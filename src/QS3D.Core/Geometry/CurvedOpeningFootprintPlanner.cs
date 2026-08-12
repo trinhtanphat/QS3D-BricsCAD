@@ -32,6 +32,8 @@ namespace QS3D.Core.Geometry
 
     public static class CurvedOpeningFootprintPlanner
     {
+        private const int MaxCenterlinePoints = 8192;
+
         private sealed class Segment
         {
             public int Index { get; set; }
@@ -54,6 +56,7 @@ namespace QS3D.Core.Geometry
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
             if (input.Centerline == null || input.Centerline.Count < 2) throw new ArgumentException("Curved host centerline requires at least two points.", nameof(input.Centerline));
+            if (input.Centerline.Count > MaxCenterlinePoints) throw new InvalidOperationException("Curved host centerline exceeds the supported point budget of " + MaxCenterlinePoints + ".");
             Positive(input.OpeningWidthM, nameof(input.OpeningWidthM));
             Positive(input.HostThicknessM, nameof(input.HostThicknessM));
             NonNegative(input.ClearanceM, nameof(input.ClearanceM));
