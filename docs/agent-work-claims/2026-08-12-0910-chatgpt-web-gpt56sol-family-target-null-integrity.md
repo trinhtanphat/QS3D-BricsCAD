@@ -1,39 +1,37 @@
 # Work claim — Family target operations null collection integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-family-target-null-integrity-20260812-0910`
 - Registered: `2026-08-12T09:10:00+07:00`
+- Completed: `2026-08-12T09:13:00+07:00`
 - Baseline main SHA: `55301299f8878eee87ef447aa110bb98cd01af73`
 - Priority: P1 — Family target operations must fail closed when the project Family collection itself is structurally invalid.
 
-## Reserved scope
+## Completed scope
 
-Harden `ProjectFamilyService` target-based operations so any `null` entry in `project.Families` is rejected before resolving or using a target Family. The completed global-duplicate helper currently skips null entries, while `Create` already rejects them explicitly; this leaves target operations able to mutate or return results from malformed Family state.
+`ProjectFamilyService` target-based operations now reject any `null` entry in `project.Families` before resolving or using a target Family. The completed global-duplicate helper no longer silently skips malformed null entries, aligning target operations with the existing Create structural-null contract.
 
-## Expected surfaces
+## Pushed implementation
 
-- `src/QS3D.Core/Domain/ProjectFamilyService.cs`
-- focused Core smoke coverage under `tests/QS3D.Core.SmokeTests/`
-- this claim file
+- Claim registration: `4fba2a8fd11c74e5cb79b416ba7c4142ec229fb2`
+- Source fix: `eb752d4305e91be94ce1011be3ec055a8ec170dc`
+- Focused Core smoke: `84553f6bd91e1153684b643c9fff7505d27a8325`
 
-## Excluded scope
+## Validation evidence
 
-- Family Create null/duplicate lanes already completed.
-- null entries in the `elements` argument to Family assignment, already completed under the older assign null-target lane.
-- Family activation/UI state, FamilyWindow, audit/no-op behavior, templates, persistence/interchange, Floor/Zone services, native BricsCAD adapters, Actions/release.
+- Readback from current `main` confirms `ValidateUniqueFamilyIds(project)` throws `InvalidOperationException("Project family collection contains a null family.")` instead of continuing past a null Family entry.
+- `ProjectFamilyGlobalNullIntegritySmoke` covers `Duplicate`, `Rename`, `SetProperty`, `RemoveProperty`, `Assign`, `Delete`, and `ReferenceCount` against a valid target plus unrelated null Family state.
+- The smoke snapshots Family count/name/property, element FamilyId, `ChangeVersion`, and `UpdatedUtc` across rejected operations, and includes valid rename/assign/reference-count controls.
+- Connector ancestry check confirmed source commit `eb752d4305e91be94ce1011be3ec055a8ec170dc` remained an ancestor of moving `main`; subsequent concurrent files were outside this reserved scope.
+- Test source was read back from current `main` after push.
 
-## Validation plan
+## Excluded / remaining validation
 
-- Seed a valid target Family plus an unrelated `null` Family collection entry.
-- Prove representative target mutation paths reject before `ProjectState.ChangeVersion`, Family/property/member state changes or collection removal/addition.
-- Prove read-only `ReferenceCount` also rejects malformed Family state.
-- Preserve valid target behavior and completed duplicate-ID enforcement.
-- Inspect exact source/test diff and ancestry after refreshing moving `main`; do not claim GitHub Actions or licensed BricsCAD runtime PASS.
-
-## Coordination
-
-This lane builds on completed Family global-duplicate implementation `44779226f6fe49129cbc82c830b79232cc80426f` and regression `d5509b126a59b7753c459c4b7c0ee0f137ffed80`. The current Family activation global-duplicate reservation owns `FamilyWindow`/activation surfaces, not `ProjectFamilyService` CRUD/property/member operations. The HostLink global-element claim is independent.
+- Family Create null/duplicate lanes and Family assignment null-element lane remain separate completed work.
+- Family activation/UI state, FamilyWindow, audit/no-op behavior, templates, persistence/interchange, Floor/Zone services, and native BricsCAD adapters were not changed.
+- GitHub Actions were not dispatched because the owner request was `continue all fix bug update code`, which is not CI authorization under `CI_POLICY.md`.
+- No local compile, executable smoke run, or licensed BricsCAD V25/V26 runtime PASS is claimed from this web session.
 
 ## Completion condition
 
-The common Family identity preflight fails closed on null collection entries for all target operations, focused deterministic Core smoke coverage is pushed, and this claim is marked `COMPLETED` without dispatching Actions.
+`COMPLETED`: target Family operations fail closed on null Family collection entries, focused deterministic Core smoke coverage is present on `main`, ownership is released, and no concurrent work was overwritten.
