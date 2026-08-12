@@ -91,13 +91,14 @@ namespace QS3D.Core.Export
                 ValidateCellText(row.FabricationStatus, index, "Fabrication Status");
                 ValidateCellText(row.FabricationStandardCode, index, "Standard Code");
                 ValidateCellText(row.FabricationDetailingRevision, index, "Detailing Revision");
-                ValidateFinite(row.DiameterMm, index, "DiameterMm");
-                ValidateFinite(row.CuttingLengthM, index, "CuttingLengthM");
-                ValidateFinite(row.TotalLengthM, index, "TotalLengthM");
-                ValidateFinite(row.UnitWeightKgM, index, "UnitWeightKgM");
-                ValidateFinite(row.NetWeightKg, index, "NetWeightKg");
-                ValidateFinite(row.WastePercent, index, "WastePercent");
-                ValidateFinite(row.TotalWeightKg, index, "TotalWeightKg");
+                ValidatePositive(row.DiameterMm, index, "DiameterMm");
+                ValidatePositive(row.Quantity, index, "Quantity");
+                ValidateNonNegative(row.CuttingLengthM, index, "CuttingLengthM");
+                ValidateNonNegative(row.TotalLengthM, index, "TotalLengthM");
+                ValidateNonNegative(row.UnitWeightKgM, index, "UnitWeightKgM");
+                ValidateNonNegative(row.NetWeightKg, index, "NetWeightKg");
+                ValidateNonNegative(row.WastePercent, index, "WastePercent");
+                ValidateNonNegative(row.TotalWeightKg, index, "TotalWeightKg");
                 snapshot.Add(row);
             }
             return snapshot;
@@ -112,13 +113,31 @@ namespace QS3D.Core.Export
                 " field '" + field + "' exceeds Excel's " + MaxCellTextLength.ToString(CultureInfo.InvariantCulture) + "-character cell text limit.");
         }
 
-        private static void ValidateFinite(double value, int rowIndex, string field)
+        private static void ValidatePositive(double value, int rowIndex, string field)
         {
-            if (!double.IsNaN(value) && !double.IsInfinity(value)) return;
+            if (!double.IsNaN(value) && !double.IsInfinity(value) && value > 0d) return;
             throw new ArgumentOutOfRangeException(
                 "rows",
                 "BBS XLSX worksheet row " + (rowIndex + HeaderRows + 1).ToString(CultureInfo.InvariantCulture) +
-                " field '" + field + "' must be finite.");
+                " field '" + field + "' must be finite and greater than zero.");
+        }
+
+        private static void ValidatePositive(int value, int rowIndex, string field)
+        {
+            if (value > 0) return;
+            throw new ArgumentOutOfRangeException(
+                "rows",
+                "BBS XLSX worksheet row " + (rowIndex + HeaderRows + 1).ToString(CultureInfo.InvariantCulture) +
+                " field '" + field + "' must be greater than zero.");
+        }
+
+        private static void ValidateNonNegative(double value, int rowIndex, string field)
+        {
+            if (!double.IsNaN(value) && !double.IsInfinity(value) && value >= 0d) return;
+            throw new ArgumentOutOfRangeException(
+                "rows",
+                "BBS XLSX worksheet row " + (rowIndex + HeaderRows + 1).ToString(CultureInfo.InvariantCulture) +
+                " field '" + field + "' must be finite and non-negative.");
         }
 
         private static string BuildSheet(IReadOnlyList<RebarScheduleRow> rows, int rowCount)
