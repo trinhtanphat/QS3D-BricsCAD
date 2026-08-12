@@ -284,7 +284,14 @@ namespace QS3D.Core.Domain
 
         private static string Decode(string value)
         {
-            try { return StrictUtf8.GetString(Convert.FromBase64String(value ?? string.Empty)); }
+            try
+            {
+                var encoded = value ?? string.Empty;
+                var bytes = Convert.FromBase64String(encoded);
+                if (!string.Equals(Convert.ToBase64String(bytes), encoded, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Material catalog contains non-canonical Base64 data.");
+                return StrictUtf8.GetString(bytes);
+            }
             catch (Exception ex) when (ex is FormatException || ex is DecoderFallbackException)
             {
                 throw new InvalidOperationException("Material catalog contains invalid Base64 or UTF-8 data.", ex);
