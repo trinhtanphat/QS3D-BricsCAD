@@ -1,40 +1,42 @@
 # Work claim — release #29 atomic file fallback preflight reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-release29-atomic-file-preflight`
 - Registered: `2026-08-12T09:06:00+07:00`
+- Completed: `2026-08-12T09:07:00+07:00`
 - Baseline main SHA: `2d9966df19226e4eb6ef0694451c13247e56c409`
-- Priority: QS3D Cloud V25 Preview Build & Release #29 first aggregate failure is a stale AtomicFileCommit exact-token gate; current production already routes fallback through normalized validated paths.
+- Claim commit: `0be40ed5a9e4cd991ca78d0057929296dc508d2c`
+- Implementation commit: `09af1507b2a20016845d5f56c2b5033a59a94403`
+- Priority: QS3D Cloud V25 Preview Build & Release #29 first aggregate failure was a stale AtomicFileCommit exact-token gate; current production already routes fallback through normalized validated paths.
 
-## Reserved scope
+## Implemented scope
 
-Reconcile only `scripts/preflight-atomic-file-fallback.py` with the current `AtomicFileCommit` validated-path fallback contract. Preserve production recovery semantics and the existing deterministic smoke source unchanged unless an independent defect is proven.
+Reconciled only `scripts/preflight-atomic-file-fallback.py` with the current `AtomicFileCommit` validated-path fallback contract. Production recovery semantics and the existing deterministic smoke source remain unchanged.
 
-## Expected surfaces
+## Changed surface
 
 - `scripts/preflight-atomic-file-fallback.py`
 - this claim file for close-out
 
-## Excluded scope
+## Validation evidence
+
+- Current production source was re-read before implementation and already contained `Validate(tempPath, destinationPath, out var temp, out var destination);` plus both fallback calls through normalized `temp` / `destination` variables.
+- The stale gate had required superseded raw caller literals using `tempPath`.
+- Implementation `09af1507b2a20016845d5f56c2b5033a59a94403` now requires the validation-normalization call plus `MoveWithRecovery(temp, destination, backup, keepBackup: true);` and `MoveWithRecovery(temp, destination, safetyBackup, keepBackup: false);`.
+- Final preflight blob `818da70e0c4ef3bca11a78aabc9000a909c7fcee` still retains every internal prior-backup/recovery marker and every unsafe-pattern prohibition from the previous gate.
+- Claim commit ancestry was verified after publication; concurrent movement immediately after the claim touched an unrelated Floor/Zone claim only.
+
+## Excluded / unchanged
 
 - No changes to `src/QS3D.Core/Persistence/AtomicFileCommit.cs`.
 - No changes to `tests/QS3D.Core.SmokeTests/AtomicFileCommitFallbackSmoke.cs`.
-- No backup/recovery semantic changes, no QSDB/session changes, no unrelated run #29 failures.
+- No backup/recovery semantic changes, QSDB/session changes, or unrelated run #29 failure changes in this lane.
 - No GitHub Actions dispatch, build/release publication, or BricsCAD runtime qualification.
 
-## Validation plan
+## Validation boundary
 
-- Require `Validate(tempPath, destinationPath, out var temp, out var destination);` so fallback callers remain bound to normalized validated paths.
-- Require `MoveWithRecovery(temp, destination, backup, keepBackup: true);` and `MoveWithRecovery(temp, destination, safetyBackup, keepBackup: false);`.
-- Retain all existing internal prior-backup/recovery tokens and all unsafe-pattern prohibitions.
-- Re-fetch moving `main`, source and preflight immediately before the write; do not overwrite concurrent work.
-- Read back the final preflight and verify the implementation commit remains an ancestor of current `main`.
-- Do not claim aggregate feature PASS without a newer manual run.
-
-## Coordination
-
-Current observed active claims cover Family activation, QSDB persistence, Grid/Semantic runtime health, diagnostic smoke and other unrelated lanes. No discovered reservation owns `scripts/preflight-atomic-file-fallback.py` or the AtomicFileCommit fallback gate.
+Remote source/static readback only. This session did not execute the preflight process, aggregate suite, full .NET build/test, or licensed BricsCAD runtime. A newer manual workflow run is required before claiming aggregate PASS.
 
 ## Completion condition
 
-The AtomicFileCommit feature gate matches the current normalized fallback calls, still pins prior-backup recovery and forbidden unsafe patterns, the change is pushed to `main`, and this claim is closed with exact SHA/readback evidence.
+Satisfied: the AtomicFileCommit feature gate matches current normalized fallback calls, still pins prior-backup recovery and unsafe-pattern prohibitions, and the implementation is on `main` with exact readback evidence.
