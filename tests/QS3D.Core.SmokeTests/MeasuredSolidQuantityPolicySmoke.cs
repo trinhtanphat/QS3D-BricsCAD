@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
             RemovesPolicyOwnedVolumesWhenSourceDisappears();
             PreservesIndependentVolumeOverride();
             RemovesPolicyOwnedVolumesWhenCategoryBecomesUnsupported();
+            CleanupMarksPreviouslyCleanElementQuantityDirty();
+            NoRemovalLeavesCleanElementClean();
         }
 
         private static void RemovesPolicyOwnedVolumesWhenSourceDisappears()
@@ -51,6 +53,35 @@ namespace QS3D.Core.SmokeTests
             Missing(element, "MeasuredSolidVolumeM3");
             Missing(element, "GrossVolumeM3");
             Missing(element, "NetVolumeM3");
+        }
+
+        private static void CleanupMarksPreviouslyCleanElementQuantityDirty()
+        {
+            var element = CreateMeasuredBeam();
+            element.MarkClean(ElementDirtyFlags.All);
+            element.Properties.Remove(MeasuredSolidQuantityPolicy.VolumeProperty);
+
+            if (element.Dirty != ElementDirtyFlags.None)
+                throw new Exception("Measured solid cleanup regression precondition requires a clean element.");
+            if (!MeasuredSolidQuantityPolicy.Apply(element))
+                throw new Exception("Measured solid cleanup must report handled when policy-owned outputs are removed.");
+
+            if (element.Dirty != ElementDirtyFlags.Quantity)
+                throw new Exception("Measured solid cleanup must mark exactly Quantity dirty on a previously clean element.");
+            Missing(element, "MeasuredSolidVolumeM3");
+            Missing(element, "GrossVolumeM3");
+            Missing(element, "NetVolumeM3");
+        }
+
+        private static void NoRemovalLeavesCleanElementClean()
+        {
+            var element = new ProjectElement("R1", ElementCategory.Room);
+            element.MarkClean(ElementDirtyFlags.All);
+
+            if (MeasuredSolidQuantityPolicy.Apply(element))
+                throw new Exception("Measured solid policy must not report handled when no measured inputs or stale outputs exist.");
+            if (element.Dirty != ElementDirtyFlags.None)
+                throw new Exception("Measured solid no-op must not invent dirty state.");
         }
 
         private static ProjectElement CreateMeasuredBeam()
