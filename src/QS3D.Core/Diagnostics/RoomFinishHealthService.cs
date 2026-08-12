@@ -33,12 +33,12 @@ namespace QS3D.Core.Diagnostics
                 {
                     roomId = AutoRoomLifecycle.ResolveRoomReferenceId(project, finish);
                 }
-                catch (InvalidOperationException ex)
+                catch (InvalidOperationException)
                 {
                     issues.Add(new ModelHealthIssue(
                         "ROOM_PROVENANCE_CONFLICT",
                         HealthSeverity.Error,
-                        "HT_Phòng có Room provenance không thể phân giải an toàn: " + ex.Message,
+                        "HT_Phòng có Room provenance mâu thuẫn và không thể phân giải an toàn. Cần sửa Room provenance trước khi quantity/release.",
                         finish.Id));
                     continue;
                 }
