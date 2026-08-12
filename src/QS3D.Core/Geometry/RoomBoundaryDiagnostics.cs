@@ -108,6 +108,8 @@ namespace QS3D.Core.Geometry
             if (source == null) throw new ArgumentNullException(nameof(source));
             if (double.IsNaN(minimumArea) || double.IsInfinity(minimumArea) || minimumArea < 0d)
                 throw new ArgumentOutOfRangeException(nameof(minimumArea));
+            if (double.IsNaN(tolerance) || double.IsInfinity(tolerance) || tolerance <= 0d)
+                throw new ArgumentOutOfRangeException(nameof(tolerance));
 
             var segments = source.Take(MaxInputSegments + 1).ToList();
             if (segments.Count > MaxInputSegments)
