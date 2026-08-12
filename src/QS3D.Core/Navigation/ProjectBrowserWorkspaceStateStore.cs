@@ -255,6 +255,12 @@ namespace QS3D.Core.Navigation
                     throw new InvalidDataException("Project browser workspace query is non-canonical.");
                 if (!string.Equals(primaryRaw, state.PrimaryElementId, StringComparison.Ordinal))
                     throw new InvalidDataException("Project browser workspace primary element id is non-canonical.");
+                if (!categories.SequenceEqual(state.Categories) ||
+                    !floorIds.SequenceEqual(state.FloorIds, StringComparer.Ordinal) ||
+                    !zoneIds.SequenceEqual(state.ZoneIds, StringComparer.Ordinal) ||
+                    !expanded.SequenceEqual(state.ExpandedPaths, StringComparer.Ordinal) ||
+                    !selected.SequenceEqual(state.SelectedElementIds, StringComparer.Ordinal))
+                    throw new InvalidDataException("Project browser workspace collections are non-canonical.");
                 return state;
             }
             catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
