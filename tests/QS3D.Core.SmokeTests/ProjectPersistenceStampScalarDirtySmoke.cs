@@ -8,11 +8,11 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
-            DetectsDirectPersistedScalarChangesWithoutRevisionAdvance();
+            DetectsPersistedScalarChangesWithSingleRevisionAdvance();
             MarkSavedRefreshesPersistedScalarSnapshot();
         }
 
-        private static void DetectsDirectPersistedScalarChangesWithoutRevisionAdvance()
+        private static void DetectsPersistedScalarChangesWithSingleRevisionAdvance()
         {
             AssertScalarMutationDetected(project => project.DrawingPath = "C:\\Models\\A.dwg", "DrawingPath");
             AssertScalarMutationDetected(project => project.DrawingFingerprint = "DWG-FP-1", "DrawingFingerprint");
@@ -44,8 +44,15 @@ namespace QS3D.Core.SmokeTests
             Require(!stamp.RequiresSave(project), label + " baseline unexpectedly required save.");
             mutate(project);
 
-            Require(project.ChangeVersion == beforeChangeVersion, label + " unexpectedly advanced ChangeVersion; regression no longer targets direct scalar mutation.");
-            Require(stamp.RequiresSave(project), label + " direct persisted scalar change was reported clean.");
+            Require(project.ChangeVersion == checked(beforeChangeVersion + 1L), label + " did not advance ChangeVersion exactly once.");
+            Require(stamp.RequiresSave(project), label + " persisted scalar change was reported clean.");
+
+            stamp.MarkSaved(project);
+            var savedChangeVersion = project.ChangeVersion;
+            mutate(project);
+
+            Require(project.ChangeVersion == savedChangeVersion, label + " canonical no-op unexpectedly advanced ChangeVersion.");
+            Require(!stamp.RequiresSave(project), label + " canonical no-op unexpectedly required save.");
         }
 
         private static void Require(bool value, string message)
