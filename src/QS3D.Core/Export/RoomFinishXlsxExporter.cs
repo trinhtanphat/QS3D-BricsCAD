@@ -32,6 +32,9 @@ namespace QS3D.Core.Export
                 ValidateCellText(row.UnitHint, rowIndex, "UnitHint");
                 ValidateJoinedCellText(row.ElementIds, rowIndex, "ElementIds");
                 ValidateJoinedCellText(row.RoomIds, rowIndex, "RoomIds");
+                ValidateFinite(row.PrimaryQuantity, rowIndex, "PrimaryQuantity");
+                ValidateFinite(row.LengthM, rowIndex, "LengthM");
+                ValidateFinite(row.AreaM2, rowIndex, "AreaM2");
             }
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
@@ -124,6 +127,14 @@ namespace QS3D.Core.Export
                         "rows",
                         "Room-finish XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
             }
+        }
+
+        private static void ValidateFinite(double value, int rowIndex, string fieldName)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Room-finish XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be finite.");
         }
 
         private static void StringCell(StringBuilder sb, string cellRef, string value, int style)
