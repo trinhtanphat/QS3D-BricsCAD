@@ -81,7 +81,10 @@ namespace QS3D.Core.Services
             if (!ReferenceEquals(canonicalHost, host))
                 throw new InvalidOperationException("Physical opening cut host is detached from the current project instance: " + host.Id + ".");
 
+            var targetEnumerationVersion = project.ChangeVersion;
             var ids = Normalize(openingIds);
+            if (project.ChangeVersion != targetEnumerationVersion)
+                throw new InvalidOperationException("Project changed while physical opening target ids were being enumerated; recompute the target set against the current project state.");
             if (ids.Count == 0)
                 throw new InvalidOperationException("Host " + host.Id + " physical opening target-state cannot be empty.");
 
