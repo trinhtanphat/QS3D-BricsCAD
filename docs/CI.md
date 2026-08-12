@@ -2,111 +2,129 @@
 
 ## Repository policy
 
-The repository-wide source of truth is `CI_POLICY.md` at the project root. Multi-agent coordination rules are in `AGENTS.md`.
+The repository-wide source of truth is `CI_POLICY.md`. GitHub Actions on `main` are owner-controlled and **manual-only**:
 
-GitHub Actions on `main` are owner-controlled and manual-only:
+- every workflow must use `workflow_dispatch` as its only trigger;
+- every executable job must hard-guard `github.event_name == 'workflow_dispatch'`;
+- commits, pushes, merges, fixes, reviews, documentation changes and `continue all` do not authorize an Actions run;
+- preparing or editing a workflow is not permission to dispatch it;
+- release workflows additionally require explicit `confirm_release=RELEASE`.
 
-- every workflow must remain `workflow_dispatch` only;
-- every executable workflow job is additionally guarded by `github.event_name == 'workflow_dispatch'`;
-- documentation-only, `*.md`, `docs/**`, `docs:` and `chore:` changes do not need GitHub CI;
-- commits, pushes, merges, reviews, refactors, fixes, handoffs, or `continue all` instructions do not authorize an Actions run by themselves;
-- even source-code changes do not automatically authorize CI;
-- dispatch or re-run GitHub Actions only when the repository owner explicitly requests a CI/build/test/runtime/release run;
-- preparing/editing a workflow is not permission to execute it.
+`scripts/preflight-ci-manual-only.py` enforces these rules across all workflow YAML files and is auto-discovered by `scripts/preflight-all.py`.
 
-Do not add `push`, `pull_request`, `pull_request_target`, `schedule`, `workflow_run`, `workflow_call`, `repository_dispatch`, release-event, deployment-event or any other automatic/event-driven trigger unless the owner explicitly changes this policy.
-
-`scripts/preflight-ci-manual-only.py` enforces this rule across every `.yml`/`.yaml` workflow and requires the manual-event guard on every executable job. It is auto-discovered by `scripts/preflight-all.py`.
-
-Because multiple agents may commit concurrently, sync the latest `main` before making changes and again immediately before shared-file writes. Never overwrite newer concurrent work.
+Because multiple agents may write concurrently, refresh current `main` before shared-file writes and never overwrite another lane.
 
 ## Manual workflows
 
-### Hosted Core/static CI
+### Core/static
 
 `.github/workflows/ci.yml`
 
-- manual dispatch only;
-- Windows hosted runner;
-- generic + feature preflight;
-- compile `QS3D.Core`;
-- run package-free deterministic smoke tests.
+- hosted Windows runner;
+- generic + auto-discovered source preflights;
+- Core Release build;
+- deterministic Core smoke tests;
+- no BricsCAD installation required.
 
-No BricsCAD installation is required.
-
-### V25 integration build/runtime
+### BricsCAD V25 integration
 
 `.github/workflows/bricscad-v25.yml`
 
-- manual dispatch only;
-- never dispatch automatically after commit/push/merge;
-- compiles the V25 adapter against a licensed self-hosted BricsCAD V25 installation;
-- can run NETLOAD/runtime/screenshot evidence when explicitly requested;
-- runtime/artifact paths use the x64 Release output `bin/x64/Release/net48`.
+- self-hosted Windows x64 runner labeled `bricscad-v25`;
+- `BRICSCAD_V25_DIR` external host references;
+- V25 adapter build from `bin/x64/Release/net48`;
+- optional licensed NETLOAD/runtime evidence when explicitly dispatched.
+
+### BricsCAD V26 integration
+
+`.github/workflows/bricscad-v26.yml`
+
+- self-hosted Windows x64 runner labeled `bricscad-v26`;
+- .NET 8 SDK + Microsoft Windows Desktop Runtime 8.x;
+- `BRICSCAD_V26_DIR` must resolve a `bricscad.exe` with file major 26 plus V26 `BrxMgd.dll` / `TD_Mgd.dll`;
+- V26 adapter build from `bin/x64/Release/net8.0-windows`;
+- optional licensed V26 NETLOAD/runtime evidence through `scripts/test-bricscad-v26-runtime.ps1`.
 
 ### Focused source gates
 
-- `.github/workflows/curved-opening.yml` — curved-opening source/Core validation.
-- `.github/workflows/geometry-extensions.yml` — geometry-extension source/Core validation.
-- `.github/workflows/project-data-gate.yml` — Zone/Floor/Family/Material/Project Tools/project-assignment-integrity validation plus Core build/smoke.
-- `.github/workflows/schedule-gate.yml` — Schedule Hub, Material usage, Door/Opening schedule, Room Finish schedule/UI and Core build/smoke validation.
+Focused workflows such as curved-opening, geometry, project-data and schedule gates remain manual-only and also execute the strict manual-CI policy preflight.
 
-Focused gates remain manual-only and also run the strict manual-CI policy preflight.
+## Manual release workflows
 
-### Manual build + GitHub Release
+### V25
 
 `.github/workflows/release-v25.yml`
 
-- manual `workflow_dispatch` only;
-- hard-guarded to the manual event;
-- requires a `release_tag` and explicit `confirm_release=RELEASE`;
-- runs source/preflight/Core/V25 build gates;
-- optionally runs real V25 NETLOAD/runtime validation;
-- packages from `src/QS3D.BricsCAD.V25/bin/x64/Release/net48`;
-- creates `QS3D-BricsCAD-V25.zip` and its SHA-256 checksum;
-- publishes a GitHub Release only after all required preceding steps succeed.
+- owner-dispatched only;
+- requires `confirm_release=RELEASE`;
+- builds Core + V25, packages V25 assets, applies signing/runtime gates according to release type and publishes only after its release-integrity checks pass.
 
-The package command manifest is generated from current `[CommandMethod]` source declarations rather than a hand-maintained command list. The package excludes BricsCAD-owned runtime assemblies.
+See `docs/MANUAL-BUILD-RELEASE.md`.
 
-This workflow is an owner-triggered release tool, **not continuous deployment**. Do not run it until the owner explicitly asks for a release.
+### V26
 
-See `docs/MANUAL-BUILD-RELEASE.md` for the operator runbook.
+`.github/workflows/release-v26.yml`
 
-## V25 runner
+- owner-dispatched only;
+- requires `confirm_release=RELEASE`;
+- stable release requires `run_runtime=true` and `sign_package=true`;
+- builds Core + `QS3D.BricsCAD.V26` on .NET 8;
+- packages only `QS3D-BricsCAD-V26` assets;
+- verifies/finalizes Authenticode-signed payloads when signing is enabled;
+- runs the exact V26 runtime gate against the signed staged DLL for a stable signed release;
+- generates `QS3D-BricsCAD-V26.update.json` only for the V26 signed package;
+- creates a draft GitHub Release and verifies exact expected V26 asset names before publication.
 
-Runner labels:
+See `docs/MANUAL-BUILD-RELEASE-V26.md` and `docs/LOCAL-V26-QUALIFICATION.md`.
 
-- `self-hosted`
-- `windows`
-- `x64`
-- `bricscad-v25`
+## Runner matrix
 
-Repository variable: `BRICSCAD_V25_DIR`.
+| Lane | Labels | Host variable | Managed target |
+| --- | --- | --- | --- |
+| V25 | `self-hosted`, `windows`, `x64`, `bricscad-v25` | `BRICSCAD_V25_DIR` | `net48` |
+| V26 | `self-hosted`, `windows`, `x64`, `bricscad-v26` | `BRICSCAD_V26_DIR` | `net8.0-windows` |
 
-Example: `C:\Program Files\Bricsys\BricsCAD V25 en_US`.
+Optional host profiles are `BRICSCAD_V25_PROFILE` and `BRICSCAD_V26_PROFILE` respectively. Runtime validation requires an interactive licensed Windows session.
 
-Optional runtime profile variable: `BRICSCAD_V25_PROFILE`.
+## Build-surface isolation
 
-The runner must have a valid licensed BricsCAD V25 installation and an interactive Windows session for runtime/screenshot validation.
+- `QS3D.sln` remains the established V25-oriented solution.
+- `QS3D.V26.sln` contains Core + V26 + Core SmokeTests and maps the V26 adapter to x64.
 
-## Static/local review versus CI
+This avoids requiring both proprietary host-major installations merely to build one adapter lane.
 
-Static review and repository-local validation may be performed without starting GitHub Actions. Do not describe those checks as GitHub CI or BricsCAD runtime verification. A CI/runtime result is claimed only after the corresponding explicitly requested workflow actually completes.
+## Update-channel isolation
+
+V25 and V26 can share the repository's GitHub release history, but automatic update discovery is host-major isolated before latest selection:
+
+- V25 release membership requires `QS3D-BricsCAD-V25.update.json`;
+- V26 release membership requires `QS3D-BricsCAD-V26.update.json`.
+
+The subsequent manifest/package/signature checks remain host-specific. Do not publish a V25 ZIP/manifest into the V26 lane or vice versa.
+
+## Static/local review versus CI/runtime
+
+Repository/source preflights may be executed locally without dispatching Actions. A static PASS is not a GitHub Actions PASS and is not licensed BricsCAD runtime proof.
+
+Similarly, source presence of V26 packaging, signing, updater or release tooling does not prove:
+
+- a real code-signing private key was used;
+- clean-machine install/update/uninstall passed;
+- BricsCAD V26 NETLOAD/UI/native geometry passed;
+- representative customer/release DWGs passed.
+
+Only report those results after the corresponding exact candidate payload was actually exercised.
 
 ## Owner-approved release gate
 
-When the owner explicitly asks to build and release:
+When the owner explicitly asks for a release:
 
 1. resolve the exact commit/tag;
-2. dispatch `release-v25.yml` manually with `confirm_release=RELEASE`;
-3. run strict manual-policy + aggregate source preflights;
-4. build Core Release;
-5. run deterministic Core smoke tests;
-6. compile the V25 adapter Release/x64;
-7. run scripted BricsCAD runtime/NETLOAD validation when requested and available;
-8. package + SHA-256;
-9. publish GitHub Release.
+2. choose the host-major release workflow (`release-v25.yml` or `release-v26.yml`);
+3. dispatch manually with `confirm_release=RELEASE`;
+4. do not bypass source/Core/host build/runtime/signing/package checks;
+5. publish only the host-major assets produced by that lane.
 
-`QS3DRELEASECHECK` is a project/DWG health tool and should be run on representative project data during release qualification; it is not treated as a meaningful blank-DWG replacement for private-DWG runtime regression.
+`QS3DRELEASECHECK` should be run on representative project data during runtime qualification; blank-DWG checks do not replace representative-DWG evidence.
 
-Do not upload BricsCAD-owned DLLs as source-controlled artifacts and do not publish a release merely because a commit/tag was pushed.
+Never source-control or publish proprietary BricsCAD runtime DLLs, signing secrets or private/customer CAD/project data.
