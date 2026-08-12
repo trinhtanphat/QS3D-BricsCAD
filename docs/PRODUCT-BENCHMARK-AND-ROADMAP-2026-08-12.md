@@ -2,49 +2,164 @@
 
 > **Status:** Advisory / non-canonical product and architecture note.
 >
-> This document records the current product assessment and recommended direction. It is **not** implementation-completion truth and it does **not** promote managed-code coverage to native BricsCAD production readiness.
+> This document captures the complete product-review discussion from the 2026-08-12 ChatGPT session. It records a dated assessment, benchmark lessons, business-logic gaps, and recommended roadmap. It is **not** implementation-completion truth and it does **not** promote managed-code coverage to native BricsCAD production readiness.
 >
 > Canonical repository truth remains in:
 >
 > - `docs/PRODUCT-BOUNDARY.md`
 > - `docs/IMPLEMENTATION-STATUS.md`
 > - `docs/PLAN.md`
-> - runtime/native qualification evidence and the current work claims under `docs/agent-work-claims/`
+> - runtime/native qualification evidence
+> - current work claims under `docs/agent-work-claims/`
 >
-> Prepared against the moving `main` branch observed on 2026-08-12. Re-check current source, claims, and native evidence before turning any recommendation below into an implementation claim.
+> If this note conflicts with current source, canonical docs, tests, or native evidence, **current repository truth wins**.
 
 ## 1. Executive thesis
 
-QS3D should **not** become “Revit inside BricsCAD.” Its strongest product position is a focused BIM/QS/rebar/BOQ/documentation/interchange layer for quantity surveyors, estimators, structural users, and production teams working in BricsCAD.
+QS3D should **not** become “Revit inside BricsCAD.” Its strongest position is a specialist **QS semantic engine for BricsCAD/DWG**: model semantics, measurement logic, explainable quantities, revision intelligence, estimating, rebar/BBS, QA, documentation, and interoperability on top of a mature CAD host.
 
-The repository already contains substantial geometry, semantic metadata, reporting, rebar, grids, documentation, takeoff, validation, preview/diff, and interchange building blocks. The next product-value step is therefore not simply “add more object categories.” The highest-leverage work is to make quantities **trustworthy, explainable, editable, versioned, cost-aware, revision-aware, and native-runtime qualified**.
+The review conclusion was that QS3D is no longer merely a collection of takeoff commands. The repository already contains enough semantic, geometry, quantity, reporting, rebar, revision, health, documentation, and interchange infrastructure that the next value step is not indiscriminate breadth. The highest-leverage work is to make quantities **trustworthy, explainable, editable, versioned, revision-aware, cost-aware, interoperable, and native-runtime qualified**.
 
-The product principle for the next phases should be:
+Product principle:
 
-> **One canonical quantity truth, one explainable measurement path, one cost truth, and explicit evidence for every production-readiness claim.**
+> **One canonical quantity truth, one explainable measurement path, one cost truth, stable identity across revisions, and explicit evidence for every production-readiness claim.**
 
-## 2. Current product baseline
+Recommended product chain:
 
-The following are architectural/product assets already visible in the repository and canonical status documentation. Their presence here does **not** imply that every path is fully native-qualified on every supported BricsCAD host/version.
+```text
+DWG / PDF / IFC
+        ↓
+Recognize / Capture / Direct Draw
+        ↓
+Semantic Model
+Family + Instance + Floor + Zone + Host + Material
+        ↓
+Model Health / QS Rules
+        ↓
+Measurement Facts
+        ↓
+Measurement Rules
+        ↓
+Explainable Quantities
+        ↓
+Classification / Work Item Mapping
+        ↓
+BOQ / BQ / BBS / Schedules
+        ↓
+Rates / Estimate
+        ↓
+Revision Quantity Delta + Cost Delta
+        ↓
+DWG Tables / Excel / IFC / BCF / Interchange
+```
 
-### 2.1 Strong building blocks to preserve
+## 2. Dated assessment scorecard from the review session
 
-- Parametric/semantic structural modeling and domain objects.
-- Stable semantic metadata, source handles/provenance work, and health/validation services.
-- Quantity-oriented domain logic and `QuantityRules` concepts.
-- Preview/diff/regeneration patterns that can support safe edits.
-- BOQ/BQ/BBS/schedule/reporting surfaces.
+These scores are a **subjective product/architecture assessment snapshot**, not automated repository metrics and not native qualification results.
+
+| Area | Review score |
+|---|---:|
+| Core architecture / separation | **8.5 / 10** |
+| Semantic BIM model | **8.0 / 10** |
+| Geometry → semantic → regeneration | **8.0 / 10** |
+| QS quantity business logic | **7.5 / 10** |
+| Architectural / structural workflow | **7.5 / 10** |
+| Rebar / BBS | **7.0 / 10** |
+| Native CAD editing experience | **6.0 / 10** |
+| IFC / openBIM / interoperability | **5.5 / 10** |
+| Estimating / rates / 5D cost | **4.5 / 10** |
+| Collaboration / enterprise workflow | **3.5–4.0 / 10** |
+| Overall product maturity from source review | **~7 / 10** |
+
+Interpretation: the strongest areas are the deterministic Core direction and semantic/quantity foundation. The largest product gaps are not basic modeling commands; they are native edit UX, large-model/runtime qualification, explainable measurement semantics, estimating/cost, openBIM production workflows, and collaboration.
+
+## 3. Working source-of-truth model used in the review
+
+The session used the following architecture model to reason about QS3D. Verify it against current canonical docs before implementing migrations or persistence changes.
+
+```text
+DWG geometry / native entities
+        ↓ geometry/source handles
+Semantic Project / .qsdb
+        ↓ family / instance / relationships
+Dependencies + regeneration
+        ↓
+Canonical calculated quantities
+        ↓
+BQ / BOQ / BBS / schedules / Excel / caches / interchange projections
+```
+
+Working principles:
+
+- **DWG** is the native geometry/source environment.
+- **`.qsdb` / semantic project state** is the semantic business-model source rather than a report cache.
+- Family/instance, floor/zone, host/opening, material, provenance, and related semantic identities should be explicit domain data.
+- Quantities should be deterministic derived results of canonical semantic/geometry inputs and measurement rules.
+- BQ/BOQ/BBS/schedules/XLSX/cache outputs should be **derived projections**, not independent hidden quantity engines.
+- A renderer/exporter must not silently invent deductions, conversions, rounding, or cost logic.
+- Stable identity must survive reporting, revision comparison, and interchange wherever the underlying business object remains the same.
+
+This is the basis for the recurring review rule: **do not fix a reporting problem by adding a second business-logic path inside reporting**.
+
+## 4. Current capability inventory observed in the review
+
+The review found a broad product surface. Presence here means the capability or its building blocks were observed in source/docs during the review; it does **not** mean every path is native-qualified on every BricsCAD version.
+
+### 4.1 Project and semantic model
+
+- Workspace / Project lifecycle.
+- Zone / Level / Floor concepts.
+- Family / Type / Instance concepts.
+- Material and semantic properties.
+- Stable metadata, source handles, ownership/provenance hardening.
+- Dependency and regeneration patterns.
+- Preview/diff/safe mutation patterns.
+- Project persistence and revision-related infrastructure.
+
+### 4.2 Architectural and structural modeling
+
+- Direct Draw / semantic creation workflows.
+- Wall.
+- Beam.
+- Column.
+- Slab / Floor.
+- Foundation.
+- Openings / Door-related workflows.
+- Auto Host / host-opening relationships and boolean-cut related behavior.
+- Room / finish workflows.
+- Curtain-related modeling.
+- Grid and structural/documentation geometry.
+
+### 4.3 Quantity, reporting, and documentation
+
+- Quantity-oriented Core services and `QuantityRules` concepts.
+- Measured geometry / solid quantity paths.
+- BQ / BOQ-oriented outputs.
+- Schedules and reports.
+- ED2/BQ-related workflow surfaces discussed in the review.
+- XLSX/Excel projections.
+- Documentation / annotation / drawing-production workflows.
+- Revision/audit/diff foundations.
+
+### 4.4 Rebar
+
 - Rebar-specific domain logic rather than only generic solids.
-- Grid, documentation, annotation, and drawing-production workflows.
-- Polygon/mesh/takeoff and measured-solid related quantity paths.
-- Interchange/import/export/provenance work.
-- A broad managed smoke/regression surface and explicit claim-first coordination.
+- Rebar quantity logic.
+- BBS/reporting foundations.
+- Structural/rebar workflows substantial enough to benchmark against Tekla and Cubicost TRB rather than generic CAD.
 
-### 2.2 Important qualification caveat
+### 4.5 Health, validation, and interchange
 
-Managed build/test success and repository implementation depth are not equivalent to native BricsCAD production qualification. Native-dependent commands, adapters, objects, drawing effects, transactions, persistence paths, and host-version behavior need their own evidence.
+- Semantic health / validation services.
+- Release/preflight/health concepts.
+- Semantic interchange, import/export, preview/diff, provenance and remapping foundations.
+- Existing work toward stable source identity across model/report/interchange.
 
-Product/status reporting should continue to separate at least:
+### 4.6 Important qualification caveat
+
+Managed build/test success and repository implementation depth are not equivalent to native BricsCAD production qualification. Native-dependent commands, adapters, drawing effects, transactions, custom objects, persistence/reopen behavior, and host-version behavior require named runtime evidence.
+
+Product/status reporting should distinguish at least:
 
 1. implemented in source;
 2. covered by deterministic managed tests/smokes;
@@ -52,76 +167,216 @@ Product/status reporting should continue to separate at least:
 4. native-host qualified on a named BricsCAD version/environment;
 5. production-ready according to an explicit acceptance gate.
 
-## 3. Competitive capability patterns worth borrowing
+## 5. How to benchmark QS3D correctly
 
-This is a capability-pattern benchmark, not an instruction to clone another product.
+AutoCAD, BricsCAD, BLT3D, Revit, CostX, Cubicost, Tekla, Solibri, and Autodesk Takeoff are not the same product category. QS3D should benchmark each for the capability it is actually good at.
 
-| Reference | Capability pattern worth learning from | Implication for QS3D | Do not copy blindly |
-|---|---|---|---|
-| Glodon Cubicost | Quantity takeoff centered on model-derived quantities and calculation/measurement rules | Evolve existing quantity rules into versioned, explainable measurement semantics with local/trade profiles | Do not reproduce every trade-specific UI or build a second quantity engine |
-| RIB CostX | Integrated takeoff + estimating + revision-oriented workflow | Add a clean rate/cost domain and connect revision quantity deltas to estimate impact | Do not start by building a large enterprise estimating suite |
-| Autodesk Takeoff | Combined 2D/3D quantification, classification, formulas/unit-cost workflow | Strengthen classification, quantity traceability, and convergence of drawing/model takeoff | Keep BricsCAD-native specialist workflow rather than broad platform parity |
-| Solibri | Rule-based model checking and open collaboration workflows | Evolve semantic health into declarative QS/model-check profiles; consider IDS/BCF later | Do not prioritize a full clash-detection platform before QS-specific checking is mature |
+| Benchmark group | Products / references | What QS3D should learn |
+|---|---|---|
+| CAD host / drafting UX | AutoCAD, BricsCAD | Native selection, grips, MOVE/ROTATE/STRETCH behavior, speed, DWG ergonomics |
+| BIM semantic authoring | Revit, BricsCAD BIM, Archicad | Family/type/instance semantics, relationships, schedules, native editing |
+| QS / QTO / estimating | BLT3D, Glodon Cubicost TAS/TRB/TME/TBQ, RIB CostX, Autodesk Takeoff | Measurement rules, deductions, trace-back, 2D/3D takeoff, estimating, revision impact |
+| Structural / rebar | Tekla Structures, Cubicost TRB | Rebar semantics, BBS, shape/grouping, fabrication-oriented quantity intelligence |
+| QA / federation / openBIM | Solibri, Navisworks | Rule-based checking, issue workflows, federation, clash/BCF patterns |
+| Open-source IFC reference | IfcOpenShell / Bonsai | IFC identity, relationships, QTO, classifications, BCF, IDS, cost/QTO integration |
 
-### External benchmark references
+The most relevant direct product benchmark set for QS3D is:
 
-These links are benchmark inputs, not endorsements and not repository completion evidence:
+> **Cubicost → CostX → BLT3D → Revit → Tekla → Solibri → Autodesk Takeoff → BricsCAD BIM → IfcOpenShell/Bonsai**
+
+AutoCAD remains primarily a **CAD UX benchmark**, not the closest QS competitor.
+
+## 6. Full competitor/reference lessons from the session
+
+This section preserves the capability-level lessons discussed in the session. It is not an instruction to clone competitors.
+
+### 6.1 AutoCAD
+
+Use AutoCAD as the reference for predictable native CAD editing and user muscle memory:
+
+- selection behavior;
+- MOVE / ROTATE / STRETCH;
+- grips;
+- command feedback;
+- large-DWG responsiveness;
+- minimal friction between inspection and editing.
+
+QS3D should preserve those expectations while keeping semantic provenance and quantities consistent.
+
+### 6.2 BricsCAD / BricsCAD BIM
+
+BricsCAD is both the host and a BIM benchmark. The review identified strengths to learn from:
+
+- native DWG runtime maturity;
+- IFC/openBIM workflows;
+- BIM classifications/properties;
+- quantity/schedule extraction;
+- native BIM editing.
+
+QS3D should **not** duplicate the whole BricsCAD BIM platform. Its differentiation should be deeper QS semantics, measurement explanations, BOQ mapping, revision/cost intelligence, and specialist rebar/QS workflows.
+
+### 6.3 Revit
+
+Revit is the semantic authoring benchmark for:
+
+- category / family / type / instance;
+- level/host relationships;
+- materials/parameters;
+- schedules and material takeoff;
+- native parametric edit/regeneration.
+
+QS3D already follows several useful semantic patterns. The major UX gap identified in the session is the seamless preservation of provenance/dependencies/quantities during normal edit operations.
+
+Target behavior example:
+
+```text
+MOVE beam
+  → semantic position changes
+  → joins/dependencies invalidate
+  → affected geometry regenerates
+  → quantities update
+  → BQ/revision delta updates
+```
+
+without requiring the user to understand an internal synchronization mechanism.
+
+### 6.4 BLT3D
+
+BLT3D was identified as a close Vietnam-market benchmark because it is quantity-focused and works with 3D/BIM workflows rather than being only a CAD platform.
+
+The important comparison is not command count. QS3D should compete on:
+
+- in-DWG semantic modeling plus takeoff;
+- structural/architectural quantity rules;
+- traceability from quantity to model;
+- revision awareness;
+- local QS workflows;
+- eventually cost/rate integration.
+
+### 6.5 Glodon Cubicost
+
+Cubicost is arguably the most important business-logic benchmark discussed. Key patterns:
+
+- local measurement-rule profiles;
+- automatic deductions;
+- quantity trace-back to model;
+- visible calculation expressions;
+- architecture/structure quantities;
+- dedicated reinforcement workflows;
+- MEP and billing/cost ecosystem in the broader product family;
+- revision-oriented work.
+
+QS3D implication: deepen `QuantityRules` into **versioned measurement semantics** rather than adding more report-specific formulas.
+
+### 6.6 RIB CostX
+
+CostX represents the next layer beyond model quantity:
+
+```text
+Drawing / Model
+    ↓
+Quantity
+    ↓
+Estimate / Rate
+    ↓
+Cost
+    ↓
+Revision impact
+```
+
+QS3D should therefore avoid stopping at Excel export. A small, clean native cost domain is a strategic next step once quantity truth is stable.
+
+### 6.7 Autodesk Takeoff
+
+Useful patterns:
+
+- unified 2D and 3D takeoff;
+- takeoff types / classification;
+- formulas;
+- package/inventory workflow;
+- version-controlled source documents;
+- unit-cost linkage.
+
+QS3D implication: do not require every job to start from a perfect 3D semantic model. A future 2D takeoff path should be able to coexist with and potentially upgrade into semantic objects.
+
+### 6.8 Tekla Structures
+
+Tekla is the stronger reference for detailed structural/rebar semantics and reporting. QS3D does not need Tekla-level fabrication authoring to gain value, but should learn from:
+
+- bar grouping and identity;
+- shape codes;
+- bends/hooks;
+- laps/splices/couplers;
+- anchorage/development length;
+- mesh and accessories;
+- BBS consistency;
+- revision-aware reinforcement reporting.
+
+### 6.9 Solibri
+
+Use Solibri as the QA/reference model for:
+
+- declarative model checks;
+- evidence-rich findings;
+- property/classification validation;
+- IDS-style requirements;
+- BCF issue workflow;
+- quantity/model review.
+
+QS3D should evolve existing Semantic Health into a **QS-specific rule engine** before attempting a full clash/federation platform.
+
+### 6.10 IfcOpenShell / Bonsai
+
+IfcOpenShell/Bonsai are valuable open references for:
+
+- IFC2x3/IFC4/IFC4.3 handling;
+- IFC identity and relationship graphs;
+- validation;
+- classifications;
+- QTO;
+- BCF;
+- IDS;
+- model diff;
+- 4D/5D-related data structures;
+- open implementation patterns around cost/QTO.
+
+Use them as architectural references, not as code to copy blindly.
+
+### 6.11 External benchmark references already used in the first review note
 
 - Glodon Cubicost TAS: <https://www.glodon.com/en/products/cubicost-tas-8>
 - RIB CostX: <https://www.rib-software.com/en/rib-costx>
 - Autodesk Takeoff: <https://construction.autodesk.com/products/autodesk-takeoff/>
 - Solibri: <https://www.solibri.com/>
 
-## 4. Product maturity matrix
+## 7. Product maturity matrix
 
-| Capability | Current posture observed in this assessment | Desired target | Priority |
+| Capability | Current posture from this review | Desired target | Priority |
 |---|---|---|---|
-| Semantic identity / source provenance | Strong foundation; still active hardening work | Stable identity across model, report, revision, and interchange | P0 |
+| Semantic identity / source provenance | Strong foundation; active hardening | Stable identity across model/report/revision/interchange | P0 |
+| Native semantic editing | Important gap vs CAD/BIM authoring UX | MOVE/ROTATE/STRETCH/grip-safe semantic edits with regeneration | **P0** |
+| Large-model performance | Not sufficiently qualified for production confidence | Versioned performance budget + large real-project qualification | **P0** |
 | Geometric quantity extraction | Broad managed implementation | Deterministic + host-qualified measurement basis | P0 |
-| Measurement semantics | Existing quantity-rule concepts, but explainability/versioning can go further | Versioned measurement standards and rule profiles | P0 |
-| Quantity explainability | Information exists across services/outputs, not yet one universal trace contract | Every reportable quantity has a machine-readable and human-readable trace | P0 |
-| Edit / inspect / preview UX | Useful primitives exist | Fast inspect → edit → preview diff → apply workflow | P0 |
+| Measurement semantics | Existing rule concepts | Versioned standards/rules/deductions/rounding | P0 |
+| Quantity explainability | Fragmented information, no universal trace contract | Every reportable quantity has machine + human trace | P0 |
+| Classification → BOQ mapping | Foundations exist but should be first-class | Explicit classification/work-item mapping and coverage | P0–P1 |
 | Revision quantity delta | Identity/diff foundations exist | First-class added/removed/changed quantity ledger | P0–P1 |
-| Rate / cost estimating | No dedicated end-to-end cost domain was identified in this audit pass | Rate book + estimate lines + snapshots + revision impact | P1 |
-| Rule-based QS QA | Semantic health/validation exists | Declarative profile-based checker with evidence and safe autofix | P2 |
-| Collaboration / issue loop | Interchange/provenance actively improving | Traceable issue/provenance loop, later open-standard exchange | P2 |
-| Native production qualification | Must remain separate wherever host evidence is incomplete | Explicit versioned host qualification matrix and artifacts | P0 |
+| Rate / cost estimating | No dedicated end-to-end cost domain identified in review | Rate book + estimate snapshot + revision cost impact | P1 |
+| 2D + 3D takeoff convergence | 3D/semantic direction stronger than 2D workflow | PDF/DWG 2D takeoff that can coexist with semantic model | P2 |
+| Rule-based QS QA | Semantic health/validation exists | Declarative checker profiles with evidence/safe fixes | P2 |
+| IFC/openBIM round-trip | Interchange foundations exist | Stable identity/property/QTO/classification round-trip | P2 |
+| BCF/issue workflow | Not a complete first-class loop in this review | Findings linked to model identities and exchangeable issues | P2 |
+| Collaboration / cloud | Limited vs enterprise platforms | Only add where concrete team workflow requires it | P2–P3 |
+| MEP QS | Gap for broad QS coverage | Specialist module only after core quantity architecture is mature | P3 |
+| Civil / earthwork depth | Some direction exists; not primary benchmark strength | Deepen when validated by real QS workflows | P3 |
 
-## 5. Keep, evolve, merge, and avoid duplicating
+## 8. Business-logic gap #1 — Explainable measurement semantics
 
-### 5.1 Keep as strategic foundations
+This was the highest-priority business-logic recommendation.
 
-- `QuantityRules` as the basis for canonical measurement behavior.
-- Semantic metadata and semantic health/validation.
-- Source-handle/provenance identity rather than report-local identity.
-- Preview/diff/regeneration instead of silent mutation.
-- Existing BOQ/BQ/BBS/schedule/report families as projections of domain truth.
-- Core/host separation so business rules remain deterministic and testable.
+Every number should answer:
 
-### 5.2 Evolve
-
-- **Quantity rules → measurement semantics:** add standards, versions, deductions, rounding, assumptions, and trace output.
-- **Semantic health → QS checker profiles:** make rules declarative, severity-aware, explainable, and reusable.
-- **Source provenance → revision/cost trace:** use stable identity to connect object change → quantity change → estimate change.
-- **Preview/diff → edit workflow:** make the same safe-diff mechanism the default for batch edits and rule changes.
-- **Reports → pure projections:** a report should consume canonical quantities/costs, not independently re-derive hidden business math.
-
-### 5.3 Merge or prevent duplicate systems
-
-The following are architecture rules for future implementation, not assertions that every duplicate currently exists:
-
-- Do not create a second quantity engine for reporting, export, or one object category.
-- Do not allow report-specific hidden deductions, rounding, or conversions.
-- Do not introduce another semantic/provenance identity scheme beside the canonical one.
-- Do not store tender/rate assumptions inside geometric entities simply because a report needs them.
-- Do not let BricsCAD adapter details become the source of core measurement rules.
-- Consolidate any discovered duplicate rounding, deduction, unit-conversion, stale-output, or report-only quantity helpers into canonical domain services when doing future targeted audits.
-
-## 6. Missing or underdeveloped business logic
-
-### 6.1 Explainable measurement semantics — highest priority
-
-The next generation of quantity logic should make every number answer the question: **“Why is this quantity exactly this value?”**
+> **“Why is this quantity exactly this value?”**
 
 Candidate domain concepts:
 
@@ -129,6 +384,7 @@ Candidate domain concepts:
 - `MeasurementRuleSet`
 - `MeasurementRuleVersion`
 - `MeasurementContext`
+- `MeasurementFact`
 - `QuantityExpression`
 - `DeductionRule`
 - `OpeningTreatment`
@@ -138,28 +394,154 @@ Candidate domain concepts:
 - `MeasurementTrace`
 - `MeasurementSnapshot`
 
-A `MeasurementTrace` should be capable of carrying, where applicable:
+A trace should contain where applicable:
 
-- source object/semantic identity;
-- source geometry/property inputs;
+- semantic/source identity;
+- geometry/property inputs;
 - gross basis;
-- each deduction/addition and its reason;
-- net measured quantity;
-- rule ID and rule version;
-- unit and conversion path;
+- deductions/additions and reasons;
+- net quantity;
+- rule ID/version;
+- units/conversion path;
 - rounding policy;
-- normalized expression/equation;
-- warnings, assumptions, fallback values, and unresolved inputs.
+- normalized expression;
+- warnings/assumptions/fallbacks;
+- related source elements.
+
+Example discussed in the session:
+
+```text
+Wall W-103
+Gross Area        = 28.40 m²
+
+Deduction:
+Door D-17         = -2.10 m²
+Window W-09       = -1.80 m²
+Column overlap    = -1.03 m²
+
+Net Wall Area     = 23.47 m²
+
+Measurement Rule = VN-WALL-MASONRY-v3
+Sources           = W-103, D-17, W-09, C-04
+```
+
+The product should expose **Quantity + provenance + formula + rule + deductions + revision**, not just `Quantity = 23.47`.
 
 Requirements:
 
 - deterministic for identical canonical inputs;
 - culture-invariant at persistence/exchange boundaries;
-- explicit about units;
-- versioned so a later rule change cannot silently rewrite historical measurement meaning;
-- able to support local/trade/company rule profiles without forking the quantity engine.
+- units explicit;
+- historical rule version preserved;
+- local/trade/company profiles supported without forking the engine;
+- missing/ambiguous inputs fail visibly rather than silently becoming zero.
 
-### 6.2 Rate and cost estimation domain
+## 9. Business-logic gap #2 — Measurement-rule depth
+
+To compete with BLT3D/Cubicost-style QS workflows, the important work is deeper measurement intelligence such as:
+
+- gross vs net;
+- opening deductions;
+- wall/column/slab/beam intersection treatment;
+- finish deductions;
+- contact area;
+- formwork area;
+- construction joint rules;
+- host/opening effects;
+- rebar lap/splice rules;
+- waste factors;
+- rounding;
+- standard/company-specific rule profiles.
+
+The architecture should separate:
+
+```text
+Geometry
+   ↓
+Semantic Element
+   ↓
+Measurement Facts
+   ↓
+Measurement Rule
+   ↓
+Quantity Breakdown
+   ↓
+Classification / Work Item
+   ↓
+BOQ Item
+   ↓
+Rate / Resource
+   ↓
+Cost
+```
+
+`Measurement Facts` and `Measurement Rule` should be distinct so the same model can be measured under different valid standards without rebuilding geometry logic.
+
+## 10. Business-logic gap #3 — Classification, BOQ mapping, and coverage
+
+Introduce an explicit mapping layer:
+
+```text
+Element
+ ↓
+Classification
+ ↓
+Measurement Item
+ ↓
+BOQ Item / Work Item
+```
+
+Do not hard-code BOQ mapping inside individual geometry categories.
+
+Recommended project coverage view:
+
+```text
+Total model elements:      8,420
+Quantity-ready:            7,961
+Missing classification:      178
+Missing rule:                109
+Stale quantity:               67
+Ambiguous host:               31
+Invalid geometry:             74
+
+BOQ Coverage:               94.5%
+```
+
+The exact numbers above are illustrative. The product value is the coverage concept: a QS user must know what is **not yet included or trustworthy**.
+
+## 11. Business-logic gap #4 — Revision → quantity → cost
+
+Stable identity should support a first-class revision ledger.
+
+Target workflow:
+
+1. capture a canonical measurement snapshot;
+2. capture/freeze the rate snapshot used for an estimate;
+3. regenerate/import the revised state;
+4. classify identities as added/removed/unchanged/changed;
+5. calculate quantity deltas;
+6. explain why the quantity changed;
+7. separate rule-version change from geometry/property change;
+8. propagate to cost impact;
+9. export a reviewable report without independent renderer math.
+
+Target UX question:
+
+> **“Why did concrete increase by 14.2 m³?”**
+
+The user should be able to click the delta and highlight the responsible objects.
+
+Suggested outputs:
+
+- previous/current quantity;
+- delta;
+- old/new rule version;
+- old/new rate version;
+- quantity-driven vs rate-driven cost delta;
+- source identities/handles;
+- unresolved identity warnings.
+
+## 12. Business-logic gap #5 — Cost and estimating domain
 
 QS3D should separate **measurement truth** from **commercial assumptions**.
 
@@ -173,7 +555,7 @@ Candidate concepts:
 - `EstimateSnapshot`
 - `EstimateRevision`
 
-An estimate line should explicitly distinguish:
+An estimate line should distinguish:
 
 - measured quantity;
 - estimating quantity;
@@ -182,43 +564,28 @@ An estimate line should explicitly distinguish:
 - currency;
 - rate effective date/version;
 - direct cost;
-- markup/overhead/contingency where supported;
-- final extended amount;
-- source measurement trace/snapshot.
+- labour/material/equipment/subcontract split where supported;
+- overhead/markup/contingency where supported;
+- final amount;
+- source measurement snapshot/trace.
 
-Do not mix rate/tender assumptions into geometry metadata merely to make them easy to display.
+Target chain:
 
-### 6.3 Revision → quantity → cost impact
+```text
+Quantity
+ × Unit Rate
+ = Direct Cost
+ + Waste / Labour / Equipment / Subcontract
+ + Overhead / Markup
+```
 
-Stable identity becomes much more valuable when it supports a first-class revision ledger.
+Do not store tender/rate assumptions in geometric entities simply because a report needs them.
 
-Target workflow:
+## 13. Business-logic gap #6 — QS rule checker
 
-1. capture a canonical measurement/estimate snapshot;
-2. regenerate or import a revised model/drawing state;
-3. classify entities/lines as added, removed, unchanged, or changed;
-4. compute quantity deltas by canonical identity and rule version;
-5. explain the reason for each delta where possible;
-6. propagate the delta into estimate impact using an explicit rate snapshot;
-7. export a reviewable revision report without re-computing different business logic in the renderer.
+Build on Semantic Health rather than introducing a parallel validation engine.
 
-Suggested outputs:
-
-- previous quantity;
-- current quantity;
-- delta;
-- previous/current rule version;
-- previous/current rate version where applicable;
-- cost delta;
-- reason/category of change;
-- source handles/provenance;
-- unresolved/missing identity warnings.
-
-### 6.4 Rule-based QS/model QA
-
-Build on semantic health instead of starting a parallel checker framework.
-
-A rule should have at least:
+A rule should include:
 
 - stable rule ID;
 - profile/category;
@@ -227,345 +594,548 @@ A rule should have at least:
 - human explanation;
 - affected semantic identities;
 - evidence values;
-- optional safe autofix only when the transformation is deterministic and reversible/previewable.
+- optional safe autofix only if deterministic and previewable.
 
-Good early QS rules:
+Example rules:
 
-- missing/ambiguous classification;
-- invalid/non-finite/impossible quantity inputs;
+```text
+QS-WALL-001
+Every ArchitecturalWall must have:
+- Family
+- Floor
+- Zone
+- Material
+- Thickness > 0
+- Height > 0
+
+QS-OPENING-002
+Every Door must:
+- resolve exactly one Host
+- be geometrically valid for the host
+- have Width > 0
+- have Height > 0
+
+QS-QTY-004
+Every BQ-included element must:
+- have a valid measurement rule
+- have classification / mapping
+- have no stale calculated quantity
+```
+
+Other high-value findings:
+
+- invalid/non-finite inputs;
 - malformed semantic/source metadata;
-- missing level/floor/family relationships;
-- missing rate for an estimate line;
-- stale measurement or estimate snapshot;
-- inconsistent unit metadata;
-- report values that cannot be traced to canonical quantities;
-- revision lines whose identity cannot be reconciled.
+- missing family/level/floor relationships;
+- inconsistent units;
+- missing rate;
+- stale snapshot/report;
+- report value without canonical trace;
+- revision line that cannot reconcile identity.
 
-Later, open-standard integrations such as IDS/BCF can be considered where they materially help the workflow. They should not block the core QS checker.
+IDS/BCF can be integrated later where useful, but should not block the core QS checker.
 
-### 6.5 Inspect, edit, batch-edit, and “why this quantity?” UX
+## 14. Native semantic editing — P0, not a later polish item
 
-The product needs a fast interaction loop around the strong domain layer:
+The original review explicitly treated native edit behavior as a major gap and high priority.
 
-- select object(s);
-- inspect semantic properties and health;
-- inspect the canonical quantity trace;
-- see rule/version/unit/rounding/deductions;
-- edit one or many allowed properties;
-- preview affected geometry/quantities/reports;
-- apply only after validation;
-- preserve a reviewable change/revision trail.
+Target workflows include:
 
-Avoid silent mutation. Batch actions should surface counts, skipped objects, warnings, and the exact effect before destructive/large updates.
+- MOVE;
+- ROTATE;
+- STRETCH;
+- grip edits;
+- jigs/direct manipulation;
+- batch property edits.
 
-### 6.6 Runtime qualification is part of product quality, not an afterthought
+Required invariant:
 
-A native-dependent feature is not production-ready merely because its Core logic is correct.
+```text
+Native edit
+  → semantic state remains valid
+  → provenance remains valid
+  → dependencies invalidate deterministically
+  → generated geometry regenerates
+  → quantities refresh
+  → reports/revision state detect the change
+```
 
-Maintain an explicit host qualification matrix with at least:
+The user should not need a special recovery/sync mental model for ordinary edits.
 
-- BricsCAD major/minor/build;
-- .NET/runtime environment;
-- command or object surface tested;
-- fixture/drawing used;
-- expected and observed native effects;
-- transaction/persistence/reopen result where relevant;
-- qualification date;
+Batch actions should show:
+
+- selected count;
+- applicable count;
+- skipped count/reasons;
+- warnings;
+- previewed geometry/quantity/report effects;
+- deterministic apply result.
+
+Avoid silent mutation.
+
+## 15. Large-model performance and native qualification — P0
+
+The session explicitly identified large-model/runtime qualification as a high-priority gap. It must **not** be hidden in P3.
+
+Performance/qualification work should cover representative real-project sizes and the workflows that dominate QS usage, such as:
+
+- project open/load/save/reopen;
+- semantic indexing;
+- room/topology paths;
+- curtain paths;
+- BQ/schedule generation;
+- rebar/BBS;
+- regeneration;
+- native editing;
+- revision comparison;
+- quantity trace generation.
+
+Maintain an explicit host qualification matrix:
+
+- BricsCAD version/build;
+- .NET/runtime;
+- command/object surface;
+- fixture/drawing;
+- model size/count;
+- expected native effect;
+- observed effect;
+- transaction/persistence/reopen result;
+- timing/memory where relevant;
 - evidence artifact/log;
-- pass/fail/blocked classification;
-- known host-specific deviations.
+- date;
+- pass/fail/blocked;
+- known host deviation.
 
-This evidence should remain separate from managed test counts.
+Managed tests remain necessary but are not substitutes for named V25/native evidence.
 
-## 7. Recommended product architecture
+## 16. 2D + 3D takeoff convergence
+
+The review recommended a future 2D takeoff path because many real QS inputs are PDFs or 2D DWGs rather than clean BIM.
+
+Candidate 2D takeoff primitives:
+
+- count;
+- length;
+- perimeter;
+- area;
+- zone/package;
+- measurement group;
+- custom formula;
+- classification/work-item mapping.
+
+Important design idea:
+
+> 2D takeoff does not have to remain a dead-end annotation. Where possible, it should be upgradeable/linkable to a semantic object later.
+
+This lets QS3D support imperfect project inputs without weakening the semantic architecture.
+
+## 17. Rebar roadmap details from the session
+
+QS3D already has enough rebar/BBS foundation to justify deeper specialist logic.
+
+Potential improvements:
+
+- canonical bar shapes;
+- shape codes;
+- bends/hooks;
+- lap/splice rules;
+- couplers;
+- anchorage/development length;
+- bar grouping/marks;
+- mesh;
+- chairs/spacers where business value is clear;
+- waste/cutting optimisation;
+- revision delta.
+
+Example future cutting optimisation:
+
+```text
+Stock bar: 11.7 m
+Required cuts: 4.5 m + 4.5 m + 2.4 m
+
+→ choose cutting pattern
+→ calculate off-cut
+→ calculate waste %
+→ procurement quantity/weight
+```
+
+This is a QS/contractor differentiator that does not require QS3D to become a full Tekla replacement.
+
+## 18. IFC / openBIM / BCF direction
+
+The review recognized that semantic interchange work already exists, so the statement is **not** “QS3D has no interoperability.” The gap is production-grade round-trip and ecosystem depth.
+
+Target identity chain:
+
+```text
+QS3D Element
+↕
+IFC GlobalId
+↕
+IfcClass
+↕
+Pset
+↕
+Qto
+↕
+Classification
+↕
+Cost Item
+```
+
+Critical requirement: round-trip should preserve identity and business meaning wherever technically possible; “can export an IFC file” is not enough.
+
+BCF/issue direction:
+
+```text
+Model Health finding
+  → Create review issue
+  → linked semantic IDs + viewpoint/evidence
+  → assigned/status workflow
+  → export/import BCF where useful
+```
+
+## 19. MEP and civil/earthwork
+
+These remain valid future domains but should not displace P0/P1 quantity trust and edit/runtime work.
+
+### MEP QS candidates
+
+- pipe;
+- duct;
+- cable tray;
+- conduit;
+- fittings;
+- valves;
+- equipment;
+- insulation;
+- accessories.
+
+### Civil / earthwork candidates
+
+- existing/design surfaces;
+- cut/fill;
+- excavation zones;
+- trench;
+- slope;
+- disposal;
+- backfill;
+- swell/shrink;
+- haul.
+
+Add these only when they can reuse canonical identity, measurement, trace, edit, reporting, and revision architecture.
+
+## 20. Recommended product architecture
 
 ### Layer 1 — Deterministic Core domain
 
-Owns semantic identity, geometry-independent business invariants, units, quantity primitives, validation, canonical serialization, and deterministic calculation contracts.
+Owns semantic identity, geometry-independent invariants, units, canonical serialization, quantity primitives, and deterministic validation/calculation contracts.
 
-### Layer 2 — Measurement and Estimate domain
+### Layer 2 — Measurement domain
 
-Owns measurement standards/rules/traces/snapshots plus rate books, estimate lines, estimate snapshots, and revision-impact logic.
+Owns facts, standards, rules, deductions, rounding, traces, and measurement snapshots.
 
-### Layer 3 — BricsCAD host adapters
+### Layer 3 — Estimate / cost domain
 
-Owns entity access, transactions, custom-object integration, geometry extraction/application, document state, selection, and host-version behavior. It must not become the canonical home of QS measurement policy.
+Owns rate books, cost codes, estimate lines/snapshots, commercial adjustments, and revision cost impact.
 
-### Layer 4 — Command/UI orchestration
+### Layer 4 — BricsCAD host adapters
 
-Owns inspect/edit/preview/apply flows and batch operations. UI should call domain services rather than reproduce quantity/cost math.
+Owns entity access, native transactions, geometry extraction/application, document state, selection, custom-object integration, and host-version behavior. It must not become the home of canonical QS policy.
 
-### Layer 5 — Reporting/export projections
+### Layer 5 — Command/UI orchestration
 
-BOQ/BQ/BBS/schedules/XLSX/interchange outputs should be projections of canonical domain outputs and snapshots. A renderer/exporter should not invent independent deductions or cost formulas.
+Owns inspect/edit/preview/apply, batch operations, and “why this quantity?” workflows. UI calls domain services; it does not reproduce measurement/cost formulas.
 
-### Layer 6 — Verification and evidence
+### Layer 6 — Reporting / export projections
 
-Owns deterministic tests, adapter smokes, native qualification evidence, release gates, trace completeness checks, and stale-snapshot detection.
+BOQ/BQ/BBS/schedules/XLSX/interchange/IFC-facing projections consume canonical quantities/snapshots. Renderers do not create hidden alternate truths.
 
-### Architecture invariants
+### Layer 7 — Verification and evidence
+
+Owns deterministic tests, adapter smokes, native qualification, large-model budgets, trace completeness, stale-state detection, and release evidence.
+
+Architecture invariants:
 
 1. One canonical quantity truth.
-2. One canonical cost/estimate truth for a selected estimate snapshot.
-3. Revision comparison uses stable identities and explicit snapshots.
-4. Reports do not secretly reimplement measurement math.
-5. Units and rule versions are explicit at persistence boundaries.
+2. One canonical cost truth for a selected frozen estimate/rate snapshot.
+3. Stable identity across model/report/revision/interchange.
+4. Reports do not secretly implement measurement math.
+5. Rule versions and units are explicit at persistence boundaries.
 6. Host dependence is explicit and isolated.
-7. Every production-readiness claim points to native evidence where native behavior is involved.
+7. Edit/regeneration effects are deterministic and reviewable.
+8. Native readiness claims require native evidence.
 
-## 8. Product anti-goals
+## 21. Keep, evolve, merge, avoid duplicating
 
-For the foreseeable roadmap, QS3D should **not** optimize for:
+### Keep
 
-- becoming a general Revit/family-authoring replacement;
-- broad architectural authoring parity for checklist reasons;
-- a full MEP routing/fabrication suite;
+- `QuantityRules` as a measurement foundation.
+- semantic metadata and health/validation.
+- canonical source-handle/provenance identity.
+- preview/diff/regeneration.
+- BQ/BOQ/BBS/schedule families as projections.
+- Core/host separation.
+
+### Evolve
+
+- quantity rules → versioned measurement semantics;
+- semantic health → QS checker profiles;
+- source provenance → revision/quantity/cost trace;
+- preview/diff → default edit/batch-edit workflow;
+- reports → pure canonical projections;
+- classification → explicit BOQ/work-item mapping;
+- interchange → stable round-trip identity/provenance.
+
+### Merge/prevent duplication
+
+- no second quantity engine for reports/exports/categories;
+- no report-only deductions/rounding/conversions;
+- no second semantic identity scheme;
+- no tender/rate assumptions hidden in geometry;
+- no BricsCAD adapter policy replacing Core measurement rules;
+- consolidate duplicate stale-output, conversion, deduction, rounding, or report calculation helpers when found by targeted audit.
+
+## 22. Product anti-goals
+
+QS3D should **not** optimize for:
+
+- becoming a full Revit clone;
+- broad architectural authoring parity only for checklist optics;
+- a full MEP routing/fabrication suite before core QS value is mature;
 - a cloud CDE/document-management replacement;
 - a rendering/general-design platform;
-- a full Solibri-like clash platform before QS-specific checking is mature;
-- duplicate measurement engines by category or report;
-- object categories added only to increase feature-count optics;
+- a full Solibri/Navisworks clash platform before QS-specific checking;
+- duplicate measurement engines by category/report;
+- categories added only to inflate feature count;
 - paper-completed native features without host evidence;
-- commercial assumptions embedded into geometry simply for convenience.
+- commercial assumptions embedded into geometry for convenience.
 
-## 9. Prioritized roadmap
+Product position to preserve:
 
-### P0 — Trust the quantity
+> **BricsCAD handles CAD. QS3D supplies semantic QS intelligence.**
 
-Goal: a QS user can trust, inspect, reproduce, and qualify every important quantity.
+## 23. Prioritized roadmap
+
+### P0-A — Native correctness, editing, and scale
+
+Goal: ordinary CAD editing and real project size must not break semantic/QS truth.
 
 Deliverables:
 
-- `MeasurementTrace` contract and canonical trace projection.
-- Measurement rule identity/versioning.
-- Explicit unit/rounding/deduction trace.
-- Stable provenance/identity convergence across quantity/report/interchange paths.
-- Quantity revision snapshot/delta foundation.
-- Inspector path for “why this quantity?”.
-- Native qualification matrix and evidence discipline for key workflows.
-- Continued removal of stale/duplicate/report-only quantity calculations found by audit.
+- native semantic MOVE/ROTATE/STRETCH/grip-safe editing;
+- deterministic dependency/regeneration after edits;
+- inspector and preview/apply loop;
+- large-model performance budgets;
+- representative native V25 qualification matrix;
+- persistence/reopen evidence for critical workflows;
+- stale-output and identity-integrity hardening.
+
+### P0-B — Trust and explain the quantity
+
+Goal: a QS user can inspect and reproduce every important number.
+
+Deliverables:
+
+- canonical `MeasurementTrace`;
+- rule identity/versioning;
+- gross/deduction/addition/net trace;
+- units and rounding trace;
+- provenance convergence;
+- quantity coverage findings;
+- classification/work-item mapping foundation;
+- measurement snapshot/delta foundation.
 
 P0 exit criteria:
 
-- important reportable quantities can be traced to canonical source inputs and rule versions;
-- identical canonical input produces deterministic measurement output;
-- report output does not require hidden quantity recomputation;
-- native-dependent P0 workflows have named host evidence rather than managed-only claims.
+- high-value reportable quantities have canonical trace;
+- same canonical input + rule version gives same result;
+- reports do not need hidden recomputation;
+- native edit paths keep semantic/quantity state consistent;
+- representative large models have named performance/runtime evidence;
+- identity ambiguity fails visibly.
 
-### P1 — Quantity to estimate
+### P1 — Revision and estimating
 
-Goal: turn trusted measured quantities into a small, rigorous estimating workflow.
+Goal: convert trusted quantity into reproducible commercial impact.
 
 Deliverables:
 
-- `RateBook` / `RateItem` / `CostCode` contracts.
-- `EstimateLine` and estimate snapshot.
-- waste factor and explicit commercial adjustments separate from measured quantity;
-- currency/rate effective-date/version handling;
-- quantity revision → cost impact;
-- estimate/BQ export based on frozen snapshots.
+- quantity revision ledger;
+- `RateBook` / `RateItem` / `CostCode`;
+- `EstimateLine` / estimate snapshot;
+- waste/commercial adjustment separation;
+- rate effective date/version/currency;
+- revision quantity → cost impact;
+- frozen estimate/BQ export.
 
-P1 exit criteria:
+### P2 — QA, openBIM, and mixed-source takeoff
 
-- an estimate can be reproduced from measurement snapshot + rate snapshot;
-- changed quantities can produce an explainable cost delta;
-- historical estimates do not silently change when rate books or measurement rules are edited.
-
-### P2 — Rules and collaboration
-
-Goal: make QS quality and review scalable across teams.
+Goal: make project review and imperfect real-world inputs manageable.
 
 Deliverables:
 
 - declarative QS checker profiles;
-- severity/evidence/autofix-preview model;
+- severity/evidence/autofix-preview;
 - stale snapshot/report detection;
-- review issues linked to semantic identities and source provenance;
-- consider IDS/BCF integration where it serves concrete workflows;
-- stronger interchange issue/provenance round-tripping.
+- 2D PDF/DWG takeoff primitives;
+- semantic upgrade/link path where feasible;
+- stronger IFC/classification/QTO round-trip;
+- issue/provenance loop;
+- selective IDS/BCF integration.
 
-P2 exit criteria:
+### P3 — Specialist expansion
 
-- a project can run a named QA profile and receive deterministic, reviewable findings;
-- issues remain traceable across model/report/interchange revisions;
-- safe fixes are previewable and do not bypass domain validation.
+Goal: deepen only workflows supported by real user evidence.
 
-### P3 — Scale specialist workflows
+Possible directions:
 
-Goal: deepen the product where real QS/structural usage proves value.
+- company/trade measurement packs;
+- richer rebar estimating and cutting optimisation;
+- productivity templates/project setup;
+- MEP QS;
+- civil/earthwork depth;
+- broader cost-code/classification mappings;
+- collaboration/cloud features where concrete team workflow demands them.
 
-Possible directions, prioritized by user evidence rather than feature-count parity:
-
-- company/trade measurement-standard packs;
-- richer structural/rebar estimating assemblies;
-- productivity templates and repeatable project setup;
-- larger-project performance and incremental regeneration;
-- broader interoperable classification/cost-code mappings;
-- selected domain categories only when they reuse canonical measurement/edit/report architecture.
-
-P3 exit criteria should be defined per validated workflow, not by raw number of supported object types.
-
-## 10. Recommended epics
+## 24. Recommended epics
 
 | Epic | Priority | Outcome |
 |---|---|---|
-| Measurement Rules v2 — Explainable Quantity | P0 | Every important quantity exposes canonical rule/version/input/deduction/rounding trace |
-| Quantity Revision Ledger | P0 | Stable snapshot-to-snapshot quantity delta with reasons/provenance |
-| Inspector & Batch Edit | P0 | Fast inspect/edit/preview/apply UX over canonical domain services |
-| Production Qualification Matrix | P0 | Native readiness backed by host/version-specific evidence |
-| Cost & Rate Domain | P1 | Reproducible rate-book and estimate-line model separated from geometry |
-| Revision Cost Impact | P1 | Quantity deltas flow into explainable estimate deltas |
-| QS Rule Checker | P2 | Declarative quality profiles with evidence and safe fixes |
-| Interchange Issue/Provenance Loop | P2 | Review issues and exchanged quantities remain identity-traceable |
+| Native Semantic Editing | P0 | CAD-native edits preserve semantic/provenance/quantity truth |
+| Large-Model Qualification | P0 | Real-project performance and V25 evidence |
+| Measurement Rules v2 — Explainable Quantity | P0 | Canonical rule/input/deduction/rounding trace |
+| Quantity Coverage & BOQ Mapping | P0–P1 | Know what is measured, unmapped, stale, or missing |
+| Quantity Revision Ledger | P0–P1 | Stable snapshot-to-snapshot quantity delta |
+| Inspector & Batch Edit | P0 | Fast inspect/edit/preview/apply workflow |
+| Cost & Rate Domain | P1 | Reproducible estimating separated from geometry |
+| Revision Cost Impact | P1 | Explainable quantity-driven and rate-driven deltas |
+| QS Rule Checker | P2 | Declarative quality profiles with evidence |
+| 2D/3D Takeoff Convergence | P2 | Support PDF/DWG takeoff without abandoning semantic architecture |
+| IFC/BCF Provenance Loop | P2 | Identity-traceable openBIM review/exchange |
+| Rebar Optimisation | P3 | Cutting/waste/procurement intelligence on BBS foundation |
 
-## 11. First 10 implementation tickets
+## 25. First implementation tickets recommended by the review
 
-These are proposed tickets; they are **not** claims that implementation is currently absent everywhere or that work is already reserved.
+These are **proposed tickets**, not reservations and not claims that every capability is absent everywhere.
 
-### 1. Add a canonical `MeasurementTrace` contract
+1. Add canonical `MeasurementTrace` contract.
+2. Version measurement rules and preserve rule version in snapshots.
+3. Project existing quantity services into trace output without creating a second calculation path.
+4. Add “why this quantity?” inspector.
+5. Add measurement snapshot + deterministic quantity delta.
+6. Add native qualification evidence schema/matrix.
+7. Add native edit regression/qualification matrix for MOVE/ROTATE/STRETCH/grips on high-value semantic categories.
+8. Add large-project performance fixtures/budgets for regeneration, BQ, rebar, room/topology, revision, and persistence.
+9. Add classification/work-item/BOQ mapping contract and coverage report.
+10. Add minimal `RateBook` and `RateItem` domain.
+11. Add `EstimateLine` from measurement snapshot + rate snapshot.
+12. Add revision cost-impact projection separating quantity and rate changes.
+13. Add QS Rule Checker v1 on top of Semantic Health.
+14. Add stale measurement/estimate/report snapshot detection.
+15. Prototype 2D count/length/area takeoff with explicit mapping to canonical work items.
+16. Define IFC identity/classification/QTO round-trip acceptance criteria before broader export work.
 
-Acceptance:
+## 26. Quality gates and product KPIs
 
-- immutable/detached result;
-- semantic/source identity included;
-- inputs, gross, deductions/additions, net, unit, rounding, rule ID/version represented;
-- deterministic equality/serialization decisions documented;
-- focused regression coverage for malformed/non-finite inputs.
-
-### 2. Version measurement rules
-
-Acceptance:
-
-- rule identity and version are explicit;
-- snapshot stores the version used;
-- editing a rule does not silently reinterpret a historical snapshot;
-- migration/backward-compat behavior is explicit.
-
-### 3. Project existing quantity services into trace output
-
-Acceptance:
-
-- start with a narrow, high-value category set;
-- numeric output remains backward-compatible unless an existing defect is proven;
-- trace explains existing result rather than adding a second calculation path;
-- report/export consumes the same result.
-
-### 4. Add “why this quantity?” inspector surface
-
-Acceptance:
-
-- selected semantic object can display quantity basis, deductions, unit, rule version, warnings, and provenance;
-- unavailable trace fails visibly instead of fabricating an explanation;
-- no business math implemented in UI code.
-
-### 5. Add measurement snapshot + quantity delta contract
-
-Acceptance:
-
-- added/removed/changed/unchanged classification is deterministic;
-- identity ambiguity fails visibly;
-- old/new quantity and delta preserved;
-- changed rule version is distinguishable from changed geometry/property input.
-
-### 6. Add native qualification evidence schema/matrix
-
-Acceptance:
-
-- host version/build/environment and test surface recorded;
-- managed vs native qualification cannot be confused;
-- evidence links/artifacts and date are recorded;
-- release/status docs can consume the matrix without manually rewriting facts.
-
-### 7. Add minimal `RateBook` and `RateItem` domain
-
-Acceptance:
-
-- explicit unit, currency, effective date/version;
-- immutable snapshot semantics for estimating;
-- no geometry dependency;
-- invalid/non-finite/ambiguous rates fail closed.
-
-### 8. Add `EstimateLine` from measurement snapshot + rate snapshot
-
-Acceptance:
-
-- measured quantity is preserved separately from waste/estimating quantity;
-- rate and commercial adjustments are explicit;
-- extended cost is deterministic;
-- source measurement trace is linkable;
-- report/export does not recompute the estimate independently.
-
-### 9. Add revision cost-impact projection
-
-Acceptance:
-
-- previous/current estimate snapshot comparison;
-- quantity delta and rate delta separated;
-- cost delta reason visible;
-- missing rate/identity produces an actionable finding, not zero-cost silence.
-
-### 10. Add QS Rule Checker v1 on top of semantic health
-
-Acceptance:
-
-- named rules/profile/severity/evidence;
-- deterministic evaluation order/output;
-- first profile includes classification, invalid quantity input, malformed metadata, stale snapshot, and missing rate checks where applicable;
-- autofix, if present, is only for safe deterministic changes and uses preview/apply semantics.
-
-## 12. Proposed quality gates and product KPIs
-
-These are proposed measurements, not current repository metrics.
+These are proposed measures, not current repository metrics.
 
 ### Quality gates
 
-- **Trace completeness:** high-value quantities must provide a valid trace before a release can call them explainable.
-- **Deterministic rerun:** same canonical input + same rule snapshot produces the same quantity/estimate output.
-- **No hidden recomputation:** reports/exports must not implement independent business formulas for canonical quantities/costs.
-- **Stale-state detection:** measurement/estimate/report snapshots must detect when their source state is no longer current.
-- **Native evidence:** native-dependent release claims require host/version-specific evidence.
-- **Identity integrity:** ambiguous/duplicate identity cannot be silently deduplicated in revision, provenance, or estimate reconciliation.
-- **Unit integrity:** persistence and external boundaries use explicit, canonical unit semantics.
+- **Trace completeness:** high-value quantities require valid trace before being called explainable.
+- **Deterministic rerun:** same canonical input + same rule snapshot → same output.
+- **No hidden recomputation:** reports/exports do not independently implement canonical business formulas.
+- **Stale-state detection:** measurement/estimate/report snapshots detect outdated source state.
+- **Native evidence:** native-dependent release claims require host/version evidence.
+- **Identity integrity:** ambiguous/duplicate identity cannot be silently deduplicated in provenance/revision/estimate reconciliation.
+- **Unit integrity:** persistence/exchange boundaries use explicit canonical units.
+- **Edit integrity:** qualified native edits preserve or deterministically regenerate semantic and quantity truth.
+- **Performance budget:** representative project sizes have measurable response-time/memory targets.
 
-### Useful product KPIs
+### Product KPIs
 
-- percentage of reportable quantity lines with complete trace;
-- percentage of target native commands/objects qualified on the supported host matrix;
-- stale snapshot detection rate in regression fixtures;
-- unresolved classification/rate findings per project;
-- revision quantity lines reconciled by stable identity;
-- revision cost deltas that can be attributed to quantity vs rate change;
+- % reportable quantity lines with complete trace;
+- % semantic elements quantity-ready;
+- % elements mapped to classification/work item/BOQ;
+- unresolved classification/rule/rate findings per project;
+- % target native commands/objects qualified on host matrix;
+- revision lines reconciled by stable identity;
+- % cost deltas attributable to quantity vs rate change;
 - count of known report-specific hidden quantity recomputations — target `0`;
-- edit-preview/report consistency failures — target `0` for qualified workflows.
+- edit-preview/report consistency failures — target `0` for qualified workflows;
+- stale-output defects found after release — target downward trend;
+- large-model workflow timings against versioned budgets.
 
-## 13. Decision policy for future features
+## 27. “Killer workflow” target
 
-Before adding a substantial feature/category, answer all five questions:
+The session’s strongest product concept was a traceable loop where every output is reversible back to its cause:
+
+```text
+DWG / PDF / IFC
+        ↓
+Recognize / Capture / Direct Draw
+        ↓
+Semantic Model
+        ↓
+Model Health
+        ↓
+Measurement Rules
+        ↓
+Explainable Quantities
+        ↓
+Classification
+        ↓
+BOQ Mapping
+        ↓
+Rates / Estimate
+        ↓
+Revision
+        ↓
+Quantity Delta + Cost Delta
+        ↓
+Excel / DWG Tables / IFC / BCF
+```
+
+Desired UX invariants:
+
+- every BQ line: **click → model**;
+- every object: **click → quantity breakdown**;
+- every quantity: **click → formula/rule/deductions**;
+- every revision delta: **click → reason/source objects**;
+- every estimate line: **click → measurement snapshot + rate snapshot**.
+
+This is the product behavior most likely to differentiate QS3D from a generic BIM authoring clone.
+
+## 28. Decision policy for future features
+
+Before adding a substantial feature/category, answer:
 
 1. Does it materially improve quantity, estimate, rebar, documentation, interchange, or QS-review fidelity?
-2. Can its business result be deterministic and explainable?
+2. Can the business result be deterministic and explainable?
 3. Does it reuse canonical identity/quantity/edit/report infrastructure rather than fork it?
-4. Is native qualification work budgeted where the host is involved?
-5. Does it serve the specialist QS/structural product boundary better than strengthening an existing workflow?
+4. Is native qualification budgeted where the host is involved?
+5. Does it improve a real specialist QS workflow more than strengthening an existing weak link?
 
-If the answer to several of these is “no,” defer the feature even if a competitor has it.
+If several answers are “no,” defer the feature even if a competitor has it.
 
-## 14. Recommended delivery sequence
+## 29. Recommended delivery sequence
 
-### Wave 1 — Measurement trust
+### Wave 1 — Native trust + measurement trust
 
+- native edit invariants;
+- large-model performance/qualification;
 - `MeasurementTrace`;
 - rule versioning;
 - identity/provenance convergence;
-- native qualification matrix;
-- trace projection for a narrow set of highest-value quantities.
+- trace projection for high-value categories;
+- quantity coverage and classification/BOQ mapping foundation.
 
-### Wave 2 — Revision and editing
+### Wave 2 — Revision and inspection
 
-- inspector / “why this quantity?”;
-- batch edit with preview/apply;
+- “why this quantity?” inspector;
+- batch edit preview/apply;
 - measurement snapshot and revision quantity delta;
-- stale-snapshot/report detection.
+- stale snapshot/report detection.
 
 ### Wave 3 — Estimating
 
@@ -573,31 +1143,44 @@ If the answer to several of these is “no,” defer the feature even if a compe
 - estimate lines/snapshots;
 - waste/commercial adjustments;
 - revision cost impact;
-- estimate-aware export/report projection.
+- estimate-aware BQ/export.
 
-### Wave 4 — QS checking and collaboration
+### Wave 4 — QA and interoperability
 
-- declarative checker profiles;
+- declarative QS checker;
 - issue/evidence workflow;
-- interchange provenance loop;
-- selective IDS/BCF integration if concrete customer workflows justify it.
+- 2D/3D takeoff convergence;
+- IFC provenance/classification/QTO round-trip hardening;
+- selective IDS/BCF integration.
 
-## 15. Repository references and source-of-truth policy
+### Wave 5 — Specialist expansion
 
-Use this note to guide prioritization, then verify each implementation decision against current repository truth:
+- rebar cutting/waste/procurement optimisation;
+- MEP QS when demand is proven;
+- civil/earthwork depth;
+- selected collaboration/cloud capabilities;
+- additional categories only when they reuse the canonical architecture.
+
+## 30. Repository references and source-of-truth policy
+
+Use this note for prioritization, then verify each implementation decision against current repository truth:
 
 - Product boundary: `docs/PRODUCT-BOUNDARY.md`
 - Implementation status: `docs/IMPLEMENTATION-STATUS.md`
 - Canonical plan: `docs/PLAN.md`
 - Multi-agent coordination: `docs/AGENT-WORK-REGISTRATION.md`
-- Current reservations/completions: `docs/agent-work-claims/`
+- Current claims: `docs/agent-work-claims/`
 
-If this document conflicts with current canonical status, source code, tests, or native qualification evidence, **the current canonical/source/evidence state wins**. Update this roadmap later as a strategy snapshot; do not use it to overwrite factual completion status.
+This note intentionally preserves the review session’s scorecard, examples, benchmark list, and strategic recommendations so they are not lost when the chat is deleted. It must not be used to claim that a recommended feature is implemented, tested, native-qualified, or production-ready.
 
-## 16. Bottom line
+## 31. Bottom line
 
-QS3D is already broad enough that the highest-value next step is not indiscriminate breadth. The stronger product path is:
+The complete review conclusion is:
 
-**semantic model → explainable measured quantity → revision-aware quantity snapshot → rate/estimate snapshot → explainable cost impact → rule-based QS review → qualified BricsCAD production workflow.**
+> **QS3D is already broad enough. The next competitive step is depth of QS truth, not raw feature count.**
 
-That chain turns existing geometry, metadata, reporting, and interchange depth into a coherent QS product while keeping the codebase focused, deterministic, auditable, and materially different from a generic BIM authoring clone.
+The strongest roadmap is:
+
+**native edit/runtime trust → semantic model → explainable measured quantity → classification/BOQ coverage → revision-aware quantity snapshot → rate/estimate snapshot → explainable cost impact → rule-based QS review → IFC/BCF/2D interoperability → specialist rebar/MEP/civil expansion where real demand proves value.**
+
+That direction keeps QS3D focused, deterministic, auditable, and meaningfully different from AutoCAD/BricsCAD as CAD platforms, Revit as a general BIM authoring platform, and BLT3D/Cubicost/CostX as quantity/estimating references.
