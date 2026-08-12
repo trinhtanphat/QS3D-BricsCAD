@@ -128,6 +128,19 @@ namespace QS3D.Core.Domain
             MarkDirtyCore(flags, affectsGeneratedOutput);
         }
 
+        internal bool RemoveProperty(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Property name is required.", nameof(name));
+            var key = name.Trim();
+            if (!Properties.Remove(key)) return false;
+            var affectsGeneratedGeometry = ElementGeometryPolicy.AffectsGeneratedGeometry(Category, key);
+            var affectsGeneratedOutput = ElementGeometryPolicy.AffectsGeneratedOutput(Category, key);
+            var flags = ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity;
+            if (affectsGeneratedGeometry) flags |= ElementDirtyFlags.Geometry;
+            MarkDirtyCore(flags, affectsGeneratedOutput);
+            return true;
+        }
+
         public void SetQuantity(string name, double value)
         {
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Quantity name is required.", nameof(name));
