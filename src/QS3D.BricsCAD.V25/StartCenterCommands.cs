@@ -13,12 +13,15 @@ namespace QS3D.BricsCAD.V25
         [CommandMethod("QS3DSTART", CommandFlags.Modal)]
         public void ShowStartCenter()
         {
+            StartCenterWindow? createdWindow = null;
+
             try
             {
                 if (_window == null || !_window.IsLoaded)
                 {
-                    _window = new StartCenterWindow();
-                    _window.Closed += OnStartCenterClosed;
+                    createdWindow = new StartCenterWindow();
+                    _window = createdWindow;
+                    createdWindow.Closed += OnStartCenterClosed;
                     SubscribeToDocumentActivation();
                 }
 
@@ -32,6 +35,9 @@ namespace QS3D.BricsCAD.V25
             }
             catch (System.Exception ex)
             {
+                if (createdWindow != null)
+                    ReleaseStartCenterWindow(createdWindow);
+
                 var document = Application.DocumentManager.MdiActiveDocument;
                 document?.Editor.WriteMessage("\nQS3DSTART error: " + ex.Message);
             }
@@ -73,11 +79,19 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private static void ReleaseStartCenterWindow(StartCenterWindow window)
+        {
+            if (!ReferenceEquals(window, _window)) return;
+
+            window.Closed -= OnStartCenterClosed;
+            UnsubscribeFromDocumentActivation();
+            _window = null;
+        }
+
         private static void OnStartCenterClosed(object sender, EventArgs e)
         {
-            UnsubscribeFromDocumentActivation();
-            if (ReferenceEquals(sender, _window))
-                _window = null;
+            if (sender is StartCenterWindow window)
+                ReleaseStartCenterWindow(window);
         }
     }
 }
