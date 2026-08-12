@@ -62,7 +62,10 @@ namespace QS3D.Core.Services
 
             if (parsed.Count == 0)
                 throw new InvalidOperationException("Host " + host.Id + " physical opening target-state contains no opening ids.");
-            openingIds = parsed.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+            var canonical = parsed.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+            if (!parsed.SequenceEqual(canonical, StringComparer.Ordinal))
+                throw new InvalidOperationException("Host " + host.Id + " physical opening target-state is not in canonical opening-id order.");
+            openingIds = canonical.AsReadOnly();
             return true;
         }
 
