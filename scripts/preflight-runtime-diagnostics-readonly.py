@@ -19,8 +19,14 @@ else:
         errors.append("QS3DRUNTIMECHECK must not create/cache project state merely to inspect runtime/package metadata.")
     if "runtime diagnostics remain read-only and do not create project state" not in text:
         errors.append("QS3DRUNTIMECHECK must explain its no-project read-only behavior.")
-    if "var ok = v25Runtime && x64Runtime && packageVersionMatches;" not in text:
-        errors.append("Runtime qualification must remain independent of semantic-project presence.")
+    for token in (
+        "private const int ExpectedRuntimeMajor = 26;",
+        "private const int ExpectedRuntimeMajor = 25;",
+        "var expectedRuntime = Major(brxAssembly) == ExpectedRuntimeMajor && Major(tdAssembly) == ExpectedRuntimeMajor;",
+        "var ok = expectedRuntime && x64Runtime && packageVersionMatches;",
+    ):
+        if token not in text:
+            errors.append("Runtime host-major qualification contract is missing: " + token)
 
 if errors:
     for error in errors:
@@ -28,4 +34,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3DRUNTIMECHECK inspects runtime/package state without creating a semantic project.")
+print("PASS: QS3DRUNTIMECHECK inspects the compile-time V25/V26 host-major/package state independently of optional semantic project presence and never creates project state.")
