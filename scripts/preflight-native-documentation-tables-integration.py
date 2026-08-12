@@ -142,8 +142,12 @@ if QSDB.is_file():
         if token not in text: errors.append("QSDB persistence must save/reload project-level native Table metadata: " + token)
 if SNAPSHOT.is_file():
     text = SNAPSHOT.read_text(encoding="utf-8")
-    for token in ("target.Metadata.Clear();", "foreach (var item in source.Metadata) target.Metadata[item.Key] = item.Value ?? string.Empty;"):
-        if token not in text: errors.append("ProjectStateSnapshot must include project Metadata for rollback-safe native Table mutation: " + token)
+    for token in (
+        "target.Metadata.Clear();",
+        "foreach (var item in source.Metadata) target.Metadata[item.Key] = item.Value;",
+        "target.RestorePersistenceState(source.UpdatedUtc, source.ChangeVersion);",
+    ):
+        if token not in text: errors.append("ProjectStateSnapshot must include project Metadata and persistence state for rollback-safe native Table mutation: " + token)
 if INTERCHANGE.is_file():
     text = INTERCHANGE.read_text(encoding="utf-8")
     if "project.Metadata" in text: errors.append("portable Semantic Snapshot must not serialize ProjectState.Metadata; drawing-local native Table handles/positions are not portable")
