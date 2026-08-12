@@ -78,7 +78,7 @@ checks = {
         'CURTAIN_FRAME_CONFIG_FINGERPRINT_MISSING', 'CURTAIN_FRAME_CONFIG_STALE',
         'CURTAIN_FRAME_CONFIG_INVALID', 'ElementCategory.GlassWall',
         'GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)',
-        'class OwnershipIndex', 'HashSet<string> Conflicts', 'ownership.Conflicts.Contains(handle)',
+        'class OwnershipIndex', 'HashSet<string> Conflicts', 'ownership.Conflicts.Contains(handleIdentity)',
         'CURTAIN_FRAME_GENERATED_OWNERSHIP_CONFLICT', 'CURTAIN_FRAME_GENERATED_STALE',
     ],
     "host_link": [
