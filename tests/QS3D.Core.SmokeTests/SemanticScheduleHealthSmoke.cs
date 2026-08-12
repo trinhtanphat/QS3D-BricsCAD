@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             ValidAndZeroMatchSchedulesAreHealthy();
+            NullIdentityEntriesFailVisibleWhenCatalogIsActive();
             StaleAndAmbiguousReferencesAreReported();
             InvalidTemplateAndCatalogAreReportedReadOnly();
             ComprehensiveHealthIncludesSemanticScheduleProvider();
@@ -28,6 +29,33 @@ namespace QS3D.Core.SmokeTests
             var issues = new SemanticScheduleHealthService().Inspect(project);
             Equal(0, issues.Count);
             Equal(version, project.ChangeVersion);
+        }
+
+        private static void NullIdentityEntriesFailVisibleWhenCatalogIsActive()
+        {
+            var floorProject = Project();
+            SaveIdentityProbe(floorProject, "S-NULL-FLOOR");
+            floorProject.Floors.Add(null!);
+            Throws<InvalidOperationException>(() => new SemanticScheduleHealthService().Inspect(floorProject));
+
+            var zoneProject = Project();
+            SaveIdentityProbe(zoneProject, "S-NULL-ZONE");
+            zoneProject.Zones.Add(null!);
+            Throws<InvalidOperationException>(() => new SemanticScheduleHealthService().Inspect(zoneProject));
+
+            var elementProject = Project();
+            SaveIdentityProbe(elementProject, "S-NULL-ELEMENT");
+            elementProject.Elements.Add(null!);
+            Throws<InvalidOperationException>(() => new SemanticScheduleHealthService().Inspect(elementProject));
+            HasProviderFailure(new ComprehensiveModelHealthService().Inspect(elementProject), "SemanticScheduleHealthService");
+        }
+
+        private static void SaveIdentityProbe(ProjectState project, string id)
+        {
+            SemanticScheduleCatalog.Save(project, new[]
+            {
+                Definition(id, "", "", Array.Empty<string>(), Array.Empty<string>(), "{Id}")
+            });
         }
 
         private static void StaleAndAmbiguousReferencesAreReported()
@@ -119,6 +147,27 @@ namespace QS3D.Core.SmokeTests
         {
             if (!issues.Any(x => string.Equals(x.Code, code, StringComparison.Ordinal)))
                 throw new Exception("Expected Model Health code " + code + ".");
+        }
+
+        private static void HasProviderFailure(System.Collections.Generic.IEnumerable<ModelHealthIssue> issues, string providerName)
+        {
+            if (!issues.Any(x =>
+                    string.Equals(x.Code, "HEALTH_PROVIDER_FAILED", StringComparison.Ordinal) &&
+                    (x.Message ?? string.Empty).IndexOf(providerName, StringComparison.Ordinal) >= 0))
+                throw new Exception("Expected HEALTH_PROVIDER_FAILED for " + providerName + ".");
+        }
+
+        private static void Throws<TException>(Action action) where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException)
+            {
+                return;
+            }
+            throw new Exception("Expected exception " + typeof(TException).Name + ".");
         }
 
         private static void Equal<T>(T expected, T actual)
