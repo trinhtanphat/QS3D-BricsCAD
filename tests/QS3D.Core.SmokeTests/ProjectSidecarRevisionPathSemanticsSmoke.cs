@@ -24,10 +24,25 @@ namespace QS3D.Core.SmokeTests
             if (stamp.HasAnyFile || sameStamp.HasAnyFile || caseVariantStamp.HasAnyFile)
                 throw new InvalidOperationException("Sidecar path smoke must use non-existing primary/backup paths.");
 
-            if (!stamp.IsForPath("  " + path + "  "))
-                throw new InvalidOperationException("Revision stamp must recognize its normalized primary path.");
+            if (!stamp.IsForPath(path))
+                throw new InvalidOperationException("Revision stamp must recognize its exact primary path.");
             if (!stamp.Equals(sameStamp) || stamp.GetHashCode() != sameStamp.GetHashCode())
                 throw new InvalidOperationException("Equivalent sidecar revision stamps must remain equal with matching hash codes.");
+
+            var whitespaceFileName = " QS3D-SIDECAR-" + Guid.NewGuid().ToString("N") + "-SPACE.qsdb";
+            var whitespacePath = Path.Combine(Path.GetTempPath(), whitespaceFileName);
+            var trimmedNeighborPath = Path.Combine(Path.GetTempPath(), whitespaceFileName.TrimStart());
+            if (string.Equals(whitespacePath, trimmedNeighborPath, StringComparison.Ordinal))
+                throw new InvalidOperationException("Whitespace path smoke fixture must have a distinct trimmed neighbor.");
+
+            var whitespaceStamp = ProjectSidecarRevisionStamp.Capture(whitespacePath);
+            var trimmedNeighborStamp = ProjectSidecarRevisionStamp.Capture(trimmedNeighborPath);
+            if (whitespaceStamp.HasAnyFile || trimmedNeighborStamp.HasAnyFile)
+                throw new InvalidOperationException("Whitespace path smoke must use non-existing primary/backup paths.");
+            if (!whitespaceStamp.IsForPath(whitespacePath))
+                throw new InvalidOperationException("Revision stamp must preserve a valid leading-whitespace file name.");
+            if (whitespaceStamp.IsForPath(trimmedNeighborPath) || whitespaceStamp.Equals(trimmedNeighborStamp))
+                throw new InvalidOperationException("Revision stamp must not collapse a valid whitespace path onto its trimmed neighbor.");
 
             var caseInsensitive = Path.DirectorySeparatorChar == '\\';
             if (stamp.IsForPath(caseVariantPath) != caseInsensitive)
