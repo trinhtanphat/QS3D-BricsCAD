@@ -21,8 +21,9 @@ if SOURCE.is_file():
         'issues.Error("QUANTITY_KEY_NON_CANONICAL"',
         'issues.Error("PROPERTY_KEY_DUPLICATE"',
         'issues.Error("QUANTITY_KEY_DUPLICATE"',
-        "DateTimeOffset.TryParse",
-        "HasExplicitUtcOffset(raw)",
+        'DateTime.TryParseExact(raw, "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)',
+        "parsed.Kind != DateTimeKind.Utc",
+        'parsed.ToString("O", CultureInfo.InvariantCulture)',
         'issues.Error("TIMESTAMP_NOT_UTC"',
         'string.Equals(element.SourceRefScope ?? string.Empty, "drawing-local", StringComparison.Ordinal)',
     ):
@@ -30,6 +31,8 @@ if SOURCE.is_file():
             errors.append("ProjectInterchangeJsonValidator.cs missing canonical validation token: " + token)
     if "Enum.TryParse(normalized, true" in text:
         errors.append("Interchange validator must not silently trim/case-normalize category tokens that typed reading rejects.")
+    if "DateTimeOffset.TryParse" in text or "HasExplicitUtcOffset(raw)" in text:
+        errors.append("Interchange validator must not restore permissive explicit-offset timestamp normalization.")
     if 'issues.Warning("TIMESTAMP_NOT_UTC"' in text:
         errors.append("A non-empty timestamp without explicit timezone must be an Error, not a Warning.")
 
@@ -43,7 +46,8 @@ if SMOKE.is_file():
         "RejectsPaddedPropertyKey();",
         "RejectsPaddedQuantityKey();",
         "RejectsTimestampWithoutOffset();",
-        "AcceptsExplicitOffset();",
+        "RejectsTimestampWithExplicitOffset();",
+        "AcceptsCanonicalUtc();",
     ):
         if token not in text:
             errors.append("ProjectInterchangeValidatorCanonicalSmoke.cs missing regression token: " + token)
@@ -54,4 +58,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: interchange validation, typed reading, preview, diff, and import share one canonical semantic-identity and explicit-timezone contract.")
+print("PASS: interchange validation, typed reading, preview, diff, and import share one canonical semantic-identity and exact UTC round-trip timestamp contract.")
