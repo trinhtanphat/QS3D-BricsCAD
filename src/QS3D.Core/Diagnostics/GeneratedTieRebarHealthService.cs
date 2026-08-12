@@ -19,8 +19,8 @@ namespace QS3D.Core.Diagnostics
             {
                 if (element == null)
                     throw new InvalidOperationException("Tie rebar health cannot inspect a null project element.");
-                if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
-                var handles = raw.Split(new[] { ';' }, StringSplitOptions.None).Select(x => (x ?? string.Empty).Trim()).ToArray();
+                if (!element.Properties.TryGetValue(HandlesKey, out var raw)) continue;
+                var handles = (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.None).Select(x => (x ?? string.Empty).Trim()).ToArray();
                 var local = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var valid = 0;
                 foreach (var handle in handles)
