@@ -253,10 +253,6 @@ namespace QS3D.Core.Persistence
         private static XDocument LoadDocument(string path)
         {
             var fullPath = Path.GetFullPath(path);
-            var fileInfo = new FileInfo(fullPath);
-            if (fileInfo.Length > MaxProjectFileBytes)
-                throw new InvalidDataException("QSDB project exceeds the maximum supported file size of 64 MiB.");
-
             var settings = new XmlReaderSettings
             {
                 DtdProcessing = DtdProcessing.Prohibit,
@@ -265,9 +261,14 @@ namespace QS3D.Core.Persistence
             };
 
             using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))
-            using (var reader = XmlReader.Create(stream, settings))
             {
-                return XDocument.Load(reader, LoadOptions.None);
+                if (stream.Length > MaxProjectFileBytes)
+                    throw new InvalidDataException("QSDB project exceeds the maximum supported file size of 64 MiB.");
+
+                using (var reader = XmlReader.Create(stream, settings))
+                {
+                    return XDocument.Load(reader, LoadOptions.None);
+                }
             }
         }
 
