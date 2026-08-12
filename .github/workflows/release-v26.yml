@@ -250,6 +250,37 @@ jobs:
             "X-GitHub-Api-Version" = "2022-11-28"
             "User-Agent" = "QS3D-V26-Manual-Release"
           }
+
+          function Assert-RemoteReleaseTagTargetsWorkflowSha {
+            $tagRef = "refs/tags/$env:RELEASE_TAG"
+            $peeledRef = $tagRef + '^{}'
+            $lines = @(git ls-remote --tags origin $tagRef $peeledRef)
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to resolve remote V26 release tag $env:RELEASE_TAG from origin. Release remains a draft."
+            }
+
+            $exact = New-Object System.Collections.Generic.List[string]
+            $peeled = New-Object System.Collections.Generic.List[string]
+            foreach ($line in $lines) {
+              if ($line -notmatch '^([0-9a-fA-F]{40})\s+(.+)$') {
+                throw "Malformed git ls-remote output while resolving V26 release tag $env:RELEASE_TAG. Release remains a draft."
+              }
+              $sha = $Matches[1]
+              $refName = $Matches[2]
+              if ([string]::Equals($refName, $tagRef, [StringComparison]::Ordinal)) { $exact.Add($sha) }
+              elseif ([string]::Equals($refName, $peeledRef, [StringComparison]::Ordinal)) { $peeled.Add($sha) }
+              else { throw "Unexpected remote ref while resolving V26 release tag: $refName. Release remains a draft." }
+            }
+            if ($exact.Count -ne 1 -or $peeled.Count -gt 1) {
+              throw "V26 release tag $env:RELEASE_TAG did not resolve to exactly one remote tag identity. Release remains a draft."
+            }
+
+            $resolvedSha = if ($peeled.Count -eq 1) { $peeled[0] } else { $exact[0] }
+            if (-not [string]::Equals($resolvedSha, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+              throw "V26 release tag $env:RELEASE_TAG targets $resolvedSha instead of qualified workflow SHA $env:GITHUB_SHA. Release remains a draft."
+            }
+          }
+
           $isPrerelease = $env:RELEASE_PRERELEASE -eq 'true'
           $signPackage = $env:RELEASE_SIGN_PACKAGE -eq 'true'
           $runtimeState = if ($env:RELEASE_RUN_RUNTIME -eq 'true') {
@@ -268,16 +299,18 @@ jobs:
           } | ConvertTo-Json
           $release = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases" -Headers $headers -ContentType 'application/json' -Body $request
 
+          Assert-RemoteReleaseTagTargetsWorkflowSha
+
           $releaseAssets = @('dist\QS3D-BricsCAD-V26.zip', 'dist\QS3D-BricsCAD-V26.zip.sha256')
           if ($signPackage) { $releaseAssets += 'dist\QS3D-BricsCAD-V26.update.json' }
+          $localAssets = @{}
           $uploadBase = $release.upload_url -replace '\{\?name,label\}$', ''
-          $localHashes = @{}
           foreach ($assetPath in $releaseAssets) {
             $asset = (Resolve-Path -LiteralPath $assetPath).Path
             $name = [IO.Path]::GetFileName($asset)
             if ($name -match 'V25') { throw "V25 release asset leaked into V26 publication: $name" }
-            if ($localHashes.ContainsKey($name)) { throw "Duplicate local V26 release asset name: $name" }
-            $localHashes[$name] = (Get-FileHash -LiteralPath $asset -Algorithm SHA256).Hash.ToUpperInvariant()
+            if ($localAssets.ContainsKey($name)) { throw "Duplicate local V26 release asset name: $name" }
+            $localAssets[$name] = $asset
             $contentType = if ($name.EndsWith('.zip')) { 'application/zip' } elseif ($name.EndsWith('.json')) { 'application/json' } else { 'text/plain' }
             Invoke-RestMethod -Method Post -Uri ($uploadBase + '?name=' + [Uri]::EscapeDataString($name)) -Headers $headers -ContentType $contentType -InFile $asset | Out-Null
           }
@@ -286,14 +319,52 @@ jobs:
           $draftRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
           $expectedAssets = @('QS3D-BricsCAD-V26.zip', 'QS3D-BricsCAD-V26.zip.sha256')
           if ($signPackage) { $expectedAssets += 'QS3D-BricsCAD-V26.update.json' }
-          foreach ($expectedAsset in $expectedAssets) {
-            $matches = @($draftRelease.assets | Where-Object { [string]$_.name -ceq $expectedAsset })
-            if ($matches.Count -ne 1) { throw "Expected exactly one V26 release asset named $expectedAsset; found $($matches.Count). Release remains draft." }
-            if ([int64]$matches[0].size -le 0) { throw "Uploaded V26 release asset is empty: $expectedAsset" }
-          }
           if (@($draftRelease.assets).Count -ne $expectedAssets.Count) {
             throw "Draft V26 release contains unexpected assets; refusing publication."
           }
+
+          $assetDownloadHeaders = @{}
+          foreach ($key in $headers.Keys) { $assetDownloadHeaders[$key] = $headers[$key] }
+          $assetDownloadHeaders['Accept'] = 'application/octet-stream'
+          $verificationRoot = if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) { [IO.Path]::GetTempPath() } else { $env:RUNNER_TEMP }
+
+          foreach ($expectedAsset in $expectedAssets) {
+            $matches = @($draftRelease.assets | Where-Object { [string]$_.name -ceq $expectedAsset })
+            if ($matches.Count -ne 1) {
+              throw "Expected exactly one V26 release asset named $expectedAsset; found $($matches.Count). Release remains a draft."
+            }
+            if (-not $localAssets.ContainsKey($expectedAsset)) {
+              throw "Local V26 release asset mapping is missing for $expectedAsset. Release remains a draft."
+            }
+
+            $uploadedAsset = $matches[0]
+            $localAsset = [string]$localAssets[$expectedAsset]
+            $localLength = [int64](Get-Item -LiteralPath $localAsset).Length
+            $remoteLength = [int64]$uploadedAsset.size
+            if ($remoteLength -ne $localLength) {
+              throw "Uploaded V26 release asset size mismatch for $expectedAsset. Local=$localLength Remote=$remoteLength. Release remains a draft."
+            }
+
+            $downloadedAsset = Join-Path $verificationRoot ('qs3d-v26-release-asset-' + [Guid]::NewGuid().ToString('N'))
+            try {
+              Invoke-WebRequest `
+                -Method Get `
+                -Uri ([string]$uploadedAsset.url) `
+                -Headers $assetDownloadHeaders `
+                -OutFile $downloadedAsset `
+                -UseBasicParsing
+              $localHash = (Get-FileHash -LiteralPath $localAsset -Algorithm SHA256).Hash
+              $remoteHash = (Get-FileHash -LiteralPath $downloadedAsset -Algorithm SHA256).Hash
+              if (-not [string]::Equals($localHash, $remoteHash, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Uploaded V26 release asset SHA-256 mismatch for $expectedAsset. Release remains a draft."
+              }
+            }
+            finally {
+              if (Test-Path -LiteralPath $downloadedAsset) { Remove-Item -LiteralPath $downloadedAsset -Force -ErrorAction SilentlyContinue }
+            }
+          }
+
+          Assert-RemoteReleaseTagTargetsWorkflowSha
 
           $published = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body (@{ draft = $false } | ConvertTo-Json)
           if ($published.draft -ne $false) { throw "V26 GitHub release remained a draft after publish request." }
