@@ -12,7 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             FailedDurableReplaceRestoresPersistenceState();
             SuccessfulSaveRoundTripsChangeVersion();
-            LegacyFileDefaultsChangeVersion();
+            MissingCurrentChangeVersionIsRejected();
             InvalidPersistedChangeVersionIsRejected();
         }
 
@@ -83,19 +83,20 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
-        private static void LegacyFileDefaultsChangeVersion()
+        private static void MissingCurrentChangeVersionIsRejected()
         {
-            var path = TempProjectPath("legacy-version");
+            var path = TempProjectPath("missing-current-version");
             try
             {
                 var store = new QsdbProjectStore();
-                store.Save(new ProjectState("legacy-version", "Legacy version"), path);
+                store.Save(new ProjectState("missing-current-version", "Missing current version"), path);
                 var document = XDocument.Load(path);
                 document.Root?.Attribute("changeVersion")?.Remove();
                 document.Save(path, SaveOptions.DisableFormatting);
 
-                var loaded = store.Load(path);
-                Require(loaded.ChangeVersion == 0L, "Legacy QSDB without changeVersion did not default to zero.");
+                Throws<InvalidDataException>(
+                    () => store.Load(path),
+                    "Current schema-3 QSDB without changeVersion was accepted instead of failing the strict persistence boundary.");
             }
             finally
             {
