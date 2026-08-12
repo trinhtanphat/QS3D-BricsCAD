@@ -128,13 +128,23 @@ namespace QS3D.Core.Reporting
         {
             if (elementIds == null) return null;
             var selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var selectedInstances = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var raw in elementIds)
             {
                 var id = (raw ?? string.Empty).Trim();
                 if (id.Length == 0) throw new ArgumentException("Quantity report element ids must not be blank.", nameof(elementIds));
                 if (!selected.Add(id))
                     throw new ArgumentException("Quantity report element ids must be unique. Duplicate id: " + id + ".", nameof(elementIds));
-                if (project.FindElement(id) == null) throw new KeyNotFoundException("Unknown quantity report element: " + id);
+                var element = project.FindElement(id) ?? throw new KeyNotFoundException("Unknown quantity report element: " + id);
+                selectedInstances.Add(id, element);
+            }
+
+            ReportingProjectIdentityGuard.RequireUniqueElementIds(project, "Quantity report selection");
+            foreach (var selectedInstance in selectedInstances)
+            {
+                var current = project.FindElement(selectedInstance.Key);
+                if (current == null || !ReferenceEquals(current, selectedInstance.Value))
+                    throw new InvalidOperationException("Quantity report selection became stale while element ids were being enumerated; recompute the selection against the current project state.");
             }
             return selected;
         }
