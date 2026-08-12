@@ -6,6 +6,20 @@ namespace QS3D.Core.Diagnostics
 {
     public sealed class GeneratedGeometryStaleHealthService
     {
+        private static readonly KeyValuePair<string, string>[] StaleMetadataPairs =
+        {
+            new KeyValuePair<string, string>(ProjectElement.GeneratedSolidStateKey, ProjectElement.GeneratedSolidStaleSnapshotKey),
+            new KeyValuePair<string, string>(ProjectElement.GeneratedRebarStateKey, ProjectElement.GeneratedRebarStaleSnapshotKey),
+            new KeyValuePair<string, string>(ProjectElement.GeneratedShapeRebarStateKey, ProjectElement.GeneratedShapeRebarStaleSnapshotKey),
+            new KeyValuePair<string, string>(ProjectElement.GeneratedTieRebarStateKey, ProjectElement.GeneratedTieRebarStaleSnapshotKey),
+            new KeyValuePair<string, string>(ProjectElement.GeneratedBeamStirrupStateKey, ProjectElement.GeneratedBeamStirrupStaleSnapshotKey),
+            new KeyValuePair<string, string>(ProjectElement.GeneratedSlabMeshStateKey, ProjectElement.GeneratedSlabMeshStaleSnapshotKey),
+            new KeyValuePair<string, string>(ProjectElement.GeneratedWallMeshStateKey, ProjectElement.GeneratedWallMeshStaleSnapshotKey),
+            new KeyValuePair<string, string>(ProjectElement.GeneratedFoundationMeshStateKey, ProjectElement.GeneratedFoundationMeshStaleSnapshotKey),
+            new KeyValuePair<string, string>(ProjectElement.GeneratedCurtainFrameStateKey, ProjectElement.GeneratedCurtainFrameStaleSnapshotKey),
+            new KeyValuePair<string, string>(ProjectElement.GeneratedCurtainPanelStateKey, ProjectElement.GeneratedCurtainPanelStaleSnapshotKey)
+        };
+
         public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -14,6 +28,7 @@ namespace QS3D.Core.Diagnostics
             {
                 if (element == null)
                     throw new InvalidOperationException("Generated-geometry stale diagnostics cannot inspect a project containing a null semantic element.");
+                InspectMalformedStaleMetadata(element, issues);
                 if (element.IsGeneratedSolidStale())
                     issues.Add(new ModelHealthIssue(
                         "GENERATED_SOLID_STALE",
@@ -76,6 +91,23 @@ namespace QS3D.Core.Diagnostics
                         element.Id));
             }
             return issues.AsReadOnly();
+        }
+
+        private static void InspectMalformedStaleMetadata(ProjectElement element, ICollection<ModelHealthIssue> issues)
+        {
+            foreach (var pair in StaleMetadataPairs)
+            {
+                if (!element.Properties.TryGetValue(pair.Key, out var state) ||
+                    !string.Equals((state ?? string.Empty).Trim(), "stale", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (element.Properties.TryGetValue(pair.Value, out var snapshot) && !string.IsNullOrWhiteSpace(snapshot))
+                    continue;
+                issues.Add(new ModelHealthIssue(
+                    "GENERATED_STALE_METADATA_INVALID",
+                    HealthSeverity.Error,
+                    "Generated stale metadata thiếu snapshot bắt buộc cho " + pair.Key + ". Rebuild generated output trước khi release.",
+                    element.Id));
+            }
         }
 
         private static string Message(ProjectElement element, string fallback)
