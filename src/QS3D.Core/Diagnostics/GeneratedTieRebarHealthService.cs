@@ -54,10 +54,18 @@ namespace QS3D.Core.Diagnostics
 
                 if (!element.Properties.TryGetValue("GeneratedTieRebarCount", out var countText) ||
                     !int.TryParse(countText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var count) || count < 0 || count != valid)
+                {
                     issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_COUNT_MISMATCH", HealthSeverity.Warning, "GeneratedTieRebarCount thiếu hoặc không khớp số handle hợp lệ.", element.Id));
+                }
+                else
+                {
+                    var canonicalCount = count.ToString(CultureInfo.InvariantCulture);
+                    if (!string.Equals(countText, canonicalCount, StringComparison.Ordinal))
+                        issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_COUNT_NON_CANONICAL", HealthSeverity.Error, "GeneratedTieRebarCount phải dùng đúng invariant integer spelling: " + canonicalCount + ".", element.Id));
+                }
 
-                CheckPositive(element, "GeneratedTieRebarDiameterMm", "TIE_REBAR_GENERATED_DIAMETER_INVALID", "GeneratedTieRebarDiameterMm thiếu hoặc không hợp lệ.", issues);
-                CheckNonNegative(element, "GeneratedTieRebarActualSpacingM", "TIE_REBAR_GENERATED_SPACING_INVALID", "GeneratedTieRebarActualSpacingM thiếu hoặc không hợp lệ.", issues);
+                CheckPositive(element, "GeneratedTieRebarDiameterMm", "TIE_REBAR_GENERATED_DIAMETER_INVALID", "TIE_REBAR_GENERATED_DIAMETER_NON_CANONICAL", "GeneratedTieRebarDiameterMm thiếu hoặc không hợp lệ.", issues);
+                CheckNonNegative(element, "GeneratedTieRebarActualSpacingM", "TIE_REBAR_GENERATED_SPACING_INVALID", "TIE_REBAR_GENERATED_SPACING_NON_CANONICAL", "GeneratedTieRebarActualSpacingM thiếu hoặc không hợp lệ.", issues);
                 InspectCover(element, issues);
                 InspectMode(element, issues);
                 if (element.Category != ElementCategory.Column)
@@ -151,16 +159,31 @@ namespace QS3D.Core.Diagnostics
                 index.Conflicts.Add(normalized);
         }
 
-        private static void CheckPositive(ProjectElement element, string key, string code, string message, List<ModelHealthIssue> issues)
+        private static void CheckPositive(ProjectElement element, string key, string code, string canonicalCode, string message, List<ModelHealthIssue> issues)
         {
             if (!element.Properties.TryGetValue(key, out var raw) || !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || value <= 0d)
+            {
                 issues.Add(new ModelHealthIssue(code, HealthSeverity.Warning, message, element.Id));
+                return;
+            }
+            ValidateNumericCanonicality(element, key, raw, value, canonicalCode, issues);
         }
 
-        private static void CheckNonNegative(ProjectElement element, string key, string code, string message, List<ModelHealthIssue> issues)
+        private static void CheckNonNegative(ProjectElement element, string key, string code, string canonicalCode, string message, List<ModelHealthIssue> issues)
         {
             if (!element.Properties.TryGetValue(key, out var raw) || !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+            {
                 issues.Add(new ModelHealthIssue(code, HealthSeverity.Warning, message, element.Id));
+                return;
+            }
+            ValidateNumericCanonicality(element, key, raw, value, canonicalCode, issues);
+        }
+
+        private static void ValidateNumericCanonicality(ProjectElement element, string key, string raw, double value, string code, ICollection<ModelHealthIssue> issues)
+        {
+            var canonical = value.ToString("R", CultureInfo.InvariantCulture);
+            if (!string.Equals(raw, canonical, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue(code, HealthSeverity.Error, key + " phải dùng đúng round-trip invariant numeric spelling: " + canonical + ".", element.Id));
         }
     }
 }
