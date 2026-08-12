@@ -33,7 +33,7 @@
         <Grid Grid.Row="0">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
             <StackPanel><TextBlock Text="⚙  CÀI ĐẶT THÔNG SỐ TÍNH TOÁN  (SETUP &amp; RULES)" FontSize="17" FontWeight="Bold" Foreground="#F3F7FD" /><TextBlock Margin="0,5,0,0" Text="Thông số cốp pha + luật giao cắt + ngưỡng engine — cấu hình QS3D dùng cho định lượng." Foreground="{StaticResource MutedBrush}" /></StackPanel>
-            <Border Grid.Column="1" Padding="10,5" CornerRadius="4" Background="#132238" BorderBrush="#2A4D74" BorderThickness="1"><TextBlock Text="Schema v2" Foreground="#86BDF2" FontWeight="SemiBold" /></Border>
+            <Border Grid.Column="1" Padding="10,5" CornerRadius="4" Background="#132238" BorderBrush="#2A4D74" BorderThickness="1"><TextBlock Text="{Binding SchemaVersionLabel}" Foreground="#86BDF2" FontWeight="SemiBold" /></Border>
         </Grid>
         <Border Grid.Row="2" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="5" Padding="1">
             <TabControl Background="{StaticResource PanelBrush}" BorderThickness="0">
