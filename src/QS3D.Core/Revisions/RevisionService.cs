@@ -215,8 +215,8 @@ namespace QS3D.Core.Revisions
             delta.Fields.Add(new RevisionFieldDelta
             {
                 Field = "SourceHandles",
-                Before = string.Join(",", left),
-                After = string.Join(",", right)
+                Before = FormatList(left),
+                After = FormatList(right)
             });
         }
 
@@ -228,8 +228,8 @@ namespace QS3D.Core.Revisions
             delta.Fields.Add(new RevisionFieldDelta
             {
                 Field = "Dependencies",
-                Before = string.Join(",", left),
-                After = string.Join(",", right)
+                Before = FormatList(left),
+                After = FormatList(right)
             });
         }
 
@@ -343,6 +343,12 @@ namespace QS3D.Core.Revisions
             if (string.Equals(before ?? string.Empty, after ?? string.Empty, StringComparison.Ordinal)) return;
             delta.Fields.Add(new RevisionFieldDelta { Field = field, Before = before ?? string.Empty, After = after ?? string.Empty });
         }
+
+        private static string FormatList(IEnumerable<string> values) =>
+            string.Join(",", values.Select(EscapeListToken));
+
+        private static string EscapeListToken(string value) =>
+            (value ?? string.Empty).Replace("\\", "\\\\").Replace(",", "\\,");
 
         private static string F(double value, string label) => RevisionMath.Finite(value, label).ToString("R", CultureInfo.InvariantCulture);
     }
