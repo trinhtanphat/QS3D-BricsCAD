@@ -330,6 +330,17 @@ namespace QS3D.Core.Templates
             if (profile.QuantityRules.Any(x => x == null)) throw new InvalidDataException("Template rule list cannot contain null entries.");
             var duplicateFamily = profile.Families.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicateFamily != null) throw new InvalidDataException("Duplicate template family id: " + duplicateFamily.Key);
+            foreach (var family in profile.Families)
+            {
+                foreach (var property in family.Properties)
+                {
+                    var key = property.Key;
+                    if (string.IsNullOrWhiteSpace(key))
+                        throw new InvalidDataException("Template family property key cannot be empty: " + family.Id);
+                    if (!string.Equals(key, key.Trim(), StringComparison.Ordinal))
+                        throw new InvalidDataException("Template family property key must not contain leading/trailing whitespace: " + family.Id + "/" + key);
+                }
+            }
             var duplicateRule = profile.QuantityRules.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicateRule != null) throw new InvalidDataException("Duplicate template rule id: " + duplicateRule.Key);
             var duplicateOutput = profile.QuantityRules.GroupBy(x => x.Category + "\u001f" + x.OutputName, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
