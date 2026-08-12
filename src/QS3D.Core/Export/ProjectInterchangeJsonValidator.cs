@@ -738,19 +738,12 @@ namespace QS3D.Core.Export
                 issues.Error("TIMESTAMP_INVALID", "Timestamp must not contain leading/trailing whitespace.", path);
                 return;
             }
-            if (!HasExplicitUtcOffset(raw) || !DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+            if (!DateTime.TryParseExact(raw, "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed) ||
+                parsed.Kind != DateTimeKind.Utc ||
+                !string.Equals(raw, parsed.ToString("O", CultureInfo.InvariantCulture), StringComparison.Ordinal))
             {
-                issues.Error("TIMESTAMP_NOT_UTC", "Timestamp must include an explicit Z or numeric timezone offset.", path);
+                issues.Error("TIMESTAMP_NOT_UTC", "Timestamp must use the canonical UTC round-trip form emitted by QS3D.", path);
             }
-        }
-
-        private static bool HasExplicitUtcOffset(string value)
-        {
-            if (value.EndsWith("Z", StringComparison.OrdinalIgnoreCase)) return true;
-            var timeSeparator = value.IndexOf('T');
-            if (timeSeparator < 0) return false;
-            var offsetSeparator = Math.Max(value.LastIndexOf('+'), value.LastIndexOf('-'));
-            return offsetSeparator > timeSeparator;
         }
 
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
