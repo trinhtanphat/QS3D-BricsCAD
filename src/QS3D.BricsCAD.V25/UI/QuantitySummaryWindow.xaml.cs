@@ -325,6 +325,7 @@ namespace QS3D.BricsCAD.V25.UI
                     var expectedCount = displayedHandles.Length > 0 ? displayedHandles.Length : liveHandles.Length;
                     if (selectedCount <= 0)
                     {
+                        Cad.CadHandleService.ClearSelection(_document);
                         PaletteCoordinator.SetStatus("BQ Định vị: không còn đối tượng CAD hợp lệ trong " + expectedCount + " handle của dòng này.");
                         return;
                     }
@@ -336,7 +337,7 @@ namespace QS3D.BricsCAD.V25.UI
                     return;
                 }
 
-                Cad.CadHandleService.Select(_document, liveHandles);
+                Cad.CadHandleService.ClearSelection(_document);
                 if (_locate != null)
                 {
                     _locate(currentRow);
