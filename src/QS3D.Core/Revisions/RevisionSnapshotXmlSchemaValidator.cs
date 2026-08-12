@@ -8,21 +8,19 @@ namespace QS3D.Core.Revisions
 {
     internal static class RevisionSnapshotXmlSchemaValidator
     {
-        internal static void Validate(XDocument document)
-        {
-            if (document == null) throw new ArgumentNullException(nameof(document));
-            var root = document.Root ?? throw new InvalidDataException("Revision file has no root.");
-            foreach (var node in document.Nodes())
-            {
-                if (ReferenceEquals(node, root)) continue;
-                throw new InvalidDataException("Unsupported QS3D revision document-level XML content.");
-            }
-            Validate(root);
-        }
-
         internal static void Validate(XElement root)
         {
             if (root == null) throw new ArgumentNullException(nameof(root));
+            var document = root.Document;
+            if (document != null)
+            {
+                foreach (var node in document.Nodes())
+                {
+                    if (ReferenceEquals(node, root)) continue;
+                    throw new InvalidDataException("Unsupported QS3D revision document-level XML content.");
+                }
+            }
+
             ValidateElement(root, "qs3dRevision", new[] { "id", "createdUtc" }, new[] { "elements" });
             RequireExactlyOne(root, "elements");
 
