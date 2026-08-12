@@ -182,6 +182,14 @@ namespace QS3D.Core.Geometry
 
         private static double CrossFinite(double ax, double ay, double bx, double by, string label)
         {
+            var firstProduct = ax * by;
+            var secondProduct = ay * bx;
+            if (Finite(firstProduct) && Finite(secondProduct))
+            {
+                var direct = firstProduct - secondProduct;
+                if (Finite(direct)) return direct;
+            }
+
             var scaleA = Math.Max(Math.Abs(ax), Math.Abs(ay));
             var scaleB = Math.Max(Math.Abs(bx), Math.Abs(by));
             if (!Finite(scaleA) || !Finite(scaleB)) throw new OverflowException(label + " input exceeds the supported numeric range.");
