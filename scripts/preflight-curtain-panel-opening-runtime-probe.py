@@ -4,15 +4,17 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMAND = ROOT / "src/QS3D.BricsCAD.V25/CurtainPanelOpeningRuntimeProbeCommands.cs"
+PANEL_SUPPORT = ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallPanelBuilderSupport.cs"
 RUNNER = ROOT / "scripts/test-bricscad-v25-curtain-panel-openings.ps1"
 HELPER = ROOT / "scripts/bricscad-runner-window-interop.ps1"
 RUNBOOK = ROOT / "docs/CURTAIN-NATIVE-PANELS.md"
 INBOX = ROOT / "docs/LOCAL-AGENT-INBOX.md"
 CLAIM = ROOT / "docs/agent-work-claims/2026-08-12-codex-local-curtain-p02-opening-probe.md"
 DIAGNOSTIC_CLAIM = ROOT / "docs/agent-work-claims/2026-08-12-codex-local-curtain-p02-failure-diagnostics.md"
+CENTERED_BOX_CLAIM = ROOT / "docs/agent-work-claims/2026-08-12-codex-local-curtain-panel-centered-box-placement.md"
 errors = []
 
-for path in (COMMAND, RUNNER, HELPER, RUNBOOK, INBOX, CLAIM, DIAGNOSTIC_CLAIM):
+for path in (COMMAND, PANEL_SUPPORT, RUNNER, HELPER, RUNBOOK, INBOX, CLAIM, DIAGNOSTIC_CLAIM, CENTERED_BOX_CLAIM):
     if not path.is_file():
         errors.append("missing Curtain-panel P02 probe file: " + str(path.relative_to(ROOT)))
 
@@ -92,6 +94,25 @@ if COMMAND.is_file():
     for forbidden in (".Message", ".StackTrace", ".InnerException", ".GetType("):
         if forbidden in failure_marker:
             errors.append("Curtain-panel P02 FAIL marker exposes exception detail: " + forbidden)
+
+if PANEL_SUPPORT.is_file():
+    text = PANEL_SUPPORT.read_text(encoding="utf-8")
+    box_start = text.find("private static Solid3d CreateBox(")
+    box_end = text.find("private static double NonNegative(", box_start)
+    box_body = text[box_start:box_end]
+    placement = (
+        "solid.CreateBox(width, depth, height);",
+        "solid.TransformBy(Matrix3d.Rotation(angle, Vector3d.ZAxis, Point3d.Origin));",
+        "solid.TransformBy(Matrix3d.Displacement(new Vector3d(centerX, centerY, centerZ)));",
+    )
+    positions = [box_body.find(token) for token in placement]
+    if box_start < 0 or box_end < 0 or any(position < 0 for position in positions):
+        errors.append("Curtain-panel CreateBox helper must create, rotate, then place the centered solid")
+    elif positions != sorted(positions):
+        errors.append("Curtain-panel CreateBox helper placement order must remain create -> rotate -> target center")
+    duplicate_half_shift = "solid.TransformBy(Matrix3d.Displacement(new Vector3d(-width / 2d, -depth / 2d, -height / 2d)));"
+    if duplicate_half_shift in box_body:
+        errors.append("Curtain-panel CreateBox helper duplicates V25 centered-box half-extent displacement")
 
 if RUNNER.is_file():
     text = RUNNER.read_text(encoding="utf-8")
@@ -217,6 +238,14 @@ if DIAGNOSTIC_CLAIM.is_file():
     if "Status: `ACTIVE`" not in text and "Status: `COMPLETED`" not in text:
         errors.append("Curtain-panel P02 diagnostic claim must remain ACTIVE during implementation or be COMPLETED at close-out")
 
+if CENTERED_BOX_CLAIM.is_file():
+    text = CENTERED_BOX_CLAIM.read_text(encoding="utf-8")
+    for token in ("7c160de66de68c811282f4cd460e927370e454cd", "DOOR_NATIVE_GEOMETRY", "STATE_REJECTED", "PENDING_LOCAL"):
+        if token not in text:
+            errors.append("Curtain-panel centered-box claim missing diagnostic boundary token: " + token)
+    if "Status: `ACTIVE`" not in text and "Status: `COMPLETED`" not in text:
+        errors.append("Curtain-panel centered-box claim must remain ACTIVE during implementation or be COMPLETED at close-out")
+
 print("QS3D Curtain-panel P02 opening-clipping runtime probe preflight")
 if errors:
     for error in errors:
@@ -224,4 +253,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: additive LOCAL-002/P02 probe seeds only synthetic legacy/no-Level LINE scenarios, verifies partial/full-cover clipping against authoritative Core plans and native bounds, emits allowlisted detail-free failure phase/class diagnostics, and enforces exact-SHA/privacy/cleanup without claiming BricsCAD runtime evidence.")
+print("PASS: additive LOCAL-002/P02 probe seeds only synthetic legacy/no-Level LINE scenarios, verifies centered native placement plus partial/full-cover clipping against authoritative Core plans and native bounds, emits allowlisted detail-free failure phase/class diagnostics, and enforces exact-SHA/privacy/cleanup without claiming BricsCAD runtime evidence.")
