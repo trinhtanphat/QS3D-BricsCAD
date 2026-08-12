@@ -8,7 +8,7 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class QsdbProjectSchemaRegressionSmoke
     {
-        private const string Timestamp = "2026-08-11T00:00:00Z";
+        private const string Timestamp = "2026-08-11T00:00:00.0000000Z";
 
         internal static void Run()
         {
