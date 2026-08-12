@@ -28,7 +28,7 @@ namespace QS3D.Core.Persistence
                 },
                 RootSections,
                 false,
-                true);
+                false);
 
             ValidateRequiredCanonicalAttribute(root, "projectId", "project id");
             ValidateRequiredCanonicalAttribute(root, "name", "project name");
