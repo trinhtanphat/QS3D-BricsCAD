@@ -148,6 +148,8 @@ namespace QS3D.Core.SmokeTests
             AssertXmlShapeRejected(document => document.Root!.Element("entries")!.Elements("entry").First().SetAttributeValue("unexpected", "value"));
             AssertXmlShapeRejected(document => document.Root!.Element("entries")!.Elements("entry").First().Add(new XElement("unexpected")));
             AssertXmlShapeRejected(document => document.Root!.Add(new XComment("unsupported")));
+            AssertXmlShapeRejected(document => document.AddFirst(new XComment("unsupported-before-root")));
+            AssertXmlShapeRejected(document => document.Add(new XProcessingInstruction("qs3d", "unsupported-after-root")));
         }
 
         private static void AssertXmlShapeRejected(Action<XDocument> mutate)
