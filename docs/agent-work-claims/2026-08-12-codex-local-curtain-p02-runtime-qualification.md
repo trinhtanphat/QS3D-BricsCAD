@@ -27,3 +27,13 @@
 - Re-pin a clean exact `main`, confirm no BricsCAD process or sidecar, run the focused P02 gate and installed-reference V25 build, then execute the guarded runner once on a new disposable copy.
 - Verify the disposable DWG hash is unchanged, the launched PID exited, the private script was deleted, no sidecar remains, and the marker/metadata contain only the allowlisted aggregate schema.
 - Deliver any evidence/doc change and claim close-out through normal commit/push/PR/merge without force-push or workflow dispatch.
+
+## Licensed result — 2026-08-12
+
+- The first V2 run on clean exact SHA `7c160de66de68c811282f4cd460e927370e454cd` failed only at allowlisted `DOOR_NATIVE_GEOMETRY / STATE_REJECTED`; disposable-DWG hash, launched-process, private-script, sidecar, backup and metadata cleanup all passed. That evidence supported separately published claim `#845` and centered-box fix `#850`, closed by `#851`.
+- The fresh post-fix run passed on clean exact SHA `7b4a379da15c8c0bed60536bc0ccca7334eb4712`, BricsCAD `25.2.10`, and exact x64 Release plugin SHA-256 `25B6A40F120028CED160F5F04362FFAE1FBEA25E0A850CEE45860E761559B53F`.
+- Door partial/full-cell clipping: 15 source cells, 16 positive fragments, one fully removed cell, five partially clipped cells, 16/16 native/Core-plan matches and zero positive native/opening intersections.
+- WallOpening complete-empty: 15/15 cells removed, zero output pieces/handles, healthy canonical `Complete` and opening-aware metadata.
+- Ownership sets were disjoint, Health issue count was zero, Locate resolved one panel to one canonical owner, and source geometry was preserved.
+- The repository-generated disposable drawing hash remained `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`; launched-process exit, private-script deletion and sidecar/backup absence were independently verified. No customer/private/BLT artifact or GitHub Actions workflow was used.
+- This proves only bounded P02. P03-P12 and overall LOCAL-002 remain `PENDING_LOCAL`.
