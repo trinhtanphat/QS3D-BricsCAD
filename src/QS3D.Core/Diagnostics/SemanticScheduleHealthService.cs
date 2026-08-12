@@ -158,7 +158,8 @@ namespace QS3D.Core.Diagnostics
             var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             foreach (var value in values)
             {
-                if (value == null) continue;
+                if (value == null)
+                    throw new InvalidOperationException("Semantic Schedule health cannot inspect a null semantic identity entry.");
                 var id = (selector(value) ?? string.Empty).Trim();
                 if (id.Length == 0) continue;
                 result[id] = result.TryGetValue(id, out var count) ? count + 1 : 1;
