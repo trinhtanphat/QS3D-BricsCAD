@@ -37,11 +37,18 @@ if not errors:
         'element.Name != expected',
         'attribute.IsNamespaceDeclaration || attribute.Name.Namespace != XNamespace.None || !attributes.Contains(attribute.Name)',
         'child.Name.Namespace != XNamespace.None || !children.Contains(child.Name)',
+        'if (node is XCData)',
+        'Unsupported QS3D revision CDATA content in ',
         '!string.IsNullOrWhiteSpace(text.Value)',
     ]
     for token in required:
         if token not in validator:
             errors.append("revision schema validator missing contract token: " + token)
+
+    cdata = validator.find("if (node is XCData)")
+    text = validator.find("if (node is XText text)")
+    if min(cdata, text) < 0 or not cdata < text:
+        errors.append("revision schema validator must reject XCData before the general XText branch")
 
     forbidden = [
         'RequireAtMostOne(root, "elements")',
@@ -64,4 +71,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: revision XML load requires all canonical root/element containers and fails closed on foreign namespaces, unknown nodes/attributes/content, and duplicate singleton containers.")
+print("PASS: revision XML load requires canonical containers, rejects CDATA before XText, and fails closed on foreign namespaces and unknown XML content.")
