@@ -12,10 +12,16 @@ namespace QS3D.Core.Templates
         {
             if (root == null) throw new ArgumentNullException(nameof(root));
             ValidateElement(root, "qs3dTemplate", new[] { "schema", "id", "name" }, new[] { "families", "rules", "layerMappings", "bqColumns" });
-            RequireAtMostOne(root, "families");
-            RequireAtMostOne(root, "rules");
-            RequireAtMostOne(root, "layerMappings");
-            RequireAtMostOne(root, "bqColumns");
+            RequireExactlyOne(root, "families");
+            RequireExactlyOne(root, "rules");
+            RequireExactlyOne(root, "layerMappings");
+            RequireExactlyOne(root, "bqColumns");
+            var expectedRootOrder = new[]
+            {
+                XName.Get("families"), XName.Get("rules"), XName.Get("layerMappings"), XName.Get("bqColumns")
+            };
+            if (!root.Elements().Select(x => x.Name).SequenceEqual(expectedRootOrder))
+                throw new InvalidDataException("QS3D template root sections are not in canonical order.");
 
             foreach (var families in root.Elements("families"))
             {
@@ -23,7 +29,7 @@ namespace QS3D.Core.Templates
                 foreach (var family in families.Elements("family"))
                 {
                     ValidateElement(family, "family", new[] { "id", "name", "category" }, new[] { "properties" });
-                    RequireAtMostOne(family, "properties");
+                    RequireExactlyOne(family, "properties");
                     foreach (var properties in family.Elements("properties"))
                     {
                         ValidateElement(properties, "properties", Array.Empty<string>(), new[] { "p" });
@@ -87,11 +93,11 @@ namespace QS3D.Core.Templates
             }
         }
 
-        private static void RequireAtMostOne(XElement parent, string childName)
+        private static void RequireExactlyOne(XElement parent, string childName)
         {
-            var name = XName.Get(childName);
-            if (parent.Elements(name).Skip(1).Any())
-                throw new InvalidDataException("Duplicate QS3D template singleton element: " + parent.Name.LocalName + "/" + childName);
+            var count = parent.Elements(XName.Get(childName)).Take(2).Count();
+            if (count != 1)
+                throw new InvalidDataException("QS3D template requires exactly one singleton element: " + parent.Name.LocalName + "/" + childName);
         }
     }
 }
