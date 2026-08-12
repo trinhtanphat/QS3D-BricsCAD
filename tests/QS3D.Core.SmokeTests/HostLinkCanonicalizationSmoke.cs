@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             AmbiguousPreviousHostFailsBeforeMutation();
             CanonicalRelinkIsSideEffectFree();
             MissingHostUnlinkIsSideEffectFree();
+            BlankHostMetadataUnlinkFailsBeforeMutation();
             AuditedHostMutationsAdvanceRevisionOnce();
             StaleAutoHostCleanupAdvancesRevisionOnce();
         }
@@ -115,6 +116,29 @@ namespace QS3D.Core.SmokeTests
             Equal(ElementDirtyFlags.None, wallB.Dirty);
             Equal(1, opening.DependsOn.Count);
             Equal(wallB.Id, opening.DependsOn.Single());
+        }
+
+        private static void BlankHostMetadataUnlinkFailsBeforeMutation()
+        {
+            var project = Project(out var wallA, out _, out var opening);
+            opening.Properties["HostWallId"] = "   ";
+            opening.Properties["AutoHostMatched"] = "true";
+            opening.DependsOn.Add(wallA.Id);
+            opening.MarkClean(ElementDirtyFlags.All);
+            wallA.MarkClean(ElementDirtyFlags.All);
+            var version = project.ChangeVersion;
+            var audits = project.AuditEvents.Count;
+
+            Throws<InvalidOperationException>(() => new HostLinkService().UnlinkOpening(project, opening.Id));
+
+            Equal("   ", opening.Properties["HostWallId"]);
+            Equal("true", opening.Properties["AutoHostMatched"]);
+            Equal(1, opening.DependsOn.Count);
+            Equal(wallA.Id, opening.DependsOn.Single());
+            Equal(version, project.ChangeVersion);
+            Equal(audits, project.AuditEvents.Count);
+            Equal(ElementDirtyFlags.None, opening.Dirty);
+            Equal(ElementDirtyFlags.None, wallA.Dirty);
         }
 
         private static void AuditedHostMutationsAdvanceRevisionOnce()
