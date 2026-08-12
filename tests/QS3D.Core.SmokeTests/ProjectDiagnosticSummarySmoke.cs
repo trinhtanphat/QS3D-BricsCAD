@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
@@ -110,11 +111,17 @@ namespace QS3D.Core.SmokeTests
 
         private static void UndefinedSeverityFailsClosedWithoutReplacingExport()
         {
-            var project = new ProjectState("P-SEVERITY", "Diagnostic Severity");
-            var malformed = new[]
+            try
             {
-                new ModelHealthIssue("INVALID_SEVERITY", (HealthSeverity)999, "invalid")
-            };
+                _ = new ModelHealthIssue("INVALID_SEVERITY", (HealthSeverity)999, "invalid");
+                throw new Exception("ModelHealthIssue constructor must reject an undefined health severity.");
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+            }
+
+            var project = new ProjectState("P-SEVERITY", "Diagnostic Severity");
+            var malformed = new[] { CreateMalformedSeverityFixture() };
 
             try
             {
@@ -149,6 +156,16 @@ namespace QS3D.Core.SmokeTests
             {
                 try { if (File.Exists(path)) File.Delete(path); } catch { }
             }
+        }
+
+        private static ModelHealthIssue CreateMalformedSeverityFixture()
+        {
+            var issue = new ModelHealthIssue("INVALID_SEVERITY", HealthSeverity.Error, "invalid");
+            var field = typeof(ModelHealthIssue).GetField("<Severity>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null) throw new Exception("ProjectDiagnosticSummarySmoke could not locate the severity backing field for its malformed test fixture.");
+            field.SetValue(issue, (HealthSeverity)999);
+            if ((int)issue.Severity != 999) throw new Exception("ProjectDiagnosticSummarySmoke could not create its malformed severity fixture.");
+            return issue;
         }
 
         private static void ExportReplacesAtomically()
