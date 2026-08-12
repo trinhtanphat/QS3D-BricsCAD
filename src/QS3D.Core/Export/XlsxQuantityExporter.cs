@@ -51,6 +51,7 @@ namespace QS3D.Core.Export
             {
                 if (row == null) throw new InvalidDataException("ED2 CHI_TIET contains a null row.");
                 ValidateEd2RowText(row, detailRowIndex, "ED2 CHI_TIET");
+                ValidateEd2RowNumbers(row, detailRowIndex, "ED2 CHI_TIET");
                 if (row.Count != 1 || row.ElementIds.Count != 1)
                     throw new InvalidDataException("ED2 CHI_TIET must contain exactly one semantic element per row.");
                 var elementId = Required(row.ElementIds[0], "ED2 CHI_TIET Element ID");
@@ -73,6 +74,7 @@ namespace QS3D.Core.Export
             {
                 if (row == null) throw new InvalidDataException("ED2 TONG_HOP contains a null row.");
                 ValidateEd2RowText(row, summaryRowIndex, "ED2 TONG_HOP");
+                ValidateEd2RowNumbers(row, summaryRowIndex, "ED2 TONG_HOP");
                 summaryCount = checked(summaryCount + row.Count);
                 if (!string.Equals(Required(row.DrawingFingerprint, "ED2 TONG_HOP drawing fingerprint"), drawingFingerprint, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("ED2 TONG_HOP drawing fingerprint does not match CHI_TIET.");
@@ -264,6 +266,8 @@ namespace QS3D.Core.Export
 
         private static void ValidateStandardRowNumbers(QuantityReportRow row, int rowIndex)
         {
+            if (row.Count < 0)
+                throw StandardNumericError(rowIndex, "Count", "must be non-negative");
             ValidateStandardNumber(row.GrossConcreteM3, rowIndex, "GrossConcreteM3");
             ValidateStandardNumber(row.DeductionM3, rowIndex, "DeductionM3");
             ValidateStandardNumber(row.NetConcreteM3, rowIndex, "NetConcreteM3");
@@ -280,10 +284,17 @@ namespace QS3D.Core.Export
 
         private static void ValidateStandardNumber(double value, int rowIndex, string fieldName)
         {
-            if (!double.IsNaN(value) && !double.IsInfinity(value)) return;
-            throw new ArgumentOutOfRangeException(
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                throw StandardNumericError(rowIndex, fieldName, "must be finite");
+            if (value < 0d)
+                throw StandardNumericError(rowIndex, fieldName, "must be non-negative");
+        }
+
+        private static ArgumentOutOfRangeException StandardNumericError(int rowIndex, string fieldName, string requirement)
+        {
+            return new ArgumentOutOfRangeException(
                 "rows",
-                "Quantity XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be finite.");
+                "Quantity XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " " + requirement + ".");
         }
 
         private static void ValidateEd2RowText(QuantityReportRow row, int rowIndex, string sheetLabel)
@@ -297,6 +308,36 @@ namespace QS3D.Core.Export
             ValidateJoinedNonBlankCellText(row.ElementIds, rowIndex, "ElementIds", sheetLabel);
             ValidateJoinedNonBlankCellText(row.SourceHandles, rowIndex, "SourceHandles", sheetLabel);
             ValidateCellText(row.DrawingFingerprint, rowIndex, "DrawingFingerprint", sheetLabel);
+        }
+
+        private static void ValidateEd2RowNumbers(QuantityReportRow row, int rowIndex, string sheetLabel)
+        {
+            if (row.Count < 0) ThrowEd2Negative(rowIndex, "Count", sheetLabel);
+            ValidateEd2NonNegative(row.GrossConcreteM3, rowIndex, "GrossConcreteM3", sheetLabel);
+            ValidateEd2NonNegative(row.DeductionM3, rowIndex, "DeductionM3", sheetLabel);
+            ValidateEd2NonNegative(row.NetConcreteM3, rowIndex, "NetConcreteM3", sheetLabel);
+            ValidateEd2NonNegative(row.FormworkM2, rowIndex, "FormworkM2", sheetLabel);
+            ValidateEd2NonNegative(row.LengthM, rowIndex, "LengthM", sheetLabel);
+            ValidateEd2NonNegative(row.OuterPerimeterM, rowIndex, "OuterPerimeterM", sheetLabel);
+            ValidateEd2NonNegative(row.InnerPerimeterM, rowIndex, "InnerPerimeterM", sheetLabel);
+            ValidateEd2NonNegative(row.DoorAreaM2, rowIndex, "DoorAreaM2", sheetLabel);
+            ValidateEd2NonNegative(row.SideAreaM2, rowIndex, "SideAreaM2", sheetLabel);
+            ValidateEd2NonNegative(row.BottomAreaM2, rowIndex, "BottomAreaM2", sheetLabel);
+            ValidateEd2NonNegative(row.TopAreaM2, rowIndex, "TopAreaM2", sheetLabel);
+            ValidateEd2NonNegative(row.OtherAreaM2, rowIndex, "OtherAreaM2", sheetLabel);
+        }
+
+        private static void ValidateEd2NonNegative(double value, int rowIndex, string fieldName, string sheetLabel)
+        {
+            if (!double.IsNaN(value) && !double.IsInfinity(value) && value < 0d)
+                ThrowEd2Negative(rowIndex, fieldName, sheetLabel);
+        }
+
+        private static void ThrowEd2Negative(int rowIndex, string fieldName, string sheetLabel)
+        {
+            throw new InvalidDataException(
+                sheetLabel + " worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) +
+                " field " + fieldName + " must be non-negative.");
         }
 
         private static void ValidateFloorZoneCellText(QuantityReportRow row, int rowIndex, string sheetLabel)
