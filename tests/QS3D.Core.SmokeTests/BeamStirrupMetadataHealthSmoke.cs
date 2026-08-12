@@ -76,7 +76,7 @@ namespace QS3D.Core.SmokeTests
             element.Properties["GeneratedBeamStirrupHandles"] = handles;
             element.Properties["GeneratedBeamStirrupCount"] = count.ToString(CultureInfo.InvariantCulture);
             element.Properties["GeneratedBeamStirrupDiameterMm"] = "8";
-            element.Properties["GeneratedBeamStirrupActualSpacingM"] = ".15";
+            element.Properties["GeneratedBeamStirrupActualSpacingM"] = "0.15";
             element.Properties["GeneratedBeamStirrupCenterlineLengthM"] = centerline.ToString("R", CultureInfo.InvariantCulture);
             element.Properties["GeneratedBeamStirrupTotalCenterlineLengthM"] = (centerline * count).ToString("R", CultureInfo.InvariantCulture);
             element.Properties["GeneratedBeamStirrupPolylineLengthM"] = (centerline - .001d).ToString("R", CultureInfo.InvariantCulture);
