@@ -28,10 +28,12 @@ namespace QS3D.Core.SmokeTests
             if (!Finite(intersection.Point.X) || !Finite(intersection.Point.Y))
                 throw new Exception("Expected finite large Grid LINE intersection coordinates.");
 
-            var expected = scale * 0.5d;
+            var representedDirectionY = (scale - offset) - offset;
+            var expectedParameter = offset / (scale - representedDirectionY);
+            var expected = scale * expectedParameter;
             if (Math.Abs(intersection.Point.X / expected - 1d) > 1e-12d ||
                 Math.Abs(intersection.Point.Y / expected - 1d) > 1e-12d)
-                throw new Exception("Expected the large Grid LINE intersection near the shared midpoint.");
+                throw new Exception("Expected the large Grid LINE intersection implied by the represented endpoints.");
         }
 
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);

@@ -32,7 +32,7 @@ namespace QS3D.BricsCAD.V25.Updates
         internal static bool TryParse(string? value, out SemanticReleaseVersion? version)
         {
             version = null;
-            if (string.IsNullOrWhiteSpace(value)) return false;
+            if (value == null || string.IsNullOrWhiteSpace(value)) return false;
 
             var trimmed = value.Trim();
             var match = Pattern.Match(trimmed);

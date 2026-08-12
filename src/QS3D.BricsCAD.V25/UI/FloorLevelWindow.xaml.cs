@@ -14,7 +14,7 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class FloorLevelWindow : Window
     {
         private readonly Document _document;
-        private ProjectState _boundProject;
+        private ProjectState? _boundProject;
         private string _editingFloorId = string.Empty;
         private bool _loading;
 

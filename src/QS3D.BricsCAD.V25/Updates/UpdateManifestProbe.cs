@@ -104,7 +104,7 @@ namespace QS3D.BricsCAD.V25.Updates
                 ? release.Tag.Substring(1)
                 : release.Tag;
             var productVersion = manifest.ProductVersion?.Trim();
-            if (string.IsNullOrEmpty(productVersion) || productVersion.StartsWith("v", StringComparison.Ordinal))
+            if (productVersion == null || productVersion.Length == 0 || productVersion.StartsWith("v", StringComparison.Ordinal))
                 return UpdateManifestProbeResult.Rejected("Update manifest productVersion không phải QS3D SemVer chuẩn.");
             if (!SemanticReleaseVersion.TryParse(productVersion, out var parsedProductVersion) || parsedProductVersion == null)
                 return UpdateManifestProbeResult.Rejected("Update manifest productVersion không phải SemVer hợp lệ.");

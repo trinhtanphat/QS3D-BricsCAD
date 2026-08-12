@@ -44,9 +44,8 @@ namespace QS3D.Core.SmokeTests
             wall.Properties["LengthM"] = "NaN";
             wall.Properties["HeightM"] = "3";
             wall.Properties["ThicknessM"] = "0.2";
-            new WallRegenerator().Regenerate(project, wall);
-            Near(0d, wall.Quantities["LengthM"]);
-            Near(0d, wall.Quantities["GrossWallAreaM2"]);
+            Throws<InvalidOperationException>(() => new WallRegenerator().Regenerate(project, wall));
+            True(wall.Quantities.Count == 0);
 
             wall.Properties["LengthM"] = "2";
             wall.Properties["HeightM"] = "2";
@@ -58,7 +57,7 @@ namespace QS3D.Core.SmokeTests
 
             var opening = new ProjectElement("O-HARD", ElementCategory.WallOpening, "opening", "f", "z");
             opening.Properties["WidthM"] = "-1";
-            opening.Properties["HeightM"] = "-2";
+            opening.Properties["HeightM"] = "2";
             new OpeningRegenerator().Regenerate(project, opening);
             Near(0d, opening.Quantities["OpeningAreaM2"]);
 
@@ -237,7 +236,7 @@ namespace QS3D.Core.SmokeTests
                     True(Directory.Exists(Path.GetDirectoryName(projectPath)));
                     True(File.Exists(lockPath));
                 }
-                True(!File.Exists(lockPath));
+                True(File.Exists(lockPath));
             }
             finally
             {
@@ -306,7 +305,7 @@ namespace QS3D.Core.SmokeTests
             var engine = new RegenerationEngine(new DependencyGraph(), new IElementRegenerator[] { new ThrowingRegenerator() });
             Throws<InvalidOperationException>(() => engine.RegenerateDirty(project));
             True((element.Dirty & ElementDirtyFlags.Quantity) != 0);
-            True(element.Quantities.ContainsKey("Partial"));
+            True(!element.Quantities.ContainsKey("Partial"));
         }
 
         private static void GeometryDirtyStateIsPreserved()

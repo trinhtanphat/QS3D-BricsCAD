@@ -60,6 +60,7 @@ namespace QS3D.Core.SmokeTests
         private static void RejectsUnknownTarget()
         {
             var project = new ProjectState("regen-unknown", "Unknown target");
+            project.Elements.Add(new ProjectElement("present", ElementCategory.CustomQuantity));
             var engine = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
             Throws<KeyNotFoundException>(() => engine.RegenerateDirtySubset(project, new[] { "missing" }));
         }

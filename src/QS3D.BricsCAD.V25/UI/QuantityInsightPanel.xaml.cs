@@ -149,7 +149,7 @@ namespace QS3D.BricsCAD.V25.UI
         }
 
         private static string DisplayFloor(string? floor) =>
-            string.IsNullOrWhiteSpace(floor) ? "Chưa gán tầng" : floor.Trim();
+            string.IsNullOrWhiteSpace(floor) ? "Chưa gán tầng" : (floor ?? string.Empty).Trim();
 
         private static string FormatSummary(QuantityReportRow row)
         {

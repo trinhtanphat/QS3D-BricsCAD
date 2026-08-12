@@ -79,7 +79,16 @@ namespace QS3D.BricsCAD.V25.Cad
                         var endCoverM = CadGeometryGuard.Number(element, family, "RebarBeamEndCoverM", coverM);
                         if (endCoverM < 0d) throw new InvalidOperationException(element.Id + "/RebarBeamEndCoverM phải >= 0.");
                         var widthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "WidthM", 0d), element.Id + "/WidthM");
-                        var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 0d), element.Id + "/HeightM");
+                        var legacyHeightM = CadGeometryGuard.Number(element, family, "HeightM", 0d);
+                        var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
+                        var placement = CadVerticalPlacementResolver.Resolve(
+                            document,
+                            project,
+                            element,
+                            line.StartPoint.Z,
+                            legacyHeightM,
+                            bottomOffsetM);
+                        var heightM = placement.HeightM;
                         var layout = BeamLongitudinalRebarPlanner.Plan(new BeamLongitudinalRebarLayoutInput { WidthM = widthM, HeightM = heightM, CoverM = coverM, DiameterMm = diameterMm, TopCount = counts.Item1, BottomCount = counts.Item2 });
                         var dx = CadGeometryGuard.Finite(line.EndPoint.X - line.StartPoint.X, element.Id + "/beam direction X");
                         var dy = CadGeometryGuard.Finite(line.EndPoint.Y - line.StartPoint.Y, element.Id + "/beam direction Y");
@@ -98,7 +107,10 @@ namespace QS3D.BricsCAD.V25.Cad
                         var endCover = CadGeometryGuard.ToDrawingUnits(document, endCoverM, element.Id + "/beam end cover");
                         var startX = CadGeometryGuard.Add(line.StartPoint.X, CadGeometryGuard.Finite(ux * endCover, element.Id + "/beam rebar start dx"), element.Id + "/beam rebar start X");
                         var startY = CadGeometryGuard.Add(line.StartPoint.Y, CadGeometryGuard.Finite(uy * endCover, element.Id + "/beam rebar start dy"), element.Id + "/beam rebar start Y");
-                        var centerZ = CadGeometryGuard.Midpoint(line.StartPoint.Z, line.EndPoint.Z, element.Id + "/beam center Z");
+                        var centerZ = CadGeometryGuard.Add(
+                            placement.BottomDrawingUnits,
+                            placement.HeightDrawingUnits / 2d,
+                            element.Id + "/beam center Z");
                         ErasePrevious(document, transaction, project, element, ownership);
                         var update = new PendingUpdate { Element = element, DiameterMm = diameterMm, CoverM = coverM, EndCoverM = endCoverM, TopCount = counts.Item1, BottomCount = counts.Item2 };
                         foreach (var local in layout.TopBarCenters.Concat(layout.BottomBarCenters))

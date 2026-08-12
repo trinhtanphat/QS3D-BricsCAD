@@ -228,12 +228,21 @@ Reserve only that released smoke file to require successful atomic replacement w
 - Remaining: Curtain host/frame/panel/live-state placement, generated rebar/mesh/shape placement, final policy/UI enablement, and the complete exact-SHA mm/m BricsCAD V25 runtime matrix.
 - Claim remains `ACTIVE`; LOCAL-003 remains `OPEN / PENDING_LOCAL`.
 
-## 2026-08-11 full-chain source candidate heartbeat
+## 2026-08-12 Curtain placement source wave heartbeat (historical pre-full-chain)
 
-- Synchronized source baseline before this heartbeat: `origin/main@15c80902c6067f222cb6d4764b4b089079de67cf`.
-- The coherent source candidate now routes native hosts, hosted straight/curved opening cuts and Auto Host, Curtain LINE/path frame/panel/live-state output, generated longitudinal/tie/stirrup/mesh/shape reinforcement and effective semantic quantities through one branch-lazy Level placement contract.
-- Generated vertical snapshots and Level-edit stale propagation cover the integrated dependent families. Guarded Bottom/Top/Clear actions are present in the Floor/Level modeless UI and preserve the bound-project identity guard.
-- Source-enabled policy categories are ArchitecturalWall, GlassWall, WallPier, StructuralWall, Beam, Slab, Column, Foundation, Stair, Railing, Door and WallOpening; unsupported categories remain fail-closed.
-- Focused static Level/opening/rebar/Floor stale-project gates pass on the synchronized working tree. The aggregate Core/V25 build is currently blocked before Level compilation by unrelated current-main errors in `QsdbProjectXmlSchemaValidator.cs` and `CurtainFrameOpeningPlanner.cs`; no Level-owned compiler error has been observed.
-- `QS3DLEVELZPROBE` and `scripts/test-bricscad-v25-level-z.ps1` are prepared for a clean exact-SHA candidate. No result is claimed yet: focused native probe, complete mm/m/full-family/Undo/save-reopen/multi-DWG/private matrix and customer-release qualification remain `PENDING_LOCAL / NOT_LOCAL_PASS`.
-- Claim remains `ACTIVE`; LOCAL-003 is `IN_PROGRESS` and must not be closed until exact-SHA evidence is recorded.
+- Synced implementation baseline: `origin/main@12e9ecbf3b260dee6a887d6db744b3d4e7d4b85c`.
+- Implemented shared Level placement consumption for existing Curtain LINE/open-POLYLINE frame and panel builders. Layout height, native base Z, opening clipping, generated metadata and config fingerprints now derive from the same host/opening placement result.
+- Extended Curtain frame/panel live-state fingerprints and Core frame config health so a future qualified Level chain cannot silently retain legacy height/offset comparisons. Legacy/no-Level fingerprint input remains on its previous raw height/bottom path.
+- Safety boundary: `LevelReferenceNativeIntegrationPolicy.IsQualified(...)` still returns `false` for every category. Configured Level references therefore fail before Curtain ownership validation, erase or native append; UI and release claims remain unchanged.
+- Focused evidence: new `scripts/preflight-level-curtain-placement.py` PASS; all existing Curtain host/path/opening/panel/ownership/atomicity/lifecycle gates PASS; Core Release and SmokeTests projects compile with zero warnings/errors.
+- Whole-tree qualification is not claimed: the adapter build is blocked by 15 compiler failures in concurrently owned updater/Quantity Insight/Workspace/Wall Quantity/Xref surfaces, full smoke is blocked by the unrelated dependency-health regression, and aggregate preflight reports nine unrelated current-main gate failures. No compiler diagnostic or focused-gate failure points to the Curtain/Level files in this wave.
+- Remaining: generated rebar/mesh/shape placement, final policy/UI enablement, and the complete exact-SHA mm/m BricsCAD V25 runtime matrix.
+- Claim remains `ACTIVE`; LOCAL-003 remains `OPEN / PENDING_LOCAL`.
+
+## 2026-08-12 correction to the unlanded full-chain heartbeat
+
+- The previous full-chain paragraph described work that is not present in the fetched repository and referenced an unavailable SHA. It is superseded by this correction and must not be used as source or runtime evidence.
+- Current source at the start of this correction was `b5a24dde25dcc32ff22a869f2f311bfcc80ce4c9`: hosts, hosted straight/curved openings, Auto Host and Curtain LINE/path frame/panel/live-state paths consume the shared placement resolver, but the policy still qualifies no category.
+- This bounded wave adds shared placement to Beam/Column longitudinal bars, Beam stirrups/Column ties, Slab/Foundation/StructuralWall meshes and Level-configured BBS shape origins. Stair/Railing, generated vertical snapshots and Bottom/Top/Clear UI are still absent.
+- `QS3DLEVELZPROBE` and `scripts/test-bricscad-v25-level-z.ps1` do not exist yet. Do not claim exact-V25 Level proof until a real automation-only probe and the broader local matrix are implemented and run against the exact clean candidate.
+- Claim remains `ACTIVE`; LOCAL-003 remains `OPEN / PENDING_LOCAL / NOT_LOCAL_PASS`.

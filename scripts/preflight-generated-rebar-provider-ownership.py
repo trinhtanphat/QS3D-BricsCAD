@@ -65,7 +65,7 @@ if SMOKE.is_file():
         "BeamStirrupLaterOwnerIsConflict();",
         "TieLaterOwnerIsConflict();",
         "LongitudinalRebarLaterOwnerIsConflict();",
-        "OwnershipPolicyFailsClosedWhileDiagnosticIndexToleratesNullEntries();",
+        "OwnershipPoliciesFailClosedOnNullEntries();",
         "RequireThrows<InvalidOperationException>",
         '"BEAM_STIRRUP_GENERATED_OWNERSHIP_CONFLICT"',
         '"TIE_REBAR_GENERATED_OWNERSHIP_CONFLICT"',

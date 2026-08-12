@@ -50,11 +50,14 @@ namespace QS3D.Core.SmokeTests
             if (!measuredResult.IsCaptureReady || measuredResult.RequiresReview || new RecognitionBatch(new[] { measuredResult }).AutoAccepted.Count != 1)
                 throw new Exception("Measured ProxyEntity should retain the normal confidence path.");
 
-            foreach (var invalid in new[] { 0d, double.NaN, double.PositiveInfinity })
+            var zeroMetric = new EntitySnapshot("D-ZERO", "ProxyEntity", "blt beam") { LengthDrawingUnits = 0d };
+            if (EntitySnapshotCaptureEligibility.IsReady(zeroMetric, ElementCategory.Beam, out _))
+                throw new Exception("Non-positive ProxyEntity metrics must fail closed.");
+
+            foreach (var invalid in new[] { double.NaN, double.PositiveInfinity })
             {
-                var bad = new EntitySnapshot("D", "ProxyEntity", "blt beam") { LengthDrawingUnits = invalid };
-                if (EntitySnapshotCaptureEligibility.IsReady(bad, ElementCategory.Beam, out _))
-                    throw new Exception("Non-positive/non-finite ProxyEntity metrics must fail closed.");
+                var bad = new EntitySnapshot("D", "ProxyEntity", "blt beam");
+                Throws<ArgumentOutOfRangeException>(() => bad.LengthDrawingUnits = invalid);
             }
 
             var surfaceOnly = new EntitySnapshot("E", "ProxyEntity", "blt slab") { SurfaceAreaDrawingUnitsSquared = 10d };

@@ -86,13 +86,13 @@ namespace QS3D.Core.SmokeTests
         private static void OpeningDerivedBoundsMustRemainFinite()
         {
             Throws<OverflowException>(
-                () => new CurtainOpeningRect(double.MaxValue, 0d, 1d, 1d),
+                () => new CurtainOpeningRect(double.MaxValue, 0d, double.MaxValue, 1d),
                 "Opening right bound overflow must fail closed.");
             Throws<OverflowException>(
                 () => new CurtainOpeningRect(-double.MaxValue, 0d, 1d, 1d, double.MaxValue),
                 "Clearance-expanded opening left bound overflow must fail closed.");
             Throws<OverflowException>(
-                () => new CurtainOpeningRect(0d, double.MaxValue, 1d, 1d),
+                () => new CurtainOpeningRect(0d, double.MaxValue, 1d, double.MaxValue),
                 "Opening top bound overflow must fail closed.");
         }
 
@@ -100,12 +100,12 @@ namespace QS3D.Core.SmokeTests
         {
             Throws<InvalidOperationException>(
                 () => CurtainFrameOpeningPlanner.Interrupt(
-                    new[] { new CurtainWallRect(double.MaxValue, 0d, 1d, 1d) },
+                    new[] { new CurtainWallRect(double.MaxValue, 0d, double.MaxValue, 1d) },
                     Array.Empty<CurtainOpeningRect>()),
                 "Frame right bound overflow must fail closed.");
             Throws<InvalidOperationException>(
                 () => CurtainFrameOpeningPlanner.Interrupt(
-                    new[] { new CurtainWallRect(0d, double.MaxValue, 1d, 1d) },
+                    new[] { new CurtainWallRect(0d, double.MaxValue, 1d, double.MaxValue) },
                     Array.Empty<CurtainOpeningRect>()),
                 "Frame top bound overflow must fail closed.");
         }

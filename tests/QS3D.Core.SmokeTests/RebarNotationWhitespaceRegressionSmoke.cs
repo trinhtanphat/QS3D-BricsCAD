@@ -31,7 +31,8 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Legitimate count/diameter whitespace no longer parses correctly.");
 
             groups = RebarNotationParser.Parse(" D8 @ 150 ");
-            if (groups.Count != 1 || Math.Abs(groups[0].DiameterMm - 8d) > 1e-12d || !groups[0].SpacingMm.HasValue || Math.Abs(groups[0].SpacingMm.Value - 150d) > 1e-12d)
+            var spacing = groups.Count == 1 ? groups[0].SpacingMm : null;
+            if (groups.Count != 1 || Math.Abs(groups[0].DiameterMm - 8d) > 1e-12d || !spacing.HasValue || Math.Abs(spacing.GetValueOrDefault() - 150d) > 1e-12d)
                 throw new InvalidOperationException("Legitimate diameter/spacing whitespace no longer parses correctly.");
         }
 

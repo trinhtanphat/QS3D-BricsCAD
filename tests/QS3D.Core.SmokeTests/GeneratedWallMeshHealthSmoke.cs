@@ -13,8 +13,6 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             var project = new ProjectState("P-wall-health", "Wall mesh ownership health");
-            project.Elements.Add(null!);
-
             var wall = new ProjectElement("W1", ElementCategory.StructuralWall, string.Empty, string.Empty, string.Empty);
             wall.Properties["GeneratedWallMeshHandles"] = "AA";
             wall.Properties["GeneratedWallMeshCount"] = "1";

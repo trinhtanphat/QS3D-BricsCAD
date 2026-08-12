@@ -99,7 +99,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void HostRelinkAuditOverflowRollsBack()
         {
-            var project = AtVersion(HostProject(), long.MaxValue - 1L);
+            var project = AtVersion(HostProject(), long.MaxValue);
             var beforeUtc = project.UpdatedUtc;
             var beforeAudits = project.AuditEvents.Count;
 
@@ -113,13 +113,13 @@ namespace QS3D.Core.SmokeTests
             Equal(ElementDirtyFlags.None, RequiredElement(project, "WALL-A").Dirty, "Failed re-host changed previous host dirty flags.");
             Equal(ElementDirtyFlags.None, RequiredElement(project, "WALL-B").Dirty, "Failed re-host changed new host dirty flags.");
             Equal(beforeAudits, project.AuditEvents.Count, "Failed re-host appended an audit event.");
-            Equal(long.MaxValue - 1L, project.ChangeVersion, "Failed re-host did not restore the pre-operation project version.");
+            Equal(long.MaxValue, project.ChangeVersion, "Failed re-host did not restore the pre-operation project version.");
             Equal(beforeUtc, project.UpdatedUtc, "Failed re-host did not restore UpdatedUtc.");
         }
 
         private static void HostUnlinkAuditOverflowRollsBack()
         {
-            var project = AtVersion(HostProject(), long.MaxValue - 1L);
+            var project = AtVersion(HostProject(), long.MaxValue);
             var beforeUtc = project.UpdatedUtc;
             var beforeAudits = project.AuditEvents.Count;
 
@@ -132,7 +132,7 @@ namespace QS3D.Core.SmokeTests
             Equal(ElementDirtyFlags.None, opening.Dirty, "Failed unlink changed opening dirty flags.");
             Equal(ElementDirtyFlags.None, RequiredElement(project, "WALL-A").Dirty, "Failed unlink changed host dirty flags.");
             Equal(beforeAudits, project.AuditEvents.Count, "Failed unlink appended an audit event.");
-            Equal(long.MaxValue - 1L, project.ChangeVersion, "Failed unlink did not restore the pre-operation project version.");
+            Equal(long.MaxValue, project.ChangeVersion, "Failed unlink did not restore the pre-operation project version.");
             Equal(beforeUtc, project.UpdatedUtc, "Failed unlink did not restore UpdatedUtc.");
         }
 
@@ -144,7 +144,7 @@ namespace QS3D.Core.SmokeTests
             opening.DependsOn.Clear();
             opening.Properties["AutoHostMatched"] = "1";
             opening.MarkClean(ElementDirtyFlags.All);
-            var project = AtVersion(source, long.MaxValue - 1L);
+            var project = AtVersion(source, long.MaxValue);
             var beforeUtc = project.UpdatedUtc;
             var beforeAudits = project.AuditEvents.Count;
 
@@ -154,7 +154,7 @@ namespace QS3D.Core.SmokeTests
             Equal("1", opening.Properties["AutoHostMatched"], "Failed stale auto-host cleanup removed provenance metadata.");
             Equal(ElementDirtyFlags.None, opening.Dirty, "Failed stale auto-host cleanup changed dirty flags.");
             Equal(beforeAudits, project.AuditEvents.Count, "Failed stale auto-host cleanup appended an audit event.");
-            Equal(long.MaxValue - 1L, project.ChangeVersion, "Failed stale auto-host cleanup did not restore the pre-operation project version.");
+            Equal(long.MaxValue, project.ChangeVersion, "Failed stale auto-host cleanup did not restore the pre-operation project version.");
             Equal(beforeUtc, project.UpdatedUtc, "Failed stale auto-host cleanup did not restore UpdatedUtc.");
         }
 

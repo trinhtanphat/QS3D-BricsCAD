@@ -86,11 +86,17 @@ namespace QS3D.BricsCAD.V25.Cad
                         var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
                         var hostThicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", 0.012d), element.Id + "/ThicknessM");
                         var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
+                        var placement = CadVerticalPlacementResolver.Resolve(
+                            document, project, element, polyline.Elevation, heightM, bottomOffsetM);
+                        var effectiveHeightM = placement.HeightM;
+                        var fingerprintBottomM = CadVerticalPlacementResolver.HasConfiguredLevel(element)
+                            ? placement.Semantic.BottomElevationM
+                            : bottomOffsetM;
                         var frameDepthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "CurtainFrameDepthM", 0.05d), element.Id + "/CurtainFrameDepthM");
                         var input = new CurtainWallLayoutInput
                         {
                             LengthM = lengthM,
-                            HeightM = heightM,
+                            HeightM = effectiveHeightM,
                             MaxPanelWidthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "CurtainMaxPanelWidthM", 1.2d), element.Id + "/CurtainMaxPanelWidthM"),
                             MaxPanelHeightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "CurtainMaxPanelHeightM", 1.5d), element.Id + "/CurtainMaxPanelHeightM"),
                             PerimeterFrameWidthM = NonNegative(CadGeometryGuard.Number(element, family, "CurtainPerimeterFrameWidthM", 0.05d), element.Id + "/CurtainPerimeterFrameWidthM"),
@@ -100,8 +106,8 @@ namespace QS3D.BricsCAD.V25.Cad
                         var configFingerprint = CurtainWallFrameFingerprint.Compute(new CurtainWallFrameFingerprintInput
                         {
                             LengthM = lengthM,
-                            HeightM = heightM,
-                            BottomOffsetM = bottomOffsetM,
+                            HeightM = effectiveHeightM,
+                            BottomOffsetM = fingerprintBottomM,
                             MaxPanelWidthM = input.MaxPanelWidthM,
                             MaxPanelHeightM = input.MaxPanelHeightM,
                             PerimeterFrameWidthM = input.PerimeterFrameWidthM,
@@ -111,7 +117,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         });
                         var detail = CurtainWallDetailPlanner.Plan(input);
                         var baseFrames = detail.VerticalFrames.Concat(detail.HorizontalFrames).ToList();
-                        var openingRects = ReadLinkedOpenings(document, transaction, project, element, centerline, lengthM, heightM, hostThicknessM);
+                        var openingRects = ReadLinkedOpenings(document, transaction, project, element, centerline, polyline.Elevation, lengthM, heightM, bottomOffsetM, hostThicknessM);
                         var frames = CurtainFrameOpeningPlanner.Interrupt(baseFrames, openingRects).ToList();
                         var pathPlan = CurtainPathFramePlanner.Plan(centerline, frames);
                         var frameCount = pathPlan.Pieces.Count;
@@ -120,7 +126,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
                         var previous = ValidatePrevious(document, transaction, project, element, ownership);
                         ErasePrevious(transaction, project, element, previous);
-                        var baseZ = CadGeometryGuard.Add(polyline.Elevation, CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM"), element.Id + "/curtain path base Z");
+                        var baseZ = placement.BottomDrawingUnits;
                         var update = new PendingUpdate
                         {
                             Element = element,
@@ -132,7 +138,7 @@ namespace QS3D.BricsCAD.V25.Cad
                             MappedFrameCount = frames.Count,
                             FrameDepthM = frameDepthM,
                             SourceLengthM = lengthM,
-                            HeightM = heightM,
+                            HeightM = effectiveHeightM,
                             ConfigFingerprint = configFingerprint
                         };
 
@@ -205,8 +211,10 @@ namespace QS3D.BricsCAD.V25.Cad
             ProjectState project,
             ProjectElement host,
             IReadOnlyList<Point2> centerline,
+            double sourceBaseDrawing,
             double hostLengthM,
-            double hostHeightM,
+            double hostLegacyHeightM,
+            double hostLegacyBottomOffsetM,
             double hostThicknessM)
         {
             var result = new List<CurtainOpeningRect>();
@@ -222,6 +230,16 @@ namespace QS3D.BricsCAD.V25.Cad
                 var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(opening, openingFamily, "HeightM", 0d), opening.Id + "/HeightM");
                 var sillM = NonNegative(CadGeometryGuard.Number(opening, openingFamily, "SillHeightM", opening.Category == ElementCategory.Door ? 0d : 0.9d), opening.Id + "/SillHeightM");
                 var clearanceM = NonNegative(CadGeometryGuard.Number(opening, openingFamily, "BooleanClearanceM", 0.01d), opening.Id + "/BooleanClearanceM");
+                var hostedPlacement = CadVerticalPlacementResolver.ResolveHostedOpening(
+                    document,
+                    project,
+                    host,
+                    opening,
+                    sourceBaseDrawing,
+                    hostLegacyHeightM,
+                    hostLegacyBottomOffsetM,
+                    heightM,
+                    sillM);
                 var sourceIds = CadHandleService.Resolve(document, opening.SourceHandles);
                 if (sourceIds.Count == 0) throw new InvalidOperationException("Linked opening " + opening.Id + " không còn live CAD source để ngắt curtain path frame an toàn.");
                 if (sourceIds.Count > 1) throw new InvalidOperationException("Linked opening " + opening.Id + " có nhiều live CAD source; cần một source duy nhất để ngắt curtain path frame.");
@@ -242,10 +260,10 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     HostLengthM = hostLengthM,
                     HostThicknessM = hostThicknessM,
-                    HostHeightM = hostHeightM,
+                    HostHeightM = hostedPlacement.Host.HeightM,
                     OpeningWidthM = widthM,
-                    OpeningHeightM = heightM,
-                    SillHeightM = sillM,
+                    OpeningHeightM = hostedPlacement.Opening.HeightM,
+                    SillHeightM = hostedPlacement.RelativeSillM,
                     CenterAlongHostM = projection.StationM,
                     ClearanceM = clearanceM
                 });

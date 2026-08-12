@@ -58,7 +58,7 @@ namespace QS3D.Core.Persistence
         private static void ValidateCanonicalMapKey(XElement property, string owner)
         {
             var key = property.Attribute("name")?.Value;
-            if (string.IsNullOrWhiteSpace(key))
+            if (key == null || string.IsNullOrWhiteSpace(key))
                 throw new InvalidDataException("QSDB " + owner + " key must not be empty.");
             if (!string.Equals(key, key.Trim(), StringComparison.Ordinal))
                 throw new InvalidDataException("QSDB " + owner + " key must not contain leading/trailing whitespace.");
@@ -203,7 +203,7 @@ namespace QS3D.Core.Persistence
         private static void ValidateRequiredCanonicalAttribute(XElement element, string attributeName, string owner)
         {
             var value = element.Attribute(attributeName)?.Value;
-            if (string.IsNullOrWhiteSpace(value))
+            if (value == null || string.IsNullOrWhiteSpace(value))
                 throw new InvalidDataException("QSDB " + owner + " must not be empty.");
             if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
                 throw new InvalidDataException("QSDB " + owner + " must not contain leading/trailing whitespace.");

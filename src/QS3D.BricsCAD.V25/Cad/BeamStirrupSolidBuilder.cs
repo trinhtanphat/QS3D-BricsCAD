@@ -104,7 +104,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
                         var family = project.FindFamily(element.FamilyId);
                         var widthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "WidthM", .3d), element.Id + "/WidthM");
-                        var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", .5d), element.Id + "/HeightM");
+                        var legacyHeightM = CadGeometryGuard.Number(element, family, "HeightM", .5d);
                         var sectionCoverM = CadGeometryGuard.Number(element, family, "RebarStirrupCoverM", CadGeometryGuard.Number(element, family, "RebarCoverM", .025d));
                         var endCoverM = CadGeometryGuard.Number(element, family, "RebarStirrupEndCoverM", sectionCoverM);
                         var bendRadiusM = CadGeometryGuard.Number(element, family, "RebarStirrupBendRadiusM", 0d);
@@ -116,6 +116,14 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (bendRadiusM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupBendRadiusM phải >= 0.");
                         if (hookLengthM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupHookLengthM phải >= 0.");
                         var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
+                        var placement = CadVerticalPlacementResolver.Resolve(
+                            document,
+                            project,
+                            element,
+                            source.StartPoint.Z,
+                            legacyHeightM,
+                            bottomM);
+                        var heightM = placement.HeightM;
 
                         var dx = CadGeometryGuard.Subtract(source.EndPoint.X, source.StartPoint.X, element.Id + "/beam dx");
                         var dy = CadGeometryGuard.Subtract(source.EndPoint.Y, source.StartPoint.Y, element.Id + "/beam dy");
@@ -164,8 +172,10 @@ namespace QS3D.BricsCAD.V25.Cad
                         var perpendicular = new Vector3d(-uy, ux, 0d);
                         var midX = CadGeometryGuard.Midpoint(source.StartPoint.X, source.EndPoint.X, element.Id + "/beam mid X");
                         var midY = CadGeometryGuard.Midpoint(source.StartPoint.Y, source.EndPoint.Y, element.Id + "/beam mid Y");
-                        var baseZ = CadGeometryGuard.Add(source.StartPoint.Z, CadGeometryGuard.ToDrawingUnits(document, bottomM, element.Id + "/BottomOffsetM"), element.Id + "/beam base Z");
-                        var centerZ = CadGeometryGuard.Add(baseZ, CadGeometryGuard.ToDrawingUnits(document, heightM / 2d, element.Id + "/half height"), element.Id + "/beam center Z");
+                        var centerZ = CadGeometryGuard.Add(
+                            placement.BottomDrawingUnits,
+                            placement.HeightDrawingUnits / 2d,
+                            element.Id + "/beam center Z");
                         var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, group.DiameterMm / 2000d, element.Id + "/stirrup radius"), element.Id + "/stirrup radius drawing");
 
                         foreach (var stationM in layout.StationOffsetsM)

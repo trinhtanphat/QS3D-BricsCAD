@@ -122,11 +122,11 @@ namespace QS3D.BricsCAD.V25.UI
             if (element.ToolTip != null && current == null)
                 return;
 
-            if (!string.IsNullOrWhiteSpace(current) &&
+            if (current != null && !string.IsNullOrWhiteSpace(current) &&
                 current.IndexOf(shortcut, StringComparison.OrdinalIgnoreCase) >= 0)
                 return;
 
-            element.ToolTip = string.IsNullOrWhiteSpace(current)
+            element.ToolTip = current == null || string.IsNullOrWhiteSpace(current)
                 ? shortcut
                 : current.TrimEnd() + "  •  " + shortcut;
             ToolTipService.SetShowDuration(element, 10000);

@@ -226,7 +226,7 @@ namespace QS3D.Core.Revisions
 
         private static void ValidateCanonicalRequired(string? value, string label)
         {
-            if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+            if (value == null || string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
                 throw new InvalidOperationException("Revision " + label + " must be non-empty and must not contain leading/trailing whitespace.");
         }
 

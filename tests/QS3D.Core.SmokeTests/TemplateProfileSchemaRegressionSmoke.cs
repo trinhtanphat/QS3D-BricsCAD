@@ -19,25 +19,25 @@ namespace QS3D.Core.SmokeTests
 
         private static void ValidMinimalTemplateLoads()
         {
-            var profile = Load("<qs3dTemplate schema='1' id='T' name='Template'/>");
+            var profile = Load("<qs3dTemplate schema='1' id='T' name='Template'><families/><rules/><layerMappings/><bqColumns/></qs3dTemplate>");
             Equal("T", profile.Id);
             Equal("Template", profile.Name);
         }
 
         private static void RejectsForeignNamespace() => Reject(
-            "<qs3dTemplate xmlns='urn:qs3d:future' schema='1' id='T' name='Template'><families/></qs3dTemplate>");
+            "<qs3dTemplate xmlns='urn:qs3d:future' schema='1' id='T' name='Template'><families/><rules/><layerMappings/><bqColumns/></qs3dTemplate>");
 
         private static void RejectsUnknownRootAttribute() => Reject(
-            "<qs3dTemplate schema='1' id='T' name='Template' future='1'><families/></qs3dTemplate>");
+            "<qs3dTemplate schema='1' id='T' name='Template' future='1'><families/><rules/><layerMappings/><bqColumns/></qs3dTemplate>");
 
         private static void RejectsUnknownChild() => Reject(
-            "<qs3dTemplate schema='1' id='T' name='Template'><families/><future/></qs3dTemplate>");
+            "<qs3dTemplate schema='1' id='T' name='Template'><families/><rules/><layerMappings/><bqColumns/><future/></qs3dTemplate>");
 
         private static void RejectsDuplicateRootSingleton() => Reject(
-            "<qs3dTemplate schema='1' id='T' name='Template'><families/><families/></qs3dTemplate>");
+            "<qs3dTemplate schema='1' id='T' name='Template'><families/><families/><rules/><layerMappings/><bqColumns/></qs3dTemplate>");
 
         private static void RejectsDuplicateFamilyProperties() => Reject(
-            "<qs3dTemplate schema='1' id='T' name='Template'><families><family id='F' name='Family' category='Beam'><properties/><properties/></family></families></qs3dTemplate>");
+            "<qs3dTemplate schema='1' id='T' name='Template'><families><family id='F' name='Family' category='Beam'><properties/><properties/></family></families><rules/><layerMappings/><bqColumns/></qs3dTemplate>");
 
         private static TemplateProfile Load(string xml)
         {

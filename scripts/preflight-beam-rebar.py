@@ -29,7 +29,8 @@ if builder.is_file():
         "RebarBeamEndCoverM", "RebarBeamDiameterMm", "Matrix3d.Rotation(Math.PI / 2d", '"BeamLongitudinalBars"',
         "GeneratedRebarOwnershipGuard.Build(project)", 'ownership.EnsureOwned(handle, element, "GeneratedRebarHandles")',
         "MaxBarsPerElement = 1024", "MaxBarsPerBatch = 4096", "document.Editor.GetSelection()",
-        "CadGeometryGuard.Midpoint(line.StartPoint.Z, line.EndPoint.Z", "CadGeometryGuard.Finite(nx * localX",
+        "CadVerticalPlacementResolver.Resolve(", "placement.BottomDrawingUnits",
+        "placement.HeightDrawingUnits / 2d", "CadGeometryGuard.Finite(nx * localX",
     ):
         if needle not in text: errors.append("beam rebar solid builder missing: " + needle)
     if "CadGeometryGuard.Multiply" in text: errors.append("beam rebar builder references nonexistent CadGeometryGuard.Multiply")

@@ -47,7 +47,8 @@ namespace QS3D.Core.SmokeTests
             var groups = RebarNotationParser.Parse("2x3D16+D12@200");
             if (groups.Count != 2 || groups[0].Quantity != 6 || Math.Abs(groups[0].DiameterMm - 16d) > 1e-12d)
                 throw new InvalidOperationException("Ordinary rebar count notation changed while adding parser bounds.");
-            if (!groups[1].SpacingMm.HasValue || Math.Abs(groups[1].SpacingMm.Value - 200d) > 1e-12d || Math.Abs(groups[1].DiameterMm - 12d) > 1e-12d)
+            var spacingMm = groups[1].SpacingMm;
+            if (!spacingMm.HasValue || Math.Abs(spacingMm.Value - 200d) > 1e-12d || Math.Abs(groups[1].DiameterMm - 12d) > 1e-12d)
                 throw new InvalidOperationException("Ordinary rebar spacing notation changed while adding parser bounds.");
         }
 

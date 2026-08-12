@@ -48,6 +48,7 @@ namespace QS3D.Core.Reporting
                 var floor = floors.TryGetValue(floorId, out var floorName) ? floorName : floorId;
                 var zone = zones.TryGetValue(zoneId, out var zoneName) ? zoneName : zoneId;
                 families.TryGetValue(familyId, out var family);
+                if (family != null) familyId = family.Id;
                 var familyName = family != null ? family.Name : familyId;
                 var elementName = FirstInstanceProperty(element, "Name", "TenCauKien");
                 if (elementName.Length == 0) elementName = familyName;

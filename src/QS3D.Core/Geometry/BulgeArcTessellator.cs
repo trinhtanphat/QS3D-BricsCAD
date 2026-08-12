@@ -22,7 +22,7 @@ namespace QS3D.Core.Geometry
 
             var theta = 4d * Math.Atan(bulge);
             var absTheta = Math.Abs(theta);
-            if (!(absTheta > 1e-12d) || absTheta >= Math.PI * 2d) throw new ArgumentOutOfRangeException(nameof(bulge), "Polyline bulge produced an invalid included angle.");
+            if (!(absTheta > 1e-12d) || absTheta > Math.PI * 2d) throw new ArgumentOutOfRangeException(nameof(bulge), "Polyline bulge produced an invalid included angle.");
 
             var absBulge = Math.Abs(bulge);
             var inverseAbsBulge = 1d / absBulge;

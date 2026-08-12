@@ -22,7 +22,7 @@ namespace QS3D.Core.SmokeTests
         {
             WithCanonicalTemplate(path =>
             {
-                Mutate(path, columns => columns.First().SetAttributeValue("name", " Area "));
+                Mutate(path, columns => columns.Elements("column").First().SetAttributeValue("name", " Area "));
                 Throws<InvalidDataException>(() => new TemplateProfileStore().Load(path), "padded column");
             });
         }

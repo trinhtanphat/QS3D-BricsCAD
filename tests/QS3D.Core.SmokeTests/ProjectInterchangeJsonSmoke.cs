@@ -120,6 +120,7 @@ namespace QS3D.Core.SmokeTests
             project.Zones.Add(new ZoneDefinition("Z-1", "Zone 1"));
             project.Floors.Add(new FloorDefinition("FL-1", "L01", 0d));
             project.Families.Add(new ProjectFamily("FAM-1", "B300x500", ElementCategory.Beam));
+            project.Elements.Add(new ProjectElement("E-ROOT", ElementCategory.Beam, "FAM-1", "FL-1", "Z-1"));
             var element = new ProjectElement("E-001", ElementCategory.Beam, "FAM-1", "FL-1", "Z-1")
             {
                 DrawingFingerprint = "DWG-FP"

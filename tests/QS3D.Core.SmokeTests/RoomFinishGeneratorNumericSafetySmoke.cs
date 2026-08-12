@@ -9,8 +9,8 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             RejectsNegativeAreaWhenConsumed();
-            RejectsNonFiniteWallAreaWhenConsumed();
-            RejectsNonFiniteSkirtingLengthWhenConsumed();
+            RejectsNonFiniteWallAreaAtDomainBoundary();
+            RejectsNonFiniteSkirtingLengthAtDomainBoundary();
             IgnoresInvalidMetricWhenCorrespondingOutputsAreDisabled();
             PreservesValidGenerationAndProvenance();
         }
@@ -23,27 +23,23 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => RoomFinishGenerator.Generate(room, settings));
         }
 
-        private static void RejectsNonFiniteWallAreaWhenConsumed()
+        private static void RejectsNonFiniteWallAreaAtDomainBoundary()
         {
             var room = NewRoom();
-            room.SideAreaM2 = double.PositiveInfinity;
-            var settings = Only(ElementCategory.WallFinish);
-            Throws<InvalidOperationException>(() => RoomFinishGenerator.Generate(room, settings));
+            Throws<ArgumentOutOfRangeException>(() => room.SideAreaM2 = double.PositiveInfinity);
         }
 
-        private static void RejectsNonFiniteSkirtingLengthWhenConsumed()
+        private static void RejectsNonFiniteSkirtingLengthAtDomainBoundary()
         {
             var room = NewRoom();
-            room.InnerPerimeterM = double.NaN;
-            var settings = Only(ElementCategory.Skirting);
-            Throws<InvalidOperationException>(() => RoomFinishGenerator.Generate(room, settings));
+            Throws<ArgumentOutOfRangeException>(() => room.InnerPerimeterM = double.NaN);
         }
 
         private static void IgnoresInvalidMetricWhenCorrespondingOutputsAreDisabled()
         {
             var room = NewRoom();
-            room.AreaM2 = double.NaN;
-            room.SideAreaM2 = double.NegativeInfinity;
+            room.AreaM2 = -1d;
+            room.SideAreaM2 = -1d;
             room.InnerPerimeterM = 7.5d;
 
             var output = RoomFinishGenerator.Generate(room, Only(ElementCategory.Skirting));

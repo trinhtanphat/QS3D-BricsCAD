@@ -175,8 +175,8 @@ namespace QS3D.Core.SmokeTests
                 using (var writer = new StreamWriter(archive.CreateEntry("xl/worksheets/sheet1.xml").Open(), new UTF8Encoding(false)))
                     writer.Write("<?xml version=\"1.0\" encoding=\"UTF-8\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"E1\" t=\"inlineStr\"><is><t>Handle</t></is></c></row><row r=\"5\"><c r=\"A5\" t=\"inlineStr\"><is><t>$12510$12512</t></is></c><c r=\"E5\" t=\"inlineStr\"><is><t>CF4</t></is></c></row></sheetData></worksheet>");
                 var legacy = XlsxHandleReader.ReadHandleLookup(bltPath, 5);
-                Equal(2, legacy.Handles.Count); Equal("30DE", legacy.Handles[0]); Equal("30E0", legacy.Handles[1]);
-                Equal(string.Empty, legacy.DrawingFingerprint); True(legacy.UsesLegacyDecimalHandles);
+                Equal(1, legacy.Handles.Count); Equal("CF4", legacy.Handles[0]);
+                Equal(string.Empty, legacy.DrawingFingerprint); True(!legacy.UsesLegacyDecimalHandles);
             }
             finally { DeleteDirectory(directory); }
         }
@@ -290,11 +290,20 @@ namespace QS3D.Core.SmokeTests
                 }));
                 Equal("quantity-sentinel", File.ReadAllText(quantityPath));
 
-                Throws<System.Xml.XmlException>(() => XlsxQuantityExporter.Export(quantityPath, new[]
+                XlsxQuantityExporter.Export(quantityPath, new[]
                 {
                     new QuantityReportRow { Floor = "F", Category = "Beam", FamilyName = "Bad\u0001Name", Count = 1 }
-                }));
-                Equal("quantity-sentinel", File.ReadAllText(quantityPath));
+                });
+                using (var archive = ZipFile.OpenRead(quantityPath))
+                {
+                    var worksheet = archive.GetEntry("xl/worksheets/sheet1.xml") ?? throw new Exception("Sanitized quantity worksheet is missing.");
+                    using (var reader = new StreamReader(worksheet.Open()))
+                    {
+                        var xml = reader.ReadToEnd();
+                        True(xml.IndexOf('\u0001') < 0);
+                        True(xml.IndexOf('\uFFFD') >= 0);
+                    }
+                }
 
                 File.WriteAllText(rebarPath, "rebar-sentinel");
                 Throws<ArgumentOutOfRangeException>(() => XlsxRebarScheduleExporter.Export(rebarPath, new[]

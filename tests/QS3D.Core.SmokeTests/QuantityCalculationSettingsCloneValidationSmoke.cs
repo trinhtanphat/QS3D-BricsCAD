@@ -8,8 +8,8 @@ namespace QS3D.Core.SmokeTests
     {
         private const string NullCategoryRuleMessage = "CategoryRules cannot contain null entries.";
         private const string NullIntersectionRuleMessage = "IntersectionRules cannot contain null entries.";
-        private const string CategoryLimitMessage = "CategoryRules cannot contain more than " + QuantityCalculationSettings.MaxObservedCategoryCodeCount + " entries.";
-        private const string IntersectionLimitMessage = "IntersectionRules cannot contain more than " + QuantityCalculationSettings.MaxDirectedIntersectionRuleCount + " entries.";
+        private static readonly string CategoryLimitMessage = "CategoryRules cannot contain more than " + QuantityCalculationSettings.MaxObservedCategoryCodeCount + " entries.";
+        private static readonly string IntersectionLimitMessage = "IntersectionRules cannot contain more than " + QuantityCalculationSettings.MaxDirectedIntersectionRuleCount + " entries.";
 
         public static void Run()
         {

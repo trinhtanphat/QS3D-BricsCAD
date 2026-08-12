@@ -404,6 +404,18 @@ namespace QS3D.Core.Geometry
         private static double Cross(double ax, double ay, double bx, double by)
         {
             EnsureFiniteDerived("Grid intersection cross-product input", ax, ay, bx, by);
+
+            var firstProduct = ax * by;
+            var secondProduct = ay * bx;
+            if (IsFinite(firstProduct) && IsFinite(secondProduct))
+            {
+                var direct = firstProduct - secondProduct;
+                if (IsFinite(direct)) return direct;
+            }
+
+            if (TryDifferenceFactoredCross(ax, ay, bx, by, out var factored))
+                return factored;
+
             var scaleA = Math.Max(Math.Abs(ax), Math.Abs(ay));
             var scaleB = Math.Max(Math.Abs(bx), Math.Abs(by));
             if (scaleA == 0.0 || scaleB == 0.0) return 0.0;
@@ -417,6 +429,30 @@ namespace QS3D.Core.Geometry
             var value = scaled * largerScale;
             if (!IsFinite(value)) throw new OverflowException("Grid intersection cross product exceeds the supported numeric range.");
             return value;
+        }
+
+        private static bool TryDifferenceFactoredCross(
+            double ax,
+            double ay,
+            double bx,
+            double by,
+            out double value)
+        {
+            // These identities keep the small component difference explicit when
+            // the two raw products overflow.  Trying both pairings avoids forcing
+            // a cancellation-sensitive normalized-ratio subtraction.
+            if (TryFiniteSum(ax * (by - bx), bx * (ax - ay), out value)) return true;
+            if (TryFiniteSum(ax * (by - ay), ay * (ax - bx), out value)) return true;
+            if (TryFiniteSum(by * (ax - ay), ay * (by - bx), out value)) return true;
+            if (TryFiniteSum(by * (ax - bx), bx * (by - ay), out value)) return true;
+            value = 0.0;
+            return false;
+        }
+
+        private static bool TryFiniteSum(double first, double second, out double value)
+        {
+            value = first + second;
+            return IsFinite(first) && IsFinite(second) && IsFinite(value);
         }
 
         private static double DotWithUnit(double x, double y, double ux, double uy)

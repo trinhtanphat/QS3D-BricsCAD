@@ -47,9 +47,17 @@ namespace QS3D.Core.SmokeTests
                 }
                 File.WriteAllText(path, "ORIGINAL");
                 var invalidRow = new DoorOpeningScheduleRow { FamilyName = "Invalid\u0001Family" };
-                try { DoorOpeningXlsxExporter.Export(path, new List<DoorOpeningScheduleRow> { invalidRow }); throw new Exception("Invalid XML text must reject door/opening XLSX export."); }
-                catch (XmlException) { }
-                if (File.ReadAllText(path) != "ORIGINAL") throw new Exception("Rejected door/opening XLSX export replaced the existing destination.");
+                DoorOpeningXlsxExporter.Export(path, new List<DoorOpeningScheduleRow> { invalidRow });
+                using (var archive = ZipFile.OpenRead(path))
+                {
+                    var worksheet = archive.GetEntry("xl/worksheets/sheet1.xml") ?? throw new Exception("Sanitized door/opening XLSX worksheet is missing.");
+                    using (var reader = new StreamReader(worksheet.Open()))
+                    {
+                        var xml = reader.ReadToEnd();
+                        if (xml.IndexOf('\u0001') >= 0) throw new Exception("Door/opening XLSX retained an XML-invalid control character.");
+                        if (xml.IndexOf('\uFFFD') < 0) throw new Exception("Door/opening XLSX did not preserve the sanitized replacement marker.");
+                    }
+                }
             }
             finally
             {

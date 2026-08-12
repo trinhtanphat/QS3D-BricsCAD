@@ -255,7 +255,22 @@ namespace QS3D.Core.Geometry
             var t = scaledAlong / scaledLength;
             if (!Finite(t) || t < 0d || t > 1d) return;
             var projected = new Point2(segment.Start.X + dx * t, segment.Start.Y + dy * t);
-            if (projected.DistanceTo(point) <= tolerance) cuts.Add(new Cut(Clamp01(t), projected));
+            if (projected.DistanceTo(point) > tolerance)
+            {
+                var dominantDirection = Math.Abs(dx) >= Math.Abs(dy) ? dx : dy;
+                var dominantDelta = Math.Abs(dx) >= Math.Abs(dy) ? qx : qy;
+                if (dominantDirection == 0d) return;
+                var dominantT = dominantDelta / dominantDirection;
+                if (!Finite(dominantT) || dominantT < 0d || dominantT > 1d) return;
+                dominantT = Clamp01(dominantT);
+                var dominantProjected = new Point2(
+                    segment.Start.X + dx * dominantT,
+                    segment.Start.Y + dy * dominantT);
+                if (dominantProjected.DistanceTo(point) > tolerance) return;
+                t = dominantT;
+                projected = dominantProjected;
+            }
+            cuts.Add(new Cut(Clamp01(t), projected));
         }
 
         private static IReadOnlyList<Cut> DeduplicateCuts(IEnumerable<Cut> source, BoundarySegment segment, double tolerance)

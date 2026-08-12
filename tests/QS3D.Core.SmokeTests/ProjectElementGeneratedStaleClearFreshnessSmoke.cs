@@ -25,7 +25,7 @@ namespace QS3D.Core.SmokeTests
 
             element.ClearGeneratedSolidStale();
 
-            Require(element.UpdatedUtc > before, "real per-kind stale clear did not advance UpdatedUtc");
+            True(element.UpdatedUtc > before, "real per-kind stale clear did not advance UpdatedUtc");
             Equal(expectedDirty, element.Dirty, "per-kind stale clear changed Dirty");
             False(element.Properties.ContainsKey(ProjectElement.GeneratedSolidStateKey), "solid state marker remained after clear");
             False(element.Properties.ContainsKey(ProjectElement.GeneratedSolidStaleSnapshotKey), "solid stale snapshot remained after clear");
@@ -44,7 +44,7 @@ namespace QS3D.Core.SmokeTests
 
             element.ClearGeneratedSolidStale();
 
-            Require(element.UpdatedUtc > before, "final per-kind stale clear did not advance UpdatedUtc");
+            True(element.UpdatedUtc > before, "final per-kind stale clear did not advance UpdatedUtc");
             Equal(expectedDirty, element.Dirty, "final per-kind stale clear changed Dirty");
             False(element.Properties.ContainsKey(ProjectElement.GeneratedSolidStateKey), "solid state marker remained");
             False(element.Properties.ContainsKey(ProjectElement.GeneratedSolidStaleSnapshotKey), "solid stale snapshot remained");
@@ -77,7 +77,7 @@ namespace QS3D.Core.SmokeTests
 
             element.ClearGeneratedGeometryStale();
 
-            Require(element.UpdatedUtc > before, "real clear-all did not advance UpdatedUtc");
+            True(element.UpdatedUtc > before, "real clear-all did not advance UpdatedUtc");
             Equal(expectedDirty, element.Dirty, "clear-all changed Dirty");
             False(element.Properties.ContainsKey(ProjectElement.GeneratedGeometryStateKey), "clear-all left aggregate stale state");
             False(element.Properties.ContainsKey(ProjectElement.GeneratedGeometryStaleReasonKey), "clear-all left aggregate stale reason");

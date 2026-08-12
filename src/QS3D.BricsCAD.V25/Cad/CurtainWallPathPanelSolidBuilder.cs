@@ -74,10 +74,17 @@ namespace QS3D.BricsCAD.V25.Cad
                         var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
                         var panelDepthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", 0.012d), element.Id + "/ThicknessM");
                         var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-                        var input = LayoutInput(element, family, lengthM, heightM);
+                        var placement = CadVerticalPlacementResolver.Resolve(
+                            document, project, element, polyline.Elevation, heightM, bottomOffsetM);
+                        var effectiveHeightM = placement.HeightM;
+                        var fingerprintBottomM = CadVerticalPlacementResolver.HasConfiguredLevel(element)
+                            ? placement.Semantic.BottomElevationM
+                            : bottomOffsetM;
+                        var input = LayoutInput(element, family, lengthM, effectiveHeightM);
                         var detail = CurtainWallDetailPlanner.Plan(input);
                         if (detail.Panels.Count > MaxPanelsPerElement) throw new InvalidOperationException(element.Id + " base panel count exceeds " + MaxPanelsPerElement + ".");
-                        var openings = CurtainWallPanelBuilderSupport.ReadPathOpenings(document, transaction, project, element, centerline, lengthM, heightM, panelDepthM);
+                        var openings = CurtainWallPanelBuilderSupport.ReadPathOpenings(
+                            document, transaction, project, element, centerline, polyline.Elevation, lengthM, heightM, bottomOffsetM, panelDepthM);
                         var panelPlan = CurtainWallOpeningPanelPlanner.Plan(detail.Panels, openings, 0d);
                         var rectangles = panelPlan.Pieces.Select(x => new CurtainWallRect(x.X_M, x.Z_M, x.WidthM, x.HeightM)).ToList();
                         var pathPlan = CurtainPathFramePlanner.Plan(centerline, rectangles);
@@ -87,7 +94,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
                         var previous = CurtainWallPanelBuilderSupport.ValidatePrevious(document, transaction, project, element, ownership);
                         CurtainWallPanelBuilderSupport.ErasePrevious(transaction, project, element, previous);
-                        var baseZ = CadGeometryGuard.Add(polyline.Elevation, CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM"), element.Id + "/path panel base Z");
+                        var baseZ = placement.BottomDrawingUnits;
                         var update = new PendingUpdate
                         {
                             Element = element,
@@ -100,13 +107,13 @@ namespace QS3D.BricsCAD.V25.Cad
                             PathSagittaM = sagittaM,
                             PanelDepthM = panelDepthM,
                             SourceLengthM = lengthM,
-                            HeightM = heightM,
+                            HeightM = effectiveHeightM,
                             AreaM2 = panelPlan.RemainingPanelAreaM2,
                             ConfigFingerprint = CurtainWallPanelFingerprint.Compute(new CurtainWallPanelFingerprintInput
                             {
                                 SourceLengthM = lengthM,
-                                HeightM = heightM,
-                                BottomOffsetM = bottomOffsetM,
+                                HeightM = effectiveHeightM,
+                                BottomOffsetM = fingerprintBottomM,
                                 PanelDepthM = panelDepthM,
                                 SourceKind = "OpenPolyline",
                                 PathSegmentCount = pathPlan.PathSegmentCount,

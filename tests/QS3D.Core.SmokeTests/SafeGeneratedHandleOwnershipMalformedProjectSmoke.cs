@@ -22,7 +22,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("SAFE-OWN-NULL", "Safe ownership null");
             project.Elements.Add(new ProjectElement("E1", ElementCategory.Beam));
-            project.Elements.Add(null);
+            project.Elements.Add(null!);
             var beforeVersion = project.ChangeVersion;
 
             var issues = new SafeGeneratedHandleOwnershipHealthService().Inspect(project);

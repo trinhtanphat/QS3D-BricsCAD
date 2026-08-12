@@ -188,11 +188,11 @@ namespace QS3D.Core.SmokeTests
                 () => new ProjectElement("E1", (ElementCategory)999, string.Empty, string.Empty, string.Empty),
                 "Undefined element category reached persistence instead of failing at the domain boundary.");
 
-            var project = NewProject("rule-category");
-            project.QuantityRules.Add(new QuantityRule("R1", (ElementCategory)999, "Area", "1", "v1"));
-            RejectSave(project, "Undefined quantity-rule category was persisted.");
+            ThrowsArgumentOutOfRange(
+                () => new QuantityRule("R1", (ElementCategory)999, "Area", "1", "v1"),
+                "Undefined quantity-rule category reached persistence instead of failing at the domain boundary.");
 
-            project = NewProject("load-category");
+            var project = NewProject("load-category");
             project.Families.Add(new ProjectFamily("F1", "Family", ElementCategory.ArchitecturalWall));
             var path = Path.Combine(Path.GetTempPath(), "qs3d-category-load-" + Guid.NewGuid().ToString("N") + ".qsdb");
             try

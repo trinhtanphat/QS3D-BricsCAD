@@ -56,7 +56,9 @@ if workspace.is_file():
     for needle in (
         'MinWidth="0" MinHeight="0"',
         'x:Name="WorkspaceOverflow"',
-        '<Grid x:Name="WorkspaceContentRoot" MinWidth="560" Background="{StaticResource Bg0Brush}">',
+        'x:Name="WorkspaceContentRoot"',
+        'Width="{Binding ViewportWidth, ElementName=WorkspaceOverflow}"',
+        'MinWidth="560"',
         'HorizontalScrollBarVisibility="Auto"',
         'VerticalScrollBarVisibility="Disabled"',
         'PanningMode="HorizontalOnly"',
@@ -106,6 +108,8 @@ if workspace.is_file():
                     errors.append("WorkspacePanel design surface must expose WorkspaceContentRoot for layout persistence")
                 if content_grid.attrib.get("MinWidth") != "560":
                     errors.append("WorkspacePanel three-column content must retain its 560-DIP design width inside overflow")
+                if content_grid.attrib.get("Width") != "{Binding ViewportWidth, ElementName=WorkspaceOverflow}":
+                    errors.append("WorkspacePanel content must follow the live viewport width while retaining its compact minimum")
     except ET.ParseError as exc:
         errors.append("WorkspacePanel.xaml is not well-formed: " + str(exc))
 
