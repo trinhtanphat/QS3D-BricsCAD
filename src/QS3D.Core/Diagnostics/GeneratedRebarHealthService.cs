@@ -169,15 +169,33 @@ namespace QS3D.Core.Diagnostics
             if (element.Properties.TryGetValue(spec.CountKey, out var countText))
             {
                 if (!int.TryParse(countText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var count) || count < 0 || count != validCount)
+                {
                     issues.Add(new ModelHealthIssue(spec.CodePrefix + "_GENERATED_COUNT_MISMATCH", HealthSeverity.Warning, spec.CountKey + " không khớp số handle hợp lệ.", element.Id));
+                }
+                else
+                {
+                    var canonicalCount = count.ToString(CultureInfo.InvariantCulture);
+                    if (!string.Equals(countText, canonicalCount, StringComparison.Ordinal))
+                        issues.Add(new ModelHealthIssue(spec.CodePrefix + "_GENERATED_COUNT_NON_CANONICAL", HealthSeverity.Error, spec.CountKey + " phải dùng đúng invariant integer spelling: " + canonicalCount + ".", element.Id));
+                }
             }
             else issues.Add(new ModelHealthIssue(spec.CodePrefix + "_GENERATED_COUNT_MISSING", HealthSeverity.Warning, "Thiếu " + spec.CountKey + ".", element.Id));
 
-            if (spec.RequiresSingleDiameter &&
-                (!element.Properties.TryGetValue("GeneratedRebarDiameterMm", out var diameterText) ||
-                 !double.TryParse(diameterText, NumberStyles.Float, CultureInfo.InvariantCulture, out var diameter) ||
-                 double.IsNaN(diameter) || double.IsInfinity(diameter) || diameter <= 0d))
-                issues.Add(new ModelHealthIssue("REBAR_GENERATED_DIAMETER_INVALID", HealthSeverity.Warning, "GeneratedRebarDiameterMm thiếu hoặc không hợp lệ.", element.Id));
+            if (spec.RequiresSingleDiameter)
+            {
+                if (!element.Properties.TryGetValue("GeneratedRebarDiameterMm", out var diameterText) ||
+                    !double.TryParse(diameterText, NumberStyles.Float, CultureInfo.InvariantCulture, out var diameter) ||
+                    double.IsNaN(diameter) || double.IsInfinity(diameter) || diameter <= 0d)
+                {
+                    issues.Add(new ModelHealthIssue("REBAR_GENERATED_DIAMETER_INVALID", HealthSeverity.Warning, "GeneratedRebarDiameterMm thiếu hoặc không hợp lệ.", element.Id));
+                }
+                else
+                {
+                    var canonicalDiameter = diameter.ToString("R", CultureInfo.InvariantCulture);
+                    if (!string.Equals(diameterText, canonicalDiameter, StringComparison.Ordinal))
+                        issues.Add(new ModelHealthIssue("REBAR_GENERATED_DIAMETER_NON_CANONICAL", HealthSeverity.Error, "GeneratedRebarDiameterMm phải dùng đúng round-trip invariant numeric spelling: " + canonicalDiameter + ".", element.Id));
+                }
+            }
         }
 
         private static IEnumerable<string> SplitHandles(string raw) =>
