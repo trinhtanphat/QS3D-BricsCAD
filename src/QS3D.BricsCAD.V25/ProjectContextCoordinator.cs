@@ -375,8 +375,8 @@ namespace QS3D.BricsCAD.V25
                 ThrowDrawingIdentityMismatch(storedFingerprint, fingerprint);
 
             if (SameDrawingName(storedPath, drawing)) return;
-            project.DrawingPath = drawing;
             project.Touch();
+            project.DrawingPath = drawing;
         }
 
         private static void ValidateDrawingIdentityReadOnly(ProjectState project, Document document)
@@ -440,15 +440,19 @@ namespace QS3D.BricsCAD.V25
 
         private static void AdoptDrawingIdentity(ProjectState project, string drawing, string fingerprint, string previousFingerprint)
         {
+            var elements = project.Elements.ToList();
+            if (elements.Any(x => x == null))
+                throw new InvalidOperationException("Project contains a null element entry.");
+
+            project.Touch();
             project.DrawingPath = drawing;
             project.DrawingFingerprint = fingerprint;
-            foreach (var element in project.Elements)
+            foreach (var element in elements)
             {
                 if (string.IsNullOrWhiteSpace(element.DrawingFingerprint) ||
                     string.Equals(element.DrawingFingerprint, previousFingerprint, StringComparison.OrdinalIgnoreCase))
                     element.DrawingFingerprint = fingerprint;
             }
-            project.Touch();
         }
 
         private static bool SameDrawingName(string? left, string? right)
