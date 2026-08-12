@@ -15,6 +15,9 @@ namespace QS3D.Core.SmokeTests
             RejectsCategory("beam");
             RejectsCategory(" Beam ");
             RejectsCategory(((int)ElementCategory.Beam).ToString(CultureInfo.InvariantCulture));
+            RejectsSaveBeforeFilesystemMutation("beam");
+            RejectsSaveBeforeFilesystemMutation(" Beam ");
+            RejectsSaveBeforeFilesystemMutation(((int)ElementCategory.Beam).ToString(CultureInfo.InvariantCulture));
             AcceptsCanonicalCategory();
         }
 
@@ -25,6 +28,26 @@ namespace QS3D.Core.SmokeTests
                 ReplaceCategory(path, replacement);
                 Throws<InvalidDataException>(() => new TemplateProfileStore().Load(path), "layer category " + replacement);
             });
+        }
+
+        private static void RejectsSaveBeforeFilesystemMutation(string category)
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-template-layer-category-preflight-" + Guid.NewGuid().ToString("N"));
+            var path = Path.Combine(root, "nested", "profile.qstemplate");
+            var profile = new TemplateProfile("layer-category-preflight", "Layer Category Preflight");
+            profile.LayerMappings["A-BEAM"] = category;
+
+            try
+            {
+                Throws<InvalidDataException>(() => new TemplateProfileStore().Save(profile, path), "save layer category " + category);
+                if (Directory.Exists(root))
+                    throw new Exception("TemplateLayerMappingCategoryCanonicalitySmoke invalid in-memory layer category must fail before filesystem mutation: " + category);
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); }
+                catch { }
+            }
         }
 
         private static void AcceptsCanonicalCategory()
