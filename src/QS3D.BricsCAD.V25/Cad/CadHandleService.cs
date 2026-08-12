@@ -24,7 +24,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     var id = document.Database.GetObjectId(false, new Handle(value), 0);
                     if (!id.IsNull && id.IsValid) candidates.Add(id);
                 }
-                catch { }
+                catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex)) { }
             }
 
             var result = new List<ObjectId>();
@@ -37,7 +37,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
                         if (entity != null && !entity.IsErased) result.Add(id);
                     }
-                    catch { }
+                    catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex)) { }
                 }
                 transaction.Commit();
             }
@@ -75,7 +75,8 @@ namespace QS3D.BricsCAD.V25.Cad
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var id in Resolve(document, handles))
             {
-                try { result.Add(id.Handle.ToString()); } catch { }
+                try { result.Add(id.Handle.ToString()); }
+                catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex)) { }
             }
             return result;
         }
@@ -94,11 +95,18 @@ namespace QS3D.BricsCAD.V25.Cad
                         var solid = transaction.GetObject(id, OpenMode.ForRead, false) as Solid3d;
                         if (solid != null && !solid.IsErased) result.Add(id.Handle.ToString());
                     }
-                    catch { }
+                    catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex)) { }
                 }
                 transaction.Commit();
             }
             return result;
+        }
+
+        private static bool IsRecoverableDiagnosticFailure(Exception exception)
+        {
+            return !(exception is OutOfMemoryException) &&
+                   !(exception is StackOverflowException) &&
+                   !(exception is AccessViolationException);
         }
     }
 }
