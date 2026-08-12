@@ -1,10 +1,10 @@
 # Work claim — Auto Room dangling previous Family
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-gpt56sol-20260812-auto-room-dangling-previous-family`
-- Registered: `2026-08-12T08:10:00+07:00`
-- Last Updated: `2026-08-12T08:10:00+07:00`
+- Registered: `2026-08-12T08:22:53+07:00`
+- Last Updated: `2026-08-12T08:25:50+07:00`
 - Baseline main SHA: `63b06496c6996bd769a44ef88b88afb7b13c2203`
 - Priority: deterministic Core relation-integrity mismatch found during owner-requested continue-all audit
 - Task Key: `CORE-AUTO-ROOM-DANGLING-PREVIOUS-FAMILY`
@@ -13,34 +13,32 @@
 
 Canonical Family reassignment paths (`ProjectFamilyService.Assign(...)` and `BulkEditService.AssignFamily(...)`) fail before mutation when an element has a non-empty `FamilyId` that no longer resolves to a project Family. This prevents silent repair from losing the distinction between inherited previous-Family defaults and explicit instance overrides.
 
-`AutoRoomLifecycle.SyncFamilyDefaults(...)` has the same reassignment/inheritance responsibility but currently does `project.FindFamily(room.FamilyId)` and treats a missing result as an empty previous-default set. A Room with dangling non-empty `FamilyId` can therefore have its FamilyId, default-snapshot metadata and properties rewritten instead of surfacing the invalid relation.
+`AutoRoomLifecycle.SyncFamilyDefaults(...)` had the same reassignment/inheritance responsibility but treated a missing previous Family as an empty previous-default set. A Room with dangling non-empty `FamilyId` could therefore have its FamilyId, default-snapshot metadata and properties rewritten instead of surfacing the invalid relation.
 
-## Reserved scope
+## Implemented scope
 
-Make Auto Room family synchronization fail before project/Room mutation when the Room's current `FamilyId` is non-empty, differs canonically from the requested target Family, and does not resolve to a project Family. Reuse existing canonical trim/case-insensitive identity semantics and preserve all valid/no-Family/same-Family behavior.
+`SyncFamilyDefaults(...)` now canonicalizes the Room's current `FamilyId` for identity comparison, distinguishes legitimate empty-Family bootstrap from reassignment, and rejects a non-empty unresolved previous Family before mutation planning. A canonical trim/case-insensitive match with the target Family remains a no-op identity and does not rewrite the persisted raw FamilyId formatting solely for formatting differences.
 
-## Expected surfaces
+Valid previous-Family synchronization still uses the existing canonical `ProjectFamilyService.SnapshotProperties(...)` path, preserving inherited-default versus explicit-override semantics.
 
-- `src/QS3D.Core/Domain/AutoRoomLifecycle.cs`
-- focused Core smoke + isolated registration if needed
-- this claim file
+## Committed evidence
 
-## Coordination / exclusions
+- Claim registration: `6badfa569edddc6af218ce5dc5a74e3f5ed1a2fe` — `chore(agent): claim auto-room dangling previous Family`
+- Core fix: `f9e372e7305136b6da465f48a99285693fbe4b69` — `fix(core): reject dangling Auto Room previous Family`
+- Focused smoke: `67fdb2ad2190c7ccbd472172f9fd123ddcb73534` — `test(core): guard Auto Room dangling previous Family`
+- Isolated smoke registration: `228dae5fb0f14f2e694372bbf57bc3fdd2e2135d` — `test(core): register Auto Room dangling Family smoke`
+- Moving-main read-back on `ff0422adbc9814e730cc60c293785053b11749b5` confirmed source, smoke and isolated registration remained present after concurrent commits.
 
-- Do not modify Auto Room geometry, topology, projection, active-id, stale-room discovery, finish generation or BricsCAD commands.
-- Do not modify `ProjectFamilyService.cs` or `BulkEditService.cs`; those canonical assignment contracts are reference behavior only.
-- Do not broaden into malformed previous-Family properties; that was already fixed by `4fa587278e84df0ef10bf560a9687dcdc81cbf7f`.
-- Preserve legitimate empty `FamilyId` bootstrap and canonical same-Family no-op behavior.
-- Do not overwrite any concurrent ACTIVE claim; no force-push, Actions/build/release dispatch, or runtime PASS claim.
+The focused smoke locks three paths: dangling non-empty previous Family fails without changing Room FamilyId/properties/dirty/timestamp, project metadata/version/timestamp; empty previous Family still bootstraps to a valid target; canonical padded/case-varied same-Family state remains a true no-op when defaults/snapshots are already synchronized.
 
-## Validation plan
+## Preserved behavior / exclusions
 
-- Room with dangling non-empty previous `FamilyId` + valid target Room Family: require fail-before-mutation.
-- Prove FamilyId, Room properties, Room dirty/timestamp, project metadata, `ChangeVersion` and project `UpdatedUtc` remain unchanged.
-- Prove empty previous FamilyId can still adopt valid target defaults.
-- Prove valid previous Family reassignment still preserves explicit instance overrides and inherited-default semantics.
-- Re-fetch `main`, collision state and exact source before every write; read back source/test before closeout.
+- Auto Room geometry, topology, projection, active-id, stale-room discovery, finish generation and BricsCAD commands were not modified.
+- `ProjectFamilyService.cs` and `BulkEditService.cs` were not modified.
+- Malformed previous-Family property validation remains owned by the completed `4fa587278e84df0ef10bf560a9687dcdc81cbf7f` lane.
+- No force-push or GitHub Actions/build/release dispatch was used.
+- No local .NET smoke execution or BricsCAD V25 runtime qualification is claimed.
 
 ## Completion condition
 
-Auto Room Family synchronization shares the canonical fail-closed relation contract for dangling previous Family identities without changing valid bootstrap or reassignment semantics.
+Satisfied: Auto Room Family synchronization now shares the canonical fail-closed relation contract for dangling previous Family identities without changing valid bootstrap or reassignment semantics.
