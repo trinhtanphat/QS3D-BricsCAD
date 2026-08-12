@@ -148,8 +148,9 @@ namespace QS3D.Core.Services
             {
                 if (element == null)
                     throw new InvalidOperationException("Project contains a null element entry.");
-                if (!result.TryAdd(element.Id, element))
+                if (result.ContainsKey(element.Id))
                     throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
+                result.Add(element.Id, element);
             }
             return result;
         }
