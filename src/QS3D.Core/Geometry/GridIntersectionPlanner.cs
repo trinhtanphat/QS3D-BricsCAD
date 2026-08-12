@@ -211,25 +211,30 @@ namespace QS3D.Core.Geometry
             var discriminant = b * b - 4.0 * a * c;
             var discriminantScale = b * b + Math.Abs(4.0 * a * c);
             var discTolerance = tolerance * Math.Max(1.0, discriminantScale);
+            var usesScaledDistanceRoots = false;
+            var directionScale = 1.0;
+            var geometryScale = 1.0;
+            var normalizedDx = 0.0;
+            var normalizedDy = 0.0;
 
             if (!IsFinite(a) || !(a > 0.0) || !IsFinite(b) || !IsFinite(c) ||
                 !IsFinite(discriminant) || !IsFinite(discriminantScale) || !IsFinite(discTolerance))
             {
-                var scale = Math.Max(
-                    1.0,
-                    Math.Max(
-                        Math.Max(Math.Abs(dx), Math.Abs(dy)),
-                        Math.Max(Math.Max(Math.Abs(fx), Math.Abs(fy)), arc.Radius)));
-                var inverseScale = 1.0 / scale;
-                var normalizedDx = dx * inverseScale;
-                var normalizedDy = dy * inverseScale;
-                var normalizedFx = fx * inverseScale;
-                var normalizedFy = fy * inverseScale;
-                var normalizedRadius = arc.Radius * inverseScale;
+                directionScale = Math.Max(Math.Abs(dx), Math.Abs(dy));
+                geometryScale = Math.Max(Math.Max(Math.Abs(fx), Math.Abs(fy)), arc.Radius);
+                if (!(directionScale > 0.0) || !(geometryScale > 0.0) ||
+                    !IsFinite(directionScale) || !IsFinite(geometryScale))
+                    throw new OverflowException("Grid LINE/ARC fallback scales are outside the supported numeric range.");
+
+                normalizedDx = dx / directionScale;
+                normalizedDy = dy / directionScale;
+                var normalizedFx = fx / geometryScale;
+                var normalizedFy = fy / geometryScale;
+                var normalizedRadius = arc.Radius / geometryScale;
                 EnsureFiniteDerived(
                     "Grid LINE/ARC normalized geometry",
-                    scale,
-                    inverseScale,
+                    directionScale,
+                    geometryScale,
                     normalizedDx,
                     normalizedDy,
                     normalizedFx,
@@ -240,10 +245,9 @@ namespace QS3D.Core.Geometry
                 b = 2.0 * (normalizedFx * normalizedDx + normalizedFy * normalizedDy);
                 c = normalizedFx * normalizedFx + normalizedFy * normalizedFy - normalizedRadius * normalizedRadius;
                 discriminant = b * b - 4.0 * a * c;
-                var inverseScaleSquared = inverseScale * inverseScale;
-                var unitDiscriminantScale = inverseScaleSquared * inverseScaleSquared;
                 discriminantScale = b * b + Math.Abs(4.0 * a * c);
-                discTolerance = tolerance * Math.Max(unitDiscriminantScale, discriminantScale);
+                discTolerance = tolerance * Math.Max(1.0, discriminantScale);
+                usesScaledDistanceRoots = true;
             }
 
             EnsureFiniteDerived("Grid LINE/ARC quadratic", a, b, c);
@@ -273,12 +277,37 @@ namespace QS3D.Core.Geometry
             var lineLength = Length(dx, dy);
             var paramTolerance = tolerance / Math.Max(tolerance, lineLength);
             EnsureFiniteDerived("Grid LINE/ARC parameter tolerance", paramTolerance);
+            var componentTolerance = usesScaledDistanceRoots ? paramTolerance * directionScale : 0.0;
+            EnsureFiniteDerived("Grid LINE/ARC fallback component tolerance", componentTolerance);
             var points = new List<Point2>(2);
             foreach (var root in roots)
             {
-                if (root < -paramTolerance || root > 1.0 + paramTolerance) continue;
-                var t = Clamp01(root);
-                var point = new Point2(line.Start.X + t * dx, line.Start.Y + t * dy);
+                Point2 point;
+                if (!usesScaledDistanceRoots)
+                {
+                    if (root < -paramTolerance || root > 1.0 + paramTolerance) continue;
+                    var t = Clamp01(root);
+                    point = new Point2(line.Start.X + t * dx, line.Start.Y + t * dy);
+                }
+                else
+                {
+                    var directionDistance = root * geometryScale;
+                    if (!IsFinite(directionDistance)) continue;
+                    if (directionDistance < -componentTolerance) continue;
+                    if (directionDistance < 0.0) directionDistance = 0.0;
+                    if (directionDistance > directionScale)
+                    {
+                        var beyondEnd = directionDistance - directionScale;
+                        EnsureFiniteDerived("Grid LINE/ARC fallback beyond-end distance", beyondEnd);
+                        if (beyondEnd > componentTolerance) continue;
+                        directionDistance = directionScale;
+                    }
+
+                    point = new Point2(
+                        line.Start.X + directionDistance * normalizedDx,
+                        line.Start.Y + directionDistance * normalizedDy);
+                }
+
                 EnsureFinitePoint(point, "Grid LINE/ARC intersection");
                 if (!IsOnArc(point, arc, tolerance)) continue;
                 points.Add(point);
