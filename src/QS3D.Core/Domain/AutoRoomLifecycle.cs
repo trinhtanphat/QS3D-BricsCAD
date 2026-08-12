@@ -169,9 +169,17 @@ namespace QS3D.Core.Domain
                 throw new InvalidOperationException("Auto-room family synchronization requires Room category values.");
 
             var familyProperties = ProjectFamilyService.SnapshotProperties(family, "Target", "auto-room synchronization");
-            var previousFamily = project.FindFamily(room.FamilyId);
-            var familyChanged = !string.Equals(room.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase);
-            var previousFamilyProperties = previousFamily != null && familyChanged
+            var previousFamilyId = (room.FamilyId ?? string.Empty).Trim();
+            var familyChanged = !string.Equals(previousFamilyId, family.Id, StringComparison.OrdinalIgnoreCase);
+            ProjectFamily? previousFamily = null;
+            if (familyChanged && previousFamilyId.Length > 0)
+            {
+                previousFamily = project.FindFamily(previousFamilyId) ??
+                    throw new InvalidOperationException(
+                        "Room " + room.Id + " references missing family id: " + previousFamilyId +
+                        ". Repair the relation before Auto Room family synchronization.");
+            }
+            var previousFamilyProperties = previousFamily != null
                 ? ProjectFamilyService.SnapshotProperties(previousFamily, "Previous", "auto-room synchronization")
                 : Array.Empty<KeyValuePair<string, string>>();
             var previousFamilyMap = previousFamilyProperties.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
