@@ -1,44 +1,34 @@
 # Work claim — release #30 legacy ED2 export-order preflight reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-release30-legacy-ed2-export-order-preflight`
 - Registered: `2026-08-12T09:31:00+07:00`
+- Completed: `2026-08-12T09:33:00+07:00`
 - Baseline main SHA: `ebe2ac7272e98ba24d8bb16550085ea6a9ed14d5`
-- Priority: QS3D Cloud V25 Preview Build & Release #30 still fails the legacy command lifecycle gate because its ED2 section requires Save confirmation before project lookup, while the canonical ED2 export gate now validates an existing detached report/live-handle set before SaveFileDialog and writes only after confirmation.
+- Claim commit: `4fef968864ae2f79a34a0681f7afbcf77c9951cc`
+- Implementation commit: `903680ba55068ddfeaf14bf9a703013de6c6e2a8`
+- Priority: QS3D Cloud V25 Preview Build & Release #30 still failed the legacy command lifecycle gate because its ED2 section required Save confirmation before project lookup, while the canonical ED2 export gate validates an existing detached report/live-handle set before SaveFileDialog and writes only after confirmation.
 
-## Reserved scope
+## Completed scope
 
-Reconcile only the QS3DED2 ordering assertions in `scripts/preflight-legacy-command-project-lifecycle.py`. Preserve all production commands and every other legacy command lifecycle check unchanged.
+Reconciled only the QS3DED2 ordering assertions in `scripts/preflight-legacy-command-project-lifecycle.py`. Production commands and every other legacy command lifecycle check remained unchanged.
 
-## Canonical evidence
+## Implemented contract
 
-- Run #30 passes `preflight-command-xlsx-export-freshness.py`, which requires ED2 existing read-only project -> detached regeneration -> detail/summary -> live-handle validation -> SaveFileDialog/confirmation -> persistent XLSX write.
-- Current `Commands.ExportEd2Workflow()` follows that contract.
-- The legacy lifecycle gate still includes `if (dialog.ShowDialog() != true) return;` before project lookup in its required tuple and separately errors unless dialog confirmation precedes project lookup.
-- ED2 remains non-creating/read-only against live project state; only detached preview/report work occurs before Save confirmation.
+- ED2 still requires an existing project read-only and a detached project snapshot.
+- ED2 still requires Detail/Group report building and live-handle validation.
+- The gate now requires existing project -> detached report validation -> live handles -> SaveFileDialog -> confirmation -> `XlsxQuantityExporter.ExportEd2(...)`.
+- The gate explicitly rejects any ED2 XLSX write before Save confirmation.
+- `ProjectContextCoordinator.GetOrCreate(doc)` remains forbidden across the legacy read-only sections.
+- BQ/BBS/Health/Locate/Link Host requirements were preserved.
 
-## Expected surfaces
+## Validation performed
 
-- `scripts/preflight-legacy-command-project-lifecycle.py`
-- this claim file for close-out
-
-## Excluded scope
-
-- No edits to `Commands.cs`, unit workflow, ED2 report builders/exporter, BQ/BBS/Health/Locate/Link Host lifecycle checks or other run #30 failures.
-- No GitHub Actions dispatch, build/release publication or BricsCAD runtime qualification.
-
-## Validation plan
-
-- Keep ED2 existing-project, detached-copy, Detail and Group requirements.
-- Require Save confirmation to remain present and the persistent `XlsxQuantityExporter.ExportEd2(...)` call to remain after confirmation.
-- Replace destination-before-project ordering with project -> detached report validation -> Save confirmation -> export.
-- Keep `GetOrCreate` forbidden for all legacy read-only sections.
-- Re-fetch exact gate before write, read back after commit, verify ancestry and close with exact SHA.
-
-## Coordination
-
-Repository search found no active reservation for this legacy lifecycle preflight. This lane is independent from completed #29/#30 export gate reconciliations and does not reopen product source.
+- Verified claim commit `4fef968864ae2f79a34a0681f7afbcf77c9951cc` remained an ancestor of moving `main`; intervening commits were unrelated Curtain/local documentation updates.
+- Re-fetched the exact gate before implementation and read it back from `main` afterward at blob `a75a065394508e9e58b5600b71b57922ed1c196f`.
+- No product source was changed.
+- No GitHub Actions/build/release dispatch was performed and no BricsCAD V25/V26 runtime PASS is claimed.
 
 ## Completion condition
 
-The legacy lifecycle gate agrees with the current ED2 validate-before-Save/write-after-confirmation contract while retaining non-creating read-only semantics, is pushed to `main`, and this claim is closed with exact evidence.
+Completed. The legacy lifecycle gate now agrees with the current ED2 validate-before-Save/write-after-confirmation contract while retaining non-creating read-only semantics, and this reservation is released.
