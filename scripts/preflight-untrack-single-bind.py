@@ -23,7 +23,9 @@ else:
             "readonly": "ProjectContextCoordinator.TryGetReadOnly(doc, out var previewProject)",
             "project_id": "var expectedProjectId = previewProject.ProjectId;",
             "version": "var expectedChangeVersion = previewProject.ChangeVersion;",
-            "preview_targets": "var previewTargetIds = ResolveUntrackTargetIds(previewProject, handles, predicate);",
+            "preview_decl": "List<string> previewTargetIds;",
+            "preview_targets": "previewTargetIds = ResolveUntrackTargetIds(previewProject, handles, predicate);",
+            "preview_error": "ReportUntrackError(doc, label, ex);",
             "zero": "if (previewTargetIds.Count == 0)",
             "zero_ui": "FinalizeUntrackUi(doc, 0, label);",
             "bind": 'ExistingProjectMutationContext.Require(doc, "Untrack semantic elements")',
@@ -41,21 +43,28 @@ else:
                 errors.append("Untrack single-bind lifecycle missing token: " + token)
 
         ordered = (
-            "selection", "handles", "readonly", "project_id", "version", "preview_targets",
-            "zero", "zero_ui", "bind", "fresh_id", "fresh_version", "current_targets",
-            "same_targets", "mutate",
+            "selection", "handles", "readonly", "project_id", "version", "preview_decl",
+            "preview_targets", "preview_error", "zero", "zero_ui", "bind", "fresh_id",
+            "fresh_version", "current_targets", "same_targets", "mutate",
         )
         if all(positions[name] >= 0 for name in ordered):
             values = [positions[name] for name in ordered]
             if values != sorted(values):
-                errors.append("Untrack must resolve targets read-only, no-op zero targets, then bind/revalidate once before Core mutation")
+                errors.append("Untrack must resolve targets read-only with fail-soft preview isolation, no-op zero targets, then bind/revalidate once before Core mutation")
+
+        preview_assign = positions.get("preview_targets", -1)
+        preview_error = positions.get("preview_error", -1)
+        zero_at = positions.get("zero", -1)
+        if min(preview_assign, preview_error, zero_at) >= 0:
+            preview_block = command[preview_assign:zero_at]
+            if "try" not in command[positions["preview_decl"]:preview_assign + 1] or "catch (Exception ex)" not in preview_block or "return;" not in preview_block:
+                errors.append("Untrack preview target resolution must stay exception-isolated and return before zero-target/bind flow on failure")
 
         if command.count("ExistingProjectMutationContext.Require(") != 1:
             errors.append("Untrack command must bind canonical mutation context exactly once")
         if "ProjectContextCoordinator.GetOrCreate(" in command:
             errors.append("Untrack command must never bootstrap project state")
 
-        zero_at = positions.get("zero", -1)
         bind_at = positions.get("bind", -1)
         if zero_at >= 0 and bind_at >= 0 and zero_at > bind_at:
             errors.append("zero semantic target must return before canonical mutation binding")
@@ -84,4 +93,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: semantic untrack resolves ownership read-only, no-ops zero targets before binding, pins ProjectId/ChangeVersion/target IDs, binds once, revalidates, then delegates to the unchanged Core untrack executor.")
+print("PASS: semantic untrack resolves ownership read-only with exception-isolated preview resolution, no-ops zero targets before binding, pins ProjectId/ChangeVersion/target IDs, binds once, revalidates, then delegates to the unchanged Core untrack executor.")
