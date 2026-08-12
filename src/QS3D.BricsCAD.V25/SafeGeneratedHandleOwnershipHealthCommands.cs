@@ -37,9 +37,9 @@ namespace QS3D.BricsCAD.V25
                     if (count > 0) document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
                 }), true);
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                Report(document, "QS3DOWNERSHIPHEALTH lỗi: " + ex.Message);
+                Report(document, "QS3DOWNERSHIPHEALTH lỗi: không thể hoàn tất health check.");
             }
         }
 
