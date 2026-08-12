@@ -60,16 +60,24 @@ namespace QS3D.Core.Reporting
 
         private static void RequireExistingElementReferences(ProjectState project, string reportName)
         {
-            var familyIds = IdentitySet(project.Families, x => x.Id);
+            var families = FamilyIndex(project.Families);
             var floorIds = IdentitySet(project.Floors, x => x.Id);
             var zoneIds = IdentitySet(project.Zones, x => x.Id);
 
             foreach (var element in project.Elements)
             {
-                RequireExistingReference(element.FamilyId, familyIds, "family", element.Id, reportName);
+                RequireExistingFamilyReference(element, families, reportName);
                 RequireExistingReference(element.FloorId, floorIds, "floor", element.Id, reportName);
                 RequireExistingReference(element.ZoneId, zoneIds, "zone", element.Id, reportName);
             }
+        }
+
+        private static Dictionary<string, ProjectFamily> FamilyIndex(IEnumerable<ProjectFamily> families)
+        {
+            var result = new Dictionary<string, ProjectFamily>(StringComparer.OrdinalIgnoreCase);
+            foreach (var family in families)
+                result.Add(family.Id, family);
+            return result;
         }
 
         private static HashSet<string> IdentitySet<T>(IEnumerable<T> items, Func<T, string> idSelector) where T : class
@@ -78,6 +86,19 @@ namespace QS3D.Core.Reporting
             foreach (var item in items)
                 result.Add(idSelector(item));
             return result;
+        }
+
+        private static void RequireExistingFamilyReference(
+            ProjectElement element,
+            IReadOnlyDictionary<string, ProjectFamily> families,
+            string reportName)
+        {
+            var familyId = element.FamilyId;
+            if (string.IsNullOrWhiteSpace(familyId)) return;
+            if (!families.TryGetValue(familyId, out var family))
+                throw new InvalidOperationException(reportName + " cannot be built because element '" + element.Id + "' references missing family id '" + familyId + "'.");
+            if (family.Category != element.Category)
+                throw new InvalidOperationException(reportName + " cannot be built because element '" + element.Id + "' category " + element.Category + " does not match family '" + family.Id + "' category " + family.Category + ".");
         }
 
         private static void RequireExistingReference(
