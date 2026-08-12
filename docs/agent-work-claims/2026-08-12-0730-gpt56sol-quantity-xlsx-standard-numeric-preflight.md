@@ -3,7 +3,7 @@
 - Status: `ACTIVE`
 - Agent: `chatgpt-web-gpt56sol-quantity-xlsx-standard-numeric-preflight-20260812-0730`
 - Registered: `2026-08-12T07:30:00+07:00`
-- Baseline main SHA: `4f934bb620d2c561206d0c90175a679f6df0d43a`
+- Baseline main SHA: `61f3a4aa959cfcda68d2698aa3a4c71d12645417`
 - Priority: evidence-driven remote-safe export atomicity hardening during owner-requested `continue all`
 
 ## Reserved scope
@@ -33,6 +33,10 @@ Fail closed on `NaN`/`Infinity` in numeric cells emitted by the standard Quantit
 - Preserve current ED2 behavior and existing serializer finite guard as defense in depth.
 - Smoke must demonstrate non-finite rejection before creation of a new destination directory and successful ordinary finite standard export.
 - Re-read current `main`/exact PR diff before integration; do not dispatch Actions.
+
+## Coordination
+
+A concurrent QSDB audit-action claim landed immediately before this claim and was verified non-overlapping; the baseline above records that actual parent.
 
 ## Completion condition
 
