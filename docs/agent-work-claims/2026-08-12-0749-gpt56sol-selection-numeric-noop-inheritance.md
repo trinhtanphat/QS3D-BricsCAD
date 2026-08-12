@@ -1,44 +1,39 @@
 # Work claim — selection numeric no-op inheritance preservation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-selection-numeric-noop-inheritance-20260812-0749`
 - Registered: `2026-08-12T07:49:00+07:00`
+- Completed: `2026-08-12T08:00:00+07:00`
 - Baseline main SHA: `547b759a4ae6d6808e6194ace1f5c96d8d893b2f`
+- Integrated main SHA: `4e08d2c671039ee7509ccd5bc51db8495ef52248`
+- PR: `#633`
 - Priority: evidence-driven remote-safe semantic mutation integrity during owner-requested `continue all`
 
-## Confirmed defect
+## Completed scope
 
-`SemanticSelectionBulkEditService.MultiplyNumericProperty()` determines no-op state by comparing the original property text with `next.ToString("R", InvariantCulture)`. Numerically identical values with different lexical forms therefore mutate. For an inherited Family property such as `"1.0"`, multiplying by `1` writes an instance override `"1"`, changes project revision state, and breaks future Family inheritance even though the numeric value did not change.
+`SemanticSelectionBulkEditService.MultiplyNumericProperty()` now treats exact numeric equality as the no-op criterion before output formatting, so a numerically unchanged effective value does not rewrite instance text or materialize an instance override over an inherited Family property.
 
-## Reserved scope
+## Changes
 
-Preserve true numeric no-ops in `MultiplyNumericProperty()` based on numeric equality rather than string-format equality. A numerically unchanged effective value must not rewrite an existing instance value and must not materialize a new instance override for an inherited Family value.
+- Moved no-op detection from lexical equality against `next.ToString("R", InvariantCulture)` to exact `double` result equality via `next.Equals(number)`.
+- Inherited Family `"1.0"` multiplied by `1` remains inherited; no instance property is created and project revision is unchanged.
+- Existing instance `"1.0"` multiplied by `1` keeps its lexical representation and project revision.
+- A real inherited multiplication such as ×2 still writes an instance override and advances project revision once.
+- Parse, non-finite and multiplication-overflow checks remain unchanged; no numeric tolerance policy was introduced.
+- Added dedicated module-initializer smoke coverage in `SemanticSelectionNumericNoOpSmoke` for inherited no-op, instance lexical no-op and real-change behavior.
 
-## Expected surfaces
+## Validation actually performed
 
-- `src/QS3D.Core/Selection/SemanticSelectionBulkEditService.cs`
-- focused Core smoke coverage under `tests/QS3D.Core.SmokeTests/`
-- this claim file
+- Claim was published and its raced baseline corrected before product-source changes.
+- Reviewed exact feature-branch diff: only `src/QS3D.Core/Selection/SemanticSelectionBulkEditService.cs` and `tests/QS3D.Core.SmokeTests/SemanticSelectionNumericNoOpSmoke.cs` changed.
+- Production patch is one semantic guard replacement: exact numeric equality is checked before formatting.
+- Re-read moving `main` immediately before PR publication and again before merge; the service remained at pre-patch blob `44273231d0bc274f7e7f4d1b60d6a1649c36ea3`, so no concurrent source overlap was present.
+- Reviewed exact PR #633 patch after publication.
+- Confirmed exact PR head `1c4fcfde8112a31916b61857b1340aa496473769` had no pull-request workflow runs; no Actions were dispatched.
+- Squash-merged PR #633 into `main` as `4e08d2c671039ee7509ccd5bc51db8495ef52248` using the exact expected head SHA.
+- Re-read merged service and dedicated smoke from remote `main`; numeric no-op preservation and regression source are present.
+- No local `.NET` build/test, licensed BricsCAD V25/Windows/native runtime execution or `LOCAL_PASS` is claimed from this connector-only environment.
 
-## Excluded scope
+## Integration
 
-- `ProjectQuantityReportBuilder` selection canonicality, currently reserved by the Goal-100 claim.
-- `SemanticSelectionInspector`, bulk Family assignment, generic `SetProperty`, property-key policy, UI/native selection, quantity reporting, or BricsCAD runtime behavior.
-- No numeric tolerance policy: only exact `double` result equality is treated as a no-op.
-- No GitHub Actions or LOCAL_ONLY qualification.
-
-## Validation plan
-
-- Inherited Family property `"1.0"` multiplied by `1` reports zero changes, preserves `ChangeVersion`, and does not create an instance property.
-- Existing instance property `"1.0"` multiplied by `1` reports zero changes, preserves raw text and `ChangeVersion`.
-- A real multiplication such as ×2 still reports one change and writes the expected instance value.
-- Existing non-finite/parse/overflow behavior remains unchanged.
-- Re-read exact branch diff and moving `main` before integration; do not dispatch Actions.
-
-## Coordination
-
-The active Goal-100 quantity-selection claim is confined to `ProjectQuantityReportBuilder.cs`, its smoke/registration and a planning document. Recent history contains an older atomic numeric bulk-edit fix and a distinct bulk Family-assignment no-op fix, but no numeric no-op/inheritance lane for this service. A concurrent wall-quantity null-opening fix landed immediately before this claim and was verified non-overlapping; the baseline above records that actual parent.
-
-## Completion condition
-
-Focused source and regression are merged to current `main`, remote source is re-read, and this claim is marked `COMPLETED` with exact integration SHA and validation boundaries.
+PR #633 was squash-merged into `main` as `4e08d2c671039ee7509ccd5bc51db8495ef52248` without force-push.
