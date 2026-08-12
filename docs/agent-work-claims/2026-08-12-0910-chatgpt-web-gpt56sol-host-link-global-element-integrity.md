@@ -1,6 +1,6 @@
 # Work claim — HostLinkService global semantic element identity integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-host-link-global-element-integrity-20260812-0910`
 - Registered: `2026-08-12T09:10:00+07:00`
 - Baseline main SHA: `78a298e7e509c2de65f3efb638016f0a5adc448a`
@@ -8,24 +8,28 @@
 
 ## Confirmed defect
 
-`HostLinkService.LinkOpening(...)` and `UnlinkOpening(...)` resolve only the requested opening/host via `ProjectState.FindElement(...)`. `FindUnique` detects duplicate IDs only when they match the requested ID. Therefore an unrelated duplicate pair such as `DUP` + `dup` can coexist while linking a unique `OPEN` to unique `WALL` still enters `ProjectSemanticMutationExecutor`, changes relations/dirty state and appends an audit event. QSDB persistence, DependencyGraph, BulkEdit and other Core mutation boundaries treat duplicate semantic element identity as invalid globally.
+`HostLinkService.LinkOpening(...)` and `UnlinkOpening(...)` resolved only the requested opening/host via `ProjectState.FindElement(...)`. Because `FindUnique` only detects duplicates matching the requested ID, an unrelated duplicate pair such as `DUP` + `dup` could coexist while a unique `OPEN`/`WALL` link or unlink still mutated semantic relations and audit state.
 
-## Reserved surfaces
+## Implemented fix
 
-- `src/QS3D.Core/Services/HostLinkService.cs`
-- `tests/QS3D.Core.SmokeTests/HostLinkGlobalElementIntegritySmoke.cs` — new focused regression
-- this claim file
+- Both LinkOpening and UnlinkOpening preflight the complete `project.Elements` identity set before target lookup.
+- Null semantic entries and case-insensitive duplicate element IDs fail closed before HostWallId/dependency/dirty/audit/project revision mutation.
+- Canonical no-op behavior, physical-cut safety, dependency canonicalization, rollback protection and audit-owned one-revision semantics remain unchanged.
+- Focused smoke covers failed Link and Unlink atomicity on unrelated duplicates plus a valid canonical link control.
 
-## Intended fix
+## Integration evidence
 
-- Preflight the full `project.Elements` collection for case-insensitive duplicate IDs before LinkOpening or UnlinkOpening target lookup/mutation.
-- Keep null-element behavior fail-closed, canonical no-op host-link behavior, physical-cut safety, rollback/audit-owned revision semantics and dependency canonicalization unchanged.
-- Add focused smoke proving unrelated duplicate element identities cause both link and unlink to fail before HostWallId/dependencies/audit/project revision mutation; valid linking remains functional.
+- Claim registration: `55301299f8878eee87ef447aa110bb98cd01af73`.
+- Branch source commit: `905508d4b88b6d5a255d2bdfaf6f880f555dd0d1`.
+- Focused smoke commit: `58141d0f3b8babf4823678357e8ac48058b80cf3`.
+- Exact branch diff was only `HostLinkService.cs` (+15) plus the new 99-line smoke.
+- Comparison from claim registration to then-current `main` `eb752d4305e91be94ce1011be3ec055a8ec170dc` showed 23 intervening commits and no reserved-path overlap.
+- PR `#676` squash-merged at `6580869d56982de6a445edc73d58c545529d2037`.
 
 ## Coordination
 
-The older `2026-08-11-2331` HostLink audit-owned-revision claim is `COMPLETED`; this lane is independent and does not change its one-revision-per-audited-mutation contract. Current Recognition claim owns only `src/QS3D.Core/Recognition/RecognitionEngine.cs` and its dedicated smoke.
+The older `2026-08-11-2331` HostLink audit-owned-revision claim is `COMPLETED`; this lane did not alter its one-revision-per-audited-mutation contract.
 
 ## Validation boundary
 
-Committed deterministic Core smoke coverage plus exact source/diff review. No GitHub Actions dispatch; no licensed BricsCAD V25/V26 runtime PASS claimed.
+Committed deterministic Core smoke coverage plus exact source/diff review. No GitHub Actions were dispatched and no licensed BricsCAD V25/V26 runtime PASS is claimed.
