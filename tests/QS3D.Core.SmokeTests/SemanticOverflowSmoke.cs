@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
         {
             WallOverflowDoesNotPartiallyMutate();
             FinishOverflowDoesNotPartiallyMutate();
+            FinishLiteralUnderflowDoesNotPartiallyMutate();
+            SemanticLiteralZeroAndSubnormalRemainRepresentable();
             BeamOverflowDoesNotPartiallyMutate();
             StairOverflowDoesNotPartiallyMutate();
             EarthworkOverflowDoesNotPartiallyMutate();
@@ -43,6 +45,35 @@ namespace QS3D.Core.SmokeTests
 
             Throws<OverflowException>(() => new RoomRegenerator().Regenerate(project, element));
             OnlySentinel(element);
+        }
+
+        private static void FinishLiteralUnderflowDoesNotPartiallyMutate()
+        {
+            var project = NewProject();
+            var element = Element("F-UNDER", ElementCategory.WallFinish);
+            element.Properties["AreaM2"] = "1";
+            element.Properties["PerimeterM"] = "1e-4000";
+            element.Properties["HeightM"] = "1";
+            element.Quantities["Sentinel"] = 1d;
+            project.Elements.Add(element);
+
+            var error = Capture<InvalidOperationException>(() => new RoomRegenerator().Regenerate(project, element));
+            Contains("F-UNDER/PerimeterM underflowed to zero.", error.Message);
+            OnlySentinel(element);
+        }
+
+        private static void SemanticLiteralZeroAndSubnormalRemainRepresentable()
+        {
+            var project = NewProject();
+            var element = Element("R-SMALL", ElementCategory.Room);
+            element.Properties["AreaM2"] = "0e-4000";
+            element.Properties["PerimeterM"] = "5e-324";
+            project.Elements.Add(element);
+
+            new RoomRegenerator().Regenerate(project, element);
+
+            Exact(0d, element.Quantities["AreaM2"]);
+            Exact(double.Epsilon, element.Quantities["PerimeterM"]);
         }
 
         private static void BeamOverflowDoesNotPartiallyMutate()
@@ -108,13 +139,30 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Regenerator partially mutated quantities before reporting overflow: " + element.Id + " → " + string.Join(",", element.Quantities.Keys.OrderBy(x => x)));
         }
 
+        private static void Exact(double expected, double actual)
+        {
+            if (!expected.Equals(actual))
+                throw new Exception("Expected exact " + expected + " but got " + actual + ".");
+        }
+
         private static string Max() => double.MaxValue.ToString("R", CultureInfo.InvariantCulture);
 
         private static void Throws<T>(Action action) where T : Exception
         {
+            Capture<T>(action);
+        }
+
+        private static T Capture<T>(Action action) where T : Exception
+        {
             try { action(); }
-            catch (T) { return; }
+            catch (T ex) { return ex; }
             throw new Exception("Expected exception " + typeof(T).Name + ".");
+        }
+
+        private static void Contains(string expected, string actual)
+        {
+            if (actual == null || actual.IndexOf(expected, StringComparison.Ordinal) < 0)
+                throw new Exception("Expected '" + actual + "' to contain '" + expected + "'.");
         }
     }
 }
