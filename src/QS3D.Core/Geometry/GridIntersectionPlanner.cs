@@ -400,11 +400,14 @@ namespace QS3D.Core.Geometry
             var radialTolerance = Math.Max(tolerance, RelativeNumericTolerance * Math.Max(radius, arc.Radius));
             EnsureFiniteDerived("Grid ARC radial tolerance", radialTolerance);
             if (Math.Abs(radius - arc.Radius) > radialTolerance) return false;
-            if (arc.SweepAngleRad >= TwoPi - tolerance / Math.Max(arc.Radius, tolerance)) return true;
+            var angularTolerance = Math.Max(
+                tolerance / Math.Max(arc.Radius, tolerance),
+                RelativeNumericTolerance);
+            EnsureFiniteDerived("Grid ARC angular tolerance", angularTolerance);
+            if (arc.SweepAngleRad >= TwoPi - angularTolerance) return true;
             var angle = NormalizeAngle(Math.Atan2(dy, dx));
             var start = NormalizeAngle(arc.StartAngleRad);
             var delta = NormalizeAngle(angle - start);
-            var angularTolerance = tolerance / Math.Max(arc.Radius, tolerance);
             EnsureFiniteDerived("Grid ARC angular test", angle, start, delta, angularTolerance);
             return delta <= arc.SweepAngleRad + angularTolerance;
         }
