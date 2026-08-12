@@ -70,14 +70,9 @@ namespace QS3D.Core.Export
         {
             if (target == null) throw new ArgumentNullException(nameof(target));
             var source = ProjectInterchangeValidatedSnapshotReader.Read(json);
-            var elementsWithHandles = source.Elements.Count(x => x.SourceHandles.Count > 0);
-            var sourceHandleCount = source.Elements.Sum(x => x.SourceHandles.Count);
-            return new ProjectInterchangeSourceHandleProvenancePlan(
-                source.Project.Id,
-                source.Project.DrawingFingerprint,
-                elementsWithHandles,
-                sourceHandleCount,
-                source.Validation.WarningCount);
+            var plan = PlanFromValidated(source);
+            EnsureProvenanceCanBeScoped(plan);
+            return plan;
         }
 
         public static ProjectInterchangeSourceHandleProvenanceResult Store(ProjectState target, string json)
@@ -85,6 +80,7 @@ namespace QS3D.Core.Export
             if (target == null) throw new ArgumentNullException(nameof(target));
             var source = ProjectInterchangeValidatedSnapshotReader.Read(json);
             var plan = PlanFromValidated(source);
+            EnsureProvenanceCanBeScoped(plan);
             var rollback = ProjectStateSnapshot.Capture(target);
 
             try
@@ -195,6 +191,15 @@ namespace QS3D.Core.Export
                 source.Elements.Count(x => x.SourceHandles.Count > 0),
                 source.Elements.Sum(x => x.SourceHandles.Count),
                 source.Validation.WarningCount);
+        }
+
+        private static void EnsureProvenanceCanBeScoped(ProjectInterchangeSourceHandleProvenancePlan plan)
+        {
+            if (plan == null) throw new ArgumentNullException(nameof(plan));
+            if (plan.SourceHandleCount > 0 && string.IsNullOrWhiteSpace(plan.SourceDrawingFingerprint))
+                throw new InvalidOperationException(
+                    "Interchange source-handle provenance requires a source drawing fingerprint when drawing-local source handles are present. " +
+                    "The handles remain provenance only and cannot be safely scoped to an unnamed/unknown source drawing.");
         }
 
         private static void RemoveExistingSourceRecords(IDictionary<string, string> metadata, string sourcePrefix)
