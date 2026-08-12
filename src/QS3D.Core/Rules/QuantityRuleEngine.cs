@@ -54,6 +54,7 @@ namespace QS3D.Core.Rules
             if (!ReferenceEquals(project.FindElement(element.Id), element))
                 throw new InvalidOperationException("Quantity rule matching requires the canonical project-owned element instance.");
             ValidateRuleIdentities(project.QuantityRules);
+            var family = ResolveFamily(project, element);
 
             var rules = project.QuantityRules
                 .Where(x => x.Category == element.Category)
@@ -69,7 +70,7 @@ namespace QS3D.Core.Rules
                 return staleOutputs.Count;
             }
 
-            var variables = BuildVariables(project, element);
+            var variables = BuildVariables(element, family);
             foreach (var output in activeOutputs) variables.Remove(output);
             foreach (var stale in staleOutputs) variables.Remove(stale);
 
@@ -125,6 +126,17 @@ namespace QS3D.Core.Rules
             }
         }
 
+        private static ProjectFamily? ResolveFamily(ProjectState project, ProjectElement element)
+        {
+            var familyId = (element.FamilyId ?? string.Empty).Trim();
+            if (familyId.Length == 0) return null;
+            var family = project.FindFamily(familyId)
+                ?? throw new InvalidOperationException("Quantity rule target element references missing family id: " + element.Id + "/" + familyId + ".");
+            if (family.Category != element.Category)
+                throw new InvalidOperationException("Quantity rule target element/family category mismatch: " + element.Id + "/" + family.Id + ".");
+            return family;
+        }
+
         private static bool WaitsForManagedOutput(QuantityRule rule, IEnumerable<string> references, ISet<string> activeOutputs, ISet<string> resolvedOutputs)
         {
             foreach (var reference in references)
@@ -175,10 +187,9 @@ namespace QS3D.Core.Rules
             if (changed) element.TouchPersistenceState();
         }
 
-        private static Dictionary<string, double> BuildVariables(ProjectState project, ProjectElement element)
+        private static Dictionary<string, double> BuildVariables(ProjectElement element, ProjectFamily? family)
         {
             var variables = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-            var family = project.FindFamily(element.FamilyId);
             if (family != null) AddNumeric(family.Properties, variables);
             AddNumeric(element.Properties, variables);
             foreach (var quantity in element.Quantities)
