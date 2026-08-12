@@ -57,7 +57,7 @@ namespace QS3D.Core.Export
         private const long MaxXmlCharacters = 64L * 1024L * 1024L;
         private const int MaxColumns = 16384;
         private const int MaxRows = 1048576;
-        private const string ErrorCellSentinel = "#QS3D_XLSX_ERROR!";
+        private const string UnsupportedCellSentinel = "#QS3D_XLSX_UNSUPPORTED!";
         private const string WorksheetRelationshipTypeHttp = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
         private const string WorksheetRelationshipTypeHttps = "https://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
         private static readonly Regex DecimalHandlePattern = new Regex(@"\$(\d+)", RegexOptions.CultureInvariant);
@@ -114,8 +114,8 @@ namespace QS3D.Core.Export
 
                 var isModernSchema = elementIdColumns.Count > 0 || fingerprintColumns.Count > 0;
                 foreach (var column in handleColumns.Concat(elementIdColumns).Concat(fingerprintColumns))
-                    if (targetCells.TryGetValue(column, out var criticalValue) && string.Equals(criticalValue, ErrorCellSentinel, StringComparison.Ordinal))
-                        throw new InvalidDataException("Excel identity cell contains an XLSX error value.");
+                    if (targetCells.TryGetValue(column, out var criticalValue) && string.Equals(criticalValue, UnsupportedCellSentinel, StringComparison.Ordinal))
+                        throw new InvalidDataException("Excel identity cell contains an unsupported XLSX value type.");
                 if (worksheet.IsEd2Detail && !isModernSchema)
                     throw new InvalidDataException("ED2 CHI_TIET is missing its modern QS3D identity headers and cannot be treated as a legacy BLT sheet.");
                 if (isModernSchema && (elementIdColumns.Count != 1 || handleColumns.Count != 1 || fingerprintColumns.Count != 1))
@@ -251,7 +251,8 @@ namespace QS3D.Core.Export
                 var type = (string?)cell.Attribute("t") ?? string.Empty;
                 string value;
                 if (string.Equals(type, "inlineStr", StringComparison.OrdinalIgnoreCase)) value = string.Concat(cell.Descendants(ns + "t").Select(x => x.Value));
-                else if (string.Equals(type, "e", StringComparison.OrdinalIgnoreCase)) value = ErrorCellSentinel;
+                else if (string.Equals(type, "e", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(type, "d", StringComparison.OrdinalIgnoreCase)) value = UnsupportedCellSentinel;
                 else
                 {
                     value = cell.Element(ns + "v")?.Value ?? string.Empty;
