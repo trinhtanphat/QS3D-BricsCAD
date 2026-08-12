@@ -41,9 +41,9 @@ namespace QS3D.BricsCAD.V25
                     document.Editor.WriteMessage("\n  [" + issue.Severity + "] " + issue.Code + " • " + issue.ElementId + " • " + issue.Message);
                 if (issues.Count > 50) document.Editor.WriteMessage("\n  … health output truncated.");
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                var message = "QS3DWALLREBARHEALTH lỗi: " + ex.Message;
+                var message = "QS3DWALLREBARHEALTH lỗi: không thể hoàn tất health check.";
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\n" + message);
             }
