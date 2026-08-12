@@ -192,19 +192,18 @@ namespace QS3D.Core.Rules
         {
             var key = ProvenancePrefix + output;
             if (element.Properties.TryGetValue(key, out var existing) && string.Equals(existing, provenance, StringComparison.Ordinal)) return;
-            element.Properties[key] = provenance;
-            element.TouchPersistenceState();
+            element.SetProperty(key, provenance);
         }
 
         private static void CleanupStaleOutputs(ProjectElement element, IEnumerable<string> staleOutputs)
         {
-            var changed = false;
             foreach (var output in staleOutputs)
             {
-                changed |= element.Quantities.Remove(output);
-                changed |= element.Properties.Remove(ProvenancePrefix + output);
+                var quantityRemoved = element.Quantities.Remove(output);
+                var provenanceRemoved = element.RemoveProperty(ProvenancePrefix + output);
+                if (quantityRemoved && !provenanceRemoved)
+                    element.MarkDirty(ElementDirtyFlags.Quantity);
             }
-            if (changed) element.TouchPersistenceState();
         }
 
         private static Dictionary<string, double> BuildVariables(ProjectElement element, ProjectFamily? family)
