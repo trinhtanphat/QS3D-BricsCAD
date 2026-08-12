@@ -1,6 +1,6 @@
 # Work claim — Grid LINE/ARC large finite intersection arithmetic
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-grid-line-arc-large-finite-20260812-0922`
 - Registered: `2026-08-12T09:22:00+07:00`
 - Baseline main SHA: `ed2448e545ffaf43422afe57bf02ba007cc2da64`
@@ -27,6 +27,16 @@ Keep existing input validation, finite-derived fail-closed behavior, root orderi
 
 The active Grid renumber read-only-result lane owns `GridNamingService.cs` and `GridRenumberReadOnlyResultSmoke.cs`, not this planner or smoke path. Current claim/commit inspection found no live ownership of `GridIntersectionPlanner.cs`, the dedicated regression path, or `SmokeTestRegistration.cs`; exact commit search for `SmokeTestRegistration` only surfaced a historical 2026-08-10 merge conflict.
 
+## Integration
+
+- Claim expansion: `2d340a93ec16b41bcbb32555162c7e7699ce7075`
+- Product follow-up: `2d989fb24b465c77a2803dca77b00575f2047eb4`
+- Focused regression: `591e1a8916cc79e61c882371b4b3415b5449a214`
+- Smoke registration: `85d94c21a5b1edcc09209ccdfdf66ea57f5ed5db`
+- Product diff readback confirmed only `IntersectLineArc(...)` changed in `GridIntersectionPlanner.cs`.
+- Numeric rereview confirmed the large-finite fallback roots are `0.25` and `0.75`, while the raw finite near-endpoint tangent preserves root `0.0` and discards the far root outside the segment.
+- No GitHub Actions dispatched; no BricsCAD/Windows runtime PASS claimed.
+
 ## Validation plan
 
-Add a focused smoke using finite LINE/ARC geometry around `1e200` whose expected intersections are finite but whose unscaled squared terms overflow, plus a compatibility case where the raw quadratic remains finite but unconditional world-scale normalization would underflow the LINE direction. Preserve expected element IDs, point ordering and arc filtering. Re-fetch `main` and the owned source before every write; never force-push. Do not dispatch GitHub Actions or claim BricsCAD runtime qualification.
+The dedicated registered smoke covers finite LINE/ARC geometry around `1e200` whose expected intersections are finite but whose unscaled squared terms overflow, plus a raw-finite compatibility case with highly asymmetric geometry. Runtime execution remains intentionally unclaimed because GitHub Actions/BricsCAD validation was not dispatched in this lane.
