@@ -424,6 +424,9 @@ namespace QS3D.Core.Persistence
             if (value == null) return 0L;
             if (value.Length == 0 || !long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var result) || result < 0L)
                 throw new InvalidDataException("Invalid QSDB change version: " + value);
+            var canonical = result.ToString(CultureInfo.InvariantCulture);
+            if (!string.Equals(value, canonical, StringComparison.Ordinal))
+                throw new InvalidDataException("Non-canonical QSDB change version: " + value);
             return result;
         }
 
