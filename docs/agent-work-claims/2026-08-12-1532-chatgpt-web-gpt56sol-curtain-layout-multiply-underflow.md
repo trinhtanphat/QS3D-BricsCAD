@@ -1,9 +1,10 @@
 # Agent Work Claim
 
 - Agent: `ChatGPT web / GPT-5.6 Sol`
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Started at: `2026-08-12T15:32:00+07:00`
+- Completed at: `2026-08-12T15:37:00+07:00`
 - Baseline main SHA: `548354da1a3e6a19b145e393ae7849ea112f5403`
 - Task Key: `CORE-CURTAIN-LAYOUT-MULTIPLY-UNDERFLOW`
 - Scope: Harden CAD-independent `CurtainWallLayoutPlanner` multiplication so finite non-zero operands that IEEE-754 underflow to exact zero fail closed instead of silently returning zero geometric area/quantity. Preserve legitimate multiplication where either operand is already zero, existing overflow/non-finite handling, grid limits, and frame-deduction semantics.
@@ -12,11 +13,22 @@
   - `tests/QS3D.Core.SmokeTests/CurtainWallLayoutSmoke.cs`
   - this claim file
 - Counterexample:
-  - `LengthM = 1e-200`, `HeightM = 1e-200`, max panel dimensions `1`, and zero frame widths currently pass all positive/finite/grid checks but `GrossAreaM2` and `ClearGlassAreaM2` silently collapse from a mathematically positive value to exact `0d`.
-- Tests intended:
-  - Reject a positive finite curtain layout whose gross-area multiplication underflows to exact zero.
-  - Preserve a normal zero-width-frame calculation where multiplication legitimately has a zero operand.
-  - Preserve existing normal layout, impossible-frame, excessive-grid, and non-finite regressions.
+  - `LengthM = 1e-200`, `HeightM = 1e-200`, max panel dimensions `1`, and zero frame widths passed all positive/finite/grid checks but `GrossAreaM2` and `ClearGlassAreaM2` silently collapsed from a mathematically positive value to exact `0d`.
+- Implementation evidence:
+  - Claim: `16f51d92c26b7d0fc067947ea3985c9b8525dc12`
+  - Source: `b1c8928544b81e39e33723c239f4f33fed6877d6`
+  - Focused smoke: `2ed51ea6a6c52f9a9cdd7674e8266a8f4509e967`
+  - Pull request: `#940`
+  - Squash merge: `cd6fcb1556175ccc82e1205b0558a6efc54f6096`
+  - Main source readback blob: `265c386af8eccca54a3f15570d4a64ce60e28edf`
+  - Main smoke readback blob: `30825b106d7d3ce9ef2a074781a14b5fa957b01e`
+- Regression evidence:
+  - A normal 1m x 1m layout with zero perimeter/mullion/transom widths remains valid and retains gross/clear area `1`.
+  - A positive `1e-200m x 1e-200m` layout now fails with `curtain gross area underflowed to zero.` instead of returning false zero area.
+  - Existing normal layout, impossible-frame, excessive-grid, and non-finite regressions remain in the focused smoke.
+- Validation:
+  - PR patch was exactly two files: a narrow non-zero multiplication-underflow guard plus focused smoke coverage.
+  - Source and smoke were read back from `main` after merge with the expected content.
+  - No GitHub Actions, full .NET build, executable smoke run, or BricsCAD V25/V26 runtime PASS was performed or claimed.
 - Notes:
   - Pure Core/Geometry change; no Navigation, persistence, QSDB, formulas, recognition/B4D, generated handles, native CAD, or release workflow scope.
-  - No GitHub Actions, full .NET build, executable smoke run, or BricsCAD V25/V26 runtime PASS will be claimed unless actually performed.
