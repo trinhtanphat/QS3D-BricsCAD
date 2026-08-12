@@ -230,6 +230,11 @@ namespace QS3D.Core.Review
                    (!string.IsNullOrWhiteSpace(raw) && string.Equals(raw, raw.Trim(), StringComparison.Ordinal));
         }
 
+        internal static bool IsCanonicalOptionalReviewCategory(string category)
+        {
+            return IsCanonicalOptionalReviewField(category);
+        }
+
         internal static string ComputeFingerprint(PreviewReviewSnapshot snapshot)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
@@ -293,6 +298,7 @@ namespace QS3D.Core.Review
                 if (entry == null) throw new InvalidOperationException("Preview review contains a null entry.");
                 CanonicalRequired(entry.ElementId, "preview review entry element id");
                 CanonicalRequired(entry.Change, "preview review entry change");
+                if (!IsCanonicalOptionalReviewCategory(entry.Category)) throw new InvalidOperationException("Preview review entry category must be exact-empty or canonical without surrounding whitespace.");
                 if (!IsCanonicalOptionalReviewField(entry.Field)) throw new InvalidOperationException("Preview review entry field must be exact-empty or canonical without surrounding whitespace.");
                 if (!IsPortableReviewField(entry.Field)) throw new InvalidOperationException("Preview review artifacts cannot contain drawing-local/native fields: " + entry.Field + ".");
                 var rowKey = entry.ElementId + "\u001f" + entry.Field;
@@ -447,6 +453,7 @@ namespace QS3D.Core.Review
             {
                 var elementId = CanonicalRequired(node, "elementId");
                 var category = Value(node, "category");
+                if (!PreviewReviewSnapshotService.IsCanonicalOptionalReviewCategory(category)) throw new InvalidDataException("Preview review category is not canonical: category.");
                 var change = CanonicalRequired(node, "change");
                 var field = Value(node, "field");
                 if (!PreviewReviewSnapshotService.IsCanonicalOptionalReviewField(field)) throw new InvalidDataException("Preview review field is not canonical: field.");
