@@ -168,19 +168,33 @@ namespace QS3D.Core.Services
         {
             hasBoundaryReference = false;
             if (!element.Properties.TryGetValue(AutoRoomLifecycle.BoundarySourceHandlesKey, out var boundaryHandles)) return;
-            var tokens = (boundaryHandles ?? string.Empty).Split(
+            if (boundaryHandles == null)
+                throw NonCanonicalBoundaryHandles(element);
+            if (boundaryHandles.Length == 0) return;
+
+            var tokens = boundaryHandles.Split(
                 new[] { ';' },
                 MaxBoundarySourceHandleCount + 1,
-                StringSplitOptions.RemoveEmptyEntries);
+                StringSplitOptions.None);
             if (tokens.Length > MaxBoundarySourceHandleCount)
                 throw new InvalidOperationException("Locate boundary source handles cannot exceed " + MaxBoundarySourceHandleCount + " entries.");
-            foreach (var raw in tokens)
+
+            var canonical = AutoRoomLifecycle.NormalizeSourceHandles(tokens);
+            if (!string.Equals(boundaryHandles, canonical, StringComparison.Ordinal))
+                throw NonCanonicalBoundaryHandles(element);
+
+            hasBoundaryReference = true;
+            foreach (var handle in tokens)
             {
-                var handle = raw.Trim();
-                if (handle.Length == 0) continue;
-                hasBoundaryReference = true;
                 if (knownHandles.Add(handle)) handles.Add(handle);
             }
+        }
+
+        private static InvalidOperationException NonCanonicalBoundaryHandles(ProjectElement element)
+        {
+            return new InvalidOperationException(
+                "Semantic element " + element.Id + " contains non-canonical " + AutoRoomLifecycle.BoundarySourceHandlesKey +
+                ". Repair Auto Room boundary ownership before Locate.");
         }
 
         private static void AddGeneratedOwnerHandles(ProjectElement element, ISet<string> knownHandles, ICollection<string> handles)
