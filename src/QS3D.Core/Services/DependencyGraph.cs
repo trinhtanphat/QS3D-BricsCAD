@@ -131,10 +131,12 @@ namespace QS3D.Core.Services
                 materialized.Add(element);
             }
 
+            foreach (var element in materialized)
+                ValidateDependencies(element);
+
             var list = new List<ProjectElement>();
             foreach (var element in materialized)
             {
-                ValidateDependencies(element);
                 if (element.Dirty != ElementDirtyFlags.None) list.Add(element);
             }
 
