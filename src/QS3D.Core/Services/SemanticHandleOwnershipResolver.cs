@@ -188,8 +188,14 @@ namespace QS3D.Core.Services
             if (handle.Length == 0 || !selected.Contains(handle)) return;
             if (owners.TryGetValue(handle, out var existing))
             {
-                if (ReferenceEquals(existing, element)) return;
                 var existingChannel = channels.TryGetValue(handle, out var value) ? value : "unknown";
+                if (ReferenceEquals(existing, element))
+                {
+                    if (GeneratedHandleOwnershipPolicy.AreSameLogicalOwnerSlots(existingChannel, channel)) return;
+                    throw new InvalidOperationException(
+                        "CAD handle " + handle + " has conflicting ownership channels on semantic element " + element.Id +
+                        " (" + existingChannel + " / " + channel + "). Resolve project semantic ownership before continuing.");
+                }
                 if (string.Equals(existing.Id, element.Id, StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException(
