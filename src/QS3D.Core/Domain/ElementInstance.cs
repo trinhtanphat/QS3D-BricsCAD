@@ -109,7 +109,7 @@ namespace QS3D.Core.Domain
                 var value = GrossConcreteM3 - DeductionM3;
                 if (double.IsNaN(value) || double.IsInfinity(value))
                     throw new OverflowException("Net concrete volume must be finite.");
-                return value;
+                return Math.Max(0d, value);
             }
         }
 
