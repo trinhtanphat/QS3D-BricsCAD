@@ -165,9 +165,16 @@ namespace QS3D.Core.Recognition
 
         private static void ValidateCandidates(IEnumerable<RecognitionCandidate> candidates)
         {
+            var seenRuleIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var candidate in candidates)
             {
                 if (candidate == null) throw new ArgumentException("Recognition candidate list cannot contain null.", nameof(candidates));
+                if (string.IsNullOrWhiteSpace(candidate.RuleId))
+                    throw new ArgumentException("Recognition candidate rule id is required.", nameof(candidates));
+                if (!string.Equals(candidate.RuleId, candidate.RuleId.Trim(), StringComparison.Ordinal))
+                    throw new ArgumentException("Recognition candidate rule id must be canonical.", nameof(candidates));
+                if (!seenRuleIds.Add(candidate.RuleId))
+                    throw new ArgumentException("Duplicate recognition candidate rule id: " + candidate.RuleId, nameof(candidates));
                 if (!Enum.IsDefined(typeof(ElementCategory), candidate.Category))
                     throw new ArgumentOutOfRangeException(nameof(candidates), "Recognition candidate category must be defined.");
                 if (double.IsNaN(candidate.Confidence) || double.IsInfinity(candidate.Confidence) || candidate.Confidence < 0d || candidate.Confidence > 1d)
