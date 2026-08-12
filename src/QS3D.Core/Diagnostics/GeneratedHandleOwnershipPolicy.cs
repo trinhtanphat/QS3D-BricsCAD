@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using QS3D.Core.Domain;
 
@@ -51,20 +50,7 @@ namespace QS3D.Core.Diagnostics
         public static bool AreSameLogicalOwnerSlots(string left, string right) =>
             string.Equals(CanonicalOwnerSlot(left), CanonicalOwnerSlot(right), StringComparison.OrdinalIgnoreCase);
 
-        public static string NormalizeHandleIdentity(string? handle)
-        {
-            var normalized = (handle ?? string.Empty).Trim();
-            if (normalized.Length == 0) return string.Empty;
-
-            var hex = normalized;
-            if (hex.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-                hex = hex.Substring(2);
-            if (hex.Length == 0) return normalized;
-
-            if (!long.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value) || value <= 0L)
-                return normalized;
-            return value.ToString("X", CultureInfo.InvariantCulture);
-        }
+        public static string NormalizeHandleIdentity(string? handle) => GeneratedHandleIdentity.Normalize(handle);
 
         public static IEnumerable<KeyValuePair<string, string>> EnumerateOwnerHandles(ProjectElement element)
         {
