@@ -23,12 +23,14 @@ if not errors:
 
     required = [
         'ValidateElement(root, "qs3dTemplate", new[] { "schema", "id", "name" }, new[] { "families", "rules", "layerMappings", "bqColumns" })',
-        'RequireAtMostOne(root, "families")',
-        'RequireAtMostOne(root, "rules")',
-        'RequireAtMostOne(root, "layerMappings")',
-        'RequireAtMostOne(root, "bqColumns")',
+        'RequireExactlyOne(root, "families")',
+        'RequireExactlyOne(root, "rules")',
+        'RequireExactlyOne(root, "layerMappings")',
+        'RequireExactlyOne(root, "bqColumns")',
+        'var expectedRootOrder = new[]',
+        'SequenceEqual(expectedRootOrder)',
         'ValidateElement(family, "family", new[] { "id", "name", "category" }, new[] { "properties" })',
-        'RequireAtMostOne(family, "properties")',
+        'RequireExactlyOne(family, "properties")',
         'ValidateElement(property, "p", new[] { "name", "value" }, Array.Empty<string>())',
         'ValidateElement(rule, "rule", new[] { "id", "category", "output", "expression", "version" }, Array.Empty<string>())',
         'ValidateElement(map, "map", new[] { "pattern", "category" }, Array.Empty<string>())',
@@ -37,7 +39,9 @@ if not errors:
         'attribute.IsNamespaceDeclaration || attribute.Name.Namespace != XNamespace.None || !attributes.Contains(attribute.Name)',
         'child.Name.Namespace != XNamespace.None || !children.Contains(child.Name)',
         '!string.IsNullOrWhiteSpace(text.Value)',
-        'parent.Elements(name).Skip(1).Any()',
+        'private static void RequireExactlyOne(XElement parent, string childName)',
+        'parent.Elements(XName.Get(childName)).Take(2).Count()',
+        'if (count != 1)',
     ]
     for token in required:
         if token not in validator:
@@ -45,6 +49,8 @@ if not errors:
 
     if "root.Name.LocalName" in validator:
         errors.append("template schema validator must not accept roots by LocalName only")
+    if "RequireAtMostOne(" in validator:
+        errors.append("template schema validator must not regress singleton containers from exactly-one to at-most-one")
 
 print("QS3D template profile XML schema preflight")
 if errors:
@@ -53,4 +59,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: template XML load fails closed on foreign namespaces, unknown nodes/attributes/content, and duplicate singleton containers.")
+print("PASS: template XML load fails closed on foreign namespaces, unknown nodes/attributes/content, missing/duplicate singleton containers, and non-canonical root section order.")
