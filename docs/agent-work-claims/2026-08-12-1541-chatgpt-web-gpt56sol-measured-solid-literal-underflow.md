@@ -1,0 +1,23 @@
+# Agent Work Claim
+
+- Agent: `ChatGPT web / GPT-5.6 Sol`
+- Status: `ACTIVE`
+- State: `ACTIVE`
+- Started at: `2026-08-12T15:41:00+07:00`
+- Baseline main SHA: `9716e5065e0a1e798d0b8b355f3236000842cd5b`
+- Task Key: `CORE-MEASURED-SOLID-NUMERIC-LITERAL-UNDERFLOW`
+- Scope: Harden `MeasuredSolidQuantityPolicy` parsing so a syntactically non-zero measured volume/surface-area token that `double.TryParse` underflows to exact zero is rejected instead of being applied as a false zero quantity. Preserve true zero spellings, representable positive subnormals, existing finite/non-negative validation, cleanup dirty semantics, and supported-category behavior.
+- Primary files:
+  - `src/QS3D.Core/Services/MeasuredSolidQuantityPolicy.cs`
+  - `tests/QS3D.Core.SmokeTests/MeasuredSolidQuantityPolicySmoke.cs`
+  - this claim file
+- Counterexample:
+  - A supported Beam with `MeasuredSolidVolumeM3 = "1e-4000"` currently parses as `0d` and `Apply()` writes measured/gross/net volume `0`, silently losing a mathematically positive persisted measurement.
+- Tests intended:
+  - Reject non-zero measured volume token `1e-4000` without mutating quantities.
+  - Preserve exact zero scientific spelling such as `0e-4000`.
+  - Preserve the smallest representable positive token `5e-324` as non-zero.
+  - Preserve existing stale-output cleanup, independent override, unsupported-category, dirty, and no-op regressions.
+- Notes:
+  - Pure Core/Services change; no QuantityMath arithmetic, formulas, Geometry planners, persistence serializer/schema, Grid/release38, generated handles, native CAD, or release workflow scope.
+  - No GitHub Actions, full .NET build, executable smoke run, or BricsCAD V25/V26 runtime PASS will be claimed unless actually performed.
