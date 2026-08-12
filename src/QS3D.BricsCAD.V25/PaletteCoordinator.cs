@@ -90,9 +90,9 @@ namespace QS3D.BricsCAD.V25
                 RefreshAll();
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                ReportPaletteFailure("Workspace", ex);
+                ReportPaletteFailure("Workspace");
             }
         }
 
@@ -115,9 +115,9 @@ namespace QS3D.BricsCAD.V25
                 _workspacePanel?.SetStatus("Safe Mode: panel bản vẽ/layer và diễn giải khối lượng đang tắt.");
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                ReportPaletteFailure("Safe Mode", ex);
+                ReportPaletteFailure("Safe Mode");
             }
         }
 
@@ -139,9 +139,9 @@ namespace QS3D.BricsCAD.V25
                 EnsureCreated();
                 _workspacePanel?.SetStatus(status);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                ReportPaletteFailure("Status", ex);
+                ReportPaletteFailure("Status");
             }
         }
 
@@ -210,33 +210,17 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void ReportPaletteFailure(string operation, Exception error)
+        private static void ReportPaletteFailure(string operation)
         {
-            var message = DescribeException(error);
             try
             {
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
-                    "\nQS3D " + operation + " UI error: " + message);
+                    "\nQS3D " + operation + " UI error: không thể hoàn tất thao tác giao diện.");
             }
             catch
             {
                 // Error reporting must never recurse into palette creation or mask the original failure.
             }
-        }
-
-        private static string DescribeException(Exception error)
-        {
-            if (error == null) return "unknown error";
-            var parts = new List<string>();
-            Exception? current = error;
-            for (var depth = 0; current != null && depth < 8; depth++, current = current.InnerException)
-            {
-                var text = (current.Message ?? string.Empty).Trim();
-                var part = current.GetType().Name + (text.Length == 0 ? string.Empty : ": " + text);
-                if (parts.Count == 0 || !string.Equals(parts[parts.Count - 1], part, StringComparison.Ordinal))
-                    parts.Add(part);
-            }
-            return string.Join(" -> ", parts);
         }
 
         private static void PersistPaletteLayout()
