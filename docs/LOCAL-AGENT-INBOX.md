@@ -84,6 +84,7 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Evidence: PENDING_LOCAL
 - Related docs: `docs/LEVEL-REFERENCES.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`; `scripts/preflight-level-native-host-placement.py`; `scripts/preflight-level-opening-placement.py`; `scripts/preflight-level-curtain-placement.py`
 - Current source wave: hosted Door/WallOpening placement is shared across straight/curved cutters, physical-cut live fingerprints and Auto Host matching. Existing Curtain LINE/open-POLYLINE frame/panel builders, opening clipping, live fingerprints and frame config health consume the same placement contract. Beam/Column longitudinal bars, stirrups/ties, Slab/Foundation/StructuralWall meshes, Level-configured BBS shape origins and Railing LINE height resolve the same host bottom/effective height before native replacement. Legacy arithmetic remains explicit; native Level use remains policy-blocked and Stair, UI plus the exact-SHA V25 matrix remain `PENDING_LOCAL`.
+- Local probe status: `QS3DLEVELZPROBE` and `scripts/test-bricscad-v25-level-z.ps1` are source-prepared to measure legacy Beam Z and confirm configured-Level replacement remains fail-closed on a disposable copy. They do not enable Level geometry and have not run on the current candidate while another BricsCAD process is active. Evidence remains `PENDING_LOCAL / NOT_LOCAL_PASS`.
 - Updated: 2026-08-12
 
 ## LOCAL-004 — source reconcile native atomicity
