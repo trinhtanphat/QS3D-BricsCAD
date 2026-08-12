@@ -1,25 +1,23 @@
 # Work claim — Preview Review composite smoke reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-preview-review-composite-smoke-reconcile-20260812-1059`
 - Registered: `2026-08-12T10:59:00+07:00`
+- Completed: `2026-08-12T11:01:00+07:00`
 - Priority: P1 Core smoke contract reconciliation
 
 ## Confirmed regression
 
-The completed Preview Review composite-row-key regression intentionally constructs U+001F-bearing `(ElementId, Field)` pairs and computes verified snapshot fingerprints to prove the comparison key cannot collide. The later completed Preview Review XML-text safety lane now rejects U+001F in persisted snapshot text from `ComputeFingerprint(...)`. The old smoke therefore throws during fixture construction and no longer tests the current contract.
+The completed Preview Review composite-row-key regression intentionally constructed U+001F-bearing `(ElementId, Field)` pairs and computed verified snapshot fingerprints to prove the comparison key cannot collide. The later completed Preview Review XML-text safety lane now rejects U+001F in persisted snapshot text from `ComputeFingerprint(...)`. The old smoke therefore threw during fixture construction and no longer tested the current contract.
 
-## Reserved scope
+## Resolution
 
-- `tests/QS3D.Core.SmokeTests/PreviewReviewCompositeRowKeySmoke.cs`
-- this claim file
+- Claim: `8162f77e16d4aed27281738a972fac9ee023848b`
+- Regression reconciliation: `ef84b2d332fee8a2f0b9d28a484fd86c21abfccf`
 
-## Intended reconciliation
+`PreviewReviewCompositeRowKeySmoke` now directly invokes the private comparison `RowKey(...)` via reflection to preserve collision-free tuple-key coverage without constructing an invalid persisted artifact. It separately verifies that a separator-bearing snapshot fails `PreviewReviewSnapshotService.Verify(...)` under the new XML-text contract, and preserves the valid case-insensitive comparison identity regression.
 
-- keep direct regression coverage that the private comparison `RowKey(...)` remains collision-free for separator-bearing tuple components;
-- explicitly assert separator-bearing snapshots are no longer verified under the XML-text contract;
-- preserve the valid case-insensitive comparison identity regression;
-- do not modify Preview Review production source.
+Exact readback confirmed current `PreviewReviewSnapshotComparisonService.RowKey(...)` remains length-prefixed and the reconciled smoke is present on moving `main`.
 
 ## Related completed work
 
@@ -31,4 +29,4 @@ The completed Preview Review composite-row-key regression intentionally construc
 
 ## Validation boundary
 
-Exact source/test readback only. No GitHub Actions/full build or BricsCAD V25/V26 runtime PASS claimed without execution.
+Exact source/test readback only. No GitHub Actions/full build or BricsCAD V25/V26 runtime PASS claimed.
