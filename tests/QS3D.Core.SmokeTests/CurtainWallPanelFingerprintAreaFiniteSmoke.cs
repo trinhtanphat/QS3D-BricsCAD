@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Geometry;
 
@@ -11,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             OverflowingAreaIsRejected();
             FiniteAreaFingerprintRemainsDeterministic();
             SignedZeroCoordinatesRemainCanonical();
+            BoundedIndexedSnapshotDoesNotTrustEnumerator();
         }
 
         private static void OverflowingAreaIsRejected()
@@ -70,6 +73,23 @@ namespace QS3D.Core.SmokeTests
             Equal(CurtainWallPanelFingerprint.Compute(positive), CurtainWallPanelFingerprint.Compute(negative));
         }
 
+        private static void BoundedIndexedSnapshotDoesNotTrustEnumerator()
+        {
+            var piece = new CurtainWallPanelPiece
+            {
+                SourcePanelIndex = 0,
+                X_M = 0.25d,
+                Z_M = 0.5d,
+                WidthM = 1.5d,
+                HeightM = 2d
+            };
+            var ordinary = Input(piece);
+            var hostile = Input(piece);
+            hostile.Pieces = new ThrowingEnumeratorList(piece);
+
+            Equal(CurtainWallPanelFingerprint.Compute(ordinary), CurtainWallPanelFingerprint.Compute(hostile));
+        }
+
         private static CurtainWallPanelFingerprintInput Input(CurtainWallPanelPiece piece)
         {
             return new CurtainWallPanelFingerprintInput
@@ -95,6 +115,23 @@ namespace QS3D.Core.SmokeTests
         {
             if (!Equals(expected, actual))
                 throw new Exception("Expected " + expected + ", got " + actual + ".");
+        }
+
+        private sealed class ThrowingEnumeratorList : IReadOnlyList<CurtainWallPanelPiece>
+        {
+            private readonly CurtainWallPanelPiece _piece;
+
+            public ThrowingEnumeratorList(CurtainWallPanelPiece piece) => _piece = piece;
+
+            public int Count => 1;
+
+            public CurtainWallPanelPiece this[int index] =>
+                index == 0 ? _piece : throw new ArgumentOutOfRangeException(nameof(index));
+
+            public IEnumerator<CurtainWallPanelPiece> GetEnumerator() =>
+                throw new InvalidOperationException("Caller-owned enumerator must not be used by the bounded fingerprint path.");
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
     }
 

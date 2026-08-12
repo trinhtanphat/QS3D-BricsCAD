@@ -38,8 +38,13 @@ namespace QS3D.Core.Geometry
                 (string.Equals(sourceKind, "OpenPolyline", StringComparison.OrdinalIgnoreCase) && input.PathSegmentCount < 1))
                 throw new ArgumentOutOfRangeException(nameof(input.PathSegmentCount));
             if (input.Pieces == null) throw new ArgumentNullException(nameof(input.Pieces));
-            if (input.Pieces.Count > MaxPieces)
+            var pieceCount = input.Pieces.Count;
+            if (pieceCount > MaxPieces)
                 throw new InvalidOperationException("Curtain panel fingerprint exceeds " + MaxPieces + " pieces.");
+
+            var pieces = new List<CurtainWallPanelPiece>(pieceCount);
+            for (var index = 0; index < pieceCount; index++)
+                pieces.Add(Validate(input.Pieces[index]));
 
             var canonical = new StringBuilder("CURTAIN_PANEL_V1")
                 .Append('|').Append(R(input.SourceLengthM))
@@ -49,8 +54,7 @@ namespace QS3D.Core.Geometry
                 .Append('|').Append(sourceKind.ToUpperInvariant())
                 .Append('|').Append(input.PathSegmentCount.ToString(CultureInfo.InvariantCulture));
 
-            foreach (var piece in input.Pieces
-                .Select(Validate)
+            foreach (var piece in pieces
                 .OrderBy(x => x.SourcePanelIndex)
                 .ThenBy(x => x.Z_M)
                 .ThenBy(x => x.X_M)
