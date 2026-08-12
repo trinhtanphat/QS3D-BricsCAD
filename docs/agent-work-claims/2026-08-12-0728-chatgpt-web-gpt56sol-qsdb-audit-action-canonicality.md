@@ -1,6 +1,6 @@
 # Work claim — QSDB audit action canonicality
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-12`
 - Baseline main SHA: `3134625a1ea1b8bb3bde47d6a90ac2db8f526091`
@@ -8,37 +8,31 @@
 
 ## Confirmed defect
 
-`AuditTrail.Record(...)` now requires a non-blank canonical action name, but the persisted `.qsdb` boundary does not enforce the same invariant. `QsdbProjectXmlSchemaValidator.ValidateAudit(...)` checks only the event shape, while `QsdbProjectStore.ValidateProject(...)` checks audit timestamps but not action identity. Because `ProjectState.AuditEvents` is an exposed mutable list, callers can bypass `AuditTrail.Record`, insert a blank or padded action, and `Save(...)` can serialize it. A hand-edited/current-schema `.qsdb` can likewise load a non-canonical audit action.
+`AuditTrail.Record(...)` now requires a non-blank canonical action name, but the persisted `.qsdb` boundary did not enforce the same invariant. `QsdbProjectXmlSchemaValidator.ValidateAudit(...)` checked only the event shape, while `QsdbProjectStore.ValidateProject(...)` checked audit timestamps but not action identity. Because `ProjectState.AuditEvents` is an exposed mutable list, callers could bypass `AuditTrail.Record`, insert a blank or padded action, and `Save(...)` could serialize it. A hand-edited/current-schema `.qsdb` could likewise load a non-canonical audit action.
 
-This creates two authorities for the same provenance identity: runtime-recorded events are canonical, persisted events are not necessarily canonical.
+## Completed contract
 
-## Reserved scope
+1. Current-schema `.qsdb` audit events now require a present, non-blank action attribute with no leading/trailing whitespace.
+2. `Save(...)` now rejects in-memory audit events whose action is blank or padded before publication.
+3. `Load(...)` rejects missing/blank/padded persisted audit actions through current-schema validation.
+4. Canonical audit actions remain unchanged on round-trip.
 
-- `src/QS3D.Core/Persistence/QsdbProjectXmlSchemaValidator.cs`
-- `src/QS3D.Core/Persistence/QsdbProjectStore.cs`
-- focused `QS3D.Core.SmokeTests` coverage for save/load rejection
-- `docs/plans/2026-08-12-qsdb-audit-action-canonicality.md`
-- this claim file
+## Commits
 
-## Non-overlap
+- Claim registration: `61f3a4aa959cfcda68d2698aa3a4c71d12645417`
+- Planning: `f93a2a088ac180ab64528f9ff3cf1e5a30dee306`
+- XML persistence validator: `3699ba21766f8b556769ec85467186cd73b3fb78`
+- In-memory save validation: `282dfef4abe80623bc54a49a4ea46c8078f1ce90`
+- Focused smoke regression source: `ac57fa72b257aa4e44069755df9dd8d6fa241959`
 
-- Do not modify `AuditTrail.cs`; the just-completed AuditTrail action lane explicitly excluded persistence schema changes.
-- Do not introduce an action enum/vocabulary, length policy, or normalization for detail/actor/correlation fields.
-- Do not modify native BricsCAD callers, updater/release code, or unrelated persistence locking/recovery behavior.
-- No GitHub Actions dispatch or release publication.
+## Validation evidence
 
-## Intended contract
+- Exact source diffs were read back: the XML validator adds one required-canonical action check; the project-store change adds only the audit-action validation beside the existing UTC check.
+- Source and smoke commits were verified as ancestors of observed `main` `86282192d967066258748e455bc226e4dc0ca775` with `behind_by: 0`.
+- Concurrent commits observed after the source changes did not modify the persistence source files in this claim.
+- Smoke regression source is committed but was not executed through GitHub Actions in this remote session.
+- No licensed BricsCAD runtime PASS, CI PASS, build PASS, or release publication is claimed.
 
-1. Current-schema `.qsdb` audit events require a present, non-blank action attribute with no leading/trailing whitespace.
-2. `Save(...)` rejects an in-memory audit event whose action is blank or padded before publishing the destination file.
-3. `Load(...)` rejects a malformed persisted audit action rather than silently accepting a provenance alias.
-4. Canonical audit actions round-trip unchanged.
+## Released scope
 
-## Validation / closure
-
-- Commit claim before source edits.
-- Commit planning document before implementation.
-- Re-fetch exact current source immediately before each write.
-- Add isolated Core smoke regression without touching shared `Program.cs` when possible.
-- Verify source/test commits remain ancestors of latest `main` with `behind_by: 0` before closing.
-- Do not claim CI/native runtime PASS unless actually executed.
+This claim is complete and the persistence files above are released for other agents. `AuditTrail.cs` was intentionally not modified by this lane.
