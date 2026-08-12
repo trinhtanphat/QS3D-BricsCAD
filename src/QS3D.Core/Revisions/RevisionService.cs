@@ -253,8 +253,18 @@ namespace QS3D.Core.Revisions
             keys.UnionWith(after.Keys);
             foreach (var key in keys.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
             {
-                before.TryGetValue(key, out var a);
-                after.TryGetValue(key, out var b);
+                var hasA = before.TryGetValue(key, out var a);
+                var hasB = after.TryGetValue(key, out var b);
+                if (hasA != hasB)
+                {
+                    delta.Fields.Add(new RevisionFieldDelta
+                    {
+                        Field = "Property:" + key,
+                        Before = hasA ? a ?? string.Empty : string.Empty,
+                        After = hasB ? b ?? string.Empty : string.Empty
+                    });
+                    continue;
+                }
                 Add(delta, "Property:" + key, a ?? string.Empty, b ?? string.Empty);
             }
         }
