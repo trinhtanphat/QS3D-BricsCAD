@@ -18,9 +18,11 @@ if STORE.is_file():
         "ValidateSnapshot(snapshot);",
         "ValidateUtcTimestamp(snapshot.CreatedUtc",
         'snapshot.CreatedUtc.ToString("O", CultureInfo.InvariantCulture)',
-        "DateTimeOffset.TryParse",
-        "HasExplicitUtcOffset(value)",
-        "return result.UtcDateTime;",
+        'DateTime.TryParseExact(value, "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var result)',
+        "result.Kind != DateTimeKind.Utc",
+        '!string.Equals(value, result.ToString("O", CultureInfo.InvariantCulture), StringComparison.Ordinal)',
+        'throw new InvalidDataException("Invalid or non-canonical revision timestamp.");',
+        "return result;",
         "Enum.IsDefined(typeof(ElementCategory), category)",
         "ValidateCanonicalCategory(element.Category)",
         "CanonicalRequired(property, \"name\", \"revision property name\")",
@@ -35,23 +37,33 @@ if STORE.is_file():
 
     for forbidden in (
         "snapshot.CreatedUtc.ToUniversalTime()",
-        "DateTimeStyles.RoundtripKind",
+        "DateTimeOffset.TryParse",
+        "HasExplicitUtcOffset(value)",
+        "return result.UtcDateTime",
         "return result.ToUniversalTime()",
         "x.SourceHandles.Where(h => !string.IsNullOrWhiteSpace(h))",
         ".Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(h => h",
         "new XAttribute(\"value\", h.Trim())",
     ):
         if forbidden in text:
-            errors.append("RevisionSnapshotStore reintroduced machine-dependent or lossy persistence: " + forbidden)
+            errors.append("RevisionSnapshotStore reintroduced normalization or lossy persistence: " + forbidden)
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
     for token in (
-        "ExplicitOffsetNormalizesToUtcAndMissingOffsetFailsClosed",
-        '"2026-08-10T12:00:00+07:00"',
-        '"2026-08-10T12:00:00"',
+        "CanonicalUtcLoadsAndNonCanonicalTimestampsFailClosed",
+        'RevisionDocument("2026-08-10T05:00:00.0000000Z")',
+        'RevisionDocument("2026-08-10T12:00:00.0000000+07:00")',
+        'RevisionDocument("2026-08-10T05:00:00.0000000+00:00")',
+        'RevisionDocument("2026-08-10T05:00:00.0000000")',
+        'RevisionDocument("2026-08-10T05:00:00Z")',
+        "DateTimeKind.Utc",
         "DateTimeKind.Unspecified",
         "DateTimeKind.Local",
+        "Throws<InvalidDataException>(() => store.Load(offsetPath));",
+        "Throws<InvalidDataException>(() => store.Load(zeroOffsetPath));",
+        "Throws<InvalidDataException>(() => store.Load(missingOffsetPath));",
+        "Throws<InvalidDataException>(() => store.Load(shortUtcPath));",
         "SaveRequiresUtcAndCanonicalDefinedCategory",
         'Snapshot("undefined", "999")',
         'Snapshot("noncanonical", "beam")',
@@ -75,4 +87,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: revision snapshots require deterministic UTC/category/canonical structure, preserve free-text maps, reject lossy handle normalization, and leave an existing file intact on failed save.")
+print("PASS: revision snapshots require exact invariant UTC round-trip timestamps, deterministic category/canonical structure, preserve free-text maps, reject lossy normalization, and leave an existing file intact on failed save.")
