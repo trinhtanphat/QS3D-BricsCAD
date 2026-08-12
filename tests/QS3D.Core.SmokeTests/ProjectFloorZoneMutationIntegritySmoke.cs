@@ -7,40 +7,48 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
-            FloorActiveCanonicalIdentityIsNoOp();
-            ZoneActiveCanonicalIdentityIsNoOp();
+            FloorActiveAliasIsCanonicalRepair();
+            ZoneActiveAliasIsCanonicalRepair();
             FloorAssignmentCanonicalIdentityIsNoOp();
             ZoneAssignmentCanonicalIdentityIsNoOp();
             FloorNullTargetFailsAtomically();
             ZoneNullTargetFailsAtomically();
         }
 
-        private static void FloorActiveCanonicalIdentityIsNoOp()
+        private static void FloorActiveAliasIsCanonicalRepair()
         {
-            var project = new ProjectState("P-FLOOR-ACTIVE-NOOP", "Floor active no-op");
+            var project = new ProjectState("P-FLOOR-ACTIVE-REPAIR", "Floor active repair");
             var floor = ProjectFloorService.Create(project, "F-01", "Floor 01", 0d);
             project.ActiveFloorId = "  f-01  ";
             var beforeVersion = project.ChangeVersion;
 
             ProjectFloorService.SetActive(project, " F-01 ");
 
-            Equal(beforeVersion, project.ChangeVersion);
-            Equal("  f-01  ", project.ActiveFloorId);
+            Equal(beforeVersion + 1L, project.ChangeVersion);
+            Equal(floor.Id, project.ActiveFloorId);
             Same(floor, project.FindFloor(floor.Id));
+
+            var canonicalVersion = project.ChangeVersion;
+            ProjectFloorService.SetActive(project, floor.Id);
+            Equal(canonicalVersion, project.ChangeVersion);
         }
 
-        private static void ZoneActiveCanonicalIdentityIsNoOp()
+        private static void ZoneActiveAliasIsCanonicalRepair()
         {
-            var project = new ProjectState("P-ZONE-ACTIVE-NOOP", "Zone active no-op");
+            var project = new ProjectState("P-ZONE-ACTIVE-REPAIR", "Zone active repair");
             var zone = ProjectZoneService.Create(project, "Z-01", "Zone 01");
             project.ActiveZoneId = "  z-01  ";
             var beforeVersion = project.ChangeVersion;
 
             ProjectZoneService.SetActive(project, " Z-01 ");
 
-            Equal(beforeVersion, project.ChangeVersion);
-            Equal("  z-01  ", project.ActiveZoneId);
+            Equal(beforeVersion + 1L, project.ChangeVersion);
+            Equal(zone.Id, project.ActiveZoneId);
             Same(zone, project.FindZone(zone.Id));
+
+            var canonicalVersion = project.ChangeVersion;
+            ProjectZoneService.SetActive(project, zone.Id);
+            Equal(canonicalVersion, project.ChangeVersion);
         }
 
         private static void FloorAssignmentCanonicalIdentityIsNoOp()
