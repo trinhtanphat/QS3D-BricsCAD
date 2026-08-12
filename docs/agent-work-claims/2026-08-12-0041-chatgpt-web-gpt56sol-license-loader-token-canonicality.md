@@ -1,6 +1,6 @@
 # Work claim — license loader token canonicality
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-license-loader-token-canonicality-20260812-0041`
 - Registered: `2026-08-12T00:41:00+07:00`
 - Baseline main SHA: `c910f6c1c61c0ddc8cb5c5e81adb35c4be7956c1`
@@ -8,7 +8,7 @@
 
 ## Reserved scope
 
-Close the loader/validator mismatch in `LicenseVerifier`: `LicenseDocument.Validate()` rejects leading/trailing whitespace on signed scalar/feature tokens, but the XML `Required(...)` helper currently trims attribute values before `Validate()` sees them. A non-canonical on-disk license attribute can therefore be silently normalized instead of rejected.
+Close the loader/validator mismatch in `LicenseVerifier`: `LicenseDocument.Validate()` rejects leading/trailing whitespace on signed scalar/feature tokens, but the XML `Required(...)` helper trimmed attribute values before `Validate()` saw them. A non-canonical on-disk license attribute could therefore be silently normalized instead of rejected.
 
 ## Reserved surfaces
 
@@ -16,12 +16,20 @@ Close the loader/validator mismatch in `LicenseVerifier`: `LicenseDocument.Valid
 - `tests/QS3D.Core.SmokeTests/LicenseVerifierSmoke.cs`
 - this claim file
 
-## Intended fix
+## Implemented fix
 
-- Preserve raw required XML attribute text instead of trimming it in the generic `Required(...)` helper.
-- Let existing exact schema/algorithm comparisons, exact timestamp parsing, and `LicenseDocument.Validate()` reject non-canonical surrounding whitespace rather than silently repairing it.
-- Keep signature element Base64 whitespace handling unchanged; this claim is only about signed canonical attribute/token fields.
-- Extend the existing licensing smoke to write temporary XML licenses containing padded `id` and padded feature `name` attributes and require `Load(...)` to fail closed.
+- `Required(...)` now preserves required XML attribute text instead of trimming it.
+- Existing exact schema/algorithm comparisons, exact timestamp parsing, and `LicenseDocument.Validate()` now see the original attribute text and reject prohibited surrounding whitespace.
+- Signature element Base64 whitespace handling remains unchanged.
+- Existing licensing smoke now writes temporary XML licenses containing a padded `id` and padded feature `name` and requires `Load(...)` to fail closed.
+
+## Integration evidence
+
+- Claim registration: `e521ef23018c916e3dc46b29b7438d1c3e316867`.
+- Source branch commits: `35720c832f4e6ff251789813e66798cd83b2fa0d`, `5606a79c8c9fbe79f57d95ef5765a67831f5efd1`.
+- PR: `#611`.
+- Squash merge on current `main`: `464d084c3afb5070e7af53996f8dd171a400daef`.
+- Before merge, comparison from the claim commit to current main showed no intervening modification of either reserved licensing file, so integration did not overwrite neighboring work.
 
 ## Explicit exclusions
 
@@ -31,14 +39,6 @@ Close the loader/validator mismatch in `LicenseVerifier`: `LicenseDocument.Valid
 - BricsCAD/runtime/UI/installer/updater changes.
 - GitHub Actions dispatch or workflow edits.
 
-## Coordination
-
-The prior completed `license token canonical whitespace` lane hardened `LicenseDocument.Validate()` directly but did not change XML loader trimming. This claim is a narrow follow-up on the loader boundary and does not reopen the completed direct-document validation behavior.
-
 ## Validation boundary
 
-Deterministic existing Core smoke coverage plus source/diff review. No GitHub Actions dispatch; no licensed BricsCAD runtime PASS claimed.
-
-## Completion condition
-
-The on-disk XML loader can no longer trim away prohibited token whitespace, the focused smoke is committed to current `main`, no neighboring ACTIVE claim is overwritten, and this claim records exact integration evidence.
+Deterministic committed Core smoke coverage plus source/diff review. No GitHub Actions were dispatched and no licensed BricsCAD runtime PASS is claimed.
