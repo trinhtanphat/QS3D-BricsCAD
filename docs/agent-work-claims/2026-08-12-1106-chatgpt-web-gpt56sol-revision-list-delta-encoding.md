@@ -1,28 +1,29 @@
 # Work claim — Revision list delta encoding collision safety
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-revision-list-delta-encoding-20260812-1106`
 - Registered: `2026-08-12T11:06:00+07:00`
+- Completed: `2026-08-12T11:10:00+07:00`
 - Priority: P1 revision review fidelity
 
 ## Confirmed defect
 
-`RevisionService.Compare(...)` correctly compares `SourceHandles` and `Dependencies` as canonical string sequences, but once it detects a difference it serializes each side with `string.Join(",", ...)`. Revision list values may themselves contain commas. Distinct lists such as `["A,B", "C"]` and `["A", "B,C"]` therefore produce the same rendered `Before`/`After` text (`A,B,C`) even though the service reports the field as changed. That makes the emitted revision delta internally contradictory and can hide the actual list difference from downstream review/UI consumers.
+`RevisionService.Compare(...)` correctly compared `SourceHandles` and `Dependencies` as canonical string sequences, but once it detected a difference it serialized each side with `string.Join(",", ...)`. Revision list values may themselves contain commas. Distinct lists such as `["A,B", "C"]` and `["A", "B,C"]` therefore produced the same rendered `Before`/`After` text (`A,B,C`) even though the service reported the field as changed.
 
-## Reserved scope
+## Resolution
 
-- `src/QS3D.Core/Revisions/RevisionService.cs`
-- one focused new Core smoke under `tests/QS3D.Core.SmokeTests/`
-- this claim file
+- Claim: `f2a2f417a9997be3e72307ca3071fe91c925dd27`
+- Source: `e0be5cab1c0771549633ba4391d3ccb46a9ab326`
+- Regression: `14cd3c225f4de985168b3b2cd21bf768f64e499b`
 
-## Intended contract
+Revision list deltas now use an injective escaped representation: each backslash is escaped first, then each comma is escaped, and tokens remain comma-separated. Ordinary tokens containing neither character retain the exact existing readable output. Case-insensitive canonical list sorting/comparison and RevisionSnapshot persistence are unchanged.
 
-Use an injective escaped list representation for revision `SourceHandles` and `Dependencies`: escape backslash and comma in each token, then join with comma. Preserve current output byte-for-byte for ordinary tokens that contain neither comma nor backslash, preserve case-insensitive canonical list comparison/sorting, and do not alter revision snapshot persistence format.
+The focused smoke covers comma-bearing source handles and dependencies that previously collapsed to identical text, backslash-bearing tokens, and byte-for-byte ordinary list output compatibility. Exact source/test readback confirmed the intended implementation on moving `main`.
 
 ## Excluded scope
 
-Do not touch the local-owned `RevisionCaptureXmlTextIntegritySmoke.cs`, RevisionSnapshotStore persistence, quantity/property diff semantics, CAD/UI, or build/release workflows.
+The local-owned `RevisionCaptureXmlTextIntegritySmoke.cs`, RevisionSnapshotStore persistence, quantity/property diff semantics, CAD/UI and build/release workflows were not modified.
 
 ## Validation boundary
 
-Focused source-safe regression + exact readback only. No GitHub Actions/full build or BricsCAD V25/V26 runtime PASS claimed without execution.
+Focused source-safe regression + exact readback only. No GitHub Actions/full build or BricsCAD V25/V26 runtime PASS claimed.
