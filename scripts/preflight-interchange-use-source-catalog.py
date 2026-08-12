@@ -24,8 +24,15 @@ if not errors:
         "FamilyCollision = InterchangeExistingIdentityAction.UseSourceSemanticData",
         "ElementCollision = InterchangeExistingIdentityAction.KeepTarget",
         "SourceHandles = InterchangeSourceHandlePolicy.Discard",
-        "ProjectStateSnapshot.Capture(project)",
-        "GeneratedDependentGeometryInvalidator.Prepare(document, transaction, project, invalidationTargets)",
+        "using (document.LockDocument())",
+        "var lockedProject = InterchangeMutationTargetGuard.RequireExact(",
+        "var lockedInvalidationTargets = ExpandInvalidationTargets(",
+        "rollback = ProjectStateSnapshot.Capture(lockedProject)",
+        "GeneratedDependentGeometryInvalidator.Prepare(",
+        "lockedProject,",
+        "lockedInvalidationTargets);",
+        "ApplyCatalogState(lockedProject, prepared.Source, prepared.Resolution)",
+        "ApplyNewElementsOnly(lockedProject, prepared.Source, prepared.Resolution)",
         "invalidation.CommitMetadata();",
         "transaction.Commit();",
         "rollback.Restore(project)",
@@ -42,15 +49,20 @@ if not errors:
         "ApplyNewElementsOnly",
         "if (action == InterchangeImportResolutionAction.KeepTarget) continue;",
         "ProjectInterchangeKeepTargetImporter.Plan(project, json)",
+        "ProjectContextCoordinator.RequireBackingStoreUnchanged(",
     ]
     for needle in required_service:
         if needle not in s:
             errors.append(f"catalog service missing atomic/policy contract: {needle}")
 
-    if s.index("GeneratedDependentGeometryInvalidator.Prepare") > s.index("transaction.Commit();"):
-        errors.append("catalog native invalidation must be prepared before CAD commit")
+    prepare_index = s.find("GeneratedDependentGeometryInvalidator.Prepare")
+    commit_index = s.find("transaction.Commit();")
+    if min(prepare_index, commit_index) < 0 or prepare_index > commit_index:
+        errors.append("catalog locked native invalidation must be prepared before CAD commit")
     if s.index("invalidation.CommitMetadata();") > s.index("transaction.Commit();"):
         errors.append("catalog generated ownership metadata must clear before CAD commit")
+    if s.count("ProjectStateSnapshot.Capture(lockedProject)") != 1:
+        errors.append("catalog service must own exactly one locked semantic rollback snapshot")
 
     catalog_section = re.search(r"private static void ApplyCatalogState\(.*?\n        private static void ApplyNewElementsOnly", s, re.S)
     if not catalog_section:
@@ -109,4 +121,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-use-source-catalog: PASS")
-print("UseSource catalog replacement invalidates referencing target elements/dependents inside the CAD transaction, preserves Family inheritance/overrides, keeps existing Element collisions target-authoritative, discards incoming handles, and leaves rebuild explicit.")
+print("UseSource catalog replacement rebinds the exact locked project, recomputes and prepares native invalidation before semantic mutation/CAD commit, preserves Family inheritance/overrides, keeps existing Element collisions target-authoritative, discards incoming handles, and leaves rebuild explicit.")
