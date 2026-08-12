@@ -1,9 +1,10 @@
 # Agent Work Claim
 
 - Agent: `ChatGPT web / GPT-5.6 Sol`
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Started at: `2026-08-12T15:41:00+07:00`
+- Completed at: `2026-08-12T15:45:00+07:00`
 - Baseline main SHA: `9716e5065e0a1e798d0b8b355f3236000842cd5b`
 - Task Key: `CORE-MEASURED-SOLID-NUMERIC-LITERAL-UNDERFLOW`
 - Scope: Harden `MeasuredSolidQuantityPolicy` parsing so a syntactically non-zero measured volume/surface-area token that `double.TryParse` underflows to exact zero is rejected instead of being applied as a false zero quantity. Preserve true zero spellings, representable positive subnormals, existing finite/non-negative validation, cleanup dirty semantics, and supported-category behavior.
@@ -12,12 +13,23 @@
   - `tests/QS3D.Core.SmokeTests/MeasuredSolidQuantityPolicySmoke.cs`
   - this claim file
 - Counterexample:
-  - A supported Beam with `MeasuredSolidVolumeM3 = "1e-4000"` currently parses as `0d` and `Apply()` writes measured/gross/net volume `0`, silently losing a mathematically positive persisted measurement.
-- Tests intended:
-  - Reject non-zero measured volume token `1e-4000` without mutating quantities.
-  - Preserve exact zero scientific spelling such as `0e-4000`.
-  - Preserve the smallest representable positive token `5e-324` as non-zero.
-  - Preserve existing stale-output cleanup, independent override, unsupported-category, dirty, and no-op regressions.
+  - A supported Beam with `MeasuredSolidVolumeM3 = "1e-4000"` parsed as `0d` and `Apply()` wrote measured/gross/net volume `0`, silently losing a mathematically positive persisted measurement.
+- Implementation evidence:
+  - Claim: `80217b44f18ebd0d1d572802d5e910a4e33e2285`
+  - Source: `1b50924433dbdda0eb70c0de3ece988d88af0748`
+  - Focused smoke: `2088dbc21d79eb8fb92d60979fd6efda274d50de`
+  - Pull request: `#941`
+  - Squash merge: `285ce4be82e6247f4def9ebf7d3b276e8c08b313`
+  - Main source readback blob: `efea7a064563f4d19d52692e65f9a092dba4cddb`
+  - Main smoke readback blob: `65ce4106c6ce987dd6c4248ad5a7c628ee53303a`
+- Regression evidence:
+  - `1e-4000` now fails with an underflow-specific error before any earlier valid measured field is written, preserving quantities and clean dirty state.
+  - `0e-4000` remains an exact valid zero metric.
+  - `5e-324` remains `double.Epsilon` in measured/gross/net volume quantities.
+  - Existing stale-output cleanup, independent override, unsupported-category, dirty, and no-op regressions remain in the focused smoke.
+- Validation:
+  - PR patch was exactly two files and did not alter QuantityMath, formula, serializer/schema, Grid/release38, generated-handle, or native CAD behavior.
+  - Source and smoke were read back from `main` after merge with the expected content.
+  - No GitHub Actions, full .NET build, executable smoke run, or BricsCAD V25/V26 runtime PASS was performed or claimed.
 - Notes:
   - Pure Core/Services change; no QuantityMath arithmetic, formulas, Geometry planners, persistence serializer/schema, Grid/release38, generated handles, native CAD, or release workflow scope.
-  - No GitHub Actions, full .NET build, executable smoke run, or BricsCAD V25/V26 runtime PASS will be claimed unless actually performed.
