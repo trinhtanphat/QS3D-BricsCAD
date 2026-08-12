@@ -80,7 +80,7 @@ namespace QS3D.Core.SmokeTests
 
                 var legacyPath = Path.Combine(directory, "legacy.qsrev");
                 File.WriteAllText(legacyPath,
-                    "<qs3dRevision id='legacy' createdUtc='2026-08-11T00:00:00Z'><elements><element id='E1' category='Beam' familyId='' floorId='' zoneId=''><properties/><quantities/><sourceHandles/><dependencies/></element></elements></qs3dRevision>");
+                    "<qs3dRevision id='legacy' createdUtc='2026-08-11T00:00:00.0000000Z'><elements><element id='E1' category='Beam' familyId='' floorId='' zoneId=''><properties/><quantities/><sourceHandles/><dependencies/></element></elements></qs3dRevision>");
                 var legacy = store.Load(legacyPath);
                 Require(legacy.Elements.Single().Dependencies.Count == 0, "legacy revision without dependencies did not load as an empty dependency set");
             }
