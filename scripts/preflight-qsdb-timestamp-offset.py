@@ -16,25 +16,33 @@ if SOURCE.is_file():
     for token in (
         "DateTimeOffset.TryParse",
         "HasExplicitUtcOffset(raw)",
-        "return result.UtcDateTime;",
+        "var utc = result.UtcDateTime;",
+        'var canonical = utc.ToString("O", CultureInfo.InvariantCulture);',
+        "if (!string.Equals(value, canonical, StringComparison.Ordinal))",
+        '"Non-canonical QSDB UTC timestamp: "',
+        "return utc;",
         'value.EndsWith("Z", StringComparison.OrdinalIgnoreCase)',
         "return offsetSeparator > timeSeparator;",
     ):
         if token not in text:
-            errors.append("QsdbProjectStore.cs missing deterministic timestamp token: " + token)
+            errors.append("QsdbProjectStore.cs missing canonical UTC timestamp token: " + token)
     if "return result.ToUniversalTime();" in text:
         errors.append("QSDB timestamps must not be reinterpreted from DateTime using the machine timezone.")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
     for token in (
+        "ExplicitNonUtcOffsetIsRejected",
+        "MissingOffsetIsRejected",
+        "CanonicalUtcRoundTripLoads",
         '"2026-08-10T12:00:00+07:00"',
         '"2026-08-10T12:00:00"',
+        '"2026-08-10T05:00:00.0000000Z"',
         "DateTimeKind.Utc",
         "catch (InvalidDataException)",
     ):
         if token not in text:
-            errors.append("QsdbTimestampOffsetSmoke.cs missing regression token: " + token)
+            errors.append("QsdbTimestampOffsetSmoke.cs missing canonical UTC regression token: " + token)
 
 if errors:
     for error in errors:
@@ -42,4 +50,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QSDB timestamps require an explicit timezone and normalize deterministically to UTC while legacy missing timestamps remain separately supported.")
+print("PASS: QSDB timestamps fail closed unless persisted in exact canonical UTC form; explicit non-UTC offsets and missing offsets are rejected, and canonical Z timestamps round-trip deterministically.")
