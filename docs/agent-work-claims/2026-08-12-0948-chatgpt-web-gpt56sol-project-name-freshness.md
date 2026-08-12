@@ -1,6 +1,6 @@
 # Work claim — ProjectState Name persistence freshness
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-project-name-freshness-20260812-0948`
 - Registered: `2026-08-12T09:48:00+07:00`
 - Baseline main SHA: `0773c70848f5bf5bdd48123e6031dd21d1c03454`
@@ -8,27 +8,30 @@
 
 ## Confirmed defect
 
-`ProjectState.Name` is a public mutable project field and QSDB persists it, but its setter currently only validates/trims the new value and assigns `_name`. `ProjectPersistenceStamp.RequiresSave(...)` relies on `ProjectState.ChangeVersion` (plus recovery state), so a real direct project rename can leave `ChangeVersion`/`UpdatedUtc` unchanged and the persistence stamp can report that no save is required even though serialized project content changed.
+`ProjectState.Name` is publicly mutable and QSDB persists it, while `ProjectPersistenceStamp.RequiresSave(...)` relies on `ProjectState.ChangeVersion`. The setter previously validated/trimmed and assigned `_name` without touching project freshness, so serialized content could change while an existing persistence stamp still reported no save required.
 
-## Reserved surfaces
+## Implemented fix
 
-- `src/QS3D.Core/Domain/ProjectState.cs` — Name setter only
-- `tests/QS3D.Core.SmokeTests/ProjectNameFreshnessSmoke.cs` — new focused regression
-- this claim file
+- Name input is validated/normalized before mutation.
+- Canonical-equivalent same-name assignment remains a true no-op.
+- A real name change assigns the normalized value then calls `Touch()` exactly once.
+- Constructor initialization still writes `_name` directly and does not create a synthetic revision.
+- Snapshot restore compatibility is preserved because `ProjectStateSnapshot.CopyInto(...)` ends by restoring the captured `UpdatedUtc`/`ChangeVersion`.
+- Focused smoke pins persistence-stamp dirty tracking, canonical no-op, invalid-input atomicity and snapshot Name/version/timestamp restoration.
 
-## Intended fix
+## Integration evidence
 
-- Normalize/validate the requested name first.
-- Preserve canonical-equivalent same-name assignment as a true no-op.
-- On a real name change, assign the normalized name then call the existing `Touch()` primitive exactly once.
-- Preserve constructor behavior by continuing to initialize `_name` directly.
-- Preserve snapshot/load behavior: `ProjectStateSnapshot.CopyInto(...)` ultimately restores source `UpdatedUtc`/`ChangeVersion` via `RestorePersistenceState`, while detached-copy construction uses the same canonical name.
-- Add focused smoke proving real rename advances one revision and makes an existing `ProjectPersistenceStamp` require save; same canonical name and invalid blank input do not mutate freshness/state.
+- Claim registration: `2fd8a0f6a0f38ee4123bd18ad8902b15cb34d392`.
+- Branch source commit: `d7694c0d92cd7b0df903020e50158e2a2383d77f`.
+- Focused smoke commit: `7103af60d8555fdf4927bb22d1c0e16ddcacdf21`.
+- Exact branch diff was only `ProjectState.cs` (+7/-1) plus the new 71-line smoke.
+- Comparison from claim registration to PR base `e9454e2566dfaabf00a6389c3f219ef46fe3f683` showed 18 intervening commits and no reserved-path overlap.
+- PR `#722` squash-merged at `503edb6e2bdee487c5d45f3849fa4e5ad5582f6f`.
 
 ## Coordination
 
-The earlier completed Project Name invariant lane remains authoritative for nonblank/canonical validation. Active QSDB changeVersion canonicality owns `QsdbProjectStore.cs`, not this file. Snapshot identity work owns snapshot semantics only; this lane does not modify snapshot code.
+The earlier completed Project Name invariant lane remains authoritative for name validation. QSDB changeVersion canonicality owns persistence parsing; snapshot identity work remains independent.
 
 ## Validation boundary
 
-Committed deterministic Core smoke coverage plus exact source/diff review. No GitHub Actions dispatch; no licensed BricsCAD V25/V26 runtime PASS claimed.
+Committed deterministic Core smoke coverage plus exact source/diff review. No GitHub Actions were dispatched and no licensed BricsCAD V25/V26 runtime PASS is claimed.
