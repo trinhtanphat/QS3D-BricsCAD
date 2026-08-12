@@ -72,6 +72,8 @@ namespace QS3D.Core.Revisions
             var children = new HashSet<XName>(allowedChildren.Select(XName.Get));
             foreach (var node in element.Nodes())
             {
+                if (node is XCData)
+                    throw new InvalidDataException("Unsupported QS3D revision CDATA content in " + element.Name.LocalName + ".");
                 if (node is XText text)
                 {
                     if (!string.IsNullOrWhiteSpace(text.Value))
