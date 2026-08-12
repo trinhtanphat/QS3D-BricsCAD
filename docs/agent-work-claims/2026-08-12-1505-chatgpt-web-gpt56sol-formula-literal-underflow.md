@@ -1,0 +1,22 @@
+# Agent Work Claim
+
+- Agent: `ChatGPT web / GPT-5.6 Sol`
+- Status: `ACTIVE`
+- State: `ACTIVE`
+- Started at: `2026-08-12T15:05:00+07:00`
+- Baseline main SHA: `a0cb5739a3da282f02b4ae625a406e81919cdfe8`
+- Task Key: `CORE-FORMULA-NUMERIC-LITERAL-UNDERFLOW`
+- Scope: Harden CAD-independent formula numeric-literal parsing so a syntactically non-zero decimal/scientific token that `double.TryParse` underflows to exact zero is rejected instead of silently becoming zero. Preserve literal zero spellings, representable subnormal/normal values, existing non-finite rejection, and the completed multiplication/division underflow contract.
+- Primary files:
+  - `src/QS3D.Core/Formulas/ExpressionEvaluator.cs`
+  - `tests/QS3D.Core.SmokeTests/FormulaFiniteSafetySmoke.cs`
+  - this claim file
+- Tests intended:
+  - A non-zero scientific literal below the representable `double` range (for example `1e-4000`) is rejected with an underflow-specific formula error.
+  - Exact zero literals remain valid.
+  - Small representable non-zero literals remain non-zero and valid.
+- Dependencies:
+  - Builds on completed formula finite-safety and arithmetic-underflow lanes; does not reopen multiplication/division handling.
+- Notes:
+  - Pure Core/net8 smoke surface; no BricsCAD host/native runtime, UI, persistence, QSDB, SourceHandle, generated-handle, revision, rebar, grid, floor, or release workflow scope.
+  - No GitHub Actions, full .NET build, executable smoke run, or BricsCAD runtime PASS will be claimed unless actually performed.
