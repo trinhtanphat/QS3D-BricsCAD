@@ -52,7 +52,7 @@ namespace QS3D.Core.Services
                 removed = true;
             }
 
-            if (removed) element.TouchPersistenceState();
+            if (removed) element.MarkDirty(ElementDirtyFlags.Quantity);
             return handled;
         }
 
