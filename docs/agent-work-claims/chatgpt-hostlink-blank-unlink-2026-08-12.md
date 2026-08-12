@@ -10,5 +10,8 @@
 - Shared files: `none`
 - Dependencies: `none`
 - Validation owner: `chatgpt-gpt56-sol-hostlink-blank-unlink`
-- Test transfer: `Add focused HostLinkCanonicalizationSmoke regression for blank HostWallId fail-closed behavior; do not dispatch GitHub Actions.`
-- Status: `ACTIVE`
+- Test transfer: `Focused HostLinkCanonicalizationSmoke regression added; GitHub Actions not dispatched per CI policy.`
+- Source fix: `727a3d084e06bea725f688d21f532ee303e24bef`
+- Regression: `0674505c1b08d691a4a57afcf979d0b345db9b21`
+- Validation summary: `GitHub commit readback confirms the fail-closed guard is before ProjectSemanticMutationExecutor and the regression locks metadata/dependency/dirty/audit/ChangeVersion preservation. No CI status was present for the regression commit; local dotnet execution was unavailable in this connector-only environment.`
+- Status: `COMPLETED`
