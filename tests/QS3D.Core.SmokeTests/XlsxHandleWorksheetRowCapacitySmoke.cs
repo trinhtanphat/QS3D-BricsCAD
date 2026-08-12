@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             RejectsRequestedRowAboveCapacityBeforeFileLookup();
             RejectsWorksheetRowAboveCapacity();
             RejectsCellReferenceAboveCapacity();
+            AcceptsUnaddressedRowWithoutIndex();
             AcceptsLastValidWorksheetRow();
         }
 
@@ -47,6 +48,21 @@ namespace QS3D.Core.SmokeTests
             try
             {
                 Throws<InvalidDataException>(() => XlsxHandleReader.ReadHandles(path, 2));
+            }
+            finally { Delete(path); }
+        }
+
+        private static void AcceptsUnaddressedRowWithoutIndex()
+        {
+            var path = CreateWorkbook(
+                HeaderRow() +
+                "<row r=\"2\"><c r=\"A2\" t=\"inlineStr\"><is><t>1A</t></is></c></row>" +
+                "<row><c t=\"inlineStr\"><is><t>Ignored optional-index row</t></is></c></row>");
+            try
+            {
+                var handles = XlsxHandleReader.ReadHandles(path, 2);
+                if (handles.Count != 1 || !string.Equals(handles[0], "1A", StringComparison.OrdinalIgnoreCase))
+                    throw new Exception("An unrelated XLSX row without optional r metadata must not invalidate an addressed Handle row.");
             }
             finally { Delete(path); }
         }
