@@ -17,7 +17,16 @@ namespace QS3D.Core.Geometry
         public double Z_M { get; }
         public double WidthM { get; }
         public double HeightM { get; }
-        public double AreaM2 => WidthM * HeightM;
+        public double AreaM2
+        {
+            get
+            {
+                var area = WidthM * HeightM;
+                if (double.IsNaN(area) || double.IsInfinity(area))
+                    throw new OverflowException("Curtain rectangle area must remain finite.");
+                return area;
+            }
+        }
     }
 
     public sealed class CurtainWallDetail
