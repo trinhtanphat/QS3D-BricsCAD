@@ -13,7 +13,8 @@ namespace QS3D.Core.Diagnostics
             var issues = new List<ModelHealthIssue>();
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Generated-rebar mode diagnostics cannot inspect a project containing a null semantic element.");
                 InspectLongitudinal(element, issues);
                 InspectSlabMesh(element, issues);
                 InspectWallMesh(element, issues);
