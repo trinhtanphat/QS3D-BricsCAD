@@ -330,7 +330,10 @@ namespace QS3D.Core.Persistence
                 }
             }
             foreach (var audit in project.AuditEvents)
+            {
                 ValidateUtcTimestamp(audit.Utc, "audit event UTC timestamp");
+                ValidateCanonicalKey(audit.Action, "audit event action");
+            }
         }
 
         private static void ValidateStringMap(System.Collections.Generic.IDictionary<string, string> values, string label)
