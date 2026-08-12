@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         {
             FindBySignatureUsesCanonicalScope();
             StaleSelectionUsesCanonicalScope();
+            StaleSelectionProtectsCanonicalActiveIds();
             FinishQuantityScopeUsesCanonicalIdentity();
         }
 
@@ -48,6 +49,30 @@ namespace QS3D.Core.SmokeTests
             True(AutoRoomLifecycle.IsStaleAutoRoom(matching));
             False(AutoRoomLifecycle.IsStaleAutoRoom(otherFloor));
             False(AutoRoomLifecycle.IsStaleAutoRoom(otherZone));
+            Equal(beforeVersion + 1L, project.ChangeVersion);
+        }
+
+        private static void StaleSelectionProtectsCanonicalActiveIds()
+        {
+            var project = new ProjectState("P-ROOM-SCOPE-4", "Room active id scope");
+            var active = AutoRoom("ROOM-LIVE", "Floor-A", "Zone-A", "AA;BB");
+            var staleCandidate = AutoRoom("ROOM-OLD", "Floor-A", "Zone-A", "AA;BB");
+            project.Elements.Add(active);
+            project.Elements.Add(staleCandidate);
+            var beforeVersion = project.ChangeVersion;
+
+            var stale = AutoRoomLifecycle.MarkStaleForSelection(
+                project,
+                new HashSet<string>(new[] { " room-live " }, StringComparer.Ordinal),
+                new HashSet<string>(new[] { "AA", "BB" }, StringComparer.Ordinal),
+                "FLOOR-A",
+                "ZONE-A",
+                new DateTime(2026, 8, 12, 0, 49, 0, DateTimeKind.Utc));
+
+            Equal(1, stale.Count);
+            Same(staleCandidate, stale[0]);
+            False(AutoRoomLifecycle.IsStaleAutoRoom(active));
+            True(AutoRoomLifecycle.IsStaleAutoRoom(staleCandidate));
             Equal(beforeVersion + 1L, project.ChangeVersion);
         }
 

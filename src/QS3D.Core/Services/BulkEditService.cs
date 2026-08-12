@@ -97,28 +97,38 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
             var family = project.FindFamily(familyId) ?? throw new KeyNotFoundException("Unknown family: " + familyId);
+            var targetProperties = ProjectFamilyService.SnapshotProperties(family, "Target", "bulk assignment");
+            var targetPropertyKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var property in targetProperties) targetPropertyKeys.Add(property.Key);
+
             var targets = OwnedDistinctByIds(project, elementIds);
             foreach (var element in targets)
                 if (element.Category != family.Category)
                     throw new InvalidOperationException("Cannot assign family " + family.Id + " (" + family.Category + ") to element " + element.Id + " (" + element.Category + "). Bulk family assignment is all-or-nothing.");
 
             var pending = new List<PendingFamilyAssignment>();
+            var previousSnapshots = new Dictionary<string, IReadOnlyList<KeyValuePair<string, string>>>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in targets)
             {
                 var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();
                 if (string.Equals(previousFamilyId, family.Id, StringComparison.OrdinalIgnoreCase)) continue;
 
-                ProjectFamily? previousFamily = null;
+                IReadOnlyList<KeyValuePair<string, string>> previousProperties = Array.Empty<KeyValuePair<string, string>>();
                 if (previousFamilyId.Length > 0)
                 {
-                    previousFamily = project.FindFamily(previousFamilyId) ??
+                    var previousFamily = project.FindFamily(previousFamilyId) ??
                         throw new InvalidOperationException("Element " + element.Id + " references missing family id: " + previousFamilyId + ". Repair the relation before bulk reassignment.");
+                    if (!previousSnapshots.TryGetValue(previousFamily.Id, out previousProperties))
+                    {
+                        previousProperties = ProjectFamilyService.SnapshotProperties(previousFamily, "Previous", "bulk assignment");
+                        previousSnapshots.Add(previousFamily.Id, previousProperties);
+                    }
                 }
+
                 var inheritedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                if (previousFamily != null)
-                    foreach (var property in previousFamily.Properties)
-                        if (element.Properties.TryGetValue(property.Key, out var current) && string.Equals(current, property.Value ?? string.Empty, StringComparison.Ordinal))
-                            inheritedKeys.Add(property.Key);
+                foreach (var property in previousProperties)
+                    if (element.Properties.TryGetValue(property.Key, out var current) && string.Equals(current, property.Value, StringComparison.Ordinal))
+                        inheritedKeys.Add(property.Key);
                 pending.Add(new PendingFamilyAssignment { Element = element, InheritedKeys = inheritedKeys });
             }
 
@@ -129,10 +139,10 @@ namespace QS3D.Core.Services
                 {
                     var element = item.Element;
                     foreach (var inheritedKey in item.InheritedKeys)
-                        if (!family.Properties.ContainsKey(inheritedKey)) element.Properties.Remove(inheritedKey);
-                    foreach (var property in family.Properties)
+                        if (!targetPropertyKeys.Contains(inheritedKey)) element.Properties.Remove(inheritedKey);
+                    foreach (var property in targetProperties)
                         if (item.InheritedKeys.Contains(property.Key) || !element.Properties.ContainsKey(property.Key))
-                            element.Properties[property.Key] = property.Value ?? string.Empty;
+                            element.Properties[property.Key] = property.Value;
 
                     element.FamilyId = family.Id;
                     var dirty = ElementDirtyFlags.Properties | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity;

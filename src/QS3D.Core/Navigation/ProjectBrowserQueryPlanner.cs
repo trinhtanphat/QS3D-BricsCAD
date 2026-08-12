@@ -252,7 +252,7 @@ namespace QS3D.Core.Navigation
                 if (!ids.Add(elementId)) throw new InvalidOperationException("Project browser found duplicate semantic element id: " + elementId + ".");
                 if (!Enum.IsDefined(typeof(ElementCategory), element.Category)) throw new InvalidOperationException("Project browser found undefined element category on: " + elementId + ".");
 
-                var familyId = (element.FamilyId ?? string.Empty).Trim();
+                var familyId = CanonicalOptionalReference(element.FamilyId, "family", elementId);
                 if (familyId.Length > 0)
                 {
                     if (!families.TryGetValue(familyId, out var family))
@@ -260,13 +260,22 @@ namespace QS3D.Core.Navigation
                     if (family.Category != element.Category)
                         throw new InvalidOperationException("Project browser found family/category mismatch on element " + elementId + ": family " + family.Id + " is " + family.Category + " while element is " + element.Category + ".");
                 }
-                var floorId = (element.FloorId ?? string.Empty).Trim();
+                var floorId = CanonicalOptionalReference(element.FloorId, "floor", elementId);
                 if (floorId.Length > 0 && !floors.ContainsKey(floorId))
                     throw new InvalidOperationException("Project browser found missing floor reference " + floorId + " on element " + elementId + ".");
-                var zoneId = (element.ZoneId ?? string.Empty).Trim();
+                var zoneId = CanonicalOptionalReference(element.ZoneId, "zone", elementId);
                 if (zoneId.Length > 0 && !zones.ContainsKey(zoneId))
                     throw new InvalidOperationException("Project browser found missing zone reference " + zoneId + " on element " + elementId + ".");
             }
+        }
+
+        private static string CanonicalOptionalReference(string? value, string label, string elementId)
+        {
+            var raw = value ?? string.Empty;
+            if (raw.Length == 0) return string.Empty;
+            if (string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Project browser filtered query requires canonical " + label + " references without surrounding whitespace on element " + elementId + ".");
+            return raw;
         }
     }
 }

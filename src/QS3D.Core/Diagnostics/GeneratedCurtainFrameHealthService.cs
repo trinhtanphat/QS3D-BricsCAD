@@ -24,7 +24,8 @@ namespace QS3D.Core.Diagnostics
             var ownership = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Curtain-frame diagnostics cannot inspect a project containing a null semantic element.");
                 if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
                 var local = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var validCount = 0;
@@ -207,7 +208,8 @@ namespace QS3D.Core.Diagnostics
             var ownership = new OwnershipIndex();
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Curtain-frame diagnostics cannot build ownership for a project containing a null semantic element.");
                 foreach (var handle in element.SourceHandles) Reserve(ownership, handle, element.Id + "/SourceHandles");
                 foreach (var property in element.Properties)
                 {
