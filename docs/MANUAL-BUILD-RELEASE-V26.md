@@ -143,7 +143,7 @@ Stable releases require:
 - `BRICSCAD_V26_DIR` and optional `BRICSCAD_V26_PROFILE`;
 - signing thumbprint/timestamp variables.
 
-The workflow builds Core + V26, packages, signs/verifies/finalizes when requested, runs the exact signed V26 runtime gate for stable releases, creates the V26-only signed update manifest/checksum, uploads a draft release and checks exact expected asset names before publishing the draft.
+The workflow builds Core + V26, packages, signs/verifies/finalizes when requested, runs the exact signed V26 runtime gate for stable releases, creates the V26-only signed update manifest/checksum, and creates the GitHub Release as a draft. Before that draft can be published, the workflow must resolve the remote release tag (including annotated-tag dereference when applicable) and prove it targets the exact qualified `GITHUB_SHA`; verify the remote uploaded asset set exactly matches the expected V26 files; re-download every uploaded asset through the GitHub asset API and require both its byte size and SHA-256 to match the qualified local artifact; then resolve the remote tag again and require it still targets the same `GITHUB_SHA`. Any mismatch leaves the release as a draft.
 
 Editing or committing this workflow does **not** authorize dispatch. Run it only when the repository owner explicitly requests a build/release.
 
