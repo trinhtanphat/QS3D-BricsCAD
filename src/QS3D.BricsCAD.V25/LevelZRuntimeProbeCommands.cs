@@ -9,6 +9,7 @@ using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
+using QS3D.Core.Units;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
 using Teigha.Runtime;
@@ -43,6 +44,8 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
+            var failureCode = "LEVEL_Z_RUNTIME_CONTEXT_FAILED";
+            VerticalBounds? observedLegacyBounds = null;
             try
             {
                 var nonce = Environment.GetEnvironmentVariable(NonceVariable) ?? string.Empty;
@@ -56,10 +59,19 @@ namespace QS3D.BricsCAD.V25
                 if (!document.Name.EndsWith(".level-z-probe-copy.dwg", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Level-Z runtime probe requires a guarded disposable drawing copy.");
 
+                failureCode = "LEVEL_Z_RUNTIME_PROJECT_FAILED";
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 if (project.Elements.Count != 0)
                     throw new InvalidOperationException("Level-Z runtime probe requires a project with no semantic elements.");
+                if (!CadUnitService.TryGetNativeLengthUnit(document, out var nativeUnit))
+                    throw new InvalidOperationException("Level-Z runtime probe requires a supported native drawing unit.");
+                DrawingUnitResolutionPolicy.BindQuantityUnit(
+                    project.Metadata,
+                    false,
+                    nativeUnit,
+                    DrawingUnitResolutionSource.NativeInsunits);
 
+                failureCode = "LEVEL_Z_RUNTIME_SOURCE_FAILED";
                 var sourceId = CreateBeamSource(document);
                 var sourceHandle = sourceId.Handle.ToString();
                 var element = new ProjectElement("level-z-probe-beam", ElementCategory.Beam, string.Empty, project.ActiveFloorId, project.ActiveZoneId);
@@ -70,26 +82,44 @@ namespace QS3D.BricsCAD.V25
                 project.Elements.Add(element);
                 project.Touch();
 
+                failureCode = "LEVEL_Z_RUNTIME_LEGACY_SELECTION_FAILED";
                 document.Editor.SetImpliedSelection(new[] { sourceId });
-                if (StructuralSolidBuilder.BuildSelected(document, project, ElementCategory.Beam) != 1)
+                var implied = document.Editor.SelectImplied();
+                var impliedIds = implied.Value?.GetObjectIds() ?? Array.Empty<ObjectId>();
+                if (impliedIds.Length != 1 || impliedIds[0] != sourceId)
+                    throw new InvalidOperationException("Legacy Level-Z probe could not establish its isolated source selection.");
+
+                failureCode = "LEVEL_Z_RUNTIME_LEGACY_BUILD_COMMAND_FAILED";
+                document.Editor.SetImpliedSelection(new[] { sourceId });
+                var legacyBuildCount = StructuralSolidBuilder.BuildSelected(document, project, ElementCategory.Beam);
+                failureCode = "LEVEL_Z_RUNTIME_LEGACY_BUILD_COUNT_FAILED";
+                if (legacyBuildCount != 1)
                     throw new InvalidOperationException("Legacy Level-Z probe did not build exactly one Beam solid.");
+                failureCode = "LEVEL_Z_RUNTIME_LEGACY_HANDLE_FAILED";
                 var generatedHandle = RequiredGeneratedHandle(element);
+                failureCode = "LEVEL_Z_RUNTIME_LEGACY_BOUNDS_FAILED";
                 var legacyBounds = ReadSolidBoundsM(document, generatedHandle);
+                observedLegacyBounds = legacyBounds;
+                failureCode = "LEVEL_Z_RUNTIME_LEGACY_MIN_Z_FAILED";
                 Near(0.2d, legacyBounds.MinZ, "legacy minimum Z");
+                failureCode = "LEVEL_Z_RUNTIME_LEGACY_MAX_Z_FAILED";
                 Near(3.2d, legacyBounds.MaxZ, "legacy maximum Z");
 
+                failureCode = "LEVEL_Z_RUNTIME_LEVEL_ASSIGN_FAILED";
                 ProjectFloorService.Create(project, "level-z-bottom", "Probe Bottom", 3d);
                 ProjectFloorService.Create(project, "level-z-top", "Probe Top", 7d);
                 if (ProjectFloorService.AssignBottomLevel(project, "level-z-bottom", new[] { element }) != 1 ||
                     ProjectFloorService.AssignTopLevel(project, "level-z-top", new[] { element }) != 1)
                     throw new InvalidOperationException("Level-Z probe could not assign its bounded Level references.");
 
+                failureCode = "LEVEL_Z_RUNTIME_LEVEL_BLOCK_FAILED";
                 var blocked = false;
                 document.Editor.SetImpliedSelection(new[] { sourceId });
                 try { StructuralSolidBuilder.BuildSelected(document, project, ElementCategory.Beam); }
                 catch (InvalidOperationException) { blocked = true; }
                 if (!blocked) throw new InvalidOperationException("Unqualified Level placement unexpectedly reached native replacement.");
 
+                failureCode = "LEVEL_Z_RUNTIME_RETENTION_FAILED";
                 var retainedHandle = RequiredGeneratedHandle(element);
                 if (!string.Equals(generatedHandle, retainedHandle, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Fail-closed Level rebuild changed generated ownership.");
@@ -105,6 +135,7 @@ namespace QS3D.BricsCAD.V25
                 if (pendingIssues != 1)
                     throw new InvalidOperationException("Level qualification health did not remain release-blocking.");
 
+                failureCode = "LEVEL_Z_RUNTIME_MARKER_FAILED";
                 WriteMarkerAtomic(resultPath, new[]
                 {
                     "status=PASS",
@@ -126,7 +157,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (System.Exception)
             {
-                TryWriteFailure(requestedPath);
+                TryWriteFailure(requestedPath, failureCode, observedLegacyBounds);
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
                     "\nQS3D Level-Z runtime probe FAIL. See the local qualification result.");
                 throw;
@@ -196,18 +227,26 @@ namespace QS3D.BricsCAD.V25
             return fullPath;
         }
 
-        private static void TryWriteFailure(string? requestedPath)
+        private static void TryWriteFailure(string? requestedPath, string failureCode, VerticalBounds? observedLegacyBounds)
         {
             try
             {
                 var normalized = (requestedPath ?? string.Empty).Trim();
                 if (normalized.Length > 0 && !File.Exists(normalized))
-                    WriteMarkerAtomic(normalized, new[]
+                {
+                    var lines = new List<string>
                     {
                         "status=FAIL",
                         "command=QS3DLEVELZPROBE",
-                        "error_code=LEVEL_Z_RUNTIME_FAILED"
-                    });
+                        "error_code=" + failureCode
+                    };
+                    if (observedLegacyBounds != null)
+                    {
+                        lines.Add("observed_legacy_min_z_m=" + observedLegacyBounds.MinZ.ToString("R", CultureInfo.InvariantCulture));
+                        lines.Add("observed_legacy_max_z_m=" + observedLegacyBounds.MaxZ.ToString("R", CultureInfo.InvariantCulture));
+                    }
+                    WriteMarkerAtomic(normalized, lines);
+                }
             }
             catch { }
         }
