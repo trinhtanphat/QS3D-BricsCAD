@@ -101,7 +101,7 @@ namespace QS3D.Core.Geometry
                 Trace(edge.B, edge.A);
             }
 
-            return result.OrderBy(x => x.Key, StringComparer.Ordinal).ToList();
+            return result.OrderBy(x => x.Key, StringComparer.Ordinal).ToList().AsReadOnly();
 
             void Trace(int startA, int startB)
             {
