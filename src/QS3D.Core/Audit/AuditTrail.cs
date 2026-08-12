@@ -52,6 +52,8 @@ namespace QS3D.Core.Audit
             var normalizedAction = (action ?? string.Empty).Trim();
             if (normalizedAction.Length == 0)
                 throw new ArgumentException("Audit action is required.", nameof(action));
+            if (ContainsControlCharacter(normalizedAction))
+                throw new ArgumentException("Audit action cannot contain control characters.", nameof(action));
             ValidateExistingHistoryForRecord();
 
             var item = new AuditEvent
@@ -83,9 +85,18 @@ namespace QS3D.Core.Audit
                 if (existing.Utc.Kind != DateTimeKind.Utc)
                     throw new InvalidOperationException("Audit trail contains a non-UTC event timestamp. Repair the existing audit history before recording a new event.");
                 var existingAction = existing.Action ?? string.Empty;
-                if (string.IsNullOrWhiteSpace(existingAction) || !string.Equals(existingAction, existingAction.Trim(), StringComparison.Ordinal))
+                if (string.IsNullOrWhiteSpace(existingAction) ||
+                    !string.Equals(existingAction, existingAction.Trim(), StringComparison.Ordinal) ||
+                    ContainsControlCharacter(existingAction))
                     throw new InvalidOperationException("Audit trail contains a non-canonical action. Repair the existing audit history before recording a new event.");
             }
+        }
+
+        private static bool ContainsControlCharacter(string value)
+        {
+            foreach (var character in value)
+                if (char.IsControl(character)) return true;
+            return false;
         }
 
         private static AuditEvent Clone(AuditEvent item)
