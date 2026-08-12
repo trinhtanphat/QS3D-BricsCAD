@@ -1,26 +1,21 @@
 # Work claim — release #31 quantity locate validation-failure pre-clear reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-release31-quantity-locate-preclear`
 - Registered: `2026-08-12T10:42:00+07:00`
+- Completed: `2026-08-12T10:44:00+07:00`
 - Baseline main SHA: `79b0ef83ba160a04092b27774d64f76fc654edd7`
-- Priority: release #31 reports `preflight-quantity-locate-validation-failure-clear.py` failing after BQ Follow3D became parity behavior for Summary and Detail modes.
+- Claim commit: `bb50e290d890ec2f5b147f24445ca59d3b4baba4`
+- Implementation commit: `50f3005093cb425cd04c570df1e46c5a2da5c634`
 
-## Reserved scope
+## Completed reconciliation
 
-Reconcile only `scripts/preflight-quantity-locate-validation-failure-clear.py`. Preserve Quantity Summary/Insight production source unchanged.
+Summary locate pre-clear assertions now follow Follow3D parity: selection pre-clear requires AutoReveal enabled and double-click pre-clear requires it disabled, with no `_detailMode` restriction. A negative assertion prevents Detail-only mode gating from returning. Existing class-handler initialization, active-DWG check, explicit empty selection, canonical locate selection/zoom, XAML wiring and Insight behavior remain intact. Production source was not edited.
 
-## Canonical evidence
+## Validation boundary
 
-- Summary selection pre-clear now triggers whenever `AutoRevealCheck` is enabled and a row is newly selected, regardless of Summary/Detail mode.
-- Summary double-click pre-clear now runs when `AutoRevealCheck` is disabled, regardless of Summary/Detail mode.
-- Explicit Locate, active-DWG affinity, class-handler ordering, empty-selection clear, canonical locate validation/selection/zoom and Insight behavior remain unchanged.
-- The gate still requires obsolete `_detailMode` predicates.
-
-## Excluded scope
-
-No production UI changes, no broad selection clearing, no wrong-DWG clearing, and no unrelated #31 work.
+Current-main source/gate readback only. No Actions dispatch and no build, smoke, signing, package or licensed BricsCAD runtime PASS is claimed.
 
 ## Completion condition
 
-The gate tracks current Follow3D parity triggers while preserving pre-clear safety and canonical locate checks, is pushed to `main`, and this claim is closed with exact evidence.
+Completed by implementation `50f3005093cb425cd04c570df1e46c5a2da5c634`.
