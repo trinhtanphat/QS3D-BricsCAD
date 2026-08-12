@@ -254,6 +254,12 @@ namespace QS3D.Core.Export
                             throw new InvalidDataException("Excel shared-string cell contains an invalid shared-string index.");
                         value = sharedStrings[index];
                     }
+                    else if (string.Equals(type, "b", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (string.Equals(value, "0", StringComparison.Ordinal)) value = "FALSE";
+                        else if (string.Equals(value, "1", StringComparison.Ordinal)) value = "TRUE";
+                        else throw new InvalidDataException("Excel Boolean cell contains an invalid Boolean value.");
+                    }
                 }
                 if (result.ContainsKey(column)) throw new InvalidDataException("Excel row contains duplicate cells in column " + (column + 1) + ".");
                 result.Add(column, value);
