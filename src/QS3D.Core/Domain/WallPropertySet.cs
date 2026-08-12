@@ -13,7 +13,7 @@ namespace QS3D.Core.Domain
         public double ThicknessMm
         {
             get => _thicknessMm;
-            set => _thicknessMm = RequireFinite(value, nameof(ThicknessMm));
+            set => _thicknessMm = RequirePositiveFinite(value, nameof(ThicknessMm));
         }
         public double AxisToLeftMm
         {
@@ -38,6 +38,14 @@ namespace QS3D.Core.Domain
         {
             get => _topOffsetMm;
             set => _topOffsetMm = RequireFinite(value, nameof(TopOffsetMm));
+        }
+
+        private static double RequirePositiveFinite(double value, string parameterName)
+        {
+            var finite = RequireFinite(value, parameterName);
+            if (finite <= 0d)
+                throw new ArgumentOutOfRangeException(parameterName, "Wall physical thickness must be greater than zero.");
+            return finite;
         }
 
         private static double RequireFinite(double value, string parameterName)
