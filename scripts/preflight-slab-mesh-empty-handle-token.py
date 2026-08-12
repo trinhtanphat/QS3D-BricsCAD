@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,21 +12,27 @@ if not SOURCE.is_file():
 else:
     text = SOURCE.read_text(encoding="utf-8")
     required = (
-        "foreach (var item in raw.Split(new[] { ';' }, StringSplitOptions.None))",
-        "var handle = (item ?? string.Empty).Trim();",
+        "StringSplitOptions.None",
         "if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))",
         '"INVALID_SLAB_MESH_GENERATED_HANDLE"',
+        '"SLAB_MESH_GENERATED_HANDLE_NON_CANONICAL"',
+        "StringComparison.Ordinal",
     )
     for token in required:
         if token not in text:
-            errors.append("missing slab-mesh empty-token contract token: " + token)
+            errors.append("missing slab-mesh empty/canonical-token contract token: " + token)
 
-    forbidden = "foreach (var item in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))"
-    if forbidden in text:
-        errors.append("slab-mesh validation still removes empty handle tokens before validation")
+    normalization = re.search(
+        r"var\s+\w+\s*=\s*item\s*\?\?\s*string\.Empty;\s*var\s+handle\s*=\s*\w+\.Trim\(\);",
+        text,
+        re.DOTALL,
+    )
+    if normalization is None:
+        errors.append("slab-mesh validation no longer preserves the raw token before null-safe trim normalization")
 
-# Pin the malformed metadata shapes that motivated the source contract.  These are
-# intentionally valid around the empty token so a matching count cannot hide it.
+    if ".Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)" in text.split("private static void ReserveProperty", 1)[0]:
+        errors.append("slab-mesh inspected handle stream removes empty tokens before validation")
+
 for raw in ("AA;;BB", ";AA", "AA;", "AA; ;BB"):
     normalized = [part.strip() for part in raw.split(";")]
     if not any(part == "" for part in normalized):
@@ -38,4 +45,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: slab-mesh health preserves delimiter-empty tokens so malformed generated handle lists fail visible.")
+print("PASS: slab-mesh health preserves delimiter-empty tokens, rejects invalid handles and flags padded/non-canonical generated handle tokens.")
