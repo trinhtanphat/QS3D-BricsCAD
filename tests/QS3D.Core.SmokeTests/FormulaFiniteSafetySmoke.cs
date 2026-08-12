@@ -25,8 +25,18 @@ namespace QS3D.Core.SmokeTests
                     ["UnsafeValue"] = double.NaN
                 }));
 
+            var multiplicationUnderflow = Capture<InvalidOperationException>(
+                () => evaluator.Evaluate("1e-300 * 1e-300"));
+            Contains("Multiplication underflowed to zero.", multiplicationUnderflow.Message);
+
+            var divisionUnderflow = Capture<InvalidOperationException>(
+                () => evaluator.Evaluate("1e-300 / 1e300"));
+            Contains("Division underflowed to zero.", divisionUnderflow.Message);
+
             Near(5d, evaluator.Evaluate("min(10, 5)"), 1e-12);
             Near(6d, evaluator.Evaluate("2 * 3"), 1e-12);
+            Near(0d, evaluator.Evaluate("0 * 1e-300"), 0d);
+            Near(0d, evaluator.Evaluate("0 / 1e300"), 0d);
             Near(1d, evaluator.Evaluate(new string('-', 64) + "1"), 1e-12);
 
             var depthBoundary = Capture<InvalidOperationException>(
