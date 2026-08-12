@@ -55,7 +55,7 @@ namespace QS3D.Core.SmokeTests
             var sheet = SemanticSheetPlanner.Build(
                 new SemanticSheetDefinition(
                     "S1", "A-01", "Schedule Sheet", 210d, 150d,
-                    new[] { new SemanticSheetPlacementDefinition("V1", 2d, 2d, 30d, 30d) }),
+                    new[] { new SemanticSheetPlacementDefinition("V1", 2d, 2d, 2d, 2d) }),
                 views);
             var plan = SemanticSchedulePlacementPlanner.Build(
                 sheet,
@@ -69,8 +69,8 @@ namespace QS3D.Core.SmokeTests
 
             Equal(1, plan.Placements.Count);
             var placement = plan.Placements[0];
-            if (placement.Xmm < 20d || placement.Ymm < 20d)
-                throw new Exception("Schedule placement escaped the configured schedule margin.");
+            Equal(20d, placement.Xmm);
+            Equal(20d, placement.Ymm);
         }
 
         private static void ReservedBottomAreaIsRespected()
