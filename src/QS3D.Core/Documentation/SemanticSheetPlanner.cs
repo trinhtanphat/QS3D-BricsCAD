@@ -39,9 +39,7 @@ namespace QS3D.Core.Documentation
             WidthMm = widthMm;
             HeightMm = heightMm;
             TitleBlockName = titleBlockName;
-            Placements = placements == null
-                ? throw new ArgumentNullException(nameof(placements))
-                : new List<SemanticSheetPlacementDefinition>(placements).AsReadOnly();
+            Placements = SnapshotPlacements(placements ?? throw new ArgumentNullException(nameof(placements)));
         }
 
         public string Id { get; }
@@ -51,6 +49,21 @@ namespace QS3D.Core.Documentation
         public double HeightMm { get; }
         public string? TitleBlockName { get; }
         public IReadOnlyList<SemanticSheetPlacementDefinition> Placements { get; }
+
+        private static IReadOnlyList<SemanticSheetPlacementDefinition> SnapshotPlacements(IEnumerable<SemanticSheetPlacementDefinition> placements)
+        {
+            var result = new List<SemanticSheetPlacementDefinition>(SemanticSheetPlanner.MaxPlacements);
+            using (var enumerator = placements.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= SemanticSheetPlanner.MaxPlacements)
+                        throw new InvalidOperationException("Semantic sheet supports at most " + SemanticSheetPlanner.MaxPlacements + " view placements.");
+                    result.Add(enumerator.Current);
+                }
+            }
+            return result.AsReadOnly();
+        }
     }
 
     public sealed class SemanticSheetPlacementPlan
@@ -104,7 +117,7 @@ namespace QS3D.Core.Documentation
     {
         private const int MaxCatalogSheets = 10000;
         private const int MaxAvailableViews = 10000;
-        private const int MaxPlacements = 128;
+        internal const int MaxPlacements = 128;
         private const int MaxIdLength = 128;
         private const int MaxNameLength = 160;
         private const int MaxNumberLength = 64;
