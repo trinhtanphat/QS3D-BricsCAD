@@ -117,9 +117,7 @@ namespace QS3D.Core.Geometry
             for (var i = 1; i < entries.Count; i++)
             {
                 var delta = entries[i].Coordinate - entries[i - 1].Coordinate;
-                if (!Finite(delta))
-                    throw new OverflowException("Grid ordering coordinate delta exceeds the supported numeric range.");
-                if (Math.Abs(delta) <= coordinateTolerance)
+                if (Finite(delta) && Math.Abs(delta) <= coordinateTolerance)
                     throw new InvalidOperationException(
                         "Grid spatial ordering is ambiguous because elements " + entries[i - 1].ElementId + " and " + entries[i].ElementId +
                         " project to the same ordering coordinate within tolerance. Review duplicate/overlapping Grid lines instead of relying on an arbitrary tie-break.");
