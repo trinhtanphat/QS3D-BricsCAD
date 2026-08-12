@@ -1,9 +1,12 @@
 # Work claim — interchange unit token canonicality
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-interchange-unit-token-canonicality-20260812-0747`
 - Registered: `2026-08-12T07:47:00+07:00`
+- Completed: `2026-08-12T07:54:00+07:00`
 - Baseline main SHA: `0696f3cbcf602e140c3cad23282160641f2e659d`
+- Integration SHA: `5d803ac9a835352f0d57c4f028e7294d132241b5`
+- PR: `#630`
 - Priority: evidence-driven remote-safe interchange integrity hardening during owner-requested `continue all`
 
 ## Reserved scope
@@ -16,11 +19,18 @@ Make canonical semantic snapshot unit tokens fail closed on leading/trailing whi
 - `src/QS3D.Core/Export/ProjectInterchangeValidatedSnapshotReader.cs`
 - `tests/QS3D.Core.SmokeTests/ProjectInterchangeValidatorCanonicalSmoke.cs`
 
-## Evidence
+## Confirmed defect
 
-- `ProjectInterchangeJsonValidator.RequireUnit()` currently compares `(actual ?? string.Empty).Trim()` with the required canonical tokens `m`, `m2`, `m3`, and `kg`, so padded unit tokens validate successfully.
-- `ProjectInterchangeValidatedSnapshotReader` currently reads units through `Required(...)`, which trims again, silently changing accepted structural metadata.
+- `ProjectInterchangeJsonValidator.RequireUnit()` compared `(actual ?? string.Empty).Trim()` with the required canonical tokens `m`, `m2`, `m3`, and `kg`, so padded unit tokens validated successfully.
+- `ProjectInterchangeValidatedSnapshotReader` validates the snapshot before typed parse, so tightening the validator prevents its later trimming path from silently normalizing padded unit metadata.
 - The same canonical interchange boundary already rejects padding for IDs, source handles, dependencies, categories, source scope, fingerprints, timestamps, property keys, and quantity keys.
+
+## Completed contract
+
+- Canonical unit tokens now require exact ordinal matches for `m`, `m2`, `m3`, and `kg`; leading/trailing whitespace is rejected.
+- Focused smoke coverage pins all four unit-specific validator error codes.
+- The typed validated-snapshot reader is covered to ensure padded units fail at the mandatory validation boundary instead of being normalized.
+- Canonical exported snapshot compatibility and existing unit values are preserved.
 
 ## Excluded scope
 
@@ -29,13 +39,6 @@ Make canonical semantic snapshot unit tokens fail closed on leading/trailing whi
 - Exporter collection/identity limits already completed by other lanes.
 - GitHub Actions, release, local .NET build qualification, and BricsCAD V25/native runtime qualification.
 
-## Validation plan
+## Verification
 
-- Reject padded length/area/volume/mass unit tokens with the existing unit-specific validator error codes.
-- Ensure the typed reader cannot normalize padded units into canonical values.
-- Preserve canonical exported snapshot acceptance and existing unit values.
-- Re-read moving `main` and exact PR diff before integration; do not dispatch Actions.
-
-## Completion condition
-
-Validator + typed-reader defense + focused canonical regression are merged to current `main`, remote source is re-read, and this claim is marked `COMPLETED` with exact integration SHA and validation boundaries.
+PR `#630` was reviewed as a narrow two-file feature diff and squash-merged to `main` at `5d803ac9a835352f0d57c4f028e7294d132241b5`. No GitHub Actions/release was dispatched, and no local .NET smoke/build PASS or BricsCAD V25/native runtime PASS is claimed from this remote session.
