@@ -82,12 +82,17 @@ if LEVEL.is_file():
 if ROOM.is_file():
     text = ROOM.read_text(encoding="utf-8")
     for token in (
+        "var elements = new List<ProjectElement>(project.Elements.Count);",
+        "foreach (var element in project.Elements)",
+        "if (element == null)",
+        'throw new InvalidOperationException("Room-finish diagnostics cannot inspect a project containing a null semantic element.");',
         "var duplicateIds = new HashSet<string>",
         '"AMBIGUOUS_ROOM_FINISH_PARENT"',
-        "project.Elements.Where(x => x != null)",
     ):
         if token not in text:
             errors.append("RoomFinishHealthService.cs missing diagnostic-safe identity token: " + token)
+    if "project.Elements.Where(x => x != null)" in text:
+        errors.append("RoomFinishHealthService.cs regressed to silently filtering corrupt null semantic entries.")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
@@ -99,6 +104,8 @@ if SMOKE.is_file():
         'HasFor(issues, "AMBIGUOUS_HOST", "D")',
         'HasFor(issues, "DEPENDENCY_TARGET_AMBIGUOUS", "D")',
         'HasFor(issues, "BOTTOM_LEVEL_REFERENCE_AMBIGUOUS", "D")',
+        'Has(issues, "HEALTH_PROVIDER_FAILED")',
+        "project.Elements.Add(null!);",
     ):
         if token not in text:
             errors.append("ModelHealthIdentityAmbiguitySmoke.cs missing regression token: " + token)
@@ -112,4 +119,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Core health reports ambiguous semantic identities without throwing, isolates provider data failures, and avoids arbitrary duplicate graph/Room/Level resolution. No V25 files are inspected.")
+print("PASS: Core health reports ambiguous semantic identities without arbitrary resolution, isolates fail-visible provider data failures including null Room Finish input, and preserves duplicate graph/Level diagnostics. No V25 files are inspected.")
