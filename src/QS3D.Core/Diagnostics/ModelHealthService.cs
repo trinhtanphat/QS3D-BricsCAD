@@ -170,26 +170,38 @@ namespace QS3D.Core.Diagnostics
 
         private static void ValidateActiveZone(ProjectState project, DiagnosticIdentityIndex identity, ICollection<ModelHealthIssue> issues)
         {
-            var id = (project.ActiveZoneId ?? string.Empty).Trim();
-            if (id.Length == 0 || !identity.Zones.ContainsKey(id))
+            var rawId = project.ActiveZoneId ?? string.Empty;
+            var id = rawId.Trim();
+            if (id.Length == 0 || !identity.Zones.TryGetValue(id, out var zone))
             {
                 issues.Add(new ModelHealthIssue("INVALID_ACTIVE_ZONE", HealthSeverity.Warning, "Zone làm việc hiện tại không còn hợp lệ."));
                 return;
             }
             if (identity.DuplicateZoneIds.Contains(id))
+            {
                 issues.Add(new ModelHealthIssue("AMBIGUOUS_ACTIVE_ZONE", HealthSeverity.Error, "Zone làm việc hiện tại trỏ tới mã Zone bị trùng: " + id + "."));
+                return;
+            }
+            if (!string.Equals(rawId, zone.Id, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("ACTIVE_ZONE_NON_CANONICAL", HealthSeverity.Error, "ActiveZoneId phải khớp chính xác mã Zone canonical: " + zone.Id + "."));
         }
 
         private static void ValidateActiveFloor(ProjectState project, DiagnosticIdentityIndex identity, ICollection<ModelHealthIssue> issues)
         {
-            var id = (project.ActiveFloorId ?? string.Empty).Trim();
-            if (id.Length == 0 || !identity.Floors.ContainsKey(id))
+            var rawId = project.ActiveFloorId ?? string.Empty;
+            var id = rawId.Trim();
+            if (id.Length == 0 || !identity.Floors.TryGetValue(id, out var floor))
             {
                 issues.Add(new ModelHealthIssue("INVALID_ACTIVE_FLOOR", HealthSeverity.Warning, "Tầng làm việc hiện tại không còn hợp lệ."));
                 return;
             }
             if (identity.DuplicateFloorIds.Contains(id))
+            {
                 issues.Add(new ModelHealthIssue("AMBIGUOUS_ACTIVE_FLOOR", HealthSeverity.Error, "Tầng làm việc hiện tại trỏ tới mã Floor/Level bị trùng: " + id + "."));
+                return;
+            }
+            if (!string.Equals(rawId, floor.Id, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("ACTIVE_FLOOR_NON_CANONICAL", HealthSeverity.Error, "ActiveFloorId phải khớp chính xác mã Floor/Level canonical: " + floor.Id + "."));
         }
 
         private static void ValidateFamily(DiagnosticIdentityIndex identity, ProjectElement element, ICollection<ModelHealthIssue> issues)

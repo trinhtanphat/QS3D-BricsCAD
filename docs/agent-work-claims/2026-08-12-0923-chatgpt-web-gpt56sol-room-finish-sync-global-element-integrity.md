@@ -1,6 +1,6 @@
 # Work claim — Room Finish single-sync global element identity integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-room-finish-sync-global-element-integrity-20260812-0923`
 - Registered: `2026-08-12T09:23:00+07:00`
 - Baseline main SHA: `7c553f8cf0b07915ced53ab833aff495aedbdc3a`
@@ -8,24 +8,25 @@
 
 ## Confirmed defect
 
-`RoomFinishSynchronizationService.SynchronizeExisting(...)` becomes globally identity-safe through `RoomFinishIdentityService.FindExisting(...)`, which builds a duplicate-rejecting element index before synchronization. The direct overload `Synchronize(project, room, finish)` only validates the requested Room and Finish through target-specific `ProjectState.FindElement(...)`. Unrelated duplicate element IDs can therefore coexist while a unique Room/Finish pair is synchronized, changing Floor/Zone/fingerprint/provenance/metrics, dirty state and project revision despite the project being invalid under QSDB and other Core mutation boundaries.
+`RoomFinishSynchronizationService.SynchronizeExisting(...)` became globally identity-safe through `RoomFinishIdentityService.FindExisting(...)`, while the direct `Synchronize(project, room, finish)` overload validated only the requested Room/Finish identities. Unrelated duplicate semantic element IDs could therefore coexist while a unique Room/Finish pair still mutated Finish semantic state and project revision.
 
-## Reserved surfaces
+## Implemented fix
 
-- `src/QS3D.Core/Services/RoomFinishSynchronizationService.cs`
-- `tests/QS3D.Core.SmokeTests/RoomFinishSyncGlobalElementIntegritySmoke.cs` — new focused regression
-- this claim file
+- Direct `Synchronize(project, room, finish)` now preflights the complete project element identity set after existing Room/Finish argument/ownership validation and before snapshot/mutation.
+- Null entries and case-insensitive duplicate semantic IDs fail closed before Finish/project state changes.
+- `SynchronizeExisting`, rollback semantics, stale Auto Room guard, provenance/dependency/metric rules and recent idempotency behavior remain unchanged.
+- Focused smoke pins no Floor/Zone/fingerprint/property/dependency/dirty/timestamp/project revision mutation under unrelated duplicates and validates the normal direct synchronization control path.
 
-## Intended fix
+## Integration evidence
 
-- Preflight the complete `project.Elements` collection for null/blank/case-insensitive duplicate semantic IDs before the direct `Synchronize(project, room, finish)` path can mutate.
-- Preserve `SynchronizeExisting` behavior, rollback semantics, stale Auto Room guard, finish identity/provenance checks, dependency canonicalization, metric validation and recent idempotency behavior.
-- Focused smoke proves unrelated duplicate IDs fail before Finish/project mutation while a valid direct synchronization still updates canonical provenance and advances one project revision.
-
-## Coordination
-
-Recent Room Finish synchronization idempotency work is completed; this lane changes only global identity preflight and a new smoke. Current snapshot/Documentation/Recognition claims own other files.
+- Claim registration: `e1dae6b25c1df1189f5956c3ee8dccb48a4300d3`.
+- Branch source commit: `8f86440b85a3201c069650e0255ba5a5fd18df83`.
+- Source-only compare confirmed exactly +13 lines in `RoomFinishSynchronizationService.cs` and no incidental churn.
+- Focused smoke commit: `77e9ffb118e28d89ec2ca0afa1b0414fe5e5e2ac`.
+- Branch diff was exactly the reserved source plus new 92-line smoke.
+- Comparison from claim registration to PR base `1811234b6f75a955b01461cdd7cf52f52d05aa10` showed 19 intervening commits and no reserved-path overlap.
+- PR `#692` squash-merged at `ed2448e545ffaf43422afe57bf02ba007cc2da64`.
 
 ## Validation boundary
 
-Committed deterministic Core smoke coverage plus exact source/diff review. No GitHub Actions dispatch; no licensed BricsCAD V25/V26 runtime PASS claimed.
+Committed deterministic Core smoke coverage plus exact source/diff review. No GitHub Actions were dispatched and no licensed BricsCAD V25/V26 runtime PASS is claimed.

@@ -56,6 +56,7 @@ namespace QS3D.Core.Services
         {
             ValidateRoom(project, room);
             ValidateFinish(project, finish);
+            ValidateUniqueElementIds(project);
             var rollback = ProjectStateSnapshot.Capture(project);
             try
             {
@@ -122,6 +123,18 @@ namespace QS3D.Core.Services
             if (!AutoRoomLifecycle.IsRoomFinishCategory(finish.Category))
                 throw new ArgumentException("Target element must be an HT_Phòng finish.", nameof(finish));
             EnsureOwned(project, finish, nameof(finish));
+        }
+
+        private static void ValidateUniqueElementIds(ProjectState project)
+        {
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry.");
+                if (!seenIds.Add(element.Id))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + element.Id + ".");
+            }
         }
 
         private static void EnsureOwned(ProjectState project, ProjectElement element, string parameterName)
