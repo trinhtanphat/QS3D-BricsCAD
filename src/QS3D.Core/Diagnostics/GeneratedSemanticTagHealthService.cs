@@ -69,12 +69,11 @@ namespace QS3D.Core.Diagnostics
                     }
                 }
 
-                ValidatePositive(element, TextHeightKey, "SEMANTIC_TAG_TEXT_HEIGHT_INVALID", issues);
-                if (!string.Equals(Property(element, PositionScopeKey), DrawingLocalWcs, StringComparison.Ordinal))
-                    issues.Add(new ModelHealthIssue("SEMANTIC_TAG_POSITION_SCOPE_INVALID", HealthSeverity.Error, "Semantic tag position scope phải là DrawingLocalWcs.", element.Id));
-                ValidateFinite(element, PositionXKey, "SEMANTIC_TAG_POSITION_INVALID", issues);
-                ValidateFinite(element, PositionYKey, "SEMANTIC_TAG_POSITION_INVALID", issues);
-                ValidateFinite(element, PositionZKey, "SEMANTIC_TAG_POSITION_INVALID", issues);
+                ValidatePositiveCanonical(element, TextHeightKey, "SEMANTIC_TAG_TEXT_HEIGHT_INVALID", "SEMANTIC_TAG_TEXT_HEIGHT_NON_CANONICAL", issues);
+                ValidatePositionScope(element, issues);
+                ValidateFiniteCanonical(element, PositionXKey, "SEMANTIC_TAG_POSITION_INVALID", "SEMANTIC_TAG_POSITION_NON_CANONICAL", issues);
+                ValidateFiniteCanonical(element, PositionYKey, "SEMANTIC_TAG_POSITION_INVALID", "SEMANTIC_TAG_POSITION_NON_CANONICAL", issues);
+                ValidateFiniteCanonical(element, PositionZKey, "SEMANTIC_TAG_POSITION_INVALID", "SEMANTIC_TAG_POSITION_NON_CANONICAL", issues);
                 ValidateRotation(element, issues);
             }
 
@@ -107,16 +106,44 @@ namespace QS3D.Core.Diagnostics
                 issues.Add(new ModelHealthIssue(code, HealthSeverity.Error, key + " không khớp semantic owner hiện tại.", element.Id));
         }
 
-        private static void ValidatePositive(ProjectElement element, string key, string code, ICollection<ModelHealthIssue> issues)
+        private static void ValidatePositiveCanonical(ProjectElement element, string key, string invalidCode, string canonicalCode, ICollection<ModelHealthIssue> issues)
         {
-            if (!TryFinite(element, key, out var value) || value <= 0d)
-                issues.Add(new ModelHealthIssue(code, HealthSeverity.Error, key + " phải là số hữu hạn > 0.", element.Id));
+            if (!TryRawFinite(element, key, out var raw, out var value) || value <= 0d)
+            {
+                issues.Add(new ModelHealthIssue(invalidCode, HealthSeverity.Error, key + " phải là số hữu hạn > 0.", element.Id));
+                return;
+            }
+            ValidateNumericCanonicality(element, key, raw, value, canonicalCode, issues);
         }
 
-        private static void ValidateFinite(ProjectElement element, string key, string code, ICollection<ModelHealthIssue> issues)
+        private static void ValidateFiniteCanonical(ProjectElement element, string key, string invalidCode, string canonicalCode, ICollection<ModelHealthIssue> issues)
         {
-            if (!TryFinite(element, key, out _))
-                issues.Add(new ModelHealthIssue(code, HealthSeverity.Error, key + " phải là số hữu hạn theo drawing-local WCS.", element.Id));
+            if (!TryRawFinite(element, key, out var raw, out var value))
+            {
+                issues.Add(new ModelHealthIssue(invalidCode, HealthSeverity.Error, key + " phải là số hữu hạn theo drawing-local WCS.", element.Id));
+                return;
+            }
+            ValidateNumericCanonicality(element, key, raw, value, canonicalCode, issues);
+        }
+
+        private static void ValidateNumericCanonicality(ProjectElement element, string key, string raw, double value, string code, ICollection<ModelHealthIssue> issues)
+        {
+            var canonical = value.ToString("R", CultureInfo.InvariantCulture);
+            if (!string.Equals(raw, canonical, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue(code, HealthSeverity.Error, key + " phải dùng đúng round-trip invariant numeric spelling: " + canonical + ".", element.Id));
+        }
+
+        private static void ValidatePositionScope(ProjectElement element, ICollection<ModelHealthIssue> issues)
+        {
+            var raw = element.Properties.TryGetValue(PositionScopeKey, out var stored) ? stored ?? string.Empty : string.Empty;
+            var normalized = raw.Trim();
+            if (!string.Equals(normalized, DrawingLocalWcs, StringComparison.Ordinal))
+            {
+                issues.Add(new ModelHealthIssue("SEMANTIC_TAG_POSITION_SCOPE_INVALID", HealthSeverity.Error, "Semantic tag position scope phải là DrawingLocalWcs.", element.Id));
+                return;
+            }
+            if (!string.Equals(raw, DrawingLocalWcs, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("SEMANTIC_TAG_POSITION_SCOPE_NON_CANONICAL", HealthSeverity.Error, PositionScopeKey + " phải dùng đúng writer-owned token DrawingLocalWcs.", element.Id));
         }
 
         private static void ValidateRotation(ProjectElement element, ICollection<ModelHealthIssue> issues)
@@ -135,11 +162,16 @@ namespace QS3D.Core.Diagnostics
                 issues.Add(new ModelHealthIssue("SEMANTIC_TAG_ROTATION_NON_CANONICAL", HealthSeverity.Error, RotationKey + " phải dùng đúng round-trip invariant numeric spelling: " + canonical + ".", element.Id));
         }
 
-        private static bool TryFinite(ProjectElement element, string key, out double value)
+        private static bool TryRawFinite(ProjectElement element, string key, out string raw, out double value)
         {
+            raw = string.Empty;
             value = 0d;
-            var text = Property(element, key);
-            return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value) && !double.IsNaN(value) && !double.IsInfinity(value);
+            return element.Properties.TryGetValue(key, out raw) &&
+                   raw != null &&
+                   !string.IsNullOrWhiteSpace(raw) &&
+                   double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value) &&
+                   !double.IsNaN(value) &&
+                   !double.IsInfinity(value);
         }
 
         private static bool IsDiagnosticDataFailure(Exception exception)
