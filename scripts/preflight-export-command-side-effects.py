@@ -11,6 +11,7 @@ CASES = (
         "panels = QuantityReportMath.AddCount(panels, row.PanelCount);",
         "CurtainWallXlsxExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status, dialog.FileName);",
+        False,
     ),
     (
         "Door/Opening",
@@ -19,6 +20,7 @@ CASES = (
         "count = QuantityReportMath.AddCount(count, row.Count);",
         "DoorOpeningXlsxExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status, dialog.FileName);",
+        False,
     ),
     (
         "Material",
@@ -27,6 +29,7 @@ CASES = (
         "elements = QuantityReportMath.AddCount(elements, row.ElementCount);",
         "MaterialUsageXlsxExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status, dialog.FileName);",
+        False,
     ),
     (
         "Room finish",
@@ -35,6 +38,7 @@ CASES = (
         "primary = QuantityReportMath.Add(primary, row.PrimaryQuantity, \"HT_Phòng export primary quantity\");",
         "RoomFinishXlsxExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status, dialog.FileName);",
+        False,
     ),
     (
         "BBS CSV",
@@ -43,22 +47,23 @@ CASES = (
         "totalWeight = QuantityReportMath.Add(totalWeight, row.TotalWeightKg, \"BBS CSV total weight\");",
         "RebarCsvExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status);",
+        True,
     ),
 )
 
 errors = []
-for label, path, build, aggregate, export, finalize in CASES:
+for label, path, build, aggregate, export, finalize, validate_before_dialog in CASES:
     if not path.is_file():
         errors.append("missing " + str(path.relative_to(ROOT)))
         continue
 
     text = path.read_text(encoding="utf-8")
-    dialog = "if (dialog.ShowDialog() != true) return;"
+    confirm = "if (dialog.ShowDialog() != true) return;"
     project = "ProjectContextCoordinator.TryGetReadOnly(document, out var project)"
     snapshot = "ProjectStateSnapshot.CreateDetachedCopy(project)"
     regenerate = "RegenerateDirty(snapshot)"
     positions = {
-        dialog: text.find(dialog),
+        confirm: text.find(confirm),
         project: text.find(project),
         snapshot: text.find(snapshot),
         regenerate: text.find(regenerate),
@@ -73,22 +78,38 @@ for label, path, build, aggregate, export, finalize in CASES:
             errors.append(label + " missing export-boundary token: " + token)
 
     if min(positions.values()) >= 0:
-        if not (
-            positions[dialog]
-            < positions[project]
-            < positions[snapshot]
-            < positions[regenerate]
-            < positions[build]
-            < positions[aggregate]
-            < positions[export]
-            < positions[finalize]
-        ):
-            errors.append(label + " must confirm destination, resolve existing project read-only, regenerate/build detached state, validate aggregates, export, then finalize UI")
+        if validate_before_dialog:
+            if not (
+                positions[project]
+                < positions[snapshot]
+                < positions[regenerate]
+                < positions[build]
+                < positions[aggregate]
+                < positions[confirm]
+                < positions[export]
+                < positions[finalize]
+            ):
+                errors.append(label + " must resolve existing project read-only, regenerate/build detached state, validate aggregates, confirm destination, export, then finalize UI")
+            before_confirm = text[:positions[confirm]]
+            if export in before_confirm:
+                errors.append(label + " must not write the persistent export before save confirmation")
+        else:
+            if not (
+                positions[confirm]
+                < positions[project]
+                < positions[snapshot]
+                < positions[regenerate]
+                < positions[build]
+                < positions[aggregate]
+                < positions[export]
+                < positions[finalize]
+            ):
+                errors.append(label + " must confirm destination, resolve existing project read-only, regenerate/build detached state, validate aggregates, export, then finalize UI")
 
-        before_dialog = text[:positions[dialog]]
-        for forbidden in (project, snapshot, regenerate, build):
-            if forbidden in before_dialog:
-                errors.append(label + " Cancel path must not touch project/regeneration/schedule state before save confirmation: " + forbidden)
+            before_confirm = text[:positions[confirm]]
+            for forbidden in (project, snapshot, regenerate, build):
+                if forbidden in before_confirm:
+                    errors.append(label + " Cancel path must not touch project/regeneration/schedule state before save confirmation: " + forbidden)
 
         between_export_and_finalize = text[positions[export] + len(export):positions[finalize]]
         if "PaletteCoordinator." in between_export_and_finalize or "Editor.WriteMessage" in between_export_and_finalize:
@@ -157,4 +178,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: schedule exporters regenerate detached read-only state after destination confirmation; template export resolves only existing project state while import may bootstrap explicitly; all isolate post-export UI.")
+print("PASS: schedule exporters stay read-only on detached state, BBS CSV validates exportability before destination UI while the other schedule/template lanes preserve their current confirmation order, and all persistent writes remain confirmation-gated with post-export UI isolation.")
