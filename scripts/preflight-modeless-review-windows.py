@@ -35,9 +35,10 @@ if bq.is_file():
             errors.append("BQ modeless callback missing current-project/source-DWG guard: " + needle)
     helper = text.find("private void EnsureCurrentProject(string operation)")
     helper_active = text.find("EnsureActive(operation);", helper)
-    helper_project = text.find("ProjectContextCoordinator.TryGetReadOnly(_document, out _)", helper)
-    if helper < 0 or helper_active < 0 or helper_project < 0 or not (helper < helper_active < helper_project):
-        errors.append("BQ EnsureCurrentProject must verify the bound DWG before existing-project inspection")
+    helper_project = text.find("ProjectContextCoordinator.TryGetReadOnly(_document, out var project)", helper)
+    helper_identity = text.find("EnsureProjectIdentity(project, operation);", helper)
+    if min(helper, helper_active, helper_project, helper_identity) < 0 or not (helper < helper_active < helper_project < helper_identity):
+        errors.append("BQ EnsureCurrentProject must verify the bound DWG, inspect the existing project, then verify project identity")
     export = text.find("private void OnExportClick")
     export_guard = text.find('EnsureCurrentProject("xuất BQ XLSX")', export)
     refresh = text.find("RefreshRowsForCurrentMode(false);", export)
@@ -54,8 +55,12 @@ if recognition.is_file():
     text = recognition.read_text(encoding="utf-8")
     if "EnsureActiveDocument();" not in text:
         errors.append("Recognition apply/locate must verify its source DWG")
-    if "catch (Exception ex)" not in text or "firstError = ex.Message" not in text:
-        errors.append("Recognition review must surface manual apply failures instead of swallowing them")
+    first_error = text.find("string? firstError = null;")
+    catch_error = text.find("catch (Exception ex)", first_error)
+    capture_error = text.find("if (firstError == null) firstError = ex.Message;", catch_error)
+    status_error = text.find("RefreshStatus(applied, failed, firstError);", capture_error)
+    if min(first_error, catch_error, capture_error, status_error) < 0 or not first_error < catch_error < capture_error < status_error:
+        errors.append("Recognition review must retain and surface the first manual apply failure instead of swallowing it")
 
 bbs = windows["BBS"]
 if bbs.is_file():
@@ -87,4 +92,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Recognition/BQ/BBS/Revision/Health modeless CAD/project/export actions are bound to their source DWG; BQ verifies current project state and refreshes before XLSX while BBS totals are checked.")
+print("PASS: Recognition/BQ/BBS/Revision/Health modeless CAD/project/export actions are bound to their source DWG; BQ verifies current project identity and refreshes before XLSX while Recognition/BBS failures and totals remain checked.")
