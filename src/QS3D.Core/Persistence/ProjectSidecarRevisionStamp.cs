@@ -12,6 +12,8 @@ namespace QS3D.Core.Persistence
     public sealed class ProjectSidecarRevisionStamp : IEquatable<ProjectSidecarRevisionStamp>
     {
         private const long MaxSidecarBytes = 64L * 1024L * 1024L;
+        private static readonly StringComparer PathComparer =
+            Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         private readonly string _primaryPath;
         private readonly FileRevision _primary;
         private readonly FileRevision _backup;
@@ -51,7 +53,7 @@ namespace QS3D.Core.Persistence
             if (string.IsNullOrWhiteSpace(primaryPath)) return false;
             try
             {
-                return string.Equals(_primaryPath, Path.GetFullPath(primaryPath.Trim()), StringComparison.OrdinalIgnoreCase);
+                return PathComparer.Equals(_primaryPath, Path.GetFullPath(primaryPath.Trim()));
             }
             catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException)
             {
@@ -68,7 +70,7 @@ namespace QS3D.Core.Persistence
         {
             if (ReferenceEquals(this, other)) return true;
             if (other == null) return false;
-            return string.Equals(_primaryPath, other._primaryPath, StringComparison.OrdinalIgnoreCase) &&
+            return PathComparer.Equals(_primaryPath, other._primaryPath) &&
                    _primary.Equals(other._primary) &&
                    _backup.Equals(other._backup);
         }
@@ -79,7 +81,7 @@ namespace QS3D.Core.Persistence
         {
             unchecked
             {
-                var hash = StringComparer.OrdinalIgnoreCase.GetHashCode(_primaryPath);
+                var hash = PathComparer.GetHashCode(_primaryPath);
                 hash = (hash * 397) ^ _primary.GetHashCode();
                 return (hash * 397) ^ _backup.GetHashCode();
             }
