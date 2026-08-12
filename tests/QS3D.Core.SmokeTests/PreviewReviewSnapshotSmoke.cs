@@ -21,6 +21,7 @@ namespace QS3D.Core.SmokeTests
             HandleFieldInjectionFailsClosed();
             NonPortableGeneratedFieldInjectionFailsClosed();
             NonCanonicalFieldInjectionFailsClosed();
+            NonCanonicalCategoryInjectionFailsClosed();
             UnsupportedXmlShapeFailsClosed();
         }
 
@@ -160,6 +161,34 @@ namespace QS3D.Core.SmokeTests
                 entry.SetAttributeValue("field", field);
                 document.Save(path, SaveOptions.DisableFormatting);
                 ThrowsInvalidDataContaining(() => store.Load(path), "field is not canonical");
+            }
+            finally
+            {
+                SafeDelete(path);
+                SafeDelete(path + ".bak");
+            }
+        }
+
+        private static void NonCanonicalCategoryInjectionFailsClosed()
+        {
+            AssertNonCanonicalCategoryRejected(" Beam ");
+            AssertNonCanonicalCategoryRejected("   ");
+        }
+
+        private static void AssertNonCanonicalCategoryRejected(string category)
+        {
+            var snapshot = new PreviewReviewSnapshotService().Create("Cost review", new QuantityRulePreviewService().PreviewProject(RuleFixture()));
+            var path = TempPath();
+            try
+            {
+                var store = new PreviewReviewSnapshotStore();
+                store.Save(snapshot, path);
+                var document = XDocument.Load(path);
+                var entry = document.Root?.Element("entries")?.Elements("entry").FirstOrDefault()
+                    ?? throw new Exception("Expected serialized preview review entry was not found.");
+                entry.SetAttributeValue("category", category);
+                document.Save(path, SaveOptions.DisableFormatting);
+                ThrowsInvalidDataContaining(() => store.Load(path), "category is not canonical");
             }
             finally
             {
