@@ -129,6 +129,7 @@ namespace QS3D.Core.Domain
             var owned = ResolveOwnedElements(project, elements, target);
             RequireTargetEnumerationFreshness(project, beforeTargetEnumeration);
             RequireCurrentAssignmentOwnership(project, target, owned);
+            targetProperties = SnapshotProperties(target, "Target", "assignment");
             var pending = new List<PendingFamilyAssignment>();
             var previousSnapshots = new Dictionary<string, IReadOnlyList<KeyValuePair<string, string>>>(StringComparer.OrdinalIgnoreCase);
 
