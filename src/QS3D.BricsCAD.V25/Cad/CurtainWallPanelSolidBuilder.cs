@@ -76,12 +76,19 @@ namespace QS3D.BricsCAD.V25.Cad
                         var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
                         var panelDepthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", 0.012d), element.Id + "/ThicknessM");
                         var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-                        var input = LayoutInput(element, family, lengthM, heightM);
+                        var placement = CadVerticalPlacementResolver.Resolve(
+                            document, project, element, line.StartPoint.Z, heightM, bottomOffsetM);
+                        var effectiveHeightM = placement.HeightM;
+                        var fingerprintBottomM = CadVerticalPlacementResolver.HasConfiguredLevel(element)
+                            ? placement.Semantic.BottomElevationM
+                            : bottomOffsetM;
+                        var input = LayoutInput(element, family, lengthM, effectiveHeightM);
                         var detail = CurtainWallDetailPlanner.Plan(input);
                         if (detail.Panels.Count > MaxPanelsPerElement) throw new InvalidOperationException(element.Id + " base panel count exceeds " + MaxPanelsPerElement + ".");
                         var ux = dx / lengthDrawing;
                         var uy = dy / lengthDrawing;
-                        var openings = CurtainWallPanelBuilderSupport.ReadLineOpenings(document, transaction, project, element, line, ux, uy, lengthM, heightM, panelDepthM);
+                        var openings = CurtainWallPanelBuilderSupport.ReadLineOpenings(
+                            document, transaction, project, element, line, ux, uy, lengthM, heightM, bottomOffsetM, panelDepthM);
                         var panelPlan = CurtainWallOpeningPanelPlanner.Plan(detail.Panels, openings, 0d);
                         var panels = panelPlan.Pieces;
                         if (panels.Count > MaxPanelsPerElement || batchPanels > MaxPanelsPerBatch - panels.Count)
@@ -89,7 +96,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
                         var previous = CurtainWallPanelBuilderSupport.ValidatePrevious(document, transaction, project, element, ownership);
                         CurtainWallPanelBuilderSupport.ErasePrevious(transaction, project, element, previous);
-                        var baseZ = CadGeometryGuard.Add(line.StartPoint.Z, CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM"), element.Id + "/panel base Z");
+                        var baseZ = placement.BottomDrawingUnits;
                         var angle = CadGeometryGuard.Finite(Math.Atan2(uy, ux), element.Id + "/panel angle");
                         var update = new PendingUpdate
                         {
@@ -100,13 +107,13 @@ namespace QS3D.BricsCAD.V25.Cad
                             OpeningCount = openings.Count,
                             PanelDepthM = panelDepthM,
                             SourceLengthM = lengthM,
-                            HeightM = heightM,
+                            HeightM = effectiveHeightM,
                             AreaM2 = panelPlan.RemainingPanelAreaM2,
                             ConfigFingerprint = CurtainWallPanelFingerprint.Compute(new CurtainWallPanelFingerprintInput
                             {
                                 SourceLengthM = lengthM,
-                                HeightM = heightM,
-                                BottomOffsetM = bottomOffsetM,
+                                HeightM = effectiveHeightM,
+                                BottomOffsetM = fingerprintBottomM,
                                 PanelDepthM = panelDepthM,
                                 SourceKind = "Line",
                                 PathSegmentCount = 0,

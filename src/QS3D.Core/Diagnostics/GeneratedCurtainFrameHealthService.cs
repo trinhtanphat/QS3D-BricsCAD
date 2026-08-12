@@ -77,7 +77,8 @@ namespace QS3D.Core.Diagnostics
                 var storedLength = PositiveValue(element, "GeneratedCurtainFrameSourceLengthM", "CURTAIN_FRAME_SOURCE_LENGTH_INVALID", issues);
                 var storedHeight = PositiveValue(element, "GeneratedCurtainFrameHeightM", "CURTAIN_FRAME_HEIGHT_INVALID", issues);
                 CompareCurrent(element, "LengthM", storedLength, "CURTAIN_FRAME_SOURCE_LENGTH_STALE", issues);
-                CompareCurrent(element, "HeightM", storedHeight, "CURTAIN_FRAME_HEIGHT_STALE", issues);
+                if (!LevelReferenceNativeIntegrationPolicy.HasConfiguredReferences(element))
+                    CompareCurrent(element, "HeightM", storedHeight, "CURTAIN_FRAME_HEIGHT_STALE", issues);
                 ValidateConfigFingerprint(project, element, storedLength, storedHeight, storedDepth, issues);
 
                 var mode = element.Properties.TryGetValue("GeneratedCurtainFrameMode", out var modeRaw) ? (modeRaw ?? string.Empty).Trim() : string.Empty;
@@ -118,11 +119,20 @@ namespace QS3D.Core.Diagnostics
             try
             {
                 var family = project.FindFamily(element.FamilyId);
+                var currentHeight = Number(element, family, "HeightM", storedHeight.Value, true);
+                var currentBottom = Number(element, family, "BottomOffsetM", 0d, false);
+                if (LevelReferenceNativeIntegrationPolicy.HasConfiguredReferences(element))
+                {
+                    LevelReferenceNativeIntegrationPolicy.EnsureQualified(element, "Curtain frame config health");
+                    var placement = ElementVerticalPlacementService.Resolve(project, element, 0d, currentHeight, currentBottom);
+                    currentHeight = placement.HeightM;
+                    currentBottom = placement.BottomElevationM;
+                }
                 var current = CurtainWallFrameFingerprint.Compute(new CurtainWallFrameFingerprintInput
                 {
                     LengthM = Number(element, family, "LengthM", storedLength.Value, true),
-                    HeightM = Number(element, family, "HeightM", storedHeight.Value, true),
-                    BottomOffsetM = Number(element, family, "BottomOffsetM", 0d, false),
+                    HeightM = currentHeight,
+                    BottomOffsetM = currentBottom,
                     MaxPanelWidthM = Number(element, family, "CurtainMaxPanelWidthM", 1.2d, true),
                     MaxPanelHeightM = Number(element, family, "CurtainMaxPanelHeightM", 1.5d, true),
                     PerimeterFrameWidthM = Number(element, family, "CurtainPerimeterFrameWidthM", 0.05d, false, true),

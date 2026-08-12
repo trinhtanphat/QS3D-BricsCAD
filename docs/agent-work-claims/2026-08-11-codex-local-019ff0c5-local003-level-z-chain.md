@@ -74,3 +74,14 @@ The complete shared Level Z-chain is integrated on current `main`, deterministic
 - Whole-tree qualification is not claimed: aggregate preflight and adapter V25 build still have failures in concurrently owned Plan-to-3D, Right Panel, updater, Workspace and quantity-reporting surfaces. No Level/opening compiler or focused-gate failure was observed.
 - Remaining: Curtain host/frame/panel/live-state placement, generated rebar/mesh/shape placement, final policy/UI enablement, and the complete exact-SHA mm/m BricsCAD V25 runtime matrix.
 - Claim remains `ACTIVE`; LOCAL-003 remains `OPEN / PENDING_LOCAL`.
+
+## 2026-08-12 Curtain placement source wave heartbeat
+
+- Synced implementation baseline: `origin/main@12e9ecbf3b260dee6a887d6db744b3d4e7d4b85c`.
+- Implemented shared Level placement consumption for existing Curtain LINE/open-POLYLINE frame and panel builders. Layout height, native base Z, opening clipping, generated metadata and config fingerprints now derive from the same host/opening placement result.
+- Extended Curtain frame/panel live-state fingerprints and Core frame config health so a future qualified Level chain cannot silently retain legacy height/offset comparisons. Legacy/no-Level fingerprint input remains on its previous raw height/bottom path.
+- Safety boundary: `LevelReferenceNativeIntegrationPolicy.IsQualified(...)` still returns `false` for every category. Configured Level references therefore fail before Curtain ownership validation, erase or native append; UI and release claims remain unchanged.
+- Focused evidence: new `scripts/preflight-level-curtain-placement.py` PASS; all existing Curtain host/path/opening/panel/ownership/atomicity/lifecycle gates PASS; Core Release and SmokeTests projects compile with zero warnings/errors.
+- Whole-tree qualification is not claimed: the adapter build is blocked by 15 compiler failures in concurrently owned updater/Quantity Insight/Workspace/Wall Quantity/Xref surfaces, full smoke is blocked by the unrelated dependency-health regression, and aggregate preflight reports nine unrelated current-main gate failures. No compiler diagnostic or focused-gate failure points to the Curtain/Level files in this wave.
+- Remaining: generated rebar/mesh/shape placement, final policy/UI enablement, and the complete exact-SHA mm/m BricsCAD V25 runtime matrix.
+- Claim remains `ACTIVE`; LOCAL-003 remains `OPEN / PENDING_LOCAL`.

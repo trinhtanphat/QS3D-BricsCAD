@@ -26,8 +26,16 @@ namespace QS3D.BricsCAD.V25.Cad
             if (hostSource == null) throw new ArgumentNullException(nameof(hostSource));
 
             var text = new StringBuilder();
+            var hostFamily = project.FindFamily(host.FamilyId);
+            var hostHeight = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, hostFamily, "HeightM", 3.6d), host.Id + "/HeightM");
+            var hostBottomOffset = CadGeometryGuard.Number(host, hostFamily, "BottomOffsetM", 0d);
+            var hostSourceBase = HostSourceBase(hostSource);
+            var hostPlacement = CadVerticalPlacementResolver.Resolve(
+                document, project, host, hostSourceBase, hostHeight, hostBottomOffset);
             text.Append("host=").Append(host.Id).Append('|').Append(hostSource.Handle.ToString()).Append('|');
             AppendHostGeometry(text, hostSource);
+            if (CadVerticalPlacementResolver.HasConfiguredLevel(host))
+                AppendPlacement(text, "|host-placement=", hostPlacement);
 
             foreach (var opening in project.Elements
                 .Where(x => (x.Category == ElementCategory.Door || x.Category == ElementCategory.WallOpening) &&
@@ -44,6 +52,16 @@ namespace QS3D.BricsCAD.V25.Cad
                 Finite(height, opening.Id + "/HeightM");
                 Finite(sill, opening.Id + "/SillHeightM");
                 Finite(clearance, opening.Id + "/BooleanClearanceM");
+                var hostedPlacement = CadVerticalPlacementResolver.ResolveHostedOpening(
+                    document,
+                    project,
+                    host,
+                    opening,
+                    hostSourceBase,
+                    hostHeight,
+                    hostBottomOffset,
+                    height,
+                    sill);
 
                 var sourceIds = CadHandleService.Resolve(document, opening.SourceHandles);
                 if (sourceIds.Count != 1)
@@ -66,6 +84,12 @@ namespace QS3D.BricsCAD.V25.Cad
                 Point(text, extents.MinPoint);
                 text.Append('>');
                 Point(text, extents.MaxPoint);
+                if (CadVerticalPlacementResolver.HasConfiguredLevel(host) || CadVerticalPlacementResolver.HasConfiguredLevel(opening))
+                {
+                    AppendPlacement(text, ":host-placement=", hostedPlacement.Host);
+                    AppendPlacement(text, ":opening-placement=", hostedPlacement.Opening);
+                    text.Append(":relative-sill=").Append(hostedPlacement.RelativeSillM.ToString("R", CultureInfo.InvariantCulture));
+                }
             }
 
             using (var sha = SHA256.Create())
@@ -109,6 +133,21 @@ namespace QS3D.BricsCAD.V25.Cad
             }
 
             throw new InvalidOperationException("Curtain live fingerprint supports only LINE or POLYLINE GlassWall sources.");
+        }
+
+        private static double HostSourceBase(Entity hostSource)
+        {
+            if (hostSource is Line line) return Finite(line.StartPoint.Z, "line source base");
+            if (hostSource is Polyline polyline) return Finite(polyline.Elevation, "polyline source base");
+            throw new InvalidOperationException("Curtain live fingerprint supports only LINE or POLYLINE GlassWall sources.");
+        }
+
+        private static void AppendPlacement(StringBuilder text, string prefix, CadVerticalPlacement placement)
+        {
+            text.Append(prefix)
+                .Append(placement.Semantic.BottomElevationM.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                .Append(placement.Semantic.TopElevationM.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                .Append(placement.Semantic.HeightM.ToString("R", CultureInfo.InvariantCulture));
         }
 
         private static void Point(StringBuilder text, Teigha.Geometry.Point3d point)

@@ -82,9 +82,9 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Scenario: Qualify the shared `ElementVerticalPlacementService` chain across wall families, Beam/Column/Slab/Foundation, Door/WallOpening, Curtain frames/panels, and generated reinforcement. Cover legacy/no-Level, Bottom-only, Bottom+Top, Top-only fail-closed, deleted/renamed Level, and dependent invalidation.
 - Evidence required: Exact SHA; before/after Z measurements; host-opening-rebar alignment; health/release blocker behavior; save/reopen and Level-edit invalidation results.
 - Evidence: PENDING_LOCAL
-- Related docs: `docs/LEVEL-REFERENCES.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`; `scripts/preflight-level-native-host-placement.py`
-- Current source wave: hosted Door/WallOpening placement is now shared across straight/curved cutters, physical-cut live fingerprints and Auto Host matching, with legacy arithmetic preserved. Native Level use remains policy-blocked and the Curtain/rebar chain plus exact-SHA V25 matrix remain `PENDING_LOCAL`.
-- Updated: 2026-08-11
+- Related docs: `docs/LEVEL-REFERENCES.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`; `scripts/preflight-level-native-host-placement.py`; `scripts/preflight-level-opening-placement.py`; `scripts/preflight-level-curtain-placement.py`
+- Current source wave: hosted Door/WallOpening placement is shared across straight/curved cutters, physical-cut live fingerprints and Auto Host matching. Existing Curtain LINE/open-POLYLINE frame/panel builders, opening clipping, live fingerprints and frame config health now consume the same placement contract. Legacy arithmetic remains explicit; native Level use remains policy-blocked and the generated rebar/mesh/shape chain plus exact-SHA V25 matrix remain `PENDING_LOCAL`.
+- Updated: 2026-08-12
 
 ## LOCAL-004 — source reconcile native atomicity
 
