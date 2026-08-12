@@ -97,9 +97,18 @@ namespace QS3D.Core.Diagnostics
         {
             foreach (var pair in StaleMetadataPairs)
             {
-                if (!element.Properties.TryGetValue(pair.Key, out var state) ||
-                    !string.Equals((state ?? string.Empty).Trim(), "stale", StringComparison.OrdinalIgnoreCase))
+                if (!element.Properties.TryGetValue(pair.Key, out var state))
                     continue;
+                var stateText = state ?? string.Empty;
+                var normalizedState = stateText.Trim();
+                if (!string.Equals(normalizedState, "stale", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (!string.Equals(stateText, normalizedState, StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue(
+                        "GENERATED_STALE_STATE_NON_CANONICAL",
+                        HealthSeverity.Error,
+                        "Generated stale state không được có khoảng trắng đầu/cuối cho " + pair.Key + ". Rebuild generated output trước khi release.",
+                        element.Id));
                 if (element.Properties.TryGetValue(pair.Value, out var snapshot) && !string.IsNullOrWhiteSpace(snapshot))
                     continue;
                 issues.Add(new ModelHealthIssue(
