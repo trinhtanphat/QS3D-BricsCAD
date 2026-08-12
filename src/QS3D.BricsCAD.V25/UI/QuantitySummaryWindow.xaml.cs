@@ -225,9 +225,9 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (ModeHintText == null || AutoRevealCheck == null || QuantityGrid == null) return;
             ModeHintText.Text = _detailMode
-                ? "Diễn giải chi tiết: 1 semantic element / dòng. Click dòng để đối chiếu trực tiếp trên View 3D."
-                : "Khối lượng đang được gộp theo Floor / Zone / Category / Family.";
-            AutoRevealCheck.IsEnabled = _detailMode;
+                ? "Diễn giải chi tiết: 1 semantic element / dòng. Bám 3D sẽ reveal cấu kiện được chọn."
+                : "Khối lượng đang được gộp theo Floor / Zone / Category / Family. Bám 3D sẽ reveal cả nhóm được chọn.";
+            AutoRevealCheck.IsEnabled = true;
             if (QuantityGrid.Columns.Count > 3)
                 QuantityGrid.Columns[3].Header = _detailMode ? "Tên cấu kiện" : "Tên Family / cấu kiện";
         }
@@ -254,7 +254,7 @@ namespace QS3D.BricsCAD.V25.UI
             if (_applyingFilter || QuantityGrid == null) return;
             var row = QuantityGrid.SelectedItem as QuantityReportRow;
             UpdateExplanation(row);
-            if (!_initialized || !_detailMode || AutoRevealCheck?.IsChecked != true || row == null || e.AddedItems.Count == 0) return;
+            if (!_initialized || AutoRevealCheck?.IsChecked != true || row == null || e.AddedItems.Count == 0) return;
             LocateCurrent();
         }
 
@@ -278,13 +278,16 @@ namespace QS3D.BricsCAD.V25.UI
             ExplanationGeometryText.Text = $"Hình học: dài {row.LengthM:0.###} m • chu vi ngoài {row.OuterPerimeterM:0.###} m • chu vi trong {row.InnerPerimeterM:0.###} m • DT cửa {row.DoorAreaM2:0.###} m²";
             var semantic = row.ElementIds.Count == 0 ? "—" : string.Join("; ", row.ElementIds);
             var handles = row.SourceHandles.Count == 0 ? "—" : string.Join("; ", row.SourceHandles);
-            ExplanationProvenanceText.Text = "Semantic: " + semantic + "\nCAD Handle: " + handles + (_detailMode ? "\nClick dòng này để reveal trong View 3D." : "\nDouble-click hoặc bấm Định vị để reveal cả nhóm trong View 3D.");
+            var revealHint = _detailMode
+                ? "\nBật Bám 3D để click dòng này và reveal cấu kiện; khi tắt vẫn có thể double-click hoặc bấm Định vị."
+                : "\nBật Bám 3D để click dòng này và reveal cả nhóm; khi tắt vẫn có thể double-click hoặc bấm Định vị.";
+            ExplanationProvenanceText.Text = "Semantic: " + semantic + "\nCAD Handle: " + handles + revealHint;
         }
 
         private void OnLocateClick(object sender, RoutedEventArgs e) => LocateCurrent();
         private void OnQuantityGridDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            if (_detailMode && AutoRevealCheck?.IsChecked == true) return;
+            if (AutoRevealCheck?.IsChecked == true) return;
             LocateCurrent();
         }
         private void OnEd2ExportClick(object sender, RoutedEventArgs e)
