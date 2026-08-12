@@ -110,8 +110,10 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var floor = FindRequired(project, floorId);
+            var floorOwnership = SnapshotFloorOwnership(project);
             var targets = ResolveOwnedElements(project, elements);
             RequireCurrentFloorOwnership(project, floor);
+            RequireReferencedLevelOwnershipUnchanged(project, floorOwnership, targets, TopLevelIdKey, "Top Level");
 
             foreach (var element in targets)
             {
@@ -148,8 +150,10 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var top = FindRequired(project, floorId);
+            var floorOwnership = SnapshotFloorOwnership(project);
             var targets = ResolveOwnedElements(project, elements);
             RequireCurrentFloorOwnership(project, top);
+            RequireReferencedLevelOwnershipUnchanged(project, floorOwnership, targets, BottomLevelIdKey, "Bottom Level");
 
             foreach (var element in targets)
             {
@@ -319,6 +323,40 @@ namespace QS3D.Core.Domain
                 resolved.Add(element);
             }
             return resolved.AsReadOnly();
+        }
+
+        private static IReadOnlyDictionary<string, FloorDefinition> SnapshotFloorOwnership(ProjectState project)
+        {
+            var result = new Dictionary<string, FloorDefinition>(StringComparer.OrdinalIgnoreCase);
+            foreach (var floor in project.Floors)
+            {
+                if (floor == null)
+                    throw new InvalidOperationException("Project floor collection contains a null floor.");
+                if (!result.TryAdd(floor.Id, floor))
+                    throw new InvalidOperationException("Project contains duplicate floor id: " + floor.Id + ".");
+            }
+            return result;
+        }
+
+        private static void RequireReferencedLevelOwnershipUnchanged(
+            ProjectState project,
+            IReadOnlyDictionary<string, FloorDefinition> expected,
+            IEnumerable<ProjectElement> elements,
+            string levelKey,
+            string levelLabel)
+        {
+            foreach (var element in elements)
+            {
+                var levelId = Property(element, levelKey);
+                if (levelId.Length == 0) continue;
+                if (!expected.TryGetValue(levelId, out var original))
+                    throw new InvalidOperationException(
+                        element.Id + "/" + levelLabel + " did not belong to the project before Floor mutation target enumeration: " + levelId + ".");
+                var current = project.FindFloor(levelId);
+                if (!ReferenceEquals(current, original))
+                    throw new InvalidOperationException(
+                        element.Id + "/" + levelLabel + " ownership changed while Floor mutation targets were being enumerated: " + levelId + ".");
+            }
         }
 
         private static double LevelOffset(ProjectElement element, string key)
