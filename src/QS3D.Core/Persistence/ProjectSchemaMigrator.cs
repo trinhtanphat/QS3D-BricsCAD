@@ -48,7 +48,8 @@ namespace QS3D.Core.Persistence
         private static int ReadSchema(XElement root)
         {
             var raw = root.Attribute("schema")?.Value;
-            return int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var schema) ? schema : 0;
+            if (string.IsNullOrEmpty(raw) || !int.TryParse(raw, NumberStyles.None, CultureInfo.InvariantCulture, out var schema)) return 0;
+            return string.Equals(raw, schema.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal) ? schema : 0;
         }
 
         private static void MigrateV1ToV2(XElement root)
