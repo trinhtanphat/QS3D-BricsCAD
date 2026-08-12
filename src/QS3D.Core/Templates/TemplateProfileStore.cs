@@ -351,7 +351,7 @@ namespace QS3D.Core.Templates
             foreach (var column in container.Elements("column"))
             {
                 var raw = column.Attribute("name")?.Value;
-                if (string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                if (raw == null || string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
                     throw new InvalidDataException("Template BQ column name is empty or non-canonical.");
                 if (!seen.Add(raw)) throw new InvalidDataException("Duplicate template BQ column: " + raw);
                 values.Add(raw);
