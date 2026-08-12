@@ -1,30 +1,43 @@
 # Work claim — QSDB relation token canonicality
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-qsdb-relation-token-canonicality-20260812-1005`
 - Registered: `2026-08-12T10:05:00+07:00`
+- Last Updated: `2026-08-12T10:10:00+07:00`
 - Baseline main SHA: `c7fdefbe8fff1d2c76c41bda429989f31788814c`
+- Source fix SHA: `b4c85122c344429d06d4581d2fa79d8203a2e34a`
+- Regression SHA: `ed1c6651d37a425688e5a0c3727d42ca65d66e17`
 - Priority: P1 — persisted semantic handle/dependency corruption must fail closed instead of being silently normalized on load.
 - Task Key: `CORE-QSDB-RELATION-TOKEN-CANONICALITY`
 
 ## Confirmed defect
 
-`QsdbProjectStore.ValidateProject(...)` requires every `ProjectElement.SourceHandles` and `DependsOn` value to be non-empty, unpadded and case-insensitively unique. The serializer writes those values verbatim. However `Load(...)` currently skips blank `<h>`/`<d>` values and calls `.Trim()` before adding nonblank values. A malformed persisted QSDB can therefore contain blank or whitespace-padded source handles/dependencies and be silently repaired into a valid in-memory project before `ValidateProject(...)` sees it. This breaks the store's fail-closed canonical persistence contract.
+`QsdbProjectStore.ValidateProject(...)` requires every `ProjectElement.SourceHandles` and `DependsOn` value to be non-empty, unpadded and case-insensitively unique. The serializer writes those values verbatim. `Load(...)` previously skipped blank `<h>`/`<d>` values and called `.Trim()` before adding nonblank values, silently repairing malformed persisted QSDB before canonical validation.
 
-## Reserved scope
+## Completed implementation
 
-- `src/QS3D.Core/Persistence/QsdbProjectStore.cs`
-- `tests/QS3D.Core.SmokeTests/QsdbRelationTokenCanonicalitySmoke.cs`
-- this claim file
+- `Load(...)` now preserves raw `<h>` and `<d>` text during materialization.
+- Existing `ValidateCanonicalStringList(...)` now sees the persisted token exactly as stored and rejects blank, whitespace-only, padded and duplicate relation values.
+- Canonical writer output, valid round-trip, dependency ordering semantics and other QSDB schema/migration/recovery behavior remain unchanged.
+- No runtime handle normalization outside QSDB loading was modified.
 
-## Intended contract
+## Regression evidence
 
-- Preserve raw persisted `<h>` and `<d>` text through materialization so the existing canonical list validator observes corruption exactly as stored.
-- Blank, whitespace-only and padded source-handle/dependency entries must fail `Load(...)` with `InvalidDataException` rather than being skipped or trimmed.
-- Preserve canonical writer output, valid load/save round-trip, duplicate detection, ordering semantics and all other QSDB schema/migration/recovery behavior.
-- Do not alter runtime handle normalization outside persisted QSDB loading, dependency graph semantics, UI/native BricsCAD or unrelated persistence fields.
+`tests/QS3D.Core.SmokeTests/QsdbRelationTokenCanonicalitySmoke.cs` is auto-registered and covers:
 
-## Validation plan
+- canonical source handle/dependency save-load round-trip;
+- padded source handle rejection;
+- blank source handle rejection;
+- padded dependency rejection;
+- blank dependency rejection.
 
-Focused auto-registered Core smoke first saves a canonical project with source handles and a dependency, verifies canonical round-trip, then mutates the emitted XML separately to padded/blank source-handle and dependency tokens and requires `Load(...)` to reject each malformed persisted form. Re-fetch exact source/claim before writes. No force-push, GitHub Actions dispatch, executable full-smoke PASS or licensed BricsCAD runtime qualification claim unless actually executed.
+The source commit diff was read back and confirmed the semantic change is limited to preserving raw persisted handle/dependency tokens before existing validation. Source and regression were re-read directly from `main` after commit.
+
+## Validation boundary
+
+No GitHub Actions were dispatched. No executable full smoke/build or licensed BricsCAD V25/V26 runtime PASS is claimed from this connector-only session.
+
+## Completion condition
+
+Completed: malformed persisted source-handle/dependency tokens now fail closed instead of being silently normalized during QSDB load.
