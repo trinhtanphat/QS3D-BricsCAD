@@ -38,7 +38,7 @@ namespace QS3D.Core.Recognition
                 if (pattern.Length == 0) throw new InvalidOperationException(label + " contains an empty layer mapping pattern.");
                 var key = RecognitionText.Normalize(pattern);
                 if (key.Length == 0) throw new InvalidOperationException(label + " contains a layer mapping pattern that normalizes to empty: " + pattern);
-                if (!Enum.TryParse(item.Value, true, out ElementCategory category) || !Enum.IsDefined(typeof(ElementCategory), category))
+                if (!TryParseNamedCategory(item.Value, out _))
                     throw new InvalidOperationException(label + " contains an invalid layer mapping category for " + pattern + ": " + item.Value);
                 if (normalized.TryGetValue(key, out var previous))
                     throw new InvalidOperationException(label + " contains ambiguous normalized layer mappings: " + previous + " and " + pattern + ".");
@@ -59,7 +59,7 @@ namespace QS3D.Core.Recognition
             {
                 var pattern = item.Key.Trim();
                 if (!string.Equals(RecognitionText.Normalize(pattern), normalizedLayer, StringComparison.OrdinalIgnoreCase)) continue;
-                if (!Enum.TryParse(item.Value, true, out ElementCategory category) || !Enum.IsDefined(typeof(ElementCategory), category))
+                if (!TryParseNamedCategory(item.Value, out var category))
                     throw new InvalidOperationException("Invalid project layer mapping category: " + item.Value);
                 if (!RecognitionEngine.IsEntityTypeCompatible(category, snapshot.EntityType)) return null;
                 var candidate = new RecognitionCandidate { RuleId = "project-layer:" + pattern, Category = category, Confidence = 0.99d };
@@ -67,6 +67,15 @@ namespace QS3D.Core.Recognition
                 return candidate;
             }
             return null;
+        }
+
+        private static bool TryParseNamedCategory(string? raw, out ElementCategory category)
+        {
+            category = default;
+            var token = (raw ?? string.Empty).Trim();
+            if (!Enum.TryParse(token, true, out category) || !Enum.IsDefined(typeof(ElementCategory), category)) return false;
+            var name = Enum.GetName(typeof(ElementCategory), category);
+            return name != null && string.Equals(token, name, StringComparison.OrdinalIgnoreCase);
         }
     }
 }
