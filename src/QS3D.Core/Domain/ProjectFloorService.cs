@@ -24,10 +24,7 @@ namespace QS3D.Core.Domain
             Finite(elevationM, nameof(elevationM));
             if (project.Floors.Any(x => x == null))
                 throw new InvalidOperationException("Project floor collection contains a null floor.");
-            var seenFloorIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var existing in project.Floors)
-                if (!seenFloorIds.Add(existing.Id))
-                    throw new InvalidOperationException("Project contains duplicate floor id: " + existing.Id + ".");
+            ValidateUniqueFloorIds(project);
             if (project.Floors.Count >= MaxFloors) throw new InvalidOperationException("Project supports at most " + MaxFloors + " floors.");
             if (project.Floors.Any(x => string.Equals(x.Id, normalizedId, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Floor id already exists: " + normalizedId);
@@ -326,7 +323,19 @@ namespace QS3D.Core.Domain
         private static FloorDefinition FindRequired(ProjectState project, string id)
         {
             var normalized = Required(id, nameof(id), 64);
+            ValidateUniqueFloorIds(project);
             return project.FindFloor(normalized) ?? throw new InvalidOperationException("Floor not found: " + normalized);
+        }
+
+        private static void ValidateUniqueFloorIds(ProjectState project)
+        {
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var floor in project.Floors)
+            {
+                if (floor == null) continue;
+                if (!seenIds.Add(floor.Id))
+                    throw new InvalidOperationException("Project contains duplicate floor id: " + floor.Id + ".");
+            }
         }
 
         private static void EnsureUniqueName(ProjectState project, string name, string exceptId)
