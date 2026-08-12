@@ -1,8 +1,9 @@
 # Work claim — Quantity XLSX non-negative publication preflight
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-gpt5-audit-blt-notes-latest` (`/root/audit_blt_notes_latest`)
 - Registered: `2026-08-12T09:32:51+07:00`
+- Completed: `2026-08-12T09:51:28+07:00`
 - Baseline main SHA: `340c88459f312710a6a794ffa8362d19f879c8af`
 - Priority: `P1` — prevent public BQ/ED2 XLSX APIs from publishing finite negative counts or physical quantity magnitudes that the canonical reporting contract rejects.
 
@@ -37,4 +38,16 @@ All current `ACTIVE` / `BLOCKED` claims were inspected at the baseline. None res
 
 ## Completion condition
 
-The claim is updated to `COMPLETED` after the bounded exporter/tests batch is integrated on current `main`, the executed source-only validation is recorded, and no GitHub Actions or private/native runtime operation has been performed.
+Satisfied by implementation PR [#720](https://github.com/trinhtanphat/QS3D-BricsCAD/pull/720), source commit `780ad1e45634dac63fa1b4a3b3a1a7b0d432a3ed`, integrated on `main` as `e9454e2566dfaabf00a6389c3f219ef46fe3f683`.
+
+## Validation evidence
+
+- PASS: focused isolated execution of `Ed2NumericParitySmoke.Run()` and `XlsxQuantityStandardNumericPreflightSmoke.Run()`.
+- PASS: `py -3 scripts/preflight-ed2-numeric-parity.py`.
+- PASS: `py -3 scripts/preflight-ed2-excel-roundtrip.py` after the separately owned gate update landed on current main.
+- PASS: `py -3 scripts/preflight-smoke-registration.py`.
+- PASS: `py -3 scripts/preflight-command-xlsx-export-freshness.py`.
+- PASS: `py -3 scripts/preflight.py` and `git diff --check`.
+- BLOCKED by current-main, out-of-scope compile debt: strict Core Release build/full smoke report `CS8602` at `ReportingProjectIdentityGuard.cs:58` and `SemanticSelectionInspector.cs:177`; a warnings-relaxed full smoke additionally reports pre-existing stale `ProjectElement` constructor call sites and `ElementCategory.Wall` test references. No reserved file in those lanes was changed.
+- Aggregate preflight was executed and remained red on multiple unrelated current-main static gates; focused XLSX/ED2 gates above passed.
+- No GitHub Actions, private/customer fixture, licensed BricsCAD runtime, package or release operation was run.
