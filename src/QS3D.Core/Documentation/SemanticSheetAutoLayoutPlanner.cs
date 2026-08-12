@@ -68,6 +68,7 @@ namespace QS3D.Core.Documentation
     public static class SemanticSheetAutoLayoutPlanner
     {
         private const int MaxItems = 10000;
+        private const int MaxSheetNumberPrefixLength = 62;
 
         public static IReadOnlyList<SemanticSheetPlan> Build(
             IEnumerable<SemanticSheetAutoLayoutItem> items,
@@ -186,7 +187,7 @@ namespace QS3D.Core.Documentation
         private static void ValidateOptions(SemanticSheetAutoLayoutOptions options)
         {
             Required(options.SheetIdPrefix, nameof(options.SheetIdPrefix));
-            Required(options.SheetNumberPrefix, nameof(options.SheetNumberPrefix));
+            Required(options.SheetNumberPrefix, nameof(options.SheetNumberPrefix), MaxSheetNumberPrefixLength);
             Required(options.SheetNamePrefix, nameof(options.SheetNamePrefix));
             PositiveFinite(options.PaperWidthMm, nameof(options.PaperWidthMm));
             PositiveFinite(options.PaperHeightMm, nameof(options.PaperHeightMm));
@@ -199,11 +200,11 @@ namespace QS3D.Core.Documentation
             NonNegativeFinite(options.ReservedBottomMm, nameof(options.ReservedBottomMm));
         }
 
-        private static string Required(string? value, string name)
+        private static string Required(string? value, string name, int maxLength = 120)
         {
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Value is required.", name);
             var normalized = value!.Trim();
-            if (normalized.Length > 120) throw new ArgumentException("Value exceeds 120 characters.", name);
+            if (normalized.Length > maxLength) throw new ArgumentException("Value exceeds " + maxLength + " characters.", name);
             return normalized;
         }
 
