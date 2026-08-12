@@ -10,5 +10,8 @@
 - Shared files: `none`
 - Dependencies: `none`
 - Validation owner: `chatgpt-gpt56-sol-qsdb-element-references`
-- Test transfer: `Extend the already-registered QSDB referential-integrity smoke with orphan family/floor/zone element references, resolved references, blank optional references, and Save publication rejection. Do not dispatch GitHub Actions.`
-- Status: `ACTIVE`
+- Test transfer: `Focused smoke coverage landed in the already-registered QsdbActiveContextReferentialIntegritySmoke. No GitHub Actions dispatched.`
+- Status: `COMPLETED`
+- Source: `5f8f78ebf40a69cd8b788d5c5824ae65865b0094`
+- Regression: `de75533f7f6b4045db7c3e7c951dc339de1deb11`
+- Validation: `GitHub commit readback confirmed the intended source/test diffs; no combined CI status was present on the regression commit. Licensed BricsCAD runtime qualification was not claimed.`
