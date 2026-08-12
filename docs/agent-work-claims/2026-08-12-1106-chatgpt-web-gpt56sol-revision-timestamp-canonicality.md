@@ -1,6 +1,6 @@
 # Work claim — Revision Snapshot timestamp canonicality
 
-- Status: `ACTIVE`
+- Status: `DONE`
 - Agent: `chatgpt-web-gpt56sol-revision-timestamp-canonicality`
 - Registered: `2026-08-12T11:06:00+07:00`
 - Baseline main SHA: `2599e5bf96e9bc14b97bb39ee63af56e54e926d9`
@@ -8,11 +8,9 @@
 
 ## Confirmed defect
 
-`RevisionSnapshotStore.Save(...)` validates that `CreatedUtc` has `DateTimeKind.Utc`, and `Serialize(...)` writes `createdUtc` with `CreatedUtc.ToString("O", CultureInfo.InvariantCulture)`. The read helper `Date(...)`, however, only requires an explicit offset and then accepts the broad `DateTimeOffset.TryParse(...)` grammar before normalizing to `UtcDateTime`.
+`RevisionSnapshotStore.Save(...)` validates that `CreatedUtc` has `DateTimeKind.Utc`, and `Serialize(...)` writes `createdUtc` with `CreatedUtc.ToString("O", CultureInfo.InvariantCulture)`. The read helper `Date(...)` previously only required an explicit offset and then accepted the broad `DateTimeOffset.TryParse(...)` grammar before normalizing to `UtcDateTime`.
 
-As a result, non-canonical persisted timestamps such as an equivalent `+00:00` form or a non-zero-offset representation can be accepted even though the writer never emits them. That makes Revision Snapshot read-side canonicality weaker than its own write contract and weaker than the file's already-canonical category and numeric token handling.
-
-The auto-registered `RevisionSnapshotStoreIntegritySmoke` also still asserts the old tolerant contract by requiring a `+07:00` timestamp to normalize successfully. That assertion must change atomically with the parser hardening or the Core smoke executable will deterministically retain a stale expectation.
+That allowed non-canonical persisted timestamps such as equivalent `+00:00` or non-zero-offset representations even though the writer never emits them. The auto-registered `RevisionSnapshotStoreIntegritySmoke` also encoded that stale tolerant contract by requiring a `+07:00` timestamp to normalize successfully.
 
 ## Reserved scope
 
@@ -20,26 +18,26 @@ The auto-registered `RevisionSnapshotStoreIntegritySmoke` also still asserts the
 - `tests/QS3D.Core.SmokeTests/RevisionSnapshotStoreIntegritySmoke.cs` (timestamp contract alignment only)
 - this claim file
 
-## Intended contract
+## Implemented contract
 
-- `createdUtc` must parse as the exact invariant round-trip representation produced by a UTC `DateTime` writer.
-- Equivalent `+00:00`, non-zero-offset, padded, lowercase/alternate, or otherwise non-canonical timestamp spellings fail closed.
-- The existing auto-registered integrity smoke accepts canonical UTC writer output and rejects tolerant offset representations.
-- Writer serialization, backup recovery, size bounds, numeric/category canonicality, and revision semantics stay unchanged.
+- `createdUtc` now parses only as exact invariant `"O"` format with `DateTimeStyles.RoundtripKind`.
+- Parsed timestamps must retain `DateTimeKind.Utc` and reproduce the exact stored token via `ToString("O", CultureInfo.InvariantCulture)`.
+- Equivalent `+00:00`, non-zero-offset, missing-offset, and short-form UTC timestamps fail closed.
+- The existing auto-registered integrity smoke now accepts canonical UTC writer-form timestamps and rejects those non-canonical representations.
+- Other malformed category/map/source-handle fixtures were moved to canonical timestamps so they continue testing their intended failure causes.
 
-## Excluded scope
+## Commits
 
-- No Revision delta encoding changes.
-- No Revision XML schema/size/backup changes.
-- No QSDB timestamp policy changes.
-- No native BricsCAD runtime changes.
-- No GitHub Actions dispatch and no runtime qualification claim.
+- Claim registration: `70076ffd1a917f9db73442f3cd9d5bca126af991`
+- Claim scope expansion: `7781fd32a68cd38d4c657b5c6e763f678206e6f3`
+- Product fix: `4b153b6e82087ad41754cbc94ff79a25544b4cd4`
+- Regression alignment: `0845bb05edd14f09db8fa0cd51894bbe2890585b`
 
-## Validation plan
+## Validation
 
-- Publish this claim before source writes and verify it remains reachable from current `main`.
-- Re-fetch the exact production/test blobs after claim publication.
-- Tighten `Date(...)` to exact invariant `"O"` UTC parsing plus canonical round-trip equality.
-- Align the existing auto-registered `RevisionSnapshotStoreIntegritySmoke` with canonical UTC acceptance and equivalent/non-zero-offset rejection.
-- Inspect exact source/test diffs and read-back, close this claim with exact commit SHAs, then verify ancestry.
-- No local compile/runtime PASS will be claimed unless actually executed.
+- Re-fetched production and auto-registered smoke blobs after claim publication.
+- Product commit exact diff changes only `Date(...)` and removes the obsolete permissive offset helper.
+- Test commit exact diff changes only timestamp contract coverage/fixtures.
+- Read-back from current `main` confirms the exact UTC parser and aligned smoke are present.
+- No GitHub Actions dispatched.
+- No local C# compile or BricsCAD V25/V26 runtime PASS claimed.
