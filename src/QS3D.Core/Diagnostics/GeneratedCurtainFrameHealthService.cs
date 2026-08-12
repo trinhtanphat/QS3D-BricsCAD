@@ -31,7 +31,10 @@ namespace QS3D.Core.Diagnostics
                 var validCount = 0;
                 foreach (var item in raw.Split(new[] { ';' }, StringSplitOptions.None))
                 {
-                    var handle = (item ?? string.Empty).Trim();
+                    var rawHandle = item ?? string.Empty;
+                    var handle = rawHandle.Trim();
+                    if (handle.Length > 0 && !string.Equals(rawHandle, handle, StringComparison.Ordinal))
+                        issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GENERATED_HANDLE_NON_CANONICAL", HealthSeverity.Error, HandlesKey + " không được có khoảng trắng quanh handle.", element.Id));
                     if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
                     {
                         issues.Add(new ModelHealthIssue("INVALID_CURTAIN_FRAME_GENERATED_HANDLE", HealthSeverity.Error, HandlesKey + " chứa handle không hợp lệ.", element.Id));
