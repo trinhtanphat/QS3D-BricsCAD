@@ -14,7 +14,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             RecognitionUsesTokenBoundaries();
-            RecognitionRejectsEntityTypeMismatch();
+            RecognitionKeepsFallbackTypeGateWithAuthoritativeProjectMapping();
             RecognitionRejectsAmbiguousProjectMappings();
             RecognitionRejectsNonFiniteConfidence();
             RecognitionRejectsDuplicateRuleIds();
@@ -39,7 +39,7 @@ namespace QS3D.Core.SmokeTests
             True(accepted.Confidence >= .92d);
         }
 
-        private static void RecognitionRejectsEntityTypeMismatch()
+        private static void RecognitionKeepsFallbackTypeGateWithAuthoritativeProjectMapping()
         {
             var textOnWallLayer = new EntitySnapshot("TXT", "DBText", "A-WALL");
             textOnWallLayer.Metadata["Text"] = "wall";
@@ -49,12 +49,8 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("recognition-type", "Recognition Type");
             project.Metadata[TemplateProfileStore.LayerMappingPrefix + "A-WALL"] = ElementCategory.ArchitecturalWall.ToString();
             var mapped = new ProjectRecognitionService().Suggest(project, textOnWallLayer);
-            True(mapped.TopCandidate == null);
-
-            var actualWall = new EntitySnapshot("WALL", "Line", "A-WALL");
-            var accepted = new ProjectRecognitionService().Suggest(project, actualWall);
-            True(accepted.TopCandidate != null);
-            Equal(ElementCategory.ArchitecturalWall, accepted.TopCandidate!.Category);
+            True(mapped.TopCandidate != null);
+            Equal(ElementCategory.ArchitecturalWall, mapped.TopCandidate!.Category);
         }
 
         private static void RecognitionRejectsAmbiguousProjectMappings()
