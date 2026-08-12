@@ -54,7 +54,7 @@ namespace QS3D.Core.Rebar
                 throw new FormatException("Unsupported rebar notation segment '" + raw + "'.");
             }
             if (result.Count == 0) throw new FormatException("Rebar notation did not contain any bar group.");
-            return result;
+            return result.AsReadOnly();
         }
 
         private static double PositiveDouble(string value, string label)
