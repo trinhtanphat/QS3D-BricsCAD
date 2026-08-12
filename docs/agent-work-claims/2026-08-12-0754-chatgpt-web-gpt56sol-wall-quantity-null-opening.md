@@ -1,6 +1,6 @@
 # Work claim — Wall quantity null opening guard
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-12`
 - Baseline main SHA: `0151f4b9ff18e9956c4b3d25530cdc0d1bd4c06a`
@@ -8,29 +8,31 @@
 
 ## Confirmed defect
 
-`WallQuantityCalculator.Calculate(...)` accepts an optional enumerable of opening cuts, but silently `continue`s when an enumerated entry is `null`. A malformed opening collection can therefore understate opening area and deduction volume while still returning apparently valid wall quantities. This differs from the Core pattern used by persisted/reporting/planning collections, where malformed null entries fail closed instead of disappearing from calculation.
+`WallQuantityCalculator.Calculate(...)` accepted an optional enumerable of opening cuts, but silently skipped enumerated `null` entries. A malformed opening collection could therefore understate opening area and deduction volume while still returning apparently valid wall quantities.
 
-The collection itself may remain `null` to mean “no openings”; this claim only covers an explicit enumerable that contains a null entry.
+## Completed contract
 
-## Reserved scope
-
-- `src/QS3D.Core/Services/WallQuantityCalculator.cs`
-- focused standalone `QS3D.Core.SmokeTests` regression
-- `docs/plans/2026-08-12-wall-quantity-null-opening.md`
-- this claim file
-
-## Intended contract
-
-1. `openings == null` keeps existing no-opening behavior.
-2. A non-null enumerable containing a null entry fails closed with an argument/data-shape error.
+1. `openings == null` keeps the existing no-opening behavior.
+2. A non-null enumerable containing a null entry now fails closed with `ArgumentException`.
 3. Valid opening calculations remain unchanged, including clamping total opening area to gross wall area.
-4. No native BricsCAD, wall-regeneration, or host-link behavior changes in this lane.
+4. No semantic regenerator, native BricsCAD, host-link, reporting, or export behavior was changed.
 
-## Non-overlap
+## Commits
 
-- Do not modify `SemanticRegenerators.cs`, opening hosting/cutting, WallPier, XLSX/reporting, or native commands.
-- No GitHub Actions dispatch or release publication.
+- Claim registration: `ac48b719a339968ae97ead369c2bbb25d6f2816a`
+- Planning: `117f529eaf88b8b30ddc8a788e849924915f0eb6`
+- Source fix: `547b759a4ae6d6808e6194ace1f5c96d8d893b2f`
+- Focused smoke regression source: `86aacc11e2229d8b70e1d1b85b564a17a5be44ae`
 
-## Closure
+## Validation evidence
 
-Claim before source, planning before implementation, exact current blob re-fetch, focused regression, ancestry `behind_by: 0`, and no unexecuted PASS claims.
+- A first smoke-file write hit a GitHub `409` because `main` advanced concurrently; no false commit was reported. HEAD and source ancestry were refreshed before retrying the write.
+- Source and smoke commits were verified as ancestors of observed `main` `3a766aeb9192ae12d42fc4f9bd2d27b05baaae37` with `behind_by: 0`.
+- Concurrent commits after the source change did not modify `WallQuantityCalculator.cs`.
+- Smoke source covers null collection, null entry rejection, normal valid opening calculation, and oversized opening clamping.
+- Regression source was committed but GitHub Actions were not dispatched in this remote session.
+- No CI PASS, build PASS, licensed BricsCAD runtime PASS, or release publication is claimed.
+
+## Released scope
+
+This claim is complete; `WallQuantityCalculator.cs` is released for other agents.
