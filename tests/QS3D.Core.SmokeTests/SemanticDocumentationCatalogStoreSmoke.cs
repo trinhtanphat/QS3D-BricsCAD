@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             CatalogRoundTripsThroughQsdb();
+            WriterCanonicalizesTextTokens();
+            PaddedPersistedTextFailsClosed();
             SameCatalogDoesNotTouchProjectTwice();
             InvalidCatalogDoesNotReplaceStoredPayload();
             UnsafeXmlFailsClosed();
@@ -47,6 +49,65 @@ namespace QS3D.Core.SmokeTests
                 TryDelete(path);
                 TryDelete(path + ".bak");
             }
+        }
+
+        private static void WriterCanonicalizesTextTokens()
+        {
+            var project = BuildProject();
+            var store = new SemanticDocumentationCatalogStore();
+            var view = new SemanticViewDefinition(
+                " V-L02-BEAM ",
+                " L02 Beams ",
+                SemanticViewKind.Plan,
+                floorId: " F-02 ",
+                zoneId: "   ",
+                categories: new[] { ElementCategory.Beam },
+                includeElementIds: new[] { " B-001 " });
+            var sheet = new SemanticSheetDefinition(
+                " S-A101 ",
+                " A-101 ",
+                " Beam Plan ",
+                841d,
+                594d,
+                new[] { new SemanticSheetPlacementDefinition(" V-L02-BEAM ", 20d, 20d, 380d, 250d) },
+                " A1 Standard ");
+
+            store.Save(project, new[] { view }, new[] { sheet });
+            var payload = project.Metadata[SemanticDocumentationCatalogStore.MetadataKey];
+            if (payload.IndexOf(" V-L02-BEAM ", StringComparison.Ordinal) >= 0 ||
+                payload.IndexOf(" L02 Beams ", StringComparison.Ordinal) >= 0 ||
+                payload.IndexOf(" F-02 ", StringComparison.Ordinal) >= 0 ||
+                payload.IndexOf(" B-001 ", StringComparison.Ordinal) >= 0 ||
+                payload.IndexOf(" A-101 ", StringComparison.Ordinal) >= 0 ||
+                payload.IndexOf(" Beam Plan ", StringComparison.Ordinal) >= 0 ||
+                payload.IndexOf(" A1 Standard ", StringComparison.Ordinal) >= 0)
+                throw new Exception("Documentation catalog Save must not persist whitespace-padded text tokens.");
+
+            var catalog = store.Load(project);
+            Equal("V-L02-BEAM", catalog.Views[0].Id);
+            Equal("L02 Beams", catalog.Views[0].Name);
+            Equal("F-02", catalog.Views[0].FloorId);
+            Equal(null, catalog.Views[0].ZoneId);
+            Equal("B-001", catalog.Views[0].IncludeElementIds[0]);
+            Equal("S-A101", catalog.Sheets[0].Id);
+            Equal("A-101", catalog.Sheets[0].Number);
+            Equal("Beam Plan", catalog.Sheets[0].Name);
+            Equal("A1 Standard", catalog.Sheets[0].TitleBlockName);
+            Equal("V-L02-BEAM", catalog.Sheets[0].Placements[0].ViewId);
+        }
+
+        private static void PaddedPersistedTextFailsClosed()
+        {
+            var project = BuildProject();
+            var store = new SemanticDocumentationCatalogStore();
+            store.Save(project, new[] { BuildView() }, new[] { BuildSheet() });
+            var payload = project.Metadata[SemanticDocumentationCatalogStore.MetadataKey];
+            project.Metadata[SemanticDocumentationCatalogStore.MetadataKey] =
+                payload.Replace("id=\"V-L02-BEAM\"", "id=\" V-L02-BEAM \"");
+
+            MustFailLoad(
+                () => store.Load(project),
+                "Whitespace-padded persisted documentation identity must fail closed instead of being silently trimmed.");
         }
 
         private static void SameCatalogDoesNotTouchProjectTwice()
@@ -131,6 +192,14 @@ namespace QS3D.Core.SmokeTests
             var failed = false;
             try { action(); }
             catch (InvalidOperationException) { failed = true; }
+            if (!failed) throw new Exception(message);
+        }
+
+        private static void MustFailLoad(Action action, string message)
+        {
+            var failed = false;
+            try { action(); }
+            catch (InvalidDataException) { failed = true; }
             if (!failed) throw new Exception(message);
         }
 
