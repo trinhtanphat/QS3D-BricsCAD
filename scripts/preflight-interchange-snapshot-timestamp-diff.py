@@ -27,10 +27,10 @@ if SOURCE.is_file():
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
     for token in (
-        "EquivalentOffsetsDoNotCreateFalseChange();",
-        "DifferentInstantsStillCreateChange();",
-        '"2026-08-10T17:00:00.0000000+07:00"',
-        '"2026-08-10T18:00:00.0000000+07:00"',
+        "IdenticalCanonicalTimestampsDoNotCreateFalseChange();",
+        "DifferentCanonicalInstantsStillCreateChange();",
+        '"2026-08-10T10:00:00.0000000Z"',
+        '"2026-08-10T11:00:00.0000000Z"',
     ):
         if token not in text:
             errors.append("ProjectInterchangeSnapshotTimestampDiffSmoke.cs missing regression token: " + token)
@@ -41,4 +41,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: interchange snapshot diff compares UTC instants, not equivalent timezone string representations.")
+print("PASS: interchange snapshot diff compares validated canonical UTC instants without false changes for identical timestamps.")
