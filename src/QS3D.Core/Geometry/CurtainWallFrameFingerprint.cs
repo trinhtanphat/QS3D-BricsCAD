@@ -49,7 +49,7 @@ namespace QS3D.Core.Geometry
             }
         }
 
-        private static string R(double value) => value.ToString("R", CultureInfo.InvariantCulture);
+        private static string R(double value) => (value == 0d ? 0d : value).ToString("R", CultureInfo.InvariantCulture);
 
         private static void Validate(double value, string name, bool positive, bool nonNegative = false)
         {
