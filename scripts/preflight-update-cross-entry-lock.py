@@ -96,7 +96,16 @@ def main() -> int:
     require(install, "Restore-DemandLoadSnapshot", "installer DemandLoad rollback")
     require(install, "throw $originalError", "installer original failure propagation")
     require(uninstall, "Refusing to remove a custom install directory outside the QS3D LocalAppData scope", "uninstaller custom-path guard")
-    require(uninstall, "PACKAGE-METADATA.json is not a valid QS3D V25 identity marker", "uninstaller package identity guard")
+    require(uninstall, "Refusing recursive removal because the target does not contain the canonical QS3D package identity files.", "uninstaller canonical identity file set")
+    require(uninstall, "QS3D.BricsCAD.V25.dll", "uninstaller plugin identity file")
+    require(uninstall, "QS3D.Core.dll", "uninstaller Core identity file")
+    require(uninstall, "[string]$metadata.product -ne 'QS3D'", "uninstaller product identity binding")
+    require(uninstall, "[string]$metadata.target -ne 'BricsCAD V25 x64'", "uninstaller target identity binding")
+    require(uninstall, "$metadata.PSObject.Properties['version']", "uninstaller assembly-version metadata requirement")
+    require(uninstall, "$metadata.PSObject.Properties['productVersion']", "uninstaller product-version metadata requirement")
+    require(uninstall, "[Reflection.AssemblyName]::GetAssemblyName($identityPath).Version", "uninstaller DLL assembly-version verification")
+    require(uninstall, "[Diagnostics.FileVersionInfo]::GetVersionInfo($identityPath).ProductVersion", "uninstaller DLL product-version verification")
+    require(uninstall, "PACKAGE-METADATA/DLL identity is not a valid QS3D V25 installation", "uninstaller fail-closed package identity error")
     require(uninstall, "$PSCmdlet.ShouldProcess", "uninstaller ShouldProcess boundary")
     require(uninstall, "if (-not $KeepFiles", "uninstaller KeepFiles behavior")
     require(uninstall, "Restore-RegistryTreeSnapshot", "uninstaller registry rollback")
@@ -104,7 +113,8 @@ def main() -> int:
 
     print(
         "PASS: detached/manual secure update, direct install, and rollback-safe direct uninstall share the same per-user Windows mutex; "
-        "all direct mutation entry points fail fast on contention and hold ownership through bounded update/install/rollback/removal completion."
+        "all direct mutation entry points fail fast on contention and hold ownership through bounded update/install/rollback/removal completion; "
+        "recursive uninstall remains bound to canonical metadata plus both managed DLL identities."
     )
     return 0
 
