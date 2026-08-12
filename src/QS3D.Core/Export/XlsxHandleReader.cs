@@ -56,6 +56,7 @@ namespace QS3D.Core.Export
         private const long MaxWorkbookBytes = 128L * 1024L * 1024L;
         private const long MaxXmlCharacters = 64L * 1024L * 1024L;
         private const int MaxColumns = 16384;
+        private const int MaxRows = 1048576;
         private static readonly Regex DecimalHandlePattern = new Regex(@"\$(\d+)", RegexOptions.CultureInvariant);
         private static readonly Regex LegacyDecimalCellPattern = new Regex(@"^\s*(?:\$\d+\s*)+$", RegexOptions.CultureInvariant);
 
@@ -64,7 +65,7 @@ namespace QS3D.Core.Export
         public static XlsxHandleLookupResult ReadHandleLookup(string path, int rowNumber)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Excel path is required.", nameof(path));
-            if (rowNumber < 1) throw new ArgumentOutOfRangeException(nameof(rowNumber));
+            if (rowNumber < 1 || rowNumber > MaxRows) throw new ArgumentOutOfRangeException(nameof(rowNumber), "Excel row number must be between 1 and " + MaxRows + ".");
             var fullPath = Path.GetFullPath(path);
             var file = new FileInfo(fullPath);
             if (!file.Exists) throw new FileNotFoundException("Excel workbook was not found.", fullPath);
@@ -78,6 +79,12 @@ namespace QS3D.Core.Export
                 var sheet = LoadXml(sheetEntry);
                 XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
                 var rows = sheet.Descendants(ns + "row").ToList();
+                foreach (var row in rows)
+                {
+                    var declaredRow = ParsePositiveInt((string?)row.Attribute("r"));
+                    if (declaredRow == int.MaxValue || declaredRow > MaxRows)
+                        throw new InvalidDataException("Excel worksheet row number is missing, invalid, or exceeds the XLSX row limit.");
+                }
                 var targets = rows.Where(x => ParsePositiveInt((string?)x.Attribute("r")) == rowNumber).ToList();
                 if (targets.Count > 1) throw new InvalidDataException("Excel worksheet contains duplicate row number " + rowNumber + ".");
                 var target = targets.SingleOrDefault();
@@ -203,7 +210,7 @@ namespace QS3D.Core.Export
         private static Dictionary<int, string> ReadCells(XElement row, XNamespace ns, IReadOnlyList<string> sharedStrings)
         {
             var rowNumber = ParsePositiveInt((string?)row.Attribute("r"));
-            if (rowNumber == int.MaxValue) throw new InvalidDataException("Excel worksheet row number is missing or invalid.");
+            if (rowNumber == int.MaxValue || rowNumber > MaxRows) throw new InvalidDataException("Excel worksheet row number is missing, invalid, or exceeds the XLSX row limit.");
             var result = new Dictionary<int, string>();
             foreach (var cell in row.Elements(ns + "c"))
             {
@@ -298,8 +305,8 @@ namespace QS3D.Core.Export
                 throw new InvalidDataException("Excel cell reference is invalid: " + reference + ".");
 
             var rowToken = reference.Substring(index);
-            if (!int.TryParse(rowToken, NumberStyles.None, CultureInfo.InvariantCulture, out var referencedRow) || referencedRow <= 0)
-                throw new InvalidDataException("Excel cell reference is invalid: " + reference + ".");
+            if (!int.TryParse(rowToken, NumberStyles.None, CultureInfo.InvariantCulture, out var referencedRow) || referencedRow <= 0 || referencedRow > MaxRows)
+                throw new InvalidDataException("Excel cell reference is invalid or exceeds the XLSX row limit: " + reference + ".");
             if (referencedRow != expectedRow)
                 throw new InvalidDataException("Excel cell reference " + reference + " does not match containing row " + expectedRow + ".");
             return value - 1;
