@@ -70,12 +70,12 @@ namespace QS3D.Core.Diagnostics
                 ValidateNonNegative(element, "GeneratedSlabMeshCoverM", "SLAB_MESH_COVER_INVALID", issues);
 
                 if (!element.Properties.TryGetValue("GeneratedSlabMeshFaces", out var faces) ||
-                    !(string.Equals(faces, "Bottom", StringComparison.OrdinalIgnoreCase) ||
-                      string.Equals(faces, "Top", StringComparison.OrdinalIgnoreCase) ||
-                      string.Equals(faces, "Both", StringComparison.OrdinalIgnoreCase)))
+                    !(string.Equals(faces, "Bottom", StringComparison.Ordinal) ||
+                      string.Equals(faces, "Top", StringComparison.Ordinal) ||
+                      string.Equals(faces, "Both", StringComparison.Ordinal)))
                     issues.Add(new ModelHealthIssue("SLAB_MESH_FACES_INVALID", HealthSeverity.Warning, "GeneratedSlabMeshFaces phải là Bottom, Top hoặc Both.", element.Id));
 
-                if (!element.Properties.TryGetValue("GeneratedSlabMeshMode", out var mode) || !string.Equals(mode, "SlabMeshXY", StringComparison.OrdinalIgnoreCase))
+                if (!element.Properties.TryGetValue("GeneratedSlabMeshMode", out var mode) || !string.Equals(mode, "SlabMeshXY", StringComparison.Ordinal))
                     issues.Add(new ModelHealthIssue("SLAB_MESH_MODE_INVALID", HealthSeverity.Warning, "GeneratedSlabMeshMode thiếu hoặc không hợp lệ.", element.Id));
 
                 // Slab meshes generated before footprint-mode metadata existed were rectangle-only,
@@ -83,9 +83,8 @@ namespace QS3D.Core.Diagnostics
                 // metadata must stay inside the two reviewed coordinate-system contracts.
                 if (element.Properties.TryGetValue(FootprintModeKey, out var footprintMode))
                 {
-                    var normalizedFootprintMode = (footprintMode ?? string.Empty).Trim();
-                    if (!(string.Equals(normalizedFootprintMode, RectangleFootprintMode, StringComparison.OrdinalIgnoreCase) ||
-                          string.Equals(normalizedFootprintMode, PolygonFootprintMode, StringComparison.OrdinalIgnoreCase)))
+                    if (!(string.Equals(footprintMode, RectangleFootprintMode, StringComparison.Ordinal) ||
+                          string.Equals(footprintMode, PolygonFootprintMode, StringComparison.Ordinal)))
                     {
                         issues.Add(new ModelHealthIssue(
                             "SLAB_MESH_FOOTPRINT_MODE_INVALID",
