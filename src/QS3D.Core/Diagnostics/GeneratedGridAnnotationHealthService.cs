@@ -157,16 +157,26 @@ namespace QS3D.Core.Diagnostics
 
         private static void ValidateSizing(ProjectElement element, ICollection<ModelHealthIssue> issues)
         {
-            if (!TryPositive(Property(element, BubbleRadiusKey), out var radius))
+            var rawRadius = RawProperty(element, BubbleRadiusKey);
+            if (!TryPositive(rawRadius, out var radius))
             {
                 issues.Add(new ModelHealthIssue("GRID_ANNOTATION_BUBBLE_RADIUS_INVALID", HealthSeverity.Error, "GridBubbleRadiusM của generated annotation phải là số hữu hạn > 0.", element.Id));
                 return;
             }
-            if (!TryPositive(Property(element, TextHeightKey), out var textHeight))
+            var canonicalRadius = radius.ToString("R", CultureInfo.InvariantCulture);
+            if (!string.Equals(rawRadius, canonicalRadius, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("GRID_ANNOTATION_BUBBLE_RADIUS_NON_CANONICAL", HealthSeverity.Error, "GridBubbleRadiusM phải dùng đúng round-trip invariant numeric spelling: " + canonicalRadius + ".", element.Id));
+
+            var rawTextHeight = RawProperty(element, TextHeightKey);
+            if (!TryPositive(rawTextHeight, out var textHeight))
             {
                 issues.Add(new ModelHealthIssue("GRID_ANNOTATION_TEXT_HEIGHT_INVALID", HealthSeverity.Error, "GridTextHeightM của generated annotation phải là số hữu hạn > 0.", element.Id));
                 return;
             }
+            var canonicalTextHeight = textHeight.ToString("R", CultureInfo.InvariantCulture);
+            if (!string.Equals(rawTextHeight, canonicalTextHeight, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("GRID_ANNOTATION_TEXT_HEIGHT_NON_CANONICAL", HealthSeverity.Error, "GridTextHeightM phải dùng đúng round-trip invariant numeric spelling: " + canonicalTextHeight + ".", element.Id));
+
             if (textHeight > radius * 1.8d)
                 issues.Add(new ModelHealthIssue("GRID_ANNOTATION_TEXT_TOO_LARGE", HealthSeverity.Error, "GridTextHeightM vượt giới hạn 1.8 × GridBubbleRadiusM.", element.Id));
         }
