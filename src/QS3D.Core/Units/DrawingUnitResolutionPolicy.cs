@@ -118,7 +118,8 @@ namespace QS3D.Core.Units
         private static bool TryParseNamedUnitToken(string raw, out LengthUnit unit)
         {
             unit = default(LengthUnit);
-            var token = (raw ?? string.Empty).Trim();
+            var token = raw ?? string.Empty;
+            if (!string.Equals(token, token.Trim(), StringComparison.Ordinal)) return false;
             if (!Enum.TryParse(token, true, out unit) || !Enum.IsDefined(typeof(LengthUnit), unit)) return false;
             var name = Enum.GetName(typeof(LengthUnit), unit);
             return name != null && string.Equals(token, name, StringComparison.OrdinalIgnoreCase);

@@ -9,6 +9,9 @@ namespace QS3D.Core.Takeoff
         public static TakeoffResult Calculate(EntitySnapshot entity, TakeoffKind kind, DrawingUnit drawingUnit)
         {
             if (entity == null) throw new ArgumentNullException(nameof(entity));
+            if (!Enum.IsDefined(typeof(TakeoffKind), kind)) throw new ArgumentOutOfRangeException(nameof(kind));
+            if (!Enum.IsDefined(typeof(DrawingUnit), drawingUnit)) throw new ArgumentOutOfRangeException(nameof(drawingUnit));
+
             switch (kind)
             {
                 case TakeoffKind.Count:

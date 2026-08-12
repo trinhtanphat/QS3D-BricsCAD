@@ -137,6 +137,59 @@ namespace QS3D.Core.Documentation
 
             var views = MaterializeAvailableViewsBounded(availableViews);
             var viewIndex = BuildUniqueViewIndex(views);
+            return BuildValidated(definition, viewIndex, id, number, name, titleBlockName);
+        }
+
+        public static IReadOnlyList<SemanticSheetPlan> BuildCatalog(
+            IEnumerable<SemanticSheetDefinition> definitions,
+            IEnumerable<SemanticViewPlan> availableViews)
+        {
+            if (definitions == null) throw new ArgumentNullException(nameof(definitions));
+            if (availableViews == null) throw new ArgumentNullException(nameof(availableViews));
+
+            var views = MaterializeAvailableViewsBounded(availableViews);
+            var viewIndex = BuildUniqueViewIndex(views);
+            var materialized = MaterializeCatalogBounded(definitions);
+
+            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var numbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var plans = new List<SemanticSheetPlan>(materialized.Count);
+            foreach (var definition in materialized)
+            {
+                if (definition == null) throw new ArgumentException("Semantic sheet definition cannot be null.", nameof(definitions));
+                var plan = BuildCore(definition, viewIndex);
+                if (!ids.Add(plan.Id)) throw new InvalidOperationException("Semantic sheet catalog contains duplicate sheet id: " + plan.Id + ".");
+                if (!numbers.Add(plan.Number)) throw new InvalidOperationException("Semantic sheet catalog contains duplicate sheet number: " + plan.Number + ".");
+                plans.Add(plan);
+            }
+
+            return plans
+                .OrderBy(x => x.Number, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        private static SemanticSheetPlan BuildCore(
+            SemanticSheetDefinition definition,
+            Dictionary<string, SemanticViewPlan> viewIndex)
+        {
+            var id = Required(definition.Id, nameof(definition.Id), MaxIdLength);
+            var number = Required(definition.Number, nameof(definition.Number), MaxNumberLength);
+            var name = Required(definition.Name, nameof(definition.Name), MaxNameLength);
+            var titleBlockName = Optional(definition.TitleBlockName, nameof(definition.TitleBlockName), MaxTitleBlockLength);
+            PositiveFinite(definition.WidthMm, nameof(definition.WidthMm));
+            PositiveFinite(definition.HeightMm, nameof(definition.HeightMm));
+            return BuildValidated(definition, viewIndex, id, number, name, titleBlockName);
+        }
+
+        private static SemanticSheetPlan BuildValidated(
+            SemanticSheetDefinition definition,
+            Dictionary<string, SemanticViewPlan> viewIndex,
+            string id,
+            string number,
+            string name,
+            string? titleBlockName)
+        {
             if (definition.Placements.Count > MaxPlacements)
                 throw new InvalidOperationException("Semantic sheet supports at most " + MaxPlacements + " view placements.");
 
@@ -172,35 +225,6 @@ namespace QS3D.Core.Documentation
                 .ToArray();
 
             return new SemanticSheetPlan(id, number, name, definition.WidthMm, definition.HeightMm, titleBlockName, ordered);
-        }
-
-        public static IReadOnlyList<SemanticSheetPlan> BuildCatalog(
-            IEnumerable<SemanticSheetDefinition> definitions,
-            IEnumerable<SemanticViewPlan> availableViews)
-        {
-            if (definitions == null) throw new ArgumentNullException(nameof(definitions));
-            if (availableViews == null) throw new ArgumentNullException(nameof(availableViews));
-
-            var views = MaterializeAvailableViewsBounded(availableViews);
-            BuildUniqueViewIndex(views);
-            var materialized = MaterializeCatalogBounded(definitions);
-
-            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var numbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var plans = new List<SemanticSheetPlan>(materialized.Count);
-            foreach (var definition in materialized)
-            {
-                if (definition == null) throw new ArgumentException("Semantic sheet definition cannot be null.", nameof(definitions));
-                var plan = Build(definition, views);
-                if (!ids.Add(plan.Id)) throw new InvalidOperationException("Semantic sheet catalog contains duplicate sheet id: " + plan.Id + ".");
-                if (!numbers.Add(plan.Number)) throw new InvalidOperationException("Semantic sheet catalog contains duplicate sheet number: " + plan.Number + ".");
-                plans.Add(plan);
-            }
-
-            return plans
-                .OrderBy(x => x.Number, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
         }
 
         private static List<SemanticSheetDefinition> MaterializeCatalogBounded(IEnumerable<SemanticSheetDefinition> definitions)

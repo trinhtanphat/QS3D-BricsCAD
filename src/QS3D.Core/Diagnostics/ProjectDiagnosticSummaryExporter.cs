@@ -13,6 +13,7 @@ namespace QS3D.Core.Diagnostics
     {
         public const string FormatName = "QS3D.DiagnosticSummary";
         public const int FormatVersion = 1;
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public static string BuildSemantic(ProjectState project)
         {
@@ -115,7 +116,7 @@ namespace QS3D.Core.Diagnostics
             try
             {
                 using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
+                using (var writer = new StreamWriter(stream, StrictUtf8))
                 {
                     writer.Write(Build(project, issues));
                     writer.Flush();
@@ -150,6 +151,7 @@ namespace QS3D.Core.Diagnostics
         private static string Escape(string value)
         {
             var input = value ?? string.Empty;
+            StrictUtf8.GetByteCount(input);
             var sb = new StringBuilder(input.Length + 8);
             foreach (var ch in input)
             {

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
@@ -10,6 +11,7 @@ namespace QS3D.Core.Services
         public void LinkOpening(ProjectState project, string openingId, string wallId)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            ValidateUniqueElementIds(project);
             var opening = project.FindElement(openingId) ?? throw new InvalidOperationException("Opening element not found: " + openingId);
             var wall = project.FindElement(wallId) ?? throw new InvalidOperationException("Wall element not found: " + wallId);
             EnsureOpening(opening, openingId);
@@ -59,6 +61,7 @@ namespace QS3D.Core.Services
         public void UnlinkOpening(ProjectState project, string openingId)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            ValidateUniqueElementIds(project);
             var opening = project.FindElement(openingId) ?? throw new InvalidOperationException("Opening element not found: " + openingId);
             EnsureOpening(opening, openingId);
             var hasHostProperty = opening.Properties.TryGetValue("HostWallId", out var value);
@@ -95,6 +98,18 @@ namespace QS3D.Core.Services
                 AuditTrail.ForProject(project).Record("host.unlink", opening.Id, hostId);
                 return true;
             });
+        }
+
+        private static void ValidateUniqueElementIds(ProjectState project)
+        {
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry.");
+                if (!seenIds.Add(element.Id))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + element.Id + ".");
+            }
         }
 
         private static bool ClearAutoHostMetadata(ProjectElement opening)

@@ -331,18 +331,18 @@ namespace QS3D.Core.Documentation
                 {
                     placements.Add(new SemanticSheetPlacementDefinition(
                         Required(placement, "viewId"),
-                        Double(Required(placement, "xMm"), "placement xMm"),
-                        Double(Required(placement, "yMm"), "placement yMm"),
-                        Double(Required(placement, "widthMm"), "placement widthMm"),
-                        Double(Required(placement, "heightMm"), "placement heightMm")));
+                        RequiredDouble(placement, "xMm", "placement xMm"),
+                        RequiredDouble(placement, "yMm", "placement yMm"),
+                        RequiredDouble(placement, "widthMm", "placement widthMm"),
+                        RequiredDouble(placement, "heightMm", "placement heightMm")));
                 }
 
                 result.Add(new SemanticSheetDefinition(
                     Required(item, "id"),
                     Required(item, "number"),
                     Required(item, "name"),
-                    Double(Required(item, "widthMm"), "sheet widthMm"),
-                    Double(Required(item, "heightMm"), "sheet heightMm"),
+                    RequiredDouble(item, "widthMm", "sheet widthMm"),
+                    RequiredDouble(item, "heightMm", "sheet heightMm"),
                     placements,
                     Optional(item, "titleBlockName")));
             }
@@ -389,9 +389,20 @@ namespace QS3D.Core.Documentation
             return result;
         }
 
+        private static double RequiredDouble(XElement element, string attribute, string label)
+        {
+            var value = element.Attribute(attribute)?.Value;
+            if (value == null || string.IsNullOrWhiteSpace(value))
+                throw new InvalidDataException("Semantic documentation catalog is missing attribute: " + attribute + ".");
+            return Double(value, label);
+        }
+
         private static double Double(string value, string label)
         {
-            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) || double.IsNaN(result) || double.IsInfinity(result))
+            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) ||
+                double.IsNaN(result) ||
+                double.IsInfinity(result) ||
+                !string.Equals(value, Number(result), StringComparison.Ordinal))
                 throw new InvalidDataException("Semantic documentation " + label + " is invalid.");
             return result;
         }

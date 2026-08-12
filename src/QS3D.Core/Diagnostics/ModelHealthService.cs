@@ -347,10 +347,18 @@ namespace QS3D.Core.Diagnostics
             if (element.SourceHandles.Any(x => string.Equals(x?.Trim(), handle, StringComparison.OrdinalIgnoreCase)))
                 issues.Add(new ModelHealthIssue("GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "GeneratedSolidHandle không được nằm trong SourceHandles.", element.Id));
 
-            if (!element.Properties.TryGetValue("GeneratedSolidCategory", out var rawCategory) || !Enum.TryParse(rawCategory, true, out ElementCategory generatedCategory))
+            var categoryText = (element.Properties.TryGetValue("GeneratedSolidCategory", out var rawCategory) ? rawCategory : string.Empty) ?? string.Empty;
+            var normalizedCategoryText = categoryText.Trim();
+            if (normalizedCategoryText.Length == 0 || !Enum.TryParse(normalizedCategoryText, true, out ElementCategory generatedCategory))
                 issues.Add(new ModelHealthIssue("GENERATED_CATEGORY_MISSING", HealthSeverity.Warning, "GeneratedSolidCategory bị thiếu hoặc không hợp lệ.", element.Id));
-            else if (generatedCategory != element.Category)
-                issues.Add(new ModelHealthIssue("GENERATED_CATEGORY_MISMATCH", HealthSeverity.Error, "GeneratedSolidCategory không khớp category semantic: " + generatedCategory + " ≠ " + element.Category + ".", element.Id));
+            else
+            {
+                var canonicalCategoryText = generatedCategory.ToString();
+                if (!string.Equals(categoryText, canonicalCategoryText, StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue("GENERATED_CATEGORY_NON_CANONICAL", HealthSeverity.Error, "GeneratedSolidCategory phải dùng đúng canonical ElementCategory token: " + canonicalCategoryText + ".", element.Id));
+                if (generatedCategory != element.Category)
+                    issues.Add(new ModelHealthIssue("GENERATED_CATEGORY_MISMATCH", HealthSeverity.Error, "GeneratedSolidCategory không khớp category semantic: " + generatedCategory + " ≠ " + element.Category + ".", element.Id));
+            }
 
             var hasVersion = element.Properties.TryGetValue("GeneratedSolidOwnershipVersion", out var ownershipVersion) && !string.IsNullOrWhiteSpace(ownershipVersion);
             var hasProjectOwner = element.Properties.TryGetValue("GeneratedSolidOwnerProjectId", out var ownerProjectId) && !string.IsNullOrWhiteSpace(ownerProjectId);
@@ -359,11 +367,22 @@ namespace QS3D.Core.Diagnostics
                 issues.Add(new ModelHealthIssue("GENERATED_OWNERSHIP_MISSING", HealthSeverity.Warning, "Generated solid is missing a QS3D ownership marker and cannot be replaced automatically.", element.Id));
             else
             {
-                if (!string.Equals(ownershipVersion!.Trim(), "1", StringComparison.Ordinal))
+                var normalizedOwnershipVersion = ownershipVersion!.Trim();
+                var normalizedOwnerProjectId = ownerProjectId!.Trim();
+                var normalizedOwnerElementId = ownerElementId!.Trim();
+
+                if (!string.Equals(ownershipVersion, normalizedOwnershipVersion, StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue("GENERATED_OWNERSHIP_VERSION_NON_CANONICAL", HealthSeverity.Error, "Generated solid ownership version contains non-canonical surrounding whitespace.", element.Id));
+                if (!string.Equals(ownerProjectId, normalizedOwnerProjectId, StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue("GENERATED_PROJECT_OWNER_NON_CANONICAL", HealthSeverity.Error, "Generated solid owner project id contains non-canonical surrounding whitespace.", element.Id));
+                if (!string.Equals(ownerElementId, normalizedOwnerElementId, StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue("GENERATED_ELEMENT_OWNER_NON_CANONICAL", HealthSeverity.Error, "Generated solid owner element id contains non-canonical surrounding whitespace.", element.Id));
+
+                if (!string.Equals(normalizedOwnershipVersion, "1", StringComparison.Ordinal))
                     issues.Add(new ModelHealthIssue("GENERATED_OWNERSHIP_VERSION", HealthSeverity.Error, "Generated solid ownership version is not supported: " + ownershipVersion + ".", element.Id));
-                if (!string.Equals(ownerProjectId!.Trim(), project.ProjectId, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(normalizedOwnerProjectId, project.ProjectId, StringComparison.OrdinalIgnoreCase))
                     issues.Add(new ModelHealthIssue("GENERATED_PROJECT_MISMATCH", HealthSeverity.Error, "Generated solid does not belong to the current project.", element.Id));
-                if (!string.Equals(ownerElementId!.Trim(), element.Id, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(normalizedOwnerElementId, element.Id, StringComparison.OrdinalIgnoreCase))
                     issues.Add(new ModelHealthIssue("GENERATED_ELEMENT_MISMATCH", HealthSeverity.Error, "Generated solid ownership does not match the current semantic element.", element.Id));
             }
 

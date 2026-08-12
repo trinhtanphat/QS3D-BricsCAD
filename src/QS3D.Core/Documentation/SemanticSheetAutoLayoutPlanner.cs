@@ -148,7 +148,7 @@ namespace QS3D.Core.Documentation
                     options.TitleBlockName);
                 result.Add(SemanticSheetPlanner.Build(definition, views.Values));
             }
-            return result;
+            return result.AsReadOnly();
         }
 
         private static List<SemanticSheetAutoLayoutItem> MaterializeItemsBounded(IEnumerable<SemanticSheetAutoLayoutItem> items)
