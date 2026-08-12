@@ -32,6 +32,7 @@ namespace QS3D.Core.Persistence
 
             ValidateRequiredCanonicalAttribute(root, "projectId", "project id");
             ValidateRequiredCanonicalAttribute(root, "name", "project name");
+            ValidateOptionalCanonicalAttribute(root, "drawingFingerprint", "drawing fingerprint");
             ValidateOptionalCanonicalAttribute(root, "activeZoneId", "active zone id");
             ValidateOptionalCanonicalAttribute(root, "activeFloorId", "active floor id");
 
@@ -136,6 +137,7 @@ namespace QS3D.Core.Persistence
                 ValidateOptionalCanonicalAttribute(element, "familyId", "element family id");
                 ValidateOptionalCanonicalAttribute(element, "floorId", "element floor id");
                 ValidateOptionalCanonicalAttribute(element, "zoneId", "element zone id");
+                ValidateOptionalCanonicalAttribute(element, "drawingFingerprint", "element drawing fingerprint");
 
                 RequireAtMostOne(element, "handles");
                 RequireAtMostOne(element, "dependencies");
