@@ -303,7 +303,15 @@ namespace QS3D.Core.Revisions
             ValidateOptionalCanonicalValue(value, label);
             return value ?? string.Empty;
         }
-        private static double Number(string? value) => double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) && !double.IsNaN(result) && !double.IsInfinity(result) ? result : throw new InvalidDataException("Invalid revision quantity.");
+        private static double Number(string? value)
+        {
+            if (value == null || !double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) || double.IsNaN(result) || double.IsInfinity(result))
+                throw new InvalidDataException("Invalid revision quantity.");
+            var canonical = result.ToString("R", CultureInfo.InvariantCulture);
+            if (!string.Equals(value, canonical, StringComparison.Ordinal))
+                throw new InvalidDataException("Non-canonical revision quantity: " + value + ".");
+            return result;
+        }
         private static double Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value) ? value : throw new InvalidDataException("Revision quantity must be finite.");
         private static DateTime Date(string? value)
         {
