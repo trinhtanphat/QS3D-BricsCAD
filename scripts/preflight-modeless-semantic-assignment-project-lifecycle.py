@@ -7,6 +7,7 @@ CASES = (
     (
         ROOT / "src/QS3D.BricsCAD.V25/UI/FamilyManagerWindow.xaml.cs",
         "private void OnAssignClick",
+        "ProjectContextCoordinator.TryGetReadOnly(_document, out var previewProject)",
         "ExistingProjectMutationContext.Require(_document, \"Gán Family cho selection\")",
         "ProjectFamilyService.Assign(project, family.Id, elements)",
         "Family",
@@ -14,6 +15,7 @@ CASES = (
     (
         ROOT / "src/QS3D.BricsCAD.V25/UI/MaterialCatalogWindow.xaml.cs",
         "private void OnApplyClick",
+        "ProjectContextCoordinator.TryGetReadOnly(_document, out var previewProject)",
         "ExistingProjectMutationContext.TryGet(_document, out var project)",
         "element.SetProperty(target, material.Name)",
         "Material",
@@ -21,6 +23,7 @@ CASES = (
     (
         ROOT / "src/QS3D.BricsCAD.V25/UI/ZoneManagerWindow.xaml.cs",
         "private void OnAssignClick",
+        "ProjectContextCoordinator.TryGetReadOnly(_document, out var previewProject)",
         "ExistingProjectMutationContext.Require(_document, \"Gán Zone cho selection\")",
         "ProjectZoneService.Assign(project, zone.Id, elements)",
         "Zone",
@@ -28,6 +31,7 @@ CASES = (
     (
         ROOT / "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml.cs",
         "private void OnAssignClick",
+        "var previewProject = RequireBoundProjectForRead(\"gán tầng cho selection\");",
         "ExistingProjectMutationContext.Require(_document, \"Gán Floor/Level cho selection\")",
         "ProjectFloorService.Assign(project, floor.Id, elements)",
         "Floor/Level",
@@ -46,7 +50,7 @@ def method_body(text, start_token):
     return text[start:next_method]
 
 
-for path, method, bind_token, mutation_token, label in CASES:
+for path, method, preview_token, bind_token, mutation_token, label in CASES:
     if not path.is_file():
         errors.append("missing modeless semantic assignment file: " + str(path.relative_to(ROOT)))
         continue
@@ -57,7 +61,7 @@ for path, method, bind_token, mutation_token, label in CASES:
         errors.append(path.name + " missing " + method)
         continue
 
-    preview = body.find("ProjectContextCoordinator.TryGetReadOnly(_document, out var previewProject)")
+    preview = body.find(preview_token)
     first_resolve = body.find("SemanticSelectionResolver.ResolveImplied(_document, previewProject)")
     empty_guard = body.find("Count == 0")
     bind = body.find(bind_token)
@@ -67,7 +71,7 @@ for path, method, bind_token, mutation_token, label in CASES:
     mutation = body.find(mutation_token)
 
     if min(preview, first_resolve, empty_guard, bind) < 0 or not preview < first_resolve < empty_guard < bind:
-        errors.append(label + " assignment must resolve a read-only semantic selection and reject empty selection before canonical mutation binding")
+        errors.append(label + " assignment must resolve a guarded read-only semantic selection and reject empty selection before canonical mutation binding")
     if project_guard < 0 or bind < 0 or project_guard > bind:
         errors.append(label + " assignment must capture preview ProjectId before canonical mutation binding")
     if min(bind, canonical_resolve, freshness, mutation) < 0 or not bind < canonical_resolve < freshness < mutation:
@@ -80,4 +84,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] Family/Material/Zone/Floor modeless semantic assignment resolves selection before project bind and rechecks ProjectId/ownership freshness before mutation")
+print("[PASS] Family/Material/Zone/Floor modeless semantic assignment resolves guarded selection before project bind and rechecks ProjectId/ownership freshness before mutation")
