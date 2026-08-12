@@ -1,36 +1,39 @@
 # Work claim — Generated Solid handle canonical spacing
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-web/gpt56sol-generated-solid-handle-canonicality`
 - Registered: `2026-08-12T09:17:00+07:00`
+- Completed: `2026-08-12T09:19:00+07:00`
 - Baseline main SHA: `7e1b3ca2f5f1c50a4ef49323fb5dcd738cbf4c21`
+- PR: `#684`
+- Reviewed head SHA: `d74a066656865ad73365d01615ea492ee00db793`
+- Squash merge SHA: `ac33b9c5e5a0387aba202eb77b279bd076f0ab4b`
 - Priority: P1 — persisted Generated Solid handle text must preserve the writer-owned trimmed contract.
 - Task Key: `CORE-MODEL-HEALTH-GENERATED-SOLID-HANDLE-CANONICALITY`
 
-## Confirmed defect
+## Completed implementation
 
-`GeneratedGeometryService.CommitReplacement(...)` persists `GeneratedSolidHandle` as `generatedHandle.Trim()`. Baseline `ModelHealthService.ValidateGeneratedGeometry(...)` currently trims the stored handle before hexadecimal validation and ownership checks, so externally edited values such as `" A "` can pass as valid handle `A` without any health evidence even though the canonical writer never emits surrounding whitespace.
+`ModelHealthService.ValidateGeneratedGeometry(...)` now preserves the raw scalar `GeneratedSolidHandle` text long enough to report a dedicated `GENERATED_HANDLE_NON_CANONICAL` Error when a valid hexadecimal handle has surrounding whitespace. Existing invalid-handle, ownership and live-handle checks continue on the trimmed handle. Hex-letter casing is intentionally unchanged.
 
-## Non-overlap check
-
-Recent generated handle lanes cover empty-list tokens for multi-handle providers and native ownership/fatal runtime behavior. The completed Generated Solid ownership/category canonicality lanes cover different metadata fields. No recent claim/commit was found for surrounding-whitespace canonicality of the scalar `GeneratedSolidHandle` property.
-
-## Reserved scope
+## Implemented surfaces
 
 - `src/QS3D.Core/Diagnostics/ModelHealthService.cs`
-- one focused Core smoke regression for Generated Solid handle spacing
+- `tests/QS3D.Core.SmokeTests/ModelHealthGeneratedSolidHandleCanonicalitySmoke.cs`
 - this claim file
 
-Do not normalize hex case, modify handle ownership semantics, native XData, `GeneratedGeometryService`, builders, persistence format or BricsCAD runtime code.
+## Validation actually performed
 
-## Intended contract
+- Reviewed PR #684 patch and focused smoke covering padded, canonical, lowercase-hex and invalid handle cases.
+- Compared PR base `d4edd88335da300127637d3b6c7145293ecba0e6` with then-current `main@13219765d9940c9ede67cdc554cd24f6216bd04e`; five intervening commits did not touch the reserved source/test.
+- Squash-merged #684 with expected head SHA `d74a066656865ad73365d01615ea492ee00db793` at `ac33b9c5e5a0387aba202eb77b279bd076f0ab4b`.
+- No local .NET build/smoke execution is claimed from this connector-only review.
+- No GitHub Actions were dispatched, no force-push was used, and no BricsCAD V25/V26 runtime PASS is claimed.
 
-- A non-empty hexadecimal handle with leading/trailing whitespace emits a dedicated `HealthSeverity.Error` canonicality diagnostic.
-- Existing invalid-handle, duplicate ownership, source-handle overlap and live-handle diagnostics continue to use the trimmed handle value.
-- Exact trimmed handles preserve existing behavior.
-- Inspection remains read-only and deterministic.
+## Excluded scope honored
+
+No hex-case normalization, handle ownership redesign, native XData, GeneratedGeometryService/builder changes, persistence format changes or BricsCAD runtime changes were made.
 
 ## Completion condition
 
-Padded handles are fail-visible without changing hex-case semantics, focused smoke coverage pins padded/canonical/invalid behavior, source + smoke are read back from merged `main`, ancestry is verified, and this claim is closed with exact commit SHAs.
+Completed. Padded scalar GeneratedSolidHandle metadata is fail-visible, focused regression coverage is integrated on `main`, exact merge evidence is recorded, and this reservation is released by `COMPLETED` status.
