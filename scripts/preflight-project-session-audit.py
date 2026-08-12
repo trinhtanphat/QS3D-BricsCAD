@@ -19,7 +19,7 @@ if SESSION.is_file():
         "public AuditTrail Audit { get; private set; }",
         "private bool _recoveredFromBackup;",
         "var snapshot = ProjectStateSnapshot.Capture(Project);",
-        'Audit.Record("PROJECT_SAVE", string.Empty, Path);',
+        'Audit.Record("PROJECT_SAVE", string.Empty, string.Empty);',
         "snapshot.Restore(Project);",
     ):
         if token not in text:
@@ -44,12 +44,12 @@ if SESSION.is_file():
                 errors.append("ProjectSession.Save missing recovery publication token: " + token)
 
         if all(token in save for token in (
-            'Audit.Record("PROJECT_SAVE", string.Empty, Path);',
+            'Audit.Record("PROJECT_SAVE", string.Empty, string.Empty);',
             "_store.SavePreservingValidatedBackup(Project, Path);",
             "_store.Save(Project, Path);",
             "_recoveredFromBackup = false;",
         )):
-            audit_index = save.index('Audit.Record("PROJECT_SAVE", string.Empty, Path);')
+            audit_index = save.index('Audit.Record("PROJECT_SAVE", string.Empty, string.Empty);')
             preserve_index = save.index("_store.SavePreservingValidatedBackup(Project, Path);")
             normal_index = save.index("_store.Save(Project, Path);")
             clear_index = save.index("_recoveredFromBackup = false;")
@@ -62,7 +62,7 @@ if SESSION.is_file():
             "var result = _store.LoadWithBackupFallback(Path);",
             "var project = result.Project;",
             "var audit = AuditTrail.ForProject(project);",
-            'audit.Record("PROJECT_RELOAD", string.Empty, Path);',
+            'audit.Record("PROJECT_RELOAD", string.Empty, string.Empty);',
             "Project = project;",
             "Audit = audit;",
             "_recoveredFromBackup = result.RecoveredFromBackup;",
@@ -71,12 +71,12 @@ if SESSION.is_file():
                 errors.append("ProjectSession.Reload missing recovery staging token: " + token)
 
         if all(token in reload for token in (
-            'audit.Record("PROJECT_RELOAD", string.Empty, Path);',
+            'audit.Record("PROJECT_RELOAD", string.Empty, string.Empty);',
             "Project = project;",
             "Audit = audit;",
             "_recoveredFromBackup = result.RecoveredFromBackup;",
         )):
-            audit_index = reload.index('audit.Record("PROJECT_RELOAD", string.Empty, Path);')
+            audit_index = reload.index('audit.Record("PROJECT_RELOAD", string.Empty, string.Empty);')
             project_index = reload.index("Project = project;")
             audit_bind_index = reload.index("Audit = audit;")
             provenance_index = reload.index("_recoveredFromBackup = result.RecoveredFromBackup;")
@@ -84,6 +84,13 @@ if SESSION.is_file():
                 errors.append("Reload must finish staging audit state before swapping live session bindings/provenance")
             if provenance_index < max(project_index, audit_bind_index):
                 errors.append("Reload recovery provenance must publish with the staged project/audit bindings")
+
+        for leaked in (
+            'Audit.Record("PROJECT_SAVE", string.Empty, Path);',
+            'audit.Record("PROJECT_RELOAD", string.Empty, Path);',
+        ):
+            if leaked in text:
+                errors.append("ProjectSession audit must not persist machine-local project paths: " + leaked)
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
@@ -111,4 +118,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] project-session recovery is statically guarded for fallback reload, atomic binding, validated-backup publication, failure rollback and recovery-mode clearing")
+print("[PASS] project-session recovery is statically guarded for redacted audit events, fallback reload, atomic binding, validated-backup publication, failure rollback and recovery-mode clearing")
