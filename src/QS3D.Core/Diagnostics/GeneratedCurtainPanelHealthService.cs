@@ -16,6 +16,18 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
+            ISet<string>? liveHandleIndex = null;
+            if (livePanelHandles != null)
+            {
+                var index = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var handle in livePanelHandles)
+                {
+                    var normalized = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
+                    if (normalized.Length > 0) index.Add(normalized);
+                }
+                liveHandleIndex = index;
+            }
+
             foreach (var element in project.Elements)
             {
                 if (element == null)
@@ -42,14 +54,15 @@ namespace QS3D.Core.Diagnostics
                         }
                         if (!string.Equals(handleText, handle, StringComparison.Ordinal))
                             Add(issues, "CURTAIN_PANEL_GENERATED_HANDLE_NON_CANONICAL", HealthSeverity.Error, HandlesKey + " cannot contain leading or trailing whitespace around a handle token.", element);
-                        if (!handles.Add(handle))
+                        var identity = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
+                        if (!handles.Add(identity))
                         {
                             Add(issues, "DUPLICATE_CURTAIN_PANEL_GENERATED_HANDLE", HealthSeverity.Error, "A generated curtain panel handle is repeated in the same owner: " + handle + ".", element);
                             continue;
                         }
                         try
                         {
-                            if (!GeneratedHandleOwnershipPolicy.TryFindOwner(project, handle, out var owner, out var ownerKey) ||
+                            if (!GeneratedHandleOwnershipPolicy.TryFindOwner(project, identity, out var owner, out var ownerKey) ||
                                 !ReferenceEquals(owner, element) ||
                                 !string.Equals(ownerKey, HandlesKey, StringComparison.OrdinalIgnoreCase))
                                 Add(issues, "CURTAIN_PANEL_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated curtain panel ownership is not exclusive: " + handle + ".", element);
@@ -60,7 +73,7 @@ namespace QS3D.Core.Diagnostics
                         }
                         if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
                             Add(issues, "CURTAIN_PANEL_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "A generated curtain panel handle cannot also be a source handle.", element);
-                        if (livePanelHandles != null && !livePanelHandles.Contains(handle))
+                        if (liveHandleIndex != null && !liveHandleIndex.Contains(identity))
                             Add(issues, "CURTAIN_PANEL_GENERATED_SOLID_MISSING", HealthSeverity.Error, "A generated curtain panel solid is missing: " + handle + ".", element);
                     }
                 }
