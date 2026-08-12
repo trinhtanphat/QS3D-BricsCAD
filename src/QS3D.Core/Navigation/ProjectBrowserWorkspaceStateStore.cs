@@ -231,6 +231,13 @@ namespace QS3D.Core.Navigation
             foreach (var name in expectedChildren)
                 if (root.Elements(name).Count() != 1)
                     throw new InvalidDataException("Project browser workspace requires exactly one " + name.LocalName + " element.");
+            var expectedChildOrder = new[]
+            {
+                XName.Get("Categories"), XName.Get("FloorIds"), XName.Get("ZoneIds"),
+                XName.Get("ExpandedPaths"), XName.Get("SelectedElementIds")
+            };
+            if (!root.Elements().Select(x => x.Name).SequenceEqual(expectedChildOrder))
+                throw new InvalidDataException("Project browser workspace collection containers are not in canonical order.");
 
             var categories = ReadCategories(root.Element("Categories"));
             var floorIds = ReadValues(root.Element("FloorIds"), "Id");
