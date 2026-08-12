@@ -85,7 +85,14 @@ if point.exists():
 metrics = ROOT / "src/QS3D.Core/Geometry/PolylineMetrics.cs"
 if metrics.exists():
     text = metrics.read_text(encoding="utf-8")
-    for needle in ("var origin = points[0]", "compensation", "MultiplyFinite", "AddFinite"):
+    for needle in (
+        "var origin = points[0]",
+        "compensation",
+        "TranslatedCrossFinite",
+        "RestoreScaledCrossFinite",
+        "CrossFinite",
+        "AddFinite",
+    ):
         if needle not in text: errors.append("stable polyline metric guard missing: " + needle)
 
 references = ROOT / "src/QS3D.BricsCAD.V25/Services/SemanticReferenceHandles.cs"
@@ -185,4 +192,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: auto-room input/identity, Room->finish resynchronization, stale/orphan quantity exclusion, lazy BQ fallbacks, rollback, shared current-project semantic locate and large-coordinate geometry guards are present.")
+print("PASS: auto-room input/identity, Room->finish resynchronization, stale/orphan quantity exclusion, lazy BQ fallbacks, rollback, shared current-project semantic locate and overflow-safe large-coordinate geometry guards are present.")
