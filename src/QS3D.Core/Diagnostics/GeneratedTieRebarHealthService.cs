@@ -20,16 +20,20 @@ namespace QS3D.Core.Diagnostics
                 if (element == null)
                     throw new InvalidOperationException("Tie rebar health cannot inspect a null project element.");
                 if (!element.Properties.TryGetValue(HandlesKey, out var raw)) continue;
-                var handles = (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.None).Select(x => (x ?? string.Empty).Trim()).ToArray();
+                var handles = (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.None);
                 var local = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var valid = 0;
-                foreach (var handle in handles)
+                foreach (var item in handles)
                 {
+                    var handleText = item ?? string.Empty;
+                    var handle = handleText.Trim();
                     if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
                     {
                         issues.Add(new ModelHealthIssue("INVALID_TIE_REBAR_GENERATED_HANDLE", HealthSeverity.Error, HandlesKey + " chứa handle không hợp lệ.", element.Id));
                         continue;
                     }
+                    if (!string.Equals(handleText, handle, StringComparison.Ordinal))
+                        issues.Add(new ModelHealthIssue("TIE_REBAR_GENERATED_HANDLE_NON_CANONICAL", HealthSeverity.Error, HandlesKey + " không được có khoảng trắng đầu/cuối ở từng handle.", element.Id));
                     if (!local.Add(handle))
                     {
                         issues.Add(new ModelHealthIssue("DUPLICATE_TIE_REBAR_GENERATED_HANDLE", HealthSeverity.Error, "Generated tie handle bị lặp: " + handle, element.Id));
