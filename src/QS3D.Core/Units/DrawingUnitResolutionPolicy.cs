@@ -42,11 +42,13 @@ namespace QS3D.Core.Units
                 return true;
             }
 
-            if (!projectMetadata.TryGetValue(OverrideMetadataKey, out var raw) || string.IsNullOrWhiteSpace(raw))
+            if (!projectMetadata.TryGetValue(OverrideMetadataKey, out var raw))
             {
                 resolution = null!;
                 return false;
             }
+            if (string.IsNullOrWhiteSpace(raw))
+                throw new InvalidOperationException("Project drawing-unit override is invalid: value is blank.");
 
             if (!TryParseNamedUnitToken(raw, out var parsed))
                 throw new InvalidOperationException("Project drawing-unit override is invalid: " + raw + ".");
@@ -109,7 +111,9 @@ namespace QS3D.Core.Units
         private static bool TryReadCanonical(IDictionary<string, string> metadata, string key, out LengthUnit unit)
         {
             unit = default(LengthUnit);
-            if (!metadata.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return false;
+            if (!metadata.TryGetValue(key, out var raw)) return false;
+            if (string.IsNullOrWhiteSpace(raw))
+                throw new InvalidOperationException("Project drawing-unit metadata is invalid: " + key + " is blank.");
             if (!TryParseNamedUnitToken(raw, out unit))
                 throw new InvalidOperationException("Project drawing-unit metadata is invalid: " + key + "=" + raw + ".");
             return true;
