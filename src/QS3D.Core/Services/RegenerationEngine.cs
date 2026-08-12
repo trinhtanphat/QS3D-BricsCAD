@@ -84,19 +84,20 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
-            var maxCount = project.Elements.Count;
             var inputVersion = project.ChangeVersion;
-            var unresolved = CanonicalTargetIds(elementIds, maxCount);
+            var sourceElements = project.Elements.ToArray();
+            var unresolved = CanonicalTargetIds(elementIds, sourceElements.Length);
             if (project.ChangeVersion != inputVersion)
                 throw new InvalidOperationException("Project state changed while materializing regeneration target ids.");
+            RequireElementStructureFresh(project, sourceElements);
             if (unresolved.Count == 0) return 0;
 
-            // Resolve the requested subset in one project-order scan. The previous implementation
-            // built a full by-id dictionary and then scanned project.Elements again to recover
-            // project order, which doubled O(project-size) work on every targeted regeneration pass.
+            // Resolve the requested subset in one captured project-order scan. The previous implementation
+            // scanned live project.Elements after caller target enumeration, which could silently switch to
+            // replacement same-id instances when callers directly edited the public collection without Touch().
             var targets = new List<ProjectElement>(unresolved.Count);
             var seenProjectIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var element in project.Elements)
+            foreach (var element in sourceElements)
             {
                 if (element == null) throw new InvalidOperationException("Project contains a null semantic element entry.");
                 if (!seenProjectIds.Add(element.Id))
@@ -109,6 +110,9 @@ namespace QS3D.Core.Services
                 throw new KeyNotFoundException("Unknown regeneration target: " + missing);
             }
             ValidateSubsetDependencyExistence(targets, seenProjectIds);
+            if (project.ChangeVersion != inputVersion)
+                throw new InvalidOperationException("Project state changed while materializing regeneration target ids.");
+            RequireElementStructureFresh(project, sourceElements);
 
             return RegenerateTransactional(project, targets, targets.Count);
         }
@@ -122,6 +126,21 @@ namespace QS3D.Core.Services
                 if (!seenProjectIds.Add(element.Id))
                     throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
             }
+        }
+
+        private static void RequireElementStructureFresh(ProjectState project, IReadOnlyList<ProjectElement> sourceElements)
+        {
+            if (project.Elements.Count != sourceElements.Count)
+                throw StructuralFreshnessError();
+            for (var index = 0; index < sourceElements.Count; index++)
+                if (!ReferenceEquals(project.Elements[index], sourceElements[index]))
+                    throw StructuralFreshnessError();
+        }
+
+        private static InvalidOperationException StructuralFreshnessError()
+        {
+            return new InvalidOperationException(
+                "Project element structure changed while materializing regeneration target ids. Retry targeted regeneration against the current project state.");
         }
 
         private static void ValidateSubsetDependencyExistence(
