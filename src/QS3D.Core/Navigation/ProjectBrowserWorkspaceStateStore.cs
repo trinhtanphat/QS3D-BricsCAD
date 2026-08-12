@@ -133,8 +133,6 @@ namespace QS3D.Core.Navigation
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (!project.Metadata.TryGetValue(MetadataKey, out var serialized))
                 return new ProjectBrowserWorkspaceState();
-            if (serialized.Length > MaxSerializedChars)
-                throw new InvalidDataException("Project browser workspace state exceeds the maximum persisted size.");
 
             var state = Deserialize(serialized);
             ValidateAgainstProject(project, state);
