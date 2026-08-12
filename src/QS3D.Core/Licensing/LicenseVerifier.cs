@@ -174,12 +174,16 @@ namespace QS3D.Core.Licensing
             if (!string.IsNullOrEmpty(root.Name.NamespaceName) ||
                 !string.Equals(root.Name.LocalName, "qs3dLicense", StringComparison.Ordinal))
                 throw new InvalidDataException("Invalid QS3D license root.");
+            ValidateAttributes(root, "qs3dLicense", "schema", "id", "customer", "product", "nonce");
             if (!string.Equals(Required(root, "schema"), "1", StringComparison.Ordinal)) throw new InvalidDataException("Unsupported QS3D license schema.");
             ValidateDirectChildren(root);
 
             var valid = RequiredSingleElement(root, "valid");
             var features = OptionalSingleElement(root, "features");
             var signatureElement = RequiredSingleElement(root, "signature");
+            ValidateAttributes(valid, "valid", "notBeforeUtc", "expiresUtc");
+            if (features != null) ValidateAttributes(features, "features");
+            ValidateAttributes(signatureElement, "signature", "algorithm");
             ValidateFeatureChildren(features);
             var license = new LicenseDocument
             {
@@ -191,7 +195,10 @@ namespace QS3D.Core.Licensing
                 Nonce = Required(root, "nonce")
             };
             foreach (var feature in features?.Elements("feature") ?? Enumerable.Empty<XElement>())
+            {
+                ValidateAttributes(feature, "feature", "name");
                 license.Features.Add(Required(feature, "name"));
+            }
             if (!string.Equals(Required(signatureElement, "algorithm"), "RSA-SHA256", StringComparison.Ordinal))
                 throw new InvalidDataException("Unsupported license signature algorithm.");
             if (signatureElement.HasElements)
@@ -226,6 +233,18 @@ namespace QS3D.Core.Licensing
                 if (!string.IsNullOrEmpty(child.Name.NamespaceName) ||
                     !string.Equals(child.Name.LocalName, "feature", StringComparison.Ordinal))
                     throw new InvalidDataException("License <features> may contain only unnamespaced <feature> elements.");
+            }
+        }
+
+        private static void ValidateAttributes(XElement element, string label, params string[] allowedNames)
+        {
+            var allowed = new HashSet<XName>(allowedNames.Select(XName.Get));
+            foreach (var attribute in element.Attributes())
+            {
+                if (attribute.IsNamespaceDeclaration ||
+                    attribute.Name.Namespace != XNamespace.None ||
+                    !allowed.Contains(attribute.Name))
+                    throw new InvalidDataException("Unsupported license attribute on <" + label + ">: " + attribute.Name + ".");
             }
         }
 
