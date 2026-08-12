@@ -121,9 +121,22 @@ namespace QS3D.Core.Diagnostics
 
         private static void ValidateOwner(ProjectState project, ProjectElement element, ICollection<ModelHealthIssue> issues)
         {
-            var version = Property(element, OwnershipVersionKey);
-            var ownerProject = Property(element, OwnerProjectKey);
-            var ownerElement = Property(element, OwnerElementKey);
+            var rawVersion = RawProperty(element, OwnershipVersionKey);
+            var rawOwnerProject = RawProperty(element, OwnerProjectKey);
+            var rawOwnerElement = RawProperty(element, OwnerElementKey);
+            var version = rawVersion.Trim();
+            var ownerProject = rawOwnerProject.Trim();
+            var ownerElement = rawOwnerElement.Trim();
+
+            if (!string.Equals(rawVersion, OwnershipVersion, StringComparison.Ordinal) &&
+                string.Equals(version, OwnershipVersion, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("GRID_ANNOTATION_OWNERSHIP_VERSION_NON_CANONICAL", HealthSeverity.Error, "Generated Grid annotation ownership version phải dùng đúng canonical token 1.", element.Id));
+            if (!string.Equals(rawOwnerProject, project.ProjectId, StringComparison.Ordinal) &&
+                string.Equals(ownerProject, project.ProjectId, StringComparison.OrdinalIgnoreCase))
+                issues.Add(new ModelHealthIssue("GRID_ANNOTATION_PROJECT_OWNER_NON_CANONICAL", HealthSeverity.Error, "Generated Grid annotation owner project id phải khớp chính xác project id canonical.", element.Id));
+            if (!string.Equals(rawOwnerElement, element.Id, StringComparison.Ordinal) &&
+                string.Equals(ownerElement, element.Id, StringComparison.OrdinalIgnoreCase))
+                issues.Add(new ModelHealthIssue("GRID_ANNOTATION_ELEMENT_OWNER_NON_CANONICAL", HealthSeverity.Error, "Generated Grid annotation owner element id phải khớp chính xác semantic Grid id canonical.", element.Id));
 
             if (!string.Equals(version, OwnershipVersion, StringComparison.Ordinal))
                 issues.Add(new ModelHealthIssue("GRID_ANNOTATION_OWNERSHIP_VERSION", HealthSeverity.Error, "Generated Grid annotation ownership version không được hỗ trợ: " + version + ".", element.Id));
@@ -155,7 +168,9 @@ namespace QS3D.Core.Diagnostics
                    !double.IsNaN(value) && !double.IsInfinity(value) && value > 0d;
         }
 
-        private static string Property(ProjectElement element, string key) =>
-            element.Properties.TryGetValue(key, out var raw) ? (raw ?? string.Empty).Trim() : string.Empty;
+        private static string RawProperty(ProjectElement element, string key) =>
+            element.Properties.TryGetValue(key, out var raw) ? raw ?? string.Empty : string.Empty;
+
+        private static string Property(ProjectElement element, string key) => RawProperty(element, key).Trim();
     }
 }
