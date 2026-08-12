@@ -57,7 +57,8 @@ namespace QS3D.Core.Recognition
                 .Where(x => !string.IsNullOrWhiteSpace(x))
                 .Select(RecognitionText.Normalize)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
+                .ToList()
+                .AsReadOnly();
         }
     }
 
