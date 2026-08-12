@@ -97,6 +97,7 @@ namespace QS3D.Core.Export
 
                 var targetCells = ReadCells(target, ns, sharedStrings);
                 var handleColumns = new HashSet<int>();
+                var fuzzyHandleColumns = new HashSet<int>();
                 var elementIdColumns = new HashSet<int>();
                 var fingerprintColumns = new HashSet<int>();
                 foreach (var headerRow in rows.Where(x => ParsePositiveInt((string?)x.Attribute("r")) < rowNumber).Take(10))
@@ -104,10 +105,11 @@ namespace QS3D.Core.Export
                     {
                         var header = (cell.Value ?? string.Empty).Trim();
                         if (string.Equals(header, "CAD Handle (hex)", StringComparison.OrdinalIgnoreCase)) handleColumns.Add(cell.Key);
-                        else if (header.IndexOf("handle", StringComparison.OrdinalIgnoreCase) >= 0) handleColumns.Add(cell.Key);
+                        else if (header.IndexOf("handle", StringComparison.OrdinalIgnoreCase) >= 0) fuzzyHandleColumns.Add(cell.Key);
                         if (string.Equals(header, "QS3D Drawing Fingerprint", StringComparison.OrdinalIgnoreCase)) fingerprintColumns.Add(cell.Key);
                         if (string.Equals(header, "QS3D Element ID", StringComparison.OrdinalIgnoreCase)) elementIdColumns.Add(cell.Key);
                     }
+                if (handleColumns.Count == 0) handleColumns.UnionWith(fuzzyHandleColumns);
 
                 var isModernSchema = elementIdColumns.Count > 0 || fingerprintColumns.Count > 0;
                 if (worksheet.IsEd2Detail && !isModernSchema)
