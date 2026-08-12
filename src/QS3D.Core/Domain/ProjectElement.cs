@@ -149,7 +149,7 @@ namespace QS3D.Core.Domain
             var key = name.Trim();
             if (Quantities.TryGetValue(key, out var existing) && existing.Equals(value)) return;
             Quantities[key] = value;
-            UpdatedUtc = DateTime.UtcNow;
+            MarkDirtyCore(ElementDirtyFlags.Quantity, false);
         }
 
         public void MarkGeneratedGeometryStale(string reason)
