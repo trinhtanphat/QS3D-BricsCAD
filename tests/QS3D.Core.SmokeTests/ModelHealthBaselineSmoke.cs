@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
@@ -66,10 +67,19 @@ namespace QS3D.Core.SmokeTests
             var project = Project("P-MALFORMED");
             var service = new ModelHealthBaselineService();
             Throws<InvalidOperationException>(() => service.Capture(project, new ModelHealthIssue[] { null! }));
-            Throws<InvalidOperationException>(() => service.Capture(project, new[]
-            {
-                new ModelHealthIssue("BAD_SEVERITY", (HealthSeverity)999, "bad")
-            }));
+
+            var invalidSeverity = CorruptSeverity(
+                new ModelHealthIssue("BAD_SEVERITY", HealthSeverity.Info, "bad"),
+                (HealthSeverity)999);
+            Throws<InvalidOperationException>(() => service.Capture(project, new[] { invalidSeverity }));
+        }
+
+        private static ModelHealthIssue CorruptSeverity(ModelHealthIssue issue, HealthSeverity severity)
+        {
+            var field = typeof(ModelHealthIssue).GetField("<Severity>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null) throw new InvalidOperationException("ModelHealthIssue severity backing field was not found for corruption smoke coverage.");
+            field.SetValue(issue, severity);
+            return issue;
         }
 
         private static void StaleMessageChangesRemainPersistent()
