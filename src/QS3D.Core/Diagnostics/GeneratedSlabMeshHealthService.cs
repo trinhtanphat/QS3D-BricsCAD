@@ -37,18 +37,19 @@ namespace QS3D.Core.Diagnostics
                     }
                     if (!string.Equals(handleText, handle, StringComparison.Ordinal))
                         issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_HANDLE_NON_CANONICAL", HealthSeverity.Error, HandlesKey + " không được có khoảng trắng đầu/cuối ở từng handle.", element.Id));
-                    if (!local.Add(handle))
+                    var identity = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
+                    if (!local.Add(identity))
                     {
                         issues.Add(new ModelHealthIssue("DUPLICATE_SLAB_MESH_GENERATED_HANDLE", HealthSeverity.Error, "Một slab mesh handle bị lặp trong cùng element: " + handle, element.Id));
                         continue;
                     }
                     validCount++;
                     var expectedOwner = element.Id + "/" + HandlesKey;
-                    if (ownership.IsConflicted(handle, expectedOwner))
-                        issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated slab mesh solid xung đột owner/project handle khác: " + ownership.Describe(handle), element.Id));
-                    if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
+                    if (ownership.IsConflicted(identity, expectedOwner))
+                        issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated slab mesh solid xung đột owner/project handle khác: " + ownership.Describe(identity), element.Id));
+                    if (element.SourceHandles.Any(x => string.Equals(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x), identity, StringComparison.OrdinalIgnoreCase)))
                         issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated slab mesh handle không được nằm trong SourceHandles.", element.Id));
-                    if (liveSolidHandles != null && !liveSolidHandles.Contains(handle))
+                    if (liveSolidHandles != null && !ContainsLogicalHandle(liveSolidHandles, identity))
                         issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_SOLID_MISSING", HealthSeverity.Error, "Không còn tìm thấy generated slab mesh Solid3d: " + handle, element.Id));
                 }
 
@@ -102,6 +103,9 @@ namespace QS3D.Core.Diagnostics
             }
             return issues.AsReadOnly();
         }
+
+        private static bool ContainsLogicalHandle(IEnumerable<string> handles, string identity) =>
+            handles.Any(x => string.Equals(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x), identity, StringComparison.OrdinalIgnoreCase));
 
         private static void ValidatePositive(ProjectElement element, string key, string code, List<ModelHealthIssue> issues)
         {
@@ -164,7 +168,7 @@ namespace QS3D.Core.Diagnostics
 
         private static void Reserve(OwnershipIndex index, string? handle, string token)
         {
-            var normalized = (handle ?? string.Empty).Trim();
+            var normalized = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
             if (normalized.Length == 0) return;
             if (!index.Owners.TryGetValue(normalized, out var existing))
             {
