@@ -52,7 +52,7 @@ namespace QS3D.Core.Documentation
 
         public string ResolveFamily(ProjectElement element)
         {
-            if (string.IsNullOrWhiteSpace(element.FamilyId)) return string.Empty;
+            if (string.IsNullOrEmpty(element.FamilyId)) return string.Empty;
             EnsureFamilyIndex();
             return ResolveReference(
                 element.FamilyId,
@@ -65,7 +65,7 @@ namespace QS3D.Core.Documentation
 
         public string ResolveFloor(ProjectElement element)
         {
-            if (string.IsNullOrWhiteSpace(element.FloorId)) return string.Empty;
+            if (string.IsNullOrEmpty(element.FloorId)) return string.Empty;
             EnsureFloorIndex();
             return ResolveReference(
                 element.FloorId,
@@ -78,7 +78,7 @@ namespace QS3D.Core.Documentation
 
         public string ResolveZone(ProjectElement element)
         {
-            if (string.IsNullOrWhiteSpace(element.ZoneId)) return string.Empty;
+            if (string.IsNullOrEmpty(element.ZoneId)) return string.Empty;
             EnsureZoneIndex();
             return ResolveReference(
                 element.ZoneId,
