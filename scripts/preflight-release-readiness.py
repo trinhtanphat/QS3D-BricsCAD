@@ -56,6 +56,9 @@ checks = {
     ],
     "src/QS3D.BricsCAD.V25/ReleaseReadinessCommands.cs": [
         'CommandMethod("QS3DRELEASECHECK"',
+        "#if BRICSCAD_V26",
+        'private const string ExpectedRuntimeLabel = "V26";',
+        'private const string ExpectedRuntimeLabel = "V25";',
         "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
         "ModelHealthService().Inspect",
         "GeneratedSolidRuntimeHealthService.Inspect(document, project)",
@@ -73,7 +76,7 @@ checks = {
         "GeneratedRebarModeHealthService().Inspect",
         "BomReleaseGuardService.Inspect",
         "summary.Errors == 0 && summary.Warnings == 0",
-        "V25 runtime/private-DWG gate vẫn là bước riêng",
+        'ExpectedRuntimeLabel + " runtime/private-DWG gate',
         "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)",
     ],
     "src/QS3D.BricsCAD.V25/SafeGeneratedHandleOwnershipHealthCommands.cs": [
@@ -136,4 +139,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DRELEASECHECK consumes shared ownership, dependency, HT_Phòng provenance, Foundation/mode, stale/live CAD (including Grid annotation + semantic tag runtime health) and BOM health; runtime/private-DWG remains a separate V25 gate.")
+print("PASS: QS3DRELEASECHECK consumes shared ownership, dependency, HT_Phòng provenance, Foundation/mode, stale/live CAD (including Grid annotation + semantic tag runtime health) and BOM health; runtime/private-DWG remains a separate host-major gate.")
