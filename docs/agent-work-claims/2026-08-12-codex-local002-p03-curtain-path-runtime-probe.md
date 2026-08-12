@@ -1,6 +1,6 @@
 # Work claim — LOCAL-002/P03 Curtain straight-path runtime probe
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local002-p03-curtain-path-runtime-probe-20260812` (`/root/audit_preflight_latest`)
 - Registered: `2026-08-12T12:23:00+07:00`
 - Baseline main SHA: `57445e364e3c8cd5bdf5322e87c5d8409e8bcbf7`
@@ -51,3 +51,12 @@ All existing production builders, planners, Health services, ownership services,
 - Deliver through normal PR/squash merge without force-push or Actions, close this source-preparation claim, and hand one clean exact merged-main SHA to the licensed local agent.
 - No BricsCAD launch, GitHub Actions dispatch, private/customer fixture or private runtime artifact access is authorized in this source-preparation batch.
 - Mark only P03 bounded `LOCAL_PASS` after a fresh exact-SHA run satisfies the complete marker and cleanup contract. Until then P03 and overall LOCAL-002 remain `PENDING_LOCAL`.
+
+## Close-out
+
+- Claim-only reservation: PR `#864`, squash merge `7cf46f23d917725abf2d36c060ae1fc403dc25a8`.
+- Source preparation: branch commit `7e64c30e3259f43f890ab9f8c96d623c93dcc4d8`, PR `#872`, squash merge `8f97b6503a1f29d6c0cd5c41858c00fc275d78d2`.
+- Added only the new automation command, runner, static gate and P03 runbook handoff reserved above. Existing Curtain builders, Core planners/Health, Level placement, Direct Draw, P01/P02 and the shared local inbox were not modified.
+- Focused P03/P02/native/orchestration/P01/runtime-health/path-frame/Level-Curtain/Direct Draw/command-wiring gates and the runner PowerShell parser passed after current-main integration. Aggregate `scripts/preflight.py` passed. The installed-reference V25 `Release|x64` adapter build succeeded with zero warnings/errors.
+- No BricsCAD launch, GitHub Actions dispatch, private/customer fixture or private runtime artifact access occurred.
+- This completes source preparation only. P03 and overall LOCAL-002 remain `PENDING_LOCAL` until one fresh exact merged-main SHA/DLL produces the complete sanitized V1 PASS marker and all process/script/sidecar/backup/DWG cleanup invariants.
