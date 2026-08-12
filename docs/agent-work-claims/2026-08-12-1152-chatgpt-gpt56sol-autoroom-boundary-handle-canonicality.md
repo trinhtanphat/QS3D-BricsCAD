@@ -1,31 +1,32 @@
 # Work claim — Auto Room boundary source handle canonicality
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-gpt56sol-autoroom-boundary-handle-canonicality-20260812`
 - Registered: `2026-08-12T11:52:00+07:00`
+- Completed: `2026-08-12T12:01:00+07:00`
 - Baseline main SHA: `0c93d6b24da2978a2ec76ca61b8ad17eb0c0a864`
+- Integration SHA: `e782ab6760b0f6cde9a09ecc04ca973095df86ca` (PR #854)
 - Priority: P1 — Locate must not silently normalize malformed persisted Auto Room boundary ownership metadata
 - Task Key: `CORE-AUTOROOM-BOUNDARY-SOURCE-HANDLES-CANONICALITY`
 
 ## Confirmed defect
 
-`AutoRoomLifecycle` writes `BoundarySourceHandles` as a canonical semicolon-separated snapshot: input handles are nonblank, trimmed, case-insensitively distinct, deterministically ordered, then joined with `;`.
+`RoomBoundaryCommands` persists `BoundarySourceHandles` from the `sourceSignature` returned by `AutoRoomLifecycle.NormalizeSourceHandles(...)`. The exact writer contract is trim + invariant uppercase + case-insensitive distinct + deterministic ordinal-ignore-case sort + semicolon join.
 
-`SourceHandleResolver.AddBoundaryHandles(...)` currently parses the persisted value with `StringSplitOptions.RemoveEmptyEntries`, trims every token, and silently de-duplicates through the global handle set. This lets malformed persisted metadata such as leading/trailing token whitespace, empty `;;` entries, duplicate/case-alias handles, or noncanonical ordering be silently accepted by Locate even though the lifecycle writer cannot produce those representations. Neighboring persisted `DependsOn` and `SourceHandles` are already fail-closed on noncanonical data.
+`SourceHandleResolver.AddBoundaryHandles(...)` previously parsed the persisted value with `StringSplitOptions.RemoveEmptyEntries`, trimmed every token, and silently de-duplicated through the global handle set. Malformed persisted metadata such as leading/trailing whitespace, lowercase/noncanonical case, empty `;;` entries, duplicate/case-alias handles, or noncanonical ordering was therefore silently accepted by Locate even though the Room Auto writer cannot produce those representations.
 
-## Reserved scope
+## Completed repair
 
-- `src/QS3D.Core/Services/SourceHandleResolver.cs`
-- one focused Core smoke and registration if required
-- this claim file
+- Non-empty persisted `BoundarySourceHandles` is split without dropping empty tokens and validated against `AutoRoomLifecycle.NormalizeSourceHandles(...)` before any boundary handle is added.
+- Null/noncanonical representations now fail closed with a repair-oriented Locate error.
+- Empty-string boundary snapshots remain valid and continue to fall back to generated ownership.
+- The existing 5000-handle bound is preserved.
+- Direct → boundary → generated precedence and deterministic canonical boundary ordering are preserved.
+- Focused Core smoke covers canonical resolution, whitespace/case/order/empty-token/duplicate rejection, empty generated fallback, and direct-source precedence.
 
-## Intended repair
+## Readback / validation boundary
 
-- Validate persisted `BoundarySourceHandles` against the lifecycle writer's canonical serialization before adding any boundary handle.
-- Fail closed on empty tokens, token whitespace, case-insensitive duplicates, and noncanonical ordering/serialization.
-- Preserve the 5000-handle bound, direct → boundary → generated precedence, deterministic returned handle order, and valid Auto Room Locate behavior.
+PR #854 was inspected as exactly two changed files before guarded squash merge. Integration SHA: `e782ab6760b0f6cde9a09ecc04ca973095df86ca`. Source and focused smoke were read back from `main` after integration.
 
-## Validation boundary
-
-Deterministic source/smoke diff and GitHub readback only. No GitHub Actions/full .NET build/executable smoke/BricsCAD V25/V26 runtime PASS will be claimed unless actually executed.
+No GitHub Actions/full .NET build/executable smoke/BricsCAD V25/V26 runtime PASS was claimed or executed.
