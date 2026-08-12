@@ -35,7 +35,7 @@ place = region(
     "QS3DTAG",
 )
 place_tokens = (
-    "PromptEntityHandle(document",
+    "AcquireSourceHandle(document",
     "ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject)",
     "ResolveSourceElement(previewProject, sourceHandle)",
     "var placement = PromptPlacement(document)",
@@ -48,20 +48,20 @@ place_tokens = (
 )
 place_positions = [place.find(token) for token in place_tokens]
 if any(position < 0 for position in place_positions):
-    errors.append("QS3DTAG missing source-preview/placement/canonical-rebind lifecycle token")
+    errors.append("QS3DTAG missing PICKFIRST/source-preview/placement/canonical-rebind lifecycle token")
 elif place_positions != sorted(place_positions):
-    errors.append("QS3DTAG must prompt source, validate read-only preview, complete placement, then bind/re-resolve canonical project before build")
+    errors.append("QS3DTAG must acquire source, validate read-only preview, complete placement, then bind/re-resolve canonical project before build")
 if "ProjectContextCoordinator.GetOrCreate" in place:
     errors.append("QS3DTAG must not create a replacement project")
 
 refresh = region(
     commands,
     "public void RefreshSemanticTag()",
-    "private static string? PromptEntityHandle",
+    "private static string? AcquireSourceHandle",
     "QS3DTAGREFRESH",
 )
 refresh_tokens = (
-    "PromptEntityHandle(document",
+    "AcquireSourceHandle(document",
     "if (sourceHandle == null) return;",
     "ExistingProjectMutationContext.Require(document, \"Semantic Tag refresh\")",
     "ResolveSourceElement(project, sourceHandle)",
@@ -69,11 +69,24 @@ refresh_tokens = (
 )
 refresh_positions = [refresh.find(token) for token in refresh_tokens]
 if any(position < 0 for position in refresh_positions):
-    errors.append("QS3DTAGREFRESH missing selection/canonical lifecycle token")
+    errors.append("QS3DTAGREFRESH missing PICKFIRST/canonical lifecycle token")
 elif refresh_positions != sorted(refresh_positions):
-    errors.append("QS3DTAGREFRESH must finish source selection before canonical project binding/build")
+    errors.append("QS3DTAGREFRESH must finish source acquisition before canonical project binding/build")
 if "ProjectContextCoordinator.GetOrCreate" in refresh:
     errors.append("QS3DTAGREFRESH must not create a replacement project")
+
+acquire_source = region(
+    commands,
+    "private static string? AcquireSourceHandle",
+    "private static string? PromptEntityHandle",
+    "Semantic Tag source acquisition helper",
+)
+for token in ("EntitySnapshotReader.ReadCurrentSelection(document)", "return PromptEntityHandle(document, message);"):
+    if token not in acquire_source:
+        errors.append("Semantic Tag source acquisition helper missing PICKFIRST/fallback token: " + token)
+for forbidden in ("ProjectState", "ProjectContextCoordinator", "ExistingProjectMutationContext", "GetOrCreate"):
+    if forbidden in acquire_source:
+        errors.append("Semantic Tag source acquisition helper must remain project-agnostic: " + forbidden)
 
 prompt_source = region(
     commands,
@@ -88,11 +101,11 @@ for forbidden in ("ProjectState", "ProjectContextCoordinator", "ExistingProjectM
 remove = region(
     removal,
     "public void RemoveSemanticTag()",
-    "private static string? PromptTagHandle",
+    "private static string? AcquireTagHandle",
     "QS3DTAGREMOVE",
 )
 remove_tokens = (
-    "PromptTagHandle(document)",
+    "AcquireTagHandle(document)",
     "if (selectedHandle == null) return;",
     "ExistingProjectMutationContext.Require(document, \"Semantic Tag remove\")",
     "ResolveTagOwner(project, selectedHandle)",
@@ -100,11 +113,24 @@ remove_tokens = (
 )
 remove_positions = [remove.find(token) for token in remove_tokens]
 if any(position < 0 for position in remove_positions):
-    errors.append("QS3DTAGREMOVE missing selection/canonical lifecycle token")
+    errors.append("QS3DTAGREMOVE missing PICKFIRST/canonical lifecycle token")
 elif remove_positions != sorted(remove_positions):
-    errors.append("QS3DTAGREMOVE must finish tag/source selection before canonical project binding/remove")
+    errors.append("QS3DTAGREMOVE must finish tag/source acquisition before canonical project binding/remove")
 if "ProjectContextCoordinator.GetOrCreate" in remove:
     errors.append("QS3DTAGREMOVE must not create a replacement project")
+
+acquire_remove = region(
+    removal,
+    "private static string? AcquireTagHandle",
+    "private static string? PromptTagHandle",
+    "Semantic Tag remove acquisition helper",
+)
+for token in ("EntitySnapshotReader.ReadCurrentSelection(document)", "return PromptTagHandle(document);"):
+    if token not in acquire_remove:
+        errors.append("Semantic Tag remove acquisition helper missing PICKFIRST/fallback token: " + token)
+for forbidden in ("ProjectState", "ProjectContextCoordinator", "ExistingProjectMutationContext", "GetOrCreate"):
+    if forbidden in acquire_remove:
+        errors.append("Semantic Tag remove acquisition helper must remain project-agnostic: " + forbidden)
 
 prompt_remove = region(
     removal,
@@ -122,4 +148,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Semantic Tag place/refresh/remove commands complete their user input before canonical existing-project mutation binding; placement uses a read-only preview and stable ProjectId/element/source re-resolution so cancel/stale-project paths fail closed without replacement-project creation.")
+print("PASS: Semantic Tag place/refresh/remove acquire PICKFIRST or prompted input before canonical existing-project mutation binding; placement uses a read-only preview and stable ProjectId/element/source re-resolution so cancel/stale-project paths fail closed without replacement-project creation.")
