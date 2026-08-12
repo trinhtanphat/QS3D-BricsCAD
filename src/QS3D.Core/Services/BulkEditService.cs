@@ -103,6 +103,7 @@ namespace QS3D.Core.Services
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
+            ValidateUniqueFamilyIds(project);
             var family = project.FindFamily(familyId) ?? throw new KeyNotFoundException("Unknown family: " + familyId);
             var targetProperties = ProjectFamilyService.SnapshotProperties(family, "Target", "bulk assignment");
             var targetPropertyKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -215,6 +216,21 @@ namespace QS3D.Core.Services
                 unique[elementId] = owned;
             }
             return new List<ProjectElement>(unique.Values).AsReadOnly();
+        }
+
+        private static void ValidateUniqueFamilyIds(ProjectState project)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var family in project.Families)
+            {
+                if (family == null)
+                    throw new InvalidOperationException("Project family collection contains a null family.");
+                var id = family.Id ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(id) || !string.Equals(id, id.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Project family collection contains a blank or non-canonical family id.");
+                if (!seen.Add(id))
+                    throw new InvalidOperationException("Project contains duplicate family id: " + id + ".");
+            }
         }
 
         private static IReadOnlyList<string> MaterializeBounded(IEnumerable<string> values, string label)
