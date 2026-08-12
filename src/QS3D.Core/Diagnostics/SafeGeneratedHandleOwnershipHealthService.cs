@@ -24,14 +24,14 @@ namespace QS3D.Core.Diagnostics
             {
                 GeneratedHandleOwnershipIndex.Build(project);
             }
-            catch (InvalidOperationException ex)
+            catch (InvalidOperationException)
             {
                 return new[]
                 {
                     new ModelHealthIssue(
                         InvalidProjectIssueCode,
                         HealthSeverity.Error,
-                        "Generated handle ownership cannot be inspected safely because the semantic project is invalid: " + ex.Message)
+                        "Generated handle ownership cannot be inspected safely because the semantic project is invalid.")
                 };
             }
 
