@@ -354,17 +354,17 @@ namespace QS3D.Core.Geometry
             AppendPacked(builder, occurrence.ToString(CultureInfo.InvariantCulture));
             AppendPacked(builder, candidate.Junction.Kind.ToString());
             AppendPacked(builder, candidate.Junction.RayCount.ToString(CultureInfo.InvariantCulture));
-            AppendPacked(builder, candidate.Junction.Point.X.ToString("R", CultureInfo.InvariantCulture));
-            AppendPacked(builder, candidate.Junction.Point.Y.ToString("R", CultureInfo.InvariantCulture));
-            AppendPacked(builder, candidate.BottomM.ToString("R", CultureInfo.InvariantCulture));
-            AppendPacked(builder, candidate.TopM.ToString("R", CultureInfo.InvariantCulture));
+            AppendPacked(builder, CanonicalDouble(candidate.Junction.Point.X));
+            AppendPacked(builder, CanonicalDouble(candidate.Junction.Point.Y));
+            AppendPacked(builder, CanonicalDouble(candidate.BottomM));
+            AppendPacked(builder, CanonicalDouble(candidate.TopM));
             foreach (var owner in candidate.SourceOwners)
             {
                 AppendPacked(builder, owner.SourceSegmentId);
                 AppendPacked(builder, owner.WallElementId);
-                AppendPacked(builder, owner.BottomM.ToString("R", CultureInfo.InvariantCulture));
-                AppendPacked(builder, owner.TopM.ToString("R", CultureInfo.InvariantCulture));
-                AppendPacked(builder, owner.ThicknessM.ToString("R", CultureInfo.InvariantCulture));
+                AppendPacked(builder, CanonicalDouble(owner.BottomM));
+                AppendPacked(builder, CanonicalDouble(owner.TopM));
+                AppendPacked(builder, CanonicalDouble(owner.ThicknessM));
             }
             return builder.ToString();
         }
@@ -409,6 +409,12 @@ namespace QS3D.Core.Geometry
                 throw new InvalidOperationException(label + " must contain well-formed Unicode text.", ex);
             }
             return canonical;
+        }
+
+        private static string CanonicalDouble(double value)
+        {
+            if (value == 0d) value = 0d;
+            return value.ToString("R", CultureInfo.InvariantCulture);
         }
 
         private static void AppendPacked(StringBuilder builder, string value)
