@@ -27,6 +27,9 @@ if SOURCE.is_file():
         "ResolvedErrorCount",
         "Model health baselines belong to different projects",
         "StringComparer.Ordinal",
+        'code.EndsWith("_STALE", StringComparison.OrdinalIgnoreCase)',
+        '? key',
+        ': key + "\\n" + (issue.Message ?? string.Empty)',
     ):
         if token not in text:
             errors.append("ModelHealthBaselineService missing deterministic diff token: " + token)
@@ -36,10 +39,16 @@ if SMOKE.is_file():
     for token in (
         "NewResolvedAndPersistentIssuesAreClassified();",
         "DuplicateIssuesAreStable();",
+        "StaleMessageChangesRemainPersistent();",
         "CrossProjectDiffFailsClosed();",
         "SemanticCaptureIsReadOnly();",
         "NEW_ERROR",
         "OLD_ERROR",
+        "GENERATED_SOLID_STALE",
+        "ORDINARY_WARNING",
+        "reason B",
+        "message A",
+        "message B",
         "[ModuleInitializer]",
     ):
         if token not in text:
@@ -52,4 +61,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: model health can be captured read-only and compared deterministically as new, resolved, and persistent issues with cross-project fail-closed semantics.")
+print("PASS: model health baseline diff keeps stale diagnostics persistent across reason-message changes while preserving message-sensitive identity for ordinary diagnostics.")
