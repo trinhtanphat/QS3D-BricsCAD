@@ -394,3 +394,11 @@ Reserve only `tests/QS3D.Core.SmokeTests/PreviewReviewCompositeRowKeySmoke.cs` t
 ### 2026-08-12 Preview Review composite-key expansion release
 
 `RELEASED (CONCURRENT OWNER)`: mandatory pre-commit synchronization exposed the earlier exact-scope claim `docs/agent-work-claims/2026-08-12-1059-chatgpt-web-gpt56sol-preview-review-composite-smoke-reconcile.md` (`8162f77e`) and its implementation `ef84b2d3`. This LOCAL-003 expansion performed no implementation edit and releases `PreviewReviewCompositeRowKeySmoke.cs` to that existing owner; the upstream implementation is consumed only through normal `main` synchronization.
+
+## 2026-08-12 QSDB canonical relation target fixture reconciliation expansion
+
+Baseline audited after a clean fetch and fast-forward: `origin/main@a0c40b9b7b5503ba8abb39289e6a8505a95760a7`.
+
+The full Core smoke reaches `QsdbPersistedRelationCanonicalReadSmoke.CanonicalRelationsStillLoad()`, whose intended-valid XML stores canonical active Zone/Floor IDs, element Family/Floor/Zone IDs and dependency `E0` while declaring empty Zone/Floor/Family collections and no dependency target element. The completed QSDB active-context and relation referential-integrity contracts now correctly reject that orphan graph after the token-canonicality checks. The original relation-read and active-context claims are `COMPLETED`; the current ACTIVE/BLOCKED audit found no owner for this exact fixture.
+
+Reserve only `tests/QS3D.Core.SmokeTests/QsdbPersistedRelationCanonicalReadSmoke.cs` to give the intended-valid control minimum matching Zone `Z1`, Floor `F1`, Beam Family `FAM-1` and dependency target `E0`, then assert/read the intended `E1` explicitly. Preserve every padded/empty relation rejection, canonical handles/dependencies, schema/timestamps and all production QSDB/domain code. Re-run the complete Core smoke after this fixture-data-only reconciliation.
