@@ -1,6 +1,6 @@
 # Work claim — LOCAL-002/P02 Curtain Panel centered-box placement
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local-curtain-panel-centered-box-placement-20260812` (`/root/audit_preflight_latest`)
 - Registered: `2026-08-12T11:52:35+07:00`
 - Baseline main SHA: `488fc84811f75e7ee435dcfb7f6ef3ce6851bc8e`
@@ -52,3 +52,13 @@ The active parent-owned P02 runtime-qualification claim explicitly kept producti
 ## Completion condition
 
 The claim is visible on `origin/main`; the single production helper correction and static regression are merged; focused gates and V25 build pass without BricsCAD; the claim is `COMPLETED`; and one exact clean merged-main SHA is handed back for the P02 licensed rerun. Expected PASS requires all existing partial/full-cover/native-match/zero-intersection/Health/Locate/cleanup assertions; any FAIL must remain allowlisted and P02/LOCAL-002 remain `PENDING_LOCAL`.
+
+## Close-out
+
+- Claim-only reservation: PR `#845`, squash merge `26e757fd829e858546b42ca4f18ea6424730e403`.
+- Source implementation: branch commit `ea99304a77beb232fc1ca27c71a37135b1d4942d`, PR `#850`, squash merge `37003ee721760159d630326bfb90cb602f5abbdb`.
+- Correction: removed only the duplicate negative half-extent displacement from `CurtainWallPanelBuilderSupport.CreateBox(...)`; the existing centered-box rotation and target-center displacement remain unchanged. No frame, planner, opening, tolerance, metadata, Health or Level source was modified.
+- Static regression: the P02 gate now requires create -> rotate -> target-center placement in that helper and forbids the duplicate V25 centered-box shift.
+- Validation after current-main integration: focused Curtain opening/native/orchestration/P01-runtime/runtime-health, Level-Curtain and Direct Draw gates PASS; PowerShell runner parses; aggregate `scripts/preflight.py` PASS; installed-reference V25 `Release|x64` build succeeds with zero warnings/errors; `git diff --check` PASS.
+- No BricsCAD, GitHub Actions, private/customer fixture or private runtime artifact was opened or run in this source batch.
+- This closes the source-fix lane only. P02 and overall LOCAL-002 remain `PENDING_LOCAL` until one fresh disposable-copy run built from the exact final clean merged-main SHA returns the complete V2 PASS marker and all cleanup invariants.
