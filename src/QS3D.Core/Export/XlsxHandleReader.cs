@@ -123,7 +123,7 @@ namespace QS3D.Core.Export
 
                 var elementIds = new List<string>();
                 foreach (var column in elementIdColumns)
-                    if (targetCells.TryGetValue(column, out var value)) AddElementIds(elementIds, value);
+                    if (targetCells.TryGetValue(column, out var value)) AddElementIds(elementIds, value, isModernSchema);
 
                 var drawingFingerprint = ReadDrawingFingerprint(targetCells, fingerprintColumns);
                 var decimalHandles = ParseDecimalHandles(targetCells.Values);
@@ -132,7 +132,7 @@ namespace QS3D.Core.Export
                     return new XlsxHandleLookupResult(decimalHandles, Array.Empty<string>(), drawingFingerprint, true, worksheet.Name, false, false);
                 var explicitHandles = new List<string>();
                 foreach (var column in handleColumns)
-                    if (targetCells.TryGetValue(column, out var value)) AddHexHandles(explicitHandles, value);
+                    if (targetCells.TryGetValue(column, out var value)) AddHexHandles(explicitHandles, value, isModernSchema);
                 if (isModernSchema)
                 {
                     if (elementIds.Count == 0) throw new InvalidDataException("QS3D Excel row is missing its Element ID.");
@@ -292,7 +292,7 @@ namespace QS3D.Core.Export
             return result;
         }
 
-        private static void AddHexHandles(ICollection<string> result, string value)
+        private static void AddHexHandles(ICollection<string> result, string value, bool rejectDuplicates)
         {
             foreach (var raw in (value ?? string.Empty).Split(new[] { ';', ',', '|', ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
             {
@@ -300,17 +300,30 @@ namespace QS3D.Core.Export
                 if (token.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) token = token.Substring(2);
                 if (!long.TryParse(token, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var number) || number <= 0)
                     throw new InvalidDataException("Excel row contains an invalid CAD Handle token: " + raw.Trim() + ".");
-                AddUnique(result, number.ToString("X", CultureInfo.InvariantCulture));
+                var handle = number.ToString("X", CultureInfo.InvariantCulture);
+                if (result.Contains(handle, StringComparer.OrdinalIgnoreCase))
+                {
+                    if (rejectDuplicates)
+                        throw new InvalidDataException("QS3D Excel row contains a duplicate CAD Handle token after hexadecimal normalization: " + raw.Trim() + ".");
+                    continue;
+                }
+                result.Add(handle);
             }
         }
 
-        private static void AddElementIds(ICollection<string> result, string value)
+        private static void AddElementIds(ICollection<string> result, string value, bool rejectDuplicates)
         {
             foreach (var raw in (value ?? string.Empty).Split(new[] { ';', '|', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
             {
                 var id = raw.Trim();
                 if (id.Length == 0) continue;
-                if (!result.Contains(id, StringComparer.OrdinalIgnoreCase)) result.Add(id);
+                if (result.Contains(id, StringComparer.OrdinalIgnoreCase))
+                {
+                    if (rejectDuplicates)
+                        throw new InvalidDataException("QS3D Excel row contains a duplicate Element ID token: " + id + ".");
+                    continue;
+                }
+                result.Add(id);
             }
         }
 
