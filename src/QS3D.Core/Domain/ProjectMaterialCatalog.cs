@@ -57,6 +57,7 @@ namespace QS3D.Core.Domain
     {
         public const string MetadataKey = "QS3D.MaterialCatalog.v1";
         private const int MaxCustomMaterials = 500;
+        private const int MaxSerializedLength = 1024 * 1024;
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         private static readonly ProjectMaterial[] BuiltIns =
@@ -241,7 +242,9 @@ namespace QS3D.Core.Domain
         private static List<ProjectMaterial> ReadCustom(ProjectState project)
         {
             if (!project.Metadata.TryGetValue(MetadataKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return new List<ProjectMaterial>();
-            var lines = raw.Split(new[] { '\n' }, StringSplitOptions.None);
+            if (raw.Length > MaxSerializedLength)
+                throw new InvalidOperationException("Stored material catalog exceeds the serialized safety limit.");
+            var lines = raw.Split(new[] { '\n' }, MaxCustomMaterials + 1, StringSplitOptions.None);
             if (lines.Length > MaxCustomMaterials) throw new InvalidOperationException("Stored material catalog exceeds the supported custom-material limit.");
             var result = new List<ProjectMaterial>(lines.Length);
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -250,7 +253,7 @@ namespace QS3D.Core.Domain
             {
                 if (string.IsNullOrWhiteSpace(lines[index]))
                     throw new InvalidOperationException("Material catalog contains an empty record at line " + (index + 1) + ".");
-                var fields = lines[index].Split('|');
+                var fields = lines[index].Split(new[] { '|' }, 5, StringSplitOptions.None);
                 if (fields.Length != 4) throw new InvalidOperationException("Invalid material catalog record at line " + (index + 1) + ".");
                 var material = new ProjectMaterial(Decode(fields[0]), Decode(fields[1]), Decode(fields[2]), Decode(fields[3]), false);
                 EnsureDoesNotShadowBuiltIn(material);
