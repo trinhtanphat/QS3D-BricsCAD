@@ -279,8 +279,19 @@ namespace QS3D.Core.Export
         {
             var input = value ?? string.Empty;
             var result = new StringBuilder(input.Length + 8);
-            foreach (var ch in input)
+            for (var index = 0; index < input.Length; index++)
             {
+                var ch = input[index];
+                if (char.IsHighSurrogate(ch))
+                {
+                    if (index + 1 >= input.Length || !char.IsLowSurrogate(input[index + 1]))
+                        throw new InvalidDataException("Interchange export strings cannot contain unpaired UTF-16 surrogates.");
+                    result.Append(ch).Append(input[++index]);
+                    continue;
+                }
+                if (char.IsLowSurrogate(ch))
+                    throw new InvalidDataException("Interchange export strings cannot contain unpaired UTF-16 surrogates.");
+
                 switch (ch)
                 {
                     case '"': result.Append("\\\""); break;
