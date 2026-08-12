@@ -24,6 +24,7 @@ namespace QS3D.Core.Export
                 if (rows[rowIndex] == null)
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
             ValidateCellText(rows);
+            ValidateNumericValues(rows);
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -59,6 +60,26 @@ namespace QS3D.Core.Export
                 RequireJoinedCellTextLength(row.ElementIds, label + "Element IDs");
                 RequireJoinedCellTextLength(row.HostIds, label + "Host IDs");
             }
+        }
+
+        private static void ValidateNumericValues(IReadOnlyList<DoorOpeningScheduleRow> rows)
+        {
+            for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+            {
+                var row = rows[rowIndex];
+                var label = "worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " ";
+                RequireFinite(row.WidthM, label + "WidthM");
+                RequireFinite(row.HeightM, label + "HeightM");
+                RequireFinite(row.SillHeightM, label + "SillHeightM");
+                RequireFinite(row.ThicknessM, label + "ThicknessM");
+                RequireFinite(row.OpeningAreaM2, label + "OpeningAreaM2");
+            }
+        }
+
+        private static void RequireFinite(double value, string label)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                throw new ArgumentOutOfRangeException("rows", "Door/opening XLSX " + label + " must be finite.");
         }
 
         private static void RequireCellTextLength(string value, string label)
