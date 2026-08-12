@@ -52,7 +52,6 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             var zone = FindRequired(project, zoneId);
             if (string.Equals(project.ActiveZoneId, zone.Id, StringComparison.Ordinal)) return;
-            project.Touch();
             project.ActiveZoneId = zone.Id;
         }
 
