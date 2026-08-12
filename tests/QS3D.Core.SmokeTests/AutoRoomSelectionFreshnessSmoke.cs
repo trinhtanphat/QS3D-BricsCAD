@@ -75,7 +75,7 @@ namespace QS3D.Core.SmokeTests
         private static ProjectState CreateProject(out ProjectElement room)
         {
             var project = new ProjectState("AUTO-ROOM-FRESH", "Auto Room selection freshness");
-            room = new ProjectElement("ROOM-1", ElementCategory.Room, floorId: "F1", zoneId: "Z1");
+            room = new ProjectElement("ROOM-1", ElementCategory.Room, string.Empty, "F1", "Z1");
             room.Properties[AutoRoomLifecycle.BoundaryModeKey] = AutoRoomLifecycle.BoundaryModeAutoNetwork;
             room.Properties[AutoRoomLifecycle.BoundaryStateKey] = AutoRoomLifecycle.BoundaryStateActive;
             room.Properties[AutoRoomLifecycle.BoundarySourceSignatureKey] = "AA";
