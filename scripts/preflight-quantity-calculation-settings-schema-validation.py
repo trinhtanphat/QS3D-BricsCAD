@@ -24,8 +24,9 @@ registration = read(REGISTRATION)
 for token in (
     "if (SchemaVersion < 0)",
     'throw new InvalidOperationException("Quantity settings schema cannot be negative.");',
-    "if (SchemaVersion == 0) SchemaVersion = CurrentSchemaVersion;",
-    "if (SchemaVersion > CurrentSchemaVersion)",
+    "var normalizedSchemaVersion = SchemaVersion == 0 ? CurrentSchemaVersion : SchemaVersion;",
+    "if (normalizedSchemaVersion > CurrentSchemaVersion)",
+    "SchemaVersion = normalizedSchemaVersion;",
 ):
     if token not in source:
         errors.append("QuantityCalculationSettings schema guard missing token: " + token)
@@ -34,10 +35,11 @@ if "if (SchemaVersion <= 0) SchemaVersion = CurrentSchemaVersion;" in source:
     errors.append("negative schema versions must not be silently promoted through the legacy zero-schema compatibility path")
 
 negative_pos = source.find("if (SchemaVersion < 0)")
-zero_pos = source.find("if (SchemaVersion == 0) SchemaVersion = CurrentSchemaVersion;")
-future_pos = source.find("if (SchemaVersion > CurrentSchemaVersion)")
-if negative_pos < 0 or zero_pos < 0 or future_pos < 0 or not (negative_pos < zero_pos < future_pos):
-    errors.append("schema validation order must reject negative values before zero compatibility and future-schema checks")
+normalized_pos = source.find("var normalizedSchemaVersion = SchemaVersion == 0 ? CurrentSchemaVersion : SchemaVersion;")
+future_pos = source.find("if (normalizedSchemaVersion > CurrentSchemaVersion)")
+commit_pos = source.find("SchemaVersion = normalizedSchemaVersion;", future_pos)
+if min(negative_pos, normalized_pos, future_pos, commit_pos) < 0 or not (negative_pos < normalized_pos < future_pos < commit_pos):
+    errors.append("schema validation must reject negatives, normalize zero locally, reject future schema, then commit the normalized schema only after validation")
 
 for token in (
     "ZeroSchemaKeepsLegacyCompatibility",
@@ -68,4 +70,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Quantity Settings rejects negative schema metadata without mutation while preserving schema-zero compatibility and current-schema validation.")
+print("PASS: Quantity Settings rejects negative/future schema metadata before mutation, normalizes legacy schema-zero locally, and commits the supported schema only after validation.")
