@@ -36,7 +36,7 @@ namespace QS3D.Core.SmokeTests
 
                 var legacyPath = Path.Combine(directory, "legacy-optional.qsrev");
                 File.WriteAllText(legacyPath,
-                    "<qs3dRevision id='legacy' createdUtc='2026-08-11T00:00:00Z'><elements>" +
+                    "<qs3dRevision id='legacy' createdUtc='2026-08-11T00:00:00.0000000Z'><elements>" +
                     "<element id='E1' category='Beam'><properties/><quantities/><sourceHandles/></element>" +
                     "</elements></qs3dRevision>");
                 var legacy = store.Load(legacyPath);
@@ -92,7 +92,7 @@ namespace QS3D.Core.SmokeTests
 
         private static string Document(string revisionId, string elementId, string familyId, string floorId, string zoneId)
         {
-            return "<qs3dRevision id='" + revisionId + "' createdUtc='2026-08-11T00:00:00Z'><elements>" +
+            return "<qs3dRevision id='" + revisionId + "' createdUtc='2026-08-11T00:00:00.0000000Z'><elements>" +
                    "<element id='" + elementId + "' category='Beam' familyId='" + familyId + "' floorId='" + floorId + "' zoneId='" + zoneId + "'>" +
                    "<properties/><quantities/><sourceHandles/><dependencies/>" +
                    "</element></elements></qs3dRevision>";
