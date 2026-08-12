@@ -84,12 +84,15 @@ namespace QS3D.Core.Diagnostics
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var token in (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.None))
             {
-                var handle = token.Trim();
+                var handleText = token ?? string.Empty;
+                var handle = handleText.Trim();
                 if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
                 {
                     issues.Add(new ModelHealthIssue("SEMANTIC_TAG_HANDLE_INVALID", HealthSeverity.Error, "Semantic tag chứa generated handle không hợp lệ: " + handle, element.Id));
                     continue;
                 }
+                if (!string.Equals(handleText, handle, StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue("SEMANTIC_TAG_HANDLE_NON_CANONICAL", HealthSeverity.Error, HandlesKey + " không được có khoảng trắng đầu/cuối quanh từng generated handle.", element.Id));
                 if (!result.Add(handle))
                     issues.Add(new ModelHealthIssue("SEMANTIC_TAG_HANDLE_DUPLICATE", HealthSeverity.Error, "Semantic tag generated handle bị lặp: " + handle, element.Id));
             }
