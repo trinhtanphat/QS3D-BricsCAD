@@ -1,6 +1,6 @@
 # Work claim — Commands error redaction
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-commands-error-redaction-20260812-1304`
 - Registered: `2026-08-12T13:04:00+07:00`
 - Baseline main SHA: `66dbf414721d774ec2b19a809278c401e8683ad0`
@@ -8,33 +8,30 @@
 
 ## Confirmed defect
 
-`src/QS3D.BricsCAD.V25/Commands.cs` still reflects raw runtime exception messages through three shared user-visible command paths: `Guard(...)`, `FinalizeExportUi(...)`, and `FinalizeCommittedUi(...)`. These messages can expose filesystem/provider/environment detail in the BricsCAD Editor or Palette.
+`src/QS3D.BricsCAD.V25/Commands.cs` reflected raw runtime exception messages through the shared `Guard(...)`, `FinalizeExportUi(...)`, and `FinalizeCommittedUi(...)` user-visible paths. The same source also reflected a raw post-commit UI exception from `QS3DLINKHOST`. Runtime exception messages may expose filesystem/provider/environment detail in the BricsCAD Editor or Palette.
 
-## Reserved scope
+## Completed scope
 
-- Remove raw exception-message reflection from the three shared reporting helpers.
-- Preserve explicit user-actionable validation messages by distinguishing QS3D-authored command validation from unexpected runtime failures rather than blindly hiding every authored BLOCKED reason.
-- Preserve command registration, read-only/detached export behavior, post-commit best-effort UI semantics, and existing Palette/Editor sinks.
-- Add a focused static regression preflight.
+- Removed raw runtime exception-message reflection from `Guard(...)`, both shared finalizers, and the `QS3DLINKHOST` post-commit UI warning.
+- Added a private `CommandUserException` path so QS3D-authored validation/BLOCKED reasons remain actionable while unexpected runtime failures use stable generic text.
+- Hardened `ReportCommandFailure(...)` so Editor and Palette reporting are independently best-effort.
+- Preserved BQ modeless behavior, ED2/BBS detached/read-only export flow, export-before-finalize ordering, command registrations, and post-commit UI isolation.
+- Added focused static source preflight coverage.
 
-## Expected surfaces
+## Integration evidence
 
-- `src/QS3D.BricsCAD.V25/Commands.cs`
-- `scripts/preflight-commands-error-redaction.py`
-- this claim file
+- Claim registration: `1f031e97fa8eac275b118037dce790990f3a4d21`
+- Implementation: `379f02565e1c7d3fee4808098cb48f3567942295`
+- Regression/preflight source: `a054e87f37c70c8ca1a5a02878b94665369c8b48`
+- Verified readback HEAD: `f24892ff886bf58ed4948f62c1b3622306a37641`
+- Verified `Commands.cs` blob on readback HEAD: `b2c2205d547fc289706453610719c867386ca7f9`
+- `379f02565e1c7d3fee4808098cb48f3567942295` was verified as an ancestor of later `main`; the compare showed `main` ahead with no subsequent `Commands.cs` modification in that range.
+- The first source update attempt hit a safe GitHub `409` while `main` moved. The target source was re-fetched, remained the same blob, and the patch was retried without overwriting concurrent work.
 
-## Excluded scope
+## Validation note
 
-- No Core exporter changes, quantity/rebar calculation changes, UI layout redesign, Actions dispatch, release publication, force push, build PASS, or BricsCAD runtime PASS claim.
-
-## Validation plan
-
-- Re-fetch current source after claim registration before editing.
-- Keep intentional QS3D validation reasons user-visible through an explicit safe validation type/path; unexpected exceptions must use stable generic failure text.
-- Make post-export/post-commit UI warnings generic while keeping them best-effort and non-throwing.
-- Add a focused Python source preflight that rejects `ex.Message` / `uiError.Message` in the shared reporters and pins the safe-validation/generic-failure split.
-- Re-fetch source/preflight from current `main`, verify commit ancestry/readback, then close with exact SHAs.
+`scripts/preflight-commands-error-redaction.py` was authored, committed, and read back from `main`; it was not executed by this connector. No GitHub Actions, build, BricsCAD V25/V26 runtime qualification, release publication, or force push was performed or claimed.
 
 ## Completion condition
 
-Completed only when current `main` no longer exposes raw runtime exception messages from the shared `Commands` reporters, intended validation UX remains explicit, focused regression source exists, and this claim is `COMPLETED` with exact integration evidence.
+Satisfied: current `main` no longer exposes raw unexpected runtime/UI exception messages through the shared `Commands` reporters covered by this lane, QS3D-authored validation remains explicit, focused regression source exists, and exact integration evidence is recorded above.
