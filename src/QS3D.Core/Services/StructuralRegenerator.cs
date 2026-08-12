@@ -236,6 +236,8 @@ namespace QS3D.Core.Services
             var total = 0d;
             foreach (var child in project.Elements)
             {
+                if (child == null)
+                    throw new InvalidOperationException("Structural wall quantity cannot inspect a project containing a null semantic element.");
                 if (child.Category != ElementCategory.WallOpening && child.Category != ElementCategory.Door) continue;
                 if (!child.Properties.TryGetValue("HostWallId", out var host)) continue;
                 var hostId = CanonicalOptionalHostId(host, child.Id);
