@@ -214,9 +214,13 @@ namespace QS3D.BricsCAD.V25
                 var centerY = (min.Y + max.Y) * 0.5d;
                 if (!Finite(centerX) || !Finite(centerY) || !FinitePositive(width) || !FinitePositive(height)) return false;
 
+                var paddedWidth = width * 1.25d;
+                var paddedHeight = height * 1.25d;
+                if (!FinitePositive(paddedWidth) || !FinitePositive(paddedHeight)) return false;
+
                 view.CenterPoint = new Point2d(centerX, centerY);
-                view.Width = width * 1.25d;
-                view.Height = height * 1.25d;
+                view.Width = paddedWidth;
+                view.Height = paddedHeight;
                 document.Editor.SetCurrentView(view);
             }
 
