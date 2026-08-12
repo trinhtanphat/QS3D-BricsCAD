@@ -16,6 +16,7 @@ namespace QS3D.Core.Services
 
         private readonly Dictionary<string, HashSet<string>> _dependents = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, ProjectElement> _elementsById = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+        private long _rebuildVersion;
 
         public void Rebuild(IEnumerable<ProjectElement> elements)
         {
@@ -23,6 +24,7 @@ namespace QS3D.Core.Services
 
             var next = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
             var nextElements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            var enumerationVersion = _rebuildVersion;
             foreach (var element in elements)
             {
                 if (element == null) throw new InvalidOperationException("Dependency graph cannot contain a null semantic element.");
@@ -50,12 +52,17 @@ namespace QS3D.Core.Services
                     "Semantic element " + dependent + " depends on missing semantic element: " + entry.Key + ". Repair semantic relations before graph evaluation.");
             }
 
+            if (_rebuildVersion != enumerationVersion)
+                throw new InvalidOperationException("Dependency graph changed while rebuild elements were being enumerated. Retry rebuild against the current graph state.");
+
+            var nextVersion = checked(_rebuildVersion + 1L);
             _dependents.Clear();
             foreach (var entry in next)
                 _dependents[entry.Key] = entry.Value;
             _elementsById.Clear();
             foreach (var entry in nextElements)
                 _elementsById[entry.Key] = entry.Value;
+            _rebuildVersion = nextVersion;
         }
 
         public bool TryGetElement(string elementId, out ProjectElement? element)
