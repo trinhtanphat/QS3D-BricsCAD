@@ -56,7 +56,7 @@ The claim is visible on `origin/main`; sanitized phase/failure diagnostics, runn
 ## Close-out — 2026-08-12
 
 - Claim-only PR `#826` merged as `2e7603ea94af632a0740c502973350296d40883a` before implementation.
-- Implementation commit `c75e5c41852e041859ac07c57c5fb6219fd0f52a` is delivered by PR `#831`; the final squash SHA is recorded after merge.
+- Implementation commit `c75e5c4116ec5c38240be5ce01ba01a1b18548cd` is delivered by PR `#831`; the final squash SHA is recorded after merge.
 - Implemented marker schema V2 with allowlisted static phases and rejection classes, strict FAIL-field validation, and deferred failure reporting after launched-process/private-script/DWG-hash/sidecar cleanup checks. No raw exception message/type/stack/inner exception, path, Handle, semantic ID or drawing content is serialized.
 - Focused P02, Curtain native/orchestration/P01-runtime/runtime-health, Level-Curtain, Direct Draw openings/P1 and repository structural preflights passed after rebase. The installed-reference V25 `Release|x64` adapter build passed with zero warnings/errors; PowerShell parse and `git diff --check` passed.
 - No BricsCAD run/rerun, GitHub Actions, private/customer/BLT fixture, production Curtain planner/builder/Health/ownership/Level edit, release, signing or package publication occurred. No production clipping defect was inferred from the original coarse marker.
