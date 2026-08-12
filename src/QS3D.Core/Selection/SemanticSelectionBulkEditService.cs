@@ -36,9 +36,9 @@ namespace QS3D.Core.Selection
 
             foreach (var element in selection.Elements)
             {
-                var current = EffectivePropertyValue(project, element, key, out var present);
-                if (present && string.Equals(current, next, StringComparison.Ordinal)) continue;
-                if (!present && next.Length == 0) continue;
+                if (element.Properties.TryGetValue(key, out var current) &&
+                    string.Equals(current ?? string.Empty, next, StringComparison.Ordinal))
+                    continue;
                 updates.Add(element);
             }
 
