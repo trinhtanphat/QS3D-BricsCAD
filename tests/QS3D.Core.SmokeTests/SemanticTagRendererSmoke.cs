@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             MalformedBraceGrammarFailsClosed();
             MissingReferenceFailsClosed();
             NonCanonicalReferencesFailClosed();
+            NonCanonicalOwnerIdsFailClosed();
             DetachedElementWithSameIdFailsClosed();
             DuplicateElementIdFailsClosed();
             AmbiguousReferencesFailClosed();
@@ -138,6 +139,30 @@ namespace QS3D.Core.SmokeTests
             MustFail(
                 () => SemanticTagRenderer.Render(blankZoneFixture.Project, blankZoneFixture.Element, "{Zone}"),
                 "Whitespace-only Zone references must fail closed instead of being treated as unassigned.");
+        }
+
+        private static void NonCanonicalOwnerIdsFailClosed()
+        {
+            var familyFixture = BuildFixture();
+            familyFixture.Project.Families.Clear();
+            familyFixture.Project.Families.Add(new ProjectFamily(" FAM-B ", "Padded Family", ElementCategory.Beam));
+            MustFail(
+                () => SemanticTagRenderer.Render(familyFixture.Project, familyFixture.Element, "{Family}"),
+                "Whitespace-padded Family owner IDs must fail closed instead of satisfying a canonical reference.");
+
+            var floorFixture = BuildFixture();
+            floorFixture.Project.Floors.Clear();
+            floorFixture.Project.Floors.Add(new FloorDefinition(" F-02 ", "Padded Floor", 3.6d));
+            MustFail(
+                () => SemanticTagRenderer.Render(floorFixture.Project, floorFixture.Element, "{Floor}"),
+                "Whitespace-padded Floor owner IDs must fail closed instead of satisfying a canonical reference.");
+
+            var zoneFixture = BuildFixture();
+            zoneFixture.Project.Zones.Clear();
+            zoneFixture.Project.Zones.Add(new ZoneDefinition("\tZ-A", "Padded Zone"));
+            MustFail(
+                () => SemanticTagRenderer.Render(zoneFixture.Project, zoneFixture.Element, "{Zone}"),
+                "Whitespace-padded Zone owner IDs must fail closed instead of satisfying a canonical reference.");
         }
 
         private static void DetachedElementWithSameIdFailsClosed()
