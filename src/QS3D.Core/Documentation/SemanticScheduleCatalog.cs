@@ -121,7 +121,8 @@ namespace QS3D.Core.Documentation
         {
             if (definition == null) throw new ArgumentNullException(nameof(definition));
             var list = Load(project).ToList();
-            var index = list.FindIndex(x => string.Equals(x.Id, definition.Id, StringComparison.OrdinalIgnoreCase));
+            var normalizedId = Required(definition.Id, "schedule id", 80);
+            var index = list.FindIndex(x => string.Equals(x.Id, normalizedId, StringComparison.OrdinalIgnoreCase));
             if (index >= 0) list[index] = definition; else list.Add(definition);
             Save(project, list);
         }
