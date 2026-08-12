@@ -30,7 +30,10 @@ checks = {
         'family.Properties["WallPierChamferM"] = "0.02"',
     ],
     "snapshot": [
-        "ProjectStateSnapshot", "CopyInto(source, target)", "target.Zones.Clear()", "target.Floors.Clear()",
+        "ProjectStateSnapshot",
+        "CopyInto(source, target, null, null, null, null);",
+        "CopyInto(_snapshot, project, preservedZones, preservedFloors, preservedFamilies, preservedElements);",
+        "target.Zones.Clear()", "target.Floors.Clear()",
         "target.Families.Clear()", "target.Elements.Clear()", "target.QuantityRules.Clear()", "target.AuditEvents.Clear()",
         "target.Metadata.Clear()", "RestorePersistenceState", "target.RestorePersistenceState(source.UpdatedUtc, source.ChangeVersion)",
     ],
@@ -76,4 +79,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: semantic capture rejects generated outputs, reuses one stable-ID source owner without canonical rebinding, rolls back project state on failure, and generic wall starter Families match specialized GlassWall/WallPier defaults.")
+print("PASS: semantic capture rejects generated outputs, reuses one stable-ID source owner without canonical rebinding, rolls back project state through the identity-preserving snapshot path, and generic wall starter Families match specialized GlassWall/WallPier defaults.")
