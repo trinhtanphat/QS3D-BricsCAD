@@ -1,6 +1,6 @@
 # Work claim — Curtain Panel empty-handle preflight sync
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-12T14:11:00+07:00`
 - Baseline main SHA: `dd1aff88224a592bb3ad7babe01f9e35781fdf5f`
@@ -25,13 +25,15 @@ Reconcile `scripts/preflight-curtain-panel-empty-handle-token.py` with the curre
 
 PR #868 recorded this focused gate as known stale because it required the removed source token `var handle = token.Trim();`. Current production source deliberately keeps `StringSplitOptions.None`, captures `handleText = token ?? string.Empty`, trims that to `handle`, then rejects empty/invalid hexadecimal tokens before numeric-identity normalization. The behavior is correct; the static token shape is stale.
 
-## Validation plan
+## Validation
 
-- Update only the stale static source-shape expectations.
-- Continue requiring `StringSplitOptions.None`, explicit trim, empty/invalid rejection, and `INVALID_CURTAIN_PANEL_GENERATED_HANDLE`.
-- Forbid `RemoveEmptyEntries` as before.
-- Read back the exact pushed diff; do not claim executable preflight/build/Actions/V25 runtime PASS unless actually run.
+- Implementation commit: `4050c5c97a76800be471853316b6f70114c09f4f` (`test(preflight): sync Curtain Panel empty-handle guard`).
+- Readback diff confirms only `scripts/preflight-curtain-panel-empty-handle-token.py` changed.
+- The focused guard now follows the production `handleText` -> trimmed `handle` shape while continuing to require `StringSplitOptions.None`, empty/invalid hexadecimal rejection, and `INVALID_CURTAIN_PANEL_GENERATED_HANDLE`.
+- The `RemoveEmptyEntries` prohibition and delimiter-empty regression fixtures remain intact.
+- Production Curtain Panel health source was read-only in this lane.
+- No GitHub Actions were dispatched. No executable preflight/build or licensed BricsCAD runtime PASS is claimed.
 
 ## Completion condition
 
-A pushed `main` implementation updates only the focused preflight, followed by this claim marked `COMPLETED` with exact implementation SHA.
+Satisfied by pushed implementation `4050c5c97a76800be471853316b6f70114c09f4f` and this completion record on `main`.
