@@ -26,7 +26,7 @@ namespace QS3D.Core.Diagnostics
                 if (!hasBuildState || !string.Equals((buildState ?? string.Empty).Trim(), BuildCompleteValue, StringComparison.OrdinalIgnoreCase))
                     Add(issues, "CURTAIN_PANEL_BUILD_STATE_INVALID", HealthSeverity.Warning, BuildStateKey + " must be Complete, including for a valid zero-piece panel build.", element);
                 var handles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var token in (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                foreach (var token in (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.None))
                 {
                     var handle = token.Trim();
                     if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
