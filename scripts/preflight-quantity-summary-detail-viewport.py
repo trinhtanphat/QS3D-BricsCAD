@@ -42,7 +42,7 @@ def main():
         "var previewProject = ProjectStateSnapshot.CreateDetachedCopy(currentProject);",
         "ProjectQuantityReportBuilder.Detail(previewProject)",
         "private void OnQuantityGridSelectionChanged(object sender, SelectionChangedEventArgs e)",
-        "if (!_initialized || !_detailMode || AutoRevealCheck?.IsChecked != true || row == null || e.AddedItems.Count == 0) return;",
+        "if (!_initialized || AutoRevealCheck?.IsChecked != true || row == null || e.AddedItems.Count == 0) return;",
         "LocateCurrent();",
         "var currentRow = ResolveCurrentRow(row);",
         "_locate(currentRow);",
@@ -73,11 +73,16 @@ def main():
         errors.append("BQ read-only detail/reveal path must not require a mutation bind")
 
     selection_pos = code.find("private void OnQuantityGridSelectionChanged")
+    next_selection_method = code.find("private void UpdateExplanation", selection_pos)
+    selection_block = code[selection_pos:next_selection_method if next_selection_method >= 0 else len(code)]
+    if "!_detailMode" in selection_block:
+        errors.append("BQ Follow3D click reveal must not be restricted to Detail mode; Summary and Detail rows both reveal current CAD targets")
+
     locate_call_pos = code.find("LocateCurrent();", selection_pos)
     resolve_pos = code.find("var currentRow = ResolveCurrentRow(row);", locate_call_pos)
     callback_pos = code.find("_locate(currentRow);", resolve_pos)
     if min(selection_pos, locate_call_pos, resolve_pos, callback_pos) < 0 or not (selection_pos < locate_call_pos < resolve_pos < callback_pos):
-        errors.append("detail row click must route through LocateCurrent -> ResolveCurrentRow -> current-row locate callback")
+        errors.append("BQ Follow3D row click must route through LocateCurrent -> ResolveCurrentRow -> current-row locate callback")
 
     detail_pos = code.find("private IReadOnlyList<QuantityReportRow> RecalculateDetailRows()")
     detached_pos = code.find("ProjectStateSnapshot.CreateDetachedCopy(currentProject)", detail_pos)
@@ -91,7 +96,7 @@ def main():
             print(" -", error)
         return 1
 
-    print("PASS: BQ detail rows use detached quantity reporting and click-through revalidation before native CAD selection/zoom.")
+    print("PASS: BQ Summary/Detail Follow3D clicks use current-row revalidation while detail rows remain detached read-only reporting before native CAD selection/zoom.")
     return 0
 
 
