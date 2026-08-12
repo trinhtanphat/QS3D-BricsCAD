@@ -1,26 +1,21 @@
 # Work claim — release #31 Quick Door/Opening authoring preflight reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-release31-quick-opening-preflight`
 - Registered: `2026-08-12T10:54:00+07:00`
+- Completed: `2026-08-12T10:56:00+07:00`
 - Baseline main SHA: `b9972422699fd76c6f5ca912d72a0243925f70d2`
-- Priority: release #31 reports `scripts/preflight-quick-opening-authoring.py` failing because the gate still requires broad AutoHost command re-entry after Direct Draw was narrowed to exact single-opening host linking.
+- Claim commit: `8f1fba8c706337f100a552c61ee3df73e9a506a2`
+- Implementation commit: `98b6af8b84431b4002dc7a2da415d06ea0cd0a65`
 
-## Reserved scope
+## Completed reconciliation
 
-Reconcile only `scripts/preflight-quick-opening-authoring.py`. Preserve DirectDrawOpeningCommands, Ribbon, Hub and docs unchanged.
+The gate now requires exact `AutoHostLinkCommands.LinkSingleOpening(document, project, createdElementId)`, DirectDrawProjectPreviewContext mutation ownership and bootstrap rollback cleanup, and explicitly fails if broad `new AutoHostLinkCommands().AutoLinkHosts()` returns. Existing quick/advanced defaults/prompts, host verification, source rollback, Ribbon/Hub wiring and explicit physical-boolean boundary remain pinned. Production source was not edited.
 
-## Canonical evidence
+## Validation boundary
 
-- Quick/advanced Door and WallOpening wrappers/defaults/prompts remain present.
-- Execute resolves its exact mutation project from `DirectDrawProjectPreviewContext` and tracks whether authoring bootstrapped project state for rollback cleanup.
-- Direct Draw now calls `AutoHostLinkCommands.LinkSingleOpening(document, project, createdElementId)` and explicitly avoids broad pick-set `AutoLinkHosts()` re-entry.
-- Host identity is verified after exact linking; physical boolean cutting remains explicit and rollback erases CAD source/restores project state.
-
-## Excluded scope
-
-No production edits, no broad AutoHost re-entry, no automatic physical cut and no unrelated #31 work.
+Current-main source/gate readback only. No GitHub Actions dispatch and no build, smoke, signing, package or licensed BricsCAD runtime PASS is claimed.
 
 ## Completion condition
 
-The gate requires exact single-opening Auto Host and rejects broad re-entry while preserving all quick/advanced/rollback/UI/doc contracts, is pushed to `main`, and this claim is closed with exact evidence.
+Completed by implementation `98b6af8b84431b4002dc7a2da415d06ea0cd0a65`.
