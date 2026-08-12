@@ -17,7 +17,7 @@ namespace QS3D.Core.SmokeTests
             var root = Path.Combine(Path.GetTempPath(), "qs3d-template-size-preflight-" + Guid.NewGuid().ToString("N"));
             var path = Path.Combine(root, "nested", "oversized.qs3d-template.xml");
             var profile = new TemplateProfile("T-OVERSIZED", "Oversized template");
-            var family = new ProjectFamily("F-OVERSIZED", "Oversized family", ElementCategory.Wall);
+            var family = new ProjectFamily("F-OVERSIZED", "Oversized family", ElementCategory.ArchitecturalWall);
             family.Properties["Payload"] = new string('\u0800', 3 * 1024 * 1024);
             profile.Families.Add(family);
 
