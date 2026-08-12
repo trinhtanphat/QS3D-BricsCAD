@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace QS3D.BricsCAD.V25.Updates
@@ -41,6 +43,8 @@ namespace QS3D.BricsCAD.V25.Updates
         internal const string UpdateManifestAssetName = "QS3D-BricsCAD-V26.update.json";
         private const int MaxResponseBytes = 2 * 1024 * 1024;
         private const int MaxReleasePages = 10;
+        private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
+        private static readonly HttpClient Http = CreateHttpClient();
 
         internal async Task<IReadOnlyList<UpdateReleaseInfo>> GetPublishedReleasesAsync()
         {
@@ -61,6 +65,20 @@ namespace QS3D.BricsCAD.V25.Updates
             return result;
         }
 
+        private static HttpClient CreateHttpClient()
+        {
+            var handler = new HttpClientHandler
+            {
+                AllowAutoRedirect = true,
+                MaxAutomaticRedirections = 5,
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+            };
+            return new HttpClient(handler, true)
+            {
+                Timeout = Timeout.InfiniteTimeSpan
+            };
+        }
+
         private static async Task<GitHubReleasePage> GetReleasePageAsync(int pageNumber)
         {
             if (pageNumber < 1 || pageNumber > MaxReleasePages)
@@ -69,31 +87,36 @@ namespace QS3D.BricsCAD.V25.Updates
             var address = pageNumber == 1
                 ? ReleasesEndpoint
                 : ReleasesEndpoint + "&page=" + pageNumber.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            var request = WebRequest.CreateHttp(address);
-            request.Method = "GET";
-            request.Accept = "application/vnd.github+json";
-            request.UserAgent = "QS3D-BricsCAD-V26-Updater";
-            request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
-            request.Timeout = 15000;
-            request.ReadWriteTimeout = 15000;
 
-            using (var response = (HttpWebResponse)await request.GetResponseAsync().ConfigureAwait(false))
+            using (var timeout = new CancellationTokenSource(RequestTimeout))
+            using (var request = new HttpRequestMessage(HttpMethod.Get, address))
             {
-                if (response.StatusCode != HttpStatusCode.OK)
-                    throw new InvalidOperationException("GitHub Releases returned HTTP " + (int)response.StatusCode + ".");
-                if (response.ContentLength > MaxResponseBytes)
-                    throw new InvalidOperationException("GitHub Releases response exceeded the allowed size.");
+                request.Headers.Accept.ParseAdd("application/vnd.github+json");
+                request.Headers.UserAgent.ParseAdd("QS3D-BricsCAD-V26-Updater");
 
-                using (var source = response.GetResponseStream())
-                using (var buffer = new MemoryStream())
+                using (var response = await Http.SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    timeout.Token).ConfigureAwait(false))
                 {
-                    await CopyBoundedAsync(source, buffer, MaxResponseBytes).ConfigureAwait(false);
-                    buffer.Position = 0;
-                    var serializer = new DataContractJsonSerializer(typeof(GitHubReleaseDto[]));
-                    var payload = serializer.ReadObject(buffer) as GitHubReleaseDto?[] ?? Array.Empty<GitHubReleaseDto?>();
-                    var link = response.Headers["Link"];
-                    var hasNext = link != null && link.IndexOf("rel=\"next\"", StringComparison.OrdinalIgnoreCase) >= 0;
-                    return new GitHubReleasePage(payload, hasNext);
+                    if (response.StatusCode != HttpStatusCode.OK)
+                        throw new InvalidOperationException("GitHub Releases returned HTTP " + (int)response.StatusCode + ".");
+
+                    var contentLength = response.Content.Headers.ContentLength;
+                    if (contentLength.HasValue && contentLength.Value > MaxResponseBytes)
+                        throw new InvalidOperationException("GitHub Releases response exceeded the allowed size.");
+
+                    using (var source = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false))
+                    using (var buffer = new MemoryStream())
+                    {
+                        await CopyBoundedAsync(source, buffer, MaxResponseBytes, timeout.Token).ConfigureAwait(false);
+                        buffer.Position = 0;
+                        var serializer = new DataContractJsonSerializer(typeof(GitHubReleaseDto[]));
+                        var payload = serializer.ReadObject(buffer) as GitHubReleaseDto?[] ?? Array.Empty<GitHubReleaseDto?>();
+                        var hasNext = response.Headers.TryGetValues("Link", out var linkValues) &&
+                                      linkValues.Any(value => value.IndexOf("rel=\"next\"", StringComparison.OrdinalIgnoreCase) >= 0);
+                        return new GitHubReleasePage(payload, hasNext);
+                    }
                 }
             }
         }
@@ -164,18 +187,18 @@ namespace QS3D.BricsCAD.V25.Updates
             return normalized.Length <= 1800 ? normalized : normalized.Substring(0, 1800).TrimEnd() + "…";
         }
 
-        private static async Task CopyBoundedAsync(Stream? input, Stream output, int maxBytes)
+        private static async Task CopyBoundedAsync(Stream? input, Stream output, int maxBytes, CancellationToken cancellationToken)
         {
             if (input == null) throw new InvalidOperationException("GitHub Releases response body was empty.");
             var buffer = new byte[16384];
             var total = 0;
             while (true)
             {
-                var read = await input.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+                var read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false);
                 if (read <= 0) return;
                 total += read;
                 if (total > maxBytes) throw new InvalidOperationException("GitHub Releases response exceeded the allowed size.");
-                await output.WriteAsync(buffer, 0, read).ConfigureAwait(false);
+                await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
             }
         }
 
