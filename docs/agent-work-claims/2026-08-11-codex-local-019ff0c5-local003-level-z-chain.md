@@ -141,6 +141,12 @@ Baseline audited and synchronized before this expansion: `origin/main@25eabe09`.
 
 Reserve only that released smoke file to use a canonical audit action and assert it round-trips unchanged, while retaining every intentional padded free-text assertion for the remaining fields. Do not edit `QsdbProjectStore`, `QsdbProjectXmlSchemaValidator`, `AuditTrail`, audit normalization policy or any production persistence source. The owning claim `2026-08-12-0728-chatgpt-web-gpt56sol-qsdb-audit-action-canonicality.md` is `COMPLETED` on this baseline; no ACTIVE claim reserves this exact fixture reconciliation. Re-run the complete Core smoke after this test-data-only fix.
 
+## 2026-08-12 Room-boundary endpoint projection reconciliation expansion
+
+Baseline audited and synchronized before this expansion: `origin/main@522d06ff`. The next full Core smoke reaches the completed `RoomBoundaryIntersectionArithmeticSmoke`: `AddEndpointCut(...)` derives the projection parameter through a normalized Euclidean length, which rounds the mathematically exact midpoint parameter down by one ULP for the represented `(0,0)` to `(1e160,1e160)` segment. Reconstructing the point amplifies that parameter error to roughly `7.8e143`, so the endpoint is incorrectly rejected against the absolute tolerance even though all inputs and the exact projection are finite and representable.
+
+Reserve only `src/QS3D.Core/Geometry/RoomBoundaryEngine.cs` to compute the same orthogonal projection parameter from separately scaled direction and delta components, avoiding component-product overflow and the avoidable square-root round trip. Keep `tests/QS3D.Core.SmokeTests/RoomBoundaryIntersectionArithmeticSmoke.cs` unchanged as the regression authority. Preserve graph topology, snapping, collinearity/tolerance policy, endpoint reconstruction, face traversal and all native/UI behavior. The owning claim `2026-08-12-0720-gpt56sol-room-boundary-intersection-arithmetic.md` and neighboring snap-cell claim are `COMPLETED`; no ACTIVE claim reserves this exact arithmetic surface. Re-run the complete Core smoke after the focused production repair.
+
 ## 2026-08-11 source-safe wave heartbeat
 
 - Synced baseline: `origin/main@e085c82732d80eb25ba3dcb719715d6ca077b37f` before final validation.
