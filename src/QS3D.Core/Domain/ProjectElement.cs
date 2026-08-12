@@ -85,6 +85,7 @@ namespace QS3D.Core.Domain
                 var next = RequireCategory(value);
                 if (_category == next) return;
                 _category = next;
+                MarkDirtyCore(ElementDirtyFlags.All, true);
             }
         }
         public string FamilyId { get; set; }
