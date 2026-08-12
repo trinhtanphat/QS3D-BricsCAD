@@ -19,12 +19,15 @@ namespace QS3D.Core.Export
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-            if (rows.Count > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Material XLSX export supports at most " + MaxDataRows + " data rows.");
-            for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+            var rowCount = rows.Count;
+            if (rowCount > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Material XLSX export supports at most " + MaxDataRows + " data rows.");
+            var snapshot = new List<MaterialUsageRow>(rowCount);
+            for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
             {
-                var row = rows[rowIndex];
-                if (row == null)
+                var sourceRow = rows[rowIndex];
+                if (sourceRow == null)
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
+                var row = SnapshotRow(sourceRow);
                 ValidateCellText(row.Floor, rowIndex, "Floor");
                 ValidateCellText(row.MaterialName, rowIndex, "MaterialName");
                 ValidateCellText(row.UnitHint, rowIndex, "UnitHint");
@@ -36,6 +39,7 @@ namespace QS3D.Core.Export
                 ValidateFinite(row.AreaM2, rowIndex, "AreaM2");
                 ValidateFinite(row.VolumeM3, rowIndex, "VolumeM3");
                 ValidateFinite(row.MassKg, rowIndex, "MassKg");
+                snapshot.Add(row);
             }
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
@@ -51,7 +55,7 @@ namespace QS3D.Core.Export
                     Write(archive, "xl/workbook.xml", WorkbookXml);
                     Write(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml);
                     Write(archive, "xl/styles.xml", StylesXml);
-                    Write(archive, "xl/worksheets/sheet1.xml", BuildSheet(rows));
+                    Write(archive, "xl/worksheets/sheet1.xml", BuildSheet(snapshot));
                 }
                 Validate(tempPath);
                 AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
@@ -110,6 +114,24 @@ namespace QS3D.Core.Export
                 "xl/_rels/workbook.xml.rels",
                 "xl/styles.xml",
                 "xl/worksheets/sheet1.xml");
+        }
+
+        private static MaterialUsageRow SnapshotRow(MaterialUsageRow row)
+        {
+            return new MaterialUsageRow
+            {
+                Floor = row.Floor ?? string.Empty,
+                MaterialName = row.MaterialName ?? string.Empty,
+                UnitHint = row.UnitHint ?? string.Empty,
+                Component = row.Component ?? string.Empty,
+                Category = row.Category ?? string.Empty,
+                FamilyName = row.FamilyName ?? string.Empty,
+                ElementCount = row.ElementCount,
+                LengthM = row.LengthM,
+                AreaM2 = row.AreaM2,
+                VolumeM3 = row.VolumeM3,
+                MassKg = row.MassKg
+            };
         }
 
         private static void ValidateCellText(string value, int rowIndex, string fieldName)
