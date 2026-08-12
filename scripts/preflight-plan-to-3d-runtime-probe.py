@@ -4,13 +4,14 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMAND = ROOT / "src/QS3D.BricsCAD.V25/PlanTo3DRuntimeProbeCommands.cs"
+WALL_BUILDER = ROOT / "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs"
 RUNNER = ROOT / "scripts/test-bricscad-v25-plan-to-3d.ps1"
 HELPER = ROOT / "scripts/bricscad-runner-window-interop.ps1"
 WORKFLOW = ROOT / "docs/PLAN-TO-3D-WORKFLOW.md"
 INBOX = ROOT / "docs/LOCAL-AGENT-INBOX.md"
 errors = []
 
-for path in (COMMAND, RUNNER, HELPER, WORKFLOW, INBOX):
+for path in (COMMAND, WALL_BUILDER, RUNNER, HELPER, WORKFLOW, INBOX):
     if not path.is_file():
         errors.append("missing Plan-to-3D runtime probe file: " + str(path.relative_to(ROOT)))
 
@@ -67,6 +68,17 @@ if COMMAND.is_file():
     for forbidden in ("handle=", "element_id=", "drawing_path=", "layer=", "family_name=", "project_id="):
         if forbidden in marker.lower():
             errors.append("Plan-to-3D runtime marker leaks identity field: " + forbidden)
+
+if WALL_BUILDER.is_file():
+    text = WALL_BUILDER.read_text(encoding="utf-8")
+    create = text.find("solid.CreateBox(length, thickness, height);")
+    rotate = text.find("solid.TransformBy(Matrix3d.Rotation(angle, Vector3d.ZAxis, Point3d.Origin));", create)
+    place = text.find("solid.TransformBy(Matrix3d.Displacement(new Vector3d(mid.X, mid.Y, mid.Z)));", rotate)
+    if min(create, rotate, place) < 0 or not (create < rotate < place):
+        errors.append("LINE wall builder must create a centered native box, rotate it, then place it at the resolved wall midpoint")
+    forbidden = "solid.TransformBy(Matrix3d.Displacement(new Vector3d(-length / 2d, -thickness / 2d, -height / 2d)));"
+    if forbidden in text:
+        errors.append("LINE wall builder must not apply a second negative half-dimension displacement to centered Solid3d.CreateBox geometry")
 
 if RUNNER.is_file():
     text = RUNNER.read_text(encoding="utf-8")
