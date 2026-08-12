@@ -1,38 +1,37 @@
 # Work claim — release #29 B4D capture-readiness preflight reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-release29-b4d-capture-readiness-preflight`
 - Registered: `2026-08-12T09:07:00+07:00`
+- Completed: `2026-08-12T09:08:00+07:00`
 - Baseline main SHA: `3436a5515b912db3cd9c9b59467ad48c4866fe1a`
-- Priority: QS3D Cloud V25 Preview Build & Release #29 reports `recognition engine missing token: x.IsCaptureReady`; current source preserves capture-readiness gating but now evaluates it through `IsAutoAccepted(result)` with `result.IsCaptureReady` rather than an inline LINQ `x.IsCaptureReady` literal.
+- Claim commit: `aad3c8e3181ebb76515c24da4a69e6a719008631`
+- Implementation commit: `50bffb35b1fa46bed42e4fcd4f19deb368695b4a`
+- Priority: QS3D Cloud V25 Preview Build & Release #29 reported `recognition engine missing token: x.IsCaptureReady`; current source preserves capture-readiness gating through the `IsAutoAccepted(result)` helper with `result.IsCaptureReady`.
 
-## Reserved scope
+## Implemented scope
 
-Reconcile only `scripts/preflight-b4d-unit-proxy-safety.py` with the current `RecognitionBatch` capture-readiness contract. Preserve Recognition/Core production behavior, UI behavior and proxy eligibility semantics unchanged.
+Reconciled only `scripts/preflight-b4d-unit-proxy-safety.py` with the current `RecognitionBatch` capture-readiness contract. Recognition/Core production behavior, UI behavior and proxy eligibility semantics remain unchanged.
 
-## Expected surfaces
+## Validation evidence
 
-- `scripts/preflight-b4d-unit-proxy-safety.py`
-- this claim file for close-out
+- Current `RecognitionEngine.cs` was re-read and contains `public bool IsCaptureReady`, `RequiresReview` with `!IsCaptureReady`, batch partitioning through `IsAutoAccepted(x)`, helper `private bool IsAutoAccepted(RecognitionResult result)`, and the final `result.IsCaptureReady` auto-accept guard.
+- Current recognition source also retains `capture-blocked:` evidence for candidates that are not capture-ready.
+- The B4D UI continues to be guarded separately by the existing `x.IsCaptureReady` requirement.
+- Implementation `50bffb35b1fa46bed42e4fcd4f19deb368695b4a` replaced only the stale engine-local `x.IsCaptureReady` literal requirement and added explicit helper/partition tokens; all unit policy, proxy eligibility, capture service, source reconcile, workflow and smoke-registration checks remain intact.
+- Claim ancestry was verified after publication; the immediate concurrent commit touched unrelated quantity preview source only.
 
-## Excluded scope
+## Excluded / unchanged
 
 - No edits to `RecognitionEngine.cs`, `RecognitionWindow.xaml.cs`, capture eligibility, B4D commands, unit policy or proxy handling.
-- No changes to confidence/margin logic or current concurrent Recognition claims.
-- No unrelated run #29 failures, GitHub Actions dispatch or licensed BricsCAD runtime qualification.
+- No changes to confidence/margin semantics or concurrent Recognition work.
+- No unrelated run #29 failure changes in this lane.
+- No GitHub Actions dispatch or licensed BricsCAD runtime qualification.
 
-## Validation plan
+## Validation boundary
 
-- Keep requiring `public bool IsCaptureReady`, `!IsCaptureReady`, and `capture-blocked:` in recognition source.
-- Replace the stale `x.IsCaptureReady` engine literal with the current `result.IsCaptureReady` auto-accept guard while retaining the separate UI `x.IsCaptureReady` requirement.
-- Also pin the current partitioning path through `IsAutoAccepted(x)` / `private bool IsAutoAccepted(RecognitionResult result)` so capture readiness cannot be removed merely by renaming a local variable.
-- Re-fetch current gate/source immediately before writing and preserve all other unit/proxy checks unchanged.
-- Read back final gate and close with exact SHA. No aggregate PASS claim without a newer manual run.
-
-## Coordination
-
-Recent Recognition work changes candidate validation/projections, not this static B4D preflight. Current observed active claims do not reserve `scripts/preflight-b4d-unit-proxy-safety.py`.
+Remote source/static readback only. This session did not run the gate, aggregate preflight, full .NET build/test or licensed BricsCAD runtime. A newer manual workflow run is required before claiming aggregate PASS.
 
 ## Completion condition
 
-The B4D unit/proxy gate recognizes the current auto-accept helper while still fail-closing if capture-readiness is removed from engine or UI, the change is pushed to `main`, and this claim is closed with exact evidence.
+Satisfied: the B4D unit/proxy gate recognizes the current auto-accept helper while remaining fail-closed if capture readiness is removed from the engine or UI, and the change is pushed to `main` with exact evidence.
