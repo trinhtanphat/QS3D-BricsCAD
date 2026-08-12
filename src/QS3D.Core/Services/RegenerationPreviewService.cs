@@ -66,10 +66,13 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
             var sourceChangeVersion = project.ChangeVersion;
-            var sourceElementCount = project.Elements.Count;
-            var targets = CanonicalPreviewTargets(elementIds, sourceElementCount);
+            var sourceElementOwnership = SnapshotElementOwnership(project);
+            var targets = CanonicalPreviewTargets(elementIds, sourceElementOwnership.Count);
             if (targets.Count == 0) throw new ArgumentException("Subset regeneration preview requires at least one target element id.", nameof(elementIds));
-            return PreviewInternal(project, targets, sourceChangeVersion);
+            RequireProjectFresh(project, sourceChangeVersion, sourceElementOwnership);
+            var preview = PreviewInternal(project, targets, sourceChangeVersion);
+            RequireProjectFresh(project, sourceChangeVersion, sourceElementOwnership);
+            return preview;
         }
 
         public RegenerationGuardedApplyResult Apply(ProjectState project, RegenerationPreview preview)
@@ -141,6 +144,46 @@ namespace QS3D.Core.Services
                 count,
                 revisions.Compare(beforeRevision, afterRevision),
                 health.Compare(beforeHealth, afterHealth));
+        }
+
+        private static IReadOnlyDictionary<string, ProjectElement> SnapshotElementOwnership(ProjectState project)
+        {
+            var result = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry while regeneration preview scope is being established.");
+                if (result.ContainsKey(element.Id))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id while regeneration preview scope is being established: " + element.Id + ".");
+                result.Add(element.Id, element);
+            }
+            return result;
+        }
+
+        private static void RequireProjectFresh(
+            ProjectState project,
+            long expectedChangeVersion,
+            IReadOnlyDictionary<string, ProjectElement> expectedOwnership)
+        {
+            if (project.ChangeVersion != expectedChangeVersion)
+                throw new InvalidOperationException("Project changed while regeneration preview scope was being established; recompute preview.");
+            if (project.Elements.Count != expectedOwnership.Count)
+                throw StructuralFreshnessError();
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null || !seen.Add(element.Id) ||
+                    !expectedOwnership.TryGetValue(element.Id, out var original) ||
+                    !ReferenceEquals(original, element))
+                    throw StructuralFreshnessError();
+            }
+        }
+
+        private static InvalidOperationException StructuralFreshnessError()
+        {
+            return new InvalidOperationException(
+                "Project element ownership changed while regeneration preview scope was being established; recompute preview.");
         }
 
         private static IReadOnlyList<string> CanonicalPreviewTargets(IEnumerable<string> elementIds, int maxCount)
