@@ -5,13 +5,13 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "QS3D.BricsCAD.V25"
 FILES = {
-    "RoomFinishScheduleCommands.cs": ("QS3DFINISHXLSX lỗi:", "HT_Phòng XLSX: project chưa có finish semantic để xuất."),
-    "DoorOpeningScheduleCommands.cs": ("QS3DDOORXLSX lỗi:", "Door XLSX: project chưa có Cửa/Lỗ mở semantic để xuất."),
-    "CurtainWallScheduleCommands.cs": ("QS3DCURTAINXLSX lỗi:", "Curtain XLSX: chưa có Vách Kính semantic để xuất."),
+    "RoomFinishScheduleCommands.cs": ("QS3DFINISHXLSX lỗi: không thể xuất bảng hoàn thiện phòng.", "HT_Phòng XLSX: project chưa có finish semantic để xuất."),
+    "DoorOpeningScheduleCommands.cs": ("QS3DDOORXLSX lỗi: không thể xuất bảng Cửa / Lỗ mở.", "Door XLSX: project chưa có Cửa/Lỗ mở semantic để xuất."),
+    "CurtainWallScheduleCommands.cs": ("QS3DCURTAINXLSX lỗi: không thể xuất bảng Vách Kính.", "Curtain XLSX: chưa có Vách Kính semantic để xuất."),
 }
 errors = []
 
-for name, (error_prefix, empty_status) in FILES.items():
+for name, (error_status, empty_status) in FILES.items():
     path = SRC / name
     if not path.is_file():
         errors.append("missing schedule export source: " + name)
@@ -26,13 +26,15 @@ for name, (error_prefix, empty_status) in FILES.items():
         "private static void Report(Document document, string status)",
         "try { PaletteCoordinator.SetStatus(status); } catch { }",
         "try { document.Editor.WriteMessage(\"\\nQS3D \" + status); } catch { }",
+        "catch (System.Exception)",
         'Report(document, "' + empty_status + '");',
+        'Report(document, "' + error_status + '");',
     ):
         if token not in text:
             errors.append(name + " missing export safety token: " + token)
-    error_report = 'Report(document, "' + error_prefix
-    if error_report not in text or '" + ex.Message);' not in text[text.find(error_report):text.find(error_report) + 160]:
-        errors.append(name + " missing best-effort exception reporting with prefix: " + error_prefix)
+    for forbidden in ("ex.Message", "exception.Message", ".StackTrace"):
+        if forbidden in text:
+            errors.append(name + " must not expose path-bearing exception diagnostics: " + forbidden)
     if "ProjectContextCoordinator.GetOrCreate(document)" in text:
         errors.append(name + " must not create/cache project state during schedule export.")
 
@@ -42,4 +44,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Room Finish, Door/Opening and Curtain XLSX exports are cancel-first, read-only, detached-regeneration workflows with best-effort empty/error reporting.")
+print("PASS: Room Finish, Door/Opening and Curtain XLSX exports are cancel-first, read-only, detached-regeneration workflows with privacy-safe best-effort empty/error reporting.")
