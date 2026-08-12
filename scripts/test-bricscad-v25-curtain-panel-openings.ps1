@@ -44,6 +44,20 @@ function Require-Qs3dValue {
     }
 }
 
+function Read-Qs3dAllowedValue {
+    param(
+        [Parameter(Mandatory = $true)]$Marker,
+        [Parameter(Mandatory = $true)][string]$Key,
+        [Parameter(Mandatory = $true)][string[]]$Allowed
+    )
+    if (-not $Marker.ContainsKey($Key)) { throw "Curtain-opening marker is missing '$Key'." }
+    $value = [string]$Marker[$Key]
+    foreach ($candidate in $Allowed) {
+        if ([string]::Equals($value, $candidate, [StringComparison]::Ordinal)) { return $value }
+    }
+    throw "Curtain-opening marker '$Key' is not an allowlisted diagnostic token."
+}
+
 function Read-NonNegativeMarkerInt {
     param([Parameter(Mandatory = $true)]$Marker, [Parameter(Mandatory = $true)][string]$Key)
     if (-not $Marker.ContainsKey($Key)) { throw "Curtain-opening marker is missing '$Key'." }
@@ -183,37 +197,75 @@ try {
     }
 
     $marker = Read-Qs3dMarker -Path $resultPath
-    Require-Qs3dValue -Marker $marker -Key "status" -Expected "PASS"
-    Require-Qs3dValue -Marker $marker -Key "command" -Expected "QS3DCURTAINOPENINGPROBE"
-    Require-Qs3dValue -Marker $marker -Key "process" -Expected "bricscad"
-    Require-Qs3dValue -Marker $marker -Key "nonce" -Expected $nonce
-    Require-Qs3dValue -Marker $marker -Key "schema" -Expected "QS3D_CURTAIN_PANEL_OPENING_RUNTIME_V1"
-    Require-Qs3dValue -Marker $marker -Key "qualification_boundary" -Expected "LOCAL_002_P02_ONLY"
-    Require-Qs3dValue -Marker $marker -Key "production_local002_qualified" -Expected "false"
-    Require-Qs3dValue -Marker $marker -Key "is_64bit" -Expected "true"
-    Require-Qs3dValue -Marker $marker -Key "legacy_no_level" -Expected "true"
-    Require-Qs3dValue -Marker $marker -Key "complete_empty_build_state" -Expected "true"
-    Require-Qs3dValue -Marker $marker -Key "opening_aware_metadata" -Expected "true"
-    Require-Qs3dValue -Marker $marker -Key "source_geometry_preserved" -Expected "true"
-    Require-Qs3dValue -Marker $marker -Key "ownership_sets_disjoint" -Expected "true"
-    Require-Qs3dValue -Marker $marker -Key "health_issue_count" -Expected "0"
-    Require-Qs3dValue -Marker $marker -Key "located_panel_count" -Expected "1"
-    Require-Qs3dValue -Marker $marker -Key "canonical_owner_count" -Expected "1"
-    Require-Qs3dValue -Marker $marker -Key "partial_native_opening_intersection_count" -Expected "0"
-    Require-Qs3dValue -Marker $marker -Key "complete_empty_output_piece_count" -Expected "0"
-    Require-Qs3dValue -Marker $marker -Key "complete_empty_handle_count" -Expected "0"
+    $diagnosticFailure = $false
+    $failurePhase = ""
+    $failureCode = ""
+    $partialSourceCount = 0
+    $partialOutputCount = 0
+    $emptySourceCount = 0
+    if ($marker.ContainsKey("status") -and [string]::Equals([string]$marker["status"], "FAIL", [StringComparison]::Ordinal)) {
+        $failurePhases = @(
+            "PROBE_AUTH", "PROJECT_DISCOVERY", "OUTPUT_DISCOVERY", "SCENARIO_CLASSIFICATION",
+            "DOOR_SOURCE_SHAPE", "DOOR_PLAN_RECONSTRUCTION", "DOOR_OUTPUT_OWNERSHIP", "DOOR_METADATA",
+            "DOOR_PLANNED_GEOMETRY", "DOOR_NATIVE_GEOMETRY",
+            "EMPTY_SOURCE_SHAPE", "EMPTY_PLAN_RECONSTRUCTION", "EMPTY_OUTPUT_OWNERSHIP", "EMPTY_METADATA",
+            "EMPTY_PLANNED_GEOMETRY", "EMPTY_NATIVE_GEOMETRY",
+            "SCENARIO_ASSERTIONS", "OWNERSHIP_DISJOINT", "HEALTH", "LOCATE", "RESULT_PUBLISH"
+        )
+        $failureCodes = @("STATE_REJECTED", "DATA_REJECTED", "IO_REJECTED", "OVERFLOW_REJECTED", "UNEXPECTED_REJECTED")
+        $failureKeys = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($key in @(
+            "status", "command", "nonce", "schema", "qualification_boundary",
+            "production_local002_qualified", "error_code", "failure_phase", "failure_code"
+        )) { [void]$failureKeys.Add($key) }
+        foreach ($key in $marker.Keys) {
+            if (-not $failureKeys.Contains([string]$key)) {
+                throw "Curtain-opening FAIL marker contains a non-contract field."
+            }
+        }
+        Require-Qs3dValue -Marker $marker -Key "command" -Expected "QS3DCURTAINOPENINGPROBE"
+        Require-Qs3dValue -Marker $marker -Key "nonce" -Expected $nonce
+        Require-Qs3dValue -Marker $marker -Key "schema" -Expected "QS3D_CURTAIN_PANEL_OPENING_RUNTIME_V2"
+        Require-Qs3dValue -Marker $marker -Key "qualification_boundary" -Expected "LOCAL_002_P02_ONLY"
+        Require-Qs3dValue -Marker $marker -Key "production_local002_qualified" -Expected "false"
+        Require-Qs3dValue -Marker $marker -Key "error_code" -Expected "CURTAIN_PANEL_OPENING_RUNTIME_FAILED"
+        $failurePhase = Read-Qs3dAllowedValue -Marker $marker -Key "failure_phase" -Allowed $failurePhases
+        $failureCode = Read-Qs3dAllowedValue -Marker $marker -Key "failure_code" -Allowed $failureCodes
+        $diagnosticFailure = $true
+    }
+    else {
+        Require-Qs3dValue -Marker $marker -Key "status" -Expected "PASS"
+        Require-Qs3dValue -Marker $marker -Key "command" -Expected "QS3DCURTAINOPENINGPROBE"
+        Require-Qs3dValue -Marker $marker -Key "process" -Expected "bricscad"
+        Require-Qs3dValue -Marker $marker -Key "nonce" -Expected $nonce
+        Require-Qs3dValue -Marker $marker -Key "schema" -Expected "QS3D_CURTAIN_PANEL_OPENING_RUNTIME_V2"
+        Require-Qs3dValue -Marker $marker -Key "qualification_boundary" -Expected "LOCAL_002_P02_ONLY"
+        Require-Qs3dValue -Marker $marker -Key "production_local002_qualified" -Expected "false"
+        Require-Qs3dValue -Marker $marker -Key "is_64bit" -Expected "true"
+        Require-Qs3dValue -Marker $marker -Key "legacy_no_level" -Expected "true"
+        Require-Qs3dValue -Marker $marker -Key "complete_empty_build_state" -Expected "true"
+        Require-Qs3dValue -Marker $marker -Key "opening_aware_metadata" -Expected "true"
+        Require-Qs3dValue -Marker $marker -Key "source_geometry_preserved" -Expected "true"
+        Require-Qs3dValue -Marker $marker -Key "ownership_sets_disjoint" -Expected "true"
+        Require-Qs3dValue -Marker $marker -Key "health_issue_count" -Expected "0"
+        Require-Qs3dValue -Marker $marker -Key "located_panel_count" -Expected "1"
+        Require-Qs3dValue -Marker $marker -Key "canonical_owner_count" -Expected "1"
+        Require-Qs3dValue -Marker $marker -Key "partial_native_opening_intersection_count" -Expected "0"
+        Require-Qs3dValue -Marker $marker -Key "complete_empty_output_piece_count" -Expected "0"
+        Require-Qs3dValue -Marker $marker -Key "complete_empty_handle_count" -Expected "0"
 
-    $partialSourceCount = Read-PositiveMarkerInt -Marker $marker -Key "partial_source_panel_count"
-    $partialOutputCount = Read-PositiveMarkerInt -Marker $marker -Key "partial_output_piece_count"
-    $partialFullyRemovedCount = Read-PositiveMarkerInt -Marker $marker -Key "partial_fully_removed_panel_count"
-    $partialClippedCount = Read-PositiveMarkerInt -Marker $marker -Key "partial_clipped_panel_count"
-    $partialNativeMatchCount = Read-PositiveMarkerInt -Marker $marker -Key "partial_native_plan_match_count"
-    $emptySourceCount = Read-PositiveMarkerInt -Marker $marker -Key "complete_empty_source_panel_count"
-    $emptyFullyRemovedCount = Read-PositiveMarkerInt -Marker $marker -Key "complete_empty_fully_removed_panel_count"
-    if ($partialNativeMatchCount -ne $partialOutputCount) { throw "Partial native/plan piece counts differ." }
-    if ($partialFullyRemovedCount -ge $partialSourceCount) { throw "Partial case unexpectedly removed every source panel." }
-    if ($partialClippedCount -gt $partialSourceCount) { throw "Partial clipped count exceeds source panels." }
-    if ($emptyFullyRemovedCount -ne $emptySourceCount) { throw "Complete-empty case did not remove every source panel." }
+        $partialSourceCount = Read-PositiveMarkerInt -Marker $marker -Key "partial_source_panel_count"
+        $partialOutputCount = Read-PositiveMarkerInt -Marker $marker -Key "partial_output_piece_count"
+        $partialFullyRemovedCount = Read-PositiveMarkerInt -Marker $marker -Key "partial_fully_removed_panel_count"
+        $partialClippedCount = Read-PositiveMarkerInt -Marker $marker -Key "partial_clipped_panel_count"
+        $partialNativeMatchCount = Read-PositiveMarkerInt -Marker $marker -Key "partial_native_plan_match_count"
+        $emptySourceCount = Read-PositiveMarkerInt -Marker $marker -Key "complete_empty_source_panel_count"
+        $emptyFullyRemovedCount = Read-PositiveMarkerInt -Marker $marker -Key "complete_empty_fully_removed_panel_count"
+        if ($partialNativeMatchCount -ne $partialOutputCount) { throw "Partial native/plan piece counts differ." }
+        if ($partialFullyRemovedCount -ge $partialSourceCount) { throw "Partial case unexpectedly removed every source panel." }
+        if ($partialClippedCount -gt $partialSourceCount) { throw "Partial clipped count exceeds source panels." }
+        if ($emptyFullyRemovedCount -ne $emptySourceCount) { throw "Complete-empty case did not remove every source panel." }
+    }
 
     Stop-Qs3dLaunchedProcess -Process $process
     if (Test-Path -LiteralPath $scriptPath) {
@@ -226,6 +278,9 @@ try {
     }
     if ((Test-Path -LiteralPath $projectSidecar) -or (Test-Path -LiteralPath ($projectSidecar + ".bak"))) {
         throw "Curtain-opening runtime probe unexpectedly persisted a QS3D sidecar."
+    }
+    if ($diagnosticFailure) {
+        throw "Curtain-opening probe failed at sanitized phase '$failurePhase' with code '$failureCode'; process/script/sidecar/DWG cleanup was verified."
     }
 
     $metadata = [ordered]@{

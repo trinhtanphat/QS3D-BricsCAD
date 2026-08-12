@@ -27,6 +27,52 @@ namespace QS3D.BricsCAD.V25
         private const string ResultFileName = "curtain-panel-opening-runtime-result.txt";
         private const double GeometryToleranceM = 1e-6d;
 
+        private static readonly HashSet<string> FailurePhases = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "PROBE_AUTH",
+            "PROJECT_DISCOVERY",
+            "OUTPUT_DISCOVERY",
+            "SCENARIO_CLASSIFICATION",
+            "DOOR_SOURCE_SHAPE",
+            "DOOR_PLAN_RECONSTRUCTION",
+            "DOOR_OUTPUT_OWNERSHIP",
+            "DOOR_METADATA",
+            "DOOR_PLANNED_GEOMETRY",
+            "DOOR_NATIVE_GEOMETRY",
+            "EMPTY_SOURCE_SHAPE",
+            "EMPTY_PLAN_RECONSTRUCTION",
+            "EMPTY_OUTPUT_OWNERSHIP",
+            "EMPTY_METADATA",
+            "EMPTY_PLANNED_GEOMETRY",
+            "EMPTY_NATIVE_GEOMETRY",
+            "SCENARIO_ASSERTIONS",
+            "OWNERSHIP_DISJOINT",
+            "HEALTH",
+            "LOCATE",
+            "RESULT_PUBLISH"
+        };
+
+        private static readonly HashSet<string> FailureCodes = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "STATE_REJECTED",
+            "DATA_REJECTED",
+            "IO_REJECTED",
+            "OVERFLOW_REJECTED",
+            "UNEXPECTED_REJECTED"
+        };
+
+        private sealed class ProbePhaseTracker
+        {
+            public string Value { get; private set; } = "PROBE_AUTH";
+
+            public void Set(string phase)
+            {
+                if (!FailurePhases.Contains(phase))
+                    throw new InvalidOperationException("Curtain opening probe phase is not allowlisted.");
+                Value = phase;
+            }
+        }
+
         private sealed class ScenarioEvidence
         {
             public ProjectElement Host { get; set; } = null!;
@@ -102,19 +148,22 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
+            var nonce = Environment.GetEnvironmentVariable(NonceVariable) ?? string.Empty;
+            var phase = new ProbePhaseTracker();
             try
             {
-                var nonce = Environment.GetEnvironmentVariable(NonceVariable) ?? string.Empty;
                 if (!Guid.TryParseExact(nonce, "N", out _))
                     throw new InvalidOperationException("Curtain opening runtime nonce is invalid.");
                 var resultPath = RequiredResultPath(requestedPath);
                 if (File.Exists(resultPath)) throw new IOException("Curtain opening result already exists.");
 
+                phase.Set("PROJECT_DISCOVERY");
                 var document = Application.DocumentManager.MdiActiveDocument
                     ?? throw new InvalidOperationException("No active BricsCAD document is available.");
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
                     throw new InvalidOperationException("Curtain opening probe requires an existing QS3D project.");
 
+                phase.Set("OUTPUT_DISCOVERY");
                 var hosts = project.Elements
                     .Where(x => x.Category == ElementCategory.GlassWall &&
                                 x.Properties.TryGetValue("GeneratedCurtainPanelBuildState", out var state) &&
@@ -123,11 +172,12 @@ namespace QS3D.BricsCAD.V25
                 if (hosts.Count != 2)
                     throw new InvalidOperationException("Curtain opening probe requires exactly two completed GlassWall owners.");
 
+                phase.Set("SCENARIO_CLASSIFICATION");
                 var evidence = new List<ScenarioEvidence>();
                 using (document.LockDocument())
                 using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
                 {
-                    foreach (var host in hosts) evidence.Add(InspectScenario(document, transaction, project, host));
+                    foreach (var host in hosts) evidence.Add(InspectScenario(document, transaction, project, host, phase));
                     transaction.Commit();
                 }
 
@@ -139,6 +189,7 @@ namespace QS3D.BricsCAD.V25
                     evidence.Count(x => x.OpeningCategory == ElementCategory.WallOpening) != 1)
                     throw new InvalidOperationException("Curtain opening scenario categories are ambiguous.");
 
+                phase.Set("SCENARIO_ASSERTIONS");
                 if (partial.CompleteEmpty || partial.OutputPieceCount <= 0 || partial.FullyRemovedPanelCount <= 0 ||
                     partial.PartiallyClippedPanelCount <= 0 || partial.NativePlanMatchCount != partial.OutputPieceCount ||
                     partial.NativeOpeningIntersectionCount != 0)
@@ -149,6 +200,7 @@ namespace QS3D.BricsCAD.V25
                     completeEmpty.NativePlanMatchCount != 0 || completeEmpty.NativeOpeningIntersectionCount != 0)
                     throw new InvalidOperationException("WallOpening complete-empty panel evidence is incomplete.");
 
+                phase.Set("OWNERSHIP_DISJOINT");
                 RequireDisjoint(evidence.SelectMany(x => new[]
                 {
                     x.SourceHandles,
@@ -158,6 +210,7 @@ namespace QS3D.BricsCAD.V25
                     x.PanelHandles
                 }).ToArray());
 
+                phase.Set("HEALTH");
                 var livePanels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var handle in evidence.SelectMany(x => x.PanelHandles)) livePanels.Add(handle);
                 var coreIssues = new GeneratedCurtainPanelHealthService().Inspect(project, livePanels);
@@ -168,6 +221,7 @@ namespace QS3D.BricsCAD.V25
                 if (blockingIssues != 0)
                     throw new InvalidOperationException("Curtain opening panel Health is not clean.");
 
+                phase.Set("LOCATE");
                 var locatedIds = CadHandleService.Resolve(document, new[] { partial.PanelHandles[0] });
                 if (locatedIds.Count != 1)
                     throw new InvalidOperationException("Curtain opening probe cannot resolve one partial panel for Locate.");
@@ -176,13 +230,14 @@ namespace QS3D.BricsCAD.V25
                 if (owners.Count != 1 || !ReferenceEquals(owners[0], partial.Host))
                     throw new InvalidOperationException("Curtain opening panel Locate did not resolve one canonical GlassWall.");
 
+                phase.Set("RESULT_PUBLISH");
                 WriteMarkerAtomic(resultPath, new[]
                 {
                     "status=PASS",
                     "command=QS3DCURTAINOPENINGPROBE",
                     "process=" + OneLine(Process.GetCurrentProcess().ProcessName),
                     "nonce=" + nonce,
-                    "schema=QS3D_CURTAIN_PANEL_OPENING_RUNTIME_V1",
+                    "schema=QS3D_CURTAIN_PANEL_OPENING_RUNTIME_V2",
                     "qualification_boundary=LOCAL_002_P02_ONLY",
                     "production_local002_qualified=false",
                     "is_64bit=" + (Environment.Is64BitProcess ? "true" : "false"),
@@ -209,9 +264,9 @@ namespace QS3D.BricsCAD.V25
                 });
                 document.Editor.WriteMessage("\nQS3D curtain opening probe PASS.");
             }
-            catch (System.Exception)
+            catch (System.Exception error)
             {
-                TryWriteFailure(requestedPath);
+                TryWriteFailure(requestedPath, nonce, phase.Value, FailureCode(error));
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
                     "\nQS3D curtain opening probe FAIL. See the local qualification result.");
                 throw;
@@ -222,13 +277,21 @@ namespace QS3D.BricsCAD.V25
             Document document,
             Transaction transaction,
             ProjectState project,
-            ProjectElement host)
+            ProjectElement host,
+            ProbePhaseTracker phase)
         {
             RequireLegacyNoLevel(host, "GlassWall");
             var linked = LinkedOpenings(project, host);
             if (linked.Count != 1)
                 throw new InvalidOperationException("Curtain opening scenario requires exactly one linked opening.");
             var opening = linked[0];
+            var prefix = opening.Category == ElementCategory.Door
+                ? "DOOR_"
+                : opening.Category == ElementCategory.WallOpening
+                    ? "EMPTY_"
+                    : throw new InvalidOperationException("Curtain opening scenario category is unsupported.");
+
+            phase.Set(prefix + "SOURCE_SHAPE");
             RequireLegacyNoLevel(opening, "opening");
 
             var sourceHandles = CanonicalHandles(host.SourceHandles, "GlassWall source");
@@ -245,6 +308,7 @@ namespace QS3D.BricsCAD.V25
                 ?? throw new InvalidOperationException("Curtain opening source is not a LINE.");
             RequireSyntheticLine(document, line, openingLine, opening.Category);
 
+            phase.Set(prefix + "PLAN_RECONSTRUCTION");
             var family = project.FindFamily(host.FamilyId);
             var dx = CadGeometryGuard.Subtract(line.EndPoint.X, line.StartPoint.X, "curtain opening probe/dx");
             var dy = CadGeometryGuard.Subtract(line.EndPoint.Y, line.StartPoint.Y, "curtain opening probe/dy");
@@ -264,6 +328,7 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Curtain opening planner did not resolve exactly one opening rectangle.");
             var plan = CurtainWallOpeningPanelPlanner.Plan(detail.Panels, openings, 0d);
 
+            phase.Set(prefix + "OUTPUT_OWNERSHIP");
             var hostHandles = CanonicalHandles(PropertyValues(host, "GeneratedSolidHandle"), "host solid");
             var frameHandles = CanonicalHandles(PropertyValues(host, "GeneratedCurtainFrameHandles"), "frame solid");
             var panelHandles = CanonicalHandles(PropertyValues(host, "GeneratedCurtainPanelHandles"), "panel solid");
@@ -274,6 +339,7 @@ namespace QS3D.BricsCAD.V25
                 CadHandleService.GetLiveSolidHandles(document, panelHandles).Count != panelHandles.Count)
                 throw new InvalidOperationException("Curtain opening output contains a non-live Solid3d.");
 
+            phase.Set(prefix + "METADATA");
             RequireExactInteger(host, "GeneratedCurtainPanelCount", plan.Pieces.Count);
             RequireExactInteger(host, "GeneratedCurtainPanelBaseCount", detail.Panels.Count);
             RequireExactInteger(host, "GeneratedCurtainPanelOpeningCount", 1);
@@ -286,6 +352,7 @@ namespace QS3D.BricsCAD.V25
             if (panelHandles.Count != plan.Pieces.Count)
                 throw new InvalidOperationException("Curtain opening handle count does not match authoritative plan pieces.");
 
+            phase.Set(prefix + "PLANNED_GEOMETRY");
             var remainingBySource = new double[detail.Panels.Count];
             foreach (var piece in plan.Pieces)
             {
@@ -309,6 +376,7 @@ namespace QS3D.BricsCAD.V25
                 else RequireNear(remaining, original, "Uninterrupted curtain panel area");
             }
 
+            phase.Set(prefix + "NATIVE_GEOMETRY");
             var native = ReadNativePieces(document, transaction, panelHandles, line, placement.BottomDrawingUnits);
             var matched = MatchNativePieces(native, plan.Pieces);
             var intersections = native.Count(x =>
@@ -536,17 +604,34 @@ namespace QS3D.BricsCAD.V25
             return fullPath;
         }
 
-        private static void TryWriteFailure(string? requestedPath)
+        private static string FailureCode(Exception error)
+        {
+            if (error is InvalidDataException) return "DATA_REJECTED";
+            if (error is OverflowException) return "OVERFLOW_REJECTED";
+            if (error is IOException) return "IO_REJECTED";
+            if (error is InvalidOperationException) return "STATE_REJECTED";
+            return "UNEXPECTED_REJECTED";
+        }
+
+        private static void TryWriteFailure(string? requestedPath, string nonce, string phase, string failureCode)
         {
             try
             {
                 var normalized = (requestedPath ?? string.Empty).Trim();
-                if (normalized.Length > 0 && !File.Exists(normalized))
+                if (normalized.Length > 0 && !File.Exists(normalized) &&
+                    Guid.TryParseExact(nonce, "N", out _) && FailurePhases.Contains(phase) &&
+                    FailureCodes.Contains(failureCode))
                     WriteMarkerAtomic(normalized, new[]
                     {
                         "status=FAIL",
                         "command=QS3DCURTAINOPENINGPROBE",
-                        "error_code=CURTAIN_PANEL_OPENING_RUNTIME_FAILED"
+                        "nonce=" + nonce,
+                        "schema=QS3D_CURTAIN_PANEL_OPENING_RUNTIME_V2",
+                        "qualification_boundary=LOCAL_002_P02_ONLY",
+                        "production_local002_qualified=false",
+                        "error_code=CURTAIN_PANEL_OPENING_RUNTIME_FAILED",
+                        "failure_phase=" + phase,
+                        "failure_code=" + failureCode
                     });
             }
             catch { }
