@@ -11,18 +11,20 @@ namespace QS3D.Core.SmokeTests
         [ModuleInitializer]
         internal static void Initialize()
         {
-            ExplicitOffsetNormalizesDeterministically();
+            ExplicitNonUtcOffsetIsRejected();
             MissingOffsetIsRejected();
+            CanonicalUtcRoundTripLoads();
         }
 
-        private static void ExplicitOffsetNormalizesDeterministically()
+        private static void ExplicitNonUtcOffsetIsRejected()
         {
             WithFile("2026-08-10T12:00:00+07:00", path =>
             {
-                var project = new QsdbProjectStore().Load(path);
-                var expected = new DateTime(2026, 8, 10, 5, 0, 0, DateTimeKind.Utc);
-                if (project.UpdatedUtc != expected || project.UpdatedUtc.Kind != DateTimeKind.Utc)
-                    throw new InvalidOperationException("QsdbTimestampOffsetSmoke: explicit +07:00 timestamp did not normalize deterministically to UTC.");
+                var rejected = false;
+                try { new QsdbProjectStore().Load(path); }
+                catch (InvalidDataException) { rejected = true; }
+                if (!rejected)
+                    throw new InvalidOperationException("QsdbTimestampOffsetSmoke: explicit non-UTC offset was accepted instead of failing the canonical UTC boundary.");
             });
         }
 
@@ -38,12 +40,23 @@ namespace QS3D.Core.SmokeTests
             });
         }
 
+        private static void CanonicalUtcRoundTripLoads()
+        {
+            WithFile("2026-08-10T05:00:00.0000000Z", path =>
+            {
+                var project = new QsdbProjectStore().Load(path);
+                var expected = new DateTime(2026, 8, 10, 5, 0, 0, DateTimeKind.Utc);
+                if (project.UpdatedUtc != expected || project.UpdatedUtc.Kind != DateTimeKind.Utc)
+                    throw new InvalidOperationException("QsdbTimestampOffsetSmoke: canonical UTC round-trip timestamp did not load exactly.");
+            });
+        }
+
         private static void WithFile(string updatedUtc, Action<string> action)
         {
             var path = Path.Combine(Path.GetTempPath(), "qs3d-ts-" + Guid.NewGuid().ToString("N") + ".qsdb");
             try
             {
-                var xml = "<qs3d schema=\"3\" projectId=\"P-ts\" name=\"Timestamp\" updatedUtc=\"" + updatedUtc + "\" drawingPath=\"\" drawingFingerprint=\"\" activeZoneId=\"\" activeFloorId=\"\">" +
+                var xml = "<qs3d schema=\"3\" projectId=\"P-ts\" name=\"Timestamp\" updatedUtc=\"" + updatedUtc + "\" changeVersion=\"0\" drawingPath=\"\" drawingFingerprint=\"\" activeZoneId=\"\" activeFloorId=\"\">" +
                           "<metadata/><zones/><floors/><families/><rules/><elements/><audit/></qs3d>";
                 File.WriteAllText(path, xml, Encoding.UTF8);
                 action(path);
