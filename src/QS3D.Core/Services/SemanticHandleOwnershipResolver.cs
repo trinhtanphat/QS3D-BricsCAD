@@ -21,9 +21,8 @@ namespace QS3D.Core.Services
             foreach (var element in project.Elements)
             {
                 var ownsSource = false;
-                for (var index = 0; index < element.SourceHandles.Count; index++)
+                foreach (var storedHandle in GetCanonicalUniqueStoredSourceHandles(element))
                 {
-                    var storedHandle = RequireCanonicalStoredSourceHandle(element, element.SourceHandles[index], index);
                     if (string.Equals(storedHandle, normalized, StringComparison.OrdinalIgnoreCase))
                         ownsSource = true;
                 }
@@ -90,11 +89,8 @@ namespace QS3D.Core.Services
             var channels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
-                for (var index = 0; index < element.SourceHandles.Count; index++)
-                {
-                    var handle = RequireCanonicalStoredSourceHandle(element, element.SourceHandles[index], index);
+                foreach (var handle in GetCanonicalUniqueStoredSourceHandles(element))
                     Add(handle, element, "SourceHandles", selected, owners, channels);
-                }
                 foreach (var entry in GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element))
                     Add(entry.Key, element, entry.Value, selected, owners, channels);
             }
@@ -151,6 +147,21 @@ namespace QS3D.Core.Services
                 if (!seen.Add(element.Id))
                     throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
             }
+        }
+
+        private static IReadOnlyList<string> GetCanonicalUniqueStoredSourceHandles(ProjectElement element)
+        {
+            var result = new List<string>(element.SourceHandles.Count);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var index = 0; index < element.SourceHandles.Count; index++)
+            {
+                var handle = RequireCanonicalStoredSourceHandle(element, element.SourceHandles[index], index);
+                if (!seen.Add(handle))
+                    throw new InvalidOperationException(
+                        "Semantic element " + element.Id + " contains duplicate SourceHandles identity at index " + index + ": " + handle + ". Repair source ownership before continuing.");
+                result.Add(handle);
+            }
+            return result.AsReadOnly();
         }
 
         private static string RequireCanonicalStoredSourceHandle(ProjectElement element, string? rawHandle, int index)
