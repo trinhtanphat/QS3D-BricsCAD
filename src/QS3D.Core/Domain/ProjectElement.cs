@@ -299,7 +299,7 @@ namespace QS3D.Core.Domain
                 changed = true;
             }
             if (!Properties.TryGetValue(snapshotKey, out var snapshot) ||
-                !string.Equals((snapshot ?? string.Empty).Trim(), signature, StringComparison.OrdinalIgnoreCase))
+                !string.Equals(CanonicalHandleSignature(snapshot), signature, StringComparison.OrdinalIgnoreCase))
             {
                 Properties[snapshotKey] = signature;
                 changed = true;
@@ -320,7 +320,7 @@ namespace QS3D.Core.Domain
                 changed = true;
             }
             if (!Properties.TryGetValue(GeneratedCurtainPanelStaleSnapshotKey, out var snapshot) ||
-                !string.Equals((snapshot ?? string.Empty).Trim(), signature, StringComparison.OrdinalIgnoreCase))
+                !string.Equals(CanonicalHandleSignature(snapshot), signature, StringComparison.OrdinalIgnoreCase))
             {
                 Properties[GeneratedCurtainPanelStaleSnapshotKey] = signature;
                 changed = true;
@@ -335,7 +335,7 @@ namespace QS3D.Core.Domain
             return Properties.TryGetValue(GeneratedCurtainPanelStaleSnapshotKey, out var snapshot) &&
                    !string.IsNullOrWhiteSpace(snapshot) &&
                    current.Length > 0 &&
-                   string.Equals(snapshot.Trim(), current, StringComparison.OrdinalIgnoreCase);
+                   string.Equals(CanonicalHandleSignature(snapshot), current, StringComparison.OrdinalIgnoreCase);
         }
 
         private string CurtainPanelOutputSignature()
@@ -355,14 +355,19 @@ namespace QS3D.Core.Domain
             return Properties.TryGetValue(snapshotKey, out var snapshot) &&
                    !string.IsNullOrWhiteSpace(snapshot) &&
                    current.Length > 0 &&
-                   string.Equals(snapshot.Trim(), current, StringComparison.OrdinalIgnoreCase);
+                   string.Equals(CanonicalHandleSignature(snapshot), current, StringComparison.OrdinalIgnoreCase);
         }
 
         private string OutputSignature(string outputKey)
         {
             if (!Properties.TryGetValue(outputKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return string.Empty;
-            return string.Join(";", raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase)
+            return CanonicalHandleSignature(raw);
+        }
+
+        private static string CanonicalHandleSignature(string raw)
+        {
+            return string.Join(";", (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(GeneratedHandleIdentity.Normalize).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
         }
 
