@@ -48,6 +48,8 @@ namespace QS3D.Core.Services
                 return "Property is derived from CAD/source geometry and cannot be edited as a generic semantic property: ";
             if (ReservedIdentityKeys.Contains(key) || LooksLikeIdentityReferenceKey(key))
                 return "Semantic identity/reference field cannot be edited as a generic property: ";
+            if (key.StartsWith("Rule:", StringComparison.OrdinalIgnoreCase))
+                return "Quantity-rule provenance state cannot be edited as a generic semantic property: ";
             if (key.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 key.StartsWith("Generated", StringComparison.OrdinalIgnoreCase) ||
                 key.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase) ||
