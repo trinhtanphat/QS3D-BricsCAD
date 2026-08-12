@@ -50,25 +50,38 @@ namespace QS3D.Core.SmokeTests
         private static void CanonicalRelationsStillLoad()
         {
             var children = "<handles><h>AB12</h></handles><dependencies><d>E0</d></dependencies>";
-            WithXml(BuildXml("activeZoneId=\"Z1\" activeFloorId=\"F1\"", "familyId=\"FAM-1\" floorId=\"F1\" zoneId=\"Z1\"", children), path =>
+            WithXml(BuildXml("activeZoneId=\"Z1\" activeFloorId=\"F1\"", "familyId=\"FAM-1\" floorId=\"F1\" zoneId=\"Z1\"", children, includeCanonicalTargets: true), path =>
             {
                 var project = new QsdbProjectStore().Load(path);
                 Equal("F1", project.ActiveFloorId);
                 Equal("Z1", project.ActiveZoneId);
-                Equal(1, project.Elements.Count);
-                Equal("FAM-1", project.Elements[0].FamilyId);
-                Equal("F1", project.Elements[0].FloorId);
-                Equal("Z1", project.Elements[0].ZoneId);
-                Equal("AB12", project.Elements[0].SourceHandles[0]);
-                Equal("E0", project.Elements[0].DependsOn[0]);
+                Equal(2, project.Elements.Count);
+                var element = project.FindElement("E1") ?? throw new Exception("Expected element E1.");
+                Equal("FAM-1", element.FamilyId);
+                Equal("F1", element.FloorId);
+                Equal("Z1", element.ZoneId);
+                Equal("AB12", element.SourceHandles[0]);
+                Equal("E0", element.DependsOn[0]);
             });
         }
 
-        private static string BuildXml(string rootAttributes, string elementAttributes, string elementChildren = "")
+        private static string BuildXml(
+            string rootAttributes,
+            string elementAttributes,
+            string elementChildren = "",
+            bool includeCanonicalTargets = false)
         {
+            var relationTargets = includeCanonicalTargets
+                ? "<zones><zone id=\"Z1\" name=\"Zone 1\"/></zones>" +
+                  "<floors><floor id=\"F1\" name=\"Floor 1\" elevationM=\"0\"/></floors>" +
+                  "<families><family id=\"FAM-1\" name=\"Beam Family\" category=\"Beam\"/></families>"
+                : "<zones/><floors/><families/>";
+            var dependencyTarget = includeCanonicalTargets
+                ? "<element id=\"E0\" category=\"Beam\" dirty=\"15\" updatedUtc=\"2026-08-11T00:00:00.0000000Z\"/>"
+                : string.Empty;
             return
                 "<qs3d schema=\"3\" projectId=\"P1\" name=\"Canonical relation read\" updatedUtc=\"2026-08-11T00:00:00.0000000Z\" changeVersion=\"0\" " + rootAttributes + ">" +
-                "<metadata/><zones/><floors/><families/><rules/><elements>" +
+                "<metadata/>" + relationTargets + "<rules/><elements>" + dependencyTarget +
                 "<element id=\"E1\" category=\"Beam\" dirty=\"15\" updatedUtc=\"2026-08-11T00:00:00.0000000Z\" " + elementAttributes + ">" +
                 elementChildren +
                 "</element></elements><audit/></qs3d>";
