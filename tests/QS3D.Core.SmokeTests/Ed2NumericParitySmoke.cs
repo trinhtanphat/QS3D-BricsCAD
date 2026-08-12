@@ -14,8 +14,64 @@ namespace QS3D.Core.SmokeTests
         {
             CanonicalNumericParityPublishes();
             NumericDriftPreservesExistingDestination();
+            MatchedNegativeCountsAndPhysicalQuantitiesFailBeforePublication();
             NullDensityAndMassRulesRemainExplicit();
             SummaryHandleSwapsFailClosed();
+        }
+
+        private static void MatchedNegativeCountsAndPhysicalQuantitiesFailBeforePublication()
+        {
+            var mutations = new[]
+            {
+                new NegativeMutation("Count", row => row.Count = -1),
+                new NegativeMutation("GrossConcreteM3", row => row.GrossConcreteM3 = -1d),
+                new NegativeMutation("DeductionM3", row => row.DeductionM3 = -1d),
+                new NegativeMutation("NetConcreteM3", row => row.NetConcreteM3 = -1d),
+                new NegativeMutation("FormworkM2", row => row.FormworkM2 = -1d),
+                new NegativeMutation("LengthM", row => row.LengthM = -1d),
+                new NegativeMutation("OuterPerimeterM", row => row.OuterPerimeterM = -1d),
+                new NegativeMutation("InnerPerimeterM", row => row.InnerPerimeterM = -1d),
+                new NegativeMutation("DoorAreaM2", row => row.DoorAreaM2 = -1d),
+                new NegativeMutation("SideAreaM2", row => row.SideAreaM2 = -1d),
+                new NegativeMutation("BottomAreaM2", row => row.BottomAreaM2 = -1d),
+                new NegativeMutation("TopAreaM2", row => row.TopAreaM2 = -1d),
+                new NegativeMutation("OtherAreaM2", row => row.OtherAreaM2 = -1d),
+            };
+            var directory = TempDirectory("ed2-matched-negative-refusal");
+            var sentinel = Encoding.UTF8.GetBytes("existing ED2 negative destination");
+
+            try
+            {
+                for (var index = 0; index < mutations.Length; index++)
+                {
+                    var mutation = mutations[index];
+                    var detail = Detail("NEG" + index, (index + 10).ToString("X"), 1d, 2400d, 2400d);
+                    var summary = Aggregate(detail);
+                    mutation.Apply(detail);
+                    mutation.Apply(summary);
+
+                    var missingDirectory = Path.Combine(directory, "missing-" + index);
+                    var missingPath = Path.Combine(missingDirectory, "negative.xlsx");
+                    ThrowsContaining<InvalidDataException>(
+                        () => XlsxQuantityExporter.ExportEd2(missingPath, new[] { detail }, new[] { summary }),
+                        mutation.FieldName,
+                        "non-negative");
+                    if (Directory.Exists(missingDirectory))
+                        throw new Exception("Matched-negative ED2 preflight created a destination directory for " + mutation.FieldName + ".");
+
+                    var path = Path.Combine(directory, "existing-negative-" + index + ".xlsx");
+                    File.WriteAllBytes(path, sentinel);
+                    ThrowsContaining<InvalidDataException>(
+                        () => XlsxQuantityExporter.ExportEd2(path, new[] { detail }, new[] { summary }),
+                        mutation.FieldName,
+                        "non-negative");
+                    if (!File.ReadAllBytes(path).SequenceEqual(sentinel))
+                        throw new Exception("Matched-negative ED2 refusal changed the existing destination for " + mutation.FieldName + ".");
+                    if (Directory.EnumerateFiles(directory, Path.GetFileName(path) + ".*.tmp").Any())
+                        throw new Exception("Matched-negative ED2 refusal left a temporary publication file for " + mutation.FieldName + ".");
+                }
+            }
+            finally { DeleteDirectory(directory); }
         }
 
         private static void SummaryHandleSwapsFailClosed()
@@ -242,6 +298,18 @@ namespace QS3D.Core.SmokeTests
             return clone;
         }
 
+        private sealed class NegativeMutation
+        {
+            public NegativeMutation(string fieldName, Action<QuantityReportRow> apply)
+            {
+                FieldName = fieldName;
+                Apply = apply;
+            }
+
+            public string FieldName { get; }
+            public Action<QuantityReportRow> Apply { get; }
+        }
+
         private static string TempDirectory(string name)
         {
             var path = Path.Combine(Path.GetTempPath(), "qs3d-smoke-" + name + "-" + Guid.NewGuid().ToString("N"));
@@ -259,6 +327,19 @@ namespace QS3D.Core.SmokeTests
         {
             try { action(); }
             catch (T) { return; }
+            throw new Exception("Expected exception " + typeof(T).Name + ".");
+        }
+
+        private static void ThrowsContaining<T>(Action action, params string[] messageParts) where T : Exception
+        {
+            try { action(); }
+            catch (T ex)
+            {
+                foreach (var part in messageParts)
+                    if (ex.Message.IndexOf(part, StringComparison.OrdinalIgnoreCase) < 0)
+                        throw new Exception("Expected " + typeof(T).Name + " message to contain " + part + ".", ex);
+                return;
+            }
             throw new Exception("Expected exception " + typeof(T).Name + ".");
         }
     }
