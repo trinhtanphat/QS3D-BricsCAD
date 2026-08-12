@@ -75,6 +75,8 @@ namespace QS3D.Core.Services
             if (host == null) throw new ArgumentNullException(nameof(host));
 
             ValidateProjectElements(project);
+            var sourceElements = project.Elements.ToArray();
+            var sourceIndex = sourceElements.ToDictionary(x => x.Id, x => x, StringComparer.OrdinalIgnoreCase);
             var canonicalHost = project.FindElement(host.Id);
             if (canonicalHost == null)
                 throw new InvalidOperationException("Physical opening cut host does not belong to the project: " + host.Id + ".");
@@ -89,6 +91,7 @@ namespace QS3D.Core.Services
                 throw new InvalidOperationException("Host " + host.Id + " physical opening target-state cannot be empty.");
 
             ValidateProjectElements(project);
+            RequireElementStructureFresh(project, sourceElements);
             var currentHost = project.FindElement(canonicalHost.Id);
             if (!ReferenceEquals(currentHost, canonicalHost))
                 throw new InvalidOperationException("Physical opening cut host no longer belongs to the project after opening target enumeration: " + canonicalHost.Id + ".");
@@ -96,7 +99,7 @@ namespace QS3D.Core.Services
             var result = new List<ProjectElement>(ids.Count);
             foreach (var id in ids)
             {
-                var opening = project.FindElement(id) ??
+                if (!sourceIndex.TryGetValue(id, out var opening))
                     throw new InvalidOperationException("Physical opening target no longer exists: " + id + ". Rebuild the host 3D geometry before cutting again.");
                 if (!IsOpening(opening))
                     throw new InvalidOperationException("Physical opening target is no longer a Door/WallOpening: " + id + ". Rebuild the host 3D geometry.");
@@ -108,6 +111,10 @@ namespace QS3D.Core.Services
                     throw new InvalidOperationException("Physical opening target " + id + " is no longer linked to host " + canonicalHost.Id + ". Rebuild the host 3D geometry.");
                 result.Add(opening);
             }
+
+            if (project.ChangeVersion != targetEnumerationVersion)
+                throw new InvalidOperationException("Project changed while physical opening targets were being resolved; recompute the target set against the current project state.");
+            RequireElementStructureFresh(project, sourceElements);
             return result.AsReadOnly();
         }
 
@@ -155,6 +162,21 @@ namespace QS3D.Core.Services
                 if (!seen.Add(id))
                     throw new InvalidOperationException("Project contains duplicate semantic element id: " + id + ".");
             }
+        }
+
+        private static void RequireElementStructureFresh(ProjectState project, IReadOnlyList<ProjectElement> sourceElements)
+        {
+            if (project.Elements.Count != sourceElements.Count)
+                throw StructuralFreshnessError();
+            for (var index = 0; index < sourceElements.Count; index++)
+                if (!ReferenceEquals(project.Elements[index], sourceElements[index]))
+                    throw StructuralFreshnessError();
+        }
+
+        private static InvalidOperationException StructuralFreshnessError()
+        {
+            return new InvalidOperationException(
+                "Project element structure changed while physical opening target ids were being enumerated; recompute the target set against the current project state.");
         }
 
         private static bool IsOpening(ProjectElement element) =>
