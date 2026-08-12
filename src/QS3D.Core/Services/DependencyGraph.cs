@@ -24,6 +24,7 @@ namespace QS3D.Core.Services
 
             var next = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
             var nextElements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            var processedDependencies = new List<KeyValuePair<ProjectElement, HashSet<string>>>();
             var enumerationVersion = _rebuildVersion;
             foreach (var element in elements)
             {
@@ -33,8 +34,10 @@ namespace QS3D.Core.Services
                 nextElements.Add(element.Id, element);
 
                 ValidateDependencies(element);
+                var dependencySnapshot = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var source in element.DependsOn)
                 {
+                    dependencySnapshot.Add(source);
                     if (!next.TryGetValue(source, out var set))
                     {
                         set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -42,6 +45,16 @@ namespace QS3D.Core.Services
                     }
                     set.Add(element.Id);
                 }
+                processedDependencies.Add(new KeyValuePair<ProjectElement, HashSet<string>>(element, dependencySnapshot));
+            }
+
+            foreach (var processed in processedDependencies)
+            {
+                ValidateDependencies(processed.Key);
+                if (processed.Key.DependsOn.Count != processed.Value.Count ||
+                    processed.Key.DependsOn.Any(dependency => !processed.Value.Contains(dependency)))
+                    throw new InvalidOperationException(
+                        "Dependency graph input changed after semantic element " + processed.Key.Id + " was processed. Retry rebuild against stable dependency input.");
             }
 
             foreach (var entry in next)
