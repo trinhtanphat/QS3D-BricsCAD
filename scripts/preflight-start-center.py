@@ -88,6 +88,27 @@ def main():
         show_method,
         "Never let optional Start Center diagnostics escape the command failure boundary.",
         "command diagnostic exception containment")
+    unsubscribe_handler = section(
+        commands,
+        "private static void UnsubscribeFromDocumentActivation()",
+        "private static void OnDocumentActivated",
+        "active-DWG refresh unsubscription")
+    require(unsubscribe_handler, "if (!_documentActivatedSubscribed) return;", "idempotent activation unsubscription guard")
+    require(unsubscribe_handler, "try", "activation unsubscription exception boundary")
+    require(unsubscribe_handler, "Application.DocumentManager.DocumentActivated -= OnDocumentActivated;", "activation event remove")
+    require(unsubscribe_handler, "_documentActivatedSubscribed = false;", "successful activation unsubscription state")
+    require(unsubscribe_handler, "catch (System.Exception)", "activation unsubscription exception containment")
+    require(
+        unsubscribe_handler,
+        "Keep the flag true so later cleanup can retry without creating a duplicate subscription.",
+        "failed activation unsubscription state contract")
+    unsubscribe_remove_pos = unsubscribe_handler.find("Application.DocumentManager.DocumentActivated -= OnDocumentActivated;")
+    unsubscribe_clear_pos = unsubscribe_handler.find("_documentActivatedSubscribed = false;")
+    unsubscribe_catch_pos = unsubscribe_handler.find("catch (System.Exception)")
+    if min(unsubscribe_remove_pos, unsubscribe_clear_pos, unsubscribe_catch_pos) < 0 or not (
+        unsubscribe_remove_pos < unsubscribe_clear_pos < unsubscribe_catch_pos
+    ):
+        raise AssertionError("activation subscription flag must clear only after a successful host event remove")
     activation_handler = section(
         commands,
         "private static void OnDocumentActivated",
@@ -106,6 +127,10 @@ def main():
     require(release_handler, "window.Closed -= OnStartCenterClosed;", "failed/closed window handler release")
     require(release_handler, "UnsubscribeFromDocumentActivation();", "failed/closed activation subscription release")
     require(release_handler, "_window = null;", "failed/closed singleton release")
+    release_unsubscribe_pos = release_handler.find("UnsubscribeFromDocumentActivation();")
+    release_clear_pos = release_handler.find("_window = null;")
+    if release_unsubscribe_pos < 0 or release_clear_pos < 0 or release_unsubscribe_pos > release_clear_pos:
+        raise AssertionError("Start Center singleton release must complete after the fail-soft unsubscribe attempt")
     require(commands, "if (sender is StartCenterWindow window)", "typed Start Center close owner")
     require(commands, "ReleaseStartCenterWindow(window);", "normal close shared lifecycle release")
     forbid(commands, "_window.Closed += (_, __) => _window = null;", "anonymous Start Center close lifecycle")
@@ -240,7 +265,7 @@ def main():
     require(quantity_settings_health, '[CommandMethod("QS3DQSETTINGSHEALTHEXPORT", CommandFlags.Modal)]', "quantity-settings-health source registration")
     require(quantity_rule_create, '[CommandMethod("QS3DRULECREATE", CommandFlags.Modal)]', "quantity-rule-create source registration")
 
-    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, activation-fail-soft, failed-open-rollback-safe, command-diagnostic-fail-soft, optional-state-fail-soft, stream-size-bounded, write-size-bounded, malformed-Unicode-safe, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
+    print("PASS: Start Center source contract is present, allowlisted, registration-backed, active-DWG-aware, activation-fail-soft, failed-open-rollback-safe, command-diagnostic-fail-soft, unsubscribe-fail-soft, optional-state-fail-soft, stream-size-bounded, write-size-bounded, malformed-Unicode-safe, accent-insensitive, featured, recent-filtered, keyboard-complete, favorite-targeted, token-searchable, corruption-tolerant and non-creating on dashboard reads.")
     return 0
 
 
