@@ -714,6 +714,8 @@ namespace QS3D.Core.Export
         {
             var raw = value ?? string.Empty;
             if (string.IsNullOrWhiteSpace(raw)) issues.Error(emptyCode, "Value is required.", path);
+            else if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                issues.Error("NAME_NON_CANONICAL", "Structural name must not contain leading/trailing whitespace.", path);
             if (raw.Length > maxLength) issues.Error(tooLongCode, "Value exceeds " + maxLength.ToString(CultureInfo.InvariantCulture) + " characters.", path);
         }
 
