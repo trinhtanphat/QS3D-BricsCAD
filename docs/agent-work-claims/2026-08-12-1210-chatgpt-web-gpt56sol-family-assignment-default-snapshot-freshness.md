@@ -1,7 +1,7 @@
 # Work claim — Family assignment default snapshot freshness
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-family-assignment-default-snapshot-freshness`
 - Registered: `2026-08-12T12:10:00+07:00`
 - Baseline main SHA: `3291545dff3284d520c642bcb203f22fd952a851`
@@ -10,29 +10,37 @@
 
 ## Confirmed defect
 
-`ProjectFamilyService.Assign(...)` validates and snapshots target Family default properties before enumerating the caller-owned target sequence. `ProjectFamily.Properties` is a publicly mutable dictionary and direct changes do not increment `ProjectState.ChangeVersion`. A lazy target enumerable can therefore yield a valid target and then directly change a target Family default such as `Material` from `Steel` to `Concrete`. Existing revision/global-identity/ownership checks all pass, but assignment later applies the stale pre-enumeration `Steel` snapshot to the element while the element now points at a Family whose current default is `Concrete`.
+`ProjectFamilyService.Assign(...)` validated and snapshotted target Family default properties before enumerating the caller-owned target sequence. `ProjectFamily.Properties` is a publicly mutable dictionary and direct changes do not increment `ProjectState.ChangeVersion`. A lazy target enumerable could therefore yield a valid target and then directly change a target Family default such as `Material` from `Steel` to `Concrete`. Existing revision/global-identity/ownership checks passed, but assignment later applied the stale pre-enumeration `Steel` snapshot to the element while the element pointed at a Family whose current default was `Concrete`.
 
 The existing Family-default integrity contract requires target defaults to be validated before instance mutation; retaining the initial preflight while refreshing the snapshot after target enumeration preserves that contract and prevents stale inheritance.
 
-## Reserved scope
+## Completed implementation
 
-- `src/QS3D.Core/Domain/ProjectFamilyService.cs` — target default snapshot refresh after enumeration/ownership validation only
-- `tests/QS3D.Core.SmokeTests/FamilyAssignStructuralFreshnessSmoke.cs` — focused target-default freshness regression extension only
-- this claim file for close-out
+- Preserved the initial `SnapshotProperties(target, "Target", "assignment")` preflight before caller enumeration, so malformed-at-entry defaults still fail early.
+- After target enumeration freshness and current global/target ownership/category validation, `Assign(...)` now validates and snapshots the current target Family defaults again.
+- Assignment inheritance uses that refreshed snapshot, preventing current Family defaults from diverging from newly assigned inherited instance defaults.
+- A target Family changed to malformed property state during lazy enumeration fails through the existing canonical `SnapshotProperties(...)` validator before `project.Touch()` or assignment mutation.
+- Existing Family identity/global freshness, previous-Family cleanup, overrides and no-op behavior remain unchanged.
 
-## Intended contract
+## Regression evidence
 
-- Preserve the initial target-default validation before caller target enumeration so malformed-at-entry defaults still fail early.
-- After enumeration freshness and current ownership/category validation, validate/snapshot the target Family defaults again and use that current snapshot for assignment inheritance.
-- A valid direct target-default change during lazy enumeration must not produce an element whose inherited defaults disagree with its newly assigned current Family.
-- A target default changed to malformed state during enumeration must fail through the existing `SnapshotProperties(...)` validator before assignment mutation.
-- Preserve Family identity/global freshness, previous-Family cleanup, overrides, no-op behavior and all unrelated Family operations.
+`tests/QS3D.Core.SmokeTests/FamilyAssignStructuralFreshnessSmoke.cs` remains auto-registered with `ModuleInitializer` and adds two focused cases:
 
-## Excluded scope
+1. `Material` changes directly from `Steel` to `Concrete` during lazy target enumeration; the assigned element must inherit current `Concrete`, not the stale pre-enumeration `Steel` snapshot.
+2. A non-canonical target default key is inserted directly during lazy enumeration; assignment must fail before element/revision/dirty/timestamp mutation.
 
-- No Family property-service redesign, no ProjectState collection/event redesign, no Zone/Floor/Grid changes, no CAD/UI/runtime work, and no concurrent Recognition/Selection/Curtain/Auto Room/Interchange work.
-- No force-push, GitHub Actions dispatch, full-build/executable-smoke PASS, or licensed BricsCAD V25/V26 runtime qualification claim.
+The existing removal and unrelated-duplicate structural-freshness cases remain intact.
 
-## Validation plan
+## Integration evidence
 
-Re-fetch exact source/smoke after claim registration. Keep the existing early snapshot validation, refresh the target default snapshot only after post-enumeration ownership checks, extend the existing auto-registered smoke with a lazy direct `Material` change and malformed-default case, read back integration, close with exact SHAs, and verify completion ancestry.
+- Claim commit: `0973e07e062866d273b79505a68cf75820e2e70d`
+- Production fix: `34f85714dabc34067e668a8d322adc6a25d470c6` (`fix(family): refresh assignment defaults after enumeration`)
+- Focused regression: `0fb3e8b7878131525fdfa1d973441055c20e61db` (`test(family): guard assignment default snapshot freshness`)
+- Integrated source blob read-back: `a087e1f47cfbce85dccb46738dff0fca09bd4792`; it retains the initial preflight and refreshes `targetProperties` immediately after post-enumeration ownership validation.
+- Integrated smoke blob read-back: `a0b65c87600b2ff3c9672a5ec160499af2ba8a68`; it covers current-default inheritance and malformed-during-enumeration rejection in addition to prior structural cases.
+
+## Excluded scope / validation boundary
+
+- No Family property-service redesign, no ProjectState collection/event redesign, no Zone/Floor/Grid changes, no CAD/UI/runtime work, and no concurrent Recognition/Selection/Curtain/Auto Room/Interchange changes.
+- No force-push and no GitHub Actions dispatch.
+- No full-build/executable-smoke PASS or licensed BricsCAD V25/V26 runtime qualification is claimed from this connector-only lane; validation is repository integration/read-back plus focused regression source coverage.
