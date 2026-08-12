@@ -241,6 +241,12 @@ namespace QS3D.Core.Persistence
             RequireNoNullEntries(source.Elements, "element");
             RequireNoNullEntries(source.QuantityRules, "quantity rule");
             RequireNoNullEntries(source.AuditEvents, "audit event");
+
+            RequireUniqueIds(source.Zones, x => x.Id, "zone");
+            RequireUniqueIds(source.Floors, x => x.Id, "floor");
+            RequireUniqueIds(source.Families, x => x.Id, "family");
+            RequireUniqueIds(source.Elements, x => x.Id, "element");
+            RequireUniqueIds(source.QuantityRules, x => x.Id, "quantity rule");
         }
 
         private static void RequireNoNullEntries<T>(IEnumerable<T> values, string label) where T : class
@@ -251,6 +257,19 @@ namespace QS3D.Core.Persistence
                 if (value == null)
                     throw new InvalidOperationException("Cannot snapshot a project containing a null " + label + " entry at index " + index + ".");
                 index++;
+            }
+        }
+
+        private static void RequireUniqueIds<T>(IEnumerable<T> values, Func<T, string> idSelector, string label) where T : class
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var value in values)
+            {
+                var id = idSelector(value);
+                if (string.IsNullOrWhiteSpace(id))
+                    throw new InvalidOperationException("Cannot snapshot a project containing a " + label + " without id.");
+                if (!seen.Add(id))
+                    throw new InvalidOperationException("Cannot snapshot a project containing duplicate " + label + " id: " + id + ".");
             }
         }
 
