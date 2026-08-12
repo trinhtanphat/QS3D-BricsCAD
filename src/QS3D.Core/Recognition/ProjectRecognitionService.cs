@@ -24,10 +24,14 @@ namespace QS3D.Core.Recognition
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (snapshots == null) throw new ArgumentNullException(nameof(snapshots));
+            var mappingStateBeforeEnumeration = CaptureLayerMappingState(project);
             var versionBeforeEnumeration = project.ChangeVersion;
             var materialized = RecognitionInputBounds.Materialize(snapshots, RecognitionInputBounds.MaxBatchItems, "Project recognition snapshot batch");
             if (project.ChangeVersion != versionBeforeEnumeration)
                 throw new InvalidOperationException("Project changed while recognition snapshots were being enumerated.");
+            var mappingStateAfterEnumeration = CaptureLayerMappingState(project);
+            if (!SameLayerMappingState(mappingStateBeforeEnumeration, mappingStateAfterEnumeration))
+                throw new InvalidOperationException("Project recognition layer mappings changed while recognition snapshots were being enumerated.");
             return new RecognitionBatch(materialized.Select(x => Suggest(project, x)), autoAcceptConfidence, minimumMargin);
         }
 
@@ -69,6 +73,29 @@ namespace QS3D.Core.Recognition
                 return candidate;
             }
             return null;
+        }
+
+        private static List<KeyValuePair<string, string>> CaptureLayerMappingState(ProjectState project)
+        {
+            return project.Metadata
+                .Where(x => x.Key.StartsWith(TemplateProfileStore.LayerMappingPrefix, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => new KeyValuePair<string, string>(x.Key, x.Value))
+                .ToList();
+        }
+
+        private static bool SameLayerMappingState(
+            IReadOnlyList<KeyValuePair<string, string>> before,
+            IReadOnlyList<KeyValuePair<string, string>> after)
+        {
+            if (before.Count != after.Count) return false;
+            for (var index = 0; index < before.Count; index++)
+            {
+                if (!string.Equals(before[index].Key, after[index].Key, StringComparison.Ordinal) ||
+                    !string.Equals(before[index].Value, after[index].Value, StringComparison.Ordinal))
+                    return false;
+            }
+            return true;
         }
 
         private static bool TryParseNamedCategory(string? raw, out ElementCategory category)
