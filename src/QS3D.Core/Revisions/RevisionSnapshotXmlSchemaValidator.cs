@@ -12,7 +12,7 @@ namespace QS3D.Core.Revisions
         {
             if (root == null) throw new ArgumentNullException(nameof(root));
             ValidateElement(root, "qs3dRevision", new[] { "id", "createdUtc" }, new[] { "elements" });
-            RequireAtMostOne(root, "elements");
+            RequireExactlyOne(root, "elements");
 
             foreach (var elements in root.Elements("elements"))
             {
@@ -86,6 +86,13 @@ namespace QS3D.Core.Revisions
                 }
                 throw new InvalidDataException("Unsupported QS3D revision XML content in " + element.Name.LocalName + ".");
             }
+        }
+
+        private static void RequireExactlyOne(XElement parent, string childName)
+        {
+            var name = XName.Get(childName);
+            if (parent.Elements(name).Take(2).Count() != 1)
+                throw new InvalidDataException("QS3D revision requires exactly one " + childName + " section.");
         }
 
         private static void RequireAtMostOne(XElement parent, string childName)
