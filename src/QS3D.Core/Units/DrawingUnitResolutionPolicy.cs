@@ -28,6 +28,8 @@ namespace QS3D.Core.Units
         public const string BindingSourceMetadataKey = "QS3D.DrawingUnitBindingSource.v1";
         public const string EffectiveUnitMetadataKey = "QS3D.DrawingUnit";
         public const string LegacyAssumptionMetadataKey = "QS3D.DrawingUnitAssumption";
+        private const string LegacyAssumedMillimeterValue = "Millimeter (assumed)";
+        private const string LegacyAssumptionValue = "INSUNITS unsupported/undefined; assumed Millimeter";
 
         public static bool TryResolve(
             LengthUnit? nativeUnit,
@@ -104,10 +106,17 @@ namespace QS3D.Core.Units
         {
             unit = default(LengthUnit);
             if (!metadata.TryGetValue(EffectiveUnitMetadataKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return false;
-            var token = raw.Trim();
-            var suffix = token.IndexOf(' ');
-            if (suffix > 0) token = token.Substring(0, suffix);
-            return Enum.TryParse(token, true, out unit) && Enum.IsDefined(typeof(LengthUnit), unit);
+
+            if (TryParseNamedUnitToken(raw, out unit))
+                return !metadata.ContainsKey(LegacyAssumptionMetadataKey);
+
+            if (!string.Equals(raw, LegacyAssumedMillimeterValue, StringComparison.Ordinal)) return false;
+            if (!metadata.TryGetValue(LegacyAssumptionMetadataKey, out var assumption) ||
+                !string.Equals(assumption, LegacyAssumptionValue, StringComparison.Ordinal))
+                return false;
+
+            unit = LengthUnit.Millimeter;
+            return true;
         }
 
         private static bool TryReadCanonical(IDictionary<string, string> metadata, string key, out LengthUnit unit)
