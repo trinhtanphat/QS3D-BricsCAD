@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,13 +13,22 @@ else:
     text = SOURCE.read_text(encoding="utf-8")
     required = (
         "foreach (var item in raw.Split(new[] { ';' }, StringSplitOptions.None))",
-        "var handle = (item ?? string.Empty).Trim();",
         "if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))",
         '"INVALID_WALL_MESH_GENERATED_HANDLE"',
+        '"WALL_MESH_GENERATED_HANDLE_NON_CANONICAL"',
+        "StringComparison.Ordinal",
     )
     for token in required:
         if token not in text:
-            errors.append("missing wall-mesh empty-token contract token: " + token)
+            errors.append("missing wall-mesh empty/canonical-token contract token: " + token)
+
+    normalization = re.search(
+        r"var\s+\w+\s*=\s*item\s*\?\?\s*string\.Empty;\s*var\s+handle\s*=\s*\w+\.Trim\(\);",
+        text,
+        re.DOTALL,
+    )
+    if normalization is None:
+        errors.append("wall-mesh validation no longer preserves the raw token before null-safe trim normalization")
 
     forbidden = "foreach (var item in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))"
     if forbidden in text:
@@ -36,4 +46,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: wall-mesh health preserves delimiter-empty tokens so malformed generated handle lists fail visible.")
+print("PASS: wall-mesh health preserves delimiter-empty tokens, rejects invalid handles and flags padded/non-canonical generated handle tokens.")
