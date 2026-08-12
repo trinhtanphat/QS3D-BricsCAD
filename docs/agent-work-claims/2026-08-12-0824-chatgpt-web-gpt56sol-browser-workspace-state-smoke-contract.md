@@ -1,36 +1,36 @@
 # Work claim — Project Browser workspace state smoke contract
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-12T08:24:00+07:00`
+- Completed: `2026-08-12T08:25:00+07:00`
 - Baseline main SHA: `cc3d339a78546ed9fa06d466f43ce24274b95115`
 - Priority: P1 — keep Core smoke expectations aligned with the current persisted dirty-tracking contract.
 
-## Reserved scope
+## Confirmed defect
 
-Align the legacy `ProjectBrowserWorkspaceStateStoreSmoke` with the newer persisted workspace dirty-tracking contract. Production `ProjectBrowserWorkspaceStateStore.Save/Clear` intentionally advances `ProjectState.ChangeVersion` exactly once for a real metadata mutation, while the old smoke still asserts that those mutations must not change the semantic version. A separate registered dirty-tracking smoke already pins the new behavior, so the current suite is internally contradictory.
+The legacy `ProjectBrowserWorkspaceStateStoreSmoke` still asserted the superseded contract that real persisted workspace Save/Clear mutations must not advance `ProjectState.ChangeVersion`. Production behavior and the separately registered dirty-tracking smoke intentionally require those mutations to advance the version exactly once, so the Core smoke suite carried contradictory expectations.
+
+## Completed work
+
+- `SaveLoadRoundTripsValidatedState()` now requires a changed Save to advance `ChangeVersion` exactly once.
+- The old `PresentationStateDoesNotInvalidateSemanticVersion()` check was renamed/aligned to `PresentationStateTracksPersistenceVersion()` and requires both Save and Clear to advance exactly once.
+- `ClearRemovesPersistedState()` now requires the first Clear to advance exactly once while preserving the second absent-key Clear as an idempotent version no-op.
+- Repeated identical Save remains a version no-op.
+- Existing serialization/load/corruption/schema/stale-selection assertions remain unchanged.
 
 ## Exact implementation surfaces
 
 - `tests/QS3D.Core.SmokeTests/ProjectBrowserWorkspaceStateStoreSmoke.cs`
 - this claim file
 
-## Exclusions
+## Integration evidence
 
-- No production `ProjectBrowserWorkspaceStateStore` changes.
-- No shared smoke registry or module-initializer changes; `ProjectBrowserWorkspaceDirtyTrackingRegistration.cs` is present and already registers the focused dirty-tracking smoke.
-- No Browser query/selection/grouping/XML-schema/native/WPF changes.
-- No GitHub Actions dispatch and no BricsCAD runtime claim.
+- Claim registration: `ab8a01d437d23c44585f975bd17c789eb9f4b0ff`.
+- Smoke contract fix on `main`: `63b06496c6996bd769a44ef88b88afb7b13c2203`.
+- Post-write readback from `main` shows the three changed version assertions use exact `+ 1` semantics and idempotent repeated Clear snapshots the already-cleared version.
+- `ProjectBrowserWorkspaceDirtyTrackingRegistration.cs` was confirmed present before this lane; no registry/module-initializer change was needed.
 
-## Evidence
+## Exclusions and validation boundary
 
-- Historical commit `c2eaf02d45cadeed85e3ffe6da148ec8d3043473` introduced the older no-version-change expectation.
-- The later dirty-tracking lane (`ceeeb0f96eef26dd0563e59f11ca0ddd084eb47d`, closed by `7fd308033bdb3cff012bfe44742cf4c81a8206ef`) intentionally changed persisted Save/Clear mutations to advance `ChangeVersion` and added focused coverage.
-- Current `ProjectBrowserWorkspaceStateStoreSmoke` still contains the superseded equality assertions, while the focused dirty-tracking smoke expects exact +1 mutation semantics.
-
-## Completion condition
-
-- Save of a changed workspace must be asserted to advance `ChangeVersion` exactly once.
-- Clear of existing workspace metadata must be asserted to advance `ChangeVersion` exactly once.
-- Existing serialization/load/clear behavior assertions remain intact.
-- Re-read the changed file and close this claim with the exact commit SHA; do not claim unexecuted CI/runtime PASS.
+No production `ProjectBrowserWorkspaceStateStore`, Browser query/selection/grouping/XML-schema/native/WPF, or shared smoke registry changes were made. GitHub Actions were not dispatched; executable smoke/build PASS and BricsCAD runtime PASS are not claimed.
