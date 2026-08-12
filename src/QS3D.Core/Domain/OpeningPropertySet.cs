@@ -12,23 +12,31 @@ namespace QS3D.Core.Domain
         public double WidthMm
         {
             get => _widthMm;
-            set => _widthMm = RequireFinite(value, nameof(WidthMm));
+            set => _widthMm = RequirePositiveFinite(value, nameof(WidthMm));
         }
         public double HeightMm
         {
             get => _heightMm;
-            set => _heightMm = RequireFinite(value, nameof(HeightMm));
+            set => _heightMm = RequirePositiveFinite(value, nameof(HeightMm));
         }
         public double ThicknessMm
         {
             get => _thicknessMm;
-            set => _thicknessMm = RequireFinite(value, nameof(ThicknessMm));
+            set => _thicknessMm = RequirePositiveFinite(value, nameof(ThicknessMm));
         }
         public string BottomLevel { get; set; } = "bottom_level";
         public double SillOffsetMm
         {
             get => _sillOffsetMm;
             set => _sillOffsetMm = RequireFinite(value, nameof(SillOffsetMm));
+        }
+
+        private static double RequirePositiveFinite(double value, string parameterName)
+        {
+            var finite = RequireFinite(value, parameterName);
+            if (finite <= 0d)
+                throw new ArgumentOutOfRangeException(parameterName, "Opening physical dimension must be greater than zero.");
+            return finite;
         }
 
         private static double RequireFinite(double value, string parameterName)
