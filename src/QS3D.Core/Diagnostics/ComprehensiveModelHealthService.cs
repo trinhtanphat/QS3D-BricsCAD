@@ -20,6 +20,20 @@ namespace QS3D.Core.Diagnostics
             "SEMANTIC_TAG"
         };
 
+        private sealed class GeneratedHandleIdentityComparer : IEqualityComparer<string>
+        {
+            public static readonly GeneratedHandleIdentityComparer Instance = new GeneratedHandleIdentityComparer();
+
+            public bool Equals(string left, string right) =>
+                string.Equals(
+                    GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(left),
+                    GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(right),
+                    StringComparison.OrdinalIgnoreCase);
+
+            public int GetHashCode(string value) =>
+                StringComparer.OrdinalIgnoreCase.GetHashCode(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(value));
+        }
+
         public IReadOnlyList<ModelHealthIssue> Inspect(
             ProjectState project,
             ISet<string>? liveSourceHandles = null,
@@ -28,7 +42,7 @@ namespace QS3D.Core.Diagnostics
             if (project == null) throw new ArgumentNullException(nameof(project));
 
             var normalizedLiveSourceHandles = NormalizeHandleSet(liveSourceHandles);
-            var normalizedLiveGeneratedSolidHandles = NormalizeHandleSet(liveGeneratedSolidHandles);
+            var normalizedLiveGeneratedSolidHandles = NormalizeGeneratedHandleSet(liveGeneratedSolidHandles);
             var issues = new List<ModelHealthIssue>();
             var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -72,6 +86,18 @@ namespace QS3D.Core.Diagnostics
         {
             if (handles == null) return null;
             var normalized = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var raw in handles)
+            {
+                var handle = (raw ?? string.Empty).Trim();
+                if (handle.Length > 0) normalized.Add(handle);
+            }
+            return normalized;
+        }
+
+        private static ISet<string>? NormalizeGeneratedHandleSet(ISet<string>? handles)
+        {
+            if (handles == null) return null;
+            var normalized = new HashSet<string>(GeneratedHandleIdentityComparer.Instance);
             foreach (var raw in handles)
             {
                 var handle = (raw ?? string.Empty).Trim();
