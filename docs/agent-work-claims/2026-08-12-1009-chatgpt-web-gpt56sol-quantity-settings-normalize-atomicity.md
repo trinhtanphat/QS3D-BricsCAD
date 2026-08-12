@@ -1,40 +1,36 @@
 # Work claim — QuantityCalculationSettings NormalizeAndValidate atomicity
 
-- Status: `ACTIVE`
-- State: `ACTIVE`
+- Status: `COMPLETED`
+- State: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-quantity-settings-normalize-atomicity-20260812-1009`
 - Registered: `2026-08-12T10:09:00+07:00`
+- Completed: `2026-08-12T10:13:00+07:00`
 - Baseline main SHA observed: `b4c85122c344429d06d4581d2fa79d8203a2e34a`
+- Claim commit: `c94a12322b8b9d7751c3d0d8972a0868375726d4`
+- Pull Request: `#739`
+- Reviewed head: `8948948f9d154abcebe43020ee91626d9393f5a8`
+- Merge SHA: `8bb3539395046e081330d8570029184645499708`
 - Priority: P1 public settings mutation atomicity
 - Task Key: `CORE-QUANTITY-SETTINGS-NORMALIZE-ATOMICITY`
 
 ## Confirmed defect
 
-`QuantityCalculationSettings.NormalizeAndValidate()` currently mutates normalization targets before validation is complete: schema `0` is rewritten to `CurrentSchemaVersion`, null rule collections are replaced with empty lists, and `DimColor` is trimmed/uppercased before numeric, color and rule validation finish. If a later check fails (for example `DimTextHeight <= 0`, a negative numeric value, an invalid category rule or duplicate intersection rule), the method throws after partially modifying the caller-owned settings object.
+`QuantityCalculationSettings.NormalizeAndValidate()` previously rewrote schema `0`, null rule collections and `DimColor` before numeric/color/rule validation completed, so a later exception left the caller-owned object partially normalized despite validation failure.
 
-This violates all-or-nothing behavior for a public normalize+validate boundary and can make a failed settings edit differ from the state the caller attempted to validate.
+## Completed implementation
 
-## Reserved scope
-
-- `src/QS3D.Core/Reporting/QuantityCalculationSettings.cs` — `NormalizeAndValidate()` atomicity only
-- `tests/QS3D.Core.SmokeTests/QuantityCalculationSettingsNormalizationAtomicitySmoke.cs` — focused regression
-- this claim file
-
-## Intended contract
-
-- Preserve existing validation order and exception semantics.
-- Compute normalized schema, null-to-empty rule collections and normalized `DimColor` into locals.
-- Validate all scalar values, color, category rules and intersection rules against those candidate values.
+- Compute normalized schema, null-to-empty rule collections and normalized `DimColor` into local candidates.
+- Preserve the established validation order: schema, collection cardinality, scalar values, color, category rules, intersection rules.
+- Validate against candidate values without mutating normalization targets.
 - Commit `SchemaVersion`, `CategoryRules`, `IntersectionRules` and `DimColor` only after every validation succeeds.
-- On failure, those normalization targets remain exactly as they were before the call.
-- Successful normalization remains behavior-compatible: schema `0` becomes current, null collections become empty lists, blank color becomes `#FFFFFF`, and valid padded/lowercase color becomes trimmed uppercase.
+- Successful normalization behavior remains unchanged.
 
-## Excluded scope
+## Regression evidence
 
-No changes to settings persistence/UI close workflow, cardinality limits, clone semantics, schema version policy, rule DTOs, calculation semantics, CAD/UI/runtime, Actions/build/release.
+`tests/QS3D.Core.SmokeTests/QuantityCalculationSettingsNormalizationAtomicitySmoke.cs` proves a late `DimTextHeight` failure leaves schema, null collections and raw color untouched, and proves a successful call still upgrades schema 0, creates empty rule lists and trims/uppercases color.
 
-## Validation plan
+Moving-main comparison showed no overlap with `QuantityCalculationSettings.cs` or the new smoke, and the pre-fix source blob was re-read unchanged immediately before the head-locked squash merge.
 
-Add auto-registered Core smoke coverage proving a late validation failure leaves schema, null collections and color untouched, plus a successful normalization control proving the established normalized outputs remain unchanged. Re-fetch moving `main`, compare exact overlap, squash-merge with expected head SHA, then close this claim with exact integration evidence.
+## Validation boundary
 
-No GitHub Actions/full build/release dispatch and no licensed BricsCAD V25/V26 runtime PASS claim from this lane.
+No GitHub Actions/full build/release dispatch occurred. No local/full .NET build or licensed BricsCAD V25/V26 runtime PASS is claimed.
