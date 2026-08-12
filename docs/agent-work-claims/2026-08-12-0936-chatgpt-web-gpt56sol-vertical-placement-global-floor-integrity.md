@@ -1,31 +1,33 @@
 # Work claim — Level placement global Floor identity integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
+- Outcome: `NO_CODE_CHANGE` — current `main` acquired the intended Floor identity preflight concurrently before this agent touched source.
 - Agent: `chatgpt-web-gpt56sol-vertical-placement-global-floor-integrity-20260812-0936`
 - Registered: `2026-08-12T09:36:00+07:00`
 - Baseline main SHA: `c22d78d21a115dffc37ccce7e5fd21353675818f`
 - Priority: P1 — prevent Level-based quantity/geometry resolution from trusting a globally ambiguous Floor collection.
 
-## Confirmed defect
+## Investigated defect
 
-`ElementVerticalPlacementService.ResolveEffectiveHeight(...)` resolves only the referenced Bottom/Top Floor IDs via `ProjectState.FindFloor(...)`. `FindUnique` detects duplicate IDs only when they match the requested identity. If the project contains unrelated duplicate Floor identities such as `F1` + `f1`, an element using unique `F2/F3` Level references can still obtain a height and downstream regeneration can write quantities/geometry-derived state even though canonical Floor mutation and QSDB persistence reject the project as globally ambiguous.
+The candidate was that Level placement resolved only referenced Bottom/Top Floor IDs and could ignore unrelated duplicate Floor identities. Before implementation, current `main` was re-read and already contained the exact intended global guard.
 
-## Reserved surfaces
+## Current implemented contract observed on main
 
-- `src/QS3D.Core/Domain/ElementVerticalPlacementService.cs`
-- `tests/QS3D.Core.SmokeTests/ElementVerticalPlacementGlobalFloorIntegritySmoke.cs` — new focused regression
-- this claim file
+- `ElementVerticalPlacementService.Resolve(...)` preserves the legacy path when no Bottom Level is configured.
+- Once Level placement is active, it calls `ValidateFloorIdentityCollection(project)` before Bottom/Top Floor lookup.
+- That helper rejects null Floor entries and case-insensitive duplicate Floor IDs globally.
+- Bottom/Top completeness checks, offsets, canonical case-insensitive lookup and finite/positive height rules remain intact.
 
-## Intended fix
+## Evidence
 
-- Only when Level references are present, preflight the complete Floor collection for null entries and case-insensitive duplicate IDs before resolving Bottom/Top Floor identities.
-- Preserve legacy-height behavior when no Level references are configured, current bottom/top completeness checks, canonical case-insensitive Floor lookup, offset parsing and finite/positive effective-height rules.
-- Focused smoke proves unique F2/F3 references fail closed in the presence of unrelated F1/f1 duplicates, while valid F2/F3 placement still resolves the expected height.
+- Claim registration: `97f9ff38684b1ee7c318051fd0f7e8c27fb150a8`.
+- Current source re-read showed blob `04e2bd81c85de493f61b76e744d6b92d3092a891` already containing the intended preflight and helper.
+- No source branch, test file or code commit was created for this lane because concurrent work had already absorbed the defect before implementation.
 
 ## Coordination
 
-Current ProjectStateSnapshot Zone/Floor identity work owns snapshot semantics only. Completed ProjectFloorService global identity work remains authoritative for mutations; this lane covers Level-placement consumers.
+ProjectStateSnapshot Zone/Floor identity work remains independent. Completed ProjectFloorService global identity work remains authoritative for Floor mutations.
 
 ## Validation boundary
 
-Committed deterministic Core smoke coverage plus exact source/diff review. No GitHub Actions dispatch; no licensed BricsCAD V25/V26 runtime PASS claimed.
+Source-level readback only for this lane. No GitHub Actions were dispatched and no licensed BricsCAD V25/V26 runtime PASS is claimed.
