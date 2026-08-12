@@ -14,13 +14,18 @@ for path in (SERVICE, SMOKE):
 if SERVICE.is_file():
     text = SERVICE.read_text(encoding="utf-8")
     start = text.find("private static IReadOnlyList<ProjectElement> OwnedDistinct(ProjectState project, IEnumerable<ProjectElement> elements)")
-    end = text.find("private static ElementDirtyFlags DirtyFlags", start)
+    end = text.find("private static IReadOnlyList<string> MaterializeBounded", start)
     if start < 0 or end <= start:
         errors.append("cannot isolate BulkEditService.OwnedDistinct")
     else:
         body = text[start:end]
         for token in (
+            "EnsureKnownCountWithinBound(elements, \"Bulk edit target collection\")",
+            "foreach (var projectElement in project.Elements)",
+            "if (projectElement == null)",
+            "if (projectElements.ContainsKey(projectElementId))",
             "foreach (var element in elements)",
+            "if (inputCount >= MaxTargetInputCount)",
             "if (element == null)",
             'throw new InvalidOperationException("Bulk edit target collection contains a null semantic element entry.")',
             "if (elementId.Length == 0)",
@@ -43,6 +48,8 @@ if SERVICE.is_file():
         body = text[start: next_public if next_public >= 0 else len(text)]
         if "OwnedDistinct(project, elements)" not in body:
             errors.append("object-based bulk edit must validate all targets through OwnedDistinct before mutation: " + signature)
+        if "RequireTargetEnumerationFreshness(project, beforeTargetEnumeration" not in body:
+            errors.append("object-based bulk edit must reject project changes caused during caller target enumeration: " + signature)
 
 if SMOKE.is_file():
     smoke = SMOKE.read_text(encoding="utf-8")
@@ -65,4 +72,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: object-based bulk edits reject null caller targets before property/dirty/version mutation while retaining project-ownership validation.")
+print("PASS: object-based bulk edits reject null/invalid caller targets and stale target enumeration before property/dirty/version mutation while retaining bounded project-ownership validation.")
