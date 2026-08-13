@@ -120,8 +120,8 @@ Assembly version: $($assemblyVersion.ToString())
 Recommended install (avoids .NET 0x80131515 / Mark-of-the-Web NETLOAD failures):
 1. Close BricsCAD.
 2. Extract the complete ZIP to a normal local folder.
-3. Double-click INSTALL-QS3D.cmd. It runs only the Authenticode-valid signed install-v25-autoload.ps1 under RemoteSigned.
-4. The installer verifies SHA256SUMS.txt/signatures, copies QS3D to the per-user install directory and removes Mark-of-the-Web from installed payloads.
+3. Double-click INSTALL-QS3D.cmd. Signed installers must have valid Authenticode; invalid/untrusted signatures are rejected. Unsigned cloud previews are explicitly warned, then only the bootstrap installer script is unblocked so it can run under RemoteSigned.
+4. The installer verifies SHA256SUMS.txt/signatures where required, copies QS3D to the per-user install directory and removes Mark-of-the-Web from installed payloads.
 5. Start BricsCAD V25 and run QS3D or QS3DDOMAIN. DemandLoad handles the installed DLL; do not NETLOAD the DLL directly from Downloads.
 6. Run QS3DRUNTIMECHECK to confirm V25/x64/package consistency on the customer machine.
 7. For an intentional upgrade over an existing QS3D registration, use the built-in QS3D Update Center or rerun install-v25-autoload.ps1 with -Force.
@@ -130,7 +130,7 @@ Built-in update:
 - QS3D checks GitHub Releases on startup.
 - Run QS3DUPDATE or click Cập nhật QS3D in KHỞI ĐẦU > Hệ thống for one-click secure update.
 - QS3DUPDATEONCLOSE toggles Update khi đóng. When enabled, a release already verified in the current session is scheduled as BricsCAD exits; the detached updater waits for all BricsCAD processes to close, installs it and reopens BricsCAD.
-- The updater verifies the signed manifest, ZIP SHA-256, internal SHA256SUMS.txt and Authenticode publisher before atomic install.
+- Production one-click update remains fail-closed: the updater requires the signed manifest, ZIP SHA-256, internal SHA256SUMS.txt and Authenticode publisher before atomic install.
 
 Manual/developer fallback:
 - Prefer installing first and NETLOAD only the DLL from the installed QS3D directory if debugging requires NETLOAD.
@@ -138,7 +138,8 @@ Manual/developer fallback:
 - If you intentionally test an unpackaged development copy, remove Mark-of-the-Web from the complete dependency folder before NETLOAD rather than unblocking only one DLL.
 
 Security:
-- INSTALL-QS3D.cmd uses RemoteSigned and verifies the installer Authenticode signature before execution; it never uses ExecutionPolicy Bypass.
+- INSTALL-QS3D.cmd uses RemoteSigned and never uses ExecutionPolicy Bypass.
+- Valid Authenticode installers report their signer; invalid/untrusted signatures fail. Unsigned preview bootstrap is visibly warned and only install-v25-autoload.ps1 is unblocked before execution.
 - The installer verifies SHA256SUMS.txt before copying files and removes Mark-of-the-Web only from the verified installed payload.
 - It does not disable or weaken BricsCAD security settings.
 - This package intentionally excludes BricsCAD runtime assemblies.
