@@ -2,6 +2,8 @@
 
 QS3D is a clean-room **BIM, semantic 3D and quantity-takeoff plugin for BricsCAD V25 and V26 x64**. It runs inside BricsCAD as a managed plugin; it is not a standalone CAD executable.
 
+> **QS3D product family:** this repository remains the BricsCAD-hosted product. Shared vendor-neutral code is being developed in sibling `trinhtanphat/QS3D-Platform`, while the separate standalone desktop product is `trinhtanphat/QS3D-CAD`. See [`docs/PRODUCT-BOUNDARY.md`](docs/PRODUCT-BOUNDARY.md) and [`docs/QS3D-PLATFORM-MIGRATION.md`](docs/QS3D-PLATFORM-MIGRATION.md). The sibling standalone effort does not remove the licensed-BricsCAD requirement for this plugin.
+
 | Layer | Target | Role |
 | --- | --- | --- |
 | `QS3D.Core` | `netstandard2.0` | CAD-independent domain model, persistence, geometry/quantity logic, diagnostics and reporting |
@@ -225,6 +227,7 @@ These are not blockers; they are the areas where changes have the highest cross-
 Start with [`docs/README.md`](docs/README.md). Durable references include:
 
 - [`docs/PRODUCT-BOUNDARY.md`](docs/PRODUCT-BOUNDARY.md) — product/hosting boundary;
+- [`docs/QS3D-PLATFORM-MIGRATION.md`](docs/QS3D-PLATFORM-MIGRATION.md) — sibling Platform/CAD ownership and incremental Core migration plan;
 - [`docs/SOURCE-OF-TRUTH.md`](docs/SOURCE-OF-TRUTH.md) — canonical project/source rules;
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture;
 - [`docs/COMMANDS.md`](docs/COMMANDS.md) — command/workflow catalog;
