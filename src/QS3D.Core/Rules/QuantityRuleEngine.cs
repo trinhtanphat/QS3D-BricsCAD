@@ -177,8 +177,12 @@ namespace QS3D.Core.Rules
         private static List<string> GetStaleManagedOutputs(ProjectElement element, ISet<string> activeOutputs)
         {
             var result = new List<string>();
-            foreach (var key in element.Properties.Keys.Where(x => x.StartsWith(ProvenancePrefix, StringComparison.OrdinalIgnoreCase)).ToArray())
+            foreach (var key in element.Properties.Keys.ToArray())
             {
+                var canonicalKey = key.Trim();
+                if (!canonicalKey.StartsWith(ProvenancePrefix, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(key, canonicalKey, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Element " + element.Id + " contains malformed quantity-rule provenance key: " + key + ".");
                 var output = key.Substring(ProvenancePrefix.Length);
                 if (string.IsNullOrWhiteSpace(output) || !string.Equals(output, output.Trim(), StringComparison.Ordinal))
                     throw new InvalidOperationException("Element " + element.Id + " contains malformed quantity-rule provenance key: " + key + ".");

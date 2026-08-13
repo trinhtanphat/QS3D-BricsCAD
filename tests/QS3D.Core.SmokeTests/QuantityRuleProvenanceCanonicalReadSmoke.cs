@@ -9,10 +9,29 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
+            LeadingWhitespacePrefixFailsBeforeMutation();
             PaddedStaleProvenanceFailsBeforeMutation();
             BlankProvenanceFailsBeforeMutation();
             PaddedActiveProvenanceFailsBeforeRuleApply();
             CanonicalStaleProvenanceStillCleansExactly();
+        }
+
+        private static void LeadingWhitespacePrefixFailsBeforeMutation()
+        {
+            var project = NewProject();
+            var element = project.FindElement("B1")!;
+            element.Quantities["Ghost"] = 7d;
+            element.Properties[" Rule:Ghost"] = "old@1";
+            var beforeUpdatedUtc = element.UpdatedUtc;
+            var beforeDirty = element.Dirty;
+
+            Throws<InvalidOperationException>(() => new QuantityRuleEngine().ApplyMatching(project, element));
+
+            Near(7d, element.Quantities["Ghost"]);
+            Equal("old@1", element.Properties[" Rule:Ghost"]);
+            True(!element.Properties.ContainsKey("Rule:Ghost"));
+            if (element.UpdatedUtc != beforeUpdatedUtc || element.Dirty != beforeDirty)
+                throw new InvalidOperationException("Rejected leading-whitespace rule provenance changed element freshness state.");
         }
 
         private static void PaddedStaleProvenanceFailsBeforeMutation()
