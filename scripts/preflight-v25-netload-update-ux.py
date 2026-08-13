@@ -3,12 +3,13 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/Updates/UpdateCommands.cs"
+UPDATE_CENTER = ROOT / "src/QS3D.BricsCAD.V25/Updates/UpdateCenterWindow.cs"
 INSTALL = ROOT / "scripts/INSTALL-QS3D.cmd"
 INSTALL_PS1 = ROOT / "scripts/install-v25-autoload.ps1"
 PACKAGE = ROOT / "scripts/package-v25.ps1"
 errors = []
 
-for path in (COMMANDS, INSTALL, INSTALL_PS1, PACKAGE):
+for path in (COMMANDS, UPDATE_CENTER, INSTALL, INSTALL_PS1, PACKAGE):
     if not path.is_file():
         errors.append("missing V25 NETLOAD/update UX contract file: " + str(path.relative_to(ROOT)))
 
@@ -26,6 +27,20 @@ if COMMANDS.is_file():
     ):
         if token not in text:
             errors.append("UpdateCommands.cs missing customer update/version contract: " + token)
+
+if UPDATE_CENTER.is_file():
+    text = UPDATE_CENTER.read_text(encoding="utf-8")
+    for token in (
+        "using System.Reflection;",
+        'Title = "QS3D Update Center — " + currentDisplay;',
+        '_title.Text = "Cập nhật QS3D " + currentDisplay;',
+        '_versions.Text = "Phiên bản hiện tại: " + currentDisplay',
+        'var assembly = Assembly.GetExecutingAssembly();',
+        'var loadedPath = string.IsNullOrWhiteSpace(assembly.Location)',
+        '_runtimeIdentity.Text = "DLL đang chạy: " + loadedPath;',
+    ):
+        if token not in text:
+            errors.append("UpdateCenterWindow.cs missing visible runtime-version identity: " + token)
 
 if INSTALL.is_file():
     text = INSTALL.read_text(encoding="utf-8")
@@ -69,4 +84,4 @@ if errors:
         print(" - " + error)
     sys.exit(1)
 
-print("PASS: V25 package keeps the integrity-checked Mark-of-the-Web install path, secure GitHub Update Center, short update aliases, and loaded-version/path diagnostics.")
+print("PASS: V25 package keeps the integrity-checked Mark-of-the-Web install path, secure GitHub Update Center, visible UI version/loaded-DLL identity, short update aliases, and command-line version diagnostics.")
