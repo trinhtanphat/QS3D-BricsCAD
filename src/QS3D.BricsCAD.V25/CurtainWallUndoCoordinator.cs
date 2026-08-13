@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using Teigha.DatabaseServices;
 using Application = Bricscad.ApplicationServices.Application;
 
@@ -32,10 +33,14 @@ namespace QS3D.BricsCAD.V25
         internal sealed class OwnerStateSnapshot
         {
             private readonly Dictionary<string, OwnerState> _owners;
+            private readonly ProjectPersistenceCheckpoint _persistence;
 
-            private OwnerStateSnapshot(Dictionary<string, OwnerState> owners)
+            private OwnerStateSnapshot(
+                Dictionary<string, OwnerState> owners,
+                ProjectPersistenceCheckpoint persistence)
             {
                 _owners = owners ?? throw new ArgumentNullException(nameof(owners));
+                _persistence = persistence ?? throw new ArgumentNullException(nameof(persistence));
             }
 
             public int Count => _owners.Count;
@@ -50,7 +55,7 @@ namespace QS3D.BricsCAD.V25
                 if (project == null) throw new ArgumentNullException(nameof(project));
                 if (sourceIds == null) throw new ArgumentNullException(nameof(sourceIds));
                 if (sourceIds.Count == 0)
-                    return new OwnerStateSnapshot(new Dictionary<string, OwnerState>(StringComparer.OrdinalIgnoreCase));
+                    return Capture(project, Array.Empty<string>());
 
                 var ownerIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
@@ -92,7 +97,9 @@ namespace QS3D.BricsCAD.V25
                         throw new InvalidOperationException("Curtain Undo owner is missing or is no longer a GlassWall: " + id + ".");
                     owners.Add(id, OwnerState.Capture(element));
                 }
-                return new OwnerStateSnapshot(owners);
+                return new OwnerStateSnapshot(
+                    owners,
+                    ProjectPersistenceCheckpoint.Capture(project, owners.Keys));
             }
 
             public bool HasSameOwnerSet(OwnerStateSnapshot other)
@@ -113,6 +120,9 @@ namespace QS3D.BricsCAD.V25
                 return true;
             }
 
+            public bool Matches(ProjectState project) =>
+                CoreMatches(project) && _persistence.Matches(project);
+
             public void Restore(ProjectState project)
             {
                 if (project == null) throw new ArgumentNullException(nameof(project));
@@ -127,7 +137,7 @@ namespace QS3D.BricsCAD.V25
 
                 foreach (var pair in _owners)
                     pair.Value.Restore(targets[pair.Key]);
-                if (_owners.Count > 0) project.Touch();
+                _persistence.Restore(project);
             }
         }
 
@@ -182,7 +192,7 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private sealed class TransitionEntry
+        internal sealed class TransitionEntry
         {
             public TransitionEntry(
                 string previousRevision,
@@ -202,7 +212,7 @@ namespace QS3D.BricsCAD.V25
             public OwnerStateSnapshot After { get; set; }
         }
 
-        private sealed class DocumentHistory
+        internal sealed class DocumentHistory
         {
             public DocumentHistory(Document document, ProjectState project, string revision)
             {
@@ -263,7 +273,7 @@ namespace QS3D.BricsCAD.V25
                     RequireCurrentHistory(_document, _history, project, _previousRevision);
                     if (!_before.HasSameOwnerSet(after))
                         throw new InvalidOperationException("Curtain Undo before/after owner sets differ.");
-                    if (!after.CoreMatches(project))
+                    if (!after.Matches(project))
                         throw new InvalidOperationException("Curtain Undo after-state no longer matches the canonical project before native commit.");
                     if (_history.Transitions.Count >= MaxTransitionsPerDocument)
                         throw new InvalidOperationException(
@@ -298,6 +308,22 @@ namespace QS3D.BricsCAD.V25
                     _history.Transitions[_nextRevision] = _staged;
                     _history.CurrentRevision = _nextRevision;
                     _committed = true;
+                }
+            }
+
+            public void RefreshCommittedAfter(ProjectState project, OwnerStateSnapshot after)
+            {
+                if (project == null) throw new ArgumentNullException(nameof(project));
+                if (after == null) throw new ArgumentNullException(nameof(after));
+                lock (Gate)
+                {
+                    ThrowIfDisposed();
+                    if (!_committed || _staged == null)
+                        throw new InvalidOperationException("Curtain Undo committed state cannot refresh before native commit publication.");
+                    RequireCurrentHistory(_document, _history, project, _nextRevision);
+                    if (!_before.HasSameOwnerSet(after) || !after.Matches(project))
+                        throw new InvalidOperationException("Curtain Undo post-commit state no longer matches the canonical project.");
+                    _staged.After = after;
                 }
             }
 
@@ -375,7 +401,7 @@ namespace QS3D.BricsCAD.V25
             if (before.Count == 0) throw new InvalidOperationException("Curtain Undo transition requires at least one semantic owner.");
 
             ProjectContextCoordinator.RequireBackingStoreUnchanged(document, project, "Curtain Undo registration");
-            if (!before.CoreMatches(project))
+            if (!before.Matches(project))
                 throw new InvalidOperationException("Curtain Undo before-state changed before registration.");
             Attach(document);
 
@@ -465,23 +491,16 @@ namespace QS3D.BricsCAD.V25
                 }
 
                 var currentExpected = undo ? transition.After : transition.Before;
-                if (!currentExpected.CoreMatches(project))
+                if (!currentExpected.Matches(project))
                     throw MarkDesynchronized(history,
-                        "Curtain native Undo/Redo was refused because generated owner metadata changed outside the tracked Curtain history. Reload and reconcile before further mutation.");
-
-                // Live fingerprint stamps are intentionally post-commit warnings. They are excluded
-                // from CoreMatches, then captured here so Redo restores the actual committed stamp
-                // rather than the pre-stamp staging snapshot.
-                var currentFull = OwnerStateSnapshot.Capture(project, currentExpected.OwnerIds);
-                if (undo) transition.After = currentFull;
-                else transition.Before = currentFull;
+                        "Curtain native Undo/Redo was refused because generated owner or project persistence state changed outside the tracked Curtain history. Reload and reconcile before further mutation.");
 
                 var target = undo ? transition.Before : transition.After;
                 var restoreRollback = OwnerStateSnapshot.Capture(project, target.OwnerIds);
                 try
                 {
                     target.Restore(project);
-                    if (!target.CoreMatches(project))
+                    if (!target.Matches(project))
                         throw new InvalidOperationException("Restored Curtain semantic owner state does not match its native revision.");
                 }
                 catch (Exception restoreError)
@@ -511,7 +530,7 @@ namespace QS3D.BricsCAD.V25
 
         private static bool IsTrackedProperty(string? key)
         {
-            if (string.IsNullOrWhiteSpace(key)) return false;
+            if (key == null || string.IsNullOrWhiteSpace(key)) return false;
             return key.StartsWith("GeneratedSolid", StringComparison.OrdinalIgnoreCase) ||
                    key.StartsWith("GeneratedCurtainFrame", StringComparison.OrdinalIgnoreCase) ||
                    key.StartsWith("GeneratedCurtainPanel", StringComparison.OrdinalIgnoreCase) ||
