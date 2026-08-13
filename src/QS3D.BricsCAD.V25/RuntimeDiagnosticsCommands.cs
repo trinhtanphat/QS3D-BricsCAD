@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Services;
@@ -20,6 +21,32 @@ namespace QS3D.BricsCAD.V25
         private const int ExpectedRuntimeMajor = 25;
         private const string ExpectedRuntimeLabel = "V25";
 #endif
+        private static readonly object LoadedIdentitySync = new object();
+        private static string _loadedBinaryPath = string.Empty;
+        private static string _loadedBinarySha256 = string.Empty;
+        private static string _loadedBinaryCaptureError = string.Empty;
+
+        internal static void CaptureLoadedBinaryIdentity()
+        {
+            lock (LoadedIdentitySync)
+            {
+                if (!string.IsNullOrWhiteSpace(_loadedBinarySha256) || !string.IsNullOrWhiteSpace(_loadedBinaryCaptureError))
+                    return;
+
+                try
+                {
+                    var path = typeof(RuntimeDiagnosticsCommands).Assembly.Location ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                        throw new FileNotFoundException("Loaded QS3D DLL path is unavailable for startup fingerprinting.", path);
+                    _loadedBinaryPath = Path.GetFullPath(path);
+                    _loadedBinarySha256 = ComputeSha256(_loadedBinaryPath);
+                }
+                catch (Exception ex)
+                {
+                    _loadedBinaryCaptureError = ex.Message;
+                }
+            }
+        }
 
         [CommandMethod("QS3DVERSION", CommandFlags.Modal)]
         public void VersionCheck()
@@ -35,6 +62,7 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
+                CaptureLoadedBinaryIdentity();
                 var pluginAssembly = typeof(RuntimeDiagnosticsCommands).Assembly;
                 var coreAssembly = typeof(ProjectState).Assembly;
                 var brxAssembly = typeof(Application).Assembly;
@@ -62,6 +90,13 @@ namespace QS3D.BricsCAD.V25
                     string.IsNullOrWhiteSpace(diskIdentity.Error) &&
                     !string.IsNullOrWhiteSpace(diskIdentity.ProductVersion) &&
                     ProductVersionsEqual(pluginProductVersion, diskIdentity.ProductVersion);
+                var loadedFingerprintKnown = !string.IsNullOrWhiteSpace(_loadedBinarySha256) &&
+                                             string.IsNullOrWhiteSpace(_loadedBinaryCaptureError);
+                var loadedPathMatches = loadedFingerprintKnown &&
+                                        PathsEqual(_loadedBinaryPath, pluginPath);
+                var diskFingerprintMatches = loadedPathMatches &&
+                                             !string.IsNullOrWhiteSpace(diskIdentity.Sha256) &&
+                                             string.Equals(_loadedBinarySha256, diskIdentity.Sha256, StringComparison.OrdinalIgnoreCase);
                 var packageProductVersionMatches = !hasPackageMetadata ||
                     (!string.IsNullOrWhiteSpace(metadata.ProductVersion) &&
                      ProductVersionsEqual(metadata.ProductVersion, pluginProductVersion));
@@ -81,6 +116,10 @@ namespace QS3D.BricsCAD.V25
                     " • Core assembly: " + coreAssemblyVersion);
                 document.Editor.WriteMessage("\n  Loaded DLL: " + (string.IsNullOrWhiteSpace(pluginPath) ? "<unknown>" : pluginPath));
                 document.Editor.WriteMessage("\n  Process: PID " + processId + " • MVID: " + pluginMvid);
+                if (loadedFingerprintKnown)
+                    document.Editor.WriteMessage("\n  Loaded-at-start SHA256: " + _loadedBinarySha256);
+                else
+                    document.Editor.WriteMessage("\n  Loaded-at-start SHA256: UNAVAILABLE • " + EmptyAsUnknown(_loadedBinaryCaptureError));
 
                 if (!diskIdentity.Exists)
                 {
@@ -97,12 +136,21 @@ namespace QS3D.BricsCAD.V25
                 {
                     document.Editor.WriteMessage(
                         "\n  On-disk DLL: product " + EmptyAsUnknown(diskIdentity.ProductVersion) +
-                        " • file " + EmptyAsUnknown(diskIdentity.FileVersion));
+                        " • file " + EmptyAsUnknown(diskIdentity.FileVersion) +
+                        " • SHA256 " + EmptyAsUnknown(diskIdentity.Sha256));
                     if (!diskVersionMatches)
                     {
                         document.Editor.WriteMessage(
                             "\n  STALE PROCESS: this BricsCAD process is running " + pluginProductVersion +
                             " but the DLL currently stored at the same path is " + EmptyAsUnknown(diskIdentity.ProductVersion) + ".");
+                    }
+                    else if (!diskFingerprintMatches)
+                    {
+                        document.Editor.WriteMessage(
+                            "\n  STALE PROCESS: running and on-disk DLLs report the same product version, but their binary SHA-256 fingerprints differ (or startup fingerprint is unavailable).");
+                    }
+                    if (!diskVersionMatches || !diskFingerprintMatches)
+                    {
                         document.Editor.WriteMessage(
                             "\n  .NET does not hot-reload an already NETLOADed QS3D assembly. Close ALL bricscad.exe processes, reopen BricsCAD, then load the new build.");
                     }
@@ -132,9 +180,9 @@ namespace QS3D.BricsCAD.V25
                     document.Editor.WriteMessage("\n  Package metadata: not found beside plugin (manual NETLOAD/dev layout).");
                 }
 
-                var ok = expectedRuntime && x64Runtime && packageVersionMatches && diskVersionMatches;
+                var ok = expectedRuntime && x64Runtime && packageVersionMatches && diskVersionMatches && diskFingerprintMatches;
                 var summary = ok
-                    ? "QS3DRUNTIMECHECK PASS: running product, on-disk DLL, package identity, adapter runtime and architecture are consistent."
+                    ? "QS3DRUNTIMECHECK PASS: running product, loaded binary fingerprint, on-disk DLL, package identity, adapter runtime and architecture are consistent."
                     : "QS3DRUNTIMECHECK FAIL: stale process or runtime/package identity mismatch detected. Close all BricsCAD processes before replacing QS3D binaries; do not qualify this installation for release.";
                 document.Editor.WriteMessage("\n" + summary);
             }
@@ -157,6 +205,7 @@ namespace QS3D.BricsCAD.V25
             public bool Exists { get; set; }
             public string ProductVersion { get; set; } = string.Empty;
             public string FileVersion { get; set; } = string.Empty;
+            public string Sha256 { get; set; } = string.Empty;
             public string Error { get; set; } = string.Empty;
         }
 
@@ -186,12 +235,36 @@ namespace QS3D.BricsCAD.V25
                 var versionInfo = FileVersionInfo.GetVersionInfo(path);
                 result.ProductVersion = versionInfo.ProductVersion ?? string.Empty;
                 result.FileVersion = versionInfo.FileVersion ?? string.Empty;
+                result.Sha256 = ComputeSha256(path);
             }
             catch (Exception ex)
             {
                 result.Error = ex.Message;
             }
             return result;
+        }
+
+        private static string ComputeSha256(string path)
+        {
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            using (var sha256 = SHA256.Create())
+            {
+                var hash = sha256.ComputeHash(stream);
+                return BitConverter.ToString(hash).Replace("-", string.Empty);
+            }
+        }
+
+        private static bool PathsEqual(string left, string right)
+        {
+            if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right)) return false;
+            try
+            {
+                return string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static string JsonString(string json, string property)
