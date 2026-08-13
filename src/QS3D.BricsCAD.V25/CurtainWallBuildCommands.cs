@@ -128,6 +128,12 @@ namespace QS3D.BricsCAD.V25
                 var panelsStamped = panelElements > 0 ? CurtainWallPanelLiveStateService.TryStampSelected(document, project, out panelStampWarning) : 0;
                 if (!string.IsNullOrWhiteSpace(panelStampWarning))
                     stampWarning = string.IsNullOrWhiteSpace(stampWarning) ? panelStampWarning : stampWarning + " | " + panelStampWarning;
+                if (undoTransition != null)
+                {
+                    phase = "semantic Undo post-commit state";
+                    var committedAfter = CurtainWallUndoCoordinator.OwnerStateSnapshot.Capture(project, undoBefore.OwnerIds);
+                    undoTransition.RefreshCommittedAfter(project, committedAfter);
+                }
                 if (hostSolids == 0 && frameSolids == 0 && panelSolids == 0)
                 {
                     Report(document, "Curtain 3D: chọn GlassWall semantic LINE hoặc open/bulged POLYLINE WCS-XY.");

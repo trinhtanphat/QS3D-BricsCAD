@@ -139,6 +139,7 @@ namespace QS3D.BricsCAD.V25
             var after = ProjectSidecarRevisionStamp.Capture(path);
             EnsureStableCapture(before, after, "QS3D project backing store changed while it was being reloaded. Retry the operation.");
             SourceReconcileUndoCoordinator.Forget(document);
+            CurtainWallUndoCoordinator.Forget(document);
             Projects[document] = project;
             PersistenceStamps[document] = persistenceStamp;
             SidecarRevisionStamps[document] = after;
@@ -214,6 +215,7 @@ namespace QS3D.BricsCAD.V25
         {
             if (document == null) return;
             SourceReconcileUndoCoordinator.Forget(document);
+            CurtainWallUndoCoordinator.Forget(document);
             Projects.Remove(document);
             PersistenceStamps.Remove(document);
             SidecarRevisionStamps.Remove(document);
@@ -227,6 +229,7 @@ namespace QS3D.BricsCAD.V25
             foreach (var document in Projects.Keys.Where(x => SameDrawingName(x.Name, drawingName)).ToArray())
             {
                 SourceReconcileUndoCoordinator.Forget(document);
+                CurtainWallUndoCoordinator.Forget(document);
                 Projects.Remove(document);
                 PersistenceStamps.Remove(document);
                 SidecarRevisionStamps.Remove(document);
