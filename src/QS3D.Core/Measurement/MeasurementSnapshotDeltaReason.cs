@@ -84,7 +84,46 @@ namespace QS3D.Core.Measurement
         {
             var before = RuleProvenanceTokens(previous.Adjustments);
             var after = RuleProvenanceTokens(current.Adjustments);
-            return !MeasurementTraceContract.SequenceEqual(before, after);
+            if (!MeasurementTraceContract.SequenceEqual(before, after))
+                return true;
+
+            // A global rule-token multiset is not enough to preserve provenance: two
+            // distinct adjustment evidence rows can exchange the same rule identities.
+            // Only compare rule assignments positionally when the canonical non-rule
+            // evidence is otherwise identical, so ordinary amount/reason/source changes
+            // are not mislabeled as provenance changes.
+            if (!AdjustmentEvidenceWithoutRuleEqual(previous.Adjustments, current.Adjustments))
+                return false;
+
+            for (var i = 0; i < previous.Adjustments.Count; i++)
+            {
+                if (!string.Equals(previous.Adjustments[i].RuleId, current.Adjustments[i].RuleId, StringComparison.Ordinal) ||
+                    !string.Equals(previous.Adjustments[i].RuleVersion, current.Adjustments[i].RuleVersion, StringComparison.Ordinal))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool AdjustmentEvidenceWithoutRuleEqual(
+            IReadOnlyList<MeasurementTraceAdjustment> previous,
+            IReadOnlyList<MeasurementTraceAdjustment> current)
+        {
+            if (previous.Count != current.Count) return false;
+
+            for (var i = 0; i < previous.Count; i++)
+            {
+                var before = previous[i];
+                var after = current[i];
+                if (before.Kind != after.Kind ||
+                    !before.Amount.Equals(after.Amount) ||
+                    !string.Equals(before.Unit, after.Unit, StringComparison.Ordinal) ||
+                    !string.Equals(before.Reason, after.Reason, StringComparison.Ordinal) ||
+                    !string.Equals(before.SourceIdentity, after.SourceIdentity, StringComparison.Ordinal))
+                    return false;
+            }
+
+            return true;
         }
 
         private static IReadOnlyList<string> RuleProvenanceTokens(IReadOnlyList<MeasurementTraceAdjustment> adjustments)
