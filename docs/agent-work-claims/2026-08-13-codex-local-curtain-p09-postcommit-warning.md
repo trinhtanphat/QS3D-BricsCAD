@@ -1,6 +1,6 @@
 # Work claim — LOCAL-002 P09 Curtain post-commit warning isolation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local-root` (`/root`, local Windows + licensed BricsCAD V25)
 - Registered: `2026-08-13T12:20:10.8843238+07:00`
 - Baseline main SHA: `b34d8f1731c00934b72df1bad01b9c381a8b6809`
@@ -49,8 +49,8 @@ The seam/probe/runner/gate is merged, a clean exact-main licensed run proves bot
 
 ## Source-preparation status
 
-- The internal two-phase one-shot seam, post-commit orchestrator hooks, synthetic state-machine probe, guarded runner, static/privacy gate and P09 runbook handoff are implemented locally. No builder, planner, Health/Release/Locate/Level/QSDB/UI implementation changed.
-- Runtime status remains `PENDING_LOCAL` until the source-preparation batch is merged and a fresh clean exact-main SHA/DLL proves both committed replacements plus cleanup.
+- The internal two-phase one-shot seam, post-commit orchestrator hooks, synthetic state-machine probe, guarded runner, static/privacy gate and P09 runbook handoff are merged. The runtime-discovered frame metadata fix below is the only builder change; planner, Health/Release/Locate/Level/QSDB/UI behavior remains unchanged.
+- Runtime status is bounded `LOCAL_PASS` at exact SHA `76a1e760c78f1146fa528dcf11e906fecaa532e0`. P10-P12 and overall LOCAL-002 remain `PENDING_LOCAL`.
 
 ## Runtime-discovered frame-fingerprint expansion
 
@@ -63,3 +63,10 @@ This claim now additionally reserves exactly:
 - the existing P09 static gate and exact-SHA runtime regression needed to prove both missing-fingerprint warnings after the injected stamp failure.
 
 This narrowly supersedes the earlier builder exclusion. It does not change frame geometry, Level placement, topology, counts, ownership, native transactions or Health rules. The BLOCKED LOCAL-003 claim belongs to the same `/root` local owner and reserves only Level-placement consumption in these builders; this P09 expansion preserves that merged placement implementation unchanged.
+
+## Completion evidence
+
+- Implementation PRs: `#976`, `#977`, `#978` and `#980`; claim expansion PR `#979`.
+- Exact qualifying SHA: `76a1e760c78f1146fa528dcf11e906fecaa532e0`; BricsCAD `25.2.10`; x64 Release adapter SHA-256 `C61A27C78B3248D70BA3DA4E57854AF8F3B3F4B41CA0E31DF93A82653F0AE708`; strict build `0 warnings / 0 errors`.
+- Baseline/fingerprint-replacement/clean-recovery/UI-replacement generated counts were `30 / 34 / 34 / 38`. The fingerprint injection retained committed geometry, removed the old set and produced the exact frame/panel missing-live-fingerprint Health review state. The UI injection retained committed geometry, valid fingerprints and zero Health issues.
+- Source geometry and the repository-generated disposable DWG hash were unchanged. Process, private script, `.dwl`/`.dwl2`, sidecar and backup cleanup all passed. No private/customer drawing, GitHub Actions, installer, signing or release action was used.
