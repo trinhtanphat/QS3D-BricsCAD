@@ -52,6 +52,14 @@ for token in (
     "_registeredHistory",
     "Histories.Remove(_document);",
     "EnsureRegApp(_database, _transaction);",
+    "internal sealed class SanitizedDiagnosticSnapshot",
+    "internal static SanitizedDiagnosticSnapshot CaptureSanitizedState(",
+    "public string HistoryState { get; }",
+    "public string EntryClass { get; }",
+    "public string CompareMarkerTo(SanitizedDiagnosticSnapshot before)",
+    'return "MISSING_OR_INVALID";',
+    '? "UNCHANGED"',
+    ': "ADVANCED";',
 ):
     if token not in coordinator:
         errors.append("Undo coordinator missing contract: " + token)
@@ -90,6 +98,35 @@ if min(snapshot, transaction, begin) < 0 or not snapshot < transaction < begin:
     errors.append("Source Reconcile must capture rollback before the native transaction and delay the Undo transition until all reconcile work is ready")
 if "if (!cadCommitted)" not in service or "new AggregateException(operationError, restoreError)" not in service:
     errors.append("Source Reconcile command-failure semantic rollback contract drifted")
+
+diagnostic_start = coordinator.find("internal sealed class SanitizedDiagnosticSnapshot")
+attach_start = coordinator.find("public static void Attach(", diagnostic_start)
+diagnostic = coordinator[diagnostic_start:attach_start] if diagnostic_start >= 0 and attach_start > diagnostic_start else ""
+if not diagnostic:
+    errors.append("sanitized Source Reconcile diagnostic accessor is missing")
+else:
+    for token in (
+        '"NONE"', '"SYNCED"', '"MARKER_MISMATCH"', '"DESYNCHRONIZED"',
+        '"ONE"', '"MULTIPLE"', '"ADVANCED"', '"UNCHANGED"', '"MISSING_OR_INVALID"',
+        "private readonly string _nativeRevision;",
+        "ProjectContextCoordinator.TryGetCached(document, out var cached)",
+        "ReferenceEquals(cached, project)",
+        "ReadRevision(document)",
+    ):
+        if token not in diagnostic:
+            errors.append("sanitized diagnostic accessor missing contract: " + token)
+    for forbidden in (
+        "public string NativeRevision",
+        "public string ProjectId",
+        "public int EntryCount",
+        "return _nativeRevision",
+        "Attach(document)",
+        "Histories.Add(",
+        "Histories.Remove(",
+        "CurrentRevision =",
+    ):
+        if forbidden in diagnostic:
+            errors.append("sanitized diagnostic accessor exposes raw state or mutates coordination: " + forbidden)
 
 stage_start = coordinator.find("public void StageAfter(")
 confirm_start = coordinator.find("public void ConfirmCommitted()", stage_start)

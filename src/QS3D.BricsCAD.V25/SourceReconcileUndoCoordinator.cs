@@ -210,6 +210,100 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        internal sealed class SanitizedDiagnosticSnapshot
+        {
+            private readonly string _nativeRevision;
+            private readonly bool _markerValid;
+
+            internal SanitizedDiagnosticSnapshot(
+                string historyState,
+                string entryClass,
+                string nativeRevision,
+                bool markerValid)
+            {
+                HistoryState = historyState;
+                EntryClass = entryClass;
+                _nativeRevision = nativeRevision;
+                _markerValid = markerValid;
+            }
+
+            public string HistoryState { get; }
+            public string EntryClass { get; }
+
+            public string CompareMarkerTo(SanitizedDiagnosticSnapshot before)
+            {
+                if (before == null) throw new ArgumentNullException(nameof(before));
+                if (!_markerValid || !before._markerValid) return "MISSING_OR_INVALID";
+                return string.Equals(_nativeRevision, before._nativeRevision, StringComparison.Ordinal)
+                    ? "UNCHANGED"
+                    : "ADVANCED";
+            }
+        }
+
+        /// <summary>
+        /// Captures only bounded classifications plus a private marker token for
+        /// the synthetic LOCAL-004 diagnostic lane. No native revision, project
+        /// identifier, path, handle, entry count or semantic value is exposed.
+        /// This is observational: it never attaches handlers, loads/creates a
+        /// project, or changes Undo history state.
+        /// </summary>
+        internal static SanitizedDiagnosticSnapshot CaptureSanitizedState(
+            Document document,
+            ProjectState project)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (project == null) throw new ArgumentNullException(nameof(project));
+
+            var nativeRevision = string.Empty;
+            var markerValid = false;
+            try
+            {
+                nativeRevision = ReadRevision(document);
+                markerValid = !string.IsNullOrWhiteSpace(nativeRevision);
+            }
+            catch
+            {
+                // The opaque snapshot reports only MISSING_OR_INVALID and never
+                // makes the malformed marker or exception text observable.
+            }
+
+            DocumentHistory? history;
+            var entryClass = "ONE";
+            lock (Gate)
+            {
+                if (!Histories.TryGetValue(document, out history))
+                    return new SanitizedDiagnosticSnapshot("NONE", "ONE", nativeRevision, markerValid);
+
+                entryClass = history.Entries.Count > 1 ? "MULTIPLE" : "ONE";
+                if (history.Desynchronized ||
+                    !ReferenceEquals(history.Document, document) ||
+                    !ReferenceEquals(history.Project, project) ||
+                    !string.Equals(history.ProjectId, project.ProjectId, StringComparison.Ordinal))
+                    return new SanitizedDiagnosticSnapshot("DESYNCHRONIZED", entryClass, nativeRevision, markerValid);
+            }
+
+            if (!ProjectContextCoordinator.TryGetCached(document, out var cached) || !ReferenceEquals(cached, project))
+                return new SanitizedDiagnosticSnapshot("DESYNCHRONIZED", entryClass, nativeRevision, markerValid);
+
+            lock (Gate)
+            {
+                if (!Histories.TryGetValue(document, out var currentHistory) || !ReferenceEquals(currentHistory, history))
+                    return new SanitizedDiagnosticSnapshot("NONE", "ONE", nativeRevision, markerValid);
+
+                entryClass = history.Entries.Count > 1 ? "MULTIPLE" : "ONE";
+                if (history.Desynchronized ||
+                    !ReferenceEquals(history.Document, document) ||
+                    !ReferenceEquals(history.Project, project) ||
+                    !string.Equals(history.ProjectId, project.ProjectId, StringComparison.Ordinal))
+                    return new SanitizedDiagnosticSnapshot("DESYNCHRONIZED", entryClass, nativeRevision, markerValid);
+
+                if (!markerValid || !string.Equals(nativeRevision, history.CurrentRevision, StringComparison.Ordinal))
+                    return new SanitizedDiagnosticSnapshot("MARKER_MISMATCH", entryClass, nativeRevision, markerValid);
+
+                return new SanitizedDiagnosticSnapshot("SYNCED", entryClass, nativeRevision, markerValid);
+            }
+        }
+
         public static void Attach(Document? document)
         {
             if (document == null) return;
