@@ -1,6 +1,6 @@
 # Work claim — Source Reconcile native Undo/Redo semantic coherence
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-issue1005-source-reconcile-undo-20260813` (`/root/fix_source_reconcile_undo`)
 - Registered: `2026-08-13T15:33:32+07:00`
 - Baseline main SHA: `f926c2dcbe9a850d8be2425e940c4d4c929d324f`
@@ -43,3 +43,11 @@ The ACTIVE LOCAL-004 claim `2026-08-13-codex-local004-source-reconcile-runtime.m
 ## Completion condition
 
 The focused production fix and regressions are merged to current `main`, issue `#1005` is closed, this claim is `COMPLETED` with exact SHAs and executed validation, and LOCAL-004 remains `IN_PROGRESS / PENDING_LOCAL` with an exact fixed-SHA V25 rerun requested rather than falsely promoted from source evidence.
+
+## Completion record
+
+- Claim-only commit: `c4a9649a0a58a37dcfb27755958f7a2e60fb08fc`; claim PR `#1006`; claim merge SHA `bf1b4e3ac39b2880080eb0b6579afaf15b1c969d`.
+- Implementation commit: `685bbca98bf296946cbaabbe7252851d2582daff`; source PR `#1007`; source merge SHA `1c957ae2dc022db8cafbfcf0de91d9d47a53e68f`.
+- Production issue `#1005` closed only after source PR `#1007` merged. The closing comment requests the guarded LOCAL-004 V25 rerun on exact main SHA `1c957ae2dc022db8cafbfcf0de91d9d47a53e68f`.
+- Executed locally without GitHub Actions or BricsCAD runtime: installed-reference V25 `Release|x64` adapter build PASS with `0 warnings / 0 errors`; Core smoke executable `ALL PASS`; strict manual-CI and generic preflight PASS; all `731` auto-discovered feature preflights PASS.
+- The additive LOCAL-004 probe/runner/gate remained unchanged. Licensed native Undo/Redo, rollback, multi-DWG and cold-reopen evidence remains `PENDING_LOCAL`; no source/static/build result is promoted to `LOCAL_PASS`.
