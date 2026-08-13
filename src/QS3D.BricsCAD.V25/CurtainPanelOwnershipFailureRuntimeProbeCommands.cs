@@ -74,6 +74,7 @@ namespace QS3D.BricsCAD.V25
             public Dictionary<int, string> ElementIds { get; } = new Dictionary<int, string>();
             public Dictionary<int, OwnerState> BaselineOwners { get; } = new Dictionary<int, OwnerState>();
             public Dictionary<int, AttemptState> VerifiedAttempts { get; } = new Dictionary<int, AttemptState>();
+            public ProjectStateSnapshot? BaselineSemanticSnapshot { get; set; }
             public AttemptState? PendingAttempt { get; set; }
             public int BaselinePanelCount { get; set; }
             public int RefusalCount { get; set; }
@@ -180,6 +181,7 @@ namespace QS3D.BricsCAD.V25
             }
             if (state.BaselinePanelCount <= OwnerCount)
                 throw new InvalidOperationException("P06 baseline panel output is unexpectedly small.");
+            state.BaselineSemanticSnapshot = ProjectStateSnapshot.Capture(project);
             state.Stage = SequenceStage.Baseline;
         });
 
@@ -224,7 +226,7 @@ namespace QS3D.BricsCAD.V25
             var attempt = VerifyAttemptUnchanged(document, project, state, 0);
             if (IsLiveSolid(document, attempt.SpecialHandle))
                 throw new InvalidOperationException("P06 missing panel unexpectedly became live.");
-            CompleteAttempt(state, attempt, SequenceStage.MissingVerified);
+            CompleteAttempt(project, state, attempt, SequenceStage.MissingVerified, restoreSemanticBaseline: true);
         });
 
         [CommandMethod("QS3DCURTAINP06DUPLICATE", CommandFlags.Modal)]
@@ -262,7 +264,7 @@ namespace QS3D.BricsCAD.V25
             if (!raw.EndsWith(";" + attempt.SpecialHandle, StringComparison.Ordinal))
                 throw new InvalidOperationException("P06 duplicate alias metadata was not preserved.");
             RequireAllLive(document, attempt.OriginalPanelHandles, "P06 duplicate originals");
-            CompleteAttempt(state, attempt, SequenceStage.DuplicateVerified);
+            CompleteAttempt(project, state, attempt, SequenceStage.DuplicateVerified, restoreSemanticBaseline: true);
         });
 
         [CommandMethod("QS3DCURTAINP06FOREIGN", CommandFlags.Modal)]
@@ -324,7 +326,7 @@ namespace QS3D.BricsCAD.V25
             var attempt = VerifyAttemptUnchanged(document, project, state, 2);
             RequireForeignUnmarked(document, project, RequiredOwner(project, state, 2), attempt.SpecialHandle);
             RequireAllLive(document, attempt.OriginalPanelHandles, "P06 orphaned original panels");
-            CompleteAttempt(state, attempt, SequenceStage.ForeignVerified);
+            CompleteAttempt(project, state, attempt, SequenceStage.ForeignVerified, restoreSemanticBaseline: true);
         });
 
         [CommandMethod("QS3DCURTAINP06CROSS", CommandFlags.Modal)]
@@ -363,7 +365,7 @@ namespace QS3D.BricsCAD.V25
                 !string.Equals(CanonicalHandle(raw, "P06 cross-owner claim"), attempt.SpecialHandle, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("P06 cross-owner claim was not preserved.");
             RequireAllLive(document, attempt.OriginalPanelHandles, "P06 cross-owner originals");
-            CompleteAttempt(state, attempt, SequenceStage.CrossVerified);
+            CompleteAttempt(project, state, attempt, SequenceStage.CrossVerified, restoreSemanticBaseline: false);
         });
 
         [CommandMethod("QS3DCURTAINP06CLEARCROSS", CommandFlags.Modal)]
@@ -371,9 +373,9 @@ namespace QS3D.BricsCAD.V25
         {
             var state = RequireState(nonce, SequenceStage.CrossVerified);
             var claimant = RequiredOwner(project, state, 4);
-            if (!claimant.Properties.Remove(CrossOwnerSlot))
+            if (!claimant.Properties.ContainsKey(CrossOwnerSlot))
                 throw new InvalidOperationException("P06 cross-owner claim is already absent.");
-            project.Touch();
+            RestoreSemanticBaseline(project, state);
             if (!string.Equals(CaptureOwnerDigest(claimant), state.BaselineOwners[4].Digest, StringComparison.Ordinal))
                 throw new InvalidOperationException("P06 claimant did not return to its baseline semantic state.");
             RequireOwnerPanelsLive(document, project, claimant, state.BaselineOwners[4].PanelHandles);
@@ -408,12 +410,11 @@ namespace QS3D.BricsCAD.V25
             if (CadHandleService.Resolve(document, state.ValidOldPanels).Count != 0)
                 throw new InvalidOperationException("P06 valid replacement left an old panel live.");
 
-            for (var lane = 0; lane < 4; lane++)
+            for (var lane = 0; lane < 5; lane++)
             {
-                var attempt = state.VerifiedAttempts[lane];
                 var owner = RequiredOwner(project, state, lane);
-                if (!string.Equals(CaptureOwnerDigest(owner), attempt.OwnerDigest, StringComparison.Ordinal))
-                    throw new InvalidOperationException("P06 refused owner semantic metadata changed later in the matrix.");
+                if (!string.Equals(CaptureOwnerDigest(owner), state.BaselineOwners[lane].Digest, StringComparison.Ordinal))
+                    throw new InvalidOperationException("P06 non-control owner did not retain the restored semantic baseline.");
             }
             var missing = state.VerifiedAttempts[0];
             if (IsLiveSolid(document, missing.SpecialHandle)) throw new InvalidOperationException("P06 missing panel reappeared.");
@@ -579,12 +580,31 @@ namespace QS3D.BricsCAD.V25
             return attempt;
         }
 
-        private static void CompleteAttempt(SequenceState state, AttemptState attempt, SequenceStage next)
+        private static void CompleteAttempt(
+            ProjectState project,
+            SequenceState state,
+            AttemptState attempt,
+            SequenceStage next,
+            bool restoreSemanticBaseline)
         {
             state.VerifiedAttempts.Add(attempt.Lane, attempt);
             state.PendingAttempt = null;
             state.RefusalCount++;
+            if (restoreSemanticBaseline) RestoreSemanticBaseline(project, state);
             state.Stage = next;
+        }
+
+        private static void RestoreSemanticBaseline(ProjectState project, SequenceState state)
+        {
+            var snapshot = state.BaselineSemanticSnapshot
+                ?? throw new InvalidOperationException("P06 semantic baseline snapshot is missing.");
+            snapshot.Restore(project);
+            foreach (var pair in state.BaselineOwners)
+            {
+                var owner = RequiredOwner(project, state, pair.Key);
+                if (!string.Equals(CaptureOwnerDigest(owner), pair.Value.Digest, StringComparison.Ordinal))
+                    throw new InvalidOperationException("P06 semantic baseline restoration is incomplete.");
+            }
         }
 
         private static void MarkForDifferentReplacement(ProjectElement owner, string maxWidthM)
