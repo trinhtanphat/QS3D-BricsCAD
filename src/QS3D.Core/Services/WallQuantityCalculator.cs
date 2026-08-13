@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using QS3D.Core.Measurement;
 
 namespace QS3D.Core.Services
 {
@@ -36,6 +37,23 @@ namespace QS3D.Core.Services
         public double DeductionVolumeM3 { get; set; }
         public double NetVolumeM3 { get; set; }
         public double TwoSideFinishAreaM2 { get; set; }
+    }
+
+    public sealed class WallQuantityResultWithTrace
+    {
+        public WallQuantityResultWithTrace(
+            WallQuantities quantities,
+            MeasurementTrace netAreaTrace,
+            MeasurementTrace netVolumeTrace)
+        {
+            Quantities = quantities ?? throw new ArgumentNullException(nameof(quantities));
+            NetAreaTrace = netAreaTrace ?? throw new ArgumentNullException(nameof(netAreaTrace));
+            NetVolumeTrace = netVolumeTrace ?? throw new ArgumentNullException(nameof(netVolumeTrace));
+        }
+
+        public WallQuantities Quantities { get; }
+        public MeasurementTrace NetAreaTrace { get; }
+        public MeasurementTrace NetVolumeTrace { get; }
     }
 
     public static class WallQuantityCalculator
@@ -82,6 +100,71 @@ namespace QS3D.Core.Services
                 NetVolumeM3 = grossVolume - deductionVolume,
                 TwoSideFinishAreaM2 = twoSideFinishArea
             };
+        }
+
+        public static WallQuantityResultWithTrace CalculateWithTrace(
+            string semanticIdentity,
+            string sourceIdentity,
+            double lengthM,
+            double heightM,
+            double thicknessM,
+            IEnumerable<OpeningCut>? openings = null)
+        {
+            var quantities = Calculate(lengthM, heightM, thicknessM, openings);
+            var facts = new[]
+            {
+                new MeasurementTraceFact("LengthM", lengthM, "m", sourceIdentity),
+                new MeasurementTraceFact("HeightM", heightM, "m", sourceIdentity),
+                new MeasurementTraceFact("ThicknessM", thicknessM, "m", sourceIdentity)
+            };
+
+            var areaAdjustments = quantities.OpeningAreaM2 > 0d
+                ? new[]
+                {
+                    new MeasurementTraceAdjustment(
+                        MeasurementTraceAdjustmentKind.Deduction,
+                        quantities.OpeningAreaM2,
+                        "m2",
+                        "Wall opening area deduction",
+                        sourceIdentity)
+                }
+                : Array.Empty<MeasurementTraceAdjustment>();
+
+            var volumeAdjustments = quantities.DeductionVolumeM3 > 0d
+                ? new[]
+                {
+                    new MeasurementTraceAdjustment(
+                        MeasurementTraceAdjustmentKind.Deduction,
+                        quantities.DeductionVolumeM3,
+                        "m3",
+                        "Wall opening volume deduction",
+                        sourceIdentity)
+                }
+                : Array.Empty<MeasurementTraceAdjustment>();
+
+            var areaTrace = new MeasurementTrace(
+                semanticIdentity,
+                sourceIdentity,
+                "NetAreaM2",
+                facts,
+                quantities.GrossAreaM2,
+                areaAdjustments,
+                quantities.NetAreaM2,
+                "m2",
+                "none");
+
+            var volumeTrace = new MeasurementTrace(
+                semanticIdentity,
+                sourceIdentity,
+                "NetVolumeM3",
+                facts,
+                quantities.GrossVolumeM3,
+                volumeAdjustments,
+                quantities.NetVolumeM3,
+                "m3",
+                "none");
+
+            return new WallQuantityResultWithTrace(quantities, areaTrace, volumeTrace);
         }
 
         private static void EnsureKnownOpeningCountWithinBound(IEnumerable<OpeningCut> openings)
