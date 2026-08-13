@@ -6,13 +6,13 @@ using System.Linq;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Media;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Domain;
 using Teigha.Runtime;
 using BcadApplication = Bricscad.ApplicationServices.Application;
-using WpfApplication = System.Windows.Application;
 
 namespace QS3D.BricsCAD.V25
 {
@@ -297,16 +297,23 @@ namespace QS3D.BricsCAD.V25
 
         private static List<CurtainWallWindow> CurtainWindows()
         {
-            var application = WpfApplication.Current;
-            if (application == null) throw Fail("WPF_APPLICATION_REJECTED");
-            return application.Windows.OfType<CurtainWallWindow>().Where(window => window.IsLoaded || window.IsVisible).ToList();
+            return HostedWindows<CurtainWallWindow>()
+                .Where(window => window.IsLoaded || window.IsVisible)
+                .ToList();
         }
 
         private static int VisibleHealthWindowCount()
         {
-            var application = WpfApplication.Current;
-            if (application == null) return 0;
-            return application.Windows.OfType<ModelHealthWindow>().Count(window => window.IsVisible);
+            return HostedWindows<ModelHealthWindow>().Count(window => window.IsVisible);
+        }
+
+        private static IEnumerable<TWindow> HostedWindows<TWindow>() where TWindow : Window
+        {
+            return PresentationSource.CurrentSources
+                .OfType<HwndSource>()
+                .Select(source => source.RootVisual)
+                .OfType<TWindow>()
+                .Distinct();
         }
 
         private static bool ContainsActiveDocumentRefusal(string? value)
