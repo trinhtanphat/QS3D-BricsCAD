@@ -29,6 +29,7 @@ source_undo = SOURCE_UNDO.read_text(encoding="utf-8") if SOURCE_UNDO.is_file() e
 for token in (
     'private const string RegAppName = "QS3D_CURTAIN_UNDO";',
     'private const string RevisionPrefix = "CWU1:";',
+    "Dictionary<Document, ObserverRegistration>",
     "OwnerStateSnapshot CaptureSelectedOwners(",
     'key.StartsWith("GeneratedSolid", StringComparison.OrdinalIgnoreCase)',
     'key.StartsWith("GeneratedCurtainFrame", StringComparison.OrdinalIgnoreCase)',
@@ -48,6 +49,22 @@ for token in (
     'string.Equals(normalized, "UNDO", StringComparison.OrdinalIgnoreCase)',
     'string.Equals(normalized, "REDO", StringComparison.OrdinalIgnoreCase)',
     'string.Equals(normalized, "MREDO", StringComparison.OrdinalIgnoreCase)',
+    "document.CommandWillStart += CommandWillStart",
+    "document.CommandEnded += CommandEnded",
+    "document.CommandCancelled += CommandCancelled",
+    "document.CommandFailed += CommandFailed",
+    "document.CommandWillStart -= CommandWillStart",
+    "document.CommandEnded -= CommandEnded",
+    "document.CommandCancelled -= CommandCancelled",
+    "document.CommandFailed -= CommandFailed",
+    "OnCommandWillStart(document, args)",
+    "OnCommandEnded(document, args)",
+    "OnCommandAborted(document)",
+    "TryConsumeMatchingCommand(document, args?.GlobalCommandName)",
+    "TrySynchronizeAtStableBoundary(document, refreshAfterRestore: false);",
+    "TrySynchronizeAtStableBoundary(document, refreshAfterRestore: true);",
+    "NormalizeNativeUndoRedo(args?.GlobalCommandName)",
+    "IsActiveDocument(document)",
     "if (!currentExpected.Matches(project))",
     "public void RefreshCommittedAfter(ProjectState project, OwnerStateSnapshot after)",
     "_staged.After = after;",
@@ -70,6 +87,99 @@ if "SourceReconcileUndoCoordinator" in coord:
     errors.append("Curtain Undo must remain independent from Source Reconcile behavior")
 if "project.Touch()" in coord:
     errors.append("Curtain Undo restore must not advance or overflow the captured project revision")
+if "Dictionary<Document, CommandEventHandler>" in coord:
+    errors.append("Curtain Undo must retain the full matched observer lifecycle, not an Ended-only handler")
+if 'string.Equals(normalized, "U", StringComparison.OrdinalIgnoreCase)' in coord:
+    errors.append("single-letter U is ambiguous in BricsCAD V25 and must not drive Curtain semantic Undo")
+
+will_start = coord.find("private static void OnCommandWillStart(")
+ended = coord.find("private static void OnCommandEnded(", will_start)
+stable = coord.find("private static void TrySynchronizeAtStableBoundary(", ended)
+sync = coord.find("private static void SynchronizeKnownRevision(", stable)
+aborted = coord.find("private static void OnCommandAborted(", sync)
+consume = coord.find("private static bool TryConsumeMatchingCommand(", aborted)
+active = coord.find("private static bool IsActiveDocument(", consume)
+tracked = coord.find("private static bool IsTrackedProperty(", active)
+if min(will_start, ended, stable, sync, aborted, consume, active, tracked) < 0:
+    errors.append("Curtain matched command observer method boundaries are missing")
+else:
+    will_body = coord[will_start:ended]
+    ended_body = coord[ended:stable]
+    sync_body = coord[sync:aborted]
+    aborted_body = coord[aborted:consume]
+    consume_body = coord[consume:active]
+    recovery = will_body.find("TrySynchronizeAtStableBoundary(document, refreshAfterRestore: false);")
+    normalize = will_body.find("NormalizeNativeUndoRedo(args?.GlobalCommandName)")
+    pending = will_body.find("registration.PendingCommand = normalized;")
+    if min(recovery, normalize, pending) < 0 or not recovery < normalize < pending:
+        errors.append("next-command recovery must run before recording new native Undo/Redo intent")
+    if "if (registration.PendingCommand != null)" not in will_body or "registration.PendingCommand = null;" not in will_body:
+        errors.append("nested/ambiguous Curtain command starts must invalidate pending intent")
+    if "TryConsumeMatchingCommand(document, args?.GlobalCommandName)" not in ended_body or "TrySynchronizeAtStableBoundary(document, refreshAfterRestore: true);" not in ended_body:
+        errors.append("Curtain command end must synchronize only after consuming matching intent")
+    if "registration.PendingCommand = null;" not in aborted_body:
+        errors.append("cancelled/failed Curtain commands must clear pending native intent")
+    if "var pendingCommand = registration.PendingCommand;" not in consume_body or "registration.PendingCommand = null;" not in consume_body:
+        errors.append("Curtain terminal intent must be single-consumption")
+    if "IsActiveDocument(document)" not in consume_body:
+        errors.append("Curtain terminal restore must remain active-document bound")
+    if "ReadRevision(document)" not in sync_body or "target.Restore(project);" not in sync_body or "if (refreshAfterRestore) RefreshAfterRestore(document);" not in sync_body:
+        errors.append("stable-boundary reconciliation must reuse the known-marker exact snapshot restore")
+
+# Deterministic event model for the host-observer contract. The source-token and
+# ordering checks above bind this model to production; no BricsCAD runtime is
+# needed to prove single-consumption and missed-terminal recovery behavior.
+class ObserverModel:
+    def __init__(self):
+        self.current = "AFTER"
+        self.native = "AFTER"
+        self.pending = None
+        self.restores = []
+
+    def synchronize(self):
+        if self.native != self.current:
+            self.current = self.native
+            self.restores.append(self.native)
+
+    def start(self, command):
+        self.synchronize()
+        normalized = command if command in ("UNDO", "REDO", "MREDO") else None
+        if self.pending is not None:
+            self.pending = None
+            return
+        self.pending = normalized
+
+    def end(self, command):
+        pending = self.pending
+        self.pending = None
+        if pending == command and command in ("UNDO", "REDO", "MREDO"):
+            self.synchronize()
+
+    def abort(self):
+        self.pending = None
+
+normal = ObserverModel()
+normal.start("UNDO")
+normal.native = "BEFORE"
+normal.end("UNDO")
+if normal.current != "BEFORE" or normal.restores != ["BEFORE"]:
+    errors.append("deterministic Curtain matched terminal transition did not restore exactly once")
+
+missed = ObserverModel()
+missed.start("UNDO")
+missed.native = "BEFORE"
+# No terminal event: the next command boundary must repair before its body.
+missed.start("P11PROBE")
+if missed.current != "BEFORE" or missed.restores != ["BEFORE"] or missed.pending is not None:
+    errors.append("deterministic Curtain missed-terminal recovery did not close the marker transition")
+
+aborted_model = ObserverModel()
+aborted_model.start("UNDO")
+aborted_model.abort()
+aborted_model.native = "BEFORE"
+aborted_model.end("UNDO")
+if aborted_model.current != "AFTER" or aborted_model.restores:
+    errors.append("aborted Curtain native intent must not restore from a later unmatched terminal event")
 
 for token in (
     "CurtainWallUndoCoordinator.OwnerStateSnapshot.CaptureSelectedOwners(",
