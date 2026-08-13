@@ -35,15 +35,15 @@ def main() -> int:
         ribbon = read("src/QS3D.BricsCAD.V25/Ribbon/UpdateRibbonAugmenter.cs")
         entry = read("src/QS3D.BricsCAD.V25/PluginEntry.cs")
 
-        require(installer, "Unblock-File -LiteralPath $copiedFile.FullName", "installer MOTW repair")
-        require(installer, "Assert-FileUnblocked", "installer MOTW verification")
+        require(installer, "ConfirmImpact = 'Medium'", "one-click ShouldProcess behavior")
+        require(installer, "Assert-PackageIntegrity -Directory $package", "installer package verification")
+        require(installer, "Unblock-File -LiteralPath $destination -ErrorAction Stop", "installed payload MOTW repair")
 
         require(launcher, "ExecutionPolicy RemoteSigned", "one-click launcher")
         require(launcher, "Get-AuthenticodeSignature", "one-click launcher")
         require(launcher, "SignatureStatus]::Valid", "signed installer bootstrap")
         require(launcher, "SignatureStatus]::NotSigned", "unsigned preview bootstrap")
         require(launcher, "Unblock-File -LiteralPath $p", "preview MOTW bootstrap")
-        require(launcher, "-Confirm:$false", "one-click non-interactive install")
         forbid(launcher, "ExecutionPolicy Bypass", "one-click launcher")
         require(package, "'INSTALL-QS3D.cmd'", "release package")
         require(package, "do not NETLOAD the DLL directly from Downloads", "safe install guidance")
