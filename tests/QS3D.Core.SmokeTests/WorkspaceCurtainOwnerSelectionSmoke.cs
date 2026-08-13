@@ -56,7 +56,7 @@ namespace QS3D.Core.SmokeTests
             var room = AutoRoom("ROOM-A", "D1;D2");
             project.Elements.Add(room);
 
-            foreach (var handle in new[] { "D1", "HANDLE:00D2" })
+            foreach (var handle in new[] { "D1", "0x00D2" })
             {
                 var resolved = SemanticHandleOwnershipResolver.Resolve(project, new[] { handle });
                 if (resolved.Count != 1 || !ReferenceEquals(resolved[0], room))
