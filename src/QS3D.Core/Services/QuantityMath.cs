@@ -22,7 +22,7 @@ namespace QS3D.Core.Services
             RequireNonNegativeFinite(right, label);
             var result = left + right;
             if (!IsFinite(result)) throw new OverflowException("Quantity addition overflow: " + label);
-            return result;
+            return result == 0d ? 0d : result;
         }
 
         public static double SubtractFloorZero(double left, double right, string label)
