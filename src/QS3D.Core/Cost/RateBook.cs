@@ -40,7 +40,7 @@ namespace QS3D.Core.Cost
             Currency = RateBookContract.RequireCurrency(currency, nameof(currency));
             if (unitRate < 0m)
                 throw new ArgumentOutOfRangeException(nameof(unitRate), "Rate item unit rate must be non-negative.");
-            UnitRate = unitRate;
+            UnitRate = unitRate == 0m ? 0m : unitRate;
             EffectiveFromUtc = RateBookContract.RequireUtc(effectiveFromUtc, nameof(effectiveFromUtc));
             Version = RateBookContract.RequireToken(version, nameof(version));
         }
