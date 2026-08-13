@@ -152,7 +152,7 @@ namespace QS3D.Core.Measurement
             GrossValue = MeasurementTraceContract.RequireNonNegativeFinite(grossValue, nameof(grossValue));
             NetValue = MeasurementTraceContract.RequireNonNegativeFinite(netValue, nameof(netValue));
             Unit = MeasurementTraceContract.RequireUnit(unit, nameof(unit));
-            RoundingPolicy = MeasurementTraceContract.RequireToken(roundingPolicy, nameof(roundingPolicy));
+            RoundingPolicy = MeasurementTraceContract.RequireRoundingPolicy(roundingPolicy, nameof(roundingPolicy));
 
             if ((ruleId == null) != (ruleVersion == null))
                 throw new ArgumentException("Measurement trace rule identity and version must be supplied together.");
@@ -336,6 +336,19 @@ namespace QS3D.Core.Measurement
             value = RequireToken(value, parameterName);
             if (!string.Equals(value, value.ToLowerInvariant(), StringComparison.Ordinal))
                 throw new ArgumentException("Measurement trace unit must use canonical lower-case text.", parameterName);
+            return value;
+        }
+
+        internal static string RequireRoundingPolicy(string value, string parameterName)
+        {
+            value = RequireToken(value, parameterName);
+            if (string.Equals(value, "none", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(value, "none", StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    "Measurement trace rounding policy 'none' must use canonical lower-case text.",
+                    parameterName);
+            }
             return value;
         }
 
