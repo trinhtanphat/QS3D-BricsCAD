@@ -74,7 +74,10 @@ The original V25 startup/show path had four avoidable sources of repeated or syn
 
 - Source/readback confirms the startup contracts above are integrated.
 - The focused preflight guards palette laziness, no duplicate first-show refresh, deferred application-idle Ribbon reconciliation, and one-shot Workspace/RightPanel initial refresh.
-- No status checks or pull-request workflow runs were attached to the #1054 head when inspected. Do not report CI-green from this evidence.
+- Cloud V25 release run #129 / `31712690583` on SHA `e7318dc41bc04b26bee9f5b4f6b985d38144c9bd` completed `SUCCESS`.
+- In that run, Generic source guard, All discovered feature source guards, Core Release build, Core smoke harness, deterministic Core smoke tests, BricsCAD V25 compile-reference validation, BricsCAD V25 plugin build, preview package, release-tag/package binding, artifact upload, and GitHub prerelease publish all completed successfully.
+- Post-run readback on `main` after later unrelated commits still shows the reserved startup surfaces preserving the intended contract: `PluginEntry.Initialize()` stays palette-free, `PaletteCoordinator.Show()` has no duplicate `RefreshAll()`, Ribbon retry remains `ApplicationIdle`, Workspace/RightPanel initial `Loaded` refreshes remain one-shot, and the focused preflight still enforces those invariants.
+- Later commits after `e7318dc...` do not have a workflow run attached to the sampled latest head, so do not generalize run #129 into a claim that every later `main` SHA is CI-green.
 - Licensed BricsCAD V25 runtime qualification remains pending.
 
 ### Native validation still required
@@ -94,4 +97,4 @@ Do not close this claim or report native PASS until that exact runtime path succ
 
 ## Collision check
 
-Open-PR searches for `netload`, `ProjectContextCoordinator`, `WorkspacePanel`, `RightPanel`, `startup`, and `RibbonInitializationCoordinator` found no overlapping open PR at the times each startup surface was reserved. Concurrent changes observed while #1054 was prepared were on unrelated responsive-UI files. This claim does not overlap the BLOCKED LOCAL-003 native Level geometry claim; it is limited to V25 plugin/palette/ribbon startup lifecycle.
+Open-PR searches for `netload`, `ProjectContextCoordinator`, `WorkspacePanel`, `RightPanel`, `startup`, and `RibbonInitializationCoordinator` found no overlapping open PR at the times each startup surface was reserved. A fresh open-PR search for `netload`, `startup`, `RibbonInitializationCoordinator`, `WorkspacePanel`, and `RightPanel` also returned no overlapping open PR before this validation checkpoint was recorded. Concurrent later changes sampled after run #129 were outside the reserved startup surfaces. This claim does not overlap the BLOCKED LOCAL-003 native Level geometry claim; it is limited to V25 plugin/palette/ribbon startup lifecycle.
