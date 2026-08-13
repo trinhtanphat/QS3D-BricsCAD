@@ -17,6 +17,7 @@ if COMMAND.is_file():
     text = COMMAND.read_text(encoding="utf-8")
     for token in (
         'CommandMethod("QS3DCURTAINP11PREPARE", CommandFlags.Modal)',
+        'CommandMethod("QS3DCURTAINP11SELECT", CommandFlags.Modal)',
         'CommandMethod("QS3DCURTAINP11BASELINE", CommandFlags.Modal)',
         'CommandMethod("QS3DCURTAINP11CHECKUNDO", CommandFlags.Modal)',
         'CommandMethod("QS3DCURTAINP11CHECKREDO", CommandFlags.Modal)',
@@ -27,6 +28,7 @@ if COMMAND.is_file():
         'QS3D_CURTAIN_PANEL_UNDO_REOPEN_RUNTIME_V1',
         'QS3D_CURTAIN_P11_SENTINEL',
         'CreateSentinel(context.Document, context.Nonce)',
+        'SelectSingleSource(context.Document, owner)',
         'SameSemanticAndNative(state.Before, current)',
         'AllPresent(context.Document, GeneratedHandles(state.Before))',
         'AllAbsent(context.Document, GeneratedHandles(after))',
@@ -80,6 +82,7 @@ if RUNNER.is_file():
         '-WindowStyle Hidden',
         '"QS3DDRAWGLASSWALL"',
         '"QS3DCURTAINP11PREPARE"',
+        '"QS3DCURTAINP11SELECT"',
         '"QS3DCURTAIN3D"',
         '"QS3DCURTAINP11BASELINE"',
         '"_.UNDO", "1"',
@@ -110,6 +113,16 @@ if RUNNER.is_file():
 
     if text.count('Start-Process -FilePath $bricscadExe') != 2:
         errors.append("Curtain P11 runner must launch exactly two isolated BricsCAD sessions")
+    if text.count('"QS3DCURTAINP11SELECT"') != 2:
+        errors.append("Curtain P11 runner must restore the canonical source selection immediately before both builds")
+    first_prepare = text.find('"QS3DCURTAINP11PREPARE"')
+    first_select = text.find('"QS3DCURTAINP11SELECT"', first_prepare)
+    first_build = text.find('"QS3DCURTAIN3D"', first_select)
+    reopen = text.find('"QS3DCURTAINP11REOPEN"')
+    second_select = text.find('"QS3DCURTAINP11SELECT"', reopen)
+    second_build = text.find('"QS3DCURTAIN3D"', second_select)
+    if not (first_prepare < first_select < first_build and reopen < second_select < second_build):
+        errors.append("Curtain P11 runner must reselect at a distinct command boundary immediately before each production build")
     if text.find('"_.UNDO", "1"') > text.find('"_.REDO"'):
         errors.append("Curtain P11 runner must execute Undo before Redo")
     if text.find('"QS3DCURTAINP11REOPEN"') > text.rfind('"QS3DCURTAIN3D"'):
