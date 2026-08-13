@@ -204,6 +204,7 @@ namespace QS3D.BricsCAD.V25.Cad
             update.Element.Properties["GeneratedCurtainFrameMappedFrameCount"] = update.MappedFrameCount.ToString(CultureInfo.InvariantCulture);
             update.Element.Properties["LengthM"] = update.SourceLengthM.ToString("R", CultureInfo.InvariantCulture);
             CadElementVerticalPlacement.CommitSnapshot(update.Element, "GeneratedCurtainFrame", update.VerticalPlacement);
+            update.Element.Properties.Remove("GeneratedCurtainFrameLiveFingerprint");
             update.Element.ClearGeneratedCurtainFrameStale();
             AuditTrail.ForProject(project).Record("geometry.curtain.path.frames", update.Element.Id,
                 update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " path frame fragments • base=" + update.BaseFrameCount.ToString(CultureInfo.InvariantCulture) + " • mapped=" + update.MappedFrameCount.ToString(CultureInfo.InvariantCulture) + " • segments=" + update.PathSegmentCount.ToString(CultureInfo.InvariantCulture) + " • openings=" + update.OpeningCount.ToString(CultureInfo.InvariantCulture));

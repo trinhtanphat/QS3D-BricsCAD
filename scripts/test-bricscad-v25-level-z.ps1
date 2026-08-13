@@ -101,13 +101,19 @@ $PluginDll = [IO.Path]::GetFullPath($PluginDll)
 $DrawingCopy = [IO.Path]::GetFullPath($DrawingCopy)
 $ArtifactDir = [IO.Path]::GetFullPath($ArtifactDir)
 $repoRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
-$resolvedSourceSha = [string](& git -C $repoRoot rev-parse HEAD 2>$null | Select-Object -First 1)
+$sourceShaOutput = @(& git -C $repoRoot rev-parse --verify HEAD 2>$null)
+$sourceShaExitCode = $LASTEXITCODE
+$resolvedSourceSha = if ($sourceShaOutput.Count -eq 1) { [string]$sourceShaOutput[0] } else { "" }
 $resolvedSourceSha = $resolvedSourceSha.Trim()
-if ($LASTEXITCODE -ne 0 -or -not [string]::Equals($resolvedSourceSha, $ExpectedSourceSha, [StringComparison]::OrdinalIgnoreCase)) {
+if ($sourceShaExitCode -ne 0 -or
+    $sourceShaOutput.Count -ne 1 -or
+    $resolvedSourceSha -notmatch "^[0-9a-fA-F]{40}$" -or
+    -not [string]::Equals($resolvedSourceSha, $ExpectedSourceSha, [StringComparison]::OrdinalIgnoreCase)) {
     throw "ExpectedSourceSha does not match the current repository HEAD. Expected=$ExpectedSourceSha Actual=$resolvedSourceSha"
 }
 $worktreeStatus = @(& git -C $repoRoot status --porcelain=v1 --untracked-files=all 2>$null)
-if ($LASTEXITCODE -ne 0) { throw "Unable to verify the repository worktree for exact-SHA Level Z qualification." }
+$worktreeExitCode = $LASTEXITCODE
+if ($worktreeExitCode -ne 0) { throw "Unable to verify the repository worktree for exact-SHA Level Z qualification." }
 if ($worktreeStatus.Count -gt 0) { throw "Exact-SHA Level Z qualification requires a clean repository worktree." }
 $ExpectedSourceSha = $resolvedSourceSha.ToLowerInvariant()
 if (-not [IO.Path]::GetFileName($DrawingCopy).EndsWith(".level-z-probe-copy.dwg", [StringComparison]::OrdinalIgnoreCase)) {

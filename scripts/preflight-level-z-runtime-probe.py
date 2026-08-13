@@ -90,7 +90,10 @@ if RUNNER.is_file():
         'QS3D_LEVEL_Z_RESULT',
         'QS3D_LEVEL_Z_NONCE',
         'QS3D_LEVEL_Z_SOURCE_SHA',
+        'git -C $repoRoot rev-parse --verify HEAD',
+        '$sourceShaExitCode = $LASTEXITCODE',
         'git -C $repoRoot status --porcelain=v1 --untracked-files=all',
+        '$worktreeExitCode = $LASTEXITCODE',
         'Assembly was not built from ExpectedSourceSha',
         '. $windowInteropPath',
         'Close-Qs3dProxyInformationDialog -Process $process',
@@ -115,6 +118,8 @@ if RUNNER.is_file():
     for forbidden in ("Get-Process -Name '*'", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
         if forbidden in text:
             errors.append("Level-Z runner contains broad process/window action: " + forbidden)
+    if "rev-parse HEAD 2>$null | Select-Object -First 1" in text:
+        errors.append("Level-Z runner must not pipe rev-parse through Select-Object because early pipeline closure can corrupt LASTEXITCODE")
 
 if CLAIM.is_file():
     text = CLAIM.read_text(encoding="utf-8")

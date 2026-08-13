@@ -46,3 +46,20 @@ Current ACTIVE/BLOCKED claims and open PRs were audited at registration. The act
 ## Completion condition
 
 The seam/probe/runner/gate is merged, a clean exact-main licensed run proves both post-commit cases and cleanup, docs mark only P09 `LOCAL_PASS`, and this claim is `COMPLETED`. P10-P12 and overall LOCAL-002 remain `PENDING_LOCAL`.
+
+## Source-preparation status
+
+- The internal two-phase one-shot seam, post-commit orchestrator hooks, synthetic state-machine probe, guarded runner, static/privacy gate and P09 runbook handoff are implemented locally. No builder, planner, Health/Release/Locate/Level/QSDB/UI implementation changed.
+- Runtime status remains `PENDING_LOCAL` until the source-preparation batch is merged and a fresh clean exact-main SHA/DLL proves both committed replacements plus cleanup.
+
+## Runtime-discovered frame-fingerprint expansion
+
+Exact clean candidate `e0cfce0c70bda041d535b7a9b7b51ed00dd4e971` reached the injected post-commit fingerprint verifier and failed closed at `VERIFY_FINGERPRINT / STATE_REJECTED` after cleanup. Source audit showed the LINE/path panel commits already remove `GeneratedCurtainPanelLiveFingerprint`, while the corresponding frame commits retain the prior `GeneratedCurtainFrameLiveFingerprint`. If stamping fails after replacement, Health can therefore inspect a stale frame fingerprint instead of the deterministic missing-fingerprint review state required by this P09 boundary.
+
+This claim now additionally reserves exactly:
+
+- `src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameSolidBuilder.cs` — remove `GeneratedCurtainFrameLiveFingerprint` inside the existing semantic commit before clearing frame stale state;
+- `src/QS3D.BricsCAD.V25/Cad/CurtainWallPathFrameSolidBuilder.cs` — apply the same one-property removal for path frames;
+- the existing P09 static gate and exact-SHA runtime regression needed to prove both missing-fingerprint warnings after the injected stamp failure.
+
+This narrowly supersedes the earlier builder exclusion. It does not change frame geometry, Level placement, topology, counts, ownership, native transactions or Health rules. The BLOCKED LOCAL-003 claim belongs to the same `/root` local owner and reserves only Level-placement consumption in these builders; this P09 expansion preserves that merged placement implementation unchanged.
