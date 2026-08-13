@@ -37,8 +37,11 @@ Reserved implementation surface:
 - Follow-up PR #1050 merged as `b37961d94d75ef943c569f01713fba8045b0693f`.
   - Source commit `34e526604cb19b8172a1f82150e16bcecaa209b3` removes only the duplicate `RefreshAll()` call from `PaletteCoordinator.Show()`.
   - Workspace, RightPanel and QuantityInsight retain their own initial `Loaded` refresh handlers, and `SelectionSyncCoordinator.Refresh()` remains after show.
+- Regression PR #1051 merged as `696603c014f306ff495a0d622e4c47eae44a17d7`.
+  - Adds `scripts/preflight-netload-existing-project-startup.py` covering deferred NETLOAD palette construction, passive refresh laziness, on-demand `Show()` creation, no first-show `RefreshAll()`, and teardown presence.
 - Superseded PR #1031 was closed without merge after a handoff comment pointed to #1048; its stale branch must not be merged over the current palette architecture.
-- GitHub reported no status checks or workflow runs attached to the #1048/#1050 source heads when checked. This is source/readback evidence, not a CI-green claim.
+- Duplicate PR #1049 was closed without merge after #1048/#1050/#1051 collectively superseded its source and gate diff.
+- GitHub reported no status checks or workflow runs attached to the #1048/#1050 source heads when checked. This is source/readback/regression evidence, not a CI-green or native-runtime claim.
 
 ### Native validation still required
 
