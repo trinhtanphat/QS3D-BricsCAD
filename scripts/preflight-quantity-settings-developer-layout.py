@@ -56,7 +56,8 @@ def main():
         return 1
 
     required = [
-        "Các ngưỡng nội bộ của engine tính khối lượng — chỉ chỉnh khi hiểu rõ tác động.",
+        "Các ngưỡng nội bộ của engine tính khối lượng",
+        "chỉ chỉnh khi hiểu rõ tác động.",
         'Background="{Binding Text, ElementName=DimColorBox}"',
         'x:Name="PrimaryCategoryList"',
         'x:Name="ReferenceCategoryList"',
