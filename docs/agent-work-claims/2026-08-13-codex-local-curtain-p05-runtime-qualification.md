@@ -1,6 +1,6 @@
 # Work claim — LOCAL-002/P05 licensed Curtain stale/rebuild qualification
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local-curtain-p05-runtime-qualification-20260813` (`/root`)
 - Registered: `2026-08-13T10:45:00+07:00`
 - Baseline main SHA: `b4a8cf161f858ec6ade23b0a59281c56b9f69a7d`
@@ -31,3 +31,11 @@
 ## Completion condition
 
 The claim is already visible on `origin/main` before launch; one clean exact-SHA licensed run returns the complete PASS and cleanup contract; sanitized evidence is merged normally without force-push or Actions; and this claim is marked `COMPLETED` with exact PR/commit identities.
+
+## Completion evidence
+
+- Claim PR `#951` merged as `c3e8aefa7052a521d09bbab25cebd5055dfbbc0e`; the worktree was detached, clean and rebuilt from that exact SHA before launch. The x64 Release adapter SHA-256 was `D5B8B76F0B5AE15F61E4A13AA7EC58053A0076211D44E1983FA171F4456F2AB8`; BricsCAD reported `25.2.10`.
+- The marker returned `PASS` for four semantic stale transitions, one live-source drift transition and five target-only replacements. The unrelated owner stayed unchanged; old target sets were removed; old/new handles were disjoint; native-plan matching, Health transitions, Source Reconcile invalidation and semantic/live sample separation passed.
+- Final aggregate output was 39 panels, `19.7189 m2`, 39 native matches, zero Health issues, one located panel and one canonical owner. Baseline/final source lengths were 5 m/6 m.
+- Disposable DWG SHA-256 stayed `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`; process/script/sidecar/backup cleanup all passed. No private/customer/BLT artifact or GitHub Actions was used.
+- This evidence qualifies only bounded ordered P05. P06-P12 and overall LOCAL-002 remain `PENDING_LOCAL`.
