@@ -143,6 +143,27 @@ namespace QS3D.Core.SmokeTests
                 "NetAreaM2",
                 Array.Empty<MeasurementTraceFact>(),
                 12d,
+                new[] { addition, deduction },
+                12d,
+                "m2",
+                "NONE"));
+            Throws<ArgumentException>(() => new MeasurementTrace(
+                "SEM-WALL-1",
+                "SRC-WALL",
+                "NetAreaM2",
+                Array.Empty<MeasurementTraceFact>(),
+                12d,
+                new[] { addition, deduction },
+                12d,
+                "m2",
+                "None"));
+
+            Throws<ArgumentException>(() => new MeasurementTrace(
+                "SEM-WALL-1",
+                "SRC-WALL",
+                "NetAreaM2",
+                Array.Empty<MeasurementTraceFact>(),
+                12d,
                 new[] { deduction },
                 12d,
                 "m2",
