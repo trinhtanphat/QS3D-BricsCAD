@@ -1,39 +1,36 @@
 # Work claim — RevisionMath signed-zero canonicality
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-revisionmath-signed-zero-20260813-2015`
 - Registered: `2026-08-13T20:15:00+07:00`
 - Baseline main SHA: `579f2cded8c18a5581509157ad5e4db88db72939`
 - Priority: revision numeric canonicality hardening
+- Claim-only commit: `e51d19df145f576b9f3f2e12a68d01fa926076c4`
+- Source fix commit: `50ba32a6d0df94ae8433b643158a6fd67cdedfc6`
+- Regression commit: `28c4f1dcc6b00ebd5434d68cb66956c9aec90344`
 
-## Confirmed defect
+## Completed change
 
-`RevisionMath.Finite(...)` rejects non-finite values but returns IEEE signed zero unchanged. `Add(...)`, `Subtract(...)`, and `Percent(...)` likewise return arithmetic zero without canonicalizing its sign bit. These shared helpers feed canonical revision capture/report paths: `RevisionService.Capture(...)` stores `Finite(quantity.Value)` directly in `RevisionElementSnapshot.Quantities`, while quantity revision rows/summaries use the same helpers. A business-equivalent numeric zero can therefore survive in revision state/output as `-0d`, unlike adjacent quantity/domain canonical boundaries already hardened to canonical positive zero.
+`RevisionMath.Finite(...)` now preserves its existing non-finite rejection while canonicalizing every accepted numeric zero to `+0d`. `Add(...)`, `Subtract(...)`, and `Percent(...)` likewise canonicalize a zero arithmetic result after retaining the existing overflow/divide-by-zero behavior and thresholds.
 
-## Reserved scope
+The focused existing `RevisionRegressionSmoke` now exercises public revision paths and verifies the sign bit rather than numeric equality alone:
 
-- `src/QS3D.Core/Revisions/RevisionMath.cs`
-- `tests/QS3D.Core.SmokeTests/RevisionRegressionSmoke.cs`
-- this claim file
+- `RevisionService.Capture(...)` must store a quantity supplied as `-0d` as canonical positive zero;
+- `QuantityRevisionRow.Delta` for `After=-0d` and `Before=+0d` must return canonical positive zero;
+- `BitConverter.DoubleToInt64Bits(...) == 0L` guards the IEEE sign bit.
 
-## Intended bounded change
+## Scope preserved
 
-- preserve current non-finite and overflow exception semantics;
-- canonicalize accepted zero input/output to `+0d` at the shared RevisionMath boundary;
-- add focused public-path regression coverage proving revision capture/report/summary do not preserve a negative-zero sign bit;
-- do not alter revision comparison tolerance, percentage denominator threshold, quantity keys, persisted XML token grammar, or business arithmetic.
+No edits were made to `RevisionService.cs`, `QuantityRevisionReport.cs`, `RevisionSnapshotStore.cs`, schema/XML validators, comparison tolerance, percentage denominator threshold, quantity keys, UI, native BricsCAD code, CST, MAP, or cross-repo platform work.
 
-## Excluded scope
+## Validation actually performed
 
-- no edits to `RevisionService.cs`, `QuantityRevisionReport.cs`, `RevisionSnapshotStore.cs`, XML/schema validators, UI, CST, MAP, native BricsCAD, or cross-repo platform work;
-- no GitHub Actions, force-push, or unexecuted managed/native PASS claim.
+- post-claim refresh confirmed the claim remained on current `main` with no competing `RevisionMath` / `RevisionRegressionSmoke` reservation;
+- source commit and regression commit were published separately;
+- compare `50ba32a6d0df94ae8433b643158a6fd67cdedfc6..28c4f1dcc6b00ebd5434d68cb66956c9aec90344` showed only the focused smoke plus an unrelated Zone/Floor claim-file change between the two commits;
+- exact remote readback confirmed `RevisionMath.cs` blob `b6daed45f602a943063609e0dd5fe8e56e118487` and `RevisionRegressionSmoke.cs` blob `d390cf80926689e369c56410c3be7ba31b697d5f` contain the intended changes;
+- no GitHub Actions were dispatched, no managed smoke executable or .NET build was run, and no BricsCAD/native runtime was executed; therefore no managed/native PASS is asserted.
 
-## Coordination
+## Completion
 
-- the older revision snapshot numeric-canonicality claim is `COMPLETED` and reserved only persisted numeric token parsing in `RevisionSnapshotStore.cs`;
-- the current Zone/Floor first-create revision claim reserves domain Zone/Floor services and their own smokes, not this source/test pair;
-- targeted current-history searches for `RevisionMath signed-zero` and `RevisionRegressionSmoke` found no competing lane immediately before this claim.
-
-## Completion condition
-
-Publish this claim alone first; refresh and recheck overlap; update the shared helper plus focused existing smoke; reconcile current `main`; remote-readback exact source/test; close `COMPLETED` with only validation actually performed recorded.
+Completed. The reservation is closed and the two source/test files are free for future non-overlapping claims.
