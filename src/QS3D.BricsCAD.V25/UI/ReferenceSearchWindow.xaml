@@ -126,14 +126,29 @@
         </ScrollViewer>
 
         <Border Grid.Row="2" Background="{StaticResource Bg1Brush}" Padding="11,7" BorderThickness="0,1,0,0">
-            <DockPanel>
-                <Border Background="{StaticResource SuccessBrush}" CornerRadius="5"
+            <Grid x:Name="ReferenceSearchStatusGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0"
+                        Background="{StaticResource SuccessBrush}" CornerRadius="5"
                         Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
-                <TextBlock x:Name="StatusText" Text="Sẵn sàng • Enter = Hình ảnh"
-                           Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
-                <TextBlock DockPanel.Dock="Right" Text="DOCUMENT-BOUND • HTTPS • SAFESEARCH"
-                           Style="{StaticResource Caption}" Margin="12,0,0,0"/>
-            </DockPanel>
+                <TextBlock x:Name="StatusText"
+                           Grid.Column="1"
+                           Text="Sẵn sàng • Enter = Hình ảnh"
+                           Foreground="{StaticResource MutedBrush}"
+                           MinWidth="0"
+                           TextWrapping="Wrap"/>
+                <TextBlock Grid.Column="2"
+                           Text="DOCUMENT-BOUND • HTTPS • SAFESEARCH"
+                           Style="{StaticResource Caption}"
+                           Margin="12,0,0,0"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center"
+                           TextWrapping="NoWrap"/>
+            </Grid>
         </Border>
     </Grid>
 </Window>
