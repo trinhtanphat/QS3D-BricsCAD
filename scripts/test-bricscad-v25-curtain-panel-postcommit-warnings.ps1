@@ -164,6 +164,7 @@ try {
     $script = @(
         "FILEDIA", "0",
         "CMDECHO", "1",
+        "PICKFIRST", "1",
         "TILEMODE", "1",
         "INSUNITS", "4",
         "UCS", "W",
