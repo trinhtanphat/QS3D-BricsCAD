@@ -139,11 +139,16 @@ foreach ($drawing in @($drawingA, $drawingB)) {
 $privateFiles = New-Object System.Collections.Generic.List[string]
 foreach ($drawing in @($drawingA, $drawingB)) {
     $sidecar = [IO.Path]::ChangeExtension($drawing, ".qsdb")
-    foreach ($path in @($sidecar, $sidecar + ".bak", $sidecar + ".lock", [IO.Path]::ChangeExtension($drawing, ".dwl"), [IO.Path]::ChangeExtension($drawing, ".dwl2"), [IO.Path]::ChangeExtension($drawing, ".bak"))) {
+    foreach ($path in @($sidecar, ($sidecar + ".bak"), ($sidecar + ".lock"), [IO.Path]::ChangeExtension($drawing, ".dwl"), [IO.Path]::ChangeExtension($drawing, ".dwl2"), [IO.Path]::ChangeExtension($drawing, ".bak"))) {
+        if (-not [IO.Path]::IsPathRooted($path) -or
+            -not [IO.Path]::GetFullPath($path).StartsWith($fixtureRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Curtain P12 private-state path escaped the fixture-copy root."
+        }
         if (Test-Path -LiteralPath $path) { throw "Curtain P12 disposable copy has pre-existing private state." }
         $privateFiles.Add($path)
     }
 }
+if ($privateFiles.Count -ne 12) { throw "Curtain P12 private-state cleanup set is incomplete." }
 
 $resultPath = Join-Path $ArtifactDir "curtain-panel-multidwg-result.txt"
 $scriptPath = Join-Path $ArtifactDir "curtain-panel-multidwg.private.scr"

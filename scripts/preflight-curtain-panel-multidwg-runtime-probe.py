@@ -110,6 +110,10 @@ if RUNNER.is_file():
         'Stop-Qs3dLaunchedProcess -Process $process',
         'Remove-ExactFile -Path $scriptPath',
         'Remove-ExactFile -Path $privatePath',
+        '($sidecar + ".bak")',
+        '($sidecar + ".lock")',
+        '$privateFiles.Count -ne 12',
+        'Curtain P12 private-state path escaped the fixture-copy root.',
         'Copy-Item -LiteralPath $FixtureDwg -Destination $drawing -Force',
         'process_cleanup_verified',
         'script_cleanup_verified',
@@ -132,6 +136,8 @@ if RUNNER.is_file():
         errors.append("Curtain P12 runner must preserve the guarded two-DWG/window lifecycle sequence")
     if text.count('Start-Process -FilePath $bricscadExe') != 1:
         errors.append("Curtain P12 runner must launch exactly one isolated BricsCAD process")
+    if '$sidecar + ".bak", $sidecar + ".lock"' in text:
+        errors.append("Curtain P12 runner must parenthesize sidecar suffix paths so PowerShell does not split them into relative tokens")
     for forbidden in ("Get-Process -Name '*'", "Process.GetProcesses", "SendKeys", "SetForegroundWindow", "git reset", "git clean"):
         if forbidden in text:
             errors.append("Curtain P12 runner contains a broad/destructive operation: " + forbidden)
