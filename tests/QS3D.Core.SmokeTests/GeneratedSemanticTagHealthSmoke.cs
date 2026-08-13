@@ -79,6 +79,7 @@ namespace QS3D.Core.SmokeTests
             element.Properties[GeneratedSemanticTagHealthService.PositionXKey] = "1000";
             element.Properties[GeneratedSemanticTagHealthService.PositionYKey] = "2000";
             element.Properties[GeneratedSemanticTagHealthService.PositionZKey] = "0";
+            element.Properties[GeneratedSemanticTagHealthService.RotationKey] = "0";
             project.Elements.Add(element);
             return project;
         }
