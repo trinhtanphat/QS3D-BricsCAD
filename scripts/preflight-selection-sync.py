@@ -38,9 +38,12 @@ checks = {
         "SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);",
     ],
     "lifecycle": [
-        "SelectionSyncCoordinator.Attach(e.Document)",
+        "ScheduleReconcile(e.Document, false)",
+        "ScheduleReconcile(e.Document, true)",
+        "SelectionSyncCoordinator.Attach(document)",
         "SelectionSyncCoordinator.Detach(document)",
         "SelectionSyncCoordinator.Stop()",
+        "DispatcherPriority.ApplicationIdle",
     ],
 }
 for key, needles in checks.items():
@@ -67,10 +70,18 @@ if files["sync"].is_file():
         if "EntitySnapshotReader.ReadImpliedSelection" in event_body or "\n            Refresh(document);" in event_body:
             errors.append("ImpliedSelectionChanged must schedule/coalesce work instead of synchronously reading snapshots.")
 
+if files["lifecycle"].is_file():
+    text = files["lifecycle"].read_text(encoding="utf-8")
+    reconcile = text.find("private static void ReconcileDocument")
+    attach = text.find("SelectionSyncCoordinator.Attach(document);", reconcile)
+    ensure = text.find("EnsureProject(document, refreshUi);", attach)
+    if min(reconcile, attach, ensure) < 0 or not reconcile < attach < ensure:
+        errors.append("selection attachment must remain inside deferred document reconciliation before project/UI refresh")
+
 print("QS3D selection-sync preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: implied-selection reads are side-effect free, inspector refreshes are visible-only and debounced, re-entrancy is guarded, and pending document timers are released on detach.")
+print("PASS: implied-selection reads are side-effect free, inspector refreshes are visible-only and debounced, and document selection attachment is deferred to the ApplicationIdle lifecycle reconcile boundary.")
