@@ -73,6 +73,11 @@ namespace QS3D.BricsCAD.V25.Services
             {
                 using (document.LockDocument())
                 using (var transaction = document.Database.TransactionManager.StartTransaction())
+                using (var undoTransition = SourceReconcileUndoCoordinator.BeginTransition(
+                    document,
+                    transaction,
+                    project,
+                    rollback))
                 {
                     var invalidation = GeneratedDependentGeometryInvalidator.Prepare(document, transaction, project, invalidationTargets);
                     if (!CadUnitService.TryGetPolicy(document, out var units, out var unitResolution))
@@ -97,7 +102,13 @@ namespace QS3D.BricsCAD.V25.Services
                     foreach (var grid in annotatedGridTargets)
                         GridAnnotationBuilder.RebuildInTransaction(document, transaction, project, grid);
 
+                    // Allocate and validate the semantic Redo state before native
+                    // commit. If CAD commit fails, PendingTransition.Dispose and
+                    // the existing rollback path return both histories to their
+                    // exact pre-command state.
+                    undoTransition.StageAfter(project, ProjectStateSnapshot.Capture(project));
                     transaction.Commit();
+                    undoTransition.ConfirmCommitted();
                     cadCommitted = true;
                 }
             }
