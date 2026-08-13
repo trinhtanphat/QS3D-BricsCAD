@@ -8,16 +8,17 @@
 
 ## Reserved scope
 
-Make the existing QS3D V25 dark theme host-independent for the Workspace scope controls and Model tree selection state only. Pin Zone/Floor ComboBoxes to the repository-owned dark ComboBox style and replace host-dependent TreeViewItem selection chrome with a repository-owned template while preserving hierarchy, expansion, selection semantics, commands and product behavior.
+Make the existing QS3D V25 dark theme host-independent for the Workspace scope controls and Model tree selection state only. Pin Zone/Floor ComboBoxes to the repository-owned dark implicit ComboBox style as explicit local styles, and shadow WPF host/system active + inactive TreeView selection brushes at the Model tree resource boundary so the default container template cannot fall back to a bright host highlight. Preserve hierarchy, expansion, selection semantics, commands and product behavior.
 
 ## Expected surfaces
 
-- `src/QS3D.BricsCAD.V25/UI/Theme.xaml`
-- `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml`
-- focused offline source regression under `scripts/` (new file preferred to avoid unrelated smoke churn)
+- `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.DarkHostTheme.cs` (new presentation-only host compatibility partial)
+- `scripts/preflight-workspace-dark-selection.py` (new focused source regression)
+- read-only contract references: `src/QS3D.BricsCAD.V25/UI/Theme.xaml`, `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml`
 
 ## Excluded scope
 
+- edits to shared `Theme.xaml` or `WorkspacePanel.xaml`
 - Workspace responsive layout, ScrollViewer/compact-shell behavior and sizing
 - `WorkspacePanel.CompactShell.cs`, Quantity Insight, Right Panel, V26 adapter behavior
 - model/domain selection semantics, Zone/Floor business logic or project filtering
@@ -25,13 +26,14 @@ Make the existing QS3D V25 dark theme host-independent for the Workspace scope c
 
 ## Validation plan
 
-- Add a deterministic source regression that verifies explicit Workspace style attachment and a custom TreeViewItem template/selection chrome contract.
-- Parse the touched XAML as XML and run the focused regression locally where available.
+- Add a deterministic source regression that verifies the bridge explicitly applies the repository-owned ComboBox style to Zone/Floor and shadows both active/inactive WPF system selection brushes on `ModelTree`.
+- Verify the existing Theme still owns host-independent ComboBox chrome and dark `BgSelectedBrush` selection contract.
+- Run the focused Python preflight locally from an isolated materialization of the exact touched/current source where connector access permits; otherwise record the environment limitation and re-fetch exact source from `main` for structural verification.
 - Do not report native BricsCAD V25 visual PASS unless it is actually exercised in a licensed BricsCAD runtime.
 
 ## Coordination
 
-The earlier `chatgpt-sol-ui-polish-20260813` palette claim is now closed on `main`; this lane intentionally excludes its compact-shell/ScrollViewer work and addresses the separate bright host-selection/control-chrome defect visible in the new screenshots.
+The earlier `chatgpt-sol-ui-polish-20260813` palette claim is now closed on `main`. This lane intentionally avoids its shared XAML/compact-shell surfaces and addresses the separate bright host-selection/control-chrome defect visible in the new screenshots through a bounded host-compatibility bridge.
 
 ## Completion condition
 
