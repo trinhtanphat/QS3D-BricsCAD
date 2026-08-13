@@ -46,3 +46,8 @@ Current ACTIVE/BLOCKED claims and open PRs were audited at registration. The act
 ## Completion condition
 
 The seam/probe/runner/gate is merged, a clean exact-main licensed run proves both post-commit cases and cleanup, docs mark only P09 `LOCAL_PASS`, and this claim is `COMPLETED`. P10-P12 and overall LOCAL-002 remain `PENDING_LOCAL`.
+
+## Source-preparation status
+
+- The internal two-phase one-shot seam, post-commit orchestrator hooks, synthetic state-machine probe, guarded runner, static/privacy gate and P09 runbook handoff are implemented locally. No builder, planner, Health/Release/Locate/Level/QSDB/UI implementation changed.
+- Runtime status remains `PENDING_LOCAL` until the source-preparation batch is merged and a fresh clean exact-main SHA/DLL proves both committed replacements plus cleanup.
