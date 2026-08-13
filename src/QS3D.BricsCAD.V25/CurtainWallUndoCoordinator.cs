@@ -224,9 +224,6 @@ namespace QS3D.BricsCAD.V25
         internal sealed class PendingTransition : IDisposable
         {
             private readonly Document _document;
-            private readonly Database _database;
-            private readonly Transaction _transaction;
-            private readonly BlockTableRecord _modelSpace;
             private readonly DocumentHistory _history;
             private readonly string _previousRevision;
             private readonly string _nextRevision;
@@ -238,9 +235,6 @@ namespace QS3D.BricsCAD.V25
 
             internal PendingTransition(
                 Document document,
-                Database database,
-                Transaction transaction,
-                BlockTableRecord modelSpace,
                 DocumentHistory history,
                 string previousRevision,
                 string nextRevision,
@@ -248,9 +242,6 @@ namespace QS3D.BricsCAD.V25
                 bool registeredHistory)
             {
                 _document = document;
-                _database = database;
-                _transaction = transaction;
-                _modelSpace = modelSpace;
                 _history = history;
                 _previousRevision = previousRevision;
                 _nextRevision = nextRevision;
@@ -258,10 +249,13 @@ namespace QS3D.BricsCAD.V25
                 _registeredHistory = registeredHistory;
             }
 
-            public void StageAfter(ProjectState project, OwnerStateSnapshot after)
+            public void StageAfter(ProjectState project, Transaction transaction, OwnerStateSnapshot after)
             {
                 if (project == null) throw new ArgumentNullException(nameof(project));
+                if (transaction == null) throw new ArgumentNullException(nameof(transaction));
                 if (after == null) throw new ArgumentNullException(nameof(after));
+                ProjectContextCoordinator.RequireBackingStoreUnchanged(_document, project, "Curtain Undo staging");
+
                 lock (Gate)
                 {
                     ThrowIfDisposed();
@@ -277,14 +271,17 @@ namespace QS3D.BricsCAD.V25
                     _staged = new TransitionEntry(_previousRevision, _nextRevision, _before, after);
                 }
 
+                var modelSpace = OpenModelSpace(_document.Database, transaction, OpenMode.ForWrite);
+                var currentNativeRevision = ReadRevision(modelSpace);
+                if (!string.Equals(currentNativeRevision, _previousRevision, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Curtain native revision changed before the outer command transaction could stage Undo metadata.");
+
+                EnsureRegApp(_document.Database, transaction);
                 using (var marker = new ResultBuffer(
                     new TypedValue((int)DxfCode.ExtendedDataRegAppName, RegAppName),
                     new TypedValue((int)DxfCode.ExtendedDataAsciiString, MarkerVersion),
                     new TypedValue((int)DxfCode.ExtendedDataAsciiString, _nextRevision)))
-                {
-                    EnsureRegApp(_database, _transaction);
-                    _modelSpace.XData = marker;
-                }
+                    modelSpace.XData = marker;
             }
 
             public void ConfirmCommitted()
@@ -369,12 +366,10 @@ namespace QS3D.BricsCAD.V25
 
         public static PendingTransition BeginTransition(
             Document document,
-            Transaction transaction,
             ProjectState project,
             OwnerStateSnapshot before)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
-            if (transaction == null) throw new ArgumentNullException(nameof(transaction));
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (before == null) throw new ArgumentNullException(nameof(before));
             if (before.Count == 0) throw new InvalidOperationException("Curtain Undo transition requires at least one semantic owner.");
@@ -384,8 +379,7 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Curtain Undo before-state changed before registration.");
             Attach(document);
 
-            var modelSpace = OpenModelSpace(document.Database, transaction, OpenMode.ForWrite);
-            var previousRevision = ReadRevision(modelSpace);
+            var previousRevision = ReadRevision(document);
             DocumentHistory history;
             var registeredHistory = false;
             lock (Gate)
@@ -410,9 +404,6 @@ namespace QS3D.BricsCAD.V25
             var nextRevision = RevisionPrefix + Guid.NewGuid().ToString("N");
             return new PendingTransition(
                 document,
-                document.Database,
-                transaction,
-                modelSpace,
                 history,
                 previousRevision,
                 nextRevision,
