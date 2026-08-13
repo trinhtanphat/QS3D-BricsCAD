@@ -1,6 +1,6 @@
 # Work claim — QSC-01A declarative QS rule profile foundation
 
-- Status: `ACTIVE`
+- Status: `RELEASED`
 - Agent: `chatgpt-web-gpt56sol-qsc01a-rule-profile-20260813-1944`
 - Registered: `2026-08-13T19:44:00+07:00`
 - Baseline main SHA: `c24832e32a053f2fe8bcf260e7ffa8ce55f6dd9c`
