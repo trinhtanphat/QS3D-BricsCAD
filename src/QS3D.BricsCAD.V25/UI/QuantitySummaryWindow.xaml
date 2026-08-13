@@ -196,13 +196,21 @@
         </Grid>
 
         <Border Grid.Row="3" Background="{StaticResource Bg1Brush}" BorderThickness="0,1,0,0" Padding="11,7">
-            <DockPanel>
-                <Border Background="{StaticResource SuccessBrush}" CornerRadius="5"
+            <Grid x:Name="QuantitySummaryStatusGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="{StaticResource SuccessBrush}" CornerRadius="5"
                         Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
-                <TextBlock x:Name="TotalsText" FontWeight="SemiBold"/>
-                <TextBlock DockPanel.Dock="Right" Text="BÁM 3D: CLICK → LOCATE • TẮT BÁM 3D: DOUBLE-CLICK / ĐỊNH VỊ • EXPORT XLSX"
+                <TextBlock Grid.Column="1" x:Name="TotalsText" MinWidth="0" FontWeight="SemiBold"
+                           TextTrimming="CharacterEllipsis"/>
+                <TextBlock Grid.Column="2"
+                           Text="BÁM 3D: CLICK → LOCATE • TẮT BÁM 3D: DOUBLE-CLICK / ĐỊNH VỊ • EXPORT XLSX"
+                           HorizontalAlignment="Right" TextWrapping="NoWrap"
                            Style="{StaticResource Caption}" Margin="12,0,0,0"/>
-            </DockPanel>
+            </Grid>
         </Border>
     </Grid>
 </Window>
