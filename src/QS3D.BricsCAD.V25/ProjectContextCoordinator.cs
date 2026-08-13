@@ -138,6 +138,7 @@ namespace QS3D.BricsCAD.V25
             SyncDrawingIdentity(project, document);
             var after = ProjectSidecarRevisionStamp.Capture(path);
             EnsureStableCapture(before, after, "QS3D project backing store changed while it was being reloaded. Retry the operation.");
+            SourceReconcileUndoCoordinator.Forget(document);
             Projects[document] = project;
             PersistenceStamps[document] = persistenceStamp;
             SidecarRevisionStamps[document] = after;
@@ -186,6 +187,19 @@ namespace QS3D.BricsCAD.V25
             return recoveryPath;
         }
 
+        public static bool TryGetCached(Document document, out ProjectState project)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (Projects.TryGetValue(document, out project))
+            {
+                EnsureUsable(project);
+                return true;
+            }
+
+            project = null!;
+            return false;
+        }
+
         public static void RequireBackingStoreUnchanged(Document document, ProjectState project, string operation)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
@@ -199,6 +213,7 @@ namespace QS3D.BricsCAD.V25
         public static void Forget(Document document)
         {
             if (document == null) return;
+            SourceReconcileUndoCoordinator.Forget(document);
             Projects.Remove(document);
             PersistenceStamps.Remove(document);
             SidecarRevisionStamps.Remove(document);
@@ -211,6 +226,7 @@ namespace QS3D.BricsCAD.V25
             if (string.IsNullOrWhiteSpace(drawingName)) return;
             foreach (var document in Projects.Keys.Where(x => SameDrawingName(x.Name, drawingName)).ToArray())
             {
+                SourceReconcileUndoCoordinator.Forget(document);
                 Projects.Remove(document);
                 PersistenceStamps.Remove(document);
                 SidecarRevisionStamps.Remove(document);

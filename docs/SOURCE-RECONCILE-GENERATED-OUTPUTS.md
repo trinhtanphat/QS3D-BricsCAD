@@ -4,7 +4,17 @@
 
 ## Transaction boundary
 
-Source reconcile expands the semantic dependency closure, captures a `ProjectStateSnapshot`, starts one CAD transaction, prepares generated-output invalidation, refreshes source-derived semantic state, regenerates the affected semantic subset to a stable state, commits invalidation metadata, touches the project, and only then commits the CAD transaction. A failure before CAD commit restores the semantic snapshot.
+Source reconcile expands the semantic dependency closure, captures a `ProjectStateSnapshot`, starts one CAD transaction, prepares generated-output invalidation, refreshes source-derived semantic state, regenerates the affected semantic subset to a stable state, commits invalidation metadata, records its audit-owned project revision, and only then commits the CAD transaction. A failure before CAD commit restores the semantic snapshot.
+
+## Native Undo/Redo semantic bridge
+
+Issue `#1005` exposed that BricsCAD native Undo restored the generated CAD objects but did not know about QS3D's canonical in-memory `ProjectState`. Source Reconcile now writes a small native revision marker to Model Space in the same CAD transaction as invalidation. Each committed marker revision maps to before/after `ProjectStateSnapshot` state held only for that document and plugin session.
+
+After any native command completes, the document-bound observer compares the live marker with its current revision. When native Undo/Redo restores another known marker, the observer restores the corresponding semantic snapshot only when the same canonical cached project instance, Project ID, `ChangeVersion`, timestamp and sidecar revision still match. It never loads or creates a project from an Undo callback. Project reload/forget and document close discard the in-session history, and an unknown/replaced/drifted project fails closed instead of receiving a stale snapshot.
+
+If ordinary semantic-only work changes the project before a later Source Reconcile, that later command rebases its current marker to a fresh pre-command snapshot. Undo of the new reconcile therefore preserves those intervening semantic edits; older unreachable marker snapshots are not guessed or replayed.
+
+The after snapshot and history allocation are staged before native commit. If the CAD transaction fails, the staged history is discarded and the existing command-level semantic rollback remains authoritative. Post-commit bookkeeping is a no-allocation acknowledgement, so it cannot turn a valid CAD commit into a reported command failure.
 
 ## Spatial generated outputs
 
@@ -29,7 +39,7 @@ A live Grid annotation handle that resolves to an unexpected CAD type also fails
 
 ## Runtime boundary
 
-The ownership/invalidation source contract and static preflight are remote-safe. Exact BricsCAD V25 behavior for transaction rollback, Undo/Redo, save/reopen, multi-DWG, locked layers, unusual owner spaces and real private DWGs remains `LOCAL_ONLY` until exercised against installed BricsCAD V25 runtime references. No release claim should infer those runtime gates from static source checks alone.
+The ownership/invalidation source contract, native revision bridge and static preflight are remote-safe. Exact BricsCAD V25 behavior for transaction rollback, Undo/Redo, save/reopen, multi-DWG, locked layers, unusual owner spaces and real private DWGs remains `LOCAL_ONLY` until exercised against installed BricsCAD V25 runtime references. No release claim should infer those runtime gates from static source checks alone.
 
 ### Guarded LOCAL-004 automation
 
