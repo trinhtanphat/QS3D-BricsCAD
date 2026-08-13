@@ -23,7 +23,7 @@ else:
         "private const int ExpectedRuntimeMajor = 26;",
         "private const int ExpectedRuntimeMajor = 25;",
         "var expectedRuntime = Major(brxAssembly) == ExpectedRuntimeMajor && Major(tdAssembly) == ExpectedRuntimeMajor;",
-        "var ok = expectedRuntime && x64Runtime && packageVersionMatches;",
+        "var ok = expectedRuntime && x64Runtime && packageVersionMatches && diskVersionMatches && diskFingerprintMatches;",
     ):
         if token not in text:
             errors.append("Runtime host-major qualification contract is missing: " + token)
@@ -34,4 +34,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3DRUNTIMECHECK inspects the compile-time V25/V26 host-major/package state independently of optional semantic project presence and never creates project state.")
+print("PASS: QS3DRUNTIMECHECK inspects the compile-time V25/V26 host-major/package and loaded/on-disk binary identity state independently of optional semantic project presence and never creates project state.")
