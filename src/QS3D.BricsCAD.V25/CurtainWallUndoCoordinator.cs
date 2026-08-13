@@ -25,10 +25,79 @@ namespace QS3D.BricsCAD.V25
         private const string PanelLiveFingerprintKey = "GeneratedCurtainPanelLiveFingerprint";
 
         private static readonly object Gate = new object();
-        private static readonly Dictionary<Document, CommandEventHandler> CommandEndedHandlers =
-            new Dictionary<Document, CommandEventHandler>();
+        private static readonly Dictionary<Document, ObserverRegistration> ObserverRegistrations =
+            new Dictionary<Document, ObserverRegistration>();
         private static readonly Dictionary<Document, DocumentHistory> Histories =
             new Dictionary<Document, DocumentHistory>();
+
+        private sealed class ObserverRegistration
+        {
+            public ObserverRegistration(
+                CommandEventHandler commandWillStart,
+                CommandEventHandler commandEnded,
+                CommandEventHandler commandCancelled,
+                CommandEventHandler commandFailed)
+            {
+                CommandWillStart = commandWillStart;
+                CommandEnded = commandEnded;
+                CommandCancelled = commandCancelled;
+                CommandFailed = commandFailed;
+            }
+
+            public CommandEventHandler CommandWillStart { get; }
+            public CommandEventHandler CommandEnded { get; }
+            public CommandEventHandler CommandCancelled { get; }
+            public CommandEventHandler CommandFailed { get; }
+            public string? PendingCommand { get; set; }
+
+            public void Subscribe(Document document)
+            {
+                var willStartSubscribed = false;
+                var endedSubscribed = false;
+                var cancelledSubscribed = false;
+                try
+                {
+                    document.CommandWillStart += CommandWillStart;
+                    willStartSubscribed = true;
+                    document.CommandEnded += CommandEnded;
+                    endedSubscribed = true;
+                    document.CommandCancelled += CommandCancelled;
+                    cancelledSubscribed = true;
+                    document.CommandFailed += CommandFailed;
+                }
+                catch
+                {
+                    if (cancelledSubscribed)
+                    {
+                        try { document.CommandCancelled -= CommandCancelled; }
+                        catch { }
+                    }
+                    if (endedSubscribed)
+                    {
+                        try { document.CommandEnded -= CommandEnded; }
+                        catch { }
+                    }
+                    if (willStartSubscribed)
+                    {
+                        try { document.CommandWillStart -= CommandWillStart; }
+                        catch { }
+                    }
+                    throw;
+                }
+            }
+
+            public void Unsubscribe(Document document)
+            {
+                try { document.CommandWillStart -= CommandWillStart; }
+                catch { }
+                try { document.CommandEnded -= CommandEnded; }
+                catch { }
+                try { document.CommandCancelled -= CommandCancelled; }
+                catch { }
+                try { document.CommandFailed -= CommandFailed; }
+                catch { }
+            }
+        }
 
         internal sealed class OwnerStateSnapshot
         {
@@ -353,41 +422,54 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             lock (Gate)
             {
-                if (CommandEndedHandlers.ContainsKey(document)) return;
-                CommandEventHandler handler = (sender, args) => OnCommandEnded(document, args);
-                document.CommandEnded += handler;
-                CommandEndedHandlers.Add(document, handler);
+                if (ObserverRegistrations.ContainsKey(document)) return;
+                var registration = new ObserverRegistration(
+                    (sender, args) => OnCommandWillStart(document, args),
+                    (sender, args) => OnCommandEnded(document, args),
+                    (sender, args) => OnCommandAborted(document),
+                    (sender, args) => OnCommandAborted(document));
+                ObserverRegistrations.Add(document, registration);
+                try { registration.Subscribe(document); }
+                catch
+                {
+                    ObserverRegistrations.Remove(document);
+                    throw;
+                }
             }
         }
 
         public static void Detach(Document? document)
         {
             if (document == null) return;
-            CommandEventHandler? handler = null;
+            ObserverRegistration? registration = null;
             lock (Gate)
             {
-                if (CommandEndedHandlers.TryGetValue(document, out handler))
-                    CommandEndedHandlers.Remove(document);
+                if (ObserverRegistrations.TryGetValue(document, out registration))
+                {
+                    registration.PendingCommand = null;
+                    ObserverRegistrations.Remove(document);
+                }
                 Histories.Remove(document);
             }
-            if (handler != null)
-            {
-                try { document.CommandEnded -= handler; }
-                catch { }
-            }
+            registration?.Unsubscribe(document);
         }
 
         public static void Stop()
         {
             Document[] documents;
-            lock (Gate) documents = new List<Document>(CommandEndedHandlers.Keys).ToArray();
+            lock (Gate) documents = new List<Document>(ObserverRegistrations.Keys).ToArray();
             foreach (var document in documents) Detach(document);
         }
 
         public static void Forget(Document? document)
         {
             if (document == null) return;
-            lock (Gate) Histories.Remove(document);
+            lock (Gate)
+            {
+                Histories.Remove(document);
+                if (ObserverRegistrations.TryGetValue(document, out var registration))
+                    registration.PendingCommand = null;
+            }
         }
 
         public static PendingTransition BeginTransition(
@@ -437,9 +519,51 @@ namespace QS3D.BricsCAD.V25
                 registeredHistory);
         }
 
+        private static void OnCommandWillStart(Document document, CommandEventArgs args)
+        {
+            if (!IsActiveDocument(document)) return;
+
+            // A native terminal callback can run before its marker transaction is
+            // readable, or can be omitted by the host. The next command start is
+            // a stable boundary before that command body executes, so first close
+            // any known marker transition left by the previous command.
+            TrySynchronizeAtStableBoundary(document, refreshAfterRestore: false);
+
+            var normalized = NormalizeNativeUndoRedo(args?.GlobalCommandName);
+            lock (Gate)
+            {
+                if (!ObserverRegistrations.TryGetValue(document, out var registration)) return;
+                if (registration.PendingCommand != null)
+                {
+                    // A second start before a matching terminal event is
+                    // ambiguous. Clear the stale token rather than allowing an
+                    // internal/nested terminal event to drive semantic restore.
+                    registration.PendingCommand = null;
+                    return;
+                }
+                if (normalized == null) return;
+                if (!Histories.TryGetValue(document, out var history) || history.Desynchronized) return;
+                registration.PendingCommand = normalized;
+            }
+        }
+
         private static void OnCommandEnded(Document document, CommandEventArgs args)
         {
-            if (!IsNativeUndoRedo(args?.GlobalCommandName)) return;
+            if (!TryConsumeMatchingCommand(document, args?.GlobalCommandName)) return;
+            TrySynchronizeAtStableBoundary(document, refreshAfterRestore: true);
+        }
+
+        private static void TrySynchronizeAtStableBoundary(Document document, bool refreshAfterRestore)
+        {
+            try { SynchronizeKnownRevision(document, refreshAfterRestore); }
+            catch (Exception error)
+            {
+                Report(document, "QS3D Curtain Undo sync warning: " + error.Message);
+            }
+        }
+
+        private static void SynchronizeKnownRevision(Document document, bool refreshAfterRestore)
+        {
 
             DocumentHistory history;
             lock (Gate)
@@ -447,85 +571,108 @@ namespace QS3D.BricsCAD.V25
                 if (!Histories.TryGetValue(document, out history) || history.Desynchronized) return;
             }
 
+            var nativeRevision = ReadRevision(document);
+            TransitionEntry transition;
+            bool undo;
+            lock (Gate)
+            {
+                if (!Histories.TryGetValue(document, out var current) || !ReferenceEquals(current, history)) return;
+                if (string.Equals(nativeRevision, history.CurrentRevision, StringComparison.Ordinal)) return;
+
+                if (history.Transitions.TryGetValue(history.CurrentRevision, out transition) &&
+                    string.Equals(transition.PreviousRevision, nativeRevision, StringComparison.Ordinal))
+                {
+                    undo = true;
+                }
+                else if (history.Transitions.TryGetValue(nativeRevision, out transition) &&
+                         string.Equals(transition.PreviousRevision, history.CurrentRevision, StringComparison.Ordinal))
+                {
+                    undo = false;
+                }
+                else
+                {
+                    history.Desynchronized = true;
+                    throw new InvalidOperationException(
+                        "Curtain native Undo/Redo reached a revision not available in this plugin session. Reload the project before further Curtain mutation.");
+                }
+            }
+
+            if (!ProjectContextCoordinator.TryGetCached(document, out var project) ||
+                !ReferenceEquals(project, history.Project) ||
+                !string.Equals(project.ProjectId, history.ProjectId, StringComparison.Ordinal))
+                throw MarkDesynchronized(history,
+                    "Curtain native Undo/Redo cannot target a missing or replaced canonical project. Reload before continuing.");
+
+            try { ProjectContextCoordinator.RequireBackingStoreUnchanged(document, project, "Curtain native Undo/Redo"); }
+            catch (Exception backingStoreError)
+            {
+                throw MarkDesynchronized(
+                    history,
+                    "Curtain native Undo/Redo was refused because the project backing store changed. Reload before continuing.",
+                    backingStoreError);
+            }
+
+            var currentExpected = undo ? transition.After : transition.Before;
+            if (!currentExpected.Matches(project))
+                throw MarkDesynchronized(history,
+                    "Curtain native Undo/Redo was refused because generated owner or project persistence state changed outside the tracked Curtain history. Reload and reconcile before further mutation.");
+
+            var target = undo ? transition.Before : transition.After;
+            var restoreRollback = OwnerStateSnapshot.Capture(project, target.OwnerIds);
             try
             {
-                var nativeRevision = ReadRevision(document);
-                TransitionEntry transition;
-                bool undo;
-                lock (Gate)
-                {
-                    if (!Histories.TryGetValue(document, out var current) || !ReferenceEquals(current, history)) return;
-                    if (string.Equals(nativeRevision, history.CurrentRevision, StringComparison.Ordinal)) return;
-
-                    if (history.Transitions.TryGetValue(history.CurrentRevision, out transition) &&
-                        string.Equals(transition.PreviousRevision, nativeRevision, StringComparison.Ordinal))
-                    {
-                        undo = true;
-                    }
-                    else if (history.Transitions.TryGetValue(nativeRevision, out transition) &&
-                             string.Equals(transition.PreviousRevision, history.CurrentRevision, StringComparison.Ordinal))
-                    {
-                        undo = false;
-                    }
-                    else
-                    {
-                        history.Desynchronized = true;
-                        throw new InvalidOperationException(
-                            "Curtain native Undo/Redo reached a revision not available in this plugin session. Reload the project before further Curtain mutation.");
-                    }
-                }
-
-                if (!ProjectContextCoordinator.TryGetCached(document, out var project) ||
-                    !ReferenceEquals(project, history.Project) ||
-                    !string.Equals(project.ProjectId, history.ProjectId, StringComparison.Ordinal))
-                    throw MarkDesynchronized(history,
-                        "Curtain native Undo/Redo cannot target a missing or replaced canonical project. Reload before continuing.");
-
-                try { ProjectContextCoordinator.RequireBackingStoreUnchanged(document, project, "Curtain native Undo/Redo"); }
-                catch (Exception backingStoreError)
-                {
-                    throw MarkDesynchronized(
-                        history,
-                        "Curtain native Undo/Redo was refused because the project backing store changed. Reload before continuing.",
-                        backingStoreError);
-                }
-
-                var currentExpected = undo ? transition.After : transition.Before;
-                if (!currentExpected.Matches(project))
-                    throw MarkDesynchronized(history,
-                        "Curtain native Undo/Redo was refused because generated owner or project persistence state changed outside the tracked Curtain history. Reload and reconcile before further mutation.");
-
-                var target = undo ? transition.Before : transition.After;
-                var restoreRollback = OwnerStateSnapshot.Capture(project, target.OwnerIds);
-                try
-                {
-                    target.Restore(project);
-                    if (!target.Matches(project))
-                        throw new InvalidOperationException("Restored Curtain semantic owner state does not match its native revision.");
-                }
-                catch (Exception restoreError)
-                {
-                    try { restoreRollback.Restore(project); }
-                    catch (Exception rollbackError)
-                    {
-                        throw MarkDesynchronized(history,
-                            "Curtain semantic Undo/Redo restore and recovery both failed.",
-                            new AggregateException(restoreError, rollbackError));
-                    }
-                    throw MarkDesynchronized(history, "Curtain semantic Undo/Redo restore failed.", restoreError);
-                }
-
-                lock (Gate)
-                {
-                    if (Histories.TryGetValue(document, out var current) && ReferenceEquals(current, history))
-                        history.CurrentRevision = nativeRevision;
-                }
-                RefreshAfterRestore(document);
+                target.Restore(project);
+                if (!target.Matches(project))
+                    throw new InvalidOperationException("Restored Curtain semantic owner state does not match its native revision.");
             }
-            catch (Exception error)
+            catch (Exception restoreError)
             {
-                Report(document, "QS3D Curtain Undo sync warning: " + error.Message);
+                try { restoreRollback.Restore(project); }
+                catch (Exception rollbackError)
+                {
+                    throw MarkDesynchronized(history,
+                        "Curtain semantic Undo/Redo restore and recovery both failed.",
+                        new AggregateException(restoreError, rollbackError));
+                }
+                throw MarkDesynchronized(history, "Curtain semantic Undo/Redo restore failed.", restoreError);
             }
+
+            lock (Gate)
+            {
+                if (Histories.TryGetValue(document, out var current) && ReferenceEquals(current, history))
+                    history.CurrentRevision = nativeRevision;
+            }
+            if (refreshAfterRestore) RefreshAfterRestore(document);
+        }
+
+        private static void OnCommandAborted(Document document)
+        {
+            lock (Gate)
+            {
+                if (ObserverRegistrations.TryGetValue(document, out var registration))
+                    registration.PendingCommand = null;
+            }
+        }
+
+        private static bool TryConsumeMatchingCommand(Document document, string? globalCommandName)
+        {
+            var normalized = NormalizeNativeUndoRedo(globalCommandName);
+            lock (Gate)
+            {
+                if (!ObserverRegistrations.TryGetValue(document, out var registration)) return false;
+                var pendingCommand = registration.PendingCommand;
+                registration.PendingCommand = null;
+                return normalized != null &&
+                    pendingCommand != null &&
+                    string.Equals(normalized, pendingCommand, StringComparison.Ordinal) &&
+                    IsActiveDocument(document);
+            }
+        }
+
+        private static bool IsActiveDocument(Document document)
+        {
+            try { return ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document); }
+            catch { return false; }
         }
 
         private static bool IsTrackedProperty(string? key)
@@ -546,15 +693,16 @@ namespace QS3D.BricsCAD.V25
             !string.Equals(key, FrameLiveFingerprintKey, StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(key, PanelLiveFingerprintKey, StringComparison.OrdinalIgnoreCase);
 
-        private static bool IsNativeUndoRedo(string? globalCommandName)
+        private static string? NormalizeNativeUndoRedo(string? globalCommandName)
         {
             var normalized = (globalCommandName ?? string.Empty).Trim();
-            if (normalized.Length == 0) return false;
+            if (normalized.Length == 0) return null;
             while (normalized.Length > 0 && (normalized[0] == '_' || normalized[0] == '.'))
                 normalized = normalized.Substring(1);
-            return string.Equals(normalized, "UNDO", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(normalized, "REDO", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(normalized, "MREDO", StringComparison.OrdinalIgnoreCase);
+            if (string.Equals(normalized, "UNDO", StringComparison.OrdinalIgnoreCase)) return "UNDO";
+            if (string.Equals(normalized, "REDO", StringComparison.OrdinalIgnoreCase)) return "REDO";
+            if (string.Equals(normalized, "MREDO", StringComparison.OrdinalIgnoreCase)) return "MREDO";
+            return null;
         }
 
         private static InvalidOperationException MarkDesynchronized(
