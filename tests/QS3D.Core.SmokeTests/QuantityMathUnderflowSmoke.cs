@@ -12,11 +12,14 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             Equal(0d, Invoke("Multiply", 0d, double.Epsilon, "zero multiplication"));
+            CanonicalPositiveZero(Invoke("Multiply", -0d, 2d, "negative-zero left multiplication"));
+            CanonicalPositiveZero(Invoke("Multiply", 2d, -0d, "negative-zero right multiplication"));
             Equal(double.Epsilon, Invoke("Multiply", double.Epsilon, 1d, "subnormal multiplication"));
             var multiplyUnderflow = Capture<InvalidOperationException>(() => Invoke("Multiply", 1e-200d, 1e-200d, "multiply regression"));
             Equal("Quantity multiplication underflow: multiply regression", multiplyUnderflow.Message);
 
             Equal(0d, Invoke("Divide", 0d, 2d, "zero division"));
+            CanonicalPositiveZero(Invoke("Divide", -0d, 2d, "negative-zero division"));
             Equal(double.Epsilon, Invoke("Divide", double.Epsilon, 1d, "subnormal division"));
             var divideUnderflow = Capture<InvalidOperationException>(() => Invoke("Divide", double.Epsilon, 2d, "divide regression"));
             Equal("Quantity division underflow: divide regression", divideUnderflow.Message);
@@ -51,6 +54,13 @@ namespace QS3D.Core.SmokeTests
             }
 
             throw new Exception("Expected exception " + typeof(T).Name + ".");
+        }
+
+        private static void CanonicalPositiveZero(double actual)
+        {
+            if (actual != 0d) throw new Exception("Expected zero but got " + actual + ".");
+            if (BitConverter.DoubleToInt64Bits(actual) != BitConverter.DoubleToInt64Bits(0d))
+                throw new Exception("Expected canonical positive zero.");
         }
 
         private static void Equal(double expected, double actual)
