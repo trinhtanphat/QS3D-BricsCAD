@@ -160,7 +160,7 @@
                                           SelectionChanged="MissingCategoryRuleSelectionChanged"
                                           IsEnabled="False" />
                                 <Button x:Name="CreateCategoryRuleButton" Grid.Column="2"
-                                        Content="+ Tạo quy tắc loại"
+                                        Content="＋  Tạo quy tắc loại"
                                         Click="CreateCategoryRule_Click"
                                         Margin="8,0,0,0" VerticalAlignment="Center"
                                         IsEnabled="False" />
@@ -250,7 +250,7 @@
                                                    Foreground="{StaticResource TextBrush}" TextWrapping="Wrap" />
                                         <TextBlock x:Name="SelectedRuleStateText" Margin="0,4,0,0"
                                                    Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" />
-                                        <Button x:Name="CreateSelectedRuleButton" Content="+ Tạo luật A → B"
+                                        <Button x:Name="CreateSelectedRuleButton" Content="＋  Tạo luật A → B"
                                                 Click="CreateSelectedRule_Click" HorizontalAlignment="Left"
                                                 Margin="0,8,0,0" IsEnabled="False" Visibility="Collapsed" />
                                     </StackPanel>
@@ -354,7 +354,7 @@
                             </StackPanel>
                             <Separator Margin="0,1,0,10" />
                             <StackPanel Margin="0,0,0,10">
-                                <TextBlock Text="Pick Room — biên phòng trong View 3D" Style="{StaticResource SectionHeading}" />
+                                <TextBlock Text="Pick Room (pick biên phòng trong View 3D)" Style="{StaticResource SectionHeading}" />
                                 <Grid>
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="300" /><ColumnDefinition Width="145" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
@@ -368,7 +368,7 @@
                             </StackPanel>
                             <Separator Margin="0,1,0,10" />
                             <StackPanel>
-                                <TextBlock Text="Nhãn kích thước khi diễn giải khối lượng" Style="{StaticResource SectionHeading}" />
+                                <TextBlock Text="Nhãn kích thước (Dim) khi Diễn giải khối lượng" Style="{StaticResource SectionHeading}" />
                                 <Grid>
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="300" /><ColumnDefinition Width="145" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>

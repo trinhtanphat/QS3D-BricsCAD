@@ -52,7 +52,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             var headerBorder = root.Children
                 .OfType<Border>()
-                .FirstOrDefault(border => Grid.GetRow(border) == 0 && border.Child is DockPanel);
+                .FirstOrDefault(border => System.Windows.Controls.Grid.GetRow(border) == 0 && border.Child is DockPanel);
             if (!(headerBorder?.Child is DockPanel header) || header.Children.Count < 2)
                 return;
 
@@ -107,7 +107,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             var footerBorder = root.Children
                 .OfType<Border>()
-                .FirstOrDefault(border => Grid.GetRow(border) == 2 && border.Child is DockPanel);
+                .FirstOrDefault(border => System.Windows.Controls.Grid.GetRow(border) == 2 && border.Child is DockPanel);
             if (!(footerBorder?.Child is DockPanel footer))
                 return;
 
