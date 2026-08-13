@@ -7,7 +7,7 @@ namespace QS3D.Core.Revisions
         public static double Finite(double value, string label)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new InvalidOperationException("Revision quantity is not finite: " + label);
-            return value;
+            return value == 0d ? 0d : value;
         }
 
         public static double Add(double left, double right, string label)
@@ -16,7 +16,7 @@ namespace QS3D.Core.Revisions
             Finite(right, label);
             var result = left + right;
             if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException("Revision quantity total overflow: " + label);
-            return result;
+            return result == 0d ? 0d : result;
         }
 
         public static double Subtract(double left, double right, string label)
@@ -25,7 +25,7 @@ namespace QS3D.Core.Revisions
             Finite(right, label);
             var result = left - right;
             if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException("Revision quantity delta overflow: " + label);
-            return result;
+            return result == 0d ? 0d : result;
         }
 
         public static double Percent(double delta, double baseline, string label)
@@ -38,7 +38,7 @@ namespace QS3D.Core.Revisions
             if (double.IsNaN(ratio) || double.IsInfinity(ratio)) throw new OverflowException("Revision percentage ratio overflow: " + label);
             var result = ratio * 100d;
             if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException("Revision percentage overflow: " + label);
-            return result;
+            return result == 0d ? 0d : result;
         }
     }
 }
