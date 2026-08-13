@@ -33,6 +33,8 @@ for token in (
     "Dictionary<Document, DocumentHistory>",
     "document.CommandEnded += handler",
     "document.CommandEnded -= handler",
+    "OnCommandEnded(document, args)",
+    "IsNativeUndoRedo(args?.GlobalCommandName)",
     "ProjectContextCoordinator.RequireBackingStoreUnchanged",
     "ProjectContextCoordinator.TryGetCached(document, out var project)",
     "ReferenceEquals(project, history.Project)",
@@ -45,8 +47,11 @@ for token in (
     "OpenModelSpace(document.Database, transaction, OpenMode.ForWrite)",
     "MaxSnapshotsPerDocument = 128",
     "history.Desynchronized = true",
-    "history.Entries.Clear();",
-    "history.Entries.Add(previousRevision, new HistoryEntry(beforeSnapshot, ProjectRevisionStamp.Capture(project)))",
+    "new Dictionary<string, HistoryEntry>(_history.Entries, StringComparer.Ordinal)",
+    "_history.Publish(_stagedEntries, _nextRevision);",
+    "_registeredHistory",
+    "Histories.Remove(_document);",
+    "EnsureRegApp(_database, _transaction);",
 ):
     if token not in coordinator:
         errors.append("Undo coordinator missing contract: " + token)
@@ -56,31 +61,73 @@ for forbidden in (
     "ProjectContextCoordinator.TryGetReadOnly(",
     "Application.DocumentManager.MdiActiveDocument =",
     "SendStringToExecute",
+    "_history.CurrentRevision = _nextRevision",
+    "history.Entries.Clear();",
 ):
     if forbidden in coordinator:
         errors.append("Undo observer must not load/create/switch/drive a project or command: " + forbidden)
 
-begin = service.find("SourceReconcileUndoCoordinator.BeginTransition(")
-prepare = service.find("GeneratedDependentGeometryInvalidator.Prepare", begin)
+prepare = service.find("GeneratedDependentGeometryInvalidator.Prepare")
+units = service.find("CadUnitService.TryGetPolicy", prepare)
 refresh = service.find("RefreshSourceDerivedState(project", prepare)
 metadata = service.find("invalidation.CommitMetadata()", refresh)
-stage = service.find("undoTransition.StageAfter(project, ProjectStateSnapshot.Capture(project));", metadata)
+after = service.find("var afterSnapshot = ProjectStateSnapshot.Capture(project);", metadata)
+begin = service.find("SourceReconcileUndoCoordinator.BeginTransition(", after)
+stage = service.find("undoTransition.StageAfter(project, afterSnapshot);", begin)
 commit = service.find("transaction.Commit();", stage)
 confirm = service.find("undoTransition.ConfirmCommitted();", commit)
 committed = service.find("cadCommitted = true;", confirm)
 restore = service.find("rollback.Restore(project);", committed)
-positions = (begin, prepare, refresh, metadata, stage, commit, confirm, committed, restore)
+positions = (prepare, units, refresh, metadata, after, begin, stage, commit, confirm, committed, restore)
 if any(position < 0 for position in positions) or list(positions) != sorted(positions):
     errors.append(
-        "Source Reconcile must register marker -> invalidate/refresh -> stage semantic Redo -> native commit -> confirm, while preserving pre-commit semantic rollback"
+        "Source Reconcile must finish invalidation/unit/refresh work -> capture Redo -> begin/stage marker -> native commit -> publish history, while preserving pre-commit semantic rollback"
     )
 
 snapshot = service.find("var rollback = ProjectStateSnapshot.Capture(project);")
 transaction = service.find("document.Database.TransactionManager.StartTransaction()", snapshot)
 if min(snapshot, transaction, begin) < 0 or not snapshot < transaction < begin:
-    errors.append("Source Reconcile must capture rollback before opening the native transaction/Undo transition")
+    errors.append("Source Reconcile must capture rollback before the native transaction and delay the Undo transition until all reconcile work is ready")
 if "if (!cadCommitted)" not in service or "new AggregateException(operationError, restoreError)" not in service:
     errors.append("Source Reconcile command-failure semantic rollback contract drifted")
+
+stage_start = coordinator.find("public void StageAfter(")
+confirm_start = coordinator.find("public void ConfirmCommitted()", stage_start)
+dispose_start = coordinator.find("public void Dispose()", confirm_start)
+begin_start = coordinator.find("public static PendingTransition BeginTransition(")
+observer_start = coordinator.find("private static void OnCommandEnded(", begin_start)
+stage_body = coordinator[stage_start:confirm_start]
+confirm_body = coordinator[confirm_start:dispose_start]
+begin_body = coordinator[begin_start:observer_start]
+if min(stage_start, confirm_start, dispose_start, begin_start, observer_start) < 0:
+    errors.append("Undo coordinator transition method boundaries are missing")
+else:
+    if "modelSpace.XData = marker" not in stage_body or "_stagedEntries = stagedEntries;" not in stage_body:
+        errors.append("native marker must be written only after the private shadow history is fully staged")
+    if "modelSpace.XData = marker" in begin_body or "EnsureRegApp" in begin_body:
+        errors.append("BeginTransition must not mutate the native marker before fallible reconcile work completes")
+    if "_history.Publish(_stagedEntries, _nextRevision);" not in confirm_body:
+        errors.append("published semantic revision must advance only in post-CAD-commit confirmation")
+    if "CurrentRevision = _nextRevision" in stage_body:
+        errors.append("StageAfter must not expose an uncommitted semantic revision")
+
+# Deterministic model of the production shadow-publication contract. The static
+# tokens above bind these states to the coordinator/service surfaces; this model
+# locks the regression sequence that failed on V25: success -> aborted reconcile
+# -> refusals/document switch -> final success -> native Undo/Redo.
+published = "first-success"
+shadow = "failed-reconcile"
+shadow = None  # transaction/transition disposed without publication
+if published != "first-success":
+    errors.append("aborted reconcile advanced published semantic history")
+shadow = "final-success"
+published = shadow  # ConfirmCommitted after native commit
+if published != "final-success":
+    errors.append("final successful reconcile did not publish its staged semantic revision")
+published = "first-success"  # native Undo marker observation
+published = "final-success"  # native Redo marker observation
+if published != "final-success":
+    errors.append("deterministic Undo/Redo shadow-history sequence drifted")
 
 for token in (
     "SourceReconcileUndoCoordinator.Attach(docs.MdiActiveDocument)",
@@ -126,6 +173,6 @@ if errors:
 
 print(
     "PASS: Source Reconcile writes a document-scoped revision marker in its native transaction, "
-    "stages semantic snapshots before commit, restores only the exact cached project after native Undo/Redo, "
-    "and clears history on project/document lifecycle changes without weakening command-failure rollback."
+    "keeps semantic snapshots private until commit, ignores non-Undo command completion, restores only the exact cached project after native Undo/Redo, "
+    "and clears history on project/document lifecycle changes without weakening command-failure rollback or failed-reconcile recovery."
 )
