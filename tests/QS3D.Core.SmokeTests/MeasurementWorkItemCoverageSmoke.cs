@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             CoverageStatesAreExplicitAndDetached();
+            SignedZeroIsCanonicalized();
             OrderingIsDeterministicAndCultureIndependent();
             CorruptProjectStateFailsClosed();
         }
@@ -74,6 +75,23 @@ namespace QS3D.Core.SmokeTests
             var readyElement = project.Elements.Single(x => x.Id == "A-ready");
             readyElement.Quantities["NetVolumeM3"] = 99d;
             Equal(2d, ready.QuantityValue, "Coverage findings must remain detached from later source dictionary mutation.");
+        }
+
+        private static void SignedZeroIsCanonicalized()
+        {
+            var project = new ProjectState("signed-zero", "Signed zero");
+            var element = CleanQuantityElement("signed-zero-element", ElementCategory.Slab, "NetVolumeM3", 1d);
+            var negativeZero = BitConverter.Int64BitsToDouble(long.MinValue);
+            element.Quantities["NetVolumeM3"] = negativeZero;
+            project.Elements.Add(element);
+
+            var finding = MeasurementWorkItemCoverageEvaluator.Evaluate(project, Catalog()).Single();
+            var value = finding.QuantityValue ?? throw new InvalidOperationException("Coverage finding must preserve a quantity value.");
+
+            Equal(0d, value, "Coverage negative zero must remain numerically zero.");
+            Equal(0L, BitConverter.DoubleToInt64Bits(value), "Coverage must canonicalize negative zero to positive zero bits.");
+            Equal(long.MinValue, BitConverter.DoubleToInt64Bits(element.Quantities["NetVolumeM3"]),
+                "Coverage snapshot must not mutate the source quantity dictionary while canonicalizing its public finding.");
         }
 
         private static void OrderingIsDeterministicAndCultureIndependent()
