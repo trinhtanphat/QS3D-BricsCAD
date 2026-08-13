@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using QS3D.Core.Documentation;
 using QS3D.Core.Domain;
 
@@ -145,21 +146,27 @@ namespace QS3D.Core.SmokeTests
         {
             var familyFixture = BuildFixture();
             familyFixture.Project.Families.Clear();
-            familyFixture.Project.Families.Add(new ProjectFamily(" FAM-B ", "Padded Family", ElementCategory.Beam));
+            var paddedFamily = new ProjectFamily("FAM-B", "Padded Family", ElementCategory.Beam);
+            SetRawOwnerId(paddedFamily, " FAM-B ");
+            familyFixture.Project.Families.Add(paddedFamily);
             MustFail(
                 () => SemanticTagRenderer.Render(familyFixture.Project, familyFixture.Element, "{Family}"),
                 "Whitespace-padded Family owner IDs must fail closed instead of satisfying a canonical reference.");
 
             var floorFixture = BuildFixture();
             floorFixture.Project.Floors.Clear();
-            floorFixture.Project.Floors.Add(new FloorDefinition(" F-02 ", "Padded Floor", 3.6d));
+            var paddedFloor = new FloorDefinition("F-02", "Padded Floor", 3.6d);
+            SetRawOwnerId(paddedFloor, " F-02 ");
+            floorFixture.Project.Floors.Add(paddedFloor);
             MustFail(
                 () => SemanticTagRenderer.Render(floorFixture.Project, floorFixture.Element, "{Floor}"),
                 "Whitespace-padded Floor owner IDs must fail closed instead of satisfying a canonical reference.");
 
             var zoneFixture = BuildFixture();
             zoneFixture.Project.Zones.Clear();
-            zoneFixture.Project.Zones.Add(new ZoneDefinition("\tZ-A", "Padded Zone"));
+            var paddedZone = new ZoneDefinition("Z-A", "Padded Zone");
+            SetRawOwnerId(paddedZone, "\tZ-A");
+            zoneFixture.Project.Zones.Add(paddedZone);
             MustFail(
                 () => SemanticTagRenderer.Render(zoneFixture.Project, zoneFixture.Element, "{Zone}"),
                 "Whitespace-padded Zone owner IDs must fail closed instead of satisfying a canonical reference.");
@@ -206,6 +213,13 @@ namespace QS3D.Core.SmokeTests
             try { action(); }
             catch (InvalidOperationException) { failed = true; }
             if (!failed) throw new Exception(message);
+        }
+
+        private static void SetRawOwnerId(object owner, string rawId)
+        {
+            var field = owner.GetType().GetField("<Id>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null) throw new Exception("Owner ID backing field is unavailable for the malformed-state fixture.");
+            field.SetValue(owner, rawId);
         }
 
         private static void MustFormatFail(Action action, string message)
