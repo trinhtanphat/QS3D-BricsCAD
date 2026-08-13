@@ -1,6 +1,6 @@
 # Work claim — LOCAL-003 shared native Level Z-chain
 
-- Status: `BLOCKED`
+- Status: `ACTIVE`
 - Agent: `codex-local-019ff0c5` (`/root`, local Windows + licensed BricsCAD V25 agent)
 - Registered: `2026-08-11T19:43:12+07:00`
 - Baseline main SHA: `c7dd212d36677a1d2e005becf8709768fe98d6a1`
@@ -632,3 +632,9 @@ The already-reserved local runner now captures the native Git output and exit co
 Status is now `BLOCKED` after the same two external conditions repeated across three consecutive goal turns. Synchronized `main@e2ef91fccd3019ccc6dfeaa4dc14b905bec859ad` differs from the pushed Level candidate only through later concurrent work, but its strict installed-reference V25 build stops before Level/native compilation on 15 nullable compiler errors in the independently merged remote-safe `src/QS3D.Core/Measurement/MeasurementTrace.cs`. Under the local-worker capability lock this agent must report that observation and must not claim or repair the general Core defect. No matching MTR/measurement correction branch was visible remotely at the final audit.
 
 The user-owned BricsCAD V25 process remains open from Explorer with `Drawing1`, so the isolated runner must not launch or close that session on the user's behalf. Resume this claim only after a non-local agent lands the MTR compiler correction and the user saves/closes every BricsCAD session. On resume, set the claim/inbox back to `IN_PROGRESS`, fetch current `main`, rebuild plugin/Core with zero warnings/errors, verify exact ProductVersion SHA, create a fresh disposable artifact root and rerun the full focused probe. No GitHub Actions were dispatched.
+
+## 2026-08-13 resumed after prerequisite clearance
+
+The claim resumes from synchronized `origin/main@b3495e36dace537cd8de823b5138c0899b4a68db`. Non-local commit `bf671a90` corrected the independently owned `MeasurementTrace` nullable contract, and its claim completion is present on this baseline. The user-owned BricsCAD `Drawing1` process has been saved/closed without agent termination. The concurrent Curtain P09 merge and quantity-rule claim were read before this status change and remain outside this Level scope.
+
+This status-only reactivation precedes all renewed qualification. After the reactivation commit is visible on `origin/main`, rebuild the current exact SHA against installed BricsCAD V25 with zero warnings/errors, verify plugin/Core `ProductVersion`, run the focused deterministic gates, create a fresh disposable `*.level-z-probe-copy.dwg`, and execute the guarded Level-Z runtime probe. Do not absorb any new remote-safe failure or dispatch GitHub Actions.
