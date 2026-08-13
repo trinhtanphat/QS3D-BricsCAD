@@ -6,8 +6,6 @@ import sys
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-TEMP_AUTO_WORKFLOW = "release-v25-cloud-auto.yml"
-TEMP_AUTO_MARKER = "QS3D_TEMP_AUTO_RELEASE_V25_UNTIL_SUCCESS"
 errors = []
 
 def committable_files():
@@ -95,23 +93,6 @@ if workflow_dir.is_dir():
     )
     for workflow in workflow_files:
         text = workflow.read_text(encoding="utf-8")
-        is_temp_auto = workflow.name == TEMP_AUTO_WORKFLOW and TEMP_AUTO_MARKER in text
-        if is_temp_auto:
-            for token in (
-                "on:\n  push:\n    branches:\n      - main",
-                "actions: write",
-                "contents: write",
-                "release-v25-cloud.yml/dispatches",
-                "inputs[confirm_release]=RELEASE",
-                "git rm .github/workflows/release-v25-cloud-auto.yml",
-                "git show b064215655e3da25c7855e18a85677ae5d4088f9:scripts/preflight-ci-manual-only.py",
-                "git show b064215655e3da25c7855e18a85677ae5d4088f9:scripts/preflight.py",
-            ):
-                if token not in text:
-                    errors.append(f"{workflow.name}: temporary auto dispatcher missing bounded-control token: {token}")
-            if re.search(r"(?m)^\s*pull_request\s*:", text):
-                errors.append(f"{workflow.name}: temporary auto dispatcher must remain push-only")
-            continue
         if "workflow_dispatch:" not in text: errors.append(f"{workflow.name}: must remain manual-only")
         if re.search(r"(?m)^\s*(push|pull_request)\s*:", text): errors.append(f"{workflow.name}: automatic trigger forbidden before real V25 runtime gate")
 else:
@@ -354,4 +335,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: structure, XML/XAML handlers, manual CI with a bounded temporary V25 auto-release exception, proprietary/private-file guard with explicit synthetic sample provenance, QSDB v3/rules/audit, template/recognition/revision workflow wiring, migration/persistence hardening, quantity/health/generated-solid guards, units, two-phase 3D geometry, document lifecycle, selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation/preferences, canonical B4D generated-source exclusion and installer verification are present.")
+print("PASS: structure, XML/XAML handlers, manual CI, proprietary/private-file guard with explicit synthetic sample provenance, QSDB v3/rules/audit, template/recognition/revision workflow wiring, migration/persistence hardening, quantity/health/generated-solid guards, units, two-phase 3D geometry, document lifecycle, selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation/preferences, canonical B4D generated-source exclusion and installer verification are present.")
