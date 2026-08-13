@@ -94,7 +94,7 @@ Run on one clean, final merged SHA and one DLL built from that exact SHA. Record
 | P07 | panel/fragment budget exceeded and malformed/off-host opening provenance, including failure on a later selected element | fail closed before mutation of the invalid element; the outer transaction rolls back the whole batch so every previous valid output remains intact | LOCAL_PASS at `ef8656362aed5f5eb060bd62383d102f6302b125` (bounded P07 only) |
 | P08 | injected failure at semantic regeneration and each of six host/frame/panel phases | pre-commit failure leaves native and semantic snapshots unchanged; no partial phase commit | LOCAL_PASS at `a025b9aa20a919ae585ddab2700055389e38eb1c` (bounded P08 only) |
 | P09 | injected live-fingerprint/UI failure after outer commit | committed geometry remains; truthful warning directs Health/Release review | LOCAL_PASS at `76a1e760c78f1146fa528dcf11e906fecaa532e0` (bounded P09 only) |
-| P10 | select a generated panel, Locate/Family review, Health All and Release Check | canonical GlassWall owner is resolved and panel health participates in both aggregate checks | PENDING_LOCAL |
+| P10 | select a generated panel, Locate/Family review, Health All and Release Check | canonical GlassWall owner is resolved and panel health participates in both aggregate checks | SOURCE_READY / PENDING_LOCAL — Workspace now uses the canonical generated-owner resolver; exact V25 review still required |
 | P11 | Undo, save/reopen and rebuild | native counts/ownership/fingerprints remain coherent; no foreign deletion | PENDING_LOCAL |
 | P12 | two open DWGs with modeless Curtain Hub | command and refresh remain bound to the intended active DWG/project | PENDING_LOCAL |
 
