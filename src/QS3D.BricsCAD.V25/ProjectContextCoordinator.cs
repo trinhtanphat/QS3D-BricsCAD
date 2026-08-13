@@ -394,7 +394,6 @@ namespace QS3D.BricsCAD.V25
                 ThrowDrawingIdentityMismatch(storedFingerprint, fingerprint);
 
             if (SameDrawingName(storedPath, drawing)) return;
-            project.Touch();
             project.DrawingPath = drawing;
         }
 
@@ -463,7 +462,11 @@ namespace QS3D.BricsCAD.V25
             if (elements.Any(x => x == null))
                 throw new InvalidOperationException("Project contains a null element entry.");
 
-            project.Touch();
+            var pathChanged = !string.Equals(project.DrawingPath, drawing, StringComparison.Ordinal);
+            var fingerprintChanged = !string.Equals(project.DrawingFingerprint, fingerprint, StringComparison.Ordinal);
+            var scalarChanges = (pathChanged ? 1L : 0L) + (fingerprintChanged ? 1L : 0L);
+            _ = checked(project.ChangeVersion + scalarChanges);
+
             project.DrawingPath = drawing;
             project.DrawingFingerprint = fingerprint;
             foreach (var element in elements)
