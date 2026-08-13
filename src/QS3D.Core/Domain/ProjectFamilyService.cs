@@ -75,6 +75,7 @@ namespace QS3D.Core.Domain
             var previous = previousRaw ?? string.Empty;
             if (hadPrevious && string.Equals(previous, normalizedValue, StringComparison.Ordinal)) return new FamilyPropertyUpdateResult();
             var members = ResolveFamilyMembers(project, family.Id);
+            ValidateMemberPropertyKeysForMutation(members, "setting a property");
 
             project.Touch();
             family.Properties[normalizedKey] = normalizedValue;
@@ -102,6 +103,7 @@ namespace QS3D.Core.Domain
             if (!family.Properties.TryGetValue(normalizedKey, out var previousRaw)) return new FamilyPropertyUpdateResult();
             var previous = previousRaw ?? string.Empty;
             var members = ResolveFamilyMembers(project, family.Id);
+            ValidateMemberPropertyKeysForMutation(members, "removing a property");
 
             project.Touch();
             family.Properties.Remove(normalizedKey);
@@ -227,6 +229,24 @@ namespace QS3D.Core.Domain
                     throw new InvalidOperationException("Target Family contains a non-canonical property key: '" + pair.Key + "'. Repair the Family before " + repairOperation + ".");
                 if (!canonicalKeys.Add(normalizedKey))
                     throw new InvalidOperationException("Target Family contains duplicate canonical property key: " + normalizedKey);
+            }
+        }
+
+        private static void ValidateMemberPropertyKeysForMutation(IReadOnlyList<ProjectElement> members, string repairOperation)
+        {
+            foreach (var element in members)
+            {
+                var canonicalKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var pair in element.Properties)
+                {
+                    if (string.IsNullOrWhiteSpace(pair.Key))
+                        throw new InvalidOperationException("Family member '" + element.Id + "' contains an empty property key. Repair the element before " + repairOperation + ".");
+                    var normalizedKey = pair.Key.Trim();
+                    if (!string.Equals(normalizedKey, pair.Key, StringComparison.Ordinal))
+                        throw new InvalidOperationException("Family member '" + element.Id + "' contains a non-canonical property key: '" + pair.Key + "'. Repair the element before " + repairOperation + ".");
+                    if (!canonicalKeys.Add(normalizedKey))
+                        throw new InvalidOperationException("Family member '" + element.Id + "' contains duplicate canonical property key: " + normalizedKey);
+                }
             }
         }
 
