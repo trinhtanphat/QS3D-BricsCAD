@@ -1,6 +1,6 @@
 # Work claim — V25 UI nullable build reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-v25-ui-nullable-build-reconciliation-20260813` (`/root`)
 - Registered: `2026-08-13T11:05:00+07:00`
 - Baseline main SHA: `2d3736ea53429890b6784d8309cf82a41b1ec051`
@@ -36,3 +36,10 @@ The older still-active Workspace footer reservation is released in the same clai
 ## Completion condition
 
 The claim-only reservation is merged before source edits; strict V25 Release builds with zero warnings/errors; focused/aggregate gates pass; implementation and claim closeout are merged normally with exact SHAs and no force-push or Actions.
+
+## Completion evidence
+
+- Claim PR `#953` merged as `8418fdaf5005b1911269e2a418771d650905eaf1`. Implementation commit `03bd4cbeaa8d6e2e400a5922674841d062119408` merged by PR `#954` as `461a64eaec5e81d7a87bc375baa4e37252939d9c`.
+- Installed-reference V25 `Release|x64` build passed with zero warnings and zero errors.
+- Quantity callback containment, BQ export/modeless, Workspace footer/current-project/compact shell, HiDPI/premium UI and all 716 aggregate feature gates passed; `git diff --check` passed.
+- UI behavior, stable localized messages and presentation-only footer semantics were preserved. No GitHub Actions, BricsCAD runtime, private fixture, release or package operation occurred.
