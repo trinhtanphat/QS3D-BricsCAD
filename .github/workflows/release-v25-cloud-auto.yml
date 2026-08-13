@@ -9,7 +9,7 @@ on:
     paths:
       - 'src/QS3D.Core/**'
       - 'tests/QS3D.Core.SmokeTests/**'
-      - 'src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj'
+      - 'src/QS3D.BricsCAD.V25/**'
       - '.github/workflows/release-v25-cloud-auto.yml'
       - 'scripts/preflight-ci-manual-only.py'
       - 'scripts/preflight.py'
