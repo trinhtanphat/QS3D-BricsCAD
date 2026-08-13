@@ -30,9 +30,10 @@ namespace QS3D.Core.Domain
                 throw new InvalidOperationException("Floor id already exists: " + normalizedId);
             EnsureUniqueName(project, normalizedName, string.Empty);
             var floor = new FloorDefinition(normalizedId, normalizedName, elevationM);
-            project.Touch();
+            var activate = string.IsNullOrWhiteSpace(project.ActiveFloorId);
+            if (activate) project.ActiveFloorId = floor.Id;
+            else project.Touch();
             project.Floors.Add(floor);
-            if (string.IsNullOrWhiteSpace(project.ActiveFloorId)) project.ActiveFloorId = floor.Id;
             return floor;
         }
 
@@ -237,7 +238,6 @@ namespace QS3D.Core.Domain
                    string.Equals(Property(element, BottomLevelIdKey), normalizedFloorId, StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(Property(element, TopLevelIdKey), normalizedFloorId, StringComparison.OrdinalIgnoreCase);
         }
-
         public static bool ReferencesVerticalLevel(ProjectElement element, string floorId)
         {
             if (element == null || string.IsNullOrWhiteSpace(floorId)) return false;
