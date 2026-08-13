@@ -1,6 +1,6 @@
 # Work claim — MTR-04 “Why this quantity?” inspector model
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-mtr04-quantity-inspector-20260813-1345`
 - Registered: `2026-08-13T13:45:00+07:00`
 - Baseline main SHA: `328ddd6c11458a8bbfb6f887d386cfdbb747eb2e`
@@ -26,9 +26,9 @@ The projection must never derive a replacement quantity, formula, deduction or c
 
 ## Expected surfaces
 
-- new `src/QS3D.Core/Measurement/MeasurementTraceInspector.cs` — immutable/read-only explanation projection only;
-- new `tests/QS3D.Core.SmokeTests/MeasurementTraceInspectorSmoke.cs` — focused projection/parity/detachment regression;
-- new `tests/QS3D.Core.SmokeTests/MeasurementTraceInspectorRegistration.cs` — ModuleInitializer registration if current smoke convention supports it;
+- `src/QS3D.Core/Measurement/MeasurementTraceInspector.cs` — immutable/read-only explanation projection only;
+- `tests/QS3D.Core.SmokeTests/MeasurementTraceInspectorSmoke.cs` — focused projection/parity/detachment regression;
+- `tests/QS3D.Core.SmokeTests/MeasurementTraceInspectorRegistration.cs` — ModuleInitializer registration;
 - this claim file.
 
 ## Excluded scope
@@ -53,6 +53,19 @@ The projection must never derive a replacement quantity, formula, deduction or c
 - REV-03A is treated as owned and excluded until its claim closes.
 - LOCAL-003 and Curtain native qualification remain separate reserved/runtime lanes.
 
+## Completion record
+
+- Claim-only commit: `e648cc3961a9a8e9363bfc653d87efa2aae69c7d`.
+- Core projection commit: `615620c2da0e2375c7e99b783bf25e115ae11f0b`.
+- Focused smoke commit: `192b681e791400d217e4ea2ece33b8a1f7e2138b`.
+- Smoke registration / final implementation SHA: `6788c44c3e8d255927296a35fe3de3a8e1289dd8`.
+- Re-fetched `MeasurementTraceInspector.cs` and `MeasurementTraceInspectorSmoke.cs` from current `main`; contents match intended scope.
+- Source-level review confirms the projection copies canonical values, facts, adjustments, rule metadata, warnings and assumptions without invoking a quantity engine or arithmetic path. The regression deliberately preserves a non-reconciled canonical `NetValue` to guard against hidden recomputation.
+- Smoke registration follows the repository's current `ModuleInitializer` convention.
+- Local executable validation: `NOT_RUN` — this runtime has no `dotnet`, `csc`, `msbuild` or `xbuild`, and no repository checkout is available for compilation.
+- GitHub Actions: `NOT_RUN` by policy.
+- BricsCAD native qualification: `NOT_RUN`; no native PASS is claimed.
+
 ## Completion condition
 
-A claim-first deterministic Core inspector projection + focused auto-registered smoke is present on current `main`, no quantity arithmetic or host UI is duplicated, and this claim is closed with exact pushed SHAs plus actual validation evidence.
+Satisfied for the claimed Core projection lane: a claim-first deterministic inspector projection and focused auto-registered smoke are present on `main`, quantity arithmetic and host UI remain untouched, and the exact implementation SHAs plus actual validation limitations are recorded here.
