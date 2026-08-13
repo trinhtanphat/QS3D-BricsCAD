@@ -200,7 +200,7 @@ namespace QS3D.Core.Diagnostics
         private static void ValidateActiveFloor(ProjectState project, DiagnosticIdentityIndex identity, ICollection<ModelHealthIssue> issues)
         {
             var rawId = project.ActiveFloorId ?? string.Empty;
-            var id = rawId.Trim();
+            var id = rawFloorId.Trim();
             if (id.Length == 0 || !identity.Floors.TryGetValue(id, out var floor))
             {
                 issues.Add(new ModelHealthIssue("INVALID_ACTIVE_FLOOR", HealthSeverity.Warning, "Tầng làm việc hiện tại không còn hợp lệ."));
