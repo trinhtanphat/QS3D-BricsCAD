@@ -412,7 +412,12 @@ namespace QS3D.BricsCAD.V25
             Guard(doc, "QS3DHEALTH", () =>
             {
                 if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
-                    throw new CommandUserException("Model Health cần một QS3D project hiện hữu; lệnh kiểm tra không tạo project mới.");
+                {
+                    const string blocked = "Model Health: BLOCKED • chưa có QS3D project state/sidecar; lệnh kiểm tra không tạo project mới.";
+                    PaletteCoordinator.SetStatus(blocked);
+                    doc.Editor.WriteMessage("\nQS3D " + blocked);
+                    return;
+                }
                 var sourceHandles = project.Elements
                     .SelectMany(x => x.SourceHandles)
                     .Where(x => !string.IsNullOrWhiteSpace(x))
