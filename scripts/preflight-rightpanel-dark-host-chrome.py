@@ -37,6 +37,7 @@ def main() -> None:
         ("ApplyRightDarkContextMenu(LayerList.ContextMenu);", "Layer context menu coverage"),
         ("BuildRightDarkMenuItemStyle()", "MenuItem owned template"),
         ("BuildRightDarkSeparatorStyle()", "separator owned template"),
+        ("new Thickness(7, 3, 7, 3)", "valid four-edge separator margin"),
         ("Property = MenuItem.IsHighlightedProperty", "menu hover trigger"),
         ("Property = MenuItem.IsSubmenuOpenProperty", "submenu selected trigger"),
         ("menu.HasDropShadow = false;", "host popup shadow suppression"),
@@ -56,6 +57,9 @@ def main() -> None:
     ):
         if forbidden in partial:
             raise SystemExit(f"FAIL: RightPanel dark-host partial must remain presentation-only: {forbidden!r}")
+
+    if "new Thickness(7, 3)" in partial:
+        raise SystemExit("FAIL: separator margin must use a valid WPF Thickness constructor")
 
     require(panel, 'x:Name="DrawingList"', "DrawingList contract")
     require(panel, 'x:Name="LayerList"', "LayerList contract")
