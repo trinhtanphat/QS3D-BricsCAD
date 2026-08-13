@@ -1,34 +1,23 @@
 # Work claim — Floor first-save preflight sync
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-floor-first-save-preflight-sync`
 - Registered: `2026-08-13T23:05:00+07:00`
 - Baseline main SHA: `194d4a5c6e011849886517553ff3d5e3d6137220`
-- Priority: close V25 run #130 false failure caused by stale Save Floor handler expectations after the intentional first-save project bootstrap landed.
+- Claim commit: `2dd36e1f77179957d33488cca4169f4421430928`
+- Fix merge commit: `3b139282d14df438d68429bd4cf7f4fad18fde74`
 
-## Reserved scope
+## Result
 
-Synchronize only the feature guards that still require the legacy `OnSaveFloorClick` XAML handler with the current production handler `OnSaveFloorFirstBootstrapClick`.
+V25 run #130 failed because two feature guards still required the legacy `OnSaveFloorClick` XAML handler after the intentional Floor first-save bootstrap had moved the Save button to `OnSaveFloorFirstBootstrapClick`.
 
-## Expected surfaces
+The fix commit updates only:
 
 - `scripts/preflight-floor-level-responsive-footer.py`
 - `scripts/preflight-material-floor-pickers.py`
-- this claim file for close-out
 
-## Excluded scope
+Both now require `OnSaveFloorFirstBootstrapClick`. Read-back of `src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml` confirms the production Save button uses that same handler. All unrelated guard assertions remain intact.
 
-- Production Floor/Level UI/runtime behavior and bootstrap implementation.
-- MAP-01B, #987, #1005, LOCAL_ONLY/runtime lanes, private DWGs, packaging/signing/updater behavior.
-- GitHub Actions dispatch/re-run and licensed BricsCAD V25 qualification.
+A concurrent write landed the exact intended two-token synchronization after this claim was registered; the attempted duplicate write correctly hit a SHA mismatch and was not forced or overwritten.
 
-## Validation plan
-
-- Re-read the failed run and current production XAML.
-- Replace only stale legacy handler expectations with the intentional first-save bootstrap handler.
-- Read back both pushed guards and XAML from `main` and verify they agree.
-- Do not weaken unrelated guard coverage and do not claim runtime/local PASS.
-
-## Completion condition
-
-Both feature guards match the intentional Save Floor first-save bootstrap path, preserving all unrelated assertions, and the claim is closed with commit/read-back evidence.
+No BricsCAD/local runtime PASS is claimed by this source-level close-out.
