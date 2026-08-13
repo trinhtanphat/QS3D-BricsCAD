@@ -1,35 +1,24 @@
 # Work claim — local V25 sanitized-summary output alias safety
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-v25-sanitized-output-alias`
 - Registered: `2026-08-13T22:48:00+07:00`
+- Completed: `2026-08-13T23:02:00+07:00`
 - Baseline main SHA: `590dbfe947f4808e28f38681f1bf0e27314578de`
-- Priority: owner-requested continue-all bug audit; prevent the shareable-summary CLI from destructively overwriting its raw qualification evidence when `--output` aliases `--input`.
+- Claim commit: `46a34d370c596389c60503a0f92e889f193587e3`
 
-## Reserved scope
+## Completed changes
 
-Harden the local V25 sanitized-summary exporter so an output path that resolves to the same file as the input qualification report fails closed before any filesystem mutation. Extend the existing pure-Python sanitized-evidence preflight with a same-file alias regression that proves the source JSON remains byte-for-byte unchanged and no Markdown is published over it.
+- `99f2be49a5fbe48a9757c066638998e4e3f03959` — exporter rejects output paths that resolve to the input report and checks existing same-file aliases before publishing.
+- `3a3bb199ad5961370e9e08fecfd74aeab7ce21c4` — sanitized-evidence preflight covers same-file input/output, requires non-zero exit and verifies the original JSON remains byte-for-byte unchanged.
 
-## Expected surfaces
+## Validation
 
-- `scripts/export-local-v25-sanitized-summary.py`
-- `scripts/preflight-local-v25-sanitized-evidence.py`
-- this claim file for close-out
+- Read back both commits from `main` and verified the alias check runs before output directory creation/write.
+- Ran the exact current exporter and exact current sanitized-evidence preflight with `python -S` in a deterministic synthetic repository fixture. Exit code `0`; result `PASS`.
+- No GitHub Actions were dispatched. No licensed BricsCAD runtime result is claimed.
+- The attempted duplicate source write received a SHA mismatch after the fix landed, so it was not forced or overwritten.
 
-## Excluded scope
+## Result
 
-- `scripts/run-local-v25-qualification.ps1` execution semantics or step ordering.
-- BricsCAD runtime behavior, private/customer DWGs, package/signing/updater/release workflows, `src/**`, `tests/**`, active Floor/Level, V25 version visibility, model-health, #987, #1005, or other LOCAL_ONLY lanes.
-- GitHub Actions dispatch/re-run and licensed V25 runtime qualification.
-
-## Validation plan
-
-- Re-fetch exact exporter/preflight blobs from the claim baseline before implementation.
-- Reject input/output identity using normalized resolved paths before `destination.parent.mkdir(...)` or `destination.write_text(...)`.
-- Add a subprocess regression using one real temporary `qualification.json` as both `--input` and `--output`; require non-zero exit, a deterministic safety error, and byte-for-byte preserved JSON.
-- Execute the exact pure-Python preflight locally from the fetched source where possible; no BricsCAD or GitHub Actions required.
-- Read back the pushed `main` files/SHA and mark this claim `COMPLETED` only with truthful validation evidence.
-
-## Completion condition
-
-The sanitizer refuses destructive input/output aliasing before mutation, the regression locks preservation of raw evidence, the exact preflight passes, and the claim is closed without touching concurrently reserved product/runtime lanes.
+The remote-safe destructive output-alias bug is fixed on `main`, regression coverage is present, and this claim is complete.
