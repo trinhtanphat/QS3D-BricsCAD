@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 errors = []
 
 runtime = ROOT / "src/QS3D.BricsCAD.V25/RuntimeDiagnosticsCommands.cs"
+release_readiness = ROOT / "src/QS3D.BricsCAD.V25/ReleaseReadinessCommands.cs"
 package = ROOT / "scripts/package-v25.ps1"
 release_package = ROOT / "scripts/package-v25-release.ps1"
 finalize = ROOT / "scripts/finalize-v25-signed-package.ps1"
@@ -68,7 +69,7 @@ for product, core, tag in (
     if exact_release_identity(product, core, tag):
         errors.append("exact release identity regression must reject case-only version differences")
 
-for path in (runtime, package, release_package, finalize, plugin_project, core_project) + release_workflows:
+for path in (runtime, release_readiness, package, release_package, finalize, plugin_project, core_project) + release_workflows:
     if not path.is_file():
         errors.append("missing customer-release source: " + str(path.relative_to(ROOT)))
 
@@ -86,12 +87,25 @@ if runtime.is_file():
         '"PACKAGE-METADATA.json"',
         'JsonString(text, "productVersion")',
         'JsonString(text, "signedPayloadSignerThumbprint")',
-        "QS3DRELEASECHECK",
+        "diskVersionMatches",
+        "diskFingerprintMatches",
     ):
         if needle not in text:
             errors.append("RuntimeDiagnosticsCommands.cs missing runtime/customer guard: " + needle)
     if "Major(brxAssembly) == 25" in text or "Major(tdAssembly) == 25" in text:
         errors.append("shared runtime diagnostics must not bypass ExpectedRuntimeMajor with a literal V25 comparison")
+
+if release_readiness.is_file():
+    text = release_readiness.read_text(encoding="utf-8")
+    for needle in (
+        '[CommandMethod("QS3DRELEASECHECK", CommandFlags.Modal)]',
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+        'ExpectedRuntimeLabel + " runtime/private-DWG gate',
+    ):
+        if needle not in text:
+            errors.append("ReleaseReadinessCommands.cs missing customer release-readiness guard: " + needle)
+    if "ProjectContextCoordinator.GetOrCreate(document)" in text:
+        errors.append("QS3DRELEASECHECK must remain read-only when no project state exists")
 
 if package.is_file():
     text = package.read_text(encoding="utf-8")
@@ -182,7 +196,7 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: customer diagnostics are registered, shared V25/V26 runtime major and x64 checks are pinned in-product, "
+    "PASS: customer diagnostics and release-readiness commands are registered, shared V25/V26 runtime major/x64 and stale-binary checks are pinned in-product, "
     "plugin/Core product versions are strict SemVer and exact-case aligned, RELEASE_TAG is exact-case/version-bound, "
     "stable release packaging is provenance-wrapped while cloud preview retains its canonical package boundary, "
     "and finalized signed metadata records the verified publisher."
