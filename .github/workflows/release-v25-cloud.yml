@@ -34,6 +34,7 @@ jobs:
       BRICSCAD_V25_PINNED_MSI_SHA256: F44DF674C0E165D96BF579E243B20A8301E3F395F929779F47BF39A7D9DACDE1
       BRICSCAD_V25_MSI_URL: ${{ secrets.BRICSCAD_V25_MSI_URL }}
       BRICSCAD_V25_MSI_SHA256: ${{ vars.BRICSCAD_V25_MSI_SHA256 }}
+      NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
     steps:
       - uses: actions/checkout@v7
         with:
@@ -46,6 +47,14 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', 'nuget.config') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
 
       - name: Validate cloud prerelease request
         shell: powershell
@@ -112,11 +121,17 @@ jobs:
       - name: All discovered feature source guards
         run: python scripts/preflight-all.py
 
+      - name: Restore Core smoke projects
+        run: dotnet restore tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj
+
       - name: Build Core Release
-        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release --no-restore
+
+      - name: Build Core smoke harness
+        run: dotnet build tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release --no-restore
 
       - name: Deterministic Core smoke tests
-        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release --no-build --no-restore
 
       - name: Restore BricsCAD V25 installer cache
         id: bricscad-msi-cache
