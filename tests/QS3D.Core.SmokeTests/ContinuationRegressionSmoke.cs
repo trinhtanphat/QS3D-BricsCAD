@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using QS3D.Core.Domain;
 using QS3D.Core.Model;
@@ -111,8 +112,18 @@ namespace QS3D.Core.SmokeTests
         {
             var invalidLength = new EntitySnapshot("A", "Line", "0");
             Throws<ArgumentOutOfRangeException>(() => invalidLength.LengthDrawingUnits = double.NaN);
-            var invalidArea = new EntitySnapshot("B", "Polyline", "0") { AreaDrawingUnitsSquared = -1d };
+
+            var invalidArea = new EntitySnapshot("B", "Polyline", "0");
+            Throws<ArgumentOutOfRangeException>(() => invalidArea.AreaDrawingUnitsSquared = -1d);
+            SetLegacyMetric(invalidArea, "_areaDrawingUnitsSquared", -1d);
             Throws<InvalidOperationException>(() => QuantityEngine.Calculate(invalidArea, TakeoffKind.Area, DrawingUnit.Meter));
+        }
+
+        private static void SetLegacyMetric(EntitySnapshot snapshot, string fieldName, double value)
+        {
+            var field = typeof(EntitySnapshot).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null) throw new Exception("Expected private legacy metric field '" + fieldName + "'.");
+            field.SetValue(snapshot, value);
         }
 
         private static void ReportingRejectsNonFiniteState()
