@@ -1,10 +1,11 @@
 # Work claim — Model Health numeric SourceHandle identity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-model-health-source-handle-numeric-identity-20260813`
 - Registered: `2026-08-13T19:33:00+07:00`
+- Completed: `2026-08-13T19:38:00+07:00`
 - Baseline main SHA: `eb1cdaa7e4d0629f966c96c772d27a3e3a17a6a5`
-- Priority: P1 diagnostic identity parity. Canonical semantic ownership already uses `GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity`, so CAD handle spellings such as `A`, `00a`, and `0xA` are one identity. `ModelHealthService` still compares SourceHandles and live handles only after trimming/case folding, so numeric aliases can evade both intra-element duplicate and cross-element ownership diagnostics and can create a false orphan when the live set uses another numeric alias.
+- Priority: P1 diagnostic identity parity. Canonical semantic ownership already uses `GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity`, so CAD handle spellings such as `A`, `00a`, and `0xA` are one identity. `ModelHealthService` compared SourceHandles and live handles only after trimming/case folding, allowing numeric aliases to evade duplicate/cross-owner diagnostics or create false orphan results.
 
 ## Reserved scope
 
@@ -12,28 +13,32 @@
 - `tests/QS3D.Core.SmokeTests/ModelHealthSourceHandleSmoke.cs`
 - this claim file for closeout
 
-## Intended change
+## Result
 
-Route both semantic SourceHandles and supplied live source-handle sets through the shared `GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity` identity function before duplicate/ownership/orphan comparisons. Preserve malformed textual compatibility, existing trimming behavior, issue codes/severity, and the recently added one-warning-per-intra-element-duplicate contract.
+- Implementation: `5b8e326422e80d2b93ef1b43397e25cb5b6cb5c5` (`fix(health): share numeric source identity`). Semantic SourceHandles are now routed through `GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity` before intra-element duplicate and cross-element ownership comparison.
+- Scope correction: `ebd4ca22acb395d4feba1beda24bda2d488b3e22` (`fix(health): scope source live identity normalization`). Live semantic source handles use a dedicated numeric-identity normalizer, while the pre-existing generated-solid live-handle normalization path remains trim/case-only and therefore outside this lane.
+- Regression: `ed9db67e6b3253053a9ca1b484be98bf049bc4b1` (`test(health): guard numeric source identity`).
+  - `A` + `00a` in one element is one identity and yields exactly one `DUPLICATE_SOURCE_HANDLE`.
+  - separate elements owning `A` and `0xA` retain the existing cross-element `DUPLICATE_HANDLE` diagnostic.
+  - live `0xA` / `00a` aliases satisfy liveness for source `A`, preventing false `ORPHAN_HANDLE`.
+  - malformed textual handle compatibility remains trimmed and case-insensitive.
 
-## Excluded scope
+## Validation actually performed
+
+- Claim was pushed alone, then ancestry and recent source-handle overlap were rechecked before mutation; the only intervening commit after claim publication touched another agent's signed-zero claim file.
+- The canonical semantic-ownership history was re-read and confirms numeric aliases are intentionally one CAD handle identity through `GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity`.
+- Exact implementation diff, focused smoke diff, and the scope-correction diff were re-read from GitHub.
+- Cumulative compare from post-claim refreshed main `79f3650122ab3152382282ff62c16059ba932335` through `ebd4ca22acb395d4feba1beda24bda2d488b3e22` showed this lane modifying only `ModelHealthService.cs` and `ModelHealthSourceHandleSmoke.cs`; unrelated concurrent commits touched only their own claim files.
+- At final pre-close verification remote `main` was exactly `ebd4ca22acb395d4feba1beda24bda2d488b3e22`.
+- This environment has Python 3.13.5 but no `dotnet`, `csc`, `mcs`, `msbuild` or `xbuild`; managed smoke execution was unavailable. No managed-build PASS, GitHub Actions PASS or licensed BricsCAD runtime PASS is claimed.
+
+## Excluded scope preserved
 
 - no semantic ownership resolver or generated-owner policy changes;
-- no persistence/report/revision/locate changes;
-- no new source-handle syntax rejection/canonical casing policy;
+- generated-solid live-handle behavior was explicitly restored to its prior normalization path;
+- no persistence/report/revision/locate changes and no new source-handle syntax/casing rejection;
 - no UI/BricsCAD native work, sibling Platform migration, GitHub Actions or native qualification.
-
-## Validation plan
-
-- refresh current `main` and recent source-handle claims after claim publication;
-- extend focused smoke with: `A` + `00a` in one element -> one `DUPLICATE_SOURCE_HANDLE`; two elements `A` / `0xA` -> existing `DUPLICATE_HANDLE`; source `A` with live `00a` -> no `ORPHAN_HANDLE`; malformed textual handles retain case-insensitive trimmed compatibility;
-- re-fetch exact source/test diffs and verify ancestry against moving `main` before closeout;
-- report only validation actually executed; no managed/native PASS without tooling/runtime.
-
-## Coordination
-
-The semantic ownership numeric-identity feature is completed history and provides the shared identity contract; this is a diagnostics parity follow-up. The immediately preceding duplicate-SourceHandles ModelHealth lane is completed and no longer reserved. Recent exact commit search found no current numeric ModelHealth/source-handle claim.
 
 ## Completion condition
 
-Model Health uses the same numeric CAD-handle identity as canonical semantic ownership for duplicate, cross-owner and liveness checks, malformed textual compatibility remains intact under focused regression source, pushed diffs/ancestry are verified, and this claim is marked `COMPLETED`.
+Satisfied for source/static scope: Model Health now uses the same numeric CAD-handle identity as canonical semantic ownership for semantic-source duplicate, cross-owner and liveness checks; malformed textual compatibility remains covered; exact diffs/ancestry were verified; unavailable managed/native execution is explicitly unclaimed.
