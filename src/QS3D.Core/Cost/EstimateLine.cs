@@ -80,13 +80,14 @@ namespace QS3D.Core.Cost
                     "Estimate line cannot resolve a rate for " + costCode.Value + "/" + trace.Unit + "/" + resolution.Currency +
                     " as of " + resolution.AsOfUtc.ToString("O") + ".");
 
-            var adjustmentReason = RequireAdjustmentReason(commercialAdjustmentQuantity, commercialAdjustmentReason);
+            var canonicalCommercialAdjustmentQuantity = commercialAdjustmentQuantity == 0m ? 0m : commercialAdjustmentQuantity;
+            var adjustmentReason = RequireAdjustmentReason(canonicalCommercialAdjustmentQuantity, commercialAdjustmentReason);
             var measuredQuantity = ConvertMeasuredQuantity(trace.NetValue);
 
             decimal estimatingQuantity;
             try
             {
-                estimatingQuantity = checked(measuredQuantity + commercialAdjustmentQuantity);
+                estimatingQuantity = checked(measuredQuantity + canonicalCommercialAdjustmentQuantity);
             }
             catch (OverflowException ex)
             {
@@ -116,7 +117,7 @@ namespace QS3D.Core.Cost
                 resolution.Item,
                 resolution.AsOfUtc,
                 measuredQuantity,
-                commercialAdjustmentQuantity,
+                canonicalCommercialAdjustmentQuantity,
                 adjustmentReason,
                 estimatingQuantity,
                 finalAmount);
