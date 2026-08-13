@@ -28,8 +28,11 @@ require(lifecycle, "docs.DocumentDestroyed += OnDocumentDestroyed;", "lifecycle 
 require(lifecycle, "docs.DocumentDestroyed -= OnDocumentDestroyed;", "lifecycle stop")
 require(lifecycle, "private static void OnDocumentDestroyed(object sender, DocumentDestroyedEventArgs e)", "destroyed handler")
 require(lifecycle, "if (docs.Count == 0)", "last-document guard")
+require(lifecycle, "_pendingNoDocumentReset = true;", "deferred no-document reset")
+require(lifecycle, "StartLifecycleIdleTimer();", "deferred lifecycle reset scheduling")
 require(lifecycle, "PaletteCoordinator.ResetForNoDocument();", "last-document palette reset")
-require(lifecycle, "EnsureProject(active, true);", "remaining-document rebind")
+require(lifecycle, "ScheduleReconcile(active, true);", "remaining-document deferred rebind")
+require(lifecycle, "EnsureProject(document, refreshUi);", "deferred project reconcile")
 require(lifecycle, "PaletteCoordinator.ResetForUnavailableProject(message);", "project-load failure workspace reset")
 
 require(palette, "public static void ResetForNoDocument()", "no-document palette reset API")
@@ -50,10 +53,13 @@ require(workspace, "_viewModel = new WorkspaceViewModel();", "workspace semantic
 require(workspace, "FamilyList.SelectedItem = null;", "workspace family selection clear")
 require(workspace, 'ClearProject("Đọc Workspace lỗi: " + ex.Message);', "direct workspace refresh fail-closed")
 
+if "EnsureProject(active, true);" in lifecycle:
+    errors.append("DocumentDestroyed must not synchronously load/rebind project UI before BricsCAD returns to idle")
+
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: destroyed or unavailable projects cannot leave stale Workspace semantic callbacks; no-document visibility is preserved and remaining drawings rebind.")
+print("PASS: destroyed or unavailable projects cannot leave stale Workspace semantic callbacks; no-document visibility is preserved and remaining drawings rebind through the idle reconcile boundary.")
