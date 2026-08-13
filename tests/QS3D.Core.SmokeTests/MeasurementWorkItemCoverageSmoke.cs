@@ -146,8 +146,12 @@ namespace QS3D.Core.SmokeTests
             missing.MarkClean(ElementDirtyFlags.All);
 
             var elements = new[] { ready, unmapped, staleMapped, staleUnmapped, missing };
+            var ordered = (ProjectElement[])elements.Clone();
+            if (reverse)
+                Array.Reverse(ordered);
+
             var project = new ProjectState("coverage", "Coverage");
-            foreach (var element in reverse ? elements.Reverse() : elements)
+            foreach (var element in ordered)
                 project.Elements.Add(element);
             return project;
         }
