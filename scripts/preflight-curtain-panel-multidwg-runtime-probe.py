@@ -34,6 +34,9 @@ if COMMAND.is_file():
         'QS3D_CURTAIN_P12_DWG_B',
         '.curtain-multidwg-probe-copy.dwg',
         'matches[0].RaiseEvent(new RoutedEventArgs(Button.ClickEvent, matches[0]))',
+        'PresentationSource.CurrentSources',
+        '.OfType<HwndSource>()',
+        '.Select(source => source.RootVisual)',
         'string.Equals(button.Tag as string, "QS3DCURTAINFRAMEHEALTH", StringComparison.Ordinal)',
         'BcadApplication.DocumentManager.MdiActiveDocument = documentA',
         'BcadApplication.DocumentManager.MdiActiveDocument = documentB',
@@ -64,6 +67,8 @@ if COMMAND.is_file():
     for forbidden in ("DllImport", "dynamic ", "GetType().Get", "BLT"):
         if forbidden in text:
             errors.append("Curtain P12 command crosses the local automation boundary: " + forbidden)
+    if "WpfApplication.Current" in text or "System.Windows.Application.Current" in text:
+        errors.append("Curtain P12 command must enumerate BricsCAD-hosted WPF sources without Application.Current")
 
 if RUNNER.is_file():
     text = RUNNER.read_text(encoding="utf-8")
