@@ -62,16 +62,27 @@
                 <Border Background="{StaticResource BgRaisedBrush}"
                         BorderBrush="{StaticResource BorderBrush}"
                         BorderThickness="0,0,0,1" Padding="10,7">
-                    <DockPanel>
-                        <StackPanel Orientation="Horizontal">
+                    <Grid x:Name="RevisionReviewHeaderGrid">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" MinWidth="0">
                             <Border Background="{StaticResource LuxuryBrush}" CornerRadius="2"
                                     Width="3" Height="15" Margin="0,0,7,0"/>
                             <TextBlock Text="REVISION REVIEW" Style="{StaticResource GroupHeader}"
-                                       VerticalAlignment="Center"/>
+                                       VerticalAlignment="Center"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
-                        <TextBlock DockPanel.Dock="Right" Text="COMPARE • INSPECT • LOCATE"
-                                   Style="{StaticResource Caption}" VerticalAlignment="Center"/>
-                    </DockPanel>
+                        <TextBlock Grid.Column="1"
+                                   Text="COMPARE • INSPECT • LOCATE"
+                                   Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Right"
+                                   Margin="12,0,0,0"
+                                   TextWrapping="NoWrap"/>
+                    </Grid>
                 </Border>
                 <TabControl x:Name="Tabs" Grid.Row="1" BorderThickness="0" Background="Transparent">
                     <TabItem Header="Khối lượng">
