@@ -1,6 +1,6 @@
 # Work claim — Workspace canonical generated-owner selection
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-issue982-workspace-curtain-selection-20260813` (`/root/fix_rightpanel_thickness`)
 - Registered: `2026-08-13T17:00:00+07:00`
 - Baseline `origin/main`: `fa79e2e5e7798cb9299bb43f21c3745d8de65507`
@@ -34,3 +34,11 @@
 - V25 x64 Release compile only if installed references are accessible;
 - aggregate preflight and `git diff --check`;
 - fetch/rebase current `origin/main`, review exact diff, push/merge without force-push, close issue `#982`, then mark this claim `COMPLETED` in a separate closeout.
+
+## Completion evidence
+
+- Claim-only PR `#1022` merged first at `5ad78f119b0ca1f7c6400a896942d9416794cc89`; implementation editing began only after that merge.
+- Source commit `d5420f96ac13a26c1fb85591013f0acf15748574` merged through PR `#1027` at `5a6de128a7e390e7b54663603f99e1a6ad72d2eb`; issue `#982` closed from the merged PR.
+- Exact merged SHA `5a6de128a7e390e7b54663603f99e1a6ad72d2eb`: focused Workspace/Curtain owner-selection and project-lifecycle gates PASS; Core Release build has 0 warnings / 0 errors; deterministic Core smoke reports `ALL PASS`; installed-reference V25 x64 Release compile has 0 warnings / 0 errors; `git diff --check` PASS.
+- Exact merged SHA aggregate: 733/737 discovered source-safe preflights PASS. The four failures are pre-existing unrelated runtime/release lanes (`preflight-bricscad-v26.py`, `preflight-customer-release.py`, `preflight-runtime-diagnostics-readonly.py`, `preflight-runtime-diagnostics-truth.py`); this claim did not edit them.
+- No BricsCAD runtime was launched and no GitHub Actions were run or inspected. `LOCAL-002 / P10` is `SOURCE_READY / PENDING_LOCAL`: exact interactive V25 Workspace/Family/Health/Release behavior still requires licensed local proof.
