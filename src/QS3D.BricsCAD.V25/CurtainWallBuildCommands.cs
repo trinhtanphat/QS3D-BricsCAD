@@ -99,6 +99,7 @@ namespace QS3D.BricsCAD.V25
                 }
 
                 phase = "live fingerprint stamp";
+                CurtainWallPostCommitFailureInjection.ThrowIfArmed(CurtainWallPostCommitFailureInjection.LiveFingerprint);
                 var stampWarning = string.Empty;
                 var stamped = frameElements > 0 ? CurtainWallFrameLiveStateService.TryStampSelected(document, project, out stampWarning) : 0;
                 var panelStampWarning = string.Empty;
@@ -169,6 +170,7 @@ namespace QS3D.BricsCAD.V25
             status += ".";
             try
             {
+                CurtainWallPostCommitFailureInjection.ThrowIfArmed(CurtainWallPostCommitFailureInjection.UiRefresh);
                 PaletteCoordinator.RefreshProject();
                 document.Editor.Regen();
                 PaletteCoordinator.SetStatus(status);
