@@ -3,7 +3,7 @@
 - Status: `ACTIVE`
 - Agent: `chatgpt-web-gpt56sol-map01b-qsdb-v4-20260813-1929`
 - Registered UTC: `2026-08-13T12:29:00Z`
-- Last updated UTC: `2026-08-13T12:40:00Z`
+- Last updated UTC: `2026-08-13T16:04:00Z`
 - Baseline main SHA: `84c2361c2c86a2082aafec723ece532653378950`
 - Priority: `MAP-01B P0/P1` — make the verified MAP-01 mapping contract project-owned and persist it deterministically in QSDB
 
@@ -32,6 +32,12 @@ This is the persistence/schema follow-on intentionally excluded from MAP-01A. BL
 - reject duplicate/ambiguous persisted mappings by reusing the existing catalog contract and keep unmapped behavior explicit;
 - add focused managed smoke regressions for v4 round-trip, deterministic persistence and v3 migration;
 - do not modify MAP-01 resolver/catalog semantics, MAP-02 coverage semantics, rates/cost, geometry, reports/UI, or BricsCAD/native surfaces.
+
+## Implementation checkpoint
+
+- Revalidated against live `main` `d9aff385c63effd895a933c0e6e60fcddb268427`; commits since the prior source snapshot do not touch the reserved MAP-01B source/test files.
+- Source patch and focused smoke regressions are prepared for schema v4 round-trip, deterministic mapping order, v3 migration, and ambiguous persisted mapping rejection.
+- No substantive source/test change has been published yet; this claim remains `ACTIVE` until implementation is reconciled, pushed, verified, and closed.
 
 ## Validation policy
 
