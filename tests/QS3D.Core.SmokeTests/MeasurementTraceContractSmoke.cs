@@ -100,6 +100,16 @@ namespace QS3D.Core.SmokeTests
 
         private static void AdjustmentRuleIdentity()
         {
+            var legacyConstructor = typeof(MeasurementTraceAdjustment).GetConstructor(new[]
+            {
+                typeof(MeasurementTraceAdjustmentKind),
+                typeof(double),
+                typeof(string),
+                typeof(string),
+                typeof(string)
+            });
+            True(legacyConstructor != null, "The legacy five-argument adjustment constructor must remain available for binary compatibility.");
+
             var legacy = new MeasurementTraceAdjustment(
                 MeasurementTraceAdjustmentKind.Deduction,
                 1d,

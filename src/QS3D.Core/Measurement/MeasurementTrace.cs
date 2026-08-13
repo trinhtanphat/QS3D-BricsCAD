@@ -59,6 +59,16 @@ namespace QS3D.Core.Measurement
             double amount,
             string unit,
             string reason,
+            string sourceIdentity)
+            : this(kind, amount, unit, reason, sourceIdentity, null, null)
+        {
+        }
+
+        public MeasurementTraceAdjustment(
+            MeasurementTraceAdjustmentKind kind,
+            double amount,
+            string unit,
+            string reason,
             string sourceIdentity,
             string? ruleId = null,
             string? ruleVersion = null)
