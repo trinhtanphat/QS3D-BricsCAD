@@ -131,6 +131,18 @@ namespace QS3D.Core.Cost
         {
             if (!string.Equals(previous.EstimateLineId, current.EstimateLineId, StringComparison.Ordinal))
                 throw new ArgumentException("Estimate revision comparison requires the same exact EstimateLineId.", nameof(current));
+
+            var previousTrace = previous.MeasurementTrace;
+            var currentTrace = current.MeasurementTrace;
+            if (!string.Equals(previousTrace.SemanticIdentity, currentTrace.SemanticIdentity, StringComparison.Ordinal) ||
+                !string.Equals(previousTrace.SourceIdentity, currentTrace.SourceIdentity, StringComparison.Ordinal) ||
+                !string.Equals(previousTrace.QuantityKey, currentTrace.QuantityKey, StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    "Estimate revision comparison requires the same exact measurement trace identity.",
+                    nameof(current));
+            }
+
             if (!string.Equals(previous.Unit, current.Unit, StringComparison.Ordinal))
                 throw new ArgumentException("Estimate revision comparison requires the same unit.", nameof(current));
             if (!string.Equals(previous.Currency, current.Currency, StringComparison.Ordinal))
