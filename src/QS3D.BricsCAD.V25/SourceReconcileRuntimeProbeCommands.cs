@@ -217,8 +217,10 @@ namespace QS3D.BricsCAD.V25
                 document.Editor.SetImpliedSelection(new[] { id });
                 state.DocumentB = document;
                 state.ProjectBId = project.ProjectId;
+                state.DocumentBSourceHandle = CadHandleService.NormalizeHexHandle(id.Handle.ToString())
+                    ?? throw new InvalidOperationException("LOCAL-004 document B source handle is invalid.");
                 state.BeforeDocumentBProjectDigest = ProjectDigest(project);
-                state.BeforeDocumentBNativeDigest = EntityDigest(document, new[] { id });
+                state.BeforeDocumentBNativeDigest = EntityDigest(document, new[] { state.DocumentBSourceHandle });
                 state.BeforeDocumentARefusal = CaptureA(state);
             });
         }
@@ -237,10 +239,7 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("LOCAL-004 document B project changed.");
                 if (!string.Equals(ProjectDigest(projectB), state.BeforeDocumentBProjectDigest, StringComparison.Ordinal))
                     throw new InvalidOperationException("LOCAL-004 refusal mutated document B semantic state.");
-                var selected = documentB.Editor.SelectImplied();
-                if (selected.Status != Bricscad.EditorInput.PromptStatus.OK || selected.Value == null)
-                    throw new InvalidOperationException("LOCAL-004 document B selection disappeared.");
-                if (!string.Equals(EntityDigest(documentB, selected.Value.GetObjectIds()), state.BeforeDocumentBNativeDigest, StringComparison.Ordinal))
+                if (!string.Equals(EntityDigest(documentB, new[] { state.DocumentBSourceHandle }), state.BeforeDocumentBNativeDigest, StringComparison.Ordinal))
                     throw new InvalidOperationException("LOCAL-004 refusal mutated document B native state.");
                 var currentA = CaptureA(state);
                 if (!Same(state.BeforeDocumentARefusal ?? throw new InvalidOperationException("LOCAL-004 A refusal baseline is missing."), currentA))
@@ -805,6 +804,7 @@ namespace QS3D.BricsCAD.V25
             public Snapshot? BeforeAmbiguousRefusal { get; set; }
             public Document? DocumentB { get; set; }
             public string ProjectBId { get; set; } = string.Empty;
+            public string DocumentBSourceHandle { get; set; } = string.Empty;
             public string BeforeDocumentBProjectDigest { get; set; } = string.Empty;
             public string BeforeDocumentBNativeDigest { get; set; } = string.Empty;
             public Snapshot? BeforeDocumentARefusal { get; set; }
