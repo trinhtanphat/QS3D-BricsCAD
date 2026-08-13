@@ -59,6 +59,34 @@ namespace QS3D.BricsCAD.V25
             });
         }
 
+        [CommandMethod("QS3DCURTAINP11SELECT", CommandFlags.Modal)]
+        public void SelectSource()
+        {
+            Execute("select_source", () =>
+            {
+                var context = Context();
+                ProjectElement owner;
+                lock (Sync)
+                {
+                    if (_sessionOne != null)
+                    {
+                        _sessionOne.Require(context);
+                        owner = RequireOwner(context.Project, _sessionOne.OwnerId);
+                    }
+                    else if (_sessionTwo != null)
+                    {
+                        _sessionTwo.Require(context);
+                        owner = RequireOwner(context.Project, _sessionTwo.OwnerId);
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException("Curtain P11 sequence is not initialized.");
+                    }
+                }
+                SelectSingleSource(context.Document, owner);
+            });
+        }
+
         [CommandMethod("QS3DCURTAINP11BASELINE", CommandFlags.Modal)]
         public void CaptureBaseline()
         {
