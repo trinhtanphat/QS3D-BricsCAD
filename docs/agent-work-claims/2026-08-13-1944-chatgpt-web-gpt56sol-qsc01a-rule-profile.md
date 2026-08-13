@@ -1,10 +1,14 @@
 # Work claim — QSC-01A declarative QS rule profile foundation
 
-- Status: `RELEASED`
-- Agent: `chatgpt-web-gpt56sol-qsc01a-rule-profile-20260813-1944`
-- Registered: `2026-08-13T19:44:00+07:00`
-- Baseline main SHA: `c24832e32a053f2fe8bcf260e7ffa8ce55f6dd9c`
+- Status: `ACTIVE`
+- Agent: `chatgpt-gpt56sol-qsc01a-rule-profile-20260813-2007`
+- Registered: `2026-08-13T20:07:00+07:00`
+- Baseline main SHA: `ec0617d6a350315b8891bc175e54c863149b3e15`
 - Priority: `QSC-01 / P2` — add the smallest declarative QS rule/profile contract on top of existing Semantic Health without creating a second validation engine
+
+## Coordination
+
+This is a reactivation of the previously released QSC-01A reservation. No QsRuleProfile implementation commit or source file exists at reactivation time. Current Zone/Floor revision, release-125 guards, MAP-01B, CST-04 and local/runtime lanes are disjoint.
 
 ## Confirmed source gap
 
@@ -13,8 +17,7 @@ Current `ModelHealthIssue` exposes only health `Code`, `Severity`, `Message`, an
 ## Reserved scope
 
 - new `src/QS3D.Core/Diagnostics/QsRuleProfile.cs`
-- new `tests/QS3D.Core.SmokeTests/QsRuleProfileSmoke.cs`
-- new `tests/QS3D.Core.SmokeTests/QsRuleProfileRegistration.cs`
+- new focused smoke under `tests/QS3D.Core.SmokeTests/`
 - this claim file
 
 ## Intended bounded change
@@ -34,4 +37,4 @@ Current `ModelHealthIssue` exposes only health `Code`, `Severity`, `Message`, an
 
 ## Completion condition
 
-Claim-only reservation is published first; after overlap recheck, the new Core profile contract plus focused registered smoke are committed on current `main`, exact remote files are read back/reconciled, and this claim is closed `COMPLETED` with only validation actually executed recorded.
+After overlap recheck, the new Core profile contract plus focused registered smoke are committed on the branch, exact remote files are read back/reconciled, the branch is merged to current `main`, and this claim is closed `COMPLETED` with only validation actually executed recorded.
