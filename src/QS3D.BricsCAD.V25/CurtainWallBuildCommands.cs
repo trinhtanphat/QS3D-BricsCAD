@@ -28,6 +28,7 @@ namespace QS3D.BricsCAD.V25
             ProjectState? project = null;
             ProjectStateSnapshot? rollback = null;
             CurtainWallBuildSelection? validatedSelection = null;
+            CurtainWallUndoCoordinator.PendingTransition? undoTransition = null;
             var nativeCommitted = false;
             try
             {
@@ -42,6 +43,16 @@ namespace QS3D.BricsCAD.V25
                 phase = "canonical source prevalidation";
                 validatedSelection = CurtainWallBuildSelectionGuard.Validate(document, project);
                 rollback = ProjectStateSnapshot.Capture(project);
+
+                // Capture only the selected GlassWall generated-owner surface. This is intentionally
+                // narrower than the command rollback snapshot so a later native Undo cannot erase
+                // unrelated semantic edits made elsewhere in the project.
+                var undoBefore = CurtainWallUndoCoordinator.OwnerStateSnapshot.CaptureSelectedOwners(
+                    document,
+                    project,
+                    validatedSelection.AllSourceIds);
+                if (undoBefore.Count > 0)
+                    undoTransition = CurtainWallUndoCoordinator.BeginTransition(document, project, undoBefore);
 
                 // Resolve rule/dependency failures before native mutation. The command snapshot restores
                 // this semantic phase as well when any later host/frame phase fails before outer commit.
@@ -94,8 +105,19 @@ namespace QS3D.BricsCAD.V25
                     frameSolids = checked(lineFrames.Frames + pathFrames.Frames);
                     panelElements = checked(linePanels.Elements + pathPanels.Elements);
                     panelSolids = checked(linePanels.Panels + pathPanels.Panels);
+
+                    if (undoTransition != null)
+                    {
+                        phase = "native Undo registration";
+                        var undoAfter = CurtainWallUndoCoordinator.OwnerStateSnapshot.Capture(project, undoBefore.OwnerIds);
+                        // Stage the revision marker in this same outer transaction. Native Undo therefore
+                        // moves CAD geometry and the marker together; semantic state follows on CommandEnded.
+                        undoTransition.StageAfter(project, commandTransaction, undoAfter);
+                    }
+
                     commandTransaction.Commit();
                     nativeCommitted = true;
+                    undoTransition?.ConfirmCommitted();
                 }
 
                 phase = "live fingerprint stamp";
@@ -131,6 +153,7 @@ namespace QS3D.BricsCAD.V25
             }
             finally
             {
+                undoTransition?.Dispose();
                 TryRestoreSelection(document, validatedSelection);
             }
         }
