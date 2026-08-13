@@ -1,6 +1,6 @@
 # Work claim — BLT3D Gemini research continuation merge
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `ChatGPT Web / GPT-5.6 Sol`
 - Registered: `2026-08-13T11:58:00+07:00`
 - Baseline main SHA: `0a70a004414a83dc9014d80cbe74ee706c36fc83`
@@ -26,22 +26,31 @@ Preserve the existing dated BLT3D Gemini master archive as the immutable baselin
 - No creation of new implementation lanes merely because the new transcript contains speculative concepts.
 - No GitHub Actions dispatch and no force-push.
 
-## Validation plan
+## Completion record
 
-- Verify the current baseline research archive blob and preserve it unchanged.
-- Programmatically compare `Pasted markdown(1).md` and `Pasted markdown(2).md` after removing Gemini UI/thought/action chrome, retaining only public user prompts and public Gemini responses.
-- Prove that the first 17 public turns are identical and that the newer source contributes exactly 13 new turns, yielding Thread B Turns 18–30.
-- Store only those 13 new turns in the continuation file with source size/SHA-256, deduplication facts and an explicit prototype/future-concept classification boundary.
-- Add a compact index recording the logical combined coverage: Thread A 14/13 + Thread B 30/30 = 44 prompts / 43 completed public responses.
-- Re-fetch the baseline archive and verify its blob remains unchanged.
-- Re-fetch the continuation/index and verify late-turn content including 10D/11D/12D/13D examples remains caveated as archival speculation.
-- Re-check the workstream note and record whether it required a change.
-- Close this claim as `COMPLETED` with the archive commits and actual validation recorded.
+- Claim registration commit: `774a43192f52ced702cdcbc256c62a7a99f53ce6`.
+- Claim-scope refinement commit: `9395d95b780c905ba4286eecdc5f165dc7b3ce22`.
+- Continuation archive commit: `8c625d08ce40548128bc43ce372d6f5af6bac4b5`.
+- Research index commit: `dcde3c2962c4a59a5e4c71e8827915fcf661e84a`.
+- Programmatic source comparison after removing Gemini UI/thought/action chrome proved:
+  - `Pasted markdown(1).md`: 17 public prompts / 17 completed public responses;
+  - `Pasted markdown(2).md`: 30 public prompts / 30 completed public responses;
+  - public Turns 1–17 are identical;
+  - exactly 13 new public prompt/response turns remain, stored as Thread B Turns 18–30.
+- New-source provenance recorded as 173,706 bytes, SHA-256 `2e5a39f19d5b6ebcd04174fb5f2f97f6b3fbd756d9d5aab558ec5f2fcb0a2e0a`.
+- Re-fetched `docs/research/BLT3D-GEMINI-RESEARCH-CONTINUATION-2026-08-13.md` and verified source caveat, deduplication statement, 44/43 combined coverage, Turn 18 parametric prototype content, and late 11D/12D/13D material.
+- Re-fetched `docs/research/BLT3D-GEMINI-RESEARCH-INDEX.md` and verified logical coverage: Thread A 14/13 + Thread B 30/30 = 44 prompts / 43 completed public responses.
+- Re-fetched baseline master; blob remains `2a197d817e9c9498a83b04d82a73cca99c0703c5`, confirming the dated master was not altered.
+- Re-fetched the agent workstream note; blob remains `d0652c7c8b6a94c1f169d3a05f0a71080d4a5c11`. No edit was necessary because its existing in-repo vs `EXT-*` boundaries already cover the useful concepts and correctly exclude speculative Cloud/AI/ESG/DfMA/FM/city-scale expansion. The 11D/12D/13D creative material does not justify new implementation lanes.
+- No product source/tests/scripts/runtime evidence changed.
+- No GitHub Actions were dispatched.
+- No native BricsCAD PASS was claimed.
+- No force-push was used.
 
 ## Coordination
 
-No BLT3D/research-master claim was found among the current refreshed ownership surfaces. Existing active work visible at the baseline includes unrelated native Curtain qualification. The prior BLT3D research/workstream claims are `COMPLETED`. This claim reserves only the research archive/index surfaces named above and any strictly necessary matching coordination-note edit; it does not reserve any implementation lane described by the research.
+The baseline master remains available for continued research. Agents should use `docs/research/BLT3D-GEMINI-RESEARCH-INDEX.md` as the archive entry point and continue using `docs/BLT3D-RESEARCH-TO-QS3D-AGENT-WORKSTREAMS-2026-08-12.md` for implementation self-selection. Only current `ACTIVE`/`BLOCKED` claim files reserve implementation scope.
 
 ## Completion condition
 
-The newer Gemini snapshot is represented without duplicate earlier turns, the dated baseline master remains intact for provenance, the continuation and index make the combined research coverage explicit, speculative caveats are prominent, the workstream queue remains accurate without unnecessary churn, all results are pushed/re-fetched from `main`, and this claim is closed.
+Satisfied: the newer Gemini snapshot is represented without duplicate earlier turns, the dated baseline master remains intact for provenance, the continuation and index make the combined research coverage explicit, speculative caveats are prominent, the workstream queue remains accurate without unnecessary churn, results were pushed/re-fetched from `main`, and this claim is `COMPLETED`.
