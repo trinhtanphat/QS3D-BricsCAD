@@ -82,7 +82,9 @@ namespace QS3D.BricsCAD.V25
         {
             "STATE_REJECTED", "DATA_REJECTED", "IO_REJECTED", "OVERFLOW_REJECTED", "UNEXPECTED_REJECTED",
             "OWNER_STALE_REJECTED", "OWNER_METADATA_REJECTED", "OWNER_OUTPUT_REJECTED",
-            "OWNER_OUTPUT_NOT_LIVE", "OWNER_HEALTH_REJECTED", "OWNERSHIP_OVERLAP_REJECTED"
+            "OWNER_OUTPUT_NOT_LIVE", "OWNER_HEALTH_REJECTED", "OWNERSHIP_OVERLAP_REJECTED",
+            "LINE_SOURCE_METADATA_REJECTED", "LINE_HOST_METADATA_REJECTED", "LINE_FRAME_METADATA_REJECTED", "LINE_PANEL_METADATA_REJECTED",
+            "PATH_SOURCE_METADATA_REJECTED", "PATH_HOST_METADATA_REJECTED", "PATH_FRAME_METADATA_REJECTED", "PATH_PANEL_METADATA_REJECTED"
         };
 
         [CommandMethod("QS3DCURTAINP08SEEDLINE", CommandFlags.Modal)]
@@ -290,22 +292,22 @@ namespace QS3D.BricsCAD.V25
         {
             RequireLegacyNoLevel(owner);
             if (owner.IsGeneratedCurtainPanelStale()) throw new ProbeContractException("OWNER_STALE_REJECTED");
+            var prefix = string.Equals(sourceKind, "Line", StringComparison.Ordinal) ? "LINE" : "PATH";
             IReadOnlyList<string> source;
-            List<string> generated;
-            try
-            {
-                source = CanonicalHandles(owner.SourceHandles, "P08 source");
-                generated = new List<string>
-                {
-                    CanonicalHandle(RequiredProperty(owner, "GeneratedSolidHandle"), "P08 host")
-                };
-                generated.AddRange(CanonicalHandles(SplitProperty(owner, "GeneratedCurtainFrameHandles"), "P08 frames"));
-                generated.AddRange(CanonicalHandles(SplitProperty(owner, GeneratedCurtainPanelHealthService.HandlesKey), "P08 panels"));
-            }
-            catch (InvalidOperationException)
-            {
-                throw new ProbeContractException("OWNER_METADATA_REJECTED");
-            }
+            string host;
+            IReadOnlyList<string> frames;
+            IReadOnlyList<string> panels;
+            try { source = CanonicalHandles(owner.SourceHandles, "P08 source"); }
+            catch (InvalidOperationException) { throw new ProbeContractException(prefix + "_SOURCE_METADATA_REJECTED"); }
+            try { host = CanonicalHandle(RequiredProperty(owner, "GeneratedSolidHandle"), "P08 host"); }
+            catch (InvalidOperationException) { throw new ProbeContractException(prefix + "_HOST_METADATA_REJECTED"); }
+            try { frames = CanonicalHandles(SplitProperty(owner, "GeneratedCurtainFrameHandles"), "P08 frames"); }
+            catch (InvalidOperationException) { throw new ProbeContractException(prefix + "_FRAME_METADATA_REJECTED"); }
+            try { panels = CanonicalHandles(SplitProperty(owner, GeneratedCurtainPanelHealthService.HandlesKey), "P08 panels"); }
+            catch (InvalidOperationException) { throw new ProbeContractException(prefix + "_PANEL_METADATA_REJECTED"); }
+            var generated = new List<string> { host };
+            generated.AddRange(frames);
+            generated.AddRange(panels);
             if (source.Count != 1 || generated.Count < 3 || generated.Distinct(StringComparer.OrdinalIgnoreCase).Count() != generated.Count)
                 throw new ProbeContractException("OWNER_OUTPUT_REJECTED");
             if (CadHandleService.Resolve(document, generated).Count != generated.Count) throw new ProbeContractException("OWNER_OUTPUT_NOT_LIVE");
