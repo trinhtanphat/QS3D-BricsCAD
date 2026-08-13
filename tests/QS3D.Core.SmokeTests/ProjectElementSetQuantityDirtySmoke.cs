@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         {
             ChangedQuantityMarksOnlyQuantityDirty();
             IdenticalQuantityRemainsNoOp();
+            SignedZeroIsCanonicalizedBySetter();
             QuantityOnlyMutationParticipatesInRegeneration();
         }
 
@@ -41,6 +42,32 @@ namespace QS3D.Core.SmokeTests
                 "Identical quantity value unexpectedly dirtied the element.");
             Require(element.UpdatedUtc == beforeUpdatedUtc,
                 "Identical quantity value unexpectedly changed UpdatedUtc.");
+        }
+
+        private static void SignedZeroIsCanonicalizedBySetter()
+        {
+            var element = NewCleanElement("quantity-signed-zero");
+            var negativeZero = BitConverter.Int64BitsToDouble(long.MinValue);
+
+            element.SetQuantity("AreaM2", negativeZero);
+
+            Require(element.Quantities.TryGetValue("AreaM2", out var stored),
+                "SetQuantity did not store the signed-zero quantity.");
+            Require(stored == 0d,
+                "SetQuantity signed zero must remain numerically zero.");
+            Require(BitConverter.DoubleToInt64Bits(stored) == 0L,
+                "SetQuantity must canonicalize negative zero to positive-zero bits.");
+            Require(element.Dirty == ElementDirtyFlags.Quantity,
+                "Initial signed-zero quantity write must keep normal Quantity dirty semantics.");
+
+            element.MarkClean(ElementDirtyFlags.All);
+            var beforeUpdatedUtc = element.UpdatedUtc;
+            element.SetQuantity("AreaM2", 0d);
+
+            Require(element.Dirty == ElementDirtyFlags.None,
+                "Positive zero after canonical signed-zero storage must remain an identical-value no-op.");
+            Require(element.UpdatedUtc == beforeUpdatedUtc,
+                "Positive zero after canonical signed-zero storage unexpectedly changed UpdatedUtc.");
         }
 
         private static void QuantityOnlyMutationParticipatesInRegeneration()
