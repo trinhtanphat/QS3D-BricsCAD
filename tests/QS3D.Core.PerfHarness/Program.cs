@@ -6,12 +6,18 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using QS3D.Core.Domain;
+using QS3D.Core.Model;
 using QS3D.Core.Services;
+using QS3D.Core.Takeoff;
+using QS3D.Core.Units;
 
 namespace QS3D.Core.PerfHarness;
 
 internal sealed class Program
 {
+    private const ulong TraceChecksumOffset = 14695981039346656037UL;
+    private const ulong TraceChecksumPrime = 1099511628211UL;
+
     private static int Main(string[] args)
     {
         try
@@ -27,9 +33,11 @@ internal sealed class Program
                 results.Add(RunMarkChanged(options));
             if (options.Scenario is "all" or "targeted-regeneration")
                 results.Add(RunTargetedRegeneration(options));
+            if (options.Scenario is "all" or "quantity-trace-generation")
+                results.Add(RunQuantityTraceGeneration(options));
 
             if (results.Count == 0)
-                throw new ArgumentException("Unknown --scenario. Use all, dependency-rebuild, dependency-closure, mark-changed, or targeted-regeneration.");
+                throw new ArgumentException("Unknown --scenario. Use all, dependency-rebuild, dependency-closure, mark-changed, targeted-regeneration, or quantity-trace-generation.");
 
             var report = new BenchmarkReport
             {
@@ -140,6 +148,155 @@ internal sealed class Program
         };
     }
 
+    private static BenchmarkResult RunQuantityTraceGeneration(Options options)
+    {
+        var fixtures = BuildQuantityTraceFixtures(options.Elements);
+        var expected = EvaluateQuantityTraces(fixtures, validateProjection: true);
+        var repeated = EvaluateQuantityTraces(fixtures, validateProjection: true);
+        RequireTraceAggregate(repeated, expected, "quantity trace deterministic preflight");
+
+        for (var i = 0; i < options.Warmups; i++)
+        {
+            var warmup = EvaluateQuantityTraces(fixtures, validateProjection: false);
+            RequireTraceAggregate(warmup, expected, "quantity trace warmup");
+        }
+
+        return Measure("quantity-trace-generation", options.Iterations, () =>
+        {
+            var measured = EvaluateQuantityTraces(fixtures, validateProjection: false);
+            RequireTraceAggregate(measured, expected, "quantity trace measured pass");
+        });
+    }
+
+    private static EntitySnapshot[] BuildQuantityTraceFixtures(int count)
+    {
+        var fixtures = new EntitySnapshot[count];
+        for (var i = 0; i < count; i++)
+        {
+            var snapshot = new EntitySnapshot(
+                "Q" + i.ToString(CultureInfo.InvariantCulture),
+                "PerfEntity",
+                "PERF")
+            {
+                LengthDrawingUnits = 1_000d + (i % 997),
+                AreaDrawingUnitsSquared = 1_000_000d + ((i % 991) * 1_000d),
+                VolumeDrawingUnitsCubed = 1_000_000_000d + ((i % 983) * 1_000_000d)
+            };
+            fixtures[i] = snapshot;
+        }
+        return fixtures;
+    }
+
+    private static TraceAggregate EvaluateQuantityTraces(IReadOnlyList<EntitySnapshot> fixtures, bool validateProjection)
+    {
+        var checksum = TraceChecksumOffset;
+        var factCount = 0;
+        for (var i = 0; i < fixtures.Count; i++)
+        {
+            var snapshot = fixtures[i];
+            var kind = QuantityTraceKind(i);
+            var projected = QuantityEngine.CalculateWithTrace(snapshot, kind, DrawingUnit.Millimeter);
+            if (validateProjection) ValidateTraceProjection(snapshot, kind, projected);
+
+            factCount += projected.Trace.InputFacts.Count;
+            checksum = MixTraceChecksum(checksum, (ulong)kind);
+            checksum = MixTraceChecksum(checksum, unchecked((ulong)BitConverter.DoubleToInt64Bits(projected.Result.Value)));
+            checksum = MixTraceChecksum(checksum, unchecked((ulong)BitConverter.DoubleToInt64Bits(projected.Trace.NetValue)));
+            checksum = MixTraceChecksum(checksum, (ulong)projected.Trace.InputFacts.Count);
+            checksum = MixTraceChecksum(checksum, (ulong)projected.Trace.Assumptions.Count);
+            checksum = MixTraceChecksum(checksum, (ulong)projected.Trace.Adjustments.Count);
+            checksum = MixTraceChecksum(checksum, projected.Result.Handle);
+            checksum = MixTraceChecksum(checksum, projected.Result.Unit);
+            checksum = MixTraceChecksum(checksum, projected.Trace.SourceIdentity);
+        }
+
+        return new TraceAggregate(fixtures.Count, factCount, checksum);
+    }
+
+    private static TakeoffKind QuantityTraceKind(int index)
+    {
+        return (index % 4) switch
+        {
+            0 => TakeoffKind.Count,
+            1 => TakeoffKind.Length,
+            2 => TakeoffKind.Area,
+            _ => TakeoffKind.Volume
+        };
+    }
+
+    private static void ValidateTraceProjection(EntitySnapshot snapshot, TakeoffKind kind, TakeoffResultWithTrace projected)
+    {
+        var result = projected.Result;
+        var trace = projected.Trace;
+        if (result.Kind != kind)
+            throw new InvalidOperationException("Quantity trace benchmark kind mismatch for " + snapshot.Handle + ".");
+        if (!string.Equals(result.Handle, snapshot.Handle, StringComparison.Ordinal) ||
+            !string.Equals(trace.SemanticIdentity, result.Handle, StringComparison.Ordinal) ||
+            !string.Equals(trace.SourceIdentity, result.Handle, StringComparison.Ordinal))
+            throw new InvalidOperationException("Quantity trace benchmark source identity mismatch for " + snapshot.Handle + ".");
+        if (trace.GrossValue != result.Value || trace.NetValue != result.Value ||
+            !string.Equals(trace.Unit, result.Unit, StringComparison.Ordinal))
+            throw new InvalidOperationException("Quantity trace benchmark canonical result parity failed for " + snapshot.Handle + ".");
+        if (!string.Equals(trace.QuantityKey, kind.ToString(), StringComparison.Ordinal) ||
+            !string.Equals(trace.RoundingPolicy, "none", StringComparison.Ordinal) ||
+            trace.Adjustments.Count != 0)
+            throw new InvalidOperationException("Quantity trace benchmark metadata parity failed for " + snapshot.Handle + ".");
+
+        var expectedFacts = kind == TakeoffKind.Count ? 0 : 1;
+        var expectedAssumptions = kind == TakeoffKind.Count ? 0 : 1;
+        if (trace.InputFacts.Count != expectedFacts || trace.Assumptions.Count != expectedAssumptions)
+            throw new InvalidOperationException("Quantity trace benchmark explanation cardinality failed for " + snapshot.Handle + ".");
+        if (kind == TakeoffKind.Count) return;
+
+        var fact = trace.InputFacts[0];
+        if (fact.Value != RawMetric(snapshot, kind) ||
+            !string.Equals(fact.SourceIdentity, snapshot.Handle, StringComparison.Ordinal))
+            throw new InvalidOperationException("Quantity trace benchmark raw fact parity failed for " + snapshot.Handle + ".");
+    }
+
+    private static double RawMetric(EntitySnapshot snapshot, TakeoffKind kind)
+    {
+        return kind switch
+        {
+            TakeoffKind.Length => snapshot.LengthDrawingUnits.GetValueOrDefault(),
+            TakeoffKind.Area => snapshot.AreaDrawingUnitsSquared.GetValueOrDefault(),
+            TakeoffKind.Volume => snapshot.VolumeDrawingUnitsCubed.GetValueOrDefault(),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Count does not have a raw metric.")
+        };
+    }
+
+    private static ulong MixTraceChecksum(ulong checksum, ulong value)
+    {
+        unchecked
+        {
+            checksum ^= value;
+            return checksum * TraceChecksumPrime;
+        }
+    }
+
+    private static ulong MixTraceChecksum(ulong checksum, string value)
+    {
+        unchecked
+        {
+            checksum = MixTraceChecksum(checksum, (ulong)value.Length);
+            for (var i = 0; i < value.Length; i++)
+                checksum = MixTraceChecksum(checksum, value[i]);
+            return checksum;
+        }
+    }
+
+    private static void RequireTraceAggregate(TraceAggregate actual, TraceAggregate expected, string operation)
+    {
+        if (actual.Processed != expected.Processed ||
+            actual.FactCount != expected.FactCount ||
+            actual.Checksum != expected.Checksum)
+        {
+            throw new InvalidOperationException(
+                $"{operation} expected processed={expected.Processed}, facts={expected.FactCount}, checksum={expected.Checksum:X16} " +
+                $"but got processed={actual.Processed}, facts={actual.FactCount}, checksum={actual.Checksum:X16}.");
+        }
+    }
+
     private static ProjectState BuildChain(int count)
     {
         var project = new ProjectState("perf", "Core Performance Fixture");
@@ -210,6 +367,20 @@ internal sealed class Program
             throw new InvalidOperationException($"{operation} expected {expected} but got {actual}.");
     }
 
+    private readonly struct TraceAggregate
+    {
+        public TraceAggregate(int processed, int factCount, ulong checksum)
+        {
+            Processed = processed;
+            FactCount = factCount;
+            Checksum = checksum;
+        }
+
+        public int Processed { get; }
+        public int FactCount { get; }
+        public ulong Checksum { get; }
+    }
+
     private sealed class NoOpRegenerator : IElementRegenerator
     {
         public bool CanRegenerate(ElementCategory category) => true;
@@ -248,7 +419,7 @@ internal sealed class Program
                     case "--json": options.JsonPath = Next(); break;
                     case "--revision": options.Revision = Next().Trim(); break;
                     case "--help":
-                    case "-h": throw new ArgumentException("Usage: dotnet run -c Release --project tests/QS3D.Core.PerfHarness -- [--elements N] [--targets N] [--iterations N] [--warmups N] [--scenario all|dependency-rebuild|dependency-closure|mark-changed|targeted-regeneration] [--revision SHA] [--json PATH|-]");
+                    case "-h": throw new ArgumentException("Usage: dotnet run -c Release --project tests/QS3D.Core.PerfHarness -- [--elements N] [--targets N] [--iterations N] [--warmups N] [--scenario all|dependency-rebuild|dependency-closure|mark-changed|targeted-regeneration|quantity-trace-generation] [--revision SHA] [--json PATH|-]");
                     default: throw new ArgumentException("Unknown argument: " + arg);
                 }
             }
