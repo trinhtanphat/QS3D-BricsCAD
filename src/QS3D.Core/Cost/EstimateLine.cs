@@ -164,7 +164,7 @@ namespace QS3D.Core.Cost
         private static string? RequireAdjustmentReason(decimal adjustmentQuantity, string? reason)
         {
             if (adjustmentQuantity == 0m) return null;
-            if (string.IsNullOrWhiteSpace(reason))
+            if (reason == null || string.IsNullOrWhiteSpace(reason))
                 throw new ArgumentException(
                     "A non-zero commercial adjustment requires an explicit reason.",
                     nameof(reason));
