@@ -44,6 +44,8 @@ if COMMAND.is_file():
         'rollback.Restore(context.Project)',
         'documentB.CloseAndDiscard()',
         'Application.DocumentManager.MdiActiveDocument = state.DocumentA',
+        'Path.GetFullPath(state.DocumentA.Name)',
+        'Path.GetFullPath(context.Document.Name)',
         'state.DocumentBSourceHandle = CadHandleService.NormalizeHexHandle(id.Handle.ToString())',
         'EntityDigest(documentB, new[] { state.DocumentBSourceHandle })',
         'RequireSemanticMatchesSources(context.Document, owners)',
@@ -65,6 +67,7 @@ if COMMAND.is_file():
         'PolylineWallSolidBuilder.BuildSelected',
         'ProjectContextCoordinator.Save(',
         'documentB.Editor.SelectImplied()',
+        'ReferenceEquals(state.DocumentA, context.Document)',
     ):
         if forbidden in text:
             errors.append("LOCAL-004 probe bypasses a production command boundary: " + forbidden)
