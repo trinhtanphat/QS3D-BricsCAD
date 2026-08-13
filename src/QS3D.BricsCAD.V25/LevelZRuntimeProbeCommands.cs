@@ -268,7 +268,6 @@ namespace QS3D.BricsCAD.V25
                 TryWriteFailure(requestedPath, failureCode, observedLegacyRange);
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
                     "\nQS3D Level Z runtime probe FAIL. See the local qualification marker.");
-                throw;
             }
         }
 

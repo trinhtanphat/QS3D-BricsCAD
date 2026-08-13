@@ -54,6 +54,7 @@ if COMMAND.is_file():
         'LEVEL_Z_RUNTIME_REBAR_FAILED',
         'LEVEL_Z_RUNTIME_LEVEL_EDIT_FAILED',
         'TryWriteFailure(requestedPath, failureCode, observedLegacyRange)',
+        'Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(',
         'observed_legacy_min_z_m=',
         'observed_legacy_max_z_m=',
         'physical_opening_volume_reduced=true',
@@ -101,10 +102,14 @@ if RUNNER.is_file():
         '. $windowInteropPath',
         'Close-Qs3dProxyInformationDialog -Process $process',
         '"QS3DLEVELZPROBE"',
+        '"_.QUIT", "_N"',
         'Start-Process -FilePath $bricscadExe',
         '-WindowStyle Hidden',
         'Stop-Qs3dLevelProcess -Process $process',
         'Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue',
+        '$gracefulExit = $process.WaitForExit(15000)',
+        'BricsCAD did not exit gracefully after the Level Z marker.',
+        'graceful_exit = $gracefulExit',
         'drawing_copy_sha256_before',
         'drawing_copy_sha256_after',
         'physical_opening_volume_reduced',
@@ -124,6 +129,11 @@ if RUNNER.is_file():
             errors.append("Level-Z runner contains broad process/window action: " + forbidden)
     if "rev-parse HEAD 2>$null | Select-Object -First 1" in text:
         errors.append("Level-Z runner must not pipe rev-parse through Select-Object because early pipeline closure can corrupt LASTEXITCODE")
+
+if COMMAND.is_file():
+    text = COMMAND.read_text(encoding="utf-8")
+    if 'See the local qualification marker.");\n                throw;' in text:
+        errors.append("Level-Z command must return to the no-save QUIT script after writing a failure marker")
 
 if CLAIM.is_file():
     text = CLAIM.read_text(encoding="utf-8")

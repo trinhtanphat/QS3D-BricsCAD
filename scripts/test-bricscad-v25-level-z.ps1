@@ -157,6 +157,7 @@ $oldNonce = [Environment]::GetEnvironmentVariable("QS3D_LEVEL_Z_NONCE", "Process
 $oldSourceSha = [Environment]::GetEnvironmentVariable("QS3D_LEVEL_Z_SOURCE_SHA", "Process")
 $process = $null
 $proxyInformationDialogsDismissed = 0
+$gracefulExit = $false
 $startedAt = Get-Date
 
 try {
@@ -170,7 +171,8 @@ try {
         "INSUNITS", "4",
         "UCS", "W",
         "NETLOAD", ('"' + $PluginDll + '"'),
-        "QS3DLEVELZPROBE"
+        "QS3DLEVELZPROBE",
+        "_.QUIT", "_N"
     )
     Set-Content -LiteralPath $scriptPath -Value $script -Encoding ASCII
 
@@ -194,6 +196,14 @@ try {
         throw "Timed out waiting for QS3DLEVELZPROBE after $StartupTimeoutSeconds seconds."
     }
 
+    $process.Refresh()
+    if (-not $process.HasExited) {
+        $gracefulExit = $process.WaitForExit(15000)
+    }
+    else {
+        $gracefulExit = $true
+    }
+
     $marker = Read-Qs3dLevelMarker -Path $resultPath
     Require-Qs3dLevelValue -Marker $marker -Key "status" -Expected "PASS"
     Require-Qs3dLevelValue -Marker $marker -Key "command" -Expected "QS3DLEVELZPROBE"
@@ -212,6 +222,7 @@ try {
     Require-Qs3dLevelNumber -Marker $marker -Key "bounded_wall_top_m" -Expected 6.8
     Require-Qs3dLevelNumber -Marker $marker -Key "bottom_beam_bottom_m" -Expected 3.25
     Require-Qs3dLevelNumber -Marker $marker -Key "bottom_beam_top_m" -Expected 3.85
+    if (-not $gracefulExit) { throw "BricsCAD did not exit gracefully after the Level Z marker." }
 
     $frameCount = Read-PositiveLevelInt -Marker $marker -Key "curtain_frame_count"
     $panelCount = Read-PositiveLevelInt -Marker $marker -Key "curtain_panel_count"
@@ -240,6 +251,7 @@ try {
         drawing_copy_sha256_before = $drawingHashBefore
         drawing_copy_sha256_after = $drawingHashAfter
         proxy_information_dialogs_dismissed = $proxyInformationDialogsDismissed
+        graceful_exit = $gracefulExit
         curtain_frame_count = $frameCount
         curtain_panel_count = $panelCount
         beam_rebar_count = $rebarCount
