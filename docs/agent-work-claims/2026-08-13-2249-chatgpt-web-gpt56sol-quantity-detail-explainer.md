@@ -2,49 +2,45 @@
 
 - Agent: `chatgpt-web-gpt56sol-quantity-detail-explainer-20260813-2249`
 - Started: `2026-08-13T22:49:00+07:00`
-- Status: `ACTIVE`
-- Task ID / title: `Detailed per-component quantity explanation`
-- Source / user driver: user supplied BLT3D reference screenshots and requested a detailed plan plus full implementation so QS3D can inspect quantity details per modeled component, then commit/push to `main`.
+- Completed: `2026-08-13T23:18:00+07:00`
+- Status: `COMPLETED`
 - Baseline main SHA: `484cd6248a167a6ff67a9ebace7e2504b5f8ecf1`
+- Task: add BLT3D-style per-component quantity explanation to QS3D and push it to `main`.
 
-## Objective
+## Plan executed
 
-Upgrade the existing QS3D Quantity Insight palette from project/group totals into a drill-down, read-only quantity explainer. Selecting a leaf quantity row must expose canonical per-element quantity fields and provenance (element identity, CAD handles and drawing fingerprint), with an element selector for grouped rows and a locate action that reuses the existing safe CAD-handle selection path.
+1. Preserve `ProjectQuantityReportBuilder` as the canonical source instead of duplicating quantity formulas in UI.
+2. Keep the existing Floor/Family aggregate tree and attach a `CHI TIẾT CẤU KIỆN` drill-down below it.
+3. Resolve a selected aggregate row with the existing stale-row guard, create a detached project snapshot, preview-regenerate it, then call `ProjectQuantityReportBuilder.Detail(preview, selectedRow.ElementIds)`.
+4. Show each canonical element separately when a grouped row contains multiple elements.
+5. Expose gross/deduction/net concrete, formwork, length, outer/inner perimeter, door/side/bottom/top/other areas, density and mass with units.
+6. Show provenance: semantic Element IDs, source CAD handles and drawing fingerprint.
+7. Add guarded `Định vị cấu kiện`: rebuild current detail, compare identity/value provenance, resolve current source handles, select and run `QS3DZOOMSELECTED` only when still valid.
+8. Add a focused static preflight preventing regression to aggregate-only or a write-enabled detail path.
 
-## Implementation plan
+## Implemented surfaces
 
-1. Preserve the existing detached-snapshot regeneration path and `ProjectQuantityReportBuilder` as the single source of truth; do not add competing quantity formulas in the UI.
-2. Add a responsive `CHI TIẾT CẤU KIỆN` area beneath the existing Floor/Family tree, including an empty-selection hint, per-element selector, metrics list, provenance/metadata, and locate-selected-component action.
-3. Use `ProjectQuantityReportBuilder.Detail(previewProject, selectedRow.ElementIds)` to drill grouped report rows down to canonical element rows.
-4. Surface concrete gross/deduction/net, formwork, length, perimeter and face-area components, density and mass with explicit units.
-5. Keep selection/locate read-only and fail-closed: stale report keys or unresolvable source handles must not mutate project data or silently select unrelated CAD entities.
-6. Add a focused source regression guard for the detail contract so future UI refactors cannot regress to aggregate-only Quantity Insight.
-7. Verify the touched source on the final `main`; run the focused static guard where GitHub CI makes that executable, without claiming native BricsCAD runtime proof remotely.
+- `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.Registration.cs`
+- `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.UiShell.cs`
+- `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.UiHeader.cs`
+- `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.Selector.cs`
+- `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.Metrics.cs`
+- `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.Provenance.cs`
+- `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.Data.cs`
+- `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.Render.cs`
+- `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.Format.cs`
+- `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.Locate.cs`
+- `scripts/preflight-quantity-insight-detail.py`
 
-## Expected path surfaces
+## Verification / commits
 
-- `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.xaml`
-- `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.xaml.cs`
-- `src/QS3D.BricsCAD.V25/UI/ViewModels/QuantityInsightViewModel.cs`
-- focused regression under `scripts/`
-- this claim file for lifecycle close-out only
+- implementation range on main starts at `81ef142c6e262d12d66d03fb862de4ae59deac6d`
+- canonical detail generation: `194d4a5c6e011849886517553ff3d5e3d6137220`
+- guarded detail locate fix: `d9c369448f24bdc997d1a459d4179071164f8678`
+- regression guard: `53ad7d3ffe93adb0fef402d1729505a7d7be182f`
+- final source-contract adjustment before close: `5940d3f93c9f244a3bfd721d57c5702ec82b8d70`
+- current source was re-read from `main`; GitHub reported no workflow run attached to the final source commit, so no CI/native runtime PASS is fabricated.
 
-## Explicit exclusions
+## Completion condition
 
-- Core QTO formulas and measurement-generation semantics
-- persistence/schema migrations
-- Build3D/PlanTo3D geometry generation
-- updater/licensing/startup lanes
-- V26 native-runtime qualification
-- unrelated workspace, ribbon, rebar, family-editor or health lanes
-- every other agent's claim file
-
-## Dependencies / risks / merge constraints
-
-- Repository `main` is highly concurrent; all writes must refresh and fast-forward without force-push.
-- Existing Quantity Insight dark theme, stale-selection guards, detached preview regeneration, and textual-source/locate contracts must be preserved.
-- This remote lane can verify source/static behavior but cannot truthfully claim BricsCAD V25 native UI/runtime acceptance without a V25 host run.
-
-## Exact completion condition
-
-The detailed component explainer, focused regression guard, and lifecycle close-out are present on current `main`; canonical detail rows drive all displayed quantity values; locate behavior remains guarded/read-only; final implementation/test SHAs are recorded here; any remaining native V25 acceptance requirement is stated explicitly rather than marked passed.
+Source implementation and regression contract are on `main`. Remaining acceptance is native-only: build/load the exact final HEAD in licensed BricsCAD V25, open a real QS3D project, select single and grouped quantity rows, inspect all detail metrics/provenance, then verify `Định vị cấu kiện` selects/zooms the correct live CAD objects. No native V25 PASS is claimed remotely.
