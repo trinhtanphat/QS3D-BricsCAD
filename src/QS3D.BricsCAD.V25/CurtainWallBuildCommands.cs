@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Domain;
@@ -26,6 +27,7 @@ namespace QS3D.BricsCAD.V25
             var pathPanels = new CurtainPanelBuildResult();
             ProjectState? project = null;
             ProjectStateSnapshot? rollback = null;
+            CurtainWallBuildSelection? validatedSelection = null;
             var nativeCommitted = false;
             try
             {
@@ -38,7 +40,7 @@ namespace QS3D.BricsCAD.V25
 
                 project = ExistingProjectMutationContext.Require(document, "Curtain 3D");
                 phase = "canonical source prevalidation";
-                CurtainWallBuildSelectionGuard.Validate(document, project);
+                validatedSelection = CurtainWallBuildSelectionGuard.Validate(document, project);
                 rollback = ProjectStateSnapshot.Capture(project);
 
                 // Resolve rule/dependency failures before native mutation. The command snapshot restores
@@ -55,29 +57,37 @@ namespace QS3D.BricsCAD.V25
                 // native commit boundary, so aborting it rolls back every earlier host/frame/panel phase together.
                 using (var commandTransaction = document.Database.TransactionManager.StartTransaction())
                 {
+                    ApplySelection(document, validatedSelection.LineSourceIds);
                     phase = "LINE host replacement";
                     lineHostSolids = WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.GlassWall);
                     CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection.LineHost);
 
+                    ApplySelection(document, validatedSelection.PathSourceIds);
                     phase = "open-POLYLINE host replacement";
                     pathHostSolids = PolylineWallSolidBuilder.BuildSelected(document, project, ElementCategory.GlassWall);
                     CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection.PathHost);
 
+                    ApplySelection(document, validatedSelection.LineSourceIds);
                     phase = "LINE frame replacement";
                     lineFrames = CurtainWallFrameSolidBuilder.BuildSelectedLineWalls(document, project);
                     CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection.LineFrame);
 
+                    ApplySelection(document, validatedSelection.PathSourceIds);
                     phase = "open/bulged path frame replacement";
                     pathFrames = CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines(document, project);
                     CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection.PathFrame);
 
+                    ApplySelection(document, validatedSelection.LineSourceIds);
                     phase = "LINE panel replacement";
                     linePanels = CurtainWallPanelSolidBuilder.BuildSelectedLineWalls(document, project);
                     CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection.LinePanel);
 
+                    ApplySelection(document, validatedSelection.PathSourceIds);
                     phase = "open/bulged path panel replacement";
                     pathPanels = CurtainWallPathPanelSolidBuilder.BuildSelectedOpenPolylines(document, project);
                     CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection.PathPanel);
+
+                    ApplySelection(document, validatedSelection.AllSourceIds);
 
                     hostSolids = checked(lineHostSolids + pathHostSolids);
                     frameElements = checked(lineFrames.Elements + pathFrames.Elements);
@@ -118,6 +128,24 @@ namespace QS3D.BricsCAD.V25
                 }
                 ReportAtomicFailure(document, phase, nativeCommitted, ex);
             }
+            finally
+            {
+                TryRestoreSelection(document, validatedSelection);
+            }
+        }
+
+        private static void ApplySelection(Document document, IReadOnlyList<Teigha.DatabaseServices.ObjectId> sourceIds)
+        {
+            var ids = new Teigha.DatabaseServices.ObjectId[sourceIds.Count];
+            for (var index = 0; index < sourceIds.Count; index++) ids[index] = sourceIds[index];
+            document.Editor.SetImpliedSelection(ids);
+        }
+
+        private static void TryRestoreSelection(Document document, CurtainWallBuildSelection? selection)
+        {
+            if (selection == null) return;
+            try { ApplySelection(document, selection.AllSourceIds); }
+            catch { }
         }
 
         private static void ReportAtomicFailure(Document document, string phase, bool nativeCommitted, Exception error)

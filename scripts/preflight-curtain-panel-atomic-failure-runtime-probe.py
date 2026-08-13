@@ -5,6 +5,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 HOOK = ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallBuildFailureInjection.cs"
 ORCHESTRATOR = ROOT / "src/QS3D.BricsCAD.V25/CurtainWallBuildCommands.cs"
+SELECTION_GUARD = ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallBuildSelectionGuard.cs"
 PROBE = ROOT / "src/QS3D.BricsCAD.V25/CurtainPanelAtomicFailureRuntimeProbeCommands.cs"
 RUNNER = ROOT / "scripts/test-bricscad-v25-curtain-panel-atomic-failures.ps1"
 HELPER = ROOT / "scripts/bricscad-runner-window-interop.ps1"
@@ -12,7 +13,7 @@ RUNBOOK = ROOT / "docs/CURTAIN-NATIVE-PANELS.md"
 CLAIM = ROOT / "docs/agent-work-claims/2026-08-13-codex-local-curtain-p08-six-phase-failure-injection.md"
 errors = []
 
-for path in (HOOK, ORCHESTRATOR, PROBE, RUNNER, HELPER, RUNBOOK, CLAIM):
+for path in (HOOK, ORCHESTRATOR, SELECTION_GUARD, PROBE, RUNNER, HELPER, RUNBOOK, CLAIM):
     if not path.is_file(): errors.append("missing Curtain P08 file: " + str(path.relative_to(ROOT)))
 
 phases = (
@@ -38,18 +39,24 @@ if HOOK.is_file():
 if ORCHESTRATOR.is_file():
     text = ORCHESTRATOR.read_text(encoding="utf-8")
     anchors = (
-        ("RegenerateDirty(project);", "SemanticRegeneration"),
-        ("WallSolidBuilder.BuildSelectedLineWalls", "LineHost"),
-        ("PolylineWallSolidBuilder.BuildSelected", "PathHost"),
-        ("CurtainWallFrameSolidBuilder.BuildSelectedLineWalls", "LineFrame"),
-        ("CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines", "PathFrame"),
-        ("CurtainWallPanelSolidBuilder.BuildSelectedLineWalls", "LinePanel"),
-        ("CurtainWallPathPanelSolidBuilder.BuildSelectedOpenPolylines", "PathPanel"),
+        ("RegenerateDirty(project);", "SemanticRegeneration", None),
+        ("WallSolidBuilder.BuildSelectedLineWalls", "LineHost", "LineSourceIds"),
+        ("PolylineWallSolidBuilder.BuildSelected", "PathHost", "PathSourceIds"),
+        ("CurtainWallFrameSolidBuilder.BuildSelectedLineWalls", "LineFrame", "LineSourceIds"),
+        ("CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines", "PathFrame", "PathSourceIds"),
+        ("CurtainWallPanelSolidBuilder.BuildSelectedLineWalls", "LinePanel", "LineSourceIds"),
+        ("CurtainWallPathPanelSolidBuilder.BuildSelectedOpenPolylines", "PathPanel", "PathSourceIds"),
     )
-    for anchor, phase in anchors:
+    previous_build = -1
+    for anchor, phase, source_partition in anchors:
         build = text.find(anchor)
         injection = text.find("CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection." + phase + ")", build)
         if build < 0 or injection < build: errors.append("P08 orchestrator injection must follow completed phase: " + phase)
+        if source_partition is not None:
+            selection = text.find("ApplySelection(document, validatedSelection." + source_partition + ");", previous_build + 1)
+            if selection < 0 or not previous_build < selection < build:
+                errors.append("P08 orchestrator must apply the canonical " + source_partition + " partition before phase: " + phase)
+        previous_build = build
     first_native = text.find("using (var commandTransaction")
     commit = text.find("commandTransaction.Commit();", first_native)
     last_injection = text.find("CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection.PathPanel)")
@@ -57,6 +64,17 @@ if ORCHESTRATOR.is_file():
         errors.append("P08 six native injection points must remain inside the outer transaction before commit")
     for token in ("rollback = ProjectStateSnapshot.Capture(project);", "if (!nativeCommitted && rollback != null && project != null)", "rollback.Restore(project);"):
         if token not in text: errors.append("P08 orchestrator rollback boundary missing: " + token)
+    for token in ("validatedSelection = CurtainWallBuildSelectionGuard.Validate(document, project);", "ApplySelection(document, validatedSelection.AllSourceIds);", "TryRestoreSelection(document, validatedSelection);"):
+        if token not in text: errors.append("P08 mixed-source selection restoration missing: " + token)
+
+if SELECTION_GUARD.is_file():
+    text = SELECTION_GUARD.read_text(encoding="utf-8")
+    for token in (
+        "internal sealed class CurtainWallBuildSelection", "LineSourceIds", "PathSourceIds", "AllSourceIds",
+        "if (source is Line) lineSourceIds.Add(id);", "else pathSourceIds.Add(id);", "allSourceIds.Add(id);",
+        "return new CurtainWallBuildSelection(lineSourceIds, pathSourceIds, allSourceIds);",
+    ):
+        if token not in text: errors.append("P08 canonical mixed-source selection guard missing: " + token)
 
 if PROBE.is_file():
     text = PROBE.read_text(encoding="utf-8")
@@ -83,6 +101,8 @@ if PROBE.is_file():
         'error_code=CURTAIN_PANEL_ATOMIC_FAILURE_RUNTIME_FAILED', 'FileMode.CreateNew', 'File.Move(tempPath, fullPath)',
         'OWNER_STALE_REJECTED', 'OWNER_METADATA_REJECTED', 'OWNER_OUTPUT_REJECTED',
         'OWNER_OUTPUT_NOT_LIVE', 'OWNER_HEALTH_REJECTED', 'OWNERSHIP_OVERLAP_REJECTED',
+        'LINE_SOURCE_METADATA_REJECTED', 'LINE_HOST_METADATA_REJECTED', 'LINE_FRAME_METADATA_REJECTED', 'LINE_PANEL_METADATA_REJECTED',
+        'PATH_SOURCE_METADATA_REJECTED', 'PATH_HOST_METADATA_REJECTED', 'PATH_FRAME_METADATA_REJECTED', 'PATH_PANEL_METADATA_REJECTED',
     ):
         if token not in text: errors.append("P08 probe missing contract token: " + token)
     for forbidden in (

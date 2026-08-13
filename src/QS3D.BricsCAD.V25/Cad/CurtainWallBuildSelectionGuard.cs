@@ -8,15 +8,36 @@ using Teigha.DatabaseServices;
 
 namespace QS3D.BricsCAD.V25.Cad
 {
+    internal sealed class CurtainWallBuildSelection
+    {
+        internal CurtainWallBuildSelection(
+            IEnumerable<ObjectId> lineSourceIds,
+            IEnumerable<ObjectId> pathSourceIds,
+            IEnumerable<ObjectId> allSourceIds)
+        {
+            LineSourceIds = new List<ObjectId>(lineSourceIds).AsReadOnly();
+            PathSourceIds = new List<ObjectId>(pathSourceIds).AsReadOnly();
+            AllSourceIds = new List<ObjectId>(allSourceIds).AsReadOnly();
+        }
+
+        internal IReadOnlyList<ObjectId> LineSourceIds { get; }
+        internal IReadOnlyList<ObjectId> PathSourceIds { get; }
+        internal IReadOnlyList<ObjectId> AllSourceIds { get; }
+    }
+
     internal static class CurtainWallBuildSelectionGuard
     {
-        public static int Validate(Document document, ProjectState project)
+        public static CurtainWallBuildSelection Validate(Document document, ProjectState project)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
             var selection = document.Editor.SelectImplied();
-            if (selection.Status != PromptStatus.OK || selection.Value == null) return 0;
+            if (selection.Status != PromptStatus.OK || selection.Value == null)
+                return new CurtainWallBuildSelection(Array.Empty<ObjectId>(), Array.Empty<ObjectId>(), Array.Empty<ObjectId>());
             var selectedOwners = new Dictionary<string, ObjectId>(StringComparer.OrdinalIgnoreCase);
+            var lineSourceIds = new List<ObjectId>();
+            var pathSourceIds = new List<ObjectId>();
+            var allSourceIds = new List<ObjectId>();
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
@@ -51,10 +72,13 @@ namespace QS3D.BricsCAD.V25.Cad
                     var liveSources = CadHandleService.Resolve(document, canonicalMetadata);
                     if (liveSources.Count != 1 || liveSources[0] != id)
                         throw new InvalidOperationException("GlassWall " + element.Id + " canonical source is missing, ambiguous, or differs from the selected entity.");
+                    if (source is Line) lineSourceIds.Add(id);
+                    else pathSourceIds.Add(id);
+                    allSourceIds.Add(id);
                 }
                 transaction.Commit();
             }
-            return selectedOwners.Count;
+            return new CurtainWallBuildSelection(lineSourceIds, pathSourceIds, allSourceIds);
         }
 
         private static bool SameHandle(string? left, string? right)
