@@ -30,6 +30,7 @@ def require(text: str, token: str, label: str) -> None:
 
 entry = read("src/QS3D.BricsCAD.V25/PluginEntry.cs")
 palette = read("src/QS3D.BricsCAD.V25/PaletteCoordinator.cs")
+ribbon = read("src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator.cs")
 
 initialize = method(entry, "public void Initialize()", "public void Terminate()", "PluginEntry.Initialize")
 show = method(palette, "public static void Show()", "public static void Hide()", "PaletteCoordinator.Show")
@@ -37,6 +38,9 @@ set_status = method(palette, "public static void SetStatus", "public static void
 refresh_project = method(palette, "public static void RefreshProject", "public static void RefreshCad", "PaletteCoordinator.RefreshProject")
 refresh_cad = method(palette, "public static void RefreshCad", "public static void ResetForNoDocument", "PaletteCoordinator.RefreshCad")
 reset_unavailable = method(palette, "public static void ResetForUnavailableProject", "private static void ResetPreservingVisibility", "PaletteCoordinator.ResetForUnavailableProject")
+ribbon_start = method(ribbon, "public static void Start()", "public static void Stop()", "RibbonInitializationCoordinator.Start")
+ribbon_document = method(ribbon, "private static void OnDocumentAvailable", "private static void StartTimedRetry", "RibbonInitializationCoordinator.OnDocumentAvailable")
+ribbon_tick = method(ribbon, "private static void OnRetryTick", "private static bool TryInitializeAll", "RibbonInitializationCoordinator.OnRetryTick")
 
 for token in (
     "RuntimeDiagnosticsCommands.CaptureLoadedBinaryIdentity();",
@@ -72,10 +76,19 @@ for token in (
     require(palette, token, "PaletteCoordinator")
 require(entry, "PaletteCoordinator.Dispose();", "PluginEntry.Terminate")
 
+require(ribbon_start, "StartTimedRetry();", "RibbonInitializationCoordinator.Start")
+require(ribbon_document, "StartTimedRetry();", "RibbonInitializationCoordinator.OnDocumentAvailable")
+require(ribbon_tick, "TryInitializeAll()", "RibbonInitializationCoordinator.OnRetryTick")
+require(ribbon, "private static bool _initialized;", "RibbonInitializationCoordinator")
+if "TryInitializeAll()" in ribbon_start:
+    errors.append("RibbonInitializationCoordinator.Start must not synchronously reconcile the ribbon during NETLOAD")
+if "TryInitializeAll()" in ribbon_document:
+    errors.append("RibbonInitializationCoordinator.OnDocumentAvailable must not synchronously reconcile the ribbon inside host document callbacks")
+
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: V25 NETLOAD defers palette construction, passive lifecycle calls stay lazy, and first QS3D show avoids duplicate full refresh.")
+print("PASS: V25 NETLOAD defers palette and ribbon construction, passive lifecycle calls stay lazy, and first QS3D show avoids duplicate full refresh.")
