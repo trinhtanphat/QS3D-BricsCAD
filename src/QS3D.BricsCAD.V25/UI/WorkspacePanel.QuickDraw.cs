@@ -28,22 +28,54 @@ namespace QS3D.BricsCAD.V25.UI
             quick.Tag = "QS3DDRAWACTIVE";
             var advanced = CreateMenuItem("Vẽ tùy chỉnh (Ctrl+Shift+D)", OnAdvancedDrawClick);
             advanced.Tag = "QS3DDRAWACTIVEADV";
+
+            var line = CreateMenuItem("Vẽ cơ bản • Đường (Ctrl+1)", OnBasicLineClick);
+            line.Tag = "QS3DDRAWLINE";
+            var rectangle = CreateMenuItem("Vẽ cơ bản • Chữ nhật (Ctrl+2)", OnBasicRectangleClick);
+            rectangle.Tag = "QS3DDRAWRECT";
+            var circle = CreateMenuItem("Vẽ cơ bản • Hình tròn (Ctrl+3)", OnBasicCircleClick);
+            circle.Tag = "QS3DDRAWCIRCLE";
+
             menu.Items.Insert(0, quick);
             menu.Items.Insert(1, advanced);
             menu.Items.Insert(2, new Separator());
+            menu.Items.Insert(3, line);
+            menu.Items.Insert(4, rectangle);
+            menu.Items.Insert(5, circle);
+            menu.Items.Insert(6, new Separator());
         }
 
         private void OnQuickDrawPreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key != Key.D) return;
             var modifiers = Keyboard.Modifiers;
             if (modifiers == ModifierKeys.Control)
             {
-                ExecuteWorkspaceDraw(advanced: false);
-                e.Handled = true;
-                return;
+                if (e.Key == Key.D)
+                {
+                    ExecuteWorkspaceDraw(advanced: false);
+                    e.Handled = true;
+                    return;
+                }
+                if (e.Key == Key.D1 || e.Key == Key.NumPad1)
+                {
+                    ExecuteWorkspaceBasicDraw("QS3DDRAWLINE", "Đường");
+                    e.Handled = true;
+                    return;
+                }
+                if (e.Key == Key.D2 || e.Key == Key.NumPad2)
+                {
+                    ExecuteWorkspaceBasicDraw("QS3DDRAWRECT", "Chữ nhật");
+                    e.Handled = true;
+                    return;
+                }
+                if (e.Key == Key.D3 || e.Key == Key.NumPad3)
+                {
+                    ExecuteWorkspaceBasicDraw("QS3DDRAWCIRCLE", "Hình tròn");
+                    e.Handled = true;
+                    return;
+                }
             }
-            if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+            if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.D)
             {
                 ExecuteWorkspaceDraw(advanced: true);
                 e.Handled = true;
@@ -62,6 +94,9 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnQuickDrawClick(object sender, RoutedEventArgs e) => ExecuteWorkspaceDraw(advanced: false);
         private void OnAdvancedDrawClick(object sender, RoutedEventArgs e) => ExecuteWorkspaceDraw(advanced: true);
+        private void OnBasicLineClick(object sender, RoutedEventArgs e) => ExecuteWorkspaceBasicDraw("QS3DDRAWLINE", "Đường");
+        private void OnBasicRectangleClick(object sender, RoutedEventArgs e) => ExecuteWorkspaceBasicDraw("QS3DDRAWRECT", "Chữ nhật");
+        private void OnBasicCircleClick(object sender, RoutedEventArgs e) => ExecuteWorkspaceBasicDraw("QS3DDRAWCIRCLE", "Hình tròn");
 
         private void ExecuteWorkspaceDraw(bool advanced)
         {
@@ -83,6 +118,29 @@ namespace QS3D.BricsCAD.V25.UI
             catch (Exception ex)
             {
                 SetStatus((advanced ? "Vẽ tùy chỉnh lỗi: " : "Vẽ Nhanh lỗi: ") + ex.Message);
+            }
+        }
+
+        private void ExecuteWorkspaceBasicDraw(string command, string label)
+        {
+            try
+            {
+                if (!(FamilyList.SelectedItem is ProjectFamily family))
+                {
+                    SetStatus("Chọn một Family / Type trước khi dùng Vẽ cơ bản.");
+                    return;
+                }
+
+                // Make the selected row the canonical ActiveFamily before dispatch. The command
+                // captures and revalidates this context around point acquisition, so a later
+                // Family/Zone/Floor/property change cannot be committed under stale context.
+                _viewModel.SetActiveFamily(family);
+                SetStatus("Vẽ cơ bản " + label + " → " + family.Name + " • " + family.Category);
+                Send(command);
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Vẽ cơ bản " + label + " lỗi: " + ex.Message);
             }
         }
     }
