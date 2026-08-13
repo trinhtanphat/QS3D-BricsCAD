@@ -6,6 +6,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 RELEASE_WORKFLOWS = {"release-v25.yml", "release-v25-cloud.yml", "release-v26.yml"}
+TEMP_AUTO_WORKFLOW = "release-v25-cloud-auto.yml"
+TEMP_AUTO_MARKER = "QS3D_TEMP_AUTO_RELEASE_V25_UNTIL_SUCCESS"
 errors = []
 
 
@@ -175,14 +177,34 @@ else:
             trigger_lines.append(line)
         trigger_block = "\n".join(trigger_lines)
 
-        if not re.search(r"(?m)^\s{2}workflow_dispatch\s*:", trigger_block):
-            errors.append(f"{path.name}: workflow_dispatch must be the only trigger")
-
         trigger_names = []
         for line in trigger_lines:
             match = re.match(r"^\s{2}([A-Za-z0-9_-]+)\s*:", line)
             if match:
                 trigger_names.append(match.group(1))
+
+        if path.name == TEMP_AUTO_WORKFLOW and TEMP_AUTO_MARKER in text:
+            if trigger_names != ["push"]:
+                errors.append(f"{path.name}: temporary dispatcher must be push-only")
+            for token in (
+                "branches:\n      - main",
+                "actions: write",
+                "contents: write",
+                "release-v25-cloud.yml/dispatches",
+                "inputs[confirm_release]=RELEASE",
+                "git rm .github/workflows/release-v25-cloud-auto.yml",
+                "git show b064215655e3da25c7855e18a85677ae5d4088f9:scripts/preflight-ci-manual-only.py",
+            ):
+                if token not in text:
+                    errors.append(f"{path.name}: temporary dispatcher missing bounded-control token: {token}")
+            job_blocks = collect_job_blocks(lines)
+            if [name for name, _ in job_blocks] != ["dispatch_release"]:
+                errors.append(f"{path.name}: temporary dispatcher must contain only dispatch_release job")
+            continue
+
+        if not re.search(r"(?m)^\s{2}workflow_dispatch\s*:", trigger_block):
+            errors.append(f"{path.name}: workflow_dispatch must be the only trigger")
+
         disallowed = sorted({name for name in trigger_names if name != "workflow_dispatch"})
         if disallowed:
             errors.append(f"{path.name}: automatic/non-owner trigger(s) forbidden: {', '.join(disallowed)}")
@@ -240,6 +262,7 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: every GitHub Actions workflow is workflow_dispatch-only, every job is independently "
-    "hard-guarded to the manual event, and every release workflow requires explicit RELEASE confirmation."
+    "PASS: every GitHub Actions workflow is workflow_dispatch-only except the bounded temporary V25 "
+    "auto-release dispatcher, every normal job is independently hard-guarded to the manual event, "
+    "and every release workflow requires explicit RELEASE confirmation."
 )
