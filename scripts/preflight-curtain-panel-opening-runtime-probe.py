@@ -215,7 +215,7 @@ if INBOX.is_file():
     next_item = text.find("\n## LOCAL-", local002_start + 1)
     local002 = text[local002_start:next_item if next_item >= 0 else len(text)]
     for token in (
-        "QS3DCURTAINOPENINGPROBE", "test-bricscad-v25-curtain-panel-openings.ps1",
+        "CurtainPanelOpeningRuntimeProbeCommands.cs", "test-bricscad-v25-curtain-panel-openings.ps1",
         "legacy/no-Level", "partial", "complete-empty", "PENDING_LOCAL",
         "failure_phase", "failure_code", "af0aec7f",
     ):
