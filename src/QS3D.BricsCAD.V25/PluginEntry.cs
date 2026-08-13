@@ -15,6 +15,7 @@ namespace QS3D.BricsCAD.V25
             ProjectRibbonAugmenter.TryInitialize();
             QuickWorkflowRibbonAugmenter.TryInitialize();
             QuantityReferenceRibbonAugmenter.TryInitialize();
+            UpdateRibbonAugmenter.TryInitialize();
             UpdateBootstrapper.Start();
         }
         public void Terminate()
@@ -22,6 +23,7 @@ namespace QS3D.BricsCAD.V25
             UpdateBootstrapper.Stop();
             DocumentLifecycleCoordinator.Stop();
             PaletteCoordinator.Dispose();
+            UpdateRibbonAugmenter.Reset();
             QuantityReferenceRibbonAugmenter.Reset();
             QuickWorkflowRibbonAugmenter.Reset();
             ReferenceWallRibbonAugmenter.Reset();

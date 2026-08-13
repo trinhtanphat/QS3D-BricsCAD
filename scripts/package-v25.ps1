@@ -69,6 +69,10 @@ foreach ($script in @('install-v25-autoload.ps1', 'uninstall-v25-autoload.ps1', 
     Copy-Item -LiteralPath $scriptPath -Destination (Join-Path $dist $script)
 }
 
+$installLauncher = Join-Path $PSScriptRoot 'INSTALL-QS3D.cmd'
+if (-not (Test-Path -LiteralPath $installLauncher -PathType Leaf)) { throw "Missing one-click installer launcher: $installLauncher" }
+Copy-Item -LiteralPath $installLauncher -Destination (Join-Path $dist 'INSTALL-QS3D.cmd')
+
 if (-not (Test-Path -LiteralPath $sampleSource -PathType Container)) { throw "Synthetic sample folder was not found: $sampleSource" }
 $sampleDestination = Join-Path $dist 'Samples'
 New-Item -ItemType Directory -Path $sampleDestination -Force | Out-Null
@@ -113,23 +117,29 @@ QS3D for BricsCAD V25 x64
 Product version: $productVersion
 Assembly version: $($assemblyVersion.ToString())
 
-Recommended install:
+Recommended install (avoids .NET 0x80131515 / Mark-of-the-Web NETLOAD failures):
 1. Close BricsCAD.
-2. Run install-v25-autoload.ps1 from this extracted package.
-3. Default mode is OnCommand DemandLoad. Start BricsCAD and run QS3D or QS3DDOMAIN.
-4. Run QS3DRUNTIMECHECK to confirm V25/x64/package consistency on the customer machine.
-5. For an intentional upgrade over an existing QS3D registration, rerun the installer with -Force.
-6. For production, require the expected Authenticode publisher with -RequireSigned -ExpectedSignerThumbprint <40-hex-thumbprint>.
+2. Extract the complete ZIP to a normal local folder.
+3. Double-click INSTALL-QS3D.cmd. It runs only the Authenticode-valid signed install-v25-autoload.ps1 under RemoteSigned.
+4. The installer verifies SHA256SUMS.txt/signatures, copies QS3D to the per-user install directory and removes Mark-of-the-Web from installed payloads.
+5. Start BricsCAD V25 and run QS3D or QS3DDOMAIN. DemandLoad handles the installed DLL; do not NETLOAD the DLL directly from Downloads.
+6. Run QS3DRUNTIMECHECK to confirm V25/x64/package consistency on the customer machine.
+7. For an intentional upgrade over an existing QS3D registration, use the built-in QS3D Update Center or rerun install-v25-autoload.ps1 with -Force.
 
-Secure update:
-- Run update-v25.ps1 with an HTTPS manifest and the expected publisher thumbprint.
-- The updater blocks downgrades, verifies the ZIP SHA-256, internal SHA256SUMS.txt and the Authenticode publisher before calling the atomic installer.
+Built-in update:
+- QS3D checks GitHub Releases on startup.
+- Run QS3DUPDATE or click Cập nhật QS3D in KHỞI ĐẦU > Hệ thống for one-click secure update.
+- QS3DUPDATEONCLOSE toggles Update khi đóng. When enabled, a release already verified in the current session is scheduled as BricsCAD exits; the detached updater waits for all BricsCAD processes to close, installs it and reopens BricsCAD.
+- The updater verifies the signed manifest, ZIP SHA-256, internal SHA256SUMS.txt and Authenticode publisher before atomic install.
 
-Manual fallback:
-- Start BricsCAD V25, run NETLOAD, select QS3D.BricsCAD.V25.dll, then run QS3D.
+Manual/developer fallback:
+- Prefer installing first and NETLOAD only the DLL from the installed QS3D directory if debugging requires NETLOAD.
+- Never NETLOAD QS3D.BricsCAD.V25.dll directly from a downloaded ZIP/Downloads folder. Windows may attach Zone.Identifier and .NET Framework can reject it with HRESULT 0x80131515.
+- If you intentionally test an unpackaged development copy, remove Mark-of-the-Web from the complete dependency folder before NETLOAD rather than unblocking only one DLL.
 
 Security:
-- The installer verifies SHA256SUMS.txt before copying files.
+- INSTALL-QS3D.cmd uses RemoteSigned and verifies the installer Authenticode signature before execution; it never uses ExecutionPolicy Bypass.
+- The installer verifies SHA256SUMS.txt before copying files and removes Mark-of-the-Web only from the verified installed payload.
 - It does not disable or weaken BricsCAD security settings.
 - This package intentionally excludes BricsCAD runtime assemblies.
 - Samples/ contains only repository-owned synthetic DXF/DWG/QSDB/XLSX/template fixtures.
