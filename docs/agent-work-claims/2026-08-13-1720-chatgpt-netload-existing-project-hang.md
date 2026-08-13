@@ -4,6 +4,7 @@
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-13T17:20:00+07:00`
 - Baseline main SHA: `52c946738bb9423d58e6fff18eb8582072f4a19c`
+- Scope extended: `2026-08-13T23:17:00+07:00` from refreshed `main` baseline `5940d3f93c9f244a3bfd721d57c5702ec82b8d70`
 
 ## Scope
 
@@ -13,20 +14,23 @@ Reserved implementation surface:
 - `src/QS3D.BricsCAD.V25/PluginEntry.cs`
 - `src/QS3D.BricsCAD.V25/PaletteCoordinator.cs`
 - `src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator.cs`
+- `src/QS3D.BricsCAD.V25/DocumentLifecycleCoordinator.cs`
 - `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs`
 - `src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs`
 - `scripts/preflight-netload-existing-project-startup.py`
+- the matching exact-SHA NETLOAD/reopen scenario already parked under `LOCAL-001` in `docs/LOCAL-AGENT-INBOX.md` when the source contract changes
 
-Remote source work for the currently identified startup lifecycle is integrated. Keep this claim ACTIVE because exact licensed BricsCAD V25 reproduction/qualification is still pending.
+Remote source work for the first four identified startup lifecycle findings is integrated. The 2026-08-13 23:17 refresh found an additional source-side gap in `DocumentLifecycleCoordinator`: NETLOAD startup and host document callbacks still directly attach persistence/undo/selection services and perform existing-project/UI reconciliation. This claim is extended before implementation so that work can be moved out of host callbacks and guarded deterministically. Keep this claim ACTIVE because exact licensed BricsCAD V25 reproduction/qualification is still pending.
 
 ## Observed source invariant
 
-The original V25 startup/show path had four avoidable sources of repeated or synchronous UI-thread work:
+The V25 startup/show path has had five avoidable sources of repeated or synchronous UI-thread work:
 
 1. `PluginEntry.Initialize()` eagerly constructed all three palette/WPF trees during NETLOAD.
 2. `PaletteCoordinator.Show()` made the palettes visible and immediately called `RefreshAll()`, duplicating the panels' own first `Loaded` refresh work.
 3. `RibbonInitializationCoordinator.Start()` synchronously reconciled the large reflective ribbon tree from NETLOAD and document-created/activated callbacks.
 4. `WorkspacePanel` and `RightPanel` used permanent anonymous `Loaded` handlers, allowing WPF unload/reload or palette reparenting to repeat constructor-owned project/CAD refresh work without an explicit refresh request.
+5. Current `DocumentLifecycleCoordinator.Start()`, `OnDocumentCreated`, `OnDocumentActivated`, and `OnDocumentDestroyed` still perform attach/project/selection reconciliation inline. `SelectionSyncCoordinator.Attach()` itself calls `Refresh()`, so removing only the explicit refresh call would not make those host callbacks passive.
 
 ## Intended contract
 
@@ -36,6 +40,8 @@ The original V25 startup/show path had four avoidable sources of repeated or syn
 - Workspace and RightPanel initial `Loaded` refreshes are one-shot per panel instance; later refreshes come through explicit lifecycle/command/manual paths.
 - Ribbon reconciliation is eventual/idempotent but never executes synchronously inside NETLOAD or document-availability callbacks.
 - Deferred ribbon work runs at `DispatcherPriority.ApplicationIdle`.
+- Document-created/activated/destroyed callbacks enqueue/coalesce attach/project/UI reconciliation instead of performing it inline; the queued work runs at `DispatcherPriority.ApplicationIdle`.
+- Document teardown remains synchronous enough to cancel pending work and detach native handlers before a document disappears.
 - Existing explicit lifecycle/command refresh paths and teardown remain available.
 - Native BricsCAD V25 exact runtime verification remains local-only; source/static evidence cannot manufacture `LOCAL_PASS`.
 
@@ -68,33 +74,34 @@ The original V25 startup/show path had four avoidable sources of repeated or syn
 - Update checking crosses its asynchronous boundary rather than synchronously waiting on release-network work in NETLOAD.
 - The loaded-binary identity capture remains synchronous intentionally so stale-binary diagnostics retain load-time truth.
 - Workspace/RightPanel no longer repeat constructor-owned initial refresh merely because the same panel instance receives a later WPF `Loaded` event; supported explicit refresh paths remain available.
-- No additional remote-safe source change is currently justified in this exact startup lane after #1054. The remaining decision boundary is native V25 behavior.
+- The earlier conclusion that no more remote-safe startup change was justified is superseded by the 23:17 refreshed source audit: `DocumentLifecycleCoordinator` still executes attach/project/selection reconciliation inline during NETLOAD startup and host document callbacks, and the focused preflight does not currently guard that surface.
 
 ### Validation status
 
-- Source/readback confirms the startup contracts above are integrated.
-- The focused preflight guards palette laziness, no duplicate first-show refresh, deferred application-idle Ribbon reconciliation, and one-shot Workspace/RightPanel initial refresh.
+- Source/readback confirms the previously integrated startup contracts above.
+- The focused preflight currently guards palette laziness, no duplicate first-show refresh, deferred application-idle Ribbon reconciliation, and one-shot Workspace/RightPanel initial refresh; this scope extension will add document-lifecycle idle deferral coverage.
 - Cloud V25 release run #129 / `31712690583` on SHA `e7318dc41bc04b26bee9f5b4f6b985d38144c9bd` completed `SUCCESS`.
 - In that run, Generic source guard, All discovered feature source guards, Core Release build, Core smoke harness, deterministic Core smoke tests, BricsCAD V25 compile-reference validation, BricsCAD V25 plugin build, preview package, release-tag/package binding, artifact upload, and GitHub prerelease publish all completed successfully.
-- Post-run readback on `main` after later unrelated commits still shows the reserved startup surfaces preserving the intended contract: `PluginEntry.Initialize()` stays palette-free, `PaletteCoordinator.Show()` has no duplicate `RefreshAll()`, Ribbon retry remains `ApplicationIdle`, Workspace/RightPanel initial `Loaded` refreshes remain one-shot, and the focused preflight still enforces those invariants.
-- Later commits after `e7318dc...` do not have a workflow run attached to the sampled latest head, so do not generalize run #129 into a claim that every later `main` SHA is CI-green.
-- Licensed BricsCAD V25 runtime qualification remains pending.
+- Run #129 predates this lifecycle-idle follow-up and therefore cannot prove the new patch.
+- Repository CI policy is manual-only; this normal source request does not authorize a new Actions dispatch. Static/source validation and post-push readback will be used remotely, while licensed runtime remains local-only.
 
 ### Native validation still required
 
-Keep this claim `ACTIVE` until a clean exact intended SHA containing #1048/#1050/#1051/#1052/#1053/#1054 is exercised through the reported sequence:
+Keep this claim `ACTIVE` until a clean exact intended SHA containing the full startup source contract is exercised through the reported sequence:
 
 1. Fully close every BricsCAD process.
 2. Reopen BricsCAD V25.
 3. Open the existing project DWG that previously reproduced the hang, with its existing QS3D project/sidecar.
 4. NETLOAD the exact candidate V25 DLL and verify the command prompt returns promptly.
 5. Run `QS3D` and verify the workspace opens without the previous freeze while preserving the canonical existing project identity.
-6. Hide/show and dock/undock the palette once; the same Workspace/RightPanel instances must not repeat their constructor-owned heavy initial refresh merely because WPF raises `Loaded` again.
-7. Exercise normal explicit Refresh and one document-lifecycle refresh after the palettes exist and verify those supported refresh paths still work.
-8. Record the exact Git SHA/ProductVersion plus sanitized cleanup/process evidence.
+6. Activate/switch documents once and verify queued lifecycle reconciliation completes after the host callback without losing persistence, undo, selection sync, or project refresh behavior.
+7. Hide/show and dock/undock the palette once; the same Workspace/RightPanel instances must not repeat their constructor-owned heavy initial refresh merely because WPF raises `Loaded` again.
+8. Exercise normal explicit Refresh and one document-lifecycle refresh after the palettes exist and verify those supported refresh paths still work.
+9. Close a document with lifecycle work pending and verify pending work is cancelled/detached safely with no stale callback or handler leak.
+10. Record the exact Git SHA/ProductVersion plus sanitized cleanup/process evidence.
 
 Do not close this claim or report native PASS until that exact runtime path succeeds.
 
 ## Collision check
 
-Open-PR searches for `netload`, `ProjectContextCoordinator`, `WorkspacePanel`, `RightPanel`, `startup`, and `RibbonInitializationCoordinator` found no overlapping open PR at the times each startup surface was reserved. A fresh open-PR search for `netload`, `startup`, `RibbonInitializationCoordinator`, `WorkspacePanel`, and `RightPanel` also returned no overlapping open PR before this validation checkpoint was recorded. Concurrent later changes sampled after run #129 were outside the reserved startup surfaces. This claim does not overlap the BLOCKED LOCAL-003 native Level geometry claim; it is limited to V25 plugin/palette/ribbon startup lifecycle.
+The current NETLOAD claim belongs to this same `chatgpt-web-gpt56sol` lane and is being extended rather than duplicated. Recent `main` changes sampled at extension time are Floor Level, quantity detail, diagnostics/update UX, and other non-overlapping work. The prior V25 NETLOAD update-UX claim was explicitly completed. This scope does not take Floor/quantity/BCF/updater implementation or LOCAL-003 Level geometry work; it is limited to V25 startup/document lifecycle scheduling plus its focused static guard and matching LOCAL-001 handoff.
