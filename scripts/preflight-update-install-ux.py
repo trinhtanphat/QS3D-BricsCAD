@@ -41,10 +41,14 @@ def main() -> int:
         require(installer, "Unblock-File -LiteralPath $destination -ErrorAction Stop", "installed payload MOTW repair")
 
         require(launcher, "ExecutionPolicy RemoteSigned", "one-click launcher")
+        require(launcher, "-NonInteractive", "one-click launcher")
         require(launcher, "Get-AuthenticodeSignature", "one-click launcher")
         require(launcher, "SignatureStatus]::Valid", "signed installer bootstrap")
         require(launcher, "SignatureStatus]::NotSigned", "unsigned preview bootstrap")
         require(launcher, "Unblock-File -LiteralPath $p", "preview MOTW bootstrap")
+        require(launcher, "& $p -Confirm:$false", "noninteractive installer invocation")
+        if launcher.lower().count("powershell.exe") != 1:
+            raise AssertionError("one-click launcher: bootstrap verification and installer invocation must stay in one PowerShell process")
         forbid(launcher, "ExecutionPolicy Bypass", "one-click launcher")
 
         require(package, "'INSTALL-QS3D.cmd'", "release package")
@@ -82,7 +86,7 @@ def main() -> int:
         print("ERROR:", exc)
         return 1
 
-    print("PASS: secure install, preview MOTW bootstrap, signed release provenance, automatic check, update-on-close, and ribbon update UX contracts are guarded.")
+    print("PASS: secure install, one-process noninteractive preview bootstrap, signed release provenance, automatic check, update-on-close, and ribbon update UX contracts are guarded.")
     return 0
 
 
