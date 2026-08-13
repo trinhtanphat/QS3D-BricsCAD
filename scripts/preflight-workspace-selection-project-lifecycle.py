@@ -57,8 +57,10 @@ for token in (
 ):
     if token not in selection:
         errors.append("Workspace read-only selection partial missing token: " + token)
-if "SemanticReferenceHandles.GetSelectionAliases(element)" not in resolver:
-    errors.append("Workspace semantic selection resolver missing source/generated alias coverage")
+if "SemanticHandleOwnershipResolver.Resolve(project, rawHandles)" not in resolver:
+    errors.append("Workspace semantic selection resolver missing canonical source/generated-owner coverage")
+if "SemanticReferenceHandles.GetSelectionAliases(element)" in resolver:
+    errors.append("Workspace semantic selection resolver must not rebuild a narrower alias index")
 read_only_resolver = resolver[:resolver.find("private string ApplyMultiSelectionProperty")]
 if "ProjectContextCoordinator.GetOrCreate" in read_only_resolver or "ExistingProjectMutationContext" in read_only_resolver:
     errors.append("Workspace read-only semantic selection resolution must not create/bind mutable project state")
