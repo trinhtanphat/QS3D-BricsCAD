@@ -204,13 +204,41 @@ else:
     target_start = ended_body.find("HistoryEntry targetEntry;", marker_read_start)
     stamp_start = ended_body.find("if (!currentEntry.Stamp.Matches(project))", target_start)
     restore_start = ended_body.find("var restoreRollback = ProjectStateSnapshot.Capture(project);", stamp_start)
-    if min(marker_read_start, target_start, stamp_start, restore_start) < 0:
+    rollback_failure_start = ended_body.find("catch (Exception rollbackError)", restore_start)
+    recovered_restore_start = ended_body.find(
+        '"Source Reconcile semantic Undo restore failed and was recovered.',
+        rollback_failure_start,
+    )
+    advance_start = ended_body.find("history.CurrentRevision = nativeRevision;", recovered_restore_start)
+    if min(
+        marker_read_start, target_start, stamp_start, restore_start,
+        rollback_failure_start, recovered_restore_start, advance_start,
+    ) < 0:
         errors.append("Undo observer marker/stamp refusal boundaries are missing")
     else:
         if "MarkDesynchronized(" in ended_body[marker_read_start:target_start]:
             errors.append("a transient command-end marker read failure must not permanently poison history")
         if "MarkDesynchronized(" in ended_body[stamp_start:restore_start]:
             errors.append("semantic-only drift refusal must remain recoverable when the native marker returns current")
+        read_only_refusals = ended_body[target_start:restore_start]
+        if "MarkDesynchronized(" in read_only_refusals or "history.Desynchronized = true" in read_only_refusals:
+            errors.append("read-only unknown-revision/project/backing-store refusals must not permanently poison history")
+        if "MarkDesynchronized(" in ended_body[recovered_restore_start:advance_start]:
+            errors.append("a failed semantic restore followed by successful exact rollback must remain recoverable")
+        recovery_body = ended_body[restore_start:rollback_failure_start]
+        if (
+            "restoreRollback.Restore(project);" not in recovery_body
+            or "if (!currentEntry.Stamp.Matches(project))" not in recovery_body
+            or '"Recovered Source Reconcile semantic state does not match its current revision."' not in recovery_body
+        ):
+            errors.append("restore recovery must verify the canonical project returned to its current revision before remaining nonsticky")
+        if ended_body.count("MarkDesynchronized(") != 1:
+            errors.append("command-end observation may become sticky only when semantic restore and recovery both fail")
+        double_failure = ended_body[rollback_failure_start:recovered_restore_start]
+        if "MarkDesynchronized(history," not in double_failure or "new AggregateException(restoreError, rollbackError)" not in double_failure:
+            errors.append("sticky desync must remain bound to combined semantic restore and recovery failure")
+        if "CurrentRevision =" in ended_body[target_start:advance_start]:
+            errors.append("all observer refusals and recovered restore failures must leave CurrentRevision unchanged")
 
 # Deterministic model of the production shadow-publication and event-intent
 # contracts. The static tokens above bind these states to the coordinator and
@@ -274,14 +302,61 @@ intent.will_start("U", True)
 if intent.ended("U", True):
     errors.append("single-letter U armed semantic Undo history")
 
-# Unknown revisions remain fail-closed when, and only when, a deliberate active
-# Undo/Redo pair was matched.
-unknown_revision_desynchronized = False
-intent.will_start("MREDO", True)
-if intent.ended("MREDO", True):
-    unknown_revision_desynchronized = True
-if not unknown_revision_desynchronized:
-    errors.append("matched native Undo/Redo no longer fails closed on an unknown revision")
+# State classification is independent of command provenance. Internal BricsCAD
+# work can emit a complete native command pair, so read-only refusal must rely
+# on marker mismatch for fail-closed behavior instead of poisoning history.
+class ObserverState:
+    def __init__(self):
+        self.project = "canonical-before"
+        self.current_revision = "known-current"
+        self.native_revision = self.current_revision
+        self.desynchronized = False
+        self.current_stamp = "tracked-stamp"
+        self.project_stamp = self.current_stamp
+
+    def can_begin(self):
+        return not self.desynchronized and self.native_revision == self.current_revision
+
+    def refuse_read_only(self, native_revision):
+        self.native_revision = native_revision
+
+    def restore_failed_but_recovered(self, native_revision):
+        self.native_revision = native_revision
+
+    def restore_and_recovery_failed(self, native_revision):
+        self.native_revision = native_revision
+        self.desynchronized = True
+
+
+for refusal in ("unknown-revision", "missing-project", "changed-backing-store"):
+    state = ObserverState()
+    before = (state.project, state.current_revision)
+    state.refuse_read_only(refusal)
+    if (state.project, state.current_revision) != before or state.desynchronized:
+        errors.append("read-only observer refusal mutated project/revision or became sticky: " + refusal)
+    if state.can_begin():
+        errors.append("persistent native marker mismatch did not fail closed: " + refusal)
+    state.native_revision = state.current_revision
+    if not state.can_begin():
+        errors.append("returning the marker to CurrentRevision did not permit safe retry: " + refusal)
+
+state = ObserverState()
+before = (state.project, state.current_revision)
+state.restore_failed_but_recovered("known-target")
+if (state.project, state.current_revision) != before or state.desynchronized:
+    errors.append("successful restore recovery did not preserve canonical project/current revision")
+if state.can_begin():
+    errors.append("recovered restore failure weakened persistent marker-mismatch fail-closed behavior")
+state.native_revision = state.current_revision
+state.project_stamp = "intervening-semantic-edit"
+if not state.can_begin() or state.project_stamp == state.current_stamp:
+    errors.append("marker recovery did not permit safe semantic rebase/retry")
+
+state = ObserverState()
+state.restore_and_recovery_failed("known-target")
+state.native_revision = state.current_revision
+if not state.desynchronized or state.can_begin():
+    errors.append("combined semantic restore/recovery failure must remain sticky and fail closed")
 
 published = "first-success"
 shadow = "failed-reconcile"
