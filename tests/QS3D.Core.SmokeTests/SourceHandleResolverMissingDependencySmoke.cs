@@ -10,7 +10,7 @@ namespace QS3D.Core.SmokeTests
         {
             RejectsMissingCanonicalDependency();
             PreservesValidDependencyTraversal();
-            PreservesUnknownRootBehavior();
+            RejectsUnknownRoot();
         }
 
         private static void RejectsMissingCanonicalDependency()
@@ -49,12 +49,23 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
-        private static void PreservesUnknownRootBehavior()
+        private static void RejectsUnknownRoot()
         {
             var project = CreateValidProject();
-            var handles = SourceHandleResolver.Resolve(project, new[] { "E-UNKNOWN" });
-            if (handles.Count != 0)
-                throw new InvalidOperationException("Unknown Locate root ids must preserve the existing empty-result behavior.");
+            try
+            {
+                SourceHandleResolver.Resolve(project, new[] { "E-UNKNOWN" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("root", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                    ex.Message.IndexOf("does not exist", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                    ex.Message.IndexOf("E-UNKNOWN", StringComparison.Ordinal) >= 0)
+                    return;
+                throw;
+            }
+
+            throw new InvalidOperationException("Locate must fail closed when a requested root semantic element does not exist.");
         }
 
         private static ProjectState CreateValidProject()
