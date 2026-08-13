@@ -79,7 +79,7 @@
                     </StackPanel>
                     <WrapPanel Grid.Column="2" VerticalAlignment="Bottom">
                         <Button Content="Mới" Click="OnNewFloorClick"/>
-                        <Button Content="Lưu" Style="{StaticResource AccentButton}" Click="OnSaveFloorClick"/>
+                        <Button Content="Lưu" Style="{StaticResource AccentButton}" Click="OnSaveFloorFirstBootstrapClick"/>
                         <Button Content="Xóa" Style="{StaticResource DangerButton}" Click="OnDeleteFloorClick"/>
                     </WrapPanel>
                 </Grid>
