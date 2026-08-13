@@ -420,7 +420,7 @@ namespace QS3D.BricsCAD.V25
         private static SequenceState State(ProbeContext context)
         {
             var state = RequiredState();
-            if (!ReferenceEquals(state.DocumentA, context.Document) ||
+            if (!string.Equals(Path.GetFullPath(state.DocumentA.Name), Path.GetFullPath(context.Document.Name), StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(state.ProjectId, context.Project.ProjectId, StringComparison.Ordinal) ||
                 !string.Equals(state.Nonce, context.Nonce, StringComparison.Ordinal))
                 throw new ProbeFailure("SEQUENCE_CONTEXT_CHANGED");
