@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using Bricscad.ApplicationServices;
 using Teigha.Runtime;
 
@@ -9,6 +10,29 @@ namespace QS3D.BricsCAD.V25.Updates
         [CommandMethod("QS3DUPDATE", CommandFlags.Modal)]
         public void ShowUpdateCenter()
         {
+            ShowUpdateCenterCore("QS3DUPDATE");
+        }
+
+        [CommandMethod("QSUPDATE", CommandFlags.Modal)]
+        public void ShowUpdateCenterAlias()
+        {
+            ShowUpdateCenterCore("QSUPDATE");
+        }
+
+        [CommandMethod("QS3DVER", CommandFlags.Modal)]
+        public void ShowVersion()
+        {
+            WriteVersionCore("QS3DVER");
+        }
+
+        [CommandMethod("QSVER", CommandFlags.Modal)]
+        public void ShowVersionAlias()
+        {
+            WriteVersionCore("QSVER");
+        }
+
+        private static void ShowUpdateCenterCore(string commandName)
+        {
             try
             {
                 UpdateCenterWindowHost.Show();
@@ -16,7 +40,29 @@ namespace QS3D.BricsCAD.V25.Updates
             catch (Exception ex)
             {
                 var document = Application.DocumentManager.MdiActiveDocument;
-                document?.Editor.WriteMessage("\nQS3DUPDATE error: " + ex.Message);
+                document?.Editor.WriteMessage("\n" + commandName + " error: " + ex.Message);
+            }
+        }
+
+        private static void WriteVersionCore(string commandName)
+        {
+            try
+            {
+                var assembly = Assembly.GetExecutingAssembly();
+                var result = UpdateCoordinator.Instance.LastResult;
+                var path = string.IsNullOrWhiteSpace(assembly.Location) ? "<unknown>" : assembly.Location;
+                var document = Application.DocumentManager.MdiActiveDocument;
+                document?.Editor.WriteMessage(
+                    "\nQS3D V25 product version: " + result.CurrentVersion +
+                    "\nAssembly version: " + assembly.GetName().Version +
+                    "\nLoaded DLL: " + path +
+                    "\nUpdate status: " + result.Message +
+                    "\nRun QSUPDATE or QS3DUPDATE to check GitHub Releases.");
+            }
+            catch (Exception ex)
+            {
+                var document = Application.DocumentManager.MdiActiveDocument;
+                document?.Editor.WriteMessage("\n" + commandName + " error: " + ex.Message);
             }
         }
     }
