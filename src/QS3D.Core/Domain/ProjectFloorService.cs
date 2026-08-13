@@ -68,9 +68,8 @@ namespace QS3D.Core.Domain
             if (elevationChanged) floor.ElevationM = elevationM;
             foreach (var element in referencedElements)
             {
-                var flags = ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity;
-                if (elevationChanged) flags |= ElementDirtyFlags.Geometry;
-                element.MarkDirty(flags);
+                if (elevationChanged) MarkVerticalPlacementChanged(project, element);
+                else element.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
             }
             foreach (var element in dependentElements)
                 element.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
@@ -139,7 +138,7 @@ namespace QS3D.Core.Domain
             {
                 element.Properties[BottomLevelIdKey] = floor.Id;
                 if (!element.Properties.ContainsKey(BottomLevelOffsetKey)) element.Properties[BottomLevelOffsetKey] = "0";
-                element.MarkDirty(ElementDirtyFlags.Geometry | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
+                MarkVerticalPlacementChanged(project, element);
             }
             return changed.Count;
         }
@@ -181,7 +180,7 @@ namespace QS3D.Core.Domain
             {
                 element.Properties[TopLevelIdKey] = top.Id;
                 if (!element.Properties.ContainsKey(TopLevelOffsetKey)) element.Properties[TopLevelOffsetKey] = "0";
-                element.MarkDirty(ElementDirtyFlags.Geometry | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
+                MarkVerticalPlacementChanged(project, element);
             }
             return changed.Count;
         }
@@ -205,7 +204,7 @@ namespace QS3D.Core.Domain
                 element.Properties.Remove(BottomLevelOffsetKey);
                 element.Properties.Remove(TopLevelIdKey);
                 element.Properties.Remove(TopLevelOffsetKey);
-                element.MarkDirty(ElementDirtyFlags.Geometry | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
+                MarkVerticalPlacementChanged(project, element);
             }
             return changed.Count;
         }
@@ -356,6 +355,17 @@ namespace QS3D.Core.Domain
                     throw new InvalidOperationException(
                         element.Id + "/" + levelLabel + " ownership changed while Floor mutation targets were being enumerated: " + levelId + ".");
             }
+        }
+
+        private static void MarkVerticalPlacementChanged(ProjectState project, ProjectElement element)
+        {
+            element.MarkDirty(ElementDirtyFlags.Geometry | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
+            if (element.Category != ElementCategory.Door && element.Category != ElementCategory.WallOpening) return;
+            var hostId = Property(element, "HostWallId");
+            if (hostId.Length == 0) return;
+            var host = project.FindElement(hostId);
+            if (host == null) return;
+            host.MarkDirty(ElementDirtyFlags.Geometry | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
         }
 
         private static double LevelOffset(ProjectElement element, string key)

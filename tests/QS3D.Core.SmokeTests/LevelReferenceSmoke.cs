@@ -14,12 +14,16 @@ namespace QS3D.Core.SmokeTests
             BottomAndTopLevelsResolveAbsolutePlacement();
             HostedOpeningsResolveInsideTheHostFrame();
             LevelReferencesValidateOnlyConsumedLegacyInputs();
-            EffectiveHeightIsPreparedWhileProductionRegenerationStaysBlocked();
             TopAssignmentRequiresBottomAndValidRange();
             DuplicateLevelIdsFailClosedDuringPlacement();
             FloorMutationTracksAllReferenceKinds();
+            LevelAwareQuantitiesUseEffectiveHeight();
+            OpeningLevelChangesInvalidateHostOutputs();
+            VerticalSnapshotsDetectStaleNativeOutputs();
+            CurtainFrameHealthFailsClosedOnInvalidBottomOnlyHeight();
             HealthRejectsBrokenLevelReferences();
-            HealthBlocksValidLevelReferencesUntilNativeQualification();
+            HealthAcceptsQualifiedNativeCategories();
+            UnsupportedCategoryFailsBeforeQuantityMutation();
         }
 
         private static void LegacyPlacementRemainsSourceRelative()
@@ -181,77 +185,6 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentOutOfRangeException>(() => ElementVerticalPlacementService.Resolve(project, legacy, 0d, 3d, double.PositiveInfinity));
         }
 
-        private static void EffectiveHeightIsPreparedWhileProductionRegenerationStaysBlocked()
-        {
-            var project = NewProject();
-
-            var wall = NewElement(project, "effective-wall", ElementCategory.ArchitecturalWall);
-            wall.Properties["LengthM"] = "2";
-            wall.Properties["HeightM"] = "99";
-            wall.Properties["ThicknessM"] = "0.2";
-            AssignBounded(project, wall);
-            Near(4d, ElementVerticalPlacementService.ResolveEffectiveHeight(project, wall, 99d));
-            Throws<InvalidOperationException>(() => new WallRegenerator().Regenerate(project, wall));
-            Equal("99", wall.Properties["HeightM"]);
-
-            var opening = NewElement(project, "effective-opening", ElementCategory.WallOpening);
-            opening.Properties["WidthM"] = "1.25";
-            opening.Properties["HeightM"] = "99";
-            AssignBounded(project, opening);
-            Throws<InvalidOperationException>(() => new OpeningRegenerator().Regenerate(project, opening));
-            Equal("99", opening.Properties["HeightM"]);
-
-            var beam = NewElement(project, "effective-beam", ElementCategory.Beam);
-            beam.Properties["LengthM"] = "2";
-            beam.Properties["WidthM"] = "0.3";
-            beam.Properties["HeightM"] = "99";
-            AssignBounded(project, beam);
-            Throws<InvalidOperationException>(() => new StructuralRegenerator().Regenerate(project, beam));
-            Equal("99", beam.Properties["HeightM"]);
-
-            var column = NewElement(project, "effective-column", ElementCategory.Column);
-            column.Properties["WidthM"] = "0.4";
-            column.Properties["DepthM"] = "0.5";
-            column.Properties["HeightM"] = "99";
-            AssignBounded(project, column);
-            Throws<InvalidOperationException>(() => new StructuralRegenerator().Regenerate(project, column));
-            Equal("99", column.Properties["HeightM"]);
-
-            var structuralWall = NewElement(project, "effective-structural-wall", ElementCategory.StructuralWall);
-            structuralWall.Properties["LengthM"] = "2";
-            structuralWall.Properties["HeightM"] = "99";
-            structuralWall.Properties["ThicknessM"] = "0.2";
-            AssignBounded(project, structuralWall);
-            Throws<InvalidOperationException>(() => new StructuralRegenerator().Regenerate(project, structuralWall));
-            Equal("99", structuralWall.Properties["HeightM"]);
-
-            var slab = NewElement(project, "effective-slab", ElementCategory.Slab);
-            slab.Properties["AreaM2"] = "10";
-            slab.Properties["ThicknessM"] = "0.2";
-            slab.Properties["PerimeterM"] = "14";
-            AssignBounded(project, slab);
-            Throws<InvalidOperationException>(() => new StructuralRegenerator().Regenerate(project, slab));
-            Equal("0.2", slab.Properties["ThicknessM"]);
-
-            var foundation = NewElement(project, "effective-foundation", ElementCategory.Foundation);
-            foundation.Properties["BaseAreaM2"] = "6";
-            foundation.Properties["ThicknessM"] = "0.3";
-            foundation.Properties["PerimeterM"] = "10";
-            AssignBounded(project, foundation);
-            Throws<InvalidOperationException>(() => new StructuralRegenerator().Regenerate(project, foundation));
-            Equal("0.3", foundation.Properties["ThicknessM"]);
-
-            var railing = NewElement(project, "effective-railing", ElementCategory.Railing);
-            railing.Properties["LengthM"] = "5";
-            railing.Properties["HeightM"] = "1.1";
-            railing.Properties["PostSpacingM"] = "1";
-            AssignBounded(project, railing);
-            Throws<InvalidOperationException>(() => new StructuralRegenerator().Regenerate(project, railing));
-            Equal("1.1", railing.Properties["HeightM"]);
-
-            Near(4d, ElementVerticalPlacementService.ResolveEffectiveHeight(project, foundation, double.NaN));
-        }
-
         private static void DuplicateLevelIdsFailClosedDuringPlacement()
         {
             var project = NewProject();
@@ -299,6 +232,145 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => ProjectFloorService.Delete(project, "L1"));
         }
 
+        private static void LevelAwareQuantitiesUseEffectiveHeight()
+        {
+            var project = NewProject();
+            var wall = new ProjectElement("wall-level-quantity", ElementCategory.ArchitecturalWall, string.Empty, "L0", string.Empty);
+            wall.Properties["LengthM"] = "5";
+            wall.Properties["HeightM"] = "99";
+            wall.Properties["ThicknessM"] = "0.2";
+            project.Elements.Add(wall);
+            ProjectFloorService.AssignBottomLevel(project, "L1", new[] { wall });
+            ProjectFloorService.AssignTopLevel(project, "L2", new[] { wall });
+            new WallRegenerator().Regenerate(project, wall);
+            Near(4d, wall.Quantities["HeightM"]);
+            Near(20d, wall.Quantities["GrossWallAreaM2"]);
+            Near(4d, wall.Quantities["GrossVolumeM3"]);
+
+            var beam = new ProjectElement("beam-level-quantity", ElementCategory.Beam, string.Empty, "L0", string.Empty);
+            beam.Properties["LengthM"] = "2";
+            beam.Properties["WidthM"] = "0.3";
+            beam.Properties["HeightM"] = "ignored-invalid-top-range";
+            project.Elements.Add(beam);
+            ProjectFloorService.AssignBottomLevel(project, "L1", new[] { beam });
+            ProjectFloorService.AssignTopLevel(project, "L2", new[] { beam });
+            new StructuralRegenerator().Regenerate(project, beam);
+            Near(4d, beam.Quantities["HeightM"]);
+            Near(2.4d, beam.Quantities["GrossVolumeM3"]);
+
+            var opening = new ProjectElement("opening-level-quantity", ElementCategory.WallOpening, string.Empty, "L0", string.Empty);
+            opening.Properties["WidthM"] = "0.9";
+            opening.Properties["HeightM"] = "ignored-invalid-top-range";
+            project.Elements.Add(opening);
+            ProjectFloorService.AssignBottomLevel(project, "L1", new[] { opening });
+            ProjectFloorService.AssignTopLevel(project, "L2", new[] { opening });
+            new OpeningRegenerator().Regenerate(project, opening);
+            Near(3.6d, opening.Quantities["OpeningAreaM2"]);
+
+            var foundation = new ProjectElement("foundation-level-quantity", ElementCategory.Foundation, string.Empty, "L0", string.Empty);
+            foundation.Properties["BaseAreaM2"] = "2";
+            foundation.Properties["PerimeterM"] = "6";
+            foundation.Properties["ThicknessM"] = "ignored-invalid-top-range";
+            foundation.Properties["HeightM"] = "also-ignored-invalid-top-range";
+            project.Elements.Add(foundation);
+            ProjectFloorService.AssignBottomLevel(project, "L1", new[] { foundation });
+            ProjectFloorService.AssignTopLevel(project, "L2", new[] { foundation });
+            new StructuralRegenerator().Regenerate(project, foundation);
+            Near(4d, foundation.Quantities["ThicknessM"]);
+            Near(8d, foundation.Quantities["GrossVolumeM3"]);
+
+            var stair = new ProjectElement("stair-level-quantity", ElementCategory.Stair, string.Empty, "L0", string.Empty);
+            stair.Properties["AreaM2"] = "6";
+            stair.Properties["WidthM"] = "1.2";
+            stair.Properties["RunLengthM"] = "3";
+            stair.Properties["TotalRiseM"] = "1.8";
+            stair.Properties["ThicknessM"] = "ignored-invalid-top-range";
+            stair.Properties["StepCount"] = "10";
+            project.Elements.Add(stair);
+            ProjectFloorService.AssignBottomLevel(project, "L1", new[] { stair });
+            ProjectFloorService.AssignTopLevel(project, "L2", new[] { stair });
+            new StructuralRegenerator().Regenerate(project, stair);
+            Near(4d, stair.Quantities["ThicknessM"]);
+
+            var railing = new ProjectElement("railing-level-quantity", ElementCategory.Railing, string.Empty, "L0", string.Empty);
+            railing.Properties["LengthM"] = "5";
+            railing.Properties["HeightM"] = "ignored-invalid-top-range";
+            railing.Properties["PostSpacingM"] = "1";
+            project.Elements.Add(railing);
+            ProjectFloorService.AssignBottomLevel(project, "L1", new[] { railing });
+            ProjectFloorService.AssignTopLevel(project, "L2", new[] { railing });
+            new StructuralRegenerator().Regenerate(project, railing);
+            Near(4d, railing.Quantities["HeightM"]);
+            Near(20d, railing.Quantities["InfillAreaM2"]);
+        }
+
+        private static void OpeningLevelChangesInvalidateHostOutputs()
+        {
+            var project = NewProject();
+            var host = new ProjectElement("level-host", ElementCategory.GlassWall, string.Empty, "L0", string.Empty);
+            host.Properties["GeneratedSolidHandle"] = "ABC";
+            host.Properties["GeneratedCurtainFrameHandles"] = "ABD";
+            host.Properties["GeneratedCurtainPanelHandles"] = "ABE";
+            host.Properties["GeneratedCurtainPanelBuildState"] = "Complete";
+            project.Elements.Add(host);
+            var opening = new ProjectElement("level-opening", ElementCategory.Door, string.Empty, "L0", string.Empty);
+            opening.Properties["HostWallId"] = host.Id;
+            project.Elements.Add(opening);
+            host.MarkClean(ElementDirtyFlags.All);
+            opening.MarkClean(ElementDirtyFlags.All);
+
+            ProjectFloorService.AssignBottomLevel(project, "L1", new[] { opening });
+            True((host.Dirty & ElementDirtyFlags.Geometry) != 0);
+            True((host.Dirty & ElementDirtyFlags.Quantity) != 0);
+            True(host.IsGeneratedSolidStale());
+            True(host.IsGeneratedCurtainFrameStale());
+            True(host.IsGeneratedCurtainPanelStale());
+        }
+
+        private static void VerticalSnapshotsDetectStaleNativeOutputs()
+        {
+            var project = NewProject();
+            var element = NewElement(project, "vertical-snapshot");
+            ProjectFloorService.AssignBottomLevel(project, "L1", new[] { element });
+            ProjectFloorService.AssignTopLevel(project, "L2", new[] { element });
+            element.Properties["GeneratedSolidHandle"] = "ABC";
+            element.Properties["GeneratedSolidVerticalBottomM"] = "3";
+            element.Properties["GeneratedSolidVerticalTopM"] = "7";
+            element.Properties["GeneratedSolidVerticalHeightM"] = "4";
+            element.Properties["GeneratedSolidVerticalMode"] = "BottomTopLevels";
+
+            var current = new LevelReferenceHealthService().Inspect(project);
+            True(!current.Any(x => x.Code == "LEVEL_NATIVE_VERTICAL_SNAPSHOT_STALE" && x.ElementId == element.Id));
+            True(!current.Any(x => x.Code == "LEVEL_NATIVE_VERTICAL_SNAPSHOT_MISSING_OR_INVALID" && x.ElementId == element.Id));
+
+            element.Properties[ProjectFloorService.TopLevelOffsetKey] = "0.25";
+            var stale = new LevelReferenceHealthService().Inspect(project);
+            True(stale.Any(x => x.Code == "LEVEL_NATIVE_VERTICAL_SNAPSHOT_STALE" && x.ElementId == element.Id));
+
+            element.Properties.Remove("GeneratedSolidVerticalMode");
+            var invalid = new LevelReferenceHealthService().Inspect(project);
+            True(invalid.Any(x => x.Code == "LEVEL_NATIVE_VERTICAL_SNAPSHOT_MISSING_OR_INVALID" && x.ElementId == element.Id));
+        }
+
+        private static void CurtainFrameHealthFailsClosedOnInvalidBottomOnlyHeight()
+        {
+            var project = NewProject();
+            var wall = NewElement(project, "curtain-invalid-height", ElementCategory.GlassWall);
+            ProjectFloorService.AssignBottomLevel(project, "L1", new[] { wall });
+            wall.Properties["HeightM"] = "not-a-finite-height";
+            wall.Properties["GeneratedCurtainFrameHandles"] = "AA";
+            wall.Properties["GeneratedCurtainFrameCount"] = "1";
+            wall.Properties["GeneratedCurtainFrameColumns"] = "1";
+            wall.Properties["GeneratedCurtainFrameRows"] = "1";
+            wall.Properties["GeneratedCurtainFrameDepthM"] = "0.05";
+            wall.Properties["GeneratedCurtainFrameSourceLengthM"] = "5";
+            wall.Properties["GeneratedCurtainFrameHeightM"] = "3.6";
+            wall.Properties["GeneratedCurtainFrameMode"] = "LineFrameOverlay";
+
+            var issues = new GeneratedCurtainFrameHealthService().Inspect(project);
+            True(issues.Any(x => x.Code == "CURTAIN_FRAME_CONFIG_INVALID" && x.ElementId == wall.Id));
+        }
+
         private static void HealthRejectsBrokenLevelReferences()
         {
             var project = NewProject();
@@ -324,7 +396,7 @@ namespace QS3D.Core.SmokeTests
             True(!issues.Any(x => x.Code == "LEVEL_REFERENCE_NATIVE_INTEGRATION_PENDING" && x.ElementId == topWithoutBottom.Id));
         }
 
-        private static void HealthBlocksValidLevelReferencesUntilNativeQualification()
+        private static void HealthAcceptsQualifiedNativeCategories()
         {
             var project = NewProject();
             var bottomOnly = NewElement(project, "valid-bottom");
@@ -337,9 +409,21 @@ namespace QS3D.Core.SmokeTests
             bounded.Properties[ProjectFloorService.TopLevelOffsetKey] = "-0.1";
 
             var issues = new LevelReferenceHealthService().Inspect(project);
-            True(issues.Any(x => x.Code == "LEVEL_REFERENCE_NATIVE_INTEGRATION_PENDING" && x.ElementId == bottomOnly.Id));
-            True(issues.Any(x => x.Code == "LEVEL_REFERENCE_NATIVE_INTEGRATION_PENDING" && x.ElementId == bounded.Id));
-            True(!LevelReferenceNativeIntegrationPolicy.IsQualified(ElementCategory.Beam));
+            True(!issues.Any(x => x.Code == "LEVEL_REFERENCE_NATIVE_INTEGRATION_PENDING" && x.ElementId == bottomOnly.Id));
+            True(!issues.Any(x => x.Code == "LEVEL_REFERENCE_NATIVE_INTEGRATION_PENDING" && x.ElementId == bounded.Id));
+            True(LevelReferenceNativeIntegrationPolicy.IsQualified(ElementCategory.Beam));
+            True(LevelReferenceNativeIntegrationPolicy.IsQualified(ElementCategory.WallOpening));
+            True(!LevelReferenceNativeIntegrationPolicy.IsQualified(ElementCategory.Earthwork));
+        }
+
+        private static void UnsupportedCategoryFailsBeforeQuantityMutation()
+        {
+            var project = NewProject();
+            var earthwork = NewElement(project, "unsupported-earthwork", ElementCategory.Earthwork);
+            Equal(1, ProjectFloorService.AssignBottomLevel(project, "L1", new[] { earthwork }));
+
+            Throws<InvalidOperationException>(() => new StructuralRegenerator().Regenerate(project, earthwork));
+            Equal(0, earthwork.Quantities.Count);
         }
 
         private static ProjectState NewProject()

@@ -27,6 +27,8 @@ namespace QS3D.BricsCAD.V25
         {
             public Point2 Plan { get; set; }
             public double ReferenceElevationM { get; set; }
+            public double? TopElevationM { get; set; }
+            public bool UsesLevelPlacement { get; set; }
         }
 
         [CommandMethod("QS3DAUTOLINKHOSTS", CommandFlags.UsePickSet)]
@@ -92,7 +94,7 @@ namespace QS3D.BricsCAD.V25
                         try
                         {
                             var location = ReadOpeningLocation(document, transaction, project, opening);
-                            var candidates = ReadHostSegments(document, transaction, project, opening, location.ReferenceElevationM, elevationToleranceM, sagittaM);
+                            var candidates = ReadHostSegments(document, transaction, project, opening, location, elevationToleranceM, sagittaM);
                             var result = matcher.Match(location.Plan, candidates, maxGapM, ambiguityM);
                             if (result.Status == OpeningHostMatchStatus.Ambiguous)
                             {
@@ -220,7 +222,7 @@ namespace QS3D.BricsCAD.V25
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
                 var location = ReadOpeningLocation(document, transaction, project, opening);
-                var candidates = ReadHostSegments(document, transaction, project, opening, location.ReferenceElevationM, elevationToleranceM, sagittaM);
+                var candidates = ReadHostSegments(document, transaction, project, opening, location, elevationToleranceM, sagittaM);
                 match = new OpeningHostMatcher().Match(location.Plan, candidates, maxGapM, ambiguityM);
                 transaction.Commit();
             }
@@ -263,33 +265,38 @@ namespace QS3D.BricsCAD.V25
             if (entity == null || entity.IsErased) throw new InvalidOperationException("Opening source không còn tồn tại.");
             var extents = entity.GeometricExtents;
             var units = CadUnitService.GetPolicy(document);
-            var referenceElevationM = units.ToMeters(extents.MinPoint.Z);
-            if (CadVerticalPlacementResolver.HasConfiguredLevel(opening))
-            {
-                var family = project.FindFamily(opening.FamilyId);
-                var heightM = CadGeometryGuard.Positive(
-                    CadGeometryGuard.Number(opening, family, "HeightM", 2.2d), opening.Id + "/HeightM");
-                var sillM = CadGeometryGuard.Finite(
-                    CadGeometryGuard.Number(opening, family, "SillHeightM", CadGeometryGuard.Number(opening, family, "BottomOffsetM", 0d)),
-                    opening.Id + "/SillHeightM");
-                referenceElevationM = CadVerticalPlacementResolver.Resolve(
+            var usesLevelPlacement = CadElementVerticalPlacement.HasAnyLevelConfiguration(opening);
+            var verticalPlacement = usesLevelPlacement
+                ? CadElementVerticalPlacement.Resolve(
                     document,
                     project,
                     opening,
+                    project.FindFamily(opening.FamilyId),
                     extents.MinPoint.Z,
-                    heightM,
-                    sillM).Semantic.BottomElevationM;
-            }
+                    "HeightM",
+                    2.2d,
+                    "SillHeightM",
+                    opening.Category == ElementCategory.Door ? 0d : 0.9d)
+                : null;
             return new OpeningLocation
             {
                 Plan = new Point2(
                     units.ToMeters(Midpoint(extents.MinPoint.X, extents.MaxPoint.X)),
                     units.ToMeters(Midpoint(extents.MinPoint.Y, extents.MaxPoint.Y))),
-                ReferenceElevationM = referenceElevationM
+                ReferenceElevationM = verticalPlacement?.BottomElevationM ?? units.ToMeters(extents.MinPoint.Z),
+                TopElevationM = verticalPlacement?.TopElevationM,
+                UsesLevelPlacement = usesLevelPlacement
             };
         }
 
-        private static IReadOnlyList<OpeningHostSegment> ReadHostSegments(Document document, Transaction transaction, ProjectState project, ProjectElement opening, double openingElevationM, double elevationToleranceM, double sagittaM)
+        private static IReadOnlyList<OpeningHostSegment> ReadHostSegments(
+            Document document,
+            Transaction transaction,
+            ProjectState project,
+            ProjectElement opening,
+            OpeningLocation openingLocation,
+            double elevationToleranceM,
+            double sagittaM)
         {
             var result = new List<OpeningHostSegment>();
             var units = CadUnitService.GetPolicy(document);
@@ -297,14 +304,7 @@ namespace QS3D.BricsCAD.V25
             {
                 var family = project.FindFamily(wall.FamilyId);
                 var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(wall, family, "ThicknessM", 0.2d), wall.Id + "/ThicknessM");
-                var hasLevelPlacement = CadVerticalPlacementResolver.HasConfiguredLevel(wall);
-                var heightM = 0d;
-                var bottomOffsetM = 0d;
-                if (hasLevelPlacement)
-                {
-                    heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(wall, family, "HeightM", 3.6d), wall.Id + "/HeightM");
-                    bottomOffsetM = CadGeometryGuard.Finite(CadGeometryGuard.Number(wall, family, "BottomOffsetM", 0d), wall.Id + "/BottomOffsetM");
-                }
+                var hostUsesLevelPlacement = CadElementVerticalPlacement.HasAnyLevelConfiguration(wall);
                 foreach (var id in ResolveLiveIds(document, transaction, wall.SourceHandles))
                 {
                     var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
@@ -314,11 +314,17 @@ namespace QS3D.BricsCAD.V25
                         var startZM = units.ToMeters(line.StartPoint.Z);
                         var endZM = units.ToMeters(line.EndPoint.Z);
                         if (Math.Abs(startZM - endZM) > elevationToleranceM) continue;
-                        var candidateElevationM = hasLevelPlacement
-                            ? CadVerticalPlacementResolver.Resolve(
-                                document, project, wall, line.StartPoint.Z, heightM, bottomOffsetM).Semantic.BottomElevationM
-                            : Midpoint(startZM, endZM);
-                        if (Math.Abs(candidateElevationM - openingElevationM) > elevationToleranceM) continue;
+                        var lineHostPlacement = openingLocation.UsesLevelPlacement || hostUsesLevelPlacement
+                            ? CadElementVerticalPlacement.Resolve(
+                                document,
+                                project,
+                                wall,
+                                family,
+                                line.StartPoint.Z,
+                                "HeightM",
+                                3.6d)
+                            : null;
+                        if (!VerticalMatch(openingLocation, lineHostPlacement, Midpoint(startZM, endZM), elevationToleranceM)) continue;
                         result.Add(new OpeningHostSegment(wall.Id,
                             new Point2(units.ToMeters(line.StartPoint.X), units.ToMeters(line.StartPoint.Y)),
                             new Point2(units.ToMeters(line.EndPoint.X), units.ToMeters(line.EndPoint.Y)), thicknessM));
@@ -327,12 +333,17 @@ namespace QS3D.BricsCAD.V25
                     if (!(entity is Polyline polyline) || polyline.Closed || polyline.NumberOfVertices < 2) continue;
                     var normal = polyline.Normal;
                     if (Math.Abs(normal.X) > 1e-9d || Math.Abs(normal.Y) > 1e-9d || normal.Z < 1d - 1e-9d) continue;
-                    var elevationM = units.ToMeters(polyline.Elevation);
-                    var candidatePolylineElevationM = hasLevelPlacement
-                        ? CadVerticalPlacementResolver.Resolve(
-                            document, project, wall, polyline.Elevation, heightM, bottomOffsetM).Semantic.BottomElevationM
-                        : elevationM;
-                    if (Math.Abs(candidatePolylineElevationM - openingElevationM) > elevationToleranceM) continue;
+                    var pathHostPlacement = openingLocation.UsesLevelPlacement || hostUsesLevelPlacement
+                        ? CadElementVerticalPlacement.Resolve(
+                            document,
+                            project,
+                            wall,
+                            family,
+                            polyline.Elevation,
+                            "HeightM",
+                            3.6d)
+                        : null;
+                    if (!VerticalMatch(openingLocation, pathHostPlacement, units.ToMeters(polyline.Elevation), elevationToleranceM)) continue;
                     for (var index = 0; index < polyline.NumberOfVertices - 1; index++)
                     {
                         var a = polyline.GetPoint2dAt(index);
@@ -349,6 +360,24 @@ namespace QS3D.BricsCAD.V25
                 }
             }
             return result.AsReadOnly();
+        }
+
+        private static bool VerticalMatch(
+            OpeningLocation opening,
+            CadElementVerticalPlacement? host,
+            double legacyHostElevationM,
+            double toleranceM)
+        {
+            if (opening.UsesLevelPlacement)
+            {
+                if (host == null || !opening.TopElevationM.HasValue)
+                    throw new InvalidOperationException("Level-aware Auto Host requires complete opening and host vertical ranges.");
+                return opening.ReferenceElevationM >= host.BottomElevationM - toleranceM &&
+                       opening.TopElevationM.Value <= host.TopElevationM + toleranceM;
+            }
+
+            var hostBottomM = host?.BottomElevationM ?? legacyHostElevationM;
+            return Math.Abs(hostBottomM - opening.ReferenceElevationM) <= toleranceM;
         }
 
         private static IReadOnlyList<ObjectId> ResolveLiveIds(Document document, Transaction transaction, IEnumerable<string> handles)

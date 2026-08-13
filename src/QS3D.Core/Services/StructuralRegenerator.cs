@@ -1,4 +1,5 @@
 using System;
+using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Services
@@ -28,6 +29,7 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (element == null) throw new ArgumentNullException(nameof(element));
             if (!CanRegenerate(element.Category)) throw new InvalidOperationException("Unsupported structural category: " + element.Category);
+            LevelReferenceNativeIntegrationPolicy.EnsureQualified(element, "Structural quantity regeneration with Level references");
 
             switch (element.Category)
             {
@@ -36,7 +38,7 @@ namespace QS3D.Core.Services
                 case ElementCategory.Column: RegenerateColumn(project, element); break;
                 case ElementCategory.StructuralWall: RegenerateWall(project, element); break;
                 case ElementCategory.Foundation: RegenerateFoundation(project, element); break;
-                case ElementCategory.Stair: RegenerateStair(element); break;
+                case ElementCategory.Stair: RegenerateStair(project, element); break;
                 case ElementCategory.Railing: RegenerateRailing(project, element); break;
                 case ElementCategory.Earthwork: RegenerateEarthwork(element); break;
             }
@@ -46,8 +48,7 @@ namespace QS3D.Core.Services
         {
             var length = QuantityMath.Positive(SemanticNumber.Get(element, "LengthM"));
             var width = QuantityMath.Positive(SemanticNumber.Get(element, "WidthM"));
-            var legacyHeight = SemanticNumber.Get(element, "HeightM");
-            var height = QuantityMath.Positive(QualifiedVerticalQuantity.EffectiveHeight(project, element, legacyHeight));
+            var height = SemanticVertical.Height(project, element, "HeightM", .5d);
             var crossSection = QuantityMath.Multiply(width, height, element.Id + "/beam cross section");
             var gross = QuantityMath.Multiply(crossSection, length, element.Id + "/beam gross volume");
             var deduction = QuantityMath.Clamp(SemanticNumber.Get(element, "DeductionM3"), 0d, gross, element.Id + "/beam deduction");
@@ -57,6 +58,7 @@ namespace QS3D.Core.Services
             var formwork = QuantityMath.Multiply(exposedPerimeter, length, element.Id + "/beam formwork");
 
             element.SetQuantity("LengthM", length);
+            element.SetQuantity("HeightM", height);
             element.SetQuantity("CrossSectionAreaM2", crossSection);
             element.SetQuantity("GrossVolumeM3", gross);
             element.SetQuantity("DeductionM3", deduction);
@@ -68,8 +70,7 @@ namespace QS3D.Core.Services
         {
             var grossArea = QuantityMath.Positive(SemanticNumber.Get(element, "AreaM2"));
             var openingArea = QuantityMath.Clamp(SemanticNumber.Get(element, "OpeningAreaM2"), 0d, grossArea, element.Id + "/slab opening area");
-            var legacyThickness = SemanticNumber.Get(element, "ThicknessM");
-            var thickness = QuantityMath.Positive(QualifiedVerticalQuantity.EffectiveHeight(project, element, legacyThickness));
+            var thickness = SemanticVertical.Height(project, element, "ThicknessM", .12d);
             var perimeter = QuantityMath.Positive(SemanticNumber.Get(element, "PerimeterM"));
             var netArea = QuantityMath.SubtractFloorZero(grossArea, openingArea, element.Id + "/slab net area");
             var grossVolume = QuantityMath.Multiply(grossArea, thickness, element.Id + "/slab gross volume");
@@ -79,6 +80,7 @@ namespace QS3D.Core.Services
             var formwork = QuantityMath.Add(netArea, edgeFormwork, element.Id + "/slab formwork");
 
             element.SetQuantity("AreaM2", grossArea);
+            element.SetQuantity("ThicknessM", thickness);
             element.SetQuantity("OpeningAreaM2", openingArea);
             element.SetQuantity("NetAreaM2", netArea);
             element.SetQuantity("GrossVolumeM3", grossVolume);
@@ -91,8 +93,7 @@ namespace QS3D.Core.Services
         {
             var width = QuantityMath.Positive(SemanticNumber.Get(element, "WidthM"));
             var depth = QuantityMath.Positive(SemanticNumber.Get(element, "DepthM", width));
-            var legacyHeight = SemanticNumber.Get(element, "HeightM");
-            var height = QuantityMath.Positive(QualifiedVerticalQuantity.EffectiveHeight(project, element, legacyHeight));
+            var height = SemanticVertical.Height(project, element, "HeightM", 3.6d);
             var crossSection = QuantityMath.Multiply(width, depth, element.Id + "/column cross section");
             var gross = QuantityMath.Multiply(crossSection, height, element.Id + "/column gross volume");
             var widthDepth = QuantityMath.Add(width, depth, element.Id + "/column perimeter half");
@@ -109,8 +110,7 @@ namespace QS3D.Core.Services
         private static void RegenerateWall(ProjectState project, ProjectElement element)
         {
             var length = QuantityMath.Positive(SemanticNumber.Get(element, "LengthM"));
-            var legacyHeight = SemanticNumber.Get(element, "HeightM");
-            var height = QuantityMath.Positive(QualifiedVerticalQuantity.EffectiveHeight(project, element, legacyHeight));
+            var height = SemanticVertical.Height(project, element, "HeightM", 3.6d);
             var thickness = QuantityMath.Positive(SemanticNumber.Get(element, "ThicknessM"));
             var grossArea = QuantityMath.Multiply(length, height, element.Id + "/structural wall gross area");
             var linkedOpeningArea = LinkedOpeningArea(project, element);
@@ -124,6 +124,7 @@ namespace QS3D.Core.Services
             var formwork = QuantityMath.Multiply(2d, netArea, element.Id + "/structural wall formwork");
 
             element.SetQuantity("LengthM", length);
+            element.SetQuantity("HeightM", height);
             element.SetQuantity("GrossWallAreaM2", grossArea);
             element.SetQuantity("OpeningAreaM2", openingArea);
             element.SetQuantity("NetWallAreaM2", netArea);
@@ -136,25 +137,36 @@ namespace QS3D.Core.Services
         private static void RegenerateFoundation(ProjectState project, ProjectElement element)
         {
             var area = QuantityMath.Positive(SemanticNumber.Get(element, "BaseAreaM2", SemanticNumber.Get(element, "AreaM2")));
-            var legacyThickness = SemanticNumber.Get(element, "ThicknessM", SemanticNumber.Get(element, "HeightM"));
-            var thickness = QuantityMath.Positive(QualifiedVerticalQuantity.EffectiveHeight(project, element, legacyThickness));
+            double thickness;
+            if (!ElementVerticalPlacementService.HasAnyLevelConfiguration(element))
+            {
+                thickness = QuantityMath.Positive(
+                    SemanticNumber.Get(element, "ThicknessM", SemanticNumber.Get(element, "HeightM")));
+            }
+            else
+            {
+                // Level-enabled Foundation uses the native ThicknessM contract. Bottom+Top does
+                // not inspect it; Bottom-only uses it with the same 0.5 m fallback as the builder.
+                thickness = SemanticVertical.Height(project, element, "ThicknessM", .5d);
+            }
             var perimeter = QuantityMath.Positive(SemanticNumber.Get(element, "PerimeterM"));
             var gross = QuantityMath.Multiply(area, thickness, element.Id + "/foundation volume");
             var formwork = QuantityMath.Multiply(perimeter, thickness, element.Id + "/foundation formwork");
 
             element.SetQuantity("AreaM2", area);
+            element.SetQuantity("ThicknessM", thickness);
             element.SetQuantity("GrossVolumeM3", gross);
             element.SetQuantity("NetVolumeM3", gross);
             element.SetQuantity("FormworkM2", formwork);
         }
 
-        private static void RegenerateStair(ProjectElement element)
+        private static void RegenerateStair(ProjectState project, ProjectElement element)
         {
             var planArea = QuantityMath.Positive(SemanticNumber.Get(element, "AreaM2"));
             var width = QuantityMath.Positive(SemanticNumber.Get(element, "WidthM"));
             var runLength = QuantityMath.Positive(SemanticNumber.Get(element, "RunLengthM"));
             var totalRise = QuantityMath.Positive(SemanticNumber.Get(element, "TotalRiseM", SemanticNumber.Get(element, "HeightM")));
-            var thickness = QuantityMath.Positive(SemanticNumber.Get(element, "ThicknessM"));
+            var thickness = SemanticVertical.Height(project, element, "ThicknessM", .15d);
             var stepCount = QuantityMath.Positive(SemanticNumber.Get(element, "StepCount"));
             var treadFallback = stepCount > 0d && runLength > 0d ? QuantityMath.Divide(runLength, stepCount, element.Id + "/stair tread fallback") : 0d;
             var riserFallback = stepCount > 0d && totalRise > 0d ? QuantityMath.Divide(totalRise, stepCount, element.Id + "/stair riser fallback") : 0d;
@@ -174,6 +186,7 @@ namespace QS3D.Core.Services
             var gross = QuantityMath.Add(waistVolume, stepVolume, element.Id + "/stair gross volume");
 
             element.SetQuantity("AreaM2", planArea);
+            element.SetQuantity("ThicknessM", thickness);
             element.SetQuantity("RunLengthM", runLength);
             element.SetQuantity("TotalRiseM", totalRise);
             element.SetQuantity("SlopeLengthM", slopeLength);
@@ -189,8 +202,9 @@ namespace QS3D.Core.Services
         private static void RegenerateRailing(ProjectState project, ProjectElement element)
         {
             var length = QuantityMath.Positive(SemanticNumber.Get(element, "LengthM"));
-            var legacyHeight = SemanticNumber.Get(element, "HeightM", 1.1d);
-            var height = QuantityMath.Positive(QualifiedVerticalQuantity.EffectiveHeight(project, element, legacyHeight));
+            var height = ElementVerticalPlacementService.HasAnyLevelConfiguration(element)
+                ? SemanticVertical.Height(project, element, "HeightM", 1.1d)
+                : QuantityMath.Positive(SemanticNumber.Get(element, "HeightM", 1.1d));
             var postSpacing = QuantityMath.Positive(SemanticNumber.Get(element, "PostSpacingM", 1d));
             var postCount = 0d;
             if (length > 0d)
@@ -247,8 +261,7 @@ namespace QS3D.Core.Services
                 else
                 {
                     var width = QuantityMath.Positive(SemanticNumber.Get(child, "WidthM"));
-                    var legacyHeight = SemanticNumber.Get(child, "HeightM");
-                    var height = QuantityMath.Positive(QualifiedVerticalQuantity.EffectiveHeight(project, child, legacyHeight));
+                    var height = SemanticVertical.Height(project, child, "HeightM", 2.2d);
                     area = QuantityMath.Multiply(width, height, child.Id + "/opening area");
                 }
                 total = QuantityMath.Add(total, area, wall.Id + "/linked opening area");

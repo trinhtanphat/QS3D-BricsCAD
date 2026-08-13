@@ -44,7 +44,10 @@ if service.is_file():
         "CreateExtrudedSolid",
         "BooleanOperationType.BoolSubtract",
         'PhysicalOpeningCutMode"] = "CurvedCenterlineFootprint"',
-        "CadGeometryGuard.Add(hostBottomOffsetM, baseElevationM",
+        "CadElementVerticalPlacement.Resolve(",
+        "CadHostedOpeningVerticalPlacement.Resolve(",
+        "hostPlacement.BottomDrawing",
+        "CadGeometryGuard.ToDrawingUnits(document, baseElevationM",
         "CurvedFingerprint(",
         "Build 3D lại host trước khi khoét curved openings",
     ):

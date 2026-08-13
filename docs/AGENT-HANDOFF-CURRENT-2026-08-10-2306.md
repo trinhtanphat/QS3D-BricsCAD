@@ -2,6 +2,14 @@
 
 This is the newest short canonical source delta for agents continuing from `main`. Always fetch current `main` first; current source wins over this text if concurrent commits move ahead.
 
+## LOCAL-003 Level Z-chain source candidate — 2026-08-13
+
+The coherent vertical-placement source chain is now assembled around `ElementVerticalPlacementService` plus one branch-lazy BricsCAD adapter, `CadElementVerticalPlacement`. No-Level geometry preserves the legacy source-Z + `BottomOffsetM` path; Bottom-only uses Level elevation + explicit Level offset with legacy height; Bottom+Top derives the complete range; Top-only, missing/ambiguous Levels, non-finite offsets and invalid ranges fail closed before native ownership mutation.
+
+The candidate covers qualified wall/structural hosts, Door/WallOpening straight/curved cuts and Auto Host, Curtain LINE/path frames/panels/live state, generated rebar/ties/stirrups/mesh/shape placement, effective semantic quantities, generated vertical snapshots and Level-edit stale propagation. The Floor/Level modeless window exposes guarded Bottom/Top/Clear actions while preserving exact bound-project identity across stale document/project replacement.
+
+`LevelReferenceNativeIntegrationPolicy.IsQualified(...)` now means the category may leave the source integration gate; it is not a customer-release verdict. `QS3DLEVELZPROBE` plus `scripts/test-bricscad-v25-level-z.ps1` is the focused exact-SHA native probe. Until that probe and the wider mm/m, full-category, Undo, save/reopen, multi-DWG and private-DWG matrix pass against the same SHA/DLL, `LOCAL-003` remains `IN_PROGRESS / PENDING_LOCAL / NOT_LOCAL_PASS`.
+
 ## Superseding Direct Draw productivity delta — 2026-08-11
 
 Owner feedback identifies excessive modeling interaction as the current product bottleneck. Current source therefore uses a **Quick by default / Advanced for exceptions** authoring pattern while preserving the existing semantic/native safety pipeline.

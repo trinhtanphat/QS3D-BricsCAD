@@ -7,7 +7,24 @@ namespace QS3D.Core.Diagnostics
     {
         public static bool IsQualified(ElementCategory category)
         {
-            return false;
+            switch (category)
+            {
+                case ElementCategory.ArchitecturalWall:
+                case ElementCategory.GlassWall:
+                case ElementCategory.WallPier:
+                case ElementCategory.StructuralWall:
+                case ElementCategory.Beam:
+                case ElementCategory.Slab:
+                case ElementCategory.Column:
+                case ElementCategory.Foundation:
+                case ElementCategory.Stair:
+                case ElementCategory.Railing:
+                case ElementCategory.Door:
+                case ElementCategory.WallOpening:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         public static bool HasConfiguredReferences(ProjectElement element)

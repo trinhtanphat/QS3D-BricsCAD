@@ -29,39 +29,38 @@ wall_mesh = read("src/QS3D.BricsCAD.V25/Cad/StructuralWallMeshSolidBuilder.cs")
 shape = read("src/QS3D.BricsCAD.V25/Cad/ShapeRebarSolidBuilder.cs")
 policy = read("src/QS3D.Core/Diagnostics/LevelReferenceNativeIntegrationPolicy.cs")
 
-for label, text, source_base, legacy_height in (
-    ("beam longitudinal bars", beam, "line.StartPoint.Z", "legacyHeightM"),
-    ("beam stirrups", stirrups, "source.StartPoint.Z", "legacyHeightM"),
-    ("column longitudinal bars", column, "polyline.Elevation", "legacyHeightM"),
-    ("column ties", ties, "polyline.Elevation", "legacyHeightM"),
-    ("slab mesh", slab_mesh, "polyline.Elevation", "legacyThicknessM"),
-    ("foundation mesh", foundation_mesh, "polyline.Elevation", "legacyThicknessM"),
-    ("structural-wall mesh", wall_mesh, "line.StartPoint.Z", "legacyHeightM"),
+for label, text, source_base, height_key, snapshot_prefix in (
+    ("beam longitudinal bars", beam, "line.StartPoint.Z", "HeightM", "GeneratedRebar"),
+    ("beam stirrups", stirrups, "source.StartPoint.Z", "HeightM", "GeneratedBeamStirrup"),
+    ("column longitudinal bars", column, "polyline.Elevation", "HeightM", "GeneratedRebar"),
+    ("column ties", ties, "polyline.Elevation", "HeightM", "GeneratedTieRebar"),
+    ("slab mesh", slab_mesh, "polyline.Elevation", "ThicknessM", "GeneratedSlabMesh"),
+    ("foundation mesh", foundation_mesh, "polyline.Elevation", "ThicknessM", "GeneratedFoundationMesh"),
+    ("structural-wall mesh", wall_mesh, "line.StartPoint.Z", "HeightM", "GeneratedWallMesh"),
 ):
-    require(text, "CadVerticalPlacementResolver.Resolve(", label)
+    require(text, "CadElementVerticalPlacement.Resolve(", label)
     require(text, source_base, label)
-    require(text, legacy_height, label)
-    resolve = text.find("CadVerticalPlacementResolver.Resolve(")
+    require(text, '"' + height_key + '"', label)
+    require(text, 'CadElementVerticalPlacement.CommitSnapshot(update.Element, "' + snapshot_prefix + '"', label)
+    resolve = text.find("CadElementVerticalPlacement.Resolve(")
     erase = text.find("ErasePrevious", resolve)
     if resolve < 0 or erase < 0 or resolve >= erase:
         errors.append(label + " must resolve and validate Level placement before erasing generated native output")
 
 for label, text in (("beam longitudinal bars", beam), ("beam stirrups", stirrups)):
-    require(text, "placement.BottomDrawingUnits", label)
-    require(text, "placement.HeightDrawingUnits / 2d", label)
+    require(text, "var centerZ = vertical.CenterDrawing;", label)
 
-require(column, "var height = placement.HeightDrawingUnits;", "column longitudinal bars")
-require(column, "var baseZ = placement.BottomDrawingUnits;", "column longitudinal bars")
-require(ties, "var heightM = placement.HeightM;", "column ties")
-require(ties, "CadGeometryGuard.Add(placement.BottomDrawingUnits, elevation", "column ties")
-for label, text, placement_name in (
-    ("slab mesh", slab_mesh, "placement"),
-    ("foundation mesh", foundation_mesh, "placement"),
-    ("structural-wall mesh", wall_mesh, "hostPlacement"),
+require(column, "var height = vertical.HeightDrawing;", "column longitudinal bars")
+require(column, "var baseZ = vertical.BottomDrawing;", "column longitudinal bars")
+require(ties, "var heightM = vertical.HeightM;", "column ties")
+require(ties, "CadGeometryGuard.Add(vertical.BottomDrawing, elevation", "column ties")
+for label, text, dimension_key in (
+    ("slab mesh", slab_mesh, "thicknessM"),
+    ("foundation mesh", foundation_mesh, "thicknessM"),
+    ("structural-wall mesh", wall_mesh, "heightM"),
 ):
-    require(text, "var heightM = " + placement_name + ".HeightM;" if label == "structural-wall mesh" else "var thicknessM = " + placement_name + ".HeightM;", label)
-    require(text, placement_name + ".BottomDrawingUnits", label)
-    require(text, placement_name + ".HeightDrawingUnits / 2d", label)
+    require(text, "var " + dimension_key + " = verticalPlacement.HeightM;", label)
+    require(text, "var centerZ = verticalPlacement.CenterDrawing;", label)
 
 for label, text, forbidden in (
     ("beam stirrups", stirrups, "var baseZ = CadGeometryGuard.Add(source.StartPoint.Z"),
@@ -72,10 +71,12 @@ for label, text, forbidden in (
         errors.append(label + " still contains a legacy-only Z path after shared placement resolution")
 
 for token in (
-    "CadVerticalPlacementResolver.HasConfiguredLevel(element)",
-    "CadVerticalPlacementResolver.Resolve(",
-    ").BottomDrawingUnits;",
-    "LegacyPlacementHeightM(element, family)",
+    "CadElementVerticalPlacement.HasAnyLevelConfiguration(element)",
+    "CadElementVerticalPlacement.Resolve(",
+    "vertical.BottomDrawing",
+    "extentsVertical.BottomDrawing",
+    'CadElementVerticalPlacement.CommitSnapshot(item.Element, "GeneratedShapeRebar"',
+    'CadElementVerticalPlacement.ClearSnapshot(item.Element, "GeneratedShapeRebar")',
 ):
     require(shape, token, "BBS shape rebar")
 shape_resolve = shape.find("var placement = ResolvePlacement(")
@@ -90,4 +91,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] Longitudinal/transverse reinforcement, Slab/Foundation/StructuralWall meshes and BBS shape origins share host Level placement before native replacement; policy remains fail-closed pending Stair/UI and V25 proof")
+print("[PASS] Longitudinal/transverse reinforcement, Slab/Foundation/StructuralWall meshes and BBS shape origins use the shared branch-lazy Level placement before native replacement, persist vertical snapshots, and remain runtime-pending until exact V25 proof")

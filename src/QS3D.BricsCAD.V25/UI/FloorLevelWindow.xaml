@@ -31,7 +31,7 @@
                             <TextBlock Text="SEMANTIC LEVEL" Foreground="{StaticResource LuxuryBrush}" FontSize="9" FontWeight="SemiBold"/>
                         </Border>
                     </StackPanel>
-                    <TextBlock Text="Quản lý tầng • active floor cho capture • gán FloorId an toàn cho semantic selection"
+                    <TextBlock Text="Quản lý tầng • active floor • gán FloorId hoặc Bottom/Top Level cho semantic selection"
                                Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
                 </StackPanel>
                 <Button Grid.Column="1" Content="Làm mới" Click="OnRefreshClick"
@@ -98,9 +98,15 @@
                     <WrapPanel>
                         <Button Content="Đặt làm tầng hoạt động" Click="OnActivateClick"/>
                         <Button Content="Gán tầng cho selection" Style="{StaticResource AccentButton}" Click="OnAssignClick"/>
+                        <Button Content="Gán Level đáy" Style="{StaticResource AccentButton}" Click="OnAssignBottomLevelClick"
+                                ToolTip="Đặt cao độ đáy native theo Level được chọn; source CAD không bị Move."/>
+                        <Button Content="Gán Level đỉnh" Style="{StaticResource AccentButton}" Click="OnAssignTopLevelClick"
+                                ToolTip="Đặt cao độ đỉnh native theo Level được chọn; phải gán Level đáy trước."/>
+                        <Button Content="Xóa Level đứng" Click="OnClearVerticalLevelsClick"
+                                ToolTip="Trở về Height/Thickness + BottomOffset tương đối source cho selection."/>
                         <Button Content="Kiểm tra selection" Click="OnInspectSelectionClick"/>
                     </WrapPanel>
-                    <TextBlock Text="Đổi cao độ tầng hoặc gán FloorId sẽ làm generated geometry liên quan thành stale. QS3D KHÔNG tự Move/Translate source CAD theo cao độ tầng; hãy cập nhật hình học CAD riêng rồi rebuild nếu cần. Không thể xóa tầng active hoặc tầng còn semantic element tham chiếu."
+                    <TextBlock Text="Bottom/Top Level điều khiển đáy và chiều cao hiệu dụng của host, rebar, opening/cutter và Curtain khi rebuild. Gán/xóa Level hoặc đổi cao độ sẽ đánh dấu output liên quan stale; QS3D KHÔNG tự Move/Translate source CAD. Xóa Level đứng sẽ quay lại Height/Thickness + BottomOffset legacy. Không thể xóa tầng active hoặc tầng còn semantic element tham chiếu."
                                Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,9,0,0"/>
                 </StackPanel>
             </Border>

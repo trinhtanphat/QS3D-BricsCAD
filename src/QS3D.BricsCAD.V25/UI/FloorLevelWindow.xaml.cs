@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Audit;
+using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
 
@@ -13,6 +14,13 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class FloorLevelWindow : Window
     {
+        private enum VerticalLevelMutation
+        {
+            AssignBottom,
+            AssignTop,
+            Clear
+        }
+
         private readonly Document _document;
         private ProjectState? _boundProject;
         private string _editingFloorId = string.Empty;
@@ -217,6 +225,109 @@ namespace QS3D.BricsCAD.V25.UI
             catch (Exception ex) { SetStatus("Gán tầng lỗi: " + ex.Message); }
         }
 
+        private void OnAssignBottomLevelClick(object sender, RoutedEventArgs e) =>
+            ApplyVerticalLevelMutation(VerticalLevelMutation.AssignBottom);
+
+        private void OnAssignTopLevelClick(object sender, RoutedEventArgs e) =>
+            ApplyVerticalLevelMutation(VerticalLevelMutation.AssignTop);
+
+        private void OnClearVerticalLevelsClick(object sender, RoutedEventArgs e) =>
+            ApplyVerticalLevelMutation(VerticalLevelMutation.Clear);
+
+        private void ApplyVerticalLevelMutation(VerticalLevelMutation mutation)
+        {
+            var operation = mutation == VerticalLevelMutation.AssignBottom
+                ? "Gán Level đáy"
+                : mutation == VerticalLevelMutation.AssignTop ? "Gán Level đỉnh" : "Xóa Level đứng";
+            try
+            {
+                var previewProject = RequireBoundProjectForRead(operation.ToLowerInvariant());
+                var selectedFloorId = string.Empty;
+                if (mutation != VerticalLevelMutation.Clear)
+                {
+                    if (!(FloorList.SelectedItem is FloorDefinition selectedFloor))
+                        throw new InvalidOperationException("Chọn một Level trước khi gán.");
+                    selectedFloorId = selectedFloor.Id;
+                }
+
+                if (selectedFloorId.Length > 0 && previewProject.FindFloor(selectedFloorId) == null)
+                    throw new InvalidOperationException("Level đã chọn không còn tồn tại. Hãy Refresh và chọn lại.");
+                var expectedProjectId = previewProject.ProjectId;
+                var previewIds = SemanticSelectionResolver.ResolveImplied(_document, previewProject)
+                    .Select(x => x.Id)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (previewIds.Count == 0)
+                    throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
+
+                var project = ExistingProjectMutationContext.Require(_document, operation);
+                if (!ReferenceEquals(project, _boundProject) || !ReferenceEquals(project, previewProject) ||
+                    !string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("QS3D project đã thay đổi sau khi đọc selection; không có Level mutation nào được áp dụng.");
+                var floor = selectedFloorId.Length == 0
+                    ? null
+                    : project.FindFloor(selectedFloorId) ?? throw new InvalidOperationException("Level đã chọn vừa bị xóa hoặc thay đổi.");
+                var elements = SemanticSelectionResolver.ResolveImplied(_document, project)
+                    .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                    .Select(x => x.First())
+                    .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                var currentIds = elements.Select(x => x.Id).ToList();
+                if (!previewIds.SequenceEqual(currentIds, StringComparer.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Selection hoặc semantic ownership đã thay đổi; hãy chọn lại và thử lại.");
+                if (mutation != VerticalLevelMutation.Clear)
+                {
+                    foreach (var element in elements)
+                        LevelReferenceNativeIntegrationPolicy.EnsureQualified(element, operation);
+                }
+
+                var before = elements.Select(x => new { Element = x, Token = VerticalLevelToken(x) }).ToList();
+                var rollback = ProjectStateSnapshot.Capture(project);
+                int changed;
+                try
+                {
+                    switch (mutation)
+                    {
+                        case VerticalLevelMutation.AssignBottom:
+                            changed = ProjectFloorService.AssignBottomLevel(project, floor!.Id, elements);
+                            break;
+                        case VerticalLevelMutation.AssignTop:
+                            changed = ProjectFloorService.AssignTopLevel(project, floor!.Id, elements);
+                            break;
+                        default:
+                            changed = ProjectFloorService.ClearVerticalLevels(project, elements);
+                            break;
+                    }
+
+                    foreach (var item in before.Where(x => !string.Equals(x.Token, VerticalLevelToken(x.Element), StringComparison.Ordinal)))
+                        AuditTrail.ForProject(project).Record(
+                            mutation == VerticalLevelMutation.AssignBottom ? "level.bottom.assign" :
+                            mutation == VerticalLevelMutation.AssignTop ? "level.top.assign" : "level.vertical.clear",
+                            item.Element.Id,
+                            item.Token + " -> " + VerticalLevelToken(item.Element) + " • source CAD unchanged; native outputs stale");
+                }
+                catch (Exception operationError)
+                {
+                    RestoreOrThrow(project, rollback, operationError, operation);
+                    throw;
+                }
+
+                var levelLabel = floor == null
+                    ? "legacy source-relative placement"
+                    : floor.Name + " • " + floor.ElevationM.ToString("0.###", CultureInfo.InvariantCulture) + " m";
+                RefreshAfterCommit(
+                    () =>
+                    {
+                        SelectionCountText.Text = elements.Count.ToString(CultureInfo.InvariantCulture);
+                        RefreshLabels();
+                    },
+                    operation + ": " + changed + "/" + elements.Count + " element • " + levelLabel + ". Rebuild output stale; source CAD không bị Move.",
+                    operation);
+            }
+            catch (Exception ex) { SetStatus(operation + " lỗi: " + ex.Message); }
+        }
+
         private void OnInspectSelectionClick(object sender, RoutedEventArgs e)
         {
             try
@@ -407,6 +518,13 @@ namespace QS3D.BricsCAD.V25.UI
             if (double.IsNaN(value) || double.IsInfinity(value))
                 throw new InvalidOperationException("Cao độ phải hữu hạn.");
             return value;
+        }
+
+        private static string VerticalLevelToken(ProjectElement element)
+        {
+            string Value(string key) => element.Properties.TryGetValue(key, out var raw) ? (raw ?? string.Empty).Trim() : string.Empty;
+            return "bottom=" + Value(ProjectFloorService.BottomLevelIdKey) + "@" + Value(ProjectFloorService.BottomLevelOffsetKey) +
+                   ";top=" + Value(ProjectFloorService.TopLevelIdKey) + "@" + Value(ProjectFloorService.TopLevelOffsetKey);
         }
 
         private static string FloorLabel(ProjectState project, string floorId)

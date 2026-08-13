@@ -28,6 +28,7 @@ namespace QS3D.BricsCAD.V25.Cad
         private sealed class PendingUpdate
         {
             public ProjectElement Element { get; set; } = null!;
+            public CadElementVerticalPlacement VerticalPlacement { get; set; } = null!;
             public List<string> Handles { get; } = new List<string>();
             public double HorizontalDiameterMm { get; set; }
             public double VerticalDiameterMm { get; set; }
@@ -98,7 +99,15 @@ namespace QS3D.BricsCAD.V25.Cad
                         var planarityTolerance = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, .005d, element.Id + "/wall mesh planarity tolerance"), element.Id + "/wall mesh planarity tolerance drawing");
                         if (Math.Abs(dz) > planarityTolerance) throw new InvalidOperationException("StructuralWall mesh 3D hiện yêu cầu source LINE gần ngang (|ΔZ| <= 0.005 m): " + element.Id);
                         var lengthM = CadGeometryGuard.ToMeters(document, lengthDrawing, element.Id + "/wall length");
-                        var legacyHeightM = CadGeometryGuard.Number(element, family, "HeightM", 3d);
+                        var verticalPlacement = CadElementVerticalPlacement.Resolve(
+                            document,
+                            project,
+                            element,
+                            family,
+                            line.StartPoint.Z,
+                            "HeightM",
+                            3.6d);
+                        var heightM = verticalPlacement.HeightM;
                         var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", .2d), element.Id + "/ThicknessM");
                         var coverM = CadGeometryGuard.Number(element, family, "RebarWallCoverM", CadGeometryGuard.Number(element, family, "RebarCoverM", .02d));
                         if (coverM < 0d) throw new InvalidOperationException(element.Id + "/RebarWallCoverM phải >= 0.");
@@ -107,15 +116,6 @@ namespace QS3D.BricsCAD.V25.Cad
                         var includeFar = string.Equals(faces, "Far", StringComparison.OrdinalIgnoreCase) || string.Equals(faces, "Both", StringComparison.OrdinalIgnoreCase);
                         if (!includeNear && !includeFar) throw new InvalidOperationException(element.Id + "/RebarWallFaces phải là Near, Far hoặc Both.");
                         var horizontalClosest = Boolean(element, family, "RebarWallHorizontalClosestToFace", true);
-                        var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-                        var hostPlacement = CadVerticalPlacementResolver.Resolve(
-                            document,
-                            project,
-                            element,
-                            line.StartPoint.Z,
-                            legacyHeightM,
-                            bottomM);
-                        var heightM = hostPlacement.HeightM;
                         var layout = RectangularWallMeshPlanner.Plan(new RectangularWallMeshInput
                         {
                             LengthM = lengthM,
@@ -142,14 +142,12 @@ namespace QS3D.BricsCAD.V25.Cad
                         var normal = new Vector3d(-uy, ux, 0d);
                         var midX = CadGeometryGuard.Midpoint(line.StartPoint.X, line.EndPoint.X, element.Id + "/wall mid X");
                         var midY = CadGeometryGuard.Midpoint(line.StartPoint.Y, line.EndPoint.Y, element.Id + "/wall mid Y");
-                        var centerZ = CadGeometryGuard.Add(
-                            hostPlacement.BottomDrawingUnits,
-                            hostPlacement.HeightDrawingUnits / 2d,
-                            element.Id + "/wall mesh center Z");
+                        var centerZ = verticalPlacement.CenterDrawing;
                         var wallCenter = new Point3d(midX, midY, centerZ);
                         var update = new PendingUpdate
                         {
                             Element = element,
+                            VerticalPlacement = verticalPlacement,
                             HorizontalDiameterMm = horizontal.DiameterMm,
                             VerticalDiameterMm = vertical.DiameterMm,
                             CoverM = coverM,
@@ -241,6 +239,7 @@ namespace QS3D.BricsCAD.V25.Cad
             update.Element.Properties["GeneratedWallMeshHorizontalActualSpacingM"] = update.HorizontalSpacingM.ToString("R", CultureInfo.InvariantCulture);
             update.Element.Properties["GeneratedWallMeshVerticalActualSpacingM"] = update.VerticalSpacingM.ToString("R", CultureInfo.InvariantCulture);
             update.Element.Properties["GeneratedWallMeshFaces"] = update.Faces;
+            CadElementVerticalPlacement.CommitSnapshot(update.Element, "GeneratedWallMesh", update.VerticalPlacement);
             AuditTrail.ForProject(project).Record("geometry.rebar.wall.mesh", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " bars");
         }
 

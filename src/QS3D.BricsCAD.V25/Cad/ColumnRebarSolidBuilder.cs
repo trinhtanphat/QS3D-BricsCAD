@@ -24,6 +24,7 @@ namespace QS3D.BricsCAD.V25.Cad
             public List<string> Handles { get; } = new List<string>();
             public double DiameterMm { get; set; }
             public double CoverM { get; set; }
+            public CadElementVerticalPlacement VerticalPlacement { get; set; } = null!;
         }
 
         public static int BuildSelected(Document document, ProjectState project)
@@ -121,23 +122,16 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (layout.BarCenters.Count > MaxBarsPerElement) throw new InvalidOperationException(element.Id + " vượt giới hạn " + MaxBarsPerElement + " thanh cột 3D.");
                         if (totalBars > MaxBarsPerBatch - layout.BarCenters.Count) throw new InvalidOperationException("Column Rebar 3D vượt giới hạn " + MaxBarsPerBatch + " thanh/batch.");
 
-                        var legacyHeightM = CadGeometryGuard.Number(element, family, "HeightM", 3.6d);
-                        var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-                        var placement = CadVerticalPlacementResolver.Resolve(
-                            document,
-                            project,
-                            element,
-                            polyline.Elevation,
-                            legacyHeightM,
-                            bottomOffsetM);
-                        var height = placement.HeightDrawingUnits;
+                        var vertical = CadElementVerticalPlacement.Resolve(
+                            document, project, element, family, polyline.Elevation, "HeightM", 3.6d);
+                        var height = vertical.HeightDrawing;
                         var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, diameterMm / 2000d, element.Id + "/rebar radius"), element.Id + "/rebar drawing radius");
                         var centerX = CadGeometryGuard.Midpoint(p0.X, p2.X, element.Id + "/center X");
                         var centerY = CadGeometryGuard.Midpoint(p0.Y, p2.Y, element.Id + "/center Y");
-                        var baseZ = placement.BottomDrawingUnits;
+                        var baseZ = vertical.BottomDrawing;
 
                         ErasePrevious(document, transaction, project, element, ownership);
-                        var update = new PendingUpdate { Element = element, DiameterMm = diameterMm, CoverM = coverM };
+                        var update = new PendingUpdate { Element = element, DiameterMm = diameterMm, CoverM = coverM, VerticalPlacement = vertical };
                         foreach (var local in layout.BarCenters)
                         {
                             var localX = CadGeometryGuard.ToDrawingUnits(document, local.X, element.Id + "/rebar local X");
@@ -198,6 +192,7 @@ namespace QS3D.BricsCAD.V25.Cad
             update.Element.Properties["GeneratedRebarDiameterMm"] = update.DiameterMm.ToString("R", CultureInfo.InvariantCulture);
             update.Element.Properties["GeneratedRebarCoverM"] = update.CoverM.ToString("R", CultureInfo.InvariantCulture);
             update.Element.Properties["GeneratedRebarMode"] = "ColumnVerticalBars";
+            CadElementVerticalPlacement.CommitSnapshot(update.Element, "GeneratedRebar", update.VerticalPlacement);
             update.Element.ClearGeneratedRebarStale();
             AuditTrail.ForProject(project).Record("geometry.rebar.column", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " bars");
         }

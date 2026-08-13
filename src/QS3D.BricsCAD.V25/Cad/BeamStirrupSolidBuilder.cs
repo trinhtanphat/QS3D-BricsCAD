@@ -38,6 +38,7 @@ namespace QS3D.BricsCAD.V25.Cad
             public double HookTailAngleDeg { get; set; }
             public bool HasHookTails { get; set; }
             public string Notation { get; set; } = string.Empty;
+            public CadElementVerticalPlacement VerticalPlacement { get; set; } = null!;
         }
 
         public static BeamStirrupBuildResult BuildSelected(Document document, ProjectState project)
@@ -104,7 +105,9 @@ namespace QS3D.BricsCAD.V25.Cad
 
                         var family = project.FindFamily(element.FamilyId);
                         var widthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "WidthM", .3d), element.Id + "/WidthM");
-                        var legacyHeightM = CadGeometryGuard.Number(element, family, "HeightM", .5d);
+                        var vertical = CadElementVerticalPlacement.Resolve(
+                            document, project, element, family, source.StartPoint.Z, "HeightM", .5d);
+                        var heightM = vertical.HeightM;
                         var sectionCoverM = CadGeometryGuard.Number(element, family, "RebarStirrupCoverM", CadGeometryGuard.Number(element, family, "RebarCoverM", .025d));
                         var endCoverM = CadGeometryGuard.Number(element, family, "RebarStirrupEndCoverM", sectionCoverM);
                         var bendRadiusM = CadGeometryGuard.Number(element, family, "RebarStirrupBendRadiusM", 0d);
@@ -115,15 +118,6 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (endCoverM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupEndCoverM phải >= 0.");
                         if (bendRadiusM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupBendRadiusM phải >= 0.");
                         if (hookLengthM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupHookLengthM phải >= 0.");
-                        var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-                        var placement = CadVerticalPlacementResolver.Resolve(
-                            document,
-                            project,
-                            element,
-                            source.StartPoint.Z,
-                            legacyHeightM,
-                            bottomM);
-                        var heightM = placement.HeightM;
 
                         var dx = CadGeometryGuard.Subtract(source.EndPoint.X, source.StartPoint.X, element.Id + "/beam dx");
                         var dy = CadGeometryGuard.Subtract(source.EndPoint.Y, source.StartPoint.Y, element.Id + "/beam dy");
@@ -164,7 +158,8 @@ namespace QS3D.BricsCAD.V25.Cad
                             HookLengthM = hookLengthM,
                             HookTailAngleDeg = hookTailAngleDeg,
                             HasHookTails = layout.HasHookTails,
-                            Notation = notation.Trim()
+                            Notation = notation.Trim(),
+                            VerticalPlacement = vertical
                         };
 
                         var ux = dx / lengthDrawing;
@@ -172,10 +167,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         var perpendicular = new Vector3d(-uy, ux, 0d);
                         var midX = CadGeometryGuard.Midpoint(source.StartPoint.X, source.EndPoint.X, element.Id + "/beam mid X");
                         var midY = CadGeometryGuard.Midpoint(source.StartPoint.Y, source.EndPoint.Y, element.Id + "/beam mid Y");
-                        var centerZ = CadGeometryGuard.Add(
-                            placement.BottomDrawingUnits,
-                            placement.HeightDrawingUnits / 2d,
-                            element.Id + "/beam center Z");
+                        var centerZ = vertical.CenterDrawing;
                         var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, group.DiameterMm / 2000d, element.Id + "/stirrup radius"), element.Id + "/stirrup radius drawing");
 
                         foreach (var stationM in layout.StationOffsetsM)
@@ -240,6 +232,7 @@ namespace QS3D.BricsCAD.V25.Cad
             update.Element.Properties["GeneratedBeamStirrupHookTailAngleDeg"] = update.HookTailAngleDeg.ToString("R", CultureInfo.InvariantCulture);
             update.Element.Properties["GeneratedBeamStirrupNotation"] = update.Notation;
             update.Element.Properties["GeneratedBeamStirrupMode"] = update.HasHookTails ? "Beam.Line.RectangularHookedPath" : (update.BendRadiusM > 1e-12d ? "Beam.Line.RectangularRoundedLoop" : "Beam.Line.RectangularClosedLoop");
+            CadElementVerticalPlacement.CommitSnapshot(update.Element, "GeneratedBeamStirrup", update.VerticalPlacement);
             update.Element.ClearGeneratedBeamStirrupStale();
             AuditTrail.ForProject(project).Record("geometry.rebar.beam.stirrup", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " stirrups");
         }

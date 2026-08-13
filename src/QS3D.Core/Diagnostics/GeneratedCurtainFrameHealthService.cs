@@ -89,9 +89,40 @@ namespace QS3D.Core.Diagnostics
                 var storedLength = PositiveValue(element, "GeneratedCurtainFrameSourceLengthM", "CURTAIN_FRAME_SOURCE_LENGTH_INVALID", "CURTAIN_FRAME_SOURCE_LENGTH_NON_CANONICAL", issues);
                 var storedHeight = PositiveValue(element, "GeneratedCurtainFrameHeightM", "CURTAIN_FRAME_HEIGHT_INVALID", "CURTAIN_FRAME_HEIGHT_NON_CANONICAL", issues);
                 CompareCurrent(element, "LengthM", storedLength, "CURTAIN_FRAME_SOURCE_LENGTH_STALE", issues);
-                if (!LevelReferenceNativeIntegrationPolicy.HasConfiguredReferences(element))
-                    CompareCurrent(element, "HeightM", storedHeight, "CURTAIN_FRAME_HEIGHT_STALE", issues);
-                ValidateConfigFingerprint(project, element, storedLength, storedHeight, storedDepth, issues);
+                var family = project.FindFamily(element.FamilyId);
+                try
+                {
+                    double currentHeight;
+                    double currentBottom;
+                    if (ElementVerticalPlacementService.HasAnyLevelConfiguration(element))
+                    {
+                        var probe = ElementVerticalPlacementService.Resolve(project, element, 0d, 1d, 0d);
+                        var hasTop = element.Properties.TryGetValue(ProjectFloorService.TopLevelIdKey, out var topId) && !string.IsNullOrWhiteSpace(topId);
+                        var placement = probe;
+                        if (!hasTop)
+                        {
+                            var legacyHeight = Number(element, family, "HeightM", storedHeight ?? 3.6d, true);
+                            placement = ElementVerticalPlacementService.Resolve(project, element, 0d, legacyHeight, 0d);
+                        }
+                        currentHeight = placement.HeightM;
+                        currentBottom = placement.BottomElevationM;
+                    }
+                    else
+                    {
+                        currentHeight = Number(element, family, "HeightM", storedHeight ?? 3.6d, true);
+                        currentBottom = Number(element, family, "BottomOffsetM", 0d, false);
+                    }
+                    CompareValue(element, "HeightM", currentHeight, storedHeight, "CURTAIN_FRAME_HEIGHT_STALE", issues);
+                    ValidateConfigFingerprint(project, element, storedLength, storedHeight, storedDepth, currentHeight, currentBottom, issues);
+                }
+                catch (Exception ex) when (IsConfigDataFailure(ex))
+                {
+                    issues.Add(new ModelHealthIssue(
+                        "CURTAIN_FRAME_CONFIG_INVALID",
+                        HealthSeverity.Warning,
+                        "Không thể kiểm tra cao độ/config curtain frame hiện tại vì semantic/family config không hợp lệ.",
+                        element.Id));
+                }
 
                 var rawMode = element.Properties.TryGetValue("GeneratedCurtainFrameMode", out var modeRaw) ? modeRaw ?? string.Empty : string.Empty;
                 var mode = rawMode.Trim();
@@ -132,7 +163,15 @@ namespace QS3D.Core.Diagnostics
             return issues.AsReadOnly();
         }
 
-        private static void ValidateConfigFingerprint(ProjectState project, ProjectElement element, double? storedLength, double? storedHeight, double? storedDepth, List<ModelHealthIssue> issues)
+        private static void ValidateConfigFingerprint(
+            ProjectState project,
+            ProjectElement element,
+            double? storedLength,
+            double? storedHeight,
+            double? storedDepth,
+            double currentHeight,
+            double currentBottom,
+            List<ModelHealthIssue> issues)
         {
             if (!element.Properties.TryGetValue("GeneratedCurtainFrameConfigFingerprint", out var storedFingerprint) || string.IsNullOrWhiteSpace(storedFingerprint))
             {
@@ -143,15 +182,6 @@ namespace QS3D.Core.Diagnostics
             try
             {
                 var family = project.FindFamily(element.FamilyId);
-                var currentHeight = Number(element, family, "HeightM", storedHeight.Value, true);
-                var currentBottom = Number(element, family, "BottomOffsetM", 0d, false);
-                if (LevelReferenceNativeIntegrationPolicy.HasConfiguredReferences(element))
-                {
-                    LevelReferenceNativeIntegrationPolicy.EnsureQualified(element, "Curtain frame config health");
-                    var placement = ElementVerticalPlacementService.Resolve(project, element, 0d, currentHeight, currentBottom);
-                    currentHeight = placement.HeightM;
-                    currentBottom = placement.BottomElevationM;
-                }
                 var current = CurtainWallFrameFingerprint.Compute(new CurtainWallFrameFingerprintInput
                 {
                     LengthM = Number(element, family, "LengthM", storedLength.Value, true),
@@ -249,6 +279,14 @@ namespace QS3D.Core.Diagnostics
             var tolerance = Math.Max(1e-8d, Math.Max(Math.Abs(current), Math.Abs(stored.Value)) * 1e-8d);
             if (Math.Abs(current - stored.Value) > tolerance)
                 issues.Add(new ModelHealthIssue(code, HealthSeverity.Warning, "Curtain frame geometry không còn khớp " + currentKey + " hiện tại; rebuild curtain frames.", element.Id));
+        }
+
+        private static void CompareValue(ProjectElement element, string label, double current, double? stored, string code, List<ModelHealthIssue> issues)
+        {
+            if (!stored.HasValue || double.IsNaN(current) || double.IsInfinity(current) || current <= 0d) return;
+            var tolerance = Math.Max(1e-8d, Math.Max(Math.Abs(current), Math.Abs(stored.Value)) * 1e-8d);
+            if (Math.Abs(current - stored.Value) > tolerance)
+                issues.Add(new ModelHealthIssue(code, HealthSeverity.Warning, "Curtain frame geometry không còn khớp " + label + " hiệu dụng; rebuild curtain frames.", element.Id));
         }
 
         private static OwnershipIndex BuildOwnershipIndex(ProjectState project)

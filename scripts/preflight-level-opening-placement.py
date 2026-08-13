@@ -21,7 +21,7 @@ def require(text: str, token: str, label: str) -> None:
 
 
 core = read("src/QS3D.Core/Domain/ElementVerticalPlacementService.cs")
-resolver = read("src/QS3D.BricsCAD.V25/Cad/CadVerticalPlacementResolver.cs")
+adapter = read("src/QS3D.BricsCAD.V25/Cad/CadElementVerticalPlacement.cs")
 straight = read("src/QS3D.BricsCAD.V25/Cad/OpeningBooleanService.cs")
 curved = read("src/QS3D.BricsCAD.V25/Cad/CurvedOpeningBooleanService.cs")
 live = read("src/QS3D.BricsCAD.V25/Cad/PhysicalOpeningCutLiveFingerprint.cs")
@@ -32,72 +32,102 @@ smoke = read("tests/QS3D.Core.SmokeTests/LevelReferenceSmoke.cs")
 for token in (
     "public sealed class HostedOpeningVerticalPlacement",
     "public static HostedOpeningVerticalPlacement ResolveHostedOpening(",
+    "ElementVerticalPlacement hostPlacement",
     "hostPlacement.BottomElevationM",
-    'throw new InvalidOperationException("Opening " + opening.Id + " is below host " + host.Id + ".")',
-    'throw new InvalidOperationException("Opening " + opening.Id + " exceeds the top of host " + host.Id + ".")',
+    'throw new InvalidOperationException("Opening " + opening.Id + " is below its host.")',
+    'throw new InvalidOperationException("Opening " + opening.Id + " exceeds the top of its host.")',
+    "Math.Max(0d, relativeSillM)",
 ):
     require(core, token, "Core hosted-opening placement")
 
-semantic = resolver.find("ElementVerticalPlacementService.ResolveHostedOpening(")
-host_guard = resolver.find('LevelReferenceNativeIntegrationPolicy.EnsureQualified(host, "Hosted opening host Level placement")')
-opening_guard = resolver.find('LevelReferenceNativeIntegrationPolicy.EnsureQualified(opening, "Hosted opening Level placement")')
-conversion = resolver.find("var hostCad = ToCadPlacement", semantic)
-if min(semantic, host_guard, opening_guard, conversion) < 0 or not (semantic < host_guard < opening_guard < conversion):
-    errors.append("CAD hosted-opening resolver must resolve semantically, enforce both Level policy guards, then convert to drawing units")
-require(resolver, "public static bool HasConfiguredLevel(ProjectElement element)", "CAD Level detection")
+for token in (
+    "internal sealed class CadElementVerticalPlacement",
+    "internal sealed class CadHostedOpeningVerticalPlacement",
+    'LevelReferenceNativeIntegrationPolicy.EnsureQualified(opening, "Hosted opening Level placement")',
+    "ElementVerticalPlacementService.ResolveHostedOpening(",
+    "double legacyHeightM = double.NaN;",
+    "double legacySillM = double.NaN;",
+    "else if (bottomLevelId.Length > 0 && topLevelId.Length == 0)",
+    "host.Placement",
+    "placement.Opening.HeightM",
+    "placement.RelativeSillM",
+):
+    require(adapter, token, "shared CAD hosted-opening adapter")
+for token in (
+    "internal static class CadVerticalPlacementResolver",
+    "CadElementVerticalPlacement.ResolveExplicitLegacy(",
+    "return CadHostedOpeningVerticalPlacement.Resolve(",
+    "CadElementVerticalPlacement.HasAnyLevelConfiguration(element)",
+):
+    require(adapter, token, "legacy automation-probe compatibility facade")
 
 for token in (
-    "CadVerticalPlacementResolver.ResolveHostedOpening(",
-    "HostHeightM = opening.HostedPlacement.Host.HeightM",
-    "OpeningHeightM = opening.HostedPlacement.Opening.HeightM",
-    "SillHeightM = opening.HostedPlacement.RelativeSillM",
-    "private static double CutterCenterZ(",
-    'legacy + ":LEVEL:" + PlacementToken',
+    "CadHostedOpeningVerticalPlacement.Resolve(",
+    "HostHeightM = hostPlacement.HeightM",
+    "OpeningHeightM = opening.HeightM",
+    "SillHeightM = opening.SillM",
+    "hostPlacement.BottomDrawing",
+    "SourceBaseDrawing(hostSource, host.Id)",
 ):
     require(straight, token, "straight opening Level placement")
-if straight.count("CadVerticalPlacementResolver.ResolveHostedOpening(") < 2:
-    errors.append("straight opening cut must resolve hosted placement for both LINE and open-POLYLINE hosts")
 stale = straight.find("host.IsGeneratedSolidStale()")
 subtract = straight.find("BoolSubtract")
 if stale < 0 or subtract < 0 or stale > subtract:
     errors.append("straight opening cut must reject stale generated hosts before Boolean subtraction")
+if "CadVerticalPlacementResolver" in straight:
+    errors.append("straight opening cut must consume only the shared CAD placement adapter")
 
 for token in (
-    "public CadHostedOpeningPlacement HostedPlacement",
-    "var hostedPlacement = CadVerticalPlacementResolver.ResolveHostedOpening(",
-    "HostHeightM = hostedPlacement.Host.HeightM",
-    "OpeningHeightM = hostedPlacement.Opening.HeightM",
-    "SillHeightM = hostedPlacement.RelativeSillM",
-    "prepared.HostedPlacement",
-    "OpeningPlacementToken(hostedPlacement)",
-    'legacy + "|LEVEL:" + PlacementToken',
+    "CadHostedOpeningVerticalPlacement.Resolve(",
+    "HostHeightM = heightM",
+    "OpeningHeightM = openingHeightM",
+    "SillHeightM = sillM",
+    "hostPlacement.BottomDrawing",
+    "hostPlacement.FingerprintBottomM",
 ):
     require(curved, token, "curved opening Level placement")
 curved_stale = curved.find("host.IsGeneratedSolidStale()")
-curved_resolve = curved.find("CadVerticalPlacementResolver.ResolveHostedOpening(")
+curved_resolve = curved.find("CadHostedOpeningVerticalPlacement.Resolve(")
 curved_subtract = curved.find("BoolSubtract")
 if min(curved_stale, curved_resolve, curved_subtract) < 0 or not (curved_stale < curved_resolve < curved_subtract):
     errors.append("curved opening cut must reject stale hosts and resolve hosted placement before Boolean subtraction")
+if "CadVerticalPlacementResolver" in curved:
+    errors.append("curved opening cut must consume only the shared CAD placement adapter")
 
 for token in (
-    "var hostPlacement = CadVerticalPlacementResolver.Resolve(",
-    "var placement = CadVerticalPlacementResolver.ResolveHostedOpening(",
-    'text.Append("|level=").Append(PlacementToken(hostPlacement.Semantic))',
-    'text.Append(":level:").Append(PlacementToken(placement.Opening.Semantic))',
+    "var hostPlacement = CadElementVerticalPlacement.Resolve(",
+    "var openingPlacement = CadHostedOpeningVerticalPlacement.Resolve(",
+    '.Append("|height=").Append(Number(hostPlacement.HeightM))',
+    ".Append(':').Append(Number(openingPlacement.HeightM))",
+    ".Append(':').Append(Number(openingPlacement.SillHeightM))",
 ):
     require(live, token, "physical opening live fingerprint Level placement")
+if "CadVerticalPlacementResolver" in live:
+    errors.append("physical opening live fingerprint must consume only the shared CAD placement adapter")
 
 for token in (
     "ReadOpeningLocation(document, transaction, project, opening)",
-    "CadVerticalPlacementResolver.HasConfiguredLevel(opening)",
-    "CadVerticalPlacementResolver.HasConfiguredLevel(wall)",
-    "CadVerticalPlacementResolver.Resolve(",
-    ": Midpoint(startZM, endZM)",
-    ": elevationM;",
+    "CadElementVerticalPlacement.HasAnyLevelConfiguration(opening)",
+    "CadElementVerticalPlacement.HasAnyLevelConfiguration(wall)",
+    "private static bool VerticalMatch(",
+    "opening.ReferenceElevationM >= host.BottomElevationM - toleranceM",
+    "opening.TopElevationM.Value <= host.TopElevationM + toleranceM",
+    "Math.Abs(hostBottomM - opening.ReferenceElevationM) <= toleranceM",
 ):
     require(auto_host, token, "Auto Host Level-aware elevation matching")
 
-require(policy, "return false;", "Level native integration policy must remain fail-closed")
+for category in (
+    "ArchitecturalWall",
+    "GlassWall",
+    "WallPier",
+    "StructuralWall",
+    "Door",
+    "WallOpening",
+):
+    require(policy, f"case ElementCategory.{category}:", "Level native integration policy")
+require(policy, "return true;", "integrated Level category policy")
+require(policy, "default:", "unsupported Level category policy")
+require(policy, "return false;", "unsupported Level category policy")
 require(smoke, "HostedOpeningsResolveInsideTheHostFrame();", "hosted-opening regression registration")
 for token in ("legacyHost", "hostRelativeOpening", "boundedOpening", "belowHost", "aboveHost"):
     require(smoke, token, "hosted-opening regression matrix")
@@ -107,4 +137,4 @@ if errors:
         print(f"[FAIL] {error}")
     sys.exit(1)
 
-print("[PASS] hosted straight/curved opening planning, live fingerprints, and Auto Host share the canonical Level placement contract while legacy arithmetic stays explicit and native Level use remains policy-blocked")
+print("[PASS] hosted straight/curved opening planning, live fingerprints, and Auto Host share the canonical branch-lazy Level placement contract while legacy arithmetic stays explicit")

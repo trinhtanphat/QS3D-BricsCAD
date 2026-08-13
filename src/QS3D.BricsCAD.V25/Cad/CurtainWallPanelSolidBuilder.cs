@@ -22,6 +22,7 @@ namespace QS3D.BricsCAD.V25.Cad
         private sealed class PendingUpdate
         {
             public ProjectElement Element { get; set; } = null!;
+            public CadElementVerticalPlacement VerticalPlacement { get; set; } = null!;
             public List<string> Handles { get; } = new List<string>();
             public int Columns { get; set; }
             public int Rows { get; set; }
@@ -73,22 +74,22 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (Math.Abs(CadGeometryGuard.ToMeters(document, dz, element.Id + "/panel dz")) > 1e-6d)
                             throw new InvalidOperationException("Curtain panel LINE must be horizontal: " + element.Id);
                         var lengthM = CadGeometryGuard.Positive(CadGeometryGuard.ToMeters(document, lengthDrawing, element.Id + "/LengthM"), element.Id + "/LengthM");
-                        var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
+                        var verticalPlacement = CadElementVerticalPlacement.Resolve(
+                            document,
+                            project,
+                            element,
+                            family,
+                            line.StartPoint.Z,
+                            "HeightM",
+                            3.6d);
+                        var heightM = verticalPlacement.HeightM;
                         var panelDepthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", 0.012d), element.Id + "/ThicknessM");
-                        var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-                        var placement = CadVerticalPlacementResolver.Resolve(
-                            document, project, element, line.StartPoint.Z, heightM, bottomOffsetM);
-                        var effectiveHeightM = placement.HeightM;
-                        var fingerprintBottomM = CadVerticalPlacementResolver.HasConfiguredLevel(element)
-                            ? placement.Semantic.BottomElevationM
-                            : bottomOffsetM;
-                        var input = LayoutInput(element, family, lengthM, effectiveHeightM);
+                        var input = LayoutInput(element, family, lengthM, heightM);
                         var detail = CurtainWallDetailPlanner.Plan(input);
                         if (detail.Panels.Count > MaxPanelsPerElement) throw new InvalidOperationException(element.Id + " base panel count exceeds " + MaxPanelsPerElement + ".");
                         var ux = dx / lengthDrawing;
                         var uy = dy / lengthDrawing;
-                        var openings = CurtainWallPanelBuilderSupport.ReadLineOpenings(
-                            document, transaction, project, element, line, ux, uy, lengthM, heightM, bottomOffsetM, panelDepthM);
+                        var openings = CurtainWallPanelBuilderSupport.ReadLineOpenings(document, transaction, project, element, verticalPlacement, line, ux, uy, lengthM, heightM, panelDepthM);
                         var panelPlan = CurtainWallOpeningPanelPlanner.Plan(detail.Panels, openings, 0d);
                         var panels = panelPlan.Pieces;
                         if (panels.Count > MaxPanelsPerElement || batchPanels > MaxPanelsPerBatch - panels.Count)
@@ -96,24 +97,25 @@ namespace QS3D.BricsCAD.V25.Cad
 
                         var previous = CurtainWallPanelBuilderSupport.ValidatePrevious(document, transaction, project, element, ownership);
                         CurtainWallPanelBuilderSupport.ErasePrevious(transaction, project, element, previous);
-                        var baseZ = placement.BottomDrawingUnits;
+                        var baseZ = verticalPlacement.BottomDrawing;
                         var angle = CadGeometryGuard.Finite(Math.Atan2(uy, ux), element.Id + "/panel angle");
                         var update = new PendingUpdate
                         {
                             Element = element,
+                            VerticalPlacement = verticalPlacement,
                             Columns = detail.Layout.Columns,
                             Rows = detail.Layout.Rows,
                             BasePanelCount = detail.Panels.Count,
                             OpeningCount = openings.Count,
                             PanelDepthM = panelDepthM,
                             SourceLengthM = lengthM,
-                            HeightM = effectiveHeightM,
+                            HeightM = heightM,
                             AreaM2 = panelPlan.RemainingPanelAreaM2,
                             ConfigFingerprint = CurtainWallPanelFingerprint.Compute(new CurtainWallPanelFingerprintInput
                             {
                                 SourceLengthM = lengthM,
-                                HeightM = effectiveHeightM,
-                                BottomOffsetM = fingerprintBottomM,
+                                HeightM = heightM,
+                                BottomOffsetM = verticalPlacement.FingerprintBottomM,
                                 PanelDepthM = panelDepthM,
                                 SourceKind = "Line",
                                 PathSegmentCount = 0,
@@ -182,6 +184,7 @@ namespace QS3D.BricsCAD.V25.Cad
             p["GeneratedCurtainPanelAreaM2"] = update.AreaM2.ToString("R", CultureInfo.InvariantCulture);
             p["GeneratedCurtainPanelConfigFingerprint"] = update.ConfigFingerprint;
             p["GeneratedCurtainPanelMode"] = update.OpeningCount > 0 ? OpeningAwareMode : Mode;
+            CadElementVerticalPlacement.CommitSnapshot(update.Element, "GeneratedCurtainPanel", update.VerticalPlacement);
             update.Element.ClearGeneratedCurtainPanelStale();
             AuditTrail.ForProject(project).Record("geometry.curtain.panels", update.Element.Id,
                 update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " panel solids; base=" + update.BasePanelCount.ToString(CultureInfo.InvariantCulture) + "; openings=" + update.OpeningCount.ToString(CultureInfo.InvariantCulture));

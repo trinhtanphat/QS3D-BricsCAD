@@ -125,19 +125,20 @@ namespace QS3D.BricsCAD.V25.Cad
         private static string ComputeConfigFingerprint(Document document, Transaction transaction, ProjectState project, ProjectElement element, Entity source)
         {
             var family = project.FindFamily(element.FamilyId);
-            var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
-            var panelDepthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", 0.012d), element.Id + "/ThicknessM");
-            var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
             double sourceBaseDrawing;
             if (source is Line sourceLine) sourceBaseDrawing = sourceLine.StartPoint.Z;
             else if (source is Polyline sourcePolyline) sourceBaseDrawing = sourcePolyline.Elevation;
             else throw new InvalidOperationException("Curtain panel config fingerprint supports only LINE/POLYLINE sources.");
-            var placement = CadVerticalPlacementResolver.Resolve(
-                document, project, element, sourceBaseDrawing, heightM, bottomOffsetM);
-            var effectiveHeightM = placement.HeightM;
-            var fingerprintBottomM = CadVerticalPlacementResolver.HasConfiguredLevel(element)
-                ? placement.Semantic.BottomElevationM
-                : bottomOffsetM;
+            var verticalPlacement = CadElementVerticalPlacement.Resolve(
+                document,
+                project,
+                element,
+                family,
+                sourceBaseDrawing,
+                "HeightM",
+                3.6d);
+            var heightM = verticalPlacement.HeightM;
+            var panelDepthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", 0.012d), element.Id + "/ThicknessM");
             double lengthM;
             string sourceKind;
             int pathSegmentCount;
@@ -152,11 +153,10 @@ namespace QS3D.BricsCAD.V25.Cad
                 if (Math.Abs(CadGeometryGuard.ToMeters(document, dz, element.Id + "/panel dz")) > 1e-6d)
                     throw new InvalidOperationException("Curtain panel LINE must be horizontal.");
                 lengthM = CadGeometryGuard.Positive(CadGeometryGuard.ToMeters(document, lengthDrawing, element.Id + "/LengthM"), element.Id + "/LengthM");
-                var detail = CurtainWallDetailPlanner.Plan(LayoutInput(element, family, lengthM, effectiveHeightM));
+                var detail = CurtainWallDetailPlanner.Plan(LayoutInput(element, family, lengthM, heightM));
                 var ux = dx / lengthDrawing;
                 var uy = dy / lengthDrawing;
-                var openings = CurtainWallPanelBuilderSupport.ReadLineOpenings(
-                    document, transaction, project, element, line, ux, uy, lengthM, heightM, bottomOffsetM, panelDepthM);
+                var openings = CurtainWallPanelBuilderSupport.ReadLineOpenings(document, transaction, project, element, verticalPlacement, line, ux, uy, lengthM, heightM, panelDepthM);
                 pieces = CurtainWallOpeningPanelPlanner.Plan(detail.Panels, openings, 0d).Pieces;
                 sourceKind = "Line";
                 pathSegmentCount = 0;
@@ -165,9 +165,8 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 var centerline = CadPolylinePathReader.ReadOpenWcsXy(document, polyline, ProjectNumber(project, "WallArcSagittaM", 0.002d, 1e-6d), element.Id + "/curtain panel path");
                 lengthM = CadGeometryGuard.Positive(CurtainPathFramePlanner.Length(centerline), element.Id + "/LengthM");
-                var detail = CurtainWallDetailPlanner.Plan(LayoutInput(element, family, lengthM, effectiveHeightM));
-                var openings = CurtainWallPanelBuilderSupport.ReadPathOpenings(
-                    document, transaction, project, element, centerline, polyline.Elevation, lengthM, heightM, bottomOffsetM, panelDepthM);
+                var detail = CurtainWallDetailPlanner.Plan(LayoutInput(element, family, lengthM, heightM));
+                var openings = CurtainWallPanelBuilderSupport.ReadPathOpenings(document, transaction, project, element, verticalPlacement, centerline, lengthM, heightM, panelDepthM);
                 pieces = CurtainWallOpeningPanelPlanner.Plan(detail.Panels, openings, 0d).Pieces;
                 pathSegmentCount = CurtainPathFramePlanner.Plan(centerline, pieces.Select(x => new CurtainWallRect(x.X_M, x.Z_M, x.WidthM, x.HeightM)).ToList()).PathSegmentCount;
                 sourceKind = "OpenPolyline";
@@ -180,8 +179,8 @@ namespace QS3D.BricsCAD.V25.Cad
             return CurtainWallPanelFingerprint.Compute(new CurtainWallPanelFingerprintInput
             {
                 SourceLengthM = lengthM,
-                HeightM = effectiveHeightM,
-                BottomOffsetM = fingerprintBottomM,
+                HeightM = heightM,
+                BottomOffsetM = verticalPlacement.FingerprintBottomM,
                 PanelDepthM = panelDepthM,
                 SourceKind = sourceKind,
                 PathSegmentCount = pathSegmentCount,

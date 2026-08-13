@@ -31,6 +31,7 @@ namespace QS3D.BricsCAD.V25.Cad
         private sealed class PendingUpdate
         {
             public ProjectElement Element { get; set; } = null!;
+            public CadElementVerticalPlacement VerticalPlacement { get; set; } = null!;
             public List<string> Handles { get; } = new List<string>();
             public double XDiameterMm { get; set; }
             public double YDiameterMm { get; set; }
@@ -92,7 +93,15 @@ namespace QS3D.BricsCAD.V25.Cad
                         var family = project.FindFamily(element.FamilyId);
                         var xGroup = ParseDirection(element, "RebarSlabXNotation");
                         var yGroup = ParseDirection(element, "RebarSlabYNotation");
-                        var legacyThicknessM = CadGeometryGuard.Number(element, family, "ThicknessM", .15d);
+                        var verticalPlacement = CadElementVerticalPlacement.Resolve(
+                            document,
+                            project,
+                            element,
+                            family,
+                            polyline.Elevation,
+                            "ThicknessM",
+                            .12d);
+                        var thicknessM = verticalPlacement.HeightM;
                         var coverM = CadGeometryGuard.Number(element, family, "RebarSlabCoverM", CadGeometryGuard.Number(element, family, "RebarCoverM", .02d));
                         if (coverM < 0d) throw new InvalidOperationException(element.Id + "/RebarSlabCoverM phải >= 0.");
                         var faces = Text(element, family, "RebarSlabFaces", "Bottom");
@@ -100,19 +109,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         var includeTop = string.Equals(faces, "Top", StringComparison.OrdinalIgnoreCase) || string.Equals(faces, "Both", StringComparison.OrdinalIgnoreCase);
                         if (!includeBottom && !includeTop) throw new InvalidOperationException(element.Id + "/RebarSlabFaces phải là Bottom, Top hoặc Both.");
                         var xClosest = Boolean(element, family, "RebarSlabXClosestToFace", true);
-                        var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-                        var placement = CadVerticalPlacementResolver.Resolve(
-                            document,
-                            project,
-                            element,
-                            polyline.Elevation,
-                            legacyThicknessM,
-                            bottomM);
-                        var thicknessM = placement.HeightM;
-                        var centerZ = CadGeometryGuard.Add(
-                            placement.BottomDrawingUnits,
-                            placement.HeightDrawingUnits / 2d,
-                            element.Id + "/slab mesh world center Z");
+                        var centerZ = verticalPlacement.CenterDrawing;
 
                         var rectangle = TryReadRectangle(document, element, polyline);
                         if (rectangle != null)
@@ -135,7 +132,7 @@ namespace QS3D.BricsCAD.V25.Cad
                             });
                             ReserveBatchBars(ref batchBars, layout.Count);
                             ErasePrevious(document, transaction, project, element, ownership);
-                            var update = CreateUpdate(element, xGroup, yGroup, coverM, layout.XActualSpacingM, layout.YActualSpacingM, includeBottom, includeTop, RectangleFootprintMode);
+                            var update = CreateUpdate(element, verticalPlacement, xGroup, yGroup, coverM, layout.XActualSpacingM, layout.YActualSpacingM, includeBottom, includeTop, RectangleFootprintMode);
                             AppendRectangleBars(document, transaction, modelSpace, polyline, element, rectangle, centerZ, layout, update);
                             GeneratedRebarNativeOwnershipService.MarkFreshGeneratedHandles(document, transaction, project, element, HandlesKey, update.Handles);
                             pending.Add(update);
@@ -160,7 +157,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         });
                         ReserveBatchBars(ref batchBars, polygonLayout.Count);
                         ErasePrevious(document, transaction, project, element, ownership);
-                        var polygonUpdate = CreateUpdate(element, xGroup, yGroup, coverM, polygonLayout.XActualSpacingM, polygonLayout.YActualSpacingM, includeBottom, includeTop, PolygonFootprintMode);
+                        var polygonUpdate = CreateUpdate(element, verticalPlacement, xGroup, yGroup, coverM, polygonLayout.XActualSpacingM, polygonLayout.YActualSpacingM, includeBottom, includeTop, PolygonFootprintMode);
                         AppendPolygonBars(document, transaction, modelSpace, polyline, element, centerZ, polygonLayout, polygonUpdate);
                         GeneratedRebarNativeOwnershipService.MarkFreshGeneratedHandles(document, transaction, project, element, HandlesKey, polygonUpdate.Handles);
                         pending.Add(polygonUpdate);
@@ -190,6 +187,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private static PendingUpdate CreateUpdate(
             ProjectElement element,
+            CadElementVerticalPlacement verticalPlacement,
             RebarGroup xGroup,
             RebarGroup yGroup,
             double coverM,
@@ -202,6 +200,7 @@ namespace QS3D.BricsCAD.V25.Cad
             return new PendingUpdate
             {
                 Element = element,
+                VerticalPlacement = verticalPlacement,
                 XDiameterMm = xGroup.DiameterMm,
                 YDiameterMm = yGroup.DiameterMm,
                 CoverM = coverM,
@@ -315,6 +314,7 @@ namespace QS3D.BricsCAD.V25.Cad
             update.Element.Properties["GeneratedSlabMeshXActualSpacingM"] = update.XSpacingM.ToString("R", CultureInfo.InvariantCulture);
             update.Element.Properties["GeneratedSlabMeshYActualSpacingM"] = update.YSpacingM.ToString("R", CultureInfo.InvariantCulture);
             update.Element.Properties["GeneratedSlabMeshFaces"] = update.Faces;
+            CadElementVerticalPlacement.CommitSnapshot(update.Element, "GeneratedSlabMesh", update.VerticalPlacement);
             AuditTrail.ForProject(project).Record("geometry.rebar.slab.mesh", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " bars • " + update.FootprintMode);
         }
 

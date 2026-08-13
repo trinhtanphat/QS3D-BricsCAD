@@ -35,12 +35,12 @@ namespace QS3D.BricsCAD.V25.Cad
             Transaction transaction,
             ProjectState project,
             ProjectElement host,
+            CadElementVerticalPlacement hostPlacement,
             Line hostLine,
             double ux,
             double uy,
             double hostLengthM,
-            double hostLegacyHeightM,
-            double hostLegacyBottomOffsetM,
+            double hostHeightM,
             double hostThicknessM)
         {
             var result = new List<CurtainWallOpeningRect>();
@@ -49,21 +49,20 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 var openingFamily = project.FindFamily(opening.FamilyId);
                 var widthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(opening, openingFamily, "WidthM", 0d), opening.Id + "/WidthM");
-                var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(opening, openingFamily, "HeightM", 0d), opening.Id + "/HeightM");
-                var sillM = NonNegative(CadGeometryGuard.Number(opening, openingFamily, "SillHeightM", opening.Category == ElementCategory.Door ? 0d : 0.9d), opening.Id + "/SillHeightM");
                 var clearanceM = NonNegative(CadGeometryGuard.Number(opening, openingFamily, "BooleanClearanceM", 0.01d), opening.Id + "/BooleanClearanceM");
-                var hostedPlacement = CadVerticalPlacementResolver.ResolveHostedOpening(
-                    document,
-                    project,
-                    host,
-                    opening,
-                    hostLine.StartPoint.Z,
-                    hostLegacyHeightM,
-                    hostLegacyBottomOffsetM,
-                    heightM,
-                    sillM);
                 var entity = RequireSingleLiveOpening(document, transaction, opening);
                 var extents = Extents(entity, opening.Id);
+                var openingPlacement = CadVerticalPlacementResolver.ResolveHostedOpening(
+                    document,
+                    project,
+                    opening,
+                    openingFamily,
+                    extents.MinPoint.Z,
+                    hostPlacement,
+                    0d,
+                    opening.Category == ElementCategory.Door ? 0d : 0.9d);
+                var heightM = openingPlacement.HeightM;
+                var sillM = openingPlacement.SillHeightM;
                 var centerX = CadGeometryGuard.Midpoint(extents.MinPoint.X, extents.MaxPoint.X, opening.Id + "/opening center X");
                 var centerY = CadGeometryGuard.Midpoint(extents.MinPoint.Y, extents.MaxPoint.Y, opening.Id + "/opening center Y");
                 var fromStartX = CadGeometryGuard.Subtract(centerX, hostLine.StartPoint.X, opening.Id + "/from start X");
@@ -76,10 +75,10 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     HostLengthM = hostLengthM,
                     HostThicknessM = hostThicknessM,
-                    HostHeightM = hostedPlacement.Host.HeightM,
+                    HostHeightM = hostHeightM,
                     OpeningWidthM = widthM,
-                    OpeningHeightM = hostedPlacement.Opening.HeightM,
-                    SillHeightM = hostedPlacement.RelativeSillM,
+                    OpeningHeightM = heightM,
+                    SillHeightM = sillM,
                     CenterAlongHostM = CadGeometryGuard.ToMeters(document, alongDrawing, opening.Id + "/center along host"),
                     ClearanceM = clearanceM
                 });
@@ -94,16 +93,49 @@ namespace QS3D.BricsCAD.V25.Cad
             return result.AsReadOnly();
         }
 
+        public static IReadOnlyList<CurtainWallOpeningRect> ReadLineOpenings(
+            Document document,
+            Transaction transaction,
+            ProjectState project,
+            ProjectElement host,
+            Line hostLine,
+            double ux,
+            double uy,
+            double hostLengthM,
+            double hostLegacyHeightM,
+            double hostLegacyBottomOffsetM,
+            double hostThicknessM)
+        {
+            var hostPlacement = CadElementVerticalPlacement.ResolveExplicitLegacy(
+                document,
+                project,
+                host,
+                hostLine.StartPoint.Z,
+                hostLegacyHeightM,
+                hostLegacyBottomOffsetM);
+            return ReadLineOpenings(
+                document,
+                transaction,
+                project,
+                host,
+                hostPlacement,
+                hostLine,
+                ux,
+                uy,
+                hostLengthM,
+                hostPlacement.HeightM,
+                hostThicknessM);
+        }
+
         public static IReadOnlyList<CurtainWallOpeningRect> ReadPathOpenings(
             Document document,
             Transaction transaction,
             ProjectState project,
             ProjectElement host,
+            CadElementVerticalPlacement hostPlacement,
             IReadOnlyList<Point2> centerline,
-            double sourceBaseDrawing,
             double hostLengthM,
-            double hostLegacyHeightM,
-            double hostLegacyBottomOffsetM,
+            double hostHeightM,
             double hostThicknessM)
         {
             var result = new List<CurtainWallOpeningRect>();
@@ -112,21 +144,20 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 var openingFamily = project.FindFamily(opening.FamilyId);
                 var widthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(opening, openingFamily, "WidthM", 0d), opening.Id + "/WidthM");
-                var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(opening, openingFamily, "HeightM", 0d), opening.Id + "/HeightM");
-                var sillM = NonNegative(CadGeometryGuard.Number(opening, openingFamily, "SillHeightM", opening.Category == ElementCategory.Door ? 0d : 0.9d), opening.Id + "/SillHeightM");
                 var clearanceM = NonNegative(CadGeometryGuard.Number(opening, openingFamily, "BooleanClearanceM", 0.01d), opening.Id + "/BooleanClearanceM");
-                var hostedPlacement = CadVerticalPlacementResolver.ResolveHostedOpening(
-                    document,
-                    project,
-                    host,
-                    opening,
-                    sourceBaseDrawing,
-                    hostLegacyHeightM,
-                    hostLegacyBottomOffsetM,
-                    heightM,
-                    sillM);
                 var entity = RequireSingleLiveOpening(document, transaction, opening);
                 var extents = Extents(entity, opening.Id);
+                var openingPlacement = CadVerticalPlacementResolver.ResolveHostedOpening(
+                    document,
+                    project,
+                    opening,
+                    openingFamily,
+                    extents.MinPoint.Z,
+                    hostPlacement,
+                    0d,
+                    opening.Category == ElementCategory.Door ? 0d : 0.9d);
+                var heightM = openingPlacement.HeightM;
+                var sillM = openingPlacement.SillHeightM;
                 var center = new Point2(
                     CadGeometryGuard.ToMeters(document, CadGeometryGuard.Midpoint(extents.MinPoint.X, extents.MaxPoint.X, opening.Id + "/center X"), opening.Id + "/center X meters"),
                     CadGeometryGuard.ToMeters(document, CadGeometryGuard.Midpoint(extents.MinPoint.Y, extents.MaxPoint.Y, opening.Id + "/center Y"), opening.Id + "/center Y meters"));
@@ -137,10 +168,10 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     HostLengthM = hostLengthM,
                     HostThicknessM = hostThicknessM,
-                    HostHeightM = hostedPlacement.Host.HeightM,
+                    HostHeightM = hostHeightM,
                     OpeningWidthM = widthM,
-                    OpeningHeightM = hostedPlacement.Opening.HeightM,
-                    SillHeightM = hostedPlacement.RelativeSillM,
+                    OpeningHeightM = heightM,
+                    SillHeightM = sillM,
                     CenterAlongHostM = projection.StationM,
                     ClearanceM = clearanceM
                 });

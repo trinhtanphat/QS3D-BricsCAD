@@ -84,6 +84,25 @@ namespace QS3D.Core.Domain
                 hostSourceBaseElevationM,
                 hostLegacyHeightM,
                 hostLegacyBottomOffsetM);
+            return ResolveHostedOpening(
+                project,
+                hostPlacement,
+                opening,
+                openingLegacyHeightM,
+                openingLegacySillM);
+        }
+
+        public static HostedOpeningVerticalPlacement ResolveHostedOpening(
+            ProjectState project,
+            ElementVerticalPlacement hostPlacement,
+            ProjectElement opening,
+            double openingLegacyHeightM,
+            double openingLegacySillM)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (hostPlacement == null) throw new ArgumentNullException(nameof(hostPlacement));
+            if (opening == null) throw new ArgumentNullException(nameof(opening));
+
             var openingPlacement = Resolve(
                 project,
                 opening,
@@ -94,11 +113,21 @@ namespace QS3D.Core.Domain
                 openingPlacement.BottomElevationM,
                 -hostPlacement.BottomElevationM,
                 opening.Id + "/relative sill elevation");
-            if (relativeSillM < 0d)
-                throw new InvalidOperationException("Opening " + opening.Id + " is below host " + host.Id + ".");
-            if (openingPlacement.TopElevationM > hostPlacement.TopElevationM)
-                throw new InvalidOperationException("Opening " + opening.Id + " exceeds the top of host " + host.Id + ".");
-            return new HostedOpeningVerticalPlacement(hostPlacement, openingPlacement, relativeSillM);
+            const double toleranceM = 1e-9d;
+            if (relativeSillM < -toleranceM)
+                throw new InvalidOperationException("Opening " + opening.Id + " is below its host.");
+            if (openingPlacement.TopElevationM > hostPlacement.TopElevationM + toleranceM)
+                throw new InvalidOperationException("Opening " + opening.Id + " exceeds the top of its host.");
+            return new HostedOpeningVerticalPlacement(hostPlacement, openingPlacement, Math.Max(0d, relativeSillM));
+        }
+
+        public static bool HasAnyLevelConfiguration(ProjectElement element)
+        {
+            if (element == null) throw new ArgumentNullException(nameof(element));
+            return HasConfiguredProperty(element, ProjectFloorService.BottomLevelIdKey) ||
+                   HasConfiguredProperty(element, ProjectFloorService.BottomLevelOffsetKey) ||
+                   HasConfiguredProperty(element, ProjectFloorService.TopLevelIdKey) ||
+                   HasConfiguredProperty(element, ProjectFloorService.TopLevelOffsetKey);
         }
 
         public static ElementVerticalPlacement Resolve(

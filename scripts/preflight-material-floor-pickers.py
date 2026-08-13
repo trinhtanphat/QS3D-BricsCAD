@@ -40,7 +40,7 @@ checks = {
     "src/QS3D.Core/Domain/ProjectFloorService.cs": [
         "MaxFloors = 2000", "Create(ProjectState project", "Update(ProjectState project", "SetActive(ProjectState project",
         "Assign(ProjectState project", "Delete(ProjectState project", "ReferenceCount(ProjectState project", "EnsureUniqueName",
-        "ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity", "flags |= ElementDirtyFlags.Geometry",
+        "ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity", "MarkVerticalPlacementChanged(project, element)",
         "Cannot delete the active floor", "Reassign or clear Floor/Level references before deletion", "Value must be finite",
         "ReferenceEquals(owned, element)", "Element does not belong to the project instance", "Project contains duplicate semantic element id",
     ],

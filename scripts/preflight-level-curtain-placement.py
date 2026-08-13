@@ -29,18 +29,19 @@ panel_live = read("src/QS3D.BricsCAD.V25/Cad/CurtainWallPanelLiveStateService.cs
 frame_health = read("src/QS3D.Core/Diagnostics/GeneratedCurtainFrameHealthService.cs")
 policy = read("src/QS3D.Core/Diagnostics/LevelReferenceNativeIntegrationPolicy.cs")
 
-for label, text, source_base in (
-    ("LINE curtain frame", line_frame, "line.StartPoint.Z"),
-    ("path curtain frame", path_frame, "polyline.Elevation"),
-    ("LINE curtain panel", line_panel, "line.StartPoint.Z"),
-    ("path curtain panel", path_panel, "polyline.Elevation"),
+for label, text, source_base, snapshot_prefix in (
+    ("LINE curtain frame", line_frame, "line.StartPoint.Z", "GeneratedCurtainFrame"),
+    ("path curtain frame", path_frame, "polyline.Elevation", "GeneratedCurtainFrame"),
+    ("LINE curtain panel", line_panel, "line.StartPoint.Z", "GeneratedCurtainPanel"),
+    ("path curtain panel", path_panel, "polyline.Elevation", "GeneratedCurtainPanel"),
 ):
-    require(text, "CadVerticalPlacementResolver.Resolve(", label)
-    require(text, source_base + ", heightM, bottomOffsetM", label)
-    require(text, "var effectiveHeightM = placement.HeightM;", label)
-    require(text, "? placement.Semantic.BottomElevationM", label)
-    require(text, "var baseZ = placement.BottomDrawingUnits;", label)
-    resolve = text.find("CadVerticalPlacementResolver.Resolve(")
+    require(text, "CadElementVerticalPlacement.Resolve(", label)
+    require(text, source_base, label)
+    require(text, "var heightM = verticalPlacement.HeightM;", label)
+    require(text, "var baseZ = verticalPlacement.BottomDrawing;", label)
+    require(text, "BottomOffsetM = verticalPlacement.FingerprintBottomM", label)
+    require(text, 'CadElementVerticalPlacement.CommitSnapshot(update.Element, "' + snapshot_prefix + '"', label)
+    resolve = text.find("CadElementVerticalPlacement.Resolve(")
     destructive = min(
         value for value in (
             text.find("ValidatePrevious", resolve),
@@ -51,47 +52,47 @@ for label, text, source_base in (
         errors.append(label + " must resolve Level placement before native replacement/erase")
 
 for label, text in (("LINE frame openings", line_frame), ("path frame openings", path_frame)):
-    require(text, "CadVerticalPlacementResolver.ResolveHostedOpening(", label)
-    require(text, "HostHeightM = hostedPlacement.Host.HeightM", label)
-    require(text, "OpeningHeightM = hostedPlacement.Opening.HeightM", label)
-    require(text, "SillHeightM = hostedPlacement.RelativeSillM", label)
+    require(text, "CadHostedOpeningVerticalPlacement.Resolve(", label)
+    require(text, "HostHeightM = hostHeightM", label)
+    require(text, "OpeningHeightM = heightM", label)
+    require(text, "SillHeightM = sillM", label)
 
 if panel_support.count("CadVerticalPlacementResolver.ResolveHostedOpening(") != 2:
-    errors.append("LINE/path panel clipping must each use the shared hosted-opening Level resolver")
+    errors.append("LINE/path panel clipping must each use the forwarding compatibility facade over the shared hosted-opening Level resolver")
 for token in (
-    "HostHeightM = hostedPlacement.Host.HeightM",
-    "OpeningHeightM = hostedPlacement.Opening.HeightM",
-    "SillHeightM = hostedPlacement.RelativeSillM",
+    "CadElementVerticalPlacement hostPlacement",
+    "HostHeightM = hostHeightM",
+    "OpeningHeightM = heightM",
+    "SillHeightM = sillM",
 ):
     require(panel_support, token, "panel opening clipping")
 
 for token in (
-    "var hostPlacement = CadVerticalPlacementResolver.Resolve(",
-    "var hostedPlacement = CadVerticalPlacementResolver.ResolveHostedOpening(",
-    'AppendPlacement(text, "|host-placement=", hostPlacement)',
-    'AppendPlacement(text, ":opening-placement=", hostedPlacement.Opening)',
-    '":relative-sill="',
+    "var hostPlacement = CadElementVerticalPlacement.Resolve(",
+    "var openingPlacement = CadHostedOpeningVerticalPlacement.Resolve(",
+    "var height = openingPlacement.HeightM;",
+    "var sill = openingPlacement.SillHeightM;",
 ):
     require(frame_live, token, "curtain frame live fingerprint")
 
 for token in (
-    "var placement = CadVerticalPlacementResolver.Resolve(",
-    "var effectiveHeightM = placement.HeightM;",
-    "? placement.Semantic.BottomElevationM",
+    "var verticalPlacement = CadElementVerticalPlacement.Resolve(",
+    "var heightM = verticalPlacement.HeightM;",
+    "BottomOffsetM = verticalPlacement.FingerprintBottomM",
     "ReadLineOpenings(",
     "ReadPathOpenings(",
 ):
     require(panel_live, token, "curtain panel live/config fingerprint")
 
 for token in (
-    "LevelReferenceNativeIntegrationPolicy.HasConfiguredReferences(element)",
-    'LevelReferenceNativeIntegrationPolicy.EnsureQualified(element, "Curtain frame config health")',
-    "ElementVerticalPlacementService.Resolve(project, element, 0d, currentHeight, currentBottom)",
+    "ElementVerticalPlacementService.HasAnyLevelConfiguration(element)",
+    "ElementVerticalPlacementService.Resolve(project, element, 0d, 1d, 0d)",
     "currentHeight = placement.HeightM;",
     "currentBottom = placement.BottomElevationM;",
 ):
     require(frame_health, token, "curtain frame config health")
 
+require(policy, "case ElementCategory.GlassWall:", "GlassWall Level source qualification")
 require(policy, "return false;", "Level native integration policy must remain fail-closed")
 
 if errors:
@@ -99,4 +100,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] Curtain LINE/path frames and panels resolve host/opening Level placement before native mutation, carry effective placement into config/live health, preserve legacy fingerprints, and remain policy-blocked pending exact V25 qualification")
+print("[PASS] Curtain LINE/path frames and panels use the branch-lazy host/opening Level adapters before native mutation, persist vertical snapshots, carry effective placement into config/live health, preserve legacy fingerprints, and remain runtime-pending until exact V25 qualification")
