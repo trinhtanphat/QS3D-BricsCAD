@@ -256,6 +256,9 @@ try {
 }
 finally {
     Stop-Qs3dLevelProcess -Process $process
+    if (Test-Path -LiteralPath $scriptPath -PathType Leaf) {
+        Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue
+    }
     Restore-EnvironmentValue -Name "QS3D_LEVEL_Z_RESULT" -Value $oldResult
     Restore-EnvironmentValue -Name "QS3D_LEVEL_Z_NONCE" -Value $oldNonce
     Restore-EnvironmentValue -Name "QS3D_LEVEL_Z_SOURCE_SHA" -Value $oldSourceSha

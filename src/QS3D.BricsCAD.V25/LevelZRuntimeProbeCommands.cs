@@ -169,17 +169,20 @@ namespace QS3D.BricsCAD.V25
                 var wallVolumeAfter = ReadSolidVolume(document, Handles(boundedWall, "GeneratedSolidHandle").Single(), "bounded wall after opening");
                 Require(wallVolumeAfter > 0d && wallVolumeAfter < wallVolumeBefore, "physical opening must reduce host volume");
 
-                failureCode = "LEVEL_Z_RUNTIME_CURTAIN_FAILED";
+                failureCode = "LEVEL_Z_RUNTIME_CURTAIN_FRAME_BUILD_FAILED";
                 Select(document, sources.GlassWall.ObjectId);
                 var frameResult = CurtainWallFrameSolidBuilder.BuildSelectedLineWalls(document, project);
                 Require(frameResult.Elements == 1 && frameResult.Frames > 0, "Curtain frame result");
+                failureCode = "LEVEL_Z_RUNTIME_CURTAIN_PANEL_BUILD_FAILED";
                 Select(document, sources.GlassWall.ObjectId);
                 var panelResult = CurtainWallPanelSolidBuilder.BuildSelectedLineWalls(document, project);
                 Require(panelResult.Elements == 1 && panelResult.Panels > 0, "Curtain panel result");
+                failureCode = "LEVEL_Z_RUNTIME_CURTAIN_RANGE_FAILED";
                 var frameRange = ReadZRange(document, Handles(glassWall, "GeneratedCurtainFrameHandles"), "Curtain frames");
                 var panelRange = ReadZRange(document, Handles(glassWall, "GeneratedCurtainPanelHandles"), "Curtain panels");
                 RequireContained(frameRange, glassRange, "Curtain frame Z");
                 RequireContained(panelRange, glassRange, "Curtain panel Z");
+                failureCode = "LEVEL_Z_RUNTIME_CURTAIN_MODE_FAILED";
                 Require(string.Equals(Property(glassWall, "GeneratedCurtainFrameMode"), "LineFrameOverlay.OpeningAware", StringComparison.Ordinal), "Curtain frame opening-aware mode");
                 Require(string.Equals(Property(glassWall, "GeneratedCurtainPanelMode"), "LinePanelSolids.OpeningAware", StringComparison.Ordinal), "Curtain panel opening-aware mode");
 
