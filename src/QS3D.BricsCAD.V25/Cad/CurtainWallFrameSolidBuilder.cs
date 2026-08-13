@@ -210,6 +210,7 @@ namespace QS3D.BricsCAD.V25.Cad
             update.Element.Properties["GeneratedCurtainFrameConfigFingerprint"] = update.ConfigFingerprint;
             update.Element.Properties["GeneratedCurtainFrameMode"] = update.OpeningCount > 0 ? OpeningAwareMode : Mode;
             CadElementVerticalPlacement.CommitSnapshot(update.Element, "GeneratedCurtainFrame", update.VerticalPlacement);
+            update.Element.Properties.Remove("GeneratedCurtainFrameLiveFingerprint");
             update.Element.ClearGeneratedCurtainFrameStale();
             AuditTrail.ForProject(project).Record("geometry.curtain.frames", update.Element.Id,
                 update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " frame fragments • base=" + update.BaseFrameCount.ToString(CultureInfo.InvariantCulture) + " • openings=" + update.OpeningCount.ToString(CultureInfo.InvariantCulture));

@@ -5,6 +5,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 HOOK = ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallPostCommitFailureInjection.cs"
 ORCHESTRATOR = ROOT / "src/QS3D.BricsCAD.V25/CurtainWallBuildCommands.cs"
+LINE_FRAME = ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameSolidBuilder.cs"
+PATH_FRAME = ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallPathFrameSolidBuilder.cs"
 PROBE = ROOT / "src/QS3D.BricsCAD.V25/CurtainPanelPostCommitRuntimeProbeCommands.cs"
 RUNNER = ROOT / "scripts/test-bricscad-v25-curtain-panel-postcommit-warnings.ps1"
 HELPER = ROOT / "scripts/bricscad-runner-window-interop.ps1"
@@ -13,7 +15,7 @@ INBOX = ROOT / "docs/LOCAL-AGENT-INBOX.md"
 CLAIM = ROOT / "docs/agent-work-claims/2026-08-13-codex-local-curtain-p09-postcommit-warning.md"
 errors = []
 
-for path in (HOOK, ORCHESTRATOR, PROBE, RUNNER, HELPER, RUNBOOK, INBOX, CLAIM):
+for path in (HOOK, ORCHESTRATOR, LINE_FRAME, PATH_FRAME, PROBE, RUNNER, HELPER, RUNBOOK, INBOX, CLAIM):
     if not path.is_file(): errors.append("missing Curtain P09 file: " + str(path.relative_to(ROOT)))
 
 if HOOK.is_file():
@@ -50,6 +52,16 @@ if ORCHESTRATOR.is_file():
     reporter = text.find("private static void ReportAtomicFailure")
     for token in ("if (!nativeCommitted)", "post-commit warning", "QS3DCURTAINFRAMEHEALTH/QS3DHEALTHALL"):
         if token not in text[reporter:finalize]: errors.append("P09 truthful post-commit warning missing: " + token)
+
+for path in (LINE_FRAME, PATH_FRAME):
+    if not path.is_file():
+        continue
+    text = path.read_text(encoding="utf-8")
+    commit = text.find("private static void CommitSemanticUpdate")
+    remove = text.find('Properties.Remove("GeneratedCurtainFrameLiveFingerprint")', commit)
+    clear = text.find("ClearGeneratedCurtainFrameStale();", commit)
+    if min(commit, remove, clear) < 0 or not commit < remove < clear:
+        errors.append(path.name + " must remove the previous frame live fingerprint before clearing stale state")
 
 if PROBE.is_file():
     text = PROBE.read_text(encoding="utf-8")
