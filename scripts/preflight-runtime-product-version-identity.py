@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "src" / "QS3D.BricsCAD.V25" / "RuntimeDiagnosticsCommands.cs"
+PLUGIN_ENTRY = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
 UPDATE_COORDINATOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "Updates" / "UpdateCoordinator.cs"
 UPDATE_CENTER = ROOT / "src" / "QS3D.BricsCAD.V25" / "Updates" / "UpdateCenterWindow.cs"
 INSTALLER = ROOT / "scripts" / "install-v25-autoload.ps1"
@@ -76,6 +77,11 @@ def main():
         "Process.GetCurrentProcess()",
         "ProductVersionsEqual(metadata.ProductVersion, pluginProductVersion)",
         "AssemblyVersionsEqual(metadata.AssemblyVersion, pluginAssemblyVersion)",
+        "CaptureLoadedBinaryIdentity()",
+        "SHA256.Create()",
+        "FileShare.ReadWrite | FileShare.Delete",
+        "diskFingerprintMatches",
+        "Loaded-at-start SHA256",
         "STALE PROCESS",
         ".NET does not hot-reload an already NETLOADed QS3D assembly",
         "diskVersionMatches",
@@ -91,6 +97,12 @@ def main():
         return fail("runtime diagnostics regressed to assembly-only package version comparison")
     if "version.ToString(4)" in runtime:
         return fail("runtime diagnostics must not call Version.ToString(4) on a version that may omit revision")
+
+    plugin_entry = PLUGIN_ENTRY.read_text(encoding="utf-8")
+    capture = plugin_entry.find("RuntimeDiagnosticsCommands.CaptureLoadedBinaryIdentity();")
+    palette = plugin_entry.find("PaletteCoordinator.EnsureCreated();")
+    if capture < 0 or palette < 0 or capture > palette:
+        return fail("PluginEntry must capture the loaded QS3D binary fingerprint before UI/runtime startup")
 
     update_coordinator = UPDATE_COORDINATOR.read_text(encoding="utf-8")
     if "AssemblyInformationalVersionAttribute" not in update_coordinator or "SemanticReleaseVersion.FromRunningVersion(informational" not in update_coordinator:
@@ -114,7 +126,7 @@ def main():
     print("PASS: runtime product-version identity is guarded")
     print("Product version:", version)
     print("Assembly version:", assembly)
-    print("QS3DVERSION/QS3DRUNTIMECHECK detect stale same-path DLL replacement and require host restart.")
+    print("QS3DVERSION/QS3DRUNTIMECHECK detect stale same-path DLL replacement by semantic version and startup SHA-256 fingerprint.")
     print("Update Center displays the semantic product version from AssemblyInformationalVersion.")
     return 0
 
