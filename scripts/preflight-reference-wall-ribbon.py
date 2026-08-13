@@ -4,21 +4,27 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
+COORDINATOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "RibbonInitializationCoordinator.cs"
 AUGMENTER = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "ReferenceWallRibbonAugmenter.cs"
 COMMAND = ROOT / "src" / "QS3D.BricsCAD.V25" / "DirectDrawReferenceWallCommands.cs"
 errors = []
 
-for path in (PLUGIN, AUGMENTER, COMMAND):
+for path in (PLUGIN, COORDINATOR, AUGMENTER, COMMAND):
     if not path.is_file():
         errors.append("missing file: " + str(path.relative_to(ROOT)))
 
+if COORDINATOR.is_file():
+    text = COORDINATOR.read_text(encoding="utf-8")
+    bootstrap = text.find("RibbonBootstrapper.TryInitialize()")
+    reference = text.find("ReferenceWallRibbonAugmenter.TryInitialize()")
+    project = text.find("ProjectRibbonAugmenter.TryInitialize()")
+    if min(bootstrap, reference, project) < 0 or not bootstrap < reference < project:
+        errors.append("reference-wall ribbon augmenter must run after base ribbon and before project augmenter in RibbonInitializationCoordinator")
+
 if PLUGIN.is_file():
     text = PLUGIN.read_text(encoding="utf-8")
-    bootstrap = text.find("RibbonBootstrapper.TryInitialize();")
-    reference = text.find("ReferenceWallRibbonAugmenter.TryInitialize();")
-    project = text.find("ProjectRibbonAugmenter.TryInitialize();")
-    if min(bootstrap, reference, project) < 0 or not bootstrap < reference < project:
-        errors.append("reference-wall ribbon augmenter must run after base ribbon and before project augmenter")
+    if "RibbonInitializationCoordinator.Start();" not in text:
+        errors.append("PluginEntry must start the bounded Ribbon initialization coordinator")
     if "ReferenceWallRibbonAugmenter.Reset();" not in text:
         errors.append("reference-wall ribbon augmenter must reset during plugin termination")
 
@@ -49,4 +55,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3D_AUTHOR exposes the PICKFIRST-capable reference-wall command through the real plugin startup path without replacing existing wall authoring.")
+print("PASS: QS3D_AUTHOR exposes the PICKFIRST-capable reference-wall command through the bounded Ribbon coordinator without replacing existing wall authoring.")
