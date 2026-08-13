@@ -38,10 +38,23 @@ function Convert-ToStrictSemVerText {
     return $text
 }
 
+function Get-SourceGitCommit {
+    $output = @(& git -C $root rev-parse --verify HEAD 2>&1)
+    if ($LASTEXITCODE -ne 0 -or $output.Count -ne 1) {
+        throw "Could not resolve the exact source Git HEAD for package provenance."
+    }
+    $commit = ([string]$output[0]).Trim().ToLowerInvariant()
+    if ($commit -notmatch '^[0-9a-f]{40}$') {
+        throw "Source Git HEAD is not one exact 40-hex commit: '$commit'."
+    }
+    return $commit
+}
+
 $pluginProject = Join-Path $root 'src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj'
 $coreProject = Join-Path $root 'src/QS3D.Core/QS3D.Core.csproj'
 $productVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $pluginProject) -Label 'QS3D plugin product version'
 $coreProductVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $coreProject) -Label 'QS3D Core product version'
+$gitCommit = Get-SourceGitCommit
 if (-not [string]::Equals($productVersion, $coreProductVersion, [StringComparison]::Ordinal)) {
     throw "QS3D plugin/Core product versions differ: plugin=$productVersion core=$coreProductVersion"
 }
@@ -68,6 +81,10 @@ foreach ($script in @('install-v25-autoload.ps1', 'uninstall-v25-autoload.ps1', 
     if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) { throw "Missing release script: $scriptPath" }
     Copy-Item -LiteralPath $scriptPath -Destination (Join-Path $dist $script)
 }
+
+$installLauncher = Join-Path $PSScriptRoot 'INSTALL-QS3D.cmd'
+if (-not (Test-Path -LiteralPath $installLauncher -PathType Leaf)) { throw "Missing one-click installer launcher: $installLauncher" }
+Copy-Item -LiteralPath $installLauncher -Destination (Join-Path $dist 'INSTALL-QS3D.cmd')
 
 if (-not (Test-Path -LiteralPath $sampleSource -PathType Container)) { throw "Synthetic sample folder was not found: $sampleSource" }
 $sampleDestination = Join-Path $dist 'Samples'
@@ -98,6 +115,7 @@ $metadata = [ordered]@{
     target = 'BricsCAD V25 x64'
     productVersion = $productVersion
     version = $assemblyVersion.ToString()
+    gitCommit = $gitCommit
     generatedUtc = [DateTime]::UtcNow.ToString('o')
     commandCount = $commands.Count
     defaultLoadMode = 'OnCommand'
@@ -112,24 +130,32 @@ $metadata | ConvertTo-Json | Set-Content -Path (Join-Path $dist 'PACKAGE-METADAT
 QS3D for BricsCAD V25 x64
 Product version: $productVersion
 Assembly version: $($assemblyVersion.ToString())
+Source commit: $gitCommit
 
-Recommended install:
+Recommended install (avoids .NET 0x80131515 / Mark-of-the-Web NETLOAD failures):
 1. Close BricsCAD.
-2. Run install-v25-autoload.ps1 from this extracted package.
-3. Default mode is OnCommand DemandLoad. Start BricsCAD and run QS3D or QS3DDOMAIN.
-4. Run QS3DRUNTIMECHECK to confirm V25/x64/package consistency on the customer machine.
-5. For an intentional upgrade over an existing QS3D registration, rerun the installer with -Force.
-6. For production, require the expected Authenticode publisher with -RequireSigned -ExpectedSignerThumbprint <40-hex-thumbprint>.
+2. Extract the complete ZIP to a normal local folder.
+3. Double-click INSTALL-QS3D.cmd. Signed installers must have valid Authenticode; invalid/untrusted signatures are rejected. Unsigned cloud previews are explicitly warned, then only the bootstrap installer script is unblocked so it can run under RemoteSigned.
+4. The installer verifies SHA256SUMS.txt/signatures where required, copies QS3D to the per-user install directory and removes Mark-of-the-Web from installed payloads.
+5. Start BricsCAD V25 and run QS3D or QS3DDOMAIN. DemandLoad handles the installed DLL; do not NETLOAD the DLL directly from Downloads.
+6. Run QS3DRUNTIMECHECK to confirm V25/x64/package consistency on the customer machine.
+7. For an intentional upgrade over an existing QS3D registration, use the built-in QS3D Update Center or rerun install-v25-autoload.ps1 with -Force.
 
-Secure update:
-- Run update-v25.ps1 with an HTTPS manifest and the expected publisher thumbprint.
-- The updater blocks downgrades, verifies the ZIP SHA-256, internal SHA256SUMS.txt and the Authenticode publisher before calling the atomic installer.
+Built-in update:
+- QS3D checks GitHub Releases on startup.
+- Run QS3DUPDATE or click Cập nhật QS3D in KHỞI ĐẦU > Hệ thống for one-click secure update.
+- QS3DUPDATEONCLOSE toggles Update khi đóng. When enabled, a release already verified in the current session is scheduled as BricsCAD exits; the detached updater waits for all BricsCAD processes to close, installs it and reopens BricsCAD.
+- Production one-click update remains fail-closed: the updater requires the signed manifest, ZIP SHA-256, internal SHA256SUMS.txt and Authenticode publisher before atomic install.
 
-Manual fallback:
-- Start BricsCAD V25, run NETLOAD, select QS3D.BricsCAD.V25.dll, then run QS3D.
+Manual/developer fallback:
+- Prefer installing first and NETLOAD only the DLL from the installed QS3D directory if debugging requires NETLOAD.
+- Never NETLOAD QS3D.BricsCAD.V25.dll directly from a downloaded ZIP/Downloads folder. Windows may attach Zone.Identifier and .NET Framework can reject it with HRESULT 0x80131515.
+- If you intentionally test an unpackaged development copy, remove Mark-of-the-Web from the complete dependency folder before NETLOAD rather than unblocking only one DLL.
 
 Security:
-- The installer verifies SHA256SUMS.txt before copying files.
+- INSTALL-QS3D.cmd uses RemoteSigned and never uses ExecutionPolicy Bypass.
+- Valid Authenticode installers report their signer; invalid/untrusted signatures fail. Unsigned preview bootstrap is visibly warned and only install-v25-autoload.ps1 is unblocked before execution.
+- The installer verifies SHA256SUMS.txt before copying files and removes Mark-of-the-Web only from the verified installed payload.
 - It does not disable or weaken BricsCAD security settings.
 - This package intentionally excludes BricsCAD runtime assemblies.
 - Samples/ contains only repository-owned synthetic DXF/DWG/QSDB/XLSX/template fixtures.
@@ -158,6 +184,7 @@ $zipHash = (Get-FileHash $zip -Algorithm SHA256).Hash
 Write-Host "Package ready: $zip"
 Write-Host "Product version: $productVersion"
 Write-Host "Assembly version: $($assemblyVersion.ToString())"
+Write-Host "Source commit: $gitCommit"
 Write-Host "Commands: $($commands.Count)"
 Write-Host "Plugin signature: $($signature.Status)"
 Write-Host "SHA256: $zipHash"
