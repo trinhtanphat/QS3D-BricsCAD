@@ -10,21 +10,27 @@ namespace QS3D.Core.SmokeTests
         [ModuleInitializer]
         internal static void Initialize()
         {
+            CanonicalUtcTimestampLoads();
             PaddedTimestampFailsClosed();
-            ExplicitOffsetStillNormalizesToUtc();
+            ExplicitOffsetFailsClosed();
+        }
+
+        private static void CanonicalUtcTimestampLoads()
+        {
+            var snapshot = Load("2026-08-11T00:00:00.0000000Z");
+            Require(snapshot.CreatedUtc == new DateTime(2026, 8, 11, 0, 0, 0, DateTimeKind.Utc),
+                "canonical UTC timestamp did not round-trip");
+            Require(snapshot.CreatedUtc.Kind == DateTimeKind.Utc, "canonical timestamp did not keep UTC kind");
         }
 
         private static void PaddedTimestampFailsClosed()
         {
-            Reject(" 2026-08-11T00:00:00Z ");
+            Reject(" 2026-08-11T00:00:00.0000000Z ");
         }
 
-        private static void ExplicitOffsetStillNormalizesToUtc()
+        private static void ExplicitOffsetFailsClosed()
         {
-            var snapshot = Load("2026-08-11T07:00:00+07:00");
-            Require(snapshot.CreatedUtc == new DateTime(2026, 8, 11, 0, 0, 0, DateTimeKind.Utc),
-                "explicit timestamp offset did not normalize to UTC");
-            Require(snapshot.CreatedUtc.Kind == DateTimeKind.Utc, "normalized timestamp did not keep UTC kind");
+            Reject("2026-08-11T07:00:00.0000000+07:00");
         }
 
         private static RevisionSnapshot Load(string createdUtc)
@@ -59,7 +65,7 @@ namespace QS3D.Core.SmokeTests
             {
                 return;
             }
-            throw new InvalidOperationException("RevisionSnapshotTimestampCanonicalitySmoke expected padded timestamp to fail closed.");
+            throw new InvalidOperationException("RevisionSnapshotTimestampCanonicalitySmoke expected a non-canonical timestamp to fail closed.");
         }
 
         private static void Require(bool condition, string message)
