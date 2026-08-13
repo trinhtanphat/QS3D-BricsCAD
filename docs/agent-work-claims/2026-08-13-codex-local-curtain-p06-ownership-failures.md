@@ -45,4 +45,4 @@ Current ACTIVE/BLOCKED claim audit found no reservation for the P06 runtime scen
 
 ## Completion condition
 
-The additive source/runner/gate is merged, a fresh exact-main licensed V25 run either records the complete sanitized P06 PASS contract or records an allowlisted diagnostic FAIL without overclaiming, reusable docs are updated truthfully, and this claim is marked `COMPLETED`. P07-P12 and overall LOCAL-002 remain pending.
+The additive source/runner/gate is merged, a fresh exact-main licensed V25 run either records the complete sanitized P06 PASS contract or records an allowlisted diagnostic FAIL without overclaiming, reusable docs are updated truthfully, and this claim is marked `COMPLETED`. P07-P12 and overall LOCAL-002 remain `PENDING_LOCAL`.
