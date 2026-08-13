@@ -45,7 +45,7 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
-            var normalizedLiveHandles = NormalizeHandleSet(liveHandles);
+            var normalizedLiveHandles = NormalizeSourceHandleSet(liveHandles);
             var normalizedLiveGeneratedSolidHandles = NormalizeHandleSet(liveGeneratedSolidHandles);
 
             if (project.Metadata.TryGetValue("QS3D.ReadOnlyRecoveryRequired", out var recoveryRequired) && string.Equals(recoveryRequired, "true", StringComparison.OrdinalIgnoreCase))
@@ -108,11 +108,19 @@ namespace QS3D.Core.Diagnostics
             return issues.AsReadOnly();
         }
 
-        private static ISet<string>? NormalizeHandleSet(ISet<string>? handles)
+        private static ISet<string>? NormalizeSourceHandleSet(ISet<string>? handles)
         {
             if (handles == null) return null;
             return new HashSet<string>(
                 handles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity),
+                StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static ISet<string>? NormalizeHandleSet(ISet<string>? handles)
+        {
+            if (handles == null) return null;
+            return new HashSet<string>(
+                handles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
                 StringComparer.OrdinalIgnoreCase);
         }
 
