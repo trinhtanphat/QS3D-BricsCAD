@@ -44,6 +44,15 @@ The completed local claim `2026-08-13-codex-local-curtain-p11-undo-save-reopen.m
 
 Concurrent claim `2026-08-13-1702-chatgpt-web-gpt56sol-curtain-undo-semantic-coherence.md` was published from the same baseline after this lane was already reserved and landed the initial `CurtainWallUndoCoordinator`/command/lifecycle/static-gate implementation. This lane adopts that current-main implementation instead of retaining its predecessor's duplicate coordinator. Review of the landed source proved the initial restore only copied selected generated properties/source handles and then called `project.Touch()`, while the authoritative P11 semantic signature also binds project `ChangeVersion`/`UpdatedUtc` and owner `Dirty`. The bounded continuation therefore owns only the exact persistence-state correction, strengthened gate/test, canonical handoff, and this original issue claim; it does not create a second Undo system.
 
+## Source implementation record
+
+- Scope expansion was published before Core/lifecycle/docs edits in PR `#1030`, merged as `8c1dc9b316ddaa19124aecd84d2a04495615f67e`.
+- The bounded correction was implemented in `7e2468add900fe4c5412bb6177c1e2f4cee23b29`, synchronized with current `main` as branch head `1e20c056f4a81586986e5fe8dd000b4032e708a1`, and merged through PR `#1035` as `884f2059fa520439640d95c8c8782cf5f160cdfa`.
+- `ProjectPersistenceCheckpoint` captures/restores only the project persistence revision and the explicit selected-owner `Dirty` / `UpdatedUtc` stamps. It resolves project/element affinity before mutation, restores exact internal state without `Touch()` or public setter sequencing, and never changes `AuditEvents` or unrelated elements.
+- `CurtainWallUndoCoordinator` now includes that exact persistence checkpoint in its before/after signatures, refuses intervening persistence drift, refreshes the committed after-snapshot only after live fingerprinting, verifies exact target restore, and clears document history on explicit reload/forget as well as document destruction.
+- Validation on the synchronized implementation head passed the focused Curtain semantic-coherence gate, full Core smoke (`ALL PASS`), installed-reference BricsCAD V25 `Release|x64` build (`0 warnings / 0 errors`), manual-CI policy and generic preflight. The aggregate feature-gate run exposed one unrelated current-main updater/V26 token drift after concurrent fixes; it is outside this claim and was not edited. No GitHub Actions or BricsCAD runtime was launched.
+- Source is `SOURCE_READY / PENDING_LOCAL`. The existing additive P11 probe, runner and gate were not edited. Issue `#987` and this claim remain open/`ACTIVE` until the local owner passes the complete guarded runner against the final exact merged `main` SHA.
+
 ## Completion condition
 
 The bounded source fix and regressions are merged to current `main`; the exact merged SHA is handed to the local P11 owner; issue `#987` and this claim remain open/`ACTIVE` until the complete guarded V25 P11 matrix passes native Undo, Redo, cold reopen, rebuild, affinity and cleanup. Source/static/build evidence alone cannot promote `LOCAL_PASS` or close the issue.
