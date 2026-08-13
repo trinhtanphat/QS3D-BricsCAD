@@ -35,6 +35,9 @@ for token in (
     "document.CommandEnded -= handler",
     "OnCommandEnded(document, args)",
     "IsNativeUndoRedo(args?.GlobalCommandName)",
+    'string.Equals(normalized, "UNDO", StringComparison.OrdinalIgnoreCase)',
+    'string.Equals(normalized, "REDO", StringComparison.OrdinalIgnoreCase)',
+    'string.Equals(normalized, "MREDO", StringComparison.OrdinalIgnoreCase)',
     "ProjectContextCoordinator.RequireBackingStoreUnchanged",
     "ProjectContextCoordinator.TryGetCached(document, out var project)",
     "ReferenceEquals(project, history.Project)",
@@ -71,6 +74,7 @@ for forbidden in (
     "SendStringToExecute",
     "_history.CurrentRevision = _nextRevision",
     "history.Entries.Clear();",
+    'string.Equals(normalized, "U", StringComparison.OrdinalIgnoreCase)',
 ):
     if forbidden in coordinator:
         errors.append("Undo observer must not load/create/switch/drive a project or command: " + forbidden)
@@ -133,10 +137,14 @@ confirm_start = coordinator.find("public void ConfirmCommitted()", stage_start)
 dispose_start = coordinator.find("public void Dispose()", confirm_start)
 begin_start = coordinator.find("public static PendingTransition BeginTransition(")
 observer_start = coordinator.find("private static void OnCommandEnded(", begin_start)
+filter_start = coordinator.find("private static bool IsNativeUndoRedo(", observer_start)
+mark_start = coordinator.find("private static InvalidOperationException MarkDesynchronized(", filter_start)
 stage_body = coordinator[stage_start:confirm_start]
 confirm_body = coordinator[confirm_start:dispose_start]
 begin_body = coordinator[begin_start:observer_start]
-if min(stage_start, confirm_start, dispose_start, begin_start, observer_start) < 0:
+observer_body = coordinator[observer_start:filter_start]
+filter_body = coordinator[filter_start:mark_start]
+if min(stage_start, confirm_start, dispose_start, begin_start, observer_start, filter_start, mark_start) < 0:
     errors.append("Undo coordinator transition method boundaries are missing")
 else:
     if "modelSpace.XData = marker" not in stage_body or "_stagedEntries = stagedEntries;" not in stage_body:
@@ -147,6 +155,20 @@ else:
         errors.append("published semantic revision must advance only in post-CAD-commit confirmation")
     if "CurrentRevision = _nextRevision" in stage_body:
         errors.append("StageAfter must not expose an uncommitted semantic revision")
+    if 'string.Equals(normalized, "U", StringComparison.OrdinalIgnoreCase)' in filter_body:
+        errors.append("single-letter U is ambiguous in BricsCAD V25 and must not drive semantic Undo observation")
+
+    marker_read_start = observer_body.find("try { nativeRevision = ReadRevision(document); }")
+    target_start = observer_body.find("HistoryEntry targetEntry;", marker_read_start)
+    stamp_start = observer_body.find("if (!currentEntry.Stamp.Matches(project))", target_start)
+    restore_start = observer_body.find("var restoreRollback = ProjectStateSnapshot.Capture(project);", stamp_start)
+    if min(marker_read_start, target_start, stamp_start, restore_start) < 0:
+        errors.append("Undo observer marker/stamp refusal boundaries are missing")
+    else:
+        if "MarkDesynchronized(" in observer_body[marker_read_start:target_start]:
+            errors.append("a transient command-end marker read failure must not permanently poison history")
+        if "MarkDesynchronized(" in observer_body[stamp_start:restore_start]:
+            errors.append("semantic-only drift refusal must remain recoverable when the native marker returns current")
 
 # Deterministic model of the production shadow-publication contract. The static
 # tokens above bind these states to the coordinator/service surfaces; this model
@@ -188,6 +210,8 @@ for token in (
     "native revision marker",
     "same CAD transaction",
     "Undo/Redo",
+    "global native command names `UNDO`, `REDO` and `MREDO`",
+    "single-letter `U`",
     "canonical cached project",
     "#1005",
 ):

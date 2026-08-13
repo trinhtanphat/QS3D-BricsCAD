@@ -426,8 +426,11 @@ namespace QS3D.BricsCAD.V25
                 try { nativeRevision = ReadRevision(document); }
                 catch (Exception markerError)
                 {
-                    throw MarkDesynchronized(
-                        history,
+                    // A command-end read can race native transaction cleanup.
+                    // Without a readable marker transition there is no evidence
+                    // that semantic state must be permanently poisoned. The next
+                    // mutation still reads/compares the marker and fails closed.
+                    throw new InvalidOperationException(
                         "Source Reconcile native Undo marker could not be read. Reload the project before further mutation.",
                         markerError);
                 }
@@ -461,7 +464,13 @@ namespace QS3D.BricsCAD.V25
                         backingStoreError);
                 }
                 if (!currentEntry.Stamp.Matches(project))
-                    throw MarkDesynchronized(history,
+                    // Intervening semantic-only work (for example Build3D) makes
+                    // the old snapshot unsafe to restore. Refuse this transition
+                    // without a sticky desync: as long as the native marker stays
+                    // different, BeginTransition still fails closed; if native
+                    // state returns to CurrentRevision, the next reconcile can
+                    // safely rebase from the canonical project it actually sees.
+                    throw new InvalidOperationException(
                         "Source Reconcile native Undo was refused because semantic state changed outside its tracked native history. Redo the native change or reload before continuing.");
 
                 var restoreRollback = ProjectStateSnapshot.Capture(project);
@@ -503,7 +512,6 @@ namespace QS3D.BricsCAD.V25
             while (normalized.Length > 0 && (normalized[0] == '_' || normalized[0] == '.'))
                 normalized = normalized.Substring(1);
             return string.Equals(normalized, "UNDO", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(normalized, "U", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(normalized, "REDO", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(normalized, "MREDO", StringComparison.OrdinalIgnoreCase);
         }
