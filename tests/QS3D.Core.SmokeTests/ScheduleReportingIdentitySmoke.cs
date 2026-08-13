@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             NullProjectElementsFailClosed();
             MalformedReferenceIdentitiesFailClosed();
             NoncanonicalMutableReferenceIdsFailClosed();
+            NoncanonicalStoredSourceHandlesFailClosed();
             UniqueIdsRemainAccepted();
             ProvenanceIsRetainedAcrossSchedules();
         }
@@ -90,6 +91,30 @@ namespace QS3D.Core.SmokeTests
             zoneElement.ZoneId = " ZONE ";
             zoneProject.Elements.Add(zoneElement);
             AssertAllProjectReportBuildersReject(zoneProject, "noncanonical zone reference id");
+        }
+
+        private static void NoncanonicalStoredSourceHandlesFailClosed()
+        {
+            var paddedProject = BaseScheduleProject("schedule-source-handle-padding", ElementCategory.Slab, out var family);
+            family.Properties["Material"] = "Concrete";
+            var padded = new ProjectElement("HANDLE-PAD", ElementCategory.Slab, family.Id, "floor", "zone");
+            padded.SourceHandles.Add(" AA ");
+            padded.Quantities["VolumeM3"] = 1d;
+            paddedProject.Elements.Add(padded);
+            ExpectThrowsContaining<InvalidOperationException>(
+                () => MaterialUsageScheduleBuilder.Build(paddedProject),
+                "non-canonical stored SourceHandles entry");
+
+            var duplicateProject = BaseScheduleProject("schedule-source-handle-duplicate", ElementCategory.Slab, out family);
+            family.Properties["Material"] = "Concrete";
+            var duplicate = new ProjectElement("HANDLE-DUP", ElementCategory.Slab, family.Id, "floor", "zone");
+            duplicate.SourceHandles.Add("A");
+            duplicate.SourceHandles.Add("0A");
+            duplicate.Quantities["VolumeM3"] = 1d;
+            duplicateProject.Elements.Add(duplicate);
+            ExpectThrowsContaining<InvalidOperationException>(
+                () => MaterialUsageScheduleBuilder.Build(duplicateProject),
+                "duplicate stored SourceHandles identity");
         }
 
         private static void UniqueIdsRemainAccepted()
@@ -208,7 +233,6 @@ namespace QS3D.Core.SmokeTests
 
         private static void AddHandles(ProjectElement element)
         {
-            element.SourceHandles.Add(" aa ");
             element.SourceHandles.Add("AA");
             element.SourceHandles.Add("Bb");
         }
@@ -218,8 +242,8 @@ namespace QS3D.Core.SmokeTests
             if (!string.Equals(projectId, project.ProjectId, StringComparison.Ordinal) ||
                 !string.Equals(drawingFingerprint, project.DrawingFingerprint, StringComparison.Ordinal))
                 throw new Exception("Schedule row must retain project and drawing identity provenance.");
-            if (handles.Count != 2 || handles[0] != "aa" || handles[1] != "Bb")
-                throw new Exception("Schedule row must trim and case-insensitively deduplicate source Handle provenance in first-seen order.");
+            if (handles.Count != 2 || handles[0] != "AA" || handles[1] != "Bb")
+                throw new Exception("Schedule row must retain canonical source Handle provenance in first-seen order.");
         }
 
         private static ProjectState DuplicateProject(string secondId)
