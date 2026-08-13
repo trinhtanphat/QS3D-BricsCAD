@@ -59,7 +59,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             if (!_started || _initialized || _retryTimer != null) return;
 
             _timedAttempts = 0;
-            var timer = new DispatcherTimer
+            var timer = new DispatcherTimer(DispatcherPriority.ApplicationIdle)
             {
                 Interval = RetryInterval
             };
