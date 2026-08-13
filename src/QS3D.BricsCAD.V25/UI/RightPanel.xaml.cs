@@ -25,7 +25,13 @@ namespace QS3D.BricsCAD.V25.UI
         {
             InitializeComponent();
             DataContext = _viewModel;
-            Loaded += (_, __) => Refresh();
+            Loaded += OnInitialLoaded;
+        }
+
+        private void OnInitialLoaded(object sender, RoutedEventArgs e)
+        {
+            Loaded -= OnInitialLoaded;
+            Refresh();
         }
 
         public void Refresh()
