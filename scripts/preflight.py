@@ -111,7 +111,7 @@ for xaml in ROOT.rglob("*.xaml"):
 project_state = ROOT / "src/QS3D.Core/Domain/ProjectState.cs"
 if project_state.exists():
     text = project_state.read_text(encoding="utf-8")
-    if "CurrentSchemaVersion = 3" not in text: errors.append("QSDB schema v3 is required for persisted rules/audit")
+    if "CurrentSchemaVersion = 4" not in text: errors.append("QSDB schema v4 is required for persisted rules/audit and project mappings")
     if "IList<QuantityRule> QuantityRules" not in text: errors.append("project quantity-rule catalog missing")
     if "IList<AuditEvent> AuditEvents" not in text: errors.append("project audit catalog missing")
 
@@ -133,6 +133,7 @@ if migrator.exists():
     text = migrator.read_text(encoding="utf-8")
     if "ElementDirtyFlags.All" not in text or 'element.SetAttributeValue("updatedUtc", LegacyUpdatedUtc)' not in text: errors.append("legacy QSDB elements must migrate dirty and require deterministic regeneration")
     if "MigrateV2ToV3" not in text: errors.append("QSDB v2 to v3 migration missing")
+    if "MigrateV3ToV4" not in text: errors.append("QSDB v3 to v4 migration missing")
 
 regen = ROOT / "src/QS3D.Core/Services/RegenerationEngine.cs"
 if regen.exists() and "ApplyMatching(project, element)" not in regen.read_text(encoding="utf-8"): errors.append("project quantity rules are not integrated into regeneration")
@@ -197,7 +198,7 @@ if continuation.exists():
 workflow_smoke = ROOT / "tests/QS3D.Core.SmokeTests/WorkflowPersistenceSmoke.cs"
 if workflow_smoke.exists():
     text = workflow_smoke.read_text(encoding="utf-8")
-    for needle in ("SchemaV2MigratesToV3", "RuleAuditRoundTrip", "RuleDrivenRegeneration", "TemplateRoundTripApply", "ProjectLayerMappingWins"):
+    for needle in ("SchemaV2MigratesToV4", "RuleAuditRoundTrip", "RuleDrivenRegeneration", "TemplateRoundTripApply", "ProjectLayerMappingWins"):
         if needle not in text: errors.append("workflow persistence regression missing: " + needle)
 registration = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 if registration.exists():
@@ -335,4 +336,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: structure, XML/XAML handlers, manual CI, proprietary/private-file guard with explicit synthetic sample provenance, QSDB v3/rules/audit, template/recognition/revision workflow wiring, migration/persistence hardening, quantity/health/generated-solid guards, units, two-phase 3D geometry, document lifecycle, selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation/preferences, canonical B4D generated-source exclusion and installer verification are present.")
+print("PASS: structure, XML/XAML handlers, manual CI, proprietary/private-file guard with explicit synthetic sample provenance, QSDB v4/rules/audit/project mappings, template/recognition/revision workflow wiring, migration/persistence hardening, quantity/health/generated-solid guards, units, two-phase 3D geometry, document lifecycle, selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation/preferences, canonical B4D generated-source exclusion and installer verification are present.")
