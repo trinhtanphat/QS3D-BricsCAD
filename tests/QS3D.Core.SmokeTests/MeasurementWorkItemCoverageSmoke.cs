@@ -122,6 +122,10 @@ namespace QS3D.Core.SmokeTests
             paddedQuantity.Elements.Add(padded);
             ExpectThrows<InvalidOperationException>(() => MeasurementWorkItemCoverageEvaluator.Evaluate(paddedQuantity, catalog));
 
+            var controlIdentity = new ProjectState("control", "Control");
+            controlIdentity.Elements.Add(CleanQuantityElement("Bad\u0001Id", ElementCategory.Slab, "NetVolumeM3", 1d));
+            ExpectThrows<InvalidOperationException>(() => MeasurementWorkItemCoverageEvaluator.Evaluate(controlIdentity, catalog));
+
             var undefinedCategory = new ProjectState("category", "Category");
             var corrupted = CleanQuantityElement("CorruptCategory", ElementCategory.Slab, "NetVolumeM3", 1d);
             var categoryField = typeof(ProjectElement).GetField("_category", BindingFlags.Instance | BindingFlags.NonPublic)
