@@ -96,6 +96,7 @@ namespace QS3D.Core.Domain
                 OnPropertyChanged();
             }
         }
+
         public IDictionary<string, string> Properties { get; }
 
         public event PropertyChangedEventHandler? PropertyChanged;
