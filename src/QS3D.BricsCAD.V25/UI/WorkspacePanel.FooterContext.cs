@@ -97,7 +97,8 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static string NormalizeFooterName(string? value)
         {
-            return string.IsNullOrWhiteSpace(value) ? "—" : value.Trim();
+            var normalized = value ?? string.Empty;
+            return string.IsNullOrWhiteSpace(normalized) ? "—" : normalized.Trim();
         }
     }
 }
