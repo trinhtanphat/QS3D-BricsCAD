@@ -41,6 +41,9 @@ if COMMAND.is_file():
         'BcadApplication.DocumentManager.MdiActiveDocument = documentA',
         'BcadApplication.DocumentManager.MdiActiveDocument = documentB',
         'documentA.CloseAndDiscard()',
+        'state.WindowClosedWithA = true;',
+        'state.BRemainedActive = true;',
+        'state.BUnchangedAfterAClose = true;',
         'ReferenceEquals(Project, current.Project)',
         'ChangeVersion != current.ChangeVersion',
         'UpdatedUtc != current.UpdatedUtc',
@@ -69,6 +72,16 @@ if COMMAND.is_file():
             errors.append("Curtain P12 command crosses the local automation boundary: " + forbidden)
     if "WpfApplication.Current" in text or "System.Windows.Application.Current" in text:
         errors.append("Curtain P12 command must enumerate BricsCAD-hosted WPF sources without Application.Current")
+    close_start = text.find('public void CloseA()')
+    final_start = text.find('public void Complete()', close_start)
+    run_start = text.find('private static void Run(', final_start)
+    close_region = text[close_start:final_start]
+    final_region = text[final_start:run_start]
+    if 'state.BRemainedActive = true;' in close_region or 'state.BUnchangedAfterAClose = true;' in close_region:
+        errors.append("Curtain P12 must validate B usability after the native close command boundary, not inside CloseAndDiscard")
+    for token in ('var documentB = RequireActive(context.DrawingB);', 'state.SeedB.Ensure(documentB, "B");', 'state.BRemainedActive = true;', 'state.BUnchangedAfterAClose = true;'):
+        if token not in final_region:
+            errors.append("Curtain P12 final command-boundary validation missing token: " + token)
 
 if RUNNER.is_file():
     text = RUNNER.read_text(encoding="utf-8")
