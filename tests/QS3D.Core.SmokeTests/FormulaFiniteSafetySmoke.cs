@@ -56,6 +56,16 @@ namespace QS3D.Core.SmokeTests
             Near(1.25d, evaluator.Evaluate("round(1.25, 15)"), 1e-15);
             Near(1d, evaluator.Evaluate(new string('-', 64) + "1"), 1e-12);
 
+            PositiveZero(evaluator.Evaluate("-0"));
+            PositiveZero(evaluator.Evaluate("0 * -1"));
+            PositiveZero(evaluator.Evaluate("0 / -1"));
+            PositiveZero(evaluator.Evaluate(
+                "ZeroValue",
+                new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["ZeroValue"] = -0d
+                }));
+
             var depthBoundary = Capture<InvalidOperationException>(
                 () => evaluator.Evaluate(new string('-', 65) + "1"));
             Contains("Expression nesting is too deep. Position 65.", depthBoundary.Message);
@@ -87,6 +97,12 @@ namespace QS3D.Core.SmokeTests
         {
             if (Math.Abs(expected - actual) > tolerance)
                 throw new Exception($"Expected {expected} but got {actual}.");
+        }
+
+        private static void PositiveZero(double actual)
+        {
+            if (BitConverter.DoubleToInt64Bits(actual) != BitConverter.DoubleToInt64Bits(0d))
+                throw new Exception("Expected canonical positive zero.");
         }
     }
 }
