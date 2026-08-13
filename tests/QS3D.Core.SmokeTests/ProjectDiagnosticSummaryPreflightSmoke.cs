@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -14,6 +15,7 @@ namespace QS3D.Core.SmokeTests
         {
             NullIssueDoesNotCreateDestinationDirectory();
             ThrowingLazyIssuesDoNotCreateDestinationDirectory();
+            IssueInputIsBoundedAndEnumeratedOnce();
             ValidExportStillWritesSnapshot();
         }
 
@@ -76,10 +78,73 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void IssueInputIsBoundedAndEnumeratedOnce()
+        {
+            var project = new ProjectState("P-DIAG-SUMMARY-BOUND", "Diagnostic summary issue bound");
+            var issue = new ModelHealthIssue("BOUNDED_WARNING", HealthSeverity.Warning, "Bounded diagnostic");
+            var accepted = new SingleUseIssueSequence(ProjectDiagnosticSummaryExporter.MaxIssueCount, issue);
+            var json = ProjectDiagnosticSummaryExporter.Build(project, accepted);
+            True(json.Contains("\"code\":\"BOUNDED_WARNING\",\"count\":" + ProjectDiagnosticSummaryExporter.MaxIssueCount));
+            Equal(1, accepted.EnumerationCount);
+            Equal(ProjectDiagnosticSummaryExporter.MaxIssueCount, accepted.YieldedCount);
+
+            var root = UniqueRoot("BOUND");
+            var path = Path.Combine(root, "summary.json");
+            try
+            {
+                Directory.CreateDirectory(root);
+                File.WriteAllText(path, "old");
+                var excessive = new SingleUseIssueSequence(ProjectDiagnosticSummaryExporter.MaxIssueCount + 1, issue);
+                ExpectThrows<InvalidOperationException>(() =>
+                    ProjectDiagnosticSummaryExporter.Export(path, project, excessive));
+                Equal(1, excessive.EnumerationCount);
+                Equal(ProjectDiagnosticSummaryExporter.MaxIssueCount + 1, excessive.YieldedCount);
+                Equal("old", File.ReadAllText(path));
+            }
+            finally
+            {
+                Cleanup(root);
+            }
+        }
+
         private static IEnumerable<ModelHealthIssue> ThrowingIssues()
         {
             yield return new ModelHealthIssue("FIRST", HealthSeverity.Info, "First diagnostic");
             throw new InvalidOperationException("Synthetic lazy diagnostic failure.");
+        }
+
+        private sealed class SingleUseIssueSequence : IEnumerable<ModelHealthIssue>
+        {
+            private readonly int _count;
+            private readonly ModelHealthIssue _issue;
+
+            public SingleUseIssueSequence(int count, ModelHealthIssue issue)
+            {
+                _count = count;
+                _issue = issue;
+            }
+
+            public int EnumerationCount { get; private set; }
+            public int YieldedCount { get; private set; }
+
+            public IEnumerator<ModelHealthIssue> GetEnumerator()
+            {
+                EnumerationCount++;
+                if (EnumerationCount > 1)
+                    throw new InvalidOperationException("Diagnostic issue input was enumerated more than once.");
+                return Enumerate().GetEnumerator();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private IEnumerable<ModelHealthIssue> Enumerate()
+            {
+                for (var index = 0; index < _count; index++)
+                {
+                    YieldedCount++;
+                    yield return _issue;
+                }
+            }
         }
 
         private static string UniqueRoot(string suffix) =>
@@ -111,6 +176,12 @@ namespace QS3D.Core.SmokeTests
         private static void False(bool value)
         {
             if (value) throw new InvalidOperationException("Expected condition to be false.");
+        }
+
+        private static void Equal<T>(T expected, T actual)
+        {
+            if (!Equals(expected, actual))
+                throw new InvalidOperationException("Expected " + expected + ", got " + actual + ".");
         }
     }
 }
