@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import re
-import sys
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "src" / "QS3D.BricsCAD.V25" / "RuntimeDiagnosticsCommands.cs"
+UPDATE_COORDINATOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "Updates" / "UpdateCoordinator.cs"
+UPDATE_CENTER = ROOT / "src" / "QS3D.BricsCAD.V25" / "Updates" / "UpdateCenterWindow.cs"
 INSTALLER = ROOT / "scripts" / "install-v25-autoload.ps1"
 PACKAGE_V25 = ROOT / "scripts" / "package-v25.ps1"
 PACKAGE_V26 = ROOT / "scripts" / "package-v26.ps1"
@@ -78,6 +79,8 @@ def main():
         "STALE PROCESS",
         ".NET does not hot-reload an already NETLOADed QS3D assembly",
         "diskVersionMatches",
+        "Math.Max(0, version.Build)",
+        "Math.Max(0, version.Revision)",
     ]
     for token in required_runtime_tokens:
         if token not in runtime:
@@ -86,6 +89,16 @@ def main():
     stale_assembly_only_comparison = "NormalizeVersion(metadata.AssemblyVersion), NormalizeVersion(pluginVersion)"
     if stale_assembly_only_comparison in runtime:
         return fail("runtime diagnostics regressed to assembly-only package version comparison")
+    if "version.ToString(4)" in runtime:
+        return fail("runtime diagnostics must not call Version.ToString(4) on a version that may omit revision")
+
+    update_coordinator = UPDATE_COORDINATOR.read_text(encoding="utf-8")
+    if "AssemblyInformationalVersionAttribute" not in update_coordinator or "SemanticReleaseVersion.FromRunningVersion(informational" not in update_coordinator:
+        return fail("UpdateCoordinator must derive the running product version from AssemblyInformationalVersion")
+
+    update_center = UPDATE_CENTER.read_text(encoding="utf-8")
+    if 'result.CurrentVersion?.Original ?? "unknown"' not in update_center:
+        return fail("Update Center must display the semantic running product version, not AssemblyVersion")
 
     installer = INSTALLER.read_text(encoding="utf-8")
     if "Get-RunningBricsCADProcessDetails" not in installer or "Close all BricsCAD processes before installing or upgrading QS3D" not in installer:
@@ -102,6 +115,7 @@ def main():
     print("Product version:", version)
     print("Assembly version:", assembly)
     print("QS3DVERSION/QS3DRUNTIMECHECK detect stale same-path DLL replacement and require host restart.")
+    print("Update Center displays the semantic product version from AssemblyInformationalVersion.")
     return 0
 
 
