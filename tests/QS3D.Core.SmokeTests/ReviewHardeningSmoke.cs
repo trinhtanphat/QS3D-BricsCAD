@@ -319,6 +319,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState(Guid.NewGuid().ToString("N"), "Revision");
             project.Zones.Add(new ZoneDefinition("z", "Vùng")); project.Floors.Add(new FloorDefinition("f", "Tầng", 0));
+            project.Families.Add(new ProjectFamily("beam-family", "Beam", ElementCategory.Beam));
             var element = new ProjectElement("B1", ElementCategory.Beam, "beam-family", "f", "z"); element.Properties["Material"] = "C30"; element.SourceHandles.Add("A1"); element.SetQuantity("NetVolumeM3", 1.25d); project.Elements.Add(element);
             return project;
         }
