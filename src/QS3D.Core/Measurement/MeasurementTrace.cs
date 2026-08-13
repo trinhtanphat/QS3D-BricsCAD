@@ -343,6 +343,11 @@ namespace QS3D.Core.Measurement
                 items.Add(item);
             }
             items.Sort(CompareFacts);
+            for (var i = 1; i < items.Count; i++)
+            {
+                if (items[i - 1].Equals(items[i]))
+                    throw new ArgumentException("Measurement trace facts must not contain duplicates.", parameterName);
+            }
             return new ReadOnlyCollection<MeasurementTraceFact>(items.ToArray());
         }
 
@@ -356,6 +361,11 @@ namespace QS3D.Core.Measurement
                 items.Add(item);
             }
             items.Sort(CompareAdjustments);
+            for (var i = 1; i < items.Count; i++)
+            {
+                if (items[i - 1].Equals(items[i]))
+                    throw new ArgumentException("Measurement trace adjustments must not contain duplicates.", parameterName);
+            }
             return new ReadOnlyCollection<MeasurementTraceAdjustment>(items.ToArray());
         }
 
