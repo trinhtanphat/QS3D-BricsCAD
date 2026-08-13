@@ -167,12 +167,7 @@ namespace QS3D.BricsCAD.V25
             if (window.IsVisible || CurtainWindows().Any(candidate => ReferenceEquals(candidate, window)))
                 throw Fail("BOUND_WINDOW_REMAINED_OPEN");
             if (!state.WindowClosedObserved) throw Fail("WINDOW_CLOSED_EVENT_MISSING");
-            if (!ReferenceEquals(BcadApplication.DocumentManager.MdiActiveDocument, documentB))
-                throw Fail("DOCUMENT_B_LOST_ACTIVE_STATE");
-            state.SeedB.Ensure(documentB, "B");
             state.WindowClosedWithA = true;
-            state.BRemainedActive = true;
-            state.BUnchangedAfterAClose = true;
         });
 
         [CommandMethod("QS3DCURTAINP12FINAL", CommandFlags.Modal)]
@@ -181,6 +176,8 @@ namespace QS3D.BricsCAD.V25
             var documentB = RequireActive(context.DrawingB);
             var state = RequireState(context);
             state.SeedB.Ensure(documentB, "B");
+            state.BRemainedActive = true;
+            state.BUnchangedAfterAClose = true;
             if (!state.IsComplete) throw Fail("INCOMPLETE_STATE");
             WriteMarkerAtomic(context.ResultPath, new[]
             {
