@@ -82,12 +82,26 @@
                 <Border Background="{StaticResource BgRaisedBrush}"
                         BorderBrush="{StaticResource BorderBrush}"
                         BorderThickness="0,0,0,1" Padding="10,7">
-                    <DockPanel>
-                        <TextBlock Text="DÒNG SỰ KIỆN" Style="{StaticResource GroupHeader}"
-                                   VerticalAlignment="Center"/>
-                        <TextBlock DockPanel.Dock="Right" Text="UTC • PROJECT AUDIT"
-                                   Style="{StaticResource Caption}" VerticalAlignment="Center"/>
-                    </DockPanel>
+                    <Grid x:Name="AuditEventHeaderGrid">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   Text="DÒNG SỰ KIỆN"
+                                   Style="{StaticResource GroupHeader}"
+                                   MinWidth="0"
+                                   Margin="0,0,12,0"
+                                   VerticalAlignment="Center"
+                                   TextWrapping="NoWrap"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="UTC • PROJECT AUDIT"
+                                   Style="{StaticResource Caption}"
+                                   HorizontalAlignment="Right"
+                                   VerticalAlignment="Center"
+                                   TextWrapping="NoWrap"/>
+                    </Grid>
                 </Border>
                 <DataGrid x:Name="Grid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
                           CanUserAddRows="False" CanUserDeleteRows="False"
