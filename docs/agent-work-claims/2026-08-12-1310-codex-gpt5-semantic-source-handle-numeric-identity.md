@@ -1,6 +1,6 @@
 # Work claim — Semantic SourceHandle numeric CAD identity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-gpt5-audit-blt-notes-latest` (`/root/audit_blt_notes_latest`)
 - Registered: `2026-08-12T13:10:13+07:00`
 - Baseline main SHA: `688827f27ff832dbc380a2a7f82353eb956471e7`
@@ -47,3 +47,10 @@ All `ACTIVE` / `BLOCKED` claims and open PRs were re-read at the baseline. None 
 ## Completion condition
 
 The bounded resolver/smoke/gate batch is merged into current `main`, exact source-only validation and any unrelated baseline blockers are recorded, the claim is marked `COMPLETED` with exact PR/commit SHAs, and no prohibited runtime/private/Actions operation has occurred.
+
+## Completion evidence
+
+- Implementation commit `66115d5fa7632b6b35c2f567aff4d418710753a0` was merged by PR `#947` as `577ba66401e02650e01ae7737912ba859d8aecb5`.
+- Core Release and SmokeTests Release builds completed with zero warnings/errors. The new self-registered semantic-handle smoke completed before the full current-main smoke later stopped at the unrelated pre-existing `SemanticTagRendererSmoke` owner-ID fixture.
+- `scripts/preflight-semantic-source-handle-numeric-identity.py`, `scripts/preflight.py`, smoke-registration and `git diff --check` passed.
+- No GitHub Actions, BricsCAD runtime, private/customer fixture, release or package operation was used.
