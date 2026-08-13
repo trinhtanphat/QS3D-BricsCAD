@@ -1,6 +1,6 @@
 # Work claim — Curtain semantic/native Undo coherence
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-curtain-undo-semantic-coherence-20260813`
 - Registered: `2026-08-13T17:02:00+07:00`
 - Baseline main SHA: `8d819d51a25009d2b99eea2dda0a9e158baa8439`
@@ -37,8 +37,15 @@ The semantic snapshot scope is intentionally limited to Curtain build-owned gene
 
 ## Coordination
 
-Recent claim/commit search found no source claim or commit for issue #987 / Curtain semantic Undo. The prior P11 local worker only recorded the blocker and explicitly left the production fix remote. Current Workspace generated-selection work (#982) is a separate lane and is excluded here. Source Reconcile's already-landed semantic Undo bridge is read-only precedent, not shared ownership.
+A concurrent canonical claim, `2026-08-13-codex-issue987-curtain-native-undo.md`, was registered on the same baseline and reserves the same production scope with a stricter completion gate: it remains `ACTIVE` until the complete exact-SHA licensed V25 P11 matrix passes. This claim is therefore closed to remove duplicate ownership; no further production or local-runtime work is reserved here.
+
+## Closeout
+
+- Production source implementation landed on `main` at `96c6c960e29a1720790988f46cf55ccaca359a7d` (`fix(curtain): synchronize semantic owners with native undo`).
+- Focused source regression landed on `main` at `018fde7dd905da5772c0d544557ec2b210c99135` (`test(curtain): guard semantic native undo coherence`).
+- Source/static landing is not a BricsCAD runtime qualification. Issue `#987`, LOCAL-002 P11, and the canonical `codex-issue987-curtain-native-undo-20260813` claim remain open/active until the guarded exact-SHA V25 Undo/Redo, cold-reopen, rebuild, affinity, and cleanup matrix passes.
+- No GitHub Actions or release work is claimed by this closeout.
 
 ## Completion condition
 
-The bounded source fix and deterministic source regression are on current `main`, exact files are re-fetched, this claim is closed `COMPLETED` with exact SHAs, and the local licensed rerun remains explicitly pending rather than being inferred from source inspection.
+This duplicate source claim is complete because its bounded source implementation and deterministic regression are on `main`, and ownership has been handed to the canonical active #987 claim for licensed qualification and final issue closeout.
