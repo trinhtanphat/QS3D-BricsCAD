@@ -202,8 +202,8 @@ for token in (
     "Major(tdAssembly) == ExpectedRuntimeMajor",
     "expectedRuntime && x64Runtime && packageVersionMatches",
     '"NOT " + ExpectedRuntimeLabel',
-    "plus the licensed ",
-    'ExpectedRuntimeLabel + " scenario suite',
+    "diskVersionMatches",
+    "diskFingerprintMatches",
 ):
     require(runtime_diagnostics, token, "shared runtime diagnostics")
 for token in (
@@ -235,4 +235,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: V25 remains net48; V26 uses the current Microsoft.NET.Sdk on net8.0-windows with WPF, a dedicated solution, V26-only refs/runtime/update assets, HttpClient-only updater networking, manifest-channel-isolated release discovery, and host-major-aware shared runtime diagnostics.")
+print("PASS: V25 remains net48; V26 uses the current Microsoft.NET.Sdk on net8.0-windows with WPF, a dedicated solution, V26-only refs/runtime/update assets, HttpClient-only updater networking, manifest-channel-isolated release discovery, and host-major-aware shared runtime diagnostics with stale-binary identity checks.")
