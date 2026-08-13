@@ -95,7 +95,7 @@ namespace QS3D.Core.SmokeTests
                 "m2",
                 "none");
             True(!trace.Equals((MeasurementTrace?)null), "Trace equality must reject null without throwing.");
-            True(!trace.Equals((object?)null), "Object equality must reject null without throwing.");
+            True(!((object)trace).Equals(null), "Object equality must reject null without throwing.");
         }
 
         private static void AdjustmentRuleIdentity()
