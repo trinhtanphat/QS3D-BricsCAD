@@ -64,8 +64,8 @@ namespace QS3D.Core.SmokeTests
                 "rows",
                 "index: 1");
 
-            var negativeLength = new ElementInstance("Legacy-Negative-Length", family, "Floor") { LengthM = -1d };
-            ExpectThrows<InvalidOperationException>(() => QuantityReportBuilder.Group(new[] { negativeLength }));
+            var negativeLength = new ElementInstance("Legacy-Negative-Length", family, "Floor");
+            ExpectThrows<ArgumentOutOfRangeException>(() => negativeLength.LengthM = -1d);
 
             var negativeNet = new ElementInstance("Legacy-Negative-Net", family, "Floor")
             {
