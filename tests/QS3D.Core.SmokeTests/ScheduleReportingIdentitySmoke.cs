@@ -14,7 +14,7 @@ namespace QS3D.Core.SmokeTests
             CaseVariantDuplicateIdsFailClosed();
             NullProjectElementsFailClosed();
             MalformedReferenceIdentitiesFailClosed();
-            MutableReferenceIdsAreNormalized();
+            NoncanonicalMutableReferenceIdsFailClosed();
             UniqueIdsRemainAccepted();
             ProvenanceIsRetainedAcrossSchedules();
         }
@@ -71,27 +71,25 @@ namespace QS3D.Core.SmokeTests
             AssertAllProjectReportBuildersReject(duplicateFamily, "family id 'family-a'");
         }
 
-        private static void MutableReferenceIdsAreNormalized()
+        private static void NoncanonicalMutableReferenceIdsFailClosed()
         {
-            var project = BaseScheduleProject("schedule-reference-normalization", ElementCategory.Slab, out var family);
-            var canonical = new ProjectElement("REF-1", ElementCategory.Slab, family.Id, "floor", "zone");
-            canonical.Quantities["LengthM"] = 1d;
-            project.Elements.Add(canonical);
+            var familyProject = BaseScheduleProject("schedule-reference-family", ElementCategory.Slab, out var family);
+            var familyElement = new ProjectElement("REF-FAMILY", ElementCategory.Slab, family.Id, "floor", "zone");
+            familyElement.FamilyId = " FAMILY ";
+            familyProject.Elements.Add(familyElement);
+            AssertAllProjectReportBuildersReject(familyProject, "noncanonical family reference id");
 
-            var padded = new ProjectElement("REF-2", ElementCategory.Slab, family.Id, "floor", "zone");
-            padded.FamilyId = " FAMILY ";
-            padded.FloorId = " floor ";
-            padded.ZoneId = " ZONE ";
-            padded.Quantities["LengthM"] = 2d;
-            project.Elements.Add(padded);
+            var floorProject = BaseScheduleProject("schedule-reference-floor", ElementCategory.Slab, out family);
+            var floorElement = new ProjectElement("REF-FLOOR", ElementCategory.Slab, family.Id, "floor", "zone");
+            floorElement.FloorId = " floor ";
+            floorProject.Elements.Add(floorElement);
+            AssertAllProjectReportBuildersReject(floorProject, "noncanonical floor reference id");
 
-            var grouped = ProjectQuantityReportBuilder.Group(project).Single();
-            if (grouped.Count != 2 || grouped.Floor != "Floor" || grouped.Zone != "Zone" || grouped.FamilyId != "family" || grouped.FamilyName != "Family" || Math.Abs(grouped.LengthM - 3d) > 1e-12)
-                throw new Exception("Project quantity grouping must normalize mutable Family/Floor/Zone reference ids before lookup and grouping.");
-
-            var detail = ProjectQuantityReportBuilder.Detail(project, new[] { padded.Id }).Single();
-            if (detail.Floor != "Floor" || detail.Zone != "Zone" || detail.FamilyId != "family" || detail.FamilyName != "Family")
-                throw new Exception("Project quantity detail must resolve padded mutable references through canonical project identities.");
+            var zoneProject = BaseScheduleProject("schedule-reference-zone", ElementCategory.Slab, out family);
+            var zoneElement = new ProjectElement("REF-ZONE", ElementCategory.Slab, family.Id, "floor", "zone");
+            zoneElement.ZoneId = " ZONE ";
+            zoneProject.Elements.Add(zoneElement);
+            AssertAllProjectReportBuildersReject(zoneProject, "noncanonical zone reference id");
         }
 
         private static void UniqueIdsRemainAccepted()
@@ -123,8 +121,9 @@ namespace QS3D.Core.SmokeTests
             var project = BaseScheduleProject("schedule-material", ElementCategory.Slab, out var family);
             family.Properties["Material"] = "Concrete";
             var element = new ProjectElement("MAT-1", ElementCategory.Slab, family.Id, "floor", "zone");
-            element.FamilyId = " FAMILY ";
-            element.FloorId = " floor ";
+            element.FamilyId = "FAMILY";
+            element.FloorId = "FLOOR";
+            element.ZoneId = "ZONE";
             AddHandles(element);
             element.Quantities["VolumeM3"] = 1.25d;
             project.Elements.Add(element);
@@ -132,37 +131,37 @@ namespace QS3D.Core.SmokeTests
             var row = MaterialUsageScheduleBuilder.Build(project).Single();
             AssertProvenance(project, row.ProjectId, row.DrawingFingerprint, row.SourceHandles);
             if (row.Floor != "Floor" || row.FamilyName != "Family")
-                throw new Exception("Material schedule must normalize mutable Floor/Family references before lookup/grouping.");
+                throw new Exception("Material schedule must resolve canonical case-variant Floor/Family references before lookup/grouping.");
         }
 
         private static void CurtainProvenance()
         {
             var project = BaseScheduleProject("schedule-curtain", ElementCategory.GlassWall, out var family);
             var element = new ProjectElement("CW-1", ElementCategory.GlassWall, family.Id, "floor", "zone");
-            element.FamilyId = " family ";
-            element.FloorId = " FLOOR ";
+            element.FamilyId = "FAMILY";
+            element.FloorId = "FLOOR";
             AddHandles(element);
             project.Elements.Add(element);
 
             var row = CurtainWallScheduleBuilder.Build(project).Single();
             AssertProvenance(project, row.ProjectId, row.DrawingFingerprint, row.SourceHandles);
             if (row.Floor != "Floor" || row.FamilyName != "Family")
-                throw new Exception("Curtain wall schedule must normalize mutable Floor/Family references before lookup/grouping.");
+                throw new Exception("Curtain wall schedule must resolve canonical case-variant Floor/Family references before lookup/grouping.");
         }
 
         private static void DoorProvenance()
         {
             var project = BaseScheduleProject("schedule-door", ElementCategory.Door, out var family);
             var element = new ProjectElement("D-1", ElementCategory.Door, family.Id, "floor", "zone");
-            element.FamilyId = " FAMILY ";
-            element.FloorId = " floor ";
+            element.FamilyId = "FAMILY";
+            element.FloorId = "FLOOR";
             AddHandles(element);
             project.Elements.Add(element);
 
             var row = DoorOpeningScheduleBuilder.Build(project).Single();
             AssertProvenance(project, row.ProjectId, row.DrawingFingerprint, row.SourceHandles);
             if (row.Floor != "Floor" || row.FamilyName != "Family")
-                throw new Exception("Door/opening schedule must normalize mutable Floor/Family references before lookup/grouping.");
+                throw new Exception("Door/opening schedule must resolve canonical case-variant Floor/Family references before lookup/grouping.");
         }
 
         private static void RoomFinishProvenance()
@@ -183,8 +182,8 @@ namespace QS3D.Core.SmokeTests
                 finishFamily.Id,
                 room.FloorId,
                 room.ZoneId);
-            finish.FamilyId = " finish-family ";
-            finish.FloorId = " FLOOR ";
+            finish.FamilyId = "FINISH-FAMILY";
+            finish.FloorId = "FLOOR";
             finish.Properties[AutoRoomLifecycle.RoomSourceIdKey] = room.Id;
             finish.Quantities["NetFinishAreaM2"] = 10d;
             finish.MarkClean(ElementDirtyFlags.All);
@@ -194,7 +193,7 @@ namespace QS3D.Core.SmokeTests
             var row = RoomFinishScheduleBuilder.Build(project).Single();
             AssertProvenance(project, row.ProjectId, row.DrawingFingerprint, row.SourceHandles);
             if (row.Floor != "Floor" || row.FamilyName != "Finish")
-                throw new Exception("Room finish schedule must normalize mutable Floor/Family references before lookup/grouping.");
+                throw new Exception("Room finish schedule must resolve canonical case-variant Floor/Family references before lookup/grouping.");
         }
 
         private static ProjectState BaseScheduleProject(string id, ElementCategory category, out ProjectFamily family)
