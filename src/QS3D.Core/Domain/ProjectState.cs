@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Audit;
+using QS3D.Core.Mapping;
 using QS3D.Core.Rules;
 
 namespace QS3D.Core.Domain
@@ -112,7 +113,7 @@ namespace QS3D.Core.Domain
 
     public sealed class ProjectState
     {
-        public const int CurrentSchemaVersion = 3;
+        public const int CurrentSchemaVersion = 4;
         private string _name;
         private string _drawingPath = string.Empty;
         private string _drawingFingerprint = string.Empty;
@@ -129,8 +130,9 @@ namespace QS3D.Core.Domain
             Families = new List<ProjectFamily>();
             Elements = new List<ProjectElement>();
             QuantityRules = new List<QuantityRule>();
+            Metadata = new ProjectMetadataDictionary();
+            MeasurementWorkItemMappings = new ProjectMeasurementWorkItemMappingCollection(Metadata);
             AuditEvents = new List<AuditEvent>();
-            Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -180,6 +182,7 @@ namespace QS3D.Core.Domain
         public IList<ProjectFamily> Families { get; }
         public IList<ProjectElement> Elements { get; }
         public IList<QuantityRule> QuantityRules { get; }
+        public ICollection<MeasurementWorkItemMapping> MeasurementWorkItemMappings { get; }
         public IList<AuditEvent> AuditEvents { get; }
         public IDictionary<string, string> Metadata { get; }
 
