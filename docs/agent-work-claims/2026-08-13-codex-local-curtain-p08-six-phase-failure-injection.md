@@ -51,6 +51,14 @@ No current ACTIVE/BLOCKED claim or open PR owns P08, `CurtainWallBuildCommands.c
 
 The seam/probe/runner/gate is merged, a clean exact-main licensed run either records the full sanitized seven-phase PASS contract or a bounded diagnostic FAIL, docs remain truthful and this claim is `COMPLETED`. P09-P12 and overall `LOCAL-002` remain `PENDING_LOCAL`.
 
+## Mixed-source production correction expansion
+
+- Expanded from exact main `d34832385e1a3643b8e18f1d5cebb5f7a98c7dc5` after two clean licensed diagnostics. The merged broad marker first reported `VERIFY_BASELINE / OWNER_METADATA_REJECTED`; a local field-only diagnostic then isolated `LINE_HOST_METADATA_REJECTED`.
+- Root cause is deterministic in production source: `QS3DCURTAIN3D` passes the full mixed LINE/open-POLYLINE selection to `WallSolidBuilder.BuildSelectedLineWalls`, while that builder deliberately rejects mixed source batches before host mutation. The command catches the exception, so the next probe stage observes no LINE host metadata. This contradicts the command's documented mixed-source six-phase contract; it is not a fixture or tolerance issue.
+- This claim now additionally reserves `src/QS3D.BricsCAD.V25/Cad/CurtainWallBuildSelectionGuard.cs` and a bounded `CurtainWallBuildCommands.cs` correction that partitions the already-validated canonical source ObjectIds by LINE/path before each corresponding host/frame/panel builder, restores the complete selection for live stamping/UI/failure paths, and leaves every builder's own fail-closed single-type rule unchanged.
+- Related Curtain/P08 static gates and the probe/runner allowlist may be strengthened. No host/frame/panel builder, geometry planner, Health/Level/Locate/QSDB/UI implementation or other LOCAL-002 cell enters scope.
+- The correction and diagnostic refinement must merge before a fresh exact-main P08 run. Only a full seven-phase rollback plus valid mixed replacement PASS can close P08.
+
 ## Source-preparation status
 
 - The internal one-shot seam, seven post-phase orchestrator checks, mixed LINE/path probe, guarded runner, static/privacy gate and runbook handoff are source-complete. No builder, planner, Health, Level or UI implementation changed.
