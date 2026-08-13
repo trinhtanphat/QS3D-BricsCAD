@@ -26,6 +26,7 @@ def main() -> int:
         installer = read("scripts/install-v25-autoload.ps1")
         launcher = read("scripts/INSTALL-QS3D.cmd")
         package = read("scripts/package-v25.ps1")
+        release_package = read("scripts/package-v25-release.ps1")
         preferences = read("src/QS3D.BricsCAD.V25/Updates/UpdatePreferences.cs")
         settings = read("src/QS3D.BricsCAD.V25/Updates/UpdateSettingsCommands.cs")
         bootstrapper = read("src/QS3D.BricsCAD.V25/Updates/UpdateBootstrapper.cs")
@@ -45,9 +46,14 @@ def main() -> int:
         require(launcher, "SignatureStatus]::NotSigned", "unsigned preview bootstrap")
         require(launcher, "Unblock-File -LiteralPath $p", "preview MOTW bootstrap")
         forbid(launcher, "ExecutionPolicy Bypass", "one-click launcher")
+
         require(package, "'INSTALL-QS3D.cmd'", "release package")
+        require(package, "gitCommit = $gitCommit", "package source provenance")
+        require(package, "Get-SourceGitCommit", "package source provenance")
         require(package, "do not NETLOAD the DLL directly from Downloads", "safe install guidance")
         require(package, "Unsigned cloud previews are explicitly warned", "preview install guidance")
+        require(release_package, "$metadata.gitCommit", "signed release provenance validation")
+        require(release_package, "does not match the exact clean package source HEAD", "signed release provenance validation")
 
         require(preferences, 'InstallOnExitValue = "InstallOnExit"', "update preference")
         require(preferences, "ReadBoolean(InstallOnExitValue, false)", "safe update-on-close default")
@@ -76,7 +82,7 @@ def main() -> int:
         print("ERROR:", exc)
         return 1
 
-    print("PASS: secure install, preview MOTW bootstrap, automatic check, update-on-close, and ribbon update UX contracts are guarded.")
+    print("PASS: secure install, preview MOTW bootstrap, signed release provenance, automatic check, update-on-close, and ribbon update UX contracts are guarded.")
     return 0
 
 
