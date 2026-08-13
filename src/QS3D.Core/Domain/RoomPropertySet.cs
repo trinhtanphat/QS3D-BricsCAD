@@ -29,7 +29,7 @@ namespace QS3D.Core.Domain
         {
             if (double.IsNaN(value) || double.IsInfinity(value))
                 throw new ArgumentOutOfRangeException(parameterName, "Room metric must be finite.");
-            return value;
+            return value == 0d ? 0d : value;
         }
     }
 }
