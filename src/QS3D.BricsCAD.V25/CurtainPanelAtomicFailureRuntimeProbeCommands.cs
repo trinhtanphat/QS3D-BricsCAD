@@ -80,7 +80,9 @@ namespace QS3D.BricsCAD.V25
         };
         private static readonly HashSet<string> FailureCodes = new HashSet<string>(StringComparer.Ordinal)
         {
-            "STATE_REJECTED", "DATA_REJECTED", "IO_REJECTED", "OVERFLOW_REJECTED", "UNEXPECTED_REJECTED"
+            "STATE_REJECTED", "DATA_REJECTED", "IO_REJECTED", "OVERFLOW_REJECTED", "UNEXPECTED_REJECTED",
+            "OWNER_STALE_REJECTED", "OWNER_METADATA_REJECTED", "OWNER_OUTPUT_REJECTED",
+            "OWNER_OUTPUT_NOT_LIVE", "OWNER_HEALTH_REJECTED", "OWNERSHIP_OVERLAP_REJECTED"
         };
 
         [CommandMethod("QS3DCURTAINP08SEEDLINE", CommandFlags.Modal)]
@@ -287,21 +289,32 @@ namespace QS3D.BricsCAD.V25
         private static OwnerOutput CaptureCleanOwner(Document document, ProjectState project, ProjectElement owner, string sourceKind)
         {
             RequireLegacyNoLevel(owner);
-            if (owner.IsGeneratedCurtainPanelStale()) throw new InvalidOperationException("P08 owner is stale.");
-            var source = CanonicalHandles(owner.SourceHandles, "P08 source");
-            var generated = new List<string>();
-            generated.Add(CanonicalHandle(RequiredProperty(owner, "GeneratedSolidHandle"), "P08 host"));
-            generated.AddRange(CanonicalHandles(SplitProperty(owner, "GeneratedCurtainFrameHandles"), "P08 frames"));
-            generated.AddRange(CanonicalHandles(SplitProperty(owner, GeneratedCurtainPanelHealthService.HandlesKey), "P08 panels"));
+            if (owner.IsGeneratedCurtainPanelStale()) throw new ProbeContractException("OWNER_STALE_REJECTED");
+            IReadOnlyList<string> source;
+            List<string> generated;
+            try
+            {
+                source = CanonicalHandles(owner.SourceHandles, "P08 source");
+                generated = new List<string>
+                {
+                    CanonicalHandle(RequiredProperty(owner, "GeneratedSolidHandle"), "P08 host")
+                };
+                generated.AddRange(CanonicalHandles(SplitProperty(owner, "GeneratedCurtainFrameHandles"), "P08 frames"));
+                generated.AddRange(CanonicalHandles(SplitProperty(owner, GeneratedCurtainPanelHealthService.HandlesKey), "P08 panels"));
+            }
+            catch (InvalidOperationException)
+            {
+                throw new ProbeContractException("OWNER_METADATA_REJECTED");
+            }
             if (source.Count != 1 || generated.Count < 3 || generated.Distinct(StringComparer.OrdinalIgnoreCase).Count() != generated.Count)
-                throw new InvalidOperationException("P08 owner output is incomplete or ambiguous.");
-            if (CadHandleService.Resolve(document, generated).Count != generated.Count) throw new InvalidOperationException("P08 generated output is not completely live.");
+                throw new ProbeContractException("OWNER_OUTPUT_REJECTED");
+            if (CadHandleService.Resolve(document, generated).Count != generated.Count) throw new ProbeContractException("OWNER_OUTPUT_NOT_LIVE");
             var livePanels = new HashSet<string>(CadHandleService.GetLiveSolidHandles(document, CanonicalHandles(SplitProperty(owner, GeneratedCurtainPanelHealthService.HandlesKey), "P08 panels")), StringComparer.OrdinalIgnoreCase);
             var issues = new GeneratedCurtainPanelHealthService().Inspect(project, livePanels)
                 .Concat(CurtainWallPanelLiveStateService.Inspect(document, project))
                 .Concat(GeneratedCurtainPanelRuntimeHealthService.Inspect(document, project))
                 .Where(x => string.Equals(x.ElementId, owner.Id, StringComparison.OrdinalIgnoreCase) && x.Severity != HealthSeverity.Info).ToList();
-            if (issues.Count != 0) throw new InvalidOperationException("P08 owner has blocking panel Health.");
+            if (issues.Count != 0) throw new ProbeContractException("OWNER_HEALTH_REJECTED");
             return new OwnerOutput { ElementId = owner.Id, SourceKind = sourceKind, SourceHandles = source, GeneratedHandles = generated.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly() };
         }
 
@@ -309,7 +322,7 @@ namespace QS3D.BricsCAD.V25
         {
             var sets = new[] { left.SourceHandles, left.GeneratedHandles, right.SourceHandles, right.GeneratedHandles };
             var all = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var set in sets) foreach (var handle in set) if (!all.Add(handle)) throw new InvalidOperationException("P08 mixed ownership sets overlap.");
+            foreach (var set in sets) foreach (var handle in set) if (!all.Add(handle)) throw new ProbeContractException("OWNERSHIP_OVERLAP_REJECTED");
         }
 
         private static void RequireBaselineOutputsLive(Document document, SequenceState state)
@@ -405,7 +418,13 @@ namespace QS3D.BricsCAD.V25
 
         private static void RequireAutomation(string? requestedPath, string nonce) { if (string.IsNullOrWhiteSpace(requestedPath) || !Guid.TryParseExact(nonce, "N", out _)) throw new InvalidOperationException("P08 runtime commands are automation-only."); RequiredResultPath(requestedPath!); }
         private static string RequiredResultPath(string value) { var fullPath = Path.GetFullPath(value); var directory = Path.GetDirectoryName(fullPath); if (!string.Equals(Path.GetFileName(fullPath), ResultFileName, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("P08 result filename is invalid."); if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory)) throw new DirectoryNotFoundException("P08 result directory must already exist."); return fullPath; }
-        private static string FailureCode(Exception error) { if (error is InvalidDataException) return "DATA_REJECTED"; if (error is OverflowException) return "OVERFLOW_REJECTED"; if (error is IOException) return "IO_REJECTED"; if (error is InvalidOperationException) return "STATE_REJECTED"; return "UNEXPECTED_REJECTED"; }
+        private static string FailureCode(Exception error) { if (error is ProbeContractException probe) return probe.Code; if (error is InvalidDataException) return "DATA_REJECTED"; if (error is OverflowException) return "OVERFLOW_REJECTED"; if (error is IOException) return "IO_REJECTED"; if (error is InvalidOperationException) return "STATE_REJECTED"; return "UNEXPECTED_REJECTED"; }
+
+        private sealed class ProbeContractException : InvalidOperationException
+        {
+            internal ProbeContractException(string code) : base("P08 probe contract rejected runtime state.") { Code = code; }
+            internal string Code { get; }
+        }
         private static void TryWriteFailure(string? requestedPath, string nonce, string phase, string failureCode)
         {
             try { var normalized = (requestedPath ?? string.Empty).Trim(); if (normalized.Length > 0 && !File.Exists(normalized) && Guid.TryParseExact(nonce, "N", out _) && FailurePhases.Contains(phase) && FailureCodes.Contains(failureCode)) WriteMarkerAtomic(normalized, new[] { "status=FAIL", "command=QS3DCURTAINP08PROBE", "nonce=" + nonce, "schema=QS3D_CURTAIN_PANEL_ATOMIC_FAILURE_RUNTIME_V1", "qualification_boundary=LOCAL_002_P08_ONLY", "production_local002_qualified=false", "error_code=CURTAIN_PANEL_ATOMIC_FAILURE_RUNTIME_FAILED", "failure_phase=" + phase, "failure_code=" + failureCode }); } catch { }

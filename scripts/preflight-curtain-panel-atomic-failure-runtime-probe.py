@@ -81,6 +81,8 @@ if PROBE.is_file():
         'valid_replacement_succeeded=true', 'schema=QS3D_CURTAIN_PANEL_ATOMIC_FAILURE_RUNTIME_V1',
         'qualification_boundary=LOCAL_002_P08_ONLY', 'production_local002_qualified=false',
         'error_code=CURTAIN_PANEL_ATOMIC_FAILURE_RUNTIME_FAILED', 'FileMode.CreateNew', 'File.Move(tempPath, fullPath)',
+        'OWNER_STALE_REJECTED', 'OWNER_METADATA_REJECTED', 'OWNER_OUTPUT_REJECTED',
+        'OWNER_OUTPUT_NOT_LIVE', 'OWNER_HEALTH_REJECTED', 'OWNERSHIP_OVERLAP_REJECTED',
     ):
         if token not in text: errors.append("P08 probe missing contract token: " + token)
     for forbidden in (
