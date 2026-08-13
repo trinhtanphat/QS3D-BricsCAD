@@ -164,7 +164,8 @@ $sidecarBackup = $projectSidecar + ".bak"
 $sidecarLock = $projectSidecar + ".lock"
 $drawingLock = [IO.Path]::ChangeExtension($DrawingCopy, ".dwl")
 $drawingLock2 = [IO.Path]::ChangeExtension($DrawingCopy, ".dwl2")
-foreach ($privateInput in @($projectSidecar, $sidecarBackup, $sidecarLock, $drawingLock, $drawingLock2)) {
+$drawingBackup = [IO.Path]::ChangeExtension($DrawingCopy, ".bak")
+foreach ($privateInput in @($projectSidecar, $sidecarBackup, $sidecarLock, $drawingLock, $drawingLock2, $drawingBackup)) {
     if (Test-Path -LiteralPath $privateInput) { throw "Curtain P11 disposable copy has pre-existing private state." }
 }
 
@@ -351,7 +352,7 @@ finally {
             try { Remove-ExactFile -Path $scriptPath }
             catch { if ($null -eq $cleanupError) { $cleanupError = $_ } }
         }
-        foreach ($privatePath in @($projectSidecar, $sidecarBackup, $sidecarLock, $drawingLock, $drawingLock2)) {
+        foreach ($privatePath in @($projectSidecar, $sidecarBackup, $sidecarLock, $drawingLock, $drawingLock2, $drawingBackup)) {
             try { Remove-ExactFile -Path $privatePath }
             catch { if ($null -eq $cleanupError) { $cleanupError = $_ } }
         }
@@ -394,6 +395,7 @@ $metadata = [ordered]@{
     script_cleanup_verified = (-not (Test-Path -LiteralPath $scriptOnePath) -and -not (Test-Path -LiteralPath $scriptTwoPath))
     sidecar_cleanup_verified = (-not (Test-Path -LiteralPath $projectSidecar) -and -not (Test-Path -LiteralPath $sidecarBackup) -and -not (Test-Path -LiteralPath $sidecarLock))
     drawing_lock_cleanup_verified = (-not (Test-Path -LiteralPath $drawingLock) -and -not (Test-Path -LiteralPath $drawingLock2))
+    drawing_backup_cleanup_verified = (-not (Test-Path -LiteralPath $drawingBackup))
     drawing_restore_verified = [string]::Equals((Get-FileHash -LiteralPath $DrawingCopy -Algorithm SHA256).Hash, $drawingHashBefore, [StringComparison]::OrdinalIgnoreCase)
     proxy_information_dialogs_dismissed = $proxyInformationDialogsDismissed
     marker = $markerForMetadata
