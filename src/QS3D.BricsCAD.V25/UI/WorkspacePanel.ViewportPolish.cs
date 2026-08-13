@@ -3,6 +3,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using QS3D.BricsCAD.V25.Services;
 
 namespace QS3D.BricsCAD.V25.UI
 {
@@ -87,6 +88,7 @@ namespace QS3D.BricsCAD.V25.UI
             Grid roomAndSelection)
         {
             if (workspace.RowDefinitions.Count < 3 ||
+                workspace.ColumnDefinitions.Count < 5 ||
                 familyAndProperties.RowDefinitions.Count < 3 ||
                 roomAndSelection.RowDefinitions.Count < 3)
                 return;
@@ -95,6 +97,14 @@ namespace QS3D.BricsCAD.V25.UI
             var narrow = width > 0 && width < 680;
             if (!narrow)
             {
+                // CompactShell must not erase the splitter choices that LayoutPersistence loaded.
+                // Restore the persisted desktop proportions after its width breakpoint has run.
+                var layout = UserUiLayoutStore.Get();
+                workspace.ColumnDefinitions[0].Width = new GridLength(layout.ModelColumnWidth, GridUnitType.Pixel);
+                workspace.ColumnDefinitions[2].Width = new GridLength(layout.FamilyColumnWidth, GridUnitType.Pixel);
+                familyAndProperties.RowDefinitions[0].Height = new GridLength(layout.FamilyTopHeight, GridUnitType.Pixel);
+                roomAndSelection.RowDefinitions[0].Height = new GridLength(layout.RoomTopHeight, GridUnitType.Pixel);
+
                 FamilyList.MinHeight = 82;
                 PropertyList.MinHeight = 118;
                 InspectionList.MinHeight = 96;
