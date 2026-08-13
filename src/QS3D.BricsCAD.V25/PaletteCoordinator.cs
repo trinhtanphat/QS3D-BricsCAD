@@ -87,7 +87,11 @@ namespace QS3D.BricsCAD.V25
                 if (_workspace != null) _workspace.Visible = true;
                 if (_right != null) _right.Visible = true;
                 if (_quantityInsight != null) _quantityInsight.Visible = true;
-                RefreshAll();
+
+                // Each panel owns its first-load refresh. Running RefreshAll here as well
+                // performs the same sidecar/quantity/layer work twice on BricsCAD's UI
+                // thread while QS3D is being shown, which is especially expensive for an
+                // already-open legacy project.
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
             }
             catch (Exception)
