@@ -16,23 +16,36 @@ Reserved implementation surface:
 
 ## Observed source invariant
 
-`PluginEntry.Initialize()` eagerly constructs all three palette trees during NETLOAD. `PaletteCoordinator.Show()` then makes them visible and also calls `RefreshAll()`, while Workspace, RightPanel and QuantityInsight already perform their initial synchronous refresh work from their WPF `Loaded` handlers. On an already-open project this can duplicate project-sidecar, semantic quantity and CAD-layer refresh work on BricsCAD's UI thread during startup/show.
+`PluginEntry.Initialize()` eagerly constructed all three palette trees during NETLOAD. `PaletteCoordinator.Show()` then made them visible and also called `RefreshAll()`, while Workspace, RightPanel and QuantityInsight already perform their initial synchronous refresh work from their WPF `Loaded` handlers. On an already-open project this could duplicate project-sidecar, semantic quantity and CAD-layer refresh work on BricsCAD's UI thread during startup/show.
 
 ## Intended contract
 
 - NETLOAD must register QS3D runtime/lifecycle/ribbon services without eagerly constructing palette WPF trees.
 - First `QS3D` show may let the panels run their existing initial-load refresh, but must not synchronously run the same full refresh a second time from `PaletteCoordinator.Show()`.
-- Existing explicit lifecycle/command refresh paths remain available.
-- Native BricsCAD V25 exact runtime verification remains local-only; GitHub CI/static/build checks will be used for this remote patch.
+- Passive status/lifecycle refresh notifications must not materialize palettes that the user has never opened.
+- Existing explicit lifecycle/command refresh paths remain available after palette creation.
+- Native BricsCAD V25 exact runtime verification remains local-only; no native PASS may be claimed from source/static evidence alone.
 
 ## Implementation status
 
-- Branch: `fix/netload-existing-project-hang-20260813`
-- PR: #1031
-- Source commits: `5363f0e2aa8b50cc4417af845c8dd166373898e4`, `4f0d6cc247bd19529695aabd145905f544895928`
-- Remote readback confirms the PR changes only the two reserved startup files.
-- No PR workflow run/status was attached to the current head when checked; exact BricsCAD V25 runtime verification remains required before claiming native PASS.
+### Current source merged to `main`
+
+- PR #1048 merged as `7a5e75b511aff0b55a2c692556121df0ffe9d25f`.
+  - `PluginEntry.Initialize()` no longer calls `PaletteCoordinator.EnsureCreated()` during NETLOAD.
+  - Passive `SetStatus`, `RefreshProject`, `RefreshCad`, and `ResetForUnavailableProject` no longer eagerly create palettes.
+  - Explicit `Show()` / `ShowSafeMode()` still create palettes on demand.
+- Follow-up PR #1050 merged as `b37961d94d75ef943c569f01713fba8045b0693f`.
+  - Source commit `34e526604cb19b8172a1f82150e16bcecaa209b3` removes only the duplicate `RefreshAll()` call from `PaletteCoordinator.Show()`.
+  - Workspace, RightPanel and QuantityInsight retain their own initial `Loaded` refresh handlers, and `SelectionSyncCoordinator.Refresh()` remains after show.
+- Superseded PR #1031 was closed without merge after a handoff comment pointed to #1048; its stale branch must not be merged over the current palette architecture.
+- GitHub reported no status checks or workflow runs attached to the #1048/#1050 source heads when checked. This is source/readback evidence, not a CI-green claim.
+
+### Native validation still required
+
+- Licensed BricsCAD V25 PROJECT=YES exact-SHA validation is still pending.
+- Keep this claim `ACTIVE` until the merged source is exercised through the reported sequence: close BricsCAD → reopen → open an existing project DWG → NETLOAD the current V25 DLL → run `QS3D`.
+- Do not close the claim or report native PASS unless that exact runtime path is observed to complete without the prior hang.
 
 ## Collision check
 
-At registration time, open-PR searches for `netload` and `ProjectContextCoordinator` returned no matching open PR. This claim does not overlap the BLOCKED LOCAL-003 native Level geometry claim; it is limited to V25 plugin/palette startup lifecycle.
+At registration time, open-PR searches for `netload` and `ProjectContextCoordinator` returned no matching open PR. This claim does not overlap the BLOCKED LOCAL-003 native Level geometry claim; it is limited to V25 plugin/palette startup lifecycle. Concurrent main changes observed during implementation were claim/doc-only on the compared snapshots and did not overlap these two startup files.
