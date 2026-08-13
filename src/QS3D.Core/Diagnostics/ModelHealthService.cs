@@ -83,6 +83,17 @@ namespace QS3D.Core.Diagnostics
                 var normalizedSourceHandles = element.SourceHandles
                     .Where(x => !string.IsNullOrWhiteSpace(x))
                     .Select(x => x.Trim())
+                    .ToList();
+                var duplicateSourceHandles = normalizedSourceHandles
+                    .GroupBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .Where(group => group.Count() > 1)
+                    .Select(group => group.Key)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                foreach (var duplicateHandle in duplicateSourceHandles)
+                    issues.Add(new ModelHealthIssue("DUPLICATE_SOURCE_HANDLE", HealthSeverity.Warning, "CAD Handle nguồn bị lặp trong cùng QS3D element: " + duplicateHandle, element.Id));
+
+                normalizedSourceHandles = normalizedSourceHandles
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
                 foreach (var normalized in normalizedSourceHandles)
