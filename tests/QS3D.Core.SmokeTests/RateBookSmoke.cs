@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             DeterministicOrderingAndLatestLookup();
+            CanonicalZeroUnitRate();
             ExplicitUnmatchedState();
             SnapshotIsolationAndReadOnlyView();
             DuplicateAndAmbiguousRatesFailClosed();
@@ -51,6 +52,19 @@ namespace QS3D.Core.SmokeTests
             {
                 CultureInfo.CurrentCulture = previousCulture;
             }
+        }
+
+        private static void CanonicalZeroUnitRate()
+        {
+            var negativeZero = new decimal(0, 0, 0, true, 0);
+            var item = Item("RATE-ZERO", "ZERO", "ea", "USD", negativeZero, Utc(2026, 1, 1), "v1");
+            var expectedBits = decimal.GetBits(0m);
+            var actualBits = decimal.GetBits(item.UnitRate);
+
+            Equal(0m, item.UnitRate, "Zero unit rate value mismatch.");
+            Equal(expectedBits.Length, actualBits.Length, "Decimal bit-vector length mismatch.");
+            for (var i = 0; i < expectedBits.Length; i++)
+                Equal(expectedBits[i], actualBits[i], "Zero unit rate must use canonical positive decimal representation at bit index " + i + ".");
         }
 
         private static void ExplicitUnmatchedState()
