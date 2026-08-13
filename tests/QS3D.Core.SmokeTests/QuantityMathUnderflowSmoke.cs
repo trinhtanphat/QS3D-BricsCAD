@@ -22,11 +22,19 @@ namespace QS3D.Core.SmokeTests
             Equal(3d, Invoke("Add", 1d, 2d, "ordinary addition"));
             Equal(double.Epsilon, Invoke("Add", double.Epsilon, 0d, "subnormal addition"));
 
+            CanonicalPositiveZero(Invoke("SubtractFloorZero", -0d, 0d, "negative-zero floor subtraction"));
+            CanonicalPositiveZero(Invoke("SubtractFloorZero", 2d, 5d, "negative floor subtraction"));
+            Equal(3d, Invoke("SubtractFloorZero", 5d, 2d, "ordinary subtraction"));
+
             Equal(0d, Invoke("Divide", 0d, 2d, "zero division"));
             CanonicalPositiveZero(Invoke("Divide", -0d, 2d, "negative-zero division"));
             Equal(double.Epsilon, Invoke("Divide", double.Epsilon, 1d, "subnormal division"));
             var divideUnderflow = Capture<InvalidOperationException>(() => Invoke("Divide", double.Epsilon, 2d, "divide regression"));
             Equal("Quantity division underflow: divide regression", divideUnderflow.Message);
+
+            CanonicalPositiveZero(InvokeClamp(-0d, 0d, 1d, "negative-zero clamp"));
+            Equal(0.5d, InvokeClamp(0.5d, 0d, 1d, "ordinary clamp"));
+            Equal(1d, InvokeClamp(2d, 0d, 1d, "upper clamp"));
         }
 
         private static double Invoke(string methodName, double first, double second, string label)
@@ -39,6 +47,23 @@ namespace QS3D.Core.SmokeTests
                 var result = method.Invoke(null, new object[] { first, second, label });
                 if (result is double value) return value;
                 throw new Exception("QuantityMath method did not return a double: " + methodName);
+            }
+            catch (TargetInvocationException ex) when (ex.InnerException != null)
+            {
+                throw ex.InnerException;
+            }
+        }
+
+        private static double InvokeClamp(double value, double minimum, double maximum, string label)
+        {
+            var method = QuantityMathType.GetMethod("Clamp", BindingFlags.Public | BindingFlags.Static);
+            if (method == null) throw new Exception("QuantityMath method not found: Clamp");
+
+            try
+            {
+                var result = method.Invoke(null, new object[] { value, minimum, maximum, label });
+                if (result is double quantity) return quantity;
+                throw new Exception("QuantityMath method did not return a double: Clamp");
             }
             catch (TargetInvocationException ex) when (ex.InnerException != null)
             {
