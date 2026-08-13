@@ -44,7 +44,7 @@ namespace QS3D.Core.SmokeTests
         private static void RejectMaterial(string root)
         {
             var row = MaterialRow();
-            row.UnitHint = "ea";
+            row.UnitHint = "m";
             row.AreaM2 = double.PositiveInfinity;
             ExpectPreflight(
                 Path.Combine(root, "material-invalid"),
