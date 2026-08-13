@@ -229,7 +229,11 @@ try {
             "PROBE_AUTH", "SEED_LINE", "PREPARE_BASELINE", "VERIFY_BASELINE", "ARM_FAILURE",
             "VERIFY_FAILURE_ROLLBACK", "PREPARE_VALID_REPLACEMENT", "VERIFY_VALID_REPLACEMENT", "RESULT_PUBLISH"
         )
-        $failureCodes = @("STATE_REJECTED", "DATA_REJECTED", "IO_REJECTED", "OVERFLOW_REJECTED", "UNEXPECTED_REJECTED")
+        $failureCodes = @(
+            "STATE_REJECTED", "DATA_REJECTED", "IO_REJECTED", "OVERFLOW_REJECTED", "UNEXPECTED_REJECTED",
+            "OWNER_STALE_REJECTED", "OWNER_METADATA_REJECTED", "OWNER_OUTPUT_REJECTED",
+            "OWNER_OUTPUT_NOT_LIVE", "OWNER_HEALTH_REJECTED", "OWNERSHIP_OVERLAP_REJECTED"
+        )
         $failureKeys = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
         foreach ($key in @(
             "status", "command", "nonce", "schema", "qualification_boundary",
