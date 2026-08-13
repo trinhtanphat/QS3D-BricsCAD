@@ -12,17 +12,22 @@ Fix the V25 host-startup/UI lifecycle path reported by the user: after fully clo
 Reserved implementation surface:
 - `src/QS3D.BricsCAD.V25/PluginEntry.cs`
 - `src/QS3D.BricsCAD.V25/PaletteCoordinator.cs`
-- a focused non-native regression/preflight if needed
+- `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs`
+- `src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs`
+- `scripts/preflight-netload-existing-project-startup.py`
 
 ## Observed source invariant
 
 `PluginEntry.Initialize()` eagerly constructed all three palette trees during NETLOAD. `PaletteCoordinator.Show()` then made them visible and also called `RefreshAll()`, while Workspace, RightPanel and QuantityInsight already perform their initial synchronous refresh work from their WPF `Loaded` handlers. On an already-open project this could duplicate project-sidecar, semantic quantity and CAD-layer refresh work on BricsCAD's UI thread during startup/show.
+
+Follow-up audit after the lazy-palette fixes found one remaining lifecycle edge: `WorkspacePanel` and `RightPanel` still register permanent anonymous `Loaded` handlers. Unlike `QuantityInsightPanel`, they cannot unsubscribe after the first successful visual load, so a WPF unload/reload caused by palette reparenting/docking can synchronously repeat project binding and CAD catalog refresh without an explicit user refresh request. This remains in the reported hang/perceived-freeze surface and is reserved by this claim.
 
 ## Intended contract
 
 - NETLOAD must register QS3D runtime/lifecycle/ribbon services without eagerly constructing palette WPF trees.
 - First `QS3D` show may let the panels run their existing initial-load refresh, but must not synchronously run the same full refresh a second time from `PaletteCoordinator.Show()`.
 - Passive status/lifecycle refresh notifications must not materialize palettes that the user has never opened.
+- Workspace and RightPanel initial `Loaded` refresh must be one-shot per panel instance; later refreshes come only from explicit lifecycle/command paths.
 - Existing explicit lifecycle/command refresh paths remain available after palette creation.
 - Native BricsCAD V25 exact runtime verification remains local-only; no native PASS may be claimed from source/static evidence alone.
 
@@ -43,6 +48,12 @@ Reserved implementation surface:
 - Duplicate PR #1049 was closed without merge after #1048/#1050/#1051 collectively superseded its source and gate diff.
 - GitHub reported no status checks or workflow runs attached to the #1048/#1050 source heads when checked. This is source/readback/regression evidence, not a CI-green or native-runtime claim.
 
+### Follow-up audit in progress
+
+- Make `WorkspacePanel` and `RightPanel` first-load refresh handlers self-unsubscribe, matching the already one-shot `QuantityInsightPanel` pattern.
+- Extend the startup preflight so permanent anonymous `Loaded` refresh handlers cannot regress.
+- Preserve all explicit refresh buttons, document-activation refreshes and command-driven refresh paths.
+
 ### Native validation still required
 
 - Licensed BricsCAD V25 PROJECT=YES exact-SHA validation is still pending.
@@ -51,4 +62,4 @@ Reserved implementation surface:
 
 ## Collision check
 
-At registration time, open-PR searches for `netload` and `ProjectContextCoordinator` returned no matching open PR. This claim does not overlap the BLOCKED LOCAL-003 native Level geometry claim; it is limited to V25 plugin/palette startup lifecycle. Concurrent main changes observed during implementation were claim/doc-only on the compared snapshots and did not overlap these two startup files.
+At registration time, open-PR searches for `netload` and `ProjectContextCoordinator` returned no matching open PR. Before reserving the panel-load follow-up, open-PR searches for `WorkspacePanel`, `RightPanel`, and `startup` also returned no matching open PR. This claim does not overlap the BLOCKED LOCAL-003 native Level geometry claim; it is limited to V25 plugin/palette startup lifecycle.
