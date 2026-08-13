@@ -132,6 +132,11 @@ if RUNNER.is_file():
         'Curtain P06 runtime qualification requires a clean exact-SHA worktree.',
         'ArtifactDir must be empty.',
         'Stop-Qs3dLaunchedProcess -Process $process',
+        'function Remove-Qs3dDrawingLocks',
+        '[IO.Path]::ChangeExtension($DrawingCopy, ".dwl")',
+        '[IO.Path]::ChangeExtension($DrawingCopy, ".dwl2")',
+        'Remove-Qs3dDrawingLocks -Paths $drawingLocks',
+        'Curtain P06 drawing-lock cleanup failed.',
         'Stop-Process -Id $Process.Id -Force -ErrorAction Stop',
         'Get-Process -Name "bricscad" -ErrorAction SilentlyContinue',
         'Remove-Item -LiteralPath $scriptPath -Force -ErrorAction Stop',
@@ -139,6 +144,7 @@ if RUNNER.is_file():
         'drawing_copy_sha256_after',
         'process_cleanup_verified = $true',
         'script_cleanup_verified = $true',
+        'drawing_lock_cleanup_verified = $true',
         'sidecar_absent_verified = $true',
         'backup_absent_verified = $true',
         'Read-Qs3dAllowedValue',
@@ -187,8 +193,9 @@ if RUNNER.is_file():
     deferred_failure = text.find("if ($diagnosticFailure)", fail_start)
     drawing_hash_after = text.find("$drawingHashAfter =", fail_start)
     backup_after = text.find("Curtain P06 runtime probe persisted an unexpected sidecar or backup.", fail_start)
-    if min(deferred_failure, drawing_hash_after, backup_after) < 0 or deferred_failure < drawing_hash_after or deferred_failure < backup_after:
-        errors.append("Curtain-panel P06 sanitized FAIL must be deferred until process/script/DWG/sidecar/backup checks finish")
+    lock_cleanup_after = text.find("Remove-Qs3dDrawingLocks -Paths $drawingLocks", fail_start)
+    if min(deferred_failure, drawing_hash_after, backup_after, lock_cleanup_after) < 0 or deferred_failure < drawing_hash_after or deferred_failure < backup_after or deferred_failure < lock_cleanup_after:
+        errors.append("Curtain-panel P06 sanitized FAIL must be deferred until process/script/DWG/lock/sidecar/backup checks finish")
     stop_start = text.find("function Stop-Qs3dLaunchedProcess")
     stop_end = text.find("if ([Environment]::OSVersion.Platform", stop_start)
     stop_body = text[stop_start:stop_end]
