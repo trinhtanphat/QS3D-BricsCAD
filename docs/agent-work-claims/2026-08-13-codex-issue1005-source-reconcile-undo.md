@@ -71,3 +71,9 @@ The corrected production fix and regressions are merged to current `main`, the e
 - The correction requires a same-command WillStart/Ended pair while the exact tracked document remains active; cancellation, failure, mismatch, duplicate starts, project forget and detach clear intent. A matched native Undo/Redo reaching an unknown revision remains sticky and fail-closed.
 - Remote validation without BricsCAD, private data or Actions: focused Source Reconcile coherence/reconcile/single-bind/runtime-probe gates PASS; strict manual-CI and generic preflight PASS; Core smoke executable `ALL PASS`; installed-reference V25 `Release|x64` build PASS with `0 warnings / 0 errors`.
 - The LOCAL-004 probe, runner and qualification/inbox docs remain unchanged. Issue `#1005` remains `OPEN`; exact-SHA rerun request is recorded in issue comment `#issuecomment-5279201302`, and claim status remains `ACTIVE` pending the licensed result.
+
+## State-classification successor pass
+
+- Exact candidate `b48503307c28ae8abbc5e324e53c581915f51a23` still produced the same pre-final `DESYNCHRONIZED` / `MULTIPLE` tuple before the runner's first explicit Undo. Active-document WillStart/Ended pairing therefore does not distinguish every internal BricsCAD command pair.
+- This successor pass reserves the coordinator's sticky state classification and deterministic gate. Read-only observer refusals, plus a failed semantic restore followed by successful rollback, will leave `CurrentRevision` unchanged rather than poison history; the live native marker mismatch continues to block all mutation fail-closed until the marker returns to that current revision.
+- Sticky desynchronization remains reserved for the only semantically uncertain state: both target restore and recovery rollback fail. Intent pairing remains as defense-in-depth. LOCAL-004 probe/runner/inbox/qualification surfaces, BricsCAD runtime, private data and Actions remain excluded.
