@@ -5,6 +5,7 @@
 - Registered: `2026-08-13T17:20:00+07:00`
 - Baseline main SHA: `52c946738bb9423d58e6fff18eb8582072f4a19c`
 - Scope extended: `2026-08-13T23:17:00+07:00` from refreshed `main` baseline `5940d3f93c9f244a3bfd721d57c5702ec82b8d70`
+- Latest remote source checkpoint: `df846111efbb1777babadeee4c312bdb4a58a4ba`
 
 ## Scope
 
@@ -18,9 +19,9 @@ Reserved implementation surface:
 - `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs`
 - `src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs`
 - `scripts/preflight-netload-existing-project-startup.py`
-- the matching exact-SHA NETLOAD/reopen scenario already parked under `LOCAL-001` in `docs/LOCAL-AGENT-INBOX.md` when the source contract changes
+- the matching exact-SHA NETLOAD/reopen scenario already parked under `LOCAL-001` in `docs/LOCAL-AGENT-INBOX.md`
 
-Remote source work for the first four identified startup lifecycle findings is integrated. The 2026-08-13 23:17 refresh found an additional source-side gap in `DocumentLifecycleCoordinator`: NETLOAD startup and host document callbacks still directly attach persistence/undo/selection services and perform existing-project/UI reconciliation. This claim is extended before implementation so that work can be moved out of host callbacks and guarded deterministically. Keep this claim ACTIVE because exact licensed BricsCAD V25 reproduction/qualification is still pending.
+Remote source work for the identified startup lifecycle is integrated through the latest checkpoint above. Keep this claim `ACTIVE` because exact licensed BricsCAD V25 reproduction/qualification remains local-only and pending.
 
 ## Observed source invariant
 
@@ -30,7 +31,7 @@ The V25 startup/show path has had five avoidable sources of repeated or synchron
 2. `PaletteCoordinator.Show()` made the palettes visible and immediately called `RefreshAll()`, duplicating the panels' own first `Loaded` refresh work.
 3. `RibbonInitializationCoordinator.Start()` synchronously reconciled the large reflective ribbon tree from NETLOAD and document-created/activated callbacks.
 4. `WorkspacePanel` and `RightPanel` used permanent anonymous `Loaded` handlers, allowing WPF unload/reload or palette reparenting to repeat constructor-owned project/CAD refresh work without an explicit refresh request.
-5. Current `DocumentLifecycleCoordinator.Start()`, `OnDocumentCreated`, `OnDocumentActivated`, and `OnDocumentDestroyed` still perform attach/project/selection reconciliation inline. `SelectionSyncCoordinator.Attach()` itself calls `Refresh()`, so removing only the explicit refresh call would not make those host callbacks passive.
+5. The 23:17 source refresh found `DocumentLifecycleCoordinator` still performing project/selection/UI reconciliation inline during NETLOAD and document callbacks. The first concurrent follow-up over-corrected by also deferring persistence and Undo subscriptions; the final source split keeps those critical lightweight hooks immediate and defers only project/selection/UI work.
 
 ## Intended contract
 
@@ -38,11 +39,11 @@ The V25 startup/show path has had five avoidable sources of repeated or synchron
 - Passive lifecycle/status refresh calls do not materialize unopened palettes.
 - First `QS3D` show lets each panel own exactly one initial refresh and does not immediately duplicate it with `RefreshAll()`.
 - Workspace and RightPanel initial `Loaded` refreshes are one-shot per panel instance; later refreshes come through explicit lifecycle/command/manual paths.
-- Ribbon reconciliation is eventual/idempotent but never executes synchronously inside NETLOAD or document-availability callbacks.
-- Deferred ribbon work runs at `DispatcherPriority.ApplicationIdle`.
-- Document-created/activated/destroyed callbacks enqueue/coalesce attach/project/UI reconciliation instead of performing it inline; the queued work runs at `DispatcherPriority.ApplicationIdle`.
-- Document teardown remains synchronous enough to cancel pending work and detach native handlers before a document disappears.
-- Existing explicit lifecycle/command refresh paths and teardown remain available.
+- Ribbon reconciliation is eventual/idempotent but never executes synchronously inside NETLOAD or document-availability callbacks; deferred Ribbon work runs at `DispatcherPriority.ApplicationIdle`.
+- Save/close persistence hooks plus Source Reconcile/Curtain Undo observers attach synchronously before a higher-priority input, command, save or close can outrun them.
+- Selection sync, existing-project inspection and palette/UI reconciliation are coalesced and run at `DispatcherPriority.ApplicationIdle` outside NETLOAD/document host callbacks.
+- Document teardown stays synchronous: pending reconcile is cancelled and native handlers are detached before the document disappears.
+- Existing explicit lifecycle/command refresh paths remain available.
 - Native BricsCAD V25 exact runtime verification remains local-only; source/static evidence cannot manufacture `LOCAL_PASS`.
 
 ## Implementation status
@@ -62,28 +63,38 @@ The V25 startup/show path has had five avoidable sources of repeated or synchron
   - Deferred Ribbon retry now runs at `DispatcherPriority.ApplicationIdle`.
 - PR #1054 merged as `cad4466829fe5b134b2701b6fced5f4846997204`.
   - `WorkspacePanel` and `RightPanel` use named `OnInitialLoaded` handlers that self-unsubscribe before the first refresh.
-  - Explicit/manual/lifecycle refresh methods remain unchanged.
   - The startup preflight requires the one-shot subscribe/unsubscribe contract and rejects the old permanent anonymous `Loaded` refresh handlers.
+- `9c9216a67e16fa234b72fb6e175173f7dccdb194` — `fix(netload): defer document lifecycle reconciliation to idle`.
+  - Concurrent implementation introduced coalesced `ApplicationIdle` lifecycle reconciliation and synchronous destroy-time cancellation/detach.
+  - Review found it also deferred persistence and Undo observer subscriptions, which could allow higher-priority input/commands to run before those hooks exist.
+- `31b47d780911673321d36dbc11b527b01e2cb891` — `test(netload): guard idle document lifecycle reconciliation`.
+  - Added the first focused lifecycle-idle preflight coverage.
+- `261635f88bdf42a6e4bc17915bf6e6d887daf83e` — `fix(netload): keep critical document hooks immediate`.
+  - Keeps `AttachProjectPersistence`, `SourceReconcileUndoCoordinator.Attach`, and `CurtainWallUndoCoordinator.Attach` immediate.
+  - Keeps `SelectionSyncCoordinator.Attach`, `EnsureProject`, selection refresh and palette/project UI work in the coalesced `ApplicationIdle` path.
+  - Keeps pending-work cancellation and detach synchronous on document teardown.
+- `df846111efbb1777babadeee4c312bdb4a58a4ba` — `test(netload): preserve immediate critical lifecycle hooks`.
+  - Pins the critical-hook/immediate versus project-selection-UI/deferred boundary so future changes cannot silently move save/Undo hooks back behind idle scheduling.
 - Superseded PR #1031 and duplicate PR #1049 remain closed/unmerged and must not be revived over current `main`.
 
 ### Remote audit result
 
 - NETLOAD no longer constructs palettes or synchronously reconciles the full Ribbon tree.
-- Selection sync remains gated on Workspace visibility during startup.
-- Source Reconcile Undo startup registration remains subscription-only.
-- Update checking crosses its asynchronous boundary rather than synchronously waiting on release-network work in NETLOAD.
+- Workspace/RightPanel no longer repeat constructor-owned initial refresh merely because the same panel instance receives a later WPF `Loaded` event.
+- Document lifecycle now has an explicit two-tier contract: critical save/close/Undo subscriptions are immediate; project/selection/palette reconciliation is deferred/coalesced at `ApplicationIdle`.
+- `OnDocumentToBeDestroyed` cancels queued reconciliation before detaching persistence, Source Reconcile Undo, Curtain Undo, selection sync and project context, preventing a pending idle callback from resurrecting stale document work.
 - The loaded-binary identity capture remains synchronous intentionally so stale-binary diagnostics retain load-time truth.
-- Workspace/RightPanel no longer repeat constructor-owned initial refresh merely because the same panel instance receives a later WPF `Loaded` event; supported explicit refresh paths remain available.
-- The earlier conclusion that no more remote-safe startup change was justified is superseded by the 23:17 refreshed source audit: `DocumentLifecycleCoordinator` still executes attach/project/selection reconciliation inline during NETLOAD startup and host document callbacks, and the focused preflight does not currently guard that surface.
+- Update checking crosses its asynchronous boundary rather than synchronously waiting on release-network work in NETLOAD.
+- No further remote-safe startup patch is currently justified by the inspected source after `df846111...`; the remaining acceptance boundary is native V25 behavior on the exact candidate SHA.
 
 ### Validation status
 
-- Source/readback confirms the previously integrated startup contracts above.
-- The focused preflight currently guards palette laziness, no duplicate first-show refresh, deferred application-idle Ribbon reconciliation, and one-shot Workspace/RightPanel initial refresh; this scope extension will add document-lifecycle idle deferral coverage.
-- Cloud V25 release run #129 / `31712690583` on SHA `e7318dc41bc04b26bee9f5b4f6b985d38144c9bd` completed `SUCCESS`.
-- In that run, Generic source guard, All discovered feature source guards, Core Release build, Core smoke harness, deterministic Core smoke tests, BricsCAD V25 compile-reference validation, BricsCAD V25 plugin build, preview package, release-tag/package binding, artifact upload, and GitHub prerelease publish all completed successfully.
-- Run #129 predates this lifecycle-idle follow-up and therefore cannot prove the new patch.
-- Repository CI policy is manual-only; this normal source request does not authorize a new Actions dispatch. Static/source validation and post-push readback will be used remotely, while licensed runtime remains local-only.
+- Post-push GitHub source readback at `df846111efbb1777babadeee4c312bdb4a58a4ba` confirms `DocumentLifecycleCoordinator` keeps `AttachCriticalServices` outside the idle reconcile path and keeps `SelectionSyncCoordinator.Attach`/`EnsureProject` inside `ReconcileDocument`.
+- The focused preflight now guards palette laziness, no duplicate first-show refresh, one-shot Workspace/RightPanel load, deferred ApplicationIdle Ribbon reconciliation, immediate critical document hooks, deferred/coalesced project-selection-UI reconcile and synchronous teardown cancellation.
+- The updated preflight content passed local Python syntax/static-boundary inspection during this remote pass; no licensed BricsCAD runtime PASS is inferred from that static evidence.
+- Cloud V25 release run #129 / `31712690583` on SHA `e7318dc41bc04b26bee9f5b4f6b985d38144c9bd` completed `SUCCESS`, but it predates the lifecycle-idle follow-up and therefore does not validate `261635f...` / `df846111...`.
+- Repository CI policy is manual-only. The owner request in this lane is source fix/update/commit/push, not an explicit Actions dispatch, so no new GitHub Actions run was started.
+- `LOCAL-001` remains the authoritative existing local V25 build/load/NETLOAD/save-reopen/multi-DWG queue; no duplicate LOCAL_ONLY item was created.
 
 ### Native validation still required
 
@@ -93,10 +104,10 @@ Keep this claim `ACTIVE` until a clean exact intended SHA containing the full st
 2. Reopen BricsCAD V25.
 3. Open the existing project DWG that previously reproduced the hang, with its existing QS3D project/sidecar.
 4. NETLOAD the exact candidate V25 DLL and verify the command prompt returns promptly.
-5. Run `QS3D` and verify the workspace opens without the previous freeze while preserving the canonical existing project identity.
-6. Activate/switch documents once and verify queued lifecycle reconciliation completes after the host callback without losing persistence, undo, selection sync, or project refresh behavior.
-7. Hide/show and dock/undock the palette once; the same Workspace/RightPanel instances must not repeat their constructor-owned heavy initial refresh merely because WPF raises `Loaded` again.
-8. Exercise normal explicit Refresh and one document-lifecycle refresh after the palettes exist and verify those supported refresh paths still work.
+5. Immediately exercise a benign command/save boundary before idle reconciliation and confirm persistence/Undo observers are already attached while NETLOAD remains responsive.
+6. Run `QS3D` and verify the workspace opens without the previous freeze while preserving canonical existing-project identity.
+7. Activate/switch documents and verify queued lifecycle reconciliation completes without losing persistence, Undo, selection sync or project refresh behavior.
+8. Hide/show and dock/undock the palette once; the same Workspace/RightPanel instances must not repeat constructor-owned heavy initial refresh merely because WPF raises `Loaded` again.
 9. Close a document with lifecycle work pending and verify pending work is cancelled/detached safely with no stale callback or handler leak.
 10. Record the exact Git SHA/ProductVersion plus sanitized cleanup/process evidence.
 
@@ -104,4 +115,4 @@ Do not close this claim or report native PASS until that exact runtime path succ
 
 ## Collision check
 
-The current NETLOAD claim belongs to this same `chatgpt-web-gpt56sol` lane and is being extended rather than duplicated. Recent `main` changes sampled at extension time are Floor Level, quantity detail, diagnostics/update UX, and other non-overlapping work. The prior V25 NETLOAD update-UX claim was explicitly completed. This scope does not take Floor/quantity/BCF/updater implementation or LOCAL-003 Level geometry work; it is limited to V25 startup/document lifecycle scheduling plus its focused static guard and matching LOCAL-001 handoff.
+The current NETLOAD claim belongs to this same `chatgpt-web-gpt56sol` lane and was extended rather than duplicated. During implementation another concurrent writer landed `9c9216a...` and `31b47d...` on the same reserved surface; those commits were reviewed and reused instead of overwritten, then narrowed safely by `261635f...` and `df846111...`. Concurrent Floor Level, quantity, measurement, diagnostics/update UX and other changes remain outside this scope. This claim does not take LOCAL-003 Level geometry work; exact licensed native qualification remains under the existing LOCAL_ONLY queue.
