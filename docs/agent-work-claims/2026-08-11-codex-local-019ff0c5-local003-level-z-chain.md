@@ -1,6 +1,6 @@
 # Work claim — LOCAL-003 shared native Level Z-chain
 
-- Status: `BLOCKED`
+- Status: `ACTIVE`
 - Agent: `codex-local-019ff0c5` (`/root`, local Windows + licensed BricsCAD V25 agent)
 - Registered: `2026-08-11T19:43:12+07:00`
 - Baseline main SHA: `c7dd212d36677a1d2e005becf8709768fe98d6a1`
@@ -654,3 +654,9 @@ Harden this already-reserved harness boundary so both PASS and FAIL return norma
 The graceful no-save/diagnostic harness landed on `main` at exact SHA `38c22f168e530908a0eadebb5e740b16b2388939` after static validation and a strict installed-reference V25 build with zero warnings/errors. Before that correction could reach the plugin, repeated test-owned BricsCAD V25 launches stopped in native startup: the exact launched PID remained responsive at about one second of CPU, created no main application window, loaded neither `QS3D.BricsCAD.V25.dll` nor `QS3D.Core.dll`, wrote no marker and then accepted exact-PID timeout cleanup. Every disposable DWG retained SHA-256 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`; no sidecar, backup, script, environment variable or BricsCAD process remained.
 
 The startup failure reproduced with no DWG/plugin/script, with clones of both `QS3D-V25-TEST` and `Default`, with an officially clean new profile plus `/SAFEMODE /L`, and with explicit `/pr ultimate`. This rules out the Level runner, disposable drawing, test profile and third-party autoload as the immediate startup boundary. All temporary profiles were removed; original `Default` and `QS3D-V25-TEST` remain. The item is reserved but `BLOCKED` until Windows session/BricsCAD license-native startup is refreshed (normally sign out/restart Windows or operator license repair) and a test-owned BricsCAD launch can create its application window again. After recovery, reactivate/push the claim first, sync/rebuild the newest exact SHA, then rerun the granular Level probe. No GitHub Actions ran, and no user-owned BricsCAD process/profile/drawing was terminated or modified.
+
+## 2026-08-13 resumed after Windows restart
+
+The Windows host restarted and a normal operator-owned BricsCAD V25.2.10 x64 session now has a responsive main application window, so the earlier native-startup machine blocker is cleared. This status-only reactivation is based on synchronized `origin/main@561523e48ac1eaad3e3b5722cf74b3f7446b58dc` and must be visible on `origin/main` before renewed qualification begins.
+
+The operator-owned session currently has `MB MONG.dwg` open and remains strictly out of scope. The exact-SHA runner will not start, close or modify that process/drawing; it will wait until the operator saves and closes every BricsCAD session. After that precondition is satisfied, fetch current `main` again, rebuild the newest exact SHA against the installed V25 references, verify matching plugin/Core `ProductVersion`, run the focused deterministic gates and execute the granular Level probe from a fresh disposable artifact root. No GitHub Actions are authorized.
