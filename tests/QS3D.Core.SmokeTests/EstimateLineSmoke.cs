@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             BindsFrozenMeasurementAndEffectiveRate();
             SupportsExplicitAdditiveCommercialAdjustment();
+            CanonicalZeroCommercialAdjustment();
             MissingMeasurementOrRateFailsClosed();
             InvalidAdjustmentAndCanonicalInputsFailClosed();
             DecimalPrecisionLossAndOverflowFailClosed();
@@ -97,6 +98,37 @@ namespace QS3D.Core.SmokeTests
             Equal(-2m, deduction.CommercialAdjustmentQuantity, "Deduction quantity mismatch.");
             Equal(8m, deduction.EstimatingQuantity, "Deduction estimating quantity mismatch.");
             Equal(24m, deduction.FinalAmount, "Deduction final amount mismatch.");
+        }
+
+        private static void CanonicalZeroCommercialAdjustment()
+        {
+            var snapshot = new MeasurementSnapshot(new[] { Trace("SEM-ZERO", "SRC-ZERO", "Count", 10d, "ea") });
+            var rateBook = new RateBook("BOOK-ZERO", new[]
+            {
+                Rate("RATE-ZERO", "ITEM", "ea", "USD", 3m, Utc(2026, 1, 1), "v1")
+            });
+            var negativeZero = new decimal(0, 0, 0, true, 0);
+            var line = EstimateLine.Create(
+                "ZERO-SIGN",
+                snapshot,
+                "SEM-ZERO",
+                "SRC-ZERO",
+                "Count",
+                rateBook,
+                new CostCode("ITEM"),
+                "USD",
+                Utc(2026, 1, 2),
+                negativeZero);
+            var expectedBits = decimal.GetBits(0m);
+            var actualBits = decimal.GetBits(line.CommercialAdjustmentQuantity);
+
+            Equal(0m, line.CommercialAdjustmentQuantity, "Signed-zero adjustment value mismatch.");
+            Equal(expectedBits.Length, actualBits.Length, "Decimal bit-vector length mismatch.");
+            for (var i = 0; i < expectedBits.Length; i++)
+                Equal(expectedBits[i], actualBits[i], "Commercial adjustment zero must use canonical positive decimal representation at bit index " + i + ".");
+            True(line.CommercialAdjustmentReason == null, "Canonical zero adjustment must not require or invent a reason.");
+            Equal(10m, line.EstimatingQuantity, "Canonical zero adjustment must not change estimating quantity.");
+            Equal(30m, line.FinalAmount, "Canonical zero adjustment must not change final amount.");
         }
 
         private static void MissingMeasurementOrRateFailsClosed()
