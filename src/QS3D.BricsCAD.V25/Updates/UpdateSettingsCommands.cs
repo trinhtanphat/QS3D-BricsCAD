@@ -1,7 +1,7 @@
 using System;
 using System.Windows;
-using Bricscad.ApplicationServices;
 using Teigha.Runtime;
+using BricscadApplication = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.Updates
 {
@@ -40,7 +40,7 @@ namespace QS3D.BricsCAD.V25.Updates
             }
             catch
             {
-                var document = Application.DocumentManager.MdiActiveDocument;
+                var document = BricscadApplication.DocumentManager.MdiActiveDocument;
                 document?.Editor.WriteMessage("\nQS3D Update: " + message.Replace("\n", " "));
             }
         }
