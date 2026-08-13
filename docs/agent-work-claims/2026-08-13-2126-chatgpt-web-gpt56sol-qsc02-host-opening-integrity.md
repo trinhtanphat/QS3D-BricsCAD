@@ -1,35 +1,36 @@
 # Work claim — QSC-02 host/opening integrity rule family
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-qsc02-host-opening-integrity-20260813-2126`
 - Registered: `2026-08-13T21:26:00+07:00`
+- Completed: `2026-08-13T21:30:00+07:00`
 - Baseline main SHA: `6aaa1d208376df1b067cff15b4f763061a7116b9`
+- Claim commit: `72443d5734d7ea487eb431bfa980f1f3a73608a3`
+- Implementation commit: `c0782c99a3f58de315ff7eda06d59bc136acf6cf`
+- Regression commit: `3b4075f911f03c8f6aa213000177ac5dc82fe0e3`
 - Priority: `QSC-02 / P2`
 
-## Confirmed gap
+## Result
 
-QSC-01A provides the immutable deterministic `QsRuleProfile` contract, and current `ModelHealthService` already emits stable host/opening integrity findings (`MISSING_HOST`, `AMBIGUOUS_HOST`, `INVALID_HOST`, `HOST_REFERENCE_NON_CANONICAL`, `INVALID_HOST_CATEGORY`). The repository has no configured QSC rule family for those existing findings. This lane adds declarative profile metadata only; it does not duplicate or alter host validation predicates.
+Added a deterministic declarative host/opening integrity profile over the five existing `ModelHealthService` findings: `MISSING_HOST`, `AMBIGUOUS_HOST`, `INVALID_HOST`, `HOST_REFERENCE_NON_CANONICAL`, and `INVALID_HOST_CATEGORY`. No health predicate or host/opening business logic was changed.
 
-A parallel QSC-02 semantic-readiness claim currently owns family/floor/zone/material/dimension rule metadata. This claim intentionally excludes those codes and reserves only host/opening integrity metadata.
+The focused smoke creates real Door/WallOpening states for missing, unresolved, wrong-category, non-canonical, and ambiguous hosts, runs the existing `ModelHealthService`, verifies exactly one expected host finding per fixture, resolves each through the QSC profile with severity parity, and verifies an unrelated `MISSING_FAMILY` finding remains unmapped.
 
-## Reserved scope
+## Actual scope
 
-- new `src/QS3D.Core/Diagnostics/QsHostOpeningIntegrityRuleFamily.cs`
-- new `tests/QS3D.Core.SmokeTests/QsHostOpeningIntegrityRuleFamilySmoke.cs`
+- `src/QS3D.Core/Diagnostics/QsHostOpeningIntegrityRuleFamily.cs`
+- `tests/QS3D.Core.SmokeTests/QsHostOpeningIntegrityRuleFamilySmoke.cs`
 - this claim file
 
-## Intended bounded change
+## Coordination / reconciliation
 
-- define one deterministic host/opening profile mapping the five existing host health codes to stable QSC rule ids, matching current health severities and human explanations;
-- keep affected element identity and runtime evidence on the original `ModelHealthIssue`; resolution remains code-only through QSC-01A;
-- focused smoke runs existing `ModelHealthService` against malformed Door/WallOpening host states and proves emitted findings resolve to the expected declarative rules;
-- unrelated health findings remain explicitly unmapped.
+The parallel QSC-02 semantic-readiness lane owns family/floor/zone/material/dimension metadata only and completed without touching this host/opening scope. After the regression commit, current `main` was verified as a strict descendant (`ahead_by: 2`, `behind_by: 0`); the only intervening changes were claim closeouts, not this lane's production/test files. Exact remote production and regression files were read back from current `main`.
 
-## Excluded scope
+## Validation boundary
 
-- no edits to `ModelHealthService`, `ModelHealthIssue`, `QsRuleProfile`, host/opening business logic, ProjectState, persistence/MAP, family/floor/zone/material/dimension QSC metadata, QSC-03 autofix, UI, reports, native BricsCAD, release qualification, or cross-repo platform work;
-- no GitHub Actions, force-push, or unexecuted managed/native PASS claim.
-
-## Completion condition
-
-Claim-only first; refresh/recheck overlap; publish profile + focused smoke; reconcile current `main`; read back exact remote files; close `COMPLETED` with only validation actually performed recorded.
+- Exact GitHub remote source/test readback: verified.
+- Current `ModelHealthService` readback confirms all five mapped host codes still emit `HealthSeverity.Error` through the existing `ValidateHost` path.
+- Local managed compile/smoke execution: not executed because this environment has no `dotnet`, `msbuild`, `csc`, or `mcs` executable.
+- Native BricsCAD V25 qualification: not executed and not claimed.
+- GitHub Actions: not dispatched.
+- Force-push: not used.
