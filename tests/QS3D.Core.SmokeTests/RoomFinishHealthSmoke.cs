@@ -93,12 +93,12 @@ namespace QS3D.Core.SmokeTests
         {
             var project = BaseProject();
             var room = project.FindElement("ROOM") ?? throw new Exception("Missing room.");
-            room.Properties[AutoRoomLifecycle.BoundarySourceHandlesKey] = "A1; b2;A1";
+            room.Properties[AutoRoomLifecycle.BoundarySourceHandlesKey] = "A1;B2";
             var finish = Finish("F-TRACE", room.Id, "f1", "z1");
             project.Elements.Add(finish);
 
             var handles = SourceHandleResolver.Resolve(project, new[] { finish.Id });
-            if (handles.Count != 2 || !handles.Contains("A1", StringComparer.OrdinalIgnoreCase) || !handles.Contains("b2", StringComparer.OrdinalIgnoreCase))
+            if (handles.Count != 2 || !handles.Contains("A1", StringComparer.OrdinalIgnoreCase) || !handles.Contains("B2", StringComparer.OrdinalIgnoreCase))
                 throw new Exception("Property-only room provenance must trace back to Room boundary handles.");
         }
 
