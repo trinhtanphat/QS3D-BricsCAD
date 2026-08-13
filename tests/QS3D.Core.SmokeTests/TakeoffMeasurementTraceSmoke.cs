@@ -34,7 +34,7 @@ namespace QS3D.Core.SmokeTests
             EntitySnapshot entity,
             TakeoffKind kind,
             DrawingUnit drawingUnit,
-            string expectedRawUnit,
+            string? expectedRawUnit,
             double expectedRawValue)
         {
             var canonical = QuantityEngine.Calculate(entity, kind, drawingUnit);
