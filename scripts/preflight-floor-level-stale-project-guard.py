@@ -3,78 +3,77 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml.cs"
+paths = {
+    "source": ROOT / "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml.cs",
+    "xaml": ROOT / "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml",
+    "bootstrap": ROOT / "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.FirstSaveBootstrap.cs",
+    "handler": ROOT / "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.FirstSaveHandler.cs",
+}
 errors = []
-
-if not SOURCE.is_file():
-    print("ERROR: missing " + str(SOURCE.relative_to(ROOT)))
+for label, path in paths.items():
+    if not path.is_file():
+        errors.append("missing " + label + ": " + str(path.relative_to(ROOT)))
+if errors:
+    print("Floor/Level stale-project preflight FAILED:")
+    for error in errors: print("- " + error)
     sys.exit(1)
 
-text = SOURCE.read_text(encoding="utf-8")
+source = paths["source"].read_text(encoding="utf-8")
+xaml = paths["xaml"].read_text(encoding="utf-8")
+bootstrap = paths["bootstrap"].read_text(encoding="utf-8")
+handler = paths["handler"].read_text(encoding="utf-8")
+creation = "ProjectContextCoordinator.GetOrCreate(_document)"
+
+def need(text, token, label):
+    if token not in text: errors.append(label + " missing: " + token)
 
 for token in (
     "private ProjectState? _boundProject;",
-    "_boundProject = null;",
-    "_boundProject = project;",
     "private ProjectState RequireBoundProjectForRead(string operation)",
-    "ProjectContextCoordinator.TryGetReadOnly(_document, out var currentProject)",
-    "!ReferenceEquals(currentProject, _boundProject)",
     "private ProjectState RequireBoundProjectForMutation(string operation, string mutationContext)",
-    "var currentProject = RequireBoundProjectForRead(operation);",
+    "!ReferenceEquals(currentProject, _boundProject)",
     "var project = ExistingProjectMutationContext.Require(_document, mutationContext);",
-    "!ReferenceEquals(project, currentProject)",
-    "!ReferenceEquals(project, _boundProject)",
-    'RequireBoundProjectForMutation("lưu tầng", "Lưu Floor/Level")',
     'RequireBoundProjectForMutation("xóa tầng", "Xóa Floor/Level")',
     'RequireBoundProjectForMutation("đặt tầng hoạt động", "Đặt Floor/Level active")',
     'var previewProject = RequireBoundProjectForRead("gán tầng cho selection");',
-    'ExistingProjectMutationContext.Require(_document, "Gán Floor/Level cho selection")',
-    "!ReferenceEquals(project, previewProject)",
-    "QS3D project đã thay đổi từ lần Refresh gần nhất. Hãy Refresh Level Picker",
-):
-    if token not in text:
-        errors.append("FloorLevel stale-project contract missing: " + token)
+): need(source, token, "source")
 
-if "ProjectContextCoordinator.GetOrCreate(_document)" in text:
-    errors.append("FloorLevel modeless callbacks must not create/replacement-bootstrap project state.")
+need(xaml, 'Content="Lưu" Style="{StaticResource AccentButton}" Click="OnSaveFloorFirstBootstrapClick"', "xaml")
+if 'Click="OnSaveFloorClick"' in xaml: errors.append("xaml still routes Save to legacy handler")
+if creation in source or creation in handler: errors.append("project creation escaped focused bootstrap helper")
+if bootstrap.count(creation) != 1: errors.append("bootstrap helper must contain exactly one canonical creation call")
+for token in (
+    "if (!creatingNewFloor || _boundProject != null)",
+    'return RequireBoundProjectForMutation("lưu tầng", "Lưu Floor/Level");',
+    'EnsureBoundDrawingIsActive("lưu tầng");',
+    "ProjectContextCoordinator.TryGetReadOnly(_document, out _)",
+    creation,
+    "bootstrappedProject = true;",
+): need(bootstrap, token, "bootstrap")
+for token in (
+    "ValidateFirstSaveFloorDraft(name);",
+    "var elevation = ParseElevation(FloorElevationBox.Text);",
+    "RequireProjectForFirstSave(creatingNewFloor, out var bootstrappedProject)",
+    "ProjectStateSnapshot.Capture(project)",
+    "RestoreOrThrow(project, rollback, operationError, \"Lưu Floor/Level\")",
+    "ProjectContextCoordinator.Forget(_document);",
+): need(handler, token, "handler")
 
-for legacy in (
-    'EnsureBoundDrawingIsActive("lưu tầng");\n                var project = ExistingProjectMutationContext.Require(_document, "Lưu Floor/Level");',
-    'EnsureBoundDrawingIsActive("xóa tầng");\n                var project = ExistingProjectMutationContext.Require(_document, "Xóa Floor/Level");',
-    'EnsureBoundDrawingIsActive("đặt tầng hoạt động");\n                var project = ExistingProjectMutationContext.Require(_document, "Đặt Floor/Level active");',
-    'EnsureBoundDrawingIsActive("gán tầng cho selection");\n                if (!(FloorList.SelectedItem is FloorDefinition selectedFloor))',
-):
-    if legacy in text:
-        errors.append("document-only FloorLevel mutation guard returned: " + legacy.split(";")[0])
-
-# Read-only inspection intentionally stays document-bound and may inspect the newly-current
-# project without mutating it; stale project binding is enforced only before writes.
-inspect_start = text.find("private void OnInspectSelectionClick")
-refresh_start = text.find("private void RefreshAll", inspect_start)
-if inspect_start < 0 or refresh_start < 0:
-    errors.append("FloorLevel inspect/refresh methods missing")
+inspect_start = source.find("private void OnInspectSelectionClick")
+refresh_start = source.find("private void RefreshAll", inspect_start)
+refresh_end = source.find("private FloorDefinition RequireSelectedFloor", refresh_start)
+if inspect_start < 0 or refresh_start < 0 or refresh_end < 0:
+    errors.append("unable to inspect read-only callbacks")
 else:
-    inspect = text[inspect_start:refresh_start]
-    if "ExistingProjectMutationContext.Require" in inspect or "RequireBoundProjectForMutation" in inspect:
-        errors.append("read-only FloorLevel inspection must not bind a mutation context")
-    if "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)" not in inspect:
-        errors.append("read-only FloorLevel inspection must resolve current project read-only")
-
-refresh_end = text.find("private FloorDefinition RequireSelectedFloor", refresh_start)
-if refresh_start >= 0 and refresh_end > refresh_start:
-    refresh = text[refresh_start:refresh_end]
-    no_project = refresh.find("if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))")
-    clear_binding = refresh.find("_boundProject = null;", no_project)
-    bind_project = refresh.find("_boundProject = project;", no_project)
-    if no_project < 0 or clear_binding < no_project or bind_project < clear_binding:
-        errors.append("RefreshAll must clear stale binding on unavailable project and bind only after a successful project refresh")
-else:
-    errors.append("unable to inspect RefreshAll binding order")
+    inspect = source[inspect_start:refresh_start]
+    refresh = source[refresh_start:refresh_end]
+    if creation in inspect or creation in refresh: errors.append("read-only callback may create a project")
+    need(inspect, "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)", "inspect")
+    need(refresh, "_boundProject = null;", "refresh")
+    need(refresh, "_boundProject = project;", "refresh")
 
 if errors:
     print("Floor/Level stale-project preflight FAILED:")
-    for error in errors:
-        print("- " + error)
+    for error in errors: print("- " + error)
     sys.exit(1)
-
-print("Floor/Level stale-project preflight PASS: modeless writes require the exact project instance from the latest successful RefreshAll, while inspection stays read-only.")
+print("Floor/Level stale-project preflight PASS: only explicit first-floor Save may create; all other writes stay exact-bound and read-only callbacks stay non-creating.")
