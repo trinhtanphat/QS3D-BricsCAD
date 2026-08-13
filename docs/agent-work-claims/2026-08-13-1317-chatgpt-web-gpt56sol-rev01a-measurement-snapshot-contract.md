@@ -1,6 +1,6 @@
 # Work claim — REV-01A canonical Measurement Snapshot contract
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-rev01a-measurement-snapshot-20260813-1317`
 - Registered: `2026-08-13T13:17:30+07:00`
 - Baseline main SHA: `94f6e5b7e9c57238a9eaa900210ea90309705aad`
@@ -44,11 +44,28 @@ The contract will:
 
 ## Coordination
 
-- Current source inspection shows `src/QS3D.Core/Measurement` contains `MeasurementTrace.cs` but no `MeasurementSnapshot` contract.
-- The existing `RevisionSnapshot` captures mutable whole-project element/property/raw-quantity state and is intentionally left unchanged; this lane is a measurement-specific frozen projection over canonical traces.
-- The current MTR-02 adjustment-rule claim explicitly excludes Measurement Profile, persistence and revision work while reserving `MeasurementTrace.cs` plus its smoke; this claim avoids those files and does not alter trace semantics.
-- Recent repository history/search shows no `REV-01`, `MeasurementSnapshot` or `measurement snapshot` claim/implementation before registration. Historical revision-snapshot hardening lanes concern the existing mutable revision subsystem and are not taken over here.
+- Current source inspection showed `src/QS3D.Core/Measurement` contained `MeasurementTrace.cs` but no `MeasurementSnapshot` contract before implementation.
+- The existing `RevisionSnapshot` captures mutable whole-project element/property/raw-quantity state and remains unchanged; this lane is a measurement-specific frozen projection over canonical traces.
+- The concurrent MTR-02 adjustment-rule claim reserved `MeasurementTrace.cs` plus its smoke; this lane avoided those files and did not alter trace semantics.
+- Baseline-to-claim compare showed only the unrelated Curtain P11 claim arrived concurrently; no REV/MeasurementSnapshot source or test overlap was introduced.
+
+## Completion evidence
+
+- Claim-only commit: `03923d284c4f6351fbdee3c96892200cbc04a0e4`.
+- Implementation commit: `1e9e38cfa475ff15e2636d6e1e37806b2a9a01e5`.
+- Final product/source SHA verified before close-out: `1e9e38cfa475ff15e2636d6e1e37806b2a9a01e5`.
+- Remote verification: `main` resolved to the implementation commit after push; all three reserved files were fetched back at that SHA with blob SHAs `6d90bfc06cbcd9a39ffedcb562d5191a3196c03f`, `ddb752df3c6d2a907d0bbb7373ac2700ece90472`, and `e1f43f0e6444a49c497fa6998b4187aefc77e3da`.
+- Static contract verification: snapshot constructor detaches/sorts the input list, rejects null/duplicate measurement identities, preserves immutable canonical `MeasurementTrace` objects, and canonical serialization embeds each trace's existing `ToCanonicalString()` without recalculating quantities.
+- Test registration verification: the new focused smoke is registered through an existing repository `ModuleInitializer` pattern and the smoke project is SDK-style `net8.0`; Core is SDK-style `netstandard2.0`, so the new source file is included by default.
+- Executable managed smoke: `NOT_RUN` in this connector-only environment because no usable local repository/.NET execution path is available.
+- GitHub Actions: `NOT_RUN` by policy/request boundary.
+- BricsCAD V25/V26 native qualification: `NOT_APPLICABLE` to this pure-Core contract and not claimed.
+
+## Remaining gates / handoff
+
+- A local/CI environment may execute `dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj` to turn the registered regression from source evidence into executable PASS evidence.
+- REV-02 deterministic quantity delta, persistence, report/UI projections, rates/cost and native adapters remain separate future claims.
 
 ## Completion condition
 
-A pushed Core contract plus focused deterministic smoke/registration is present on current `main`, with no existing revision/measurement calculation engine modified, and this claim is updated to `COMPLETED` with implementation SHA and actual validation evidence.
+Satisfied: the pure-Core frozen measurement snapshot contract plus focused deterministic smoke/registration is pushed on `main`, no existing revision or measurement calculation engine was modified, and actual validation plus remaining execution gates are recorded above.
