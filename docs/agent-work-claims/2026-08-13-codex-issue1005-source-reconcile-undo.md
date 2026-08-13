@@ -63,3 +63,11 @@ The corrected production fix and regressions are merged to current `main`, the e
 - Exact candidate `1c957ae2dc022db8cafbfcf0de91d9d47a53e68f` failed on licensed BricsCAD `V25.2.10 x64` after the second reported-successful `QS3DSYNCSOURCE` and before native Undo: `failure_phase=verify_final_reconcile`, `failure_code=SEMANTIC_SOURCE_MISMATCH`.
 - The first reconcile/rebuild passed; the guarded sequence then exercised an intentional `INSUNITS` reconcile failure, generated/ambiguous refusal paths, and a document-B switch before the final reconcile. Cleanup evidence remained all true.
 - Issue `#1005` was reopened and must remain open until the corrected exact main SHA passes the existing guarded runner. This remote lane will audit the production pending-transition/command-ended/rebase boundary and add deterministic/static regression coverage without changing the additive LOCAL-004 probe or runner.
+
+## Latest candidate record
+
+- The remaining false desync was bounded to the ended-only native command observer: the exact local failure reported sticky `DESYNCHRONIZED` history before its first explicit runner Undo, while production accepted any terminal event named `UNDO`, `REDO` or `MREDO` as restoration authority.
+- Successor claim PR `#1032` merged as `ddd5beddd02549b6676f004af492ca6668961058`. Source commit `161b1a8a1448e937f1bdb34c4921ed2b63056ef2` and source PR `#1039` merged as exact rerun candidate `b48503307c28ae8abbc5e324e53c581915f51a23`.
+- The correction requires a same-command WillStart/Ended pair while the exact tracked document remains active; cancellation, failure, mismatch, duplicate starts, project forget and detach clear intent. A matched native Undo/Redo reaching an unknown revision remains sticky and fail-closed.
+- Remote validation without BricsCAD, private data or Actions: focused Source Reconcile coherence/reconcile/single-bind/runtime-probe gates PASS; strict manual-CI and generic preflight PASS; Core smoke executable `ALL PASS`; installed-reference V25 `Release|x64` build PASS with `0 warnings / 0 errors`.
+- The LOCAL-004 probe, runner and qualification/inbox docs remain unchanged. Issue `#1005` remains `OPEN`; exact-SHA rerun request is recorded in issue comment `#issuecomment-5279201302`, and claim status remains `ACTIVE` pending the licensed result.
