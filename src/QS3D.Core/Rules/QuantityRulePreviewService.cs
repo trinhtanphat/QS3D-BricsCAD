@@ -280,7 +280,8 @@ namespace QS3D.Core.Rules
             var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null element.");
                 if (!seenIds.Add(element.Id))
                     throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
             }
