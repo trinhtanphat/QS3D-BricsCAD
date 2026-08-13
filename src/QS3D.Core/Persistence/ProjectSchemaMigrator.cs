@@ -33,6 +33,10 @@ namespace QS3D.Core.Persistence
                         MigrateV2ToV3(root);
                         schema = 3;
                         break;
+                    case 3:
+                        MigrateV3ToV4(root);
+                        schema = 4;
+                        break;
                     default:
                         throw new InvalidDataException("No migration path exists from QSDB schema " + schema.ToString(CultureInfo.InvariantCulture));
                 }
@@ -54,19 +58,15 @@ namespace QS3D.Core.Persistence
         private static void MigrateV1ToV2(XElement root)
         {
             if (root.Attribute("updatedUtc") == null) root.SetAttributeValue("updatedUtc", LegacyUpdatedUtc);
-
             var elements = root.Element("elements");
             if (elements != null)
             {
                 foreach (var element in elements.Elements("element"))
                 {
-                    if (element.Attribute("dirty") == null)
-                        element.SetAttributeValue("dirty", ((int)ElementDirtyFlags.All).ToString(CultureInfo.InvariantCulture));
-                    if (element.Attribute("updatedUtc") == null)
-                        element.SetAttributeValue("updatedUtc", LegacyUpdatedUtc);
+                    if (element.Attribute("dirty") == null) element.SetAttributeValue("dirty", ((int)ElementDirtyFlags.All).ToString(CultureInfo.InvariantCulture));
+                    if (element.Attribute("updatedUtc") == null) element.SetAttributeValue("updatedUtc", LegacyUpdatedUtc);
                 }
             }
-
             SetMigrationOrigin(root, "1");
         }
 
@@ -76,6 +76,15 @@ namespace QS3D.Core.Persistence
             if (root.Element("rules") == null) root.Add(new XElement("rules"));
             if (root.Element("audit") == null) root.Add(new XElement("audit"));
             SetMigrationOrigin(root, "2");
+        }
+
+        private static void MigrateV3ToV4(XElement root)
+        {
+            var metadata = root.Element("metadata");
+            if (metadata != null && metadata.Elements("p").Any(x =>
+                (x.Attribute("name")?.Value ?? string.Empty).StartsWith(ProjectMeasurementWorkItemMappingCodec.Prefix, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException("QSDB v3 metadata uses the reserved measurement/work-item mapping namespace and cannot be migrated automatically.");
+            SetMigrationOrigin(root, "3");
         }
 
         private static void ValidateCurrentPersistenceState(XElement root)
@@ -89,49 +98,33 @@ namespace QS3D.Core.Persistence
             RequireSingleContainer(root, "rules");
             var elements = RequireSingleContainer(root, "elements");
             var audit = RequireSingleContainer(root, "audit");
-
-            foreach (var floor in floors.Elements("floor"))
-                RequirePersistenceValue(floor, "elevationM", "Project floor");
-
+            foreach (var floor in floors.Elements("floor")) RequirePersistenceValue(floor, "elevationM", "Project floor");
             foreach (var element in elements.Elements("element"))
             {
                 RequirePersistenceValue(element, "updatedUtc", "Project element");
                 RequirePersistenceValue(element, "dirty", "Project element");
-
                 var quantities = element.Element("quantities");
-                if (quantities != null)
-                {
-                    foreach (var quantity in quantities.Elements("q"))
-                        RequirePersistenceValue(quantity, "value", "Project quantity");
-                }
+                if (quantities != null) foreach (var quantity in quantities.Elements("q")) RequirePersistenceValue(quantity, "value", "Project quantity");
             }
-
-            foreach (var auditEvent in audit.Elements("event"))
-                RequirePersistenceValue(auditEvent, "utc", "Audit event");
+            foreach (var auditEvent in audit.Elements("event")) RequirePersistenceValue(auditEvent, "utc", "Audit event");
         }
 
         private static XElement RequireSingleContainer(XElement root, string name)
         {
             var matches = root.Elements(name).Take(2).ToArray();
-            if (matches.Length != 1)
-                throw new InvalidDataException("QSDB requires exactly one " + name + " section.");
+            if (matches.Length != 1) throw new InvalidDataException("QSDB requires exactly one " + name + " section.");
             return matches[0];
         }
 
         private static void RequirePersistenceValue(XElement element, string attributeName, string owner)
         {
-            if (string.IsNullOrWhiteSpace(element.Attribute(attributeName)?.Value))
-                throw new InvalidDataException(owner + " is missing required " + attributeName + ".");
+            if (string.IsNullOrWhiteSpace(element.Attribute(attributeName)?.Value)) throw new InvalidDataException(owner + " is missing required " + attributeName + ".");
         }
 
         private static void SetMigrationOrigin(XElement root, string version)
         {
             var metadata = root.Element("metadata");
-            if (metadata == null)
-            {
-                metadata = new XElement("metadata");
-                root.AddFirst(metadata);
-            }
+            if (metadata == null) { metadata = new XElement("metadata"); root.AddFirst(metadata); }
             var exists = metadata.Elements("p").Any(x => string.Equals(x.Attribute("name")?.Value, "QS3D.SchemaMigratedFrom", StringComparison.OrdinalIgnoreCase));
             if (!exists) metadata.Add(new XElement("p", new XAttribute("name", "QS3D.SchemaMigratedFrom"), new XAttribute("value", version)));
         }
