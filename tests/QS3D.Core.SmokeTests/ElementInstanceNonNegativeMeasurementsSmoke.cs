@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             RejectsNegativeOrNonFiniteMeasurements();
             AcceptsZeroAndPositiveMeasurements();
+            CanonicalizesNegativeZeroMeasurements();
         }
 
         private static void RejectsNegativeOrNonFiniteMeasurements()
@@ -35,6 +36,25 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void CanonicalizesNegativeZeroMeasurements()
+        {
+            var element = CreateElement();
+            var setters = MeasurementSetters(element);
+            var getters = MeasurementGetters(element);
+            if (setters.Length != getters.Length)
+                throw new InvalidOperationException("ElementInstance measurement setter/getter coverage is out of sync.");
+
+            for (var i = 0; i < setters.Length; i++)
+            {
+                setters[i](-0d);
+                CanonicalPositiveZero(getters[i]());
+            }
+
+            element.GrossConcreteM3 = -0d;
+            element.DeductionM3 = 0d;
+            CanonicalPositiveZero(element.NetConcreteM3);
+        }
+
         private static Action<double>[] MeasurementSetters(ElementInstance element) => new Action<double>[]
         {
             value => element.LengthM = value,
@@ -52,8 +72,33 @@ namespace QS3D.Core.SmokeTests
             value => element.OtherAreaM2 = value
         };
 
+        private static Func<double>[] MeasurementGetters(ElementInstance element) => new Func<double>[]
+        {
+            () => element.LengthM,
+            () => element.AreaM2,
+            () => element.VolumeM3,
+            () => element.GrossConcreteM3,
+            () => element.DeductionM3,
+            () => element.FormworkM2,
+            () => element.DoorAreaM2,
+            () => element.OuterPerimeterM,
+            () => element.InnerPerimeterM,
+            () => element.SideAreaM2,
+            () => element.BottomAreaM2,
+            () => element.TopAreaM2,
+            () => element.OtherAreaM2
+        };
+
         private static ElementInstance CreateElement() =>
             new ElementInstance("E-1", new FamilyDefinition("Test", ElementCategory.CustomQuantity), "L1");
+
+        private static void CanonicalPositiveZero(double value)
+        {
+            if (value != 0d)
+                throw new InvalidOperationException("Expected zero but got " + value + ".");
+            if (BitConverter.DoubleToInt64Bits(value) != BitConverter.DoubleToInt64Bits(0d))
+                throw new InvalidOperationException("Expected canonical positive zero.");
+        }
 
         private static void Throws<T>(Action action) where T : Exception
         {
