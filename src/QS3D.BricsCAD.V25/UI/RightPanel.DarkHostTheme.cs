@@ -194,7 +194,7 @@ namespace QS3D.BricsCAD.V25.UI
             var rule = new FrameworkElementFactory(typeof(Border), "SeparatorRule");
             rule.SetValue(Border.BackgroundProperty, line);
             rule.SetValue(FrameworkElement.HeightProperty, 1.0);
-            rule.SetValue(FrameworkElement.MarginProperty, new Thickness(7, 3));
+            rule.SetValue(FrameworkElement.MarginProperty, new Thickness(7, 3, 7, 3));
             rule.SetValue(UIElement.SnapsToDevicePixelsProperty, true);
             template.VisualTree = rule;
 
