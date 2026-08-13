@@ -166,8 +166,14 @@ namespace QS3D.Core.SmokeTests
         private static void NonUtcTimestampFailsBeforePersistence()
         {
             var project = NewProject("project-time");
-            project.UpdatedUtc = new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Unspecified);
-            RejectSave(project, "Unspecified project UpdatedUtc was converted using machine timezone during persistence.");
+            var priorUtc = project.UpdatedUtc;
+            var rejectedAtDomainBoundary = false;
+            try { project.UpdatedUtc = new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Unspecified); }
+            catch (ArgumentException) { rejectedAtDomainBoundary = true; }
+            if (!rejectedAtDomainBoundary)
+                throw new Exception("Unspecified project UpdatedUtc reached persistence instead of failing at the domain boundary.");
+            if (project.UpdatedUtc != priorUtc)
+                throw new Exception("Rejected non-UTC project timestamp changed the prior canonical UTC value.");
 
             project = NewProject("audit-time");
             project.AuditEvents.Add(new AuditEvent
