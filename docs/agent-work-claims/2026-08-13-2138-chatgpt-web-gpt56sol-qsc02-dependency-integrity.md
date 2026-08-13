@@ -1,6 +1,6 @@
 # Work claim — QSC-02 dependency integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-qsc02-dependency-integrity-20260813-2138`
 - Priority: `QSC-02 / P2`
 
