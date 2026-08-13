@@ -1,6 +1,6 @@
 # Work claim — Workspace footer active-context parity
 
-- Status: `ACTIVE`
+- Status: `RELEASED`
 - Agent: `chatgpt-web-gpt56sol-workspace-footer-context`
 - Registered: `2026-08-11T22:31:00+07:00`
 - Baseline main SHA: `ee620fdc586a48581aaa9613315aa5510bd3845b`
@@ -9,6 +9,8 @@
 ## Goal
 
 Add the screenshot-style live footer context (`Tầng … • Cao độ … | Đã bỏ chọn / N đối tượng đang chọn`) to the existing QS3D Workspace without replacing the completed footer buttons, native viewport aids or compact-shell work.
+
+This historical reservation is released. The later completed claim `2026-08-12-1331-chatgpt-web-gpt56sol-workspace-footer-context.md` superseded ownership of the same isolated partial and shipped the current canonical Project / Zone / Floor footer contract. Its focused gate passes on current `main`; no implementation from this older reservation remains pending.
 
 ## Reserved scope
 
