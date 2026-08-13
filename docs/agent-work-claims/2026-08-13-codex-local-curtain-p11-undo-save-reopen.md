@@ -1,6 +1,6 @@
 # Work claim — LOCAL-002/P11 Curtain Undo, save/reopen and rebuild
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local-root` (`/root`, local Windows + licensed BricsCAD V25 worker)
 - Registered: `2026-08-13T15:10:00+07:00`
 - Baseline main SHA: `36db4723b311b5f40fbde8983877d6965ef0ed9b`
@@ -58,3 +58,11 @@ The current ACTIVE `LOCAL-003` claim explicitly excludes Curtain P01-P12 impleme
 ## Completion condition
 
 The claim is complete when the guarded probe/runner/gate is integrated on current `main`, exact-SHA V25 evidence is recorded truthfully as either the full bounded P11 PASS or a sanitized source-blocking FAIL, cleanup is verified, P10/P12 and overall LOCAL-002 remain correctly scoped, and this claim is marked `COMPLETED` without operating GitHub Actions.
+
+## Completion evidence
+
+- Probe/runner/gate preparation merged through PR `#984`; pickset-boundary corrections merged through PRs `#985` and `#986`; native drawing-backup cleanup merged through PR `#988`.
+- Exact clean candidate `484a9c686a10edd4f04d7edf135031b2328c8c29` built `Release|x64` against BricsCAD V25 managed references with `0 warnings / 0 errors`; adapter SHA-256 was `4EDB6F3B06B0AC7744CEE760AEE576CE4EC5AF689400C6940CE5BDB721050F9B` and ProductVersion ended in the exact candidate SHA.
+- BricsCAD `25.2.10` returned sanitized source-blocking result `native_undo / SEMANTIC_NATIVE_DIVERGENCE`. Undo coherence was false; Redo, cold reopen and ownership-scoped rebuild coherence were true. Reopened and rebuilt counts were both 1 host / 10 frames / 15 panels, Health issues were zero, source and unrelated sentinel were preserved, the old set was removed and the replacement was disjoint.
+- Process, private-script, QSDB, native drawing-backup and drawing-lock cleanup were independently true. The disposable synthetic DWG was restored byte-for-byte to SHA-256 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`.
+- Remote product correction is handed to issue `#987`; P10 remains independently tracked by `#982`. P11 and overall LOCAL-002 remain source-blocked `PENDING_LOCAL`. No GitHub Actions, private/customer drawing or production Curtain fix was performed by this local claim.
