@@ -1,9 +1,10 @@
 # Work claim — MTR-04 quantity preview null-element integrity
 
-- Status: `ACTIVE`
+- Status: `RELEASED`
 - Agent: `gpt56sol-mtr04-quantity-preview-null-element-integrity-20260813-2321`
 - Registered: `2026-08-13T23:21:00+07:00`
 - Baseline main SHA: `df846111efbb1777babadeee4c312bdb4a58a4ba`
+- Released: `2026-08-13T23:33:00+07:00`
 - Priority: `P0` measurement-rule trust integrity.
 
 ## Reserved scope
@@ -31,8 +32,12 @@ Make quantity-rule preview fail closed with a deterministic domain error when `P
 
 ## Coordination
 
-The earlier quantity-preview global element-integrity work is `COMPLETED` and covers unrelated duplicate element IDs only. Current source skips nulls in `ValidateUniqueElementIds`, while `PreviewProject` subsequently dereferences every element. No visible current ACTIVE/BLOCKED claim reserves these two quantity-rule preview surfaces.
+The earlier quantity-preview global element-integrity work is `COMPLETED` and covers unrelated duplicate element IDs only. Current source skips nulls in `ValidateUniqueElementIds`, while `PreviewProject` subsequently dereferences every element. No visible current ACTIVE/BLOCKED claim reserved these two quantity-rule preview surfaces when this claim was created.
+
+## Release reason
+
+The defect was verified and the claim-only commit reached `main`, but production-file write routes available in this session were blocked by the connector safety gate before creating any production commit. No source or test change was published. The scope is released immediately so another agent/session can implement it without ownership ambiguity.
 
 ## Completion condition
 
-Null element collection corruption fails closed before preview projection, focused deterministic regression coverage is pushed to current `main`, and this claim is closed `COMPLETED` with actual validation evidence and remaining LOCAL/native gates recorded.
+Not completed in this claim. A future claimant may reserve the same narrow invariant and implement it after refreshing current `main` and claims.
