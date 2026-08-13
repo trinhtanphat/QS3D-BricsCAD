@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             PanelFrameAndLegacyReferencesResolveTheExistingFamily();
             UnknownAndAmbiguousPanelOwnershipFailClosed();
             MultipleReferencesCollapseToOneCanonicalOwner();
+            AutoRoomBoundaryReferencesRemainCanonicalSelectionAliases();
         }
 
         private static void PanelFrameAndLegacyReferencesResolveTheExistingFamily()
@@ -47,6 +48,42 @@ namespace QS3D.Core.SmokeTests
             var resolved = SemanticHandleOwnershipResolver.Resolve(project, new[] { "B1", "C1" });
             if (resolved.Count != 1 || !ReferenceEquals(resolved[0], curtain))
                 throw new Exception("Canonical generated-owner resolution did not collapse frame/panel references to one GlassWall.");
+        }
+
+        private static void AutoRoomBoundaryReferencesRemainCanonicalSelectionAliases()
+        {
+            var project = new ProjectState("workspace-auto-room-selection", "Workspace Auto Room Selection");
+            var room = AutoRoom("ROOM-A", "D1;D2");
+            project.Elements.Add(room);
+
+            foreach (var handle in new[] { "D1", "HANDLE:00D2" })
+            {
+                var resolved = SemanticHandleOwnershipResolver.Resolve(project, new[] { handle });
+                if (resolved.Count != 1 || !ReferenceEquals(resolved[0], room))
+                    throw new Exception("Auto Room boundary reference did not resolve the canonical Room owner: " + handle + ".");
+            }
+
+            var competing = AutoRoom("ROOM-B", "D2;D3");
+            project.Elements.Add(competing);
+            Throws<InvalidOperationException>(() => SemanticHandleOwnershipResolver.Resolve(project, new[] { "D2" }));
+
+            var explicitProject = new ProjectState("workspace-auto-room-explicit-source", "Workspace Auto Room Explicit Source");
+            var explicitRoom = AutoRoom("ROOM-C", "D4;D5");
+            explicitRoom.SourceHandles.Add("E1");
+            explicitProject.Elements.Add(explicitRoom);
+            if (SemanticHandleOwnershipResolver.Resolve(explicitProject, new[] { "D4" }).Count != 0)
+                throw new Exception("Auto Room boundary provenance must not override explicit SourceHandles ownership.");
+            var explicitResolved = SemanticHandleOwnershipResolver.Resolve(explicitProject, new[] { "E1" });
+            if (explicitResolved.Count != 1 || !ReferenceEquals(explicitResolved[0], explicitRoom))
+                throw new Exception("Auto Room explicit SourceHandles ownership was not preserved.");
+        }
+
+        private static ProjectElement AutoRoom(string id, string boundaryHandles)
+        {
+            var room = new ProjectElement(id, ElementCategory.Room, string.Empty, string.Empty, string.Empty);
+            room.Properties[AutoRoomLifecycle.BoundaryModeKey] = AutoRoomLifecycle.BoundaryModeAutoNetwork;
+            room.Properties[AutoRoomLifecycle.BoundarySourceHandlesKey] = boundaryHandles;
+            return room;
         }
 
         private static ProjectState Project(out ProjectFamily family, out ProjectElement curtain)
