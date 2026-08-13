@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -9,8 +10,10 @@ namespace QS3D.BricsCAD.V25.Updates
 {
     internal sealed class UpdateCenterWindow : Window
     {
+        private readonly TextBlock _title;
         private readonly TextBlock _status;
         private readonly TextBlock _versions;
+        private readonly TextBlock _runtimeIdentity;
         private readonly TextBlock _detail;
         private readonly TextBox _notes;
         private readonly Button _refreshButton;
@@ -23,9 +26,9 @@ namespace QS3D.BricsCAD.V25.Updates
         {
             Title = "QS3D Update Center";
             Width = 620;
-            Height = 520;
+            Height = 550;
             MinWidth = 540;
-            MinHeight = 420;
+            MinHeight = 440;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Background = new SolidColorBrush(Color.FromRgb(24, 28, 36));
             Foreground = Brushes.White;
@@ -34,26 +37,38 @@ namespace QS3D.BricsCAD.V25.Updates
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            var title = new TextBlock
+            _title = new TextBlock
             {
                 Text = "Cập nhật QS3D",
                 FontSize = 24,
                 FontWeight = FontWeights.SemiBold,
                 Margin = new Thickness(0, 0, 0, 6)
             };
-            Grid.SetRow(title, 0);
-            root.Children.Add(title);
+            Grid.SetRow(_title, 0);
+            root.Children.Add(_title);
 
             _versions = new TextBlock
             {
                 Foreground = new SolidColorBrush(Color.FromRgb(164, 174, 190)),
-                Margin = new Thickness(0, 0, 0, 18)
+                Margin = new Thickness(0, 0, 0, 6),
+                TextWrapping = TextWrapping.Wrap
             };
             Grid.SetRow(_versions, 1);
             root.Children.Add(_versions);
+
+            _runtimeIdentity = new TextBlock
+            {
+                Foreground = new SolidColorBrush(Color.FromRgb(134, 146, 164)),
+                FontSize = 11,
+                Margin = new Thickness(0, 0, 0, 18),
+                TextWrapping = TextWrapping.Wrap
+            };
+            Grid.SetRow(_runtimeIdentity, 2);
+            root.Children.Add(_runtimeIdentity);
 
             var stateCard = new Border
             {
@@ -73,7 +88,7 @@ namespace QS3D.BricsCAD.V25.Updates
             stateStack.Children.Add(_status);
             stateStack.Children.Add(_detail);
             stateCard.Child = stateStack;
-            Grid.SetRow(stateCard, 2);
+            Grid.SetRow(stateCard, 3);
             root.Children.Add(stateCard);
 
             _notes = new TextBox
@@ -87,7 +102,7 @@ namespace QS3D.BricsCAD.V25.Updates
                 Padding = new Thickness(12),
                 Margin = new Thickness(0, 0, 0, 16)
             };
-            Grid.SetRow(_notes, 3);
+            Grid.SetRow(_notes, 4);
             root.Children.Add(_notes);
 
             var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
@@ -100,7 +115,7 @@ namespace QS3D.BricsCAD.V25.Updates
             actions.Children.Add(_releaseButton);
             actions.Children.Add(_refreshButton);
             actions.Children.Add(_updateButton);
-            Grid.SetRow(actions, 4);
+            Grid.SetRow(actions, 5);
             root.Children.Add(actions);
 
             Content = root;
@@ -118,8 +133,16 @@ namespace QS3D.BricsCAD.V25.Updates
             _detail.Text = result.Detail;
 
             var current = result.CurrentVersion?.Original ?? "unknown";
+            var currentDisplay = current.StartsWith("v", StringComparison.OrdinalIgnoreCase) ? current : "v" + current;
             var latest = result.Release?.Tag ?? "—";
-            _versions.Text = "Đang chạy: " + current + "    •    GitHub mới nhất: " + latest;
+            var assembly = Assembly.GetExecutingAssembly();
+            var loadedPath = string.IsNullOrWhiteSpace(assembly.Location) ? "<unknown>" : assembly.Location;
+
+            Title = "QS3D Update Center — " + currentDisplay;
+            _title.Text = "Cập nhật QS3D " + currentDisplay;
+            _versions.Text = "Phiên bản hiện tại: " + currentDisplay + "    •    GitHub mới nhất: " + latest;
+            _runtimeIdentity.Text = "DLL đang chạy: " + loadedPath;
+            _runtimeIdentity.ToolTip = loadedPath;
             _notes.Text = result.Release?.Notes ?? "Ghi chú release sẽ hiển thị ở đây khi có dữ liệu.";
 
             var checking = result.State == UpdateState.Checking;
