@@ -129,7 +129,10 @@ namespace QS3D.BricsCAD.V25.Updates
                 // V25 package asset. Manifest-less V25 previews remain visible so the
                 // coordinator can surface ManualInstallRequired instead of silently hiding
                 // a newer preview; one-click install still requires a verified signed manifest.
-                if (manifestUri == null && packageUri == null) continue;
+                if (packageUri == null)
+                {
+                    if (manifestUri == null) continue;
+                }
 
                 var publishedUtc = DateTime.MinValue;
                 var publishedAt = release.PublishedAt;

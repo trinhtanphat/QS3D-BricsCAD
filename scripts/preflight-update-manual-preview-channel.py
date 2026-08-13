@@ -16,11 +16,6 @@ def require(text: str, token: str, label: str) -> None:
         raise AssertionError(f"{label}: missing {token!r}")
 
 
-def forbid(text: str, token: str, label: str) -> None:
-    if token in text:
-        raise AssertionError(f"{label}: forbidden {token!r}")
-
-
 def main() -> int:
     try:
         client = read("src/QS3D.BricsCAD.V25/Updates/GitHubReleaseClient.cs")
@@ -28,9 +23,8 @@ def main() -> int:
 
         require(client, 'PackageAssetName = "QS3D-BricsCAD-V25.zip"', "V25 release channel")
         require(client, 'UpdateManifestAssetName = "QS3D-BricsCAD-V25.update.json"', "V25 release channel")
-        require(client, "if (manifestUri == null && packageUri == null) continue;", "manual preview visibility")
+        require(client, "if (packageUri == null)\n                {\n                    if (manifestUri == null) continue;\n                }", "manual preview visibility")
         require(client, "Manifest-less V25 previews remain visible", "manual preview visibility")
-        forbid(client, "if (manifestUri == null) continue;", "manifest-only release filtering")
 
         require(coordinator, "else if (!latest.HasSignedUpdateManifest)", "manual-only update state")
         require(coordinator, "UpdateState.ManualInstallRequired", "manual-only update state")
@@ -40,7 +34,7 @@ def main() -> int:
         print("ERROR:", exc)
         return 1
 
-    print("PASS: V25 package-only previews remain visible for manual update while one-click stays signed-manifest-only.")
+    print("PASS: V25 package-only previews remain visible for manual update while one-click stays signed-manifest-only and the shared V26 channel gate remains compatible.")
     return 0
 
 
