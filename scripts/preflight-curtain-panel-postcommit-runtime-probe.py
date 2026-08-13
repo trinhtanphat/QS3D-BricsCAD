@@ -93,6 +93,7 @@ if RUNNER.is_file():
     for token in (
         "[switch]$ConfirmDisposableCopy", "[string]::IsNullOrWhiteSpace($Profile)",
         "*.curtain-postcommit-probe-copy.dwg", "QS3D_CURTAIN_PANEL_P09_RESULT", "QS3D_CURTAIN_PANEL_P09_NONCE",
+        '"PICKFIRST", "1"',
         ". $windowInteropPath", "Close-Qs3dProxyInformationDialog -Process $process",
         "Start-Process -FilePath $bricscadExe", "-WindowStyle Hidden",
         "PluginDll must be the exact repository x64 Release V25 build output.", "ArtifactDir must stay outside the repository.",
@@ -110,6 +111,10 @@ if RUNNER.is_file():
     script_start = text.find("$script = @(")
     script_end = text.find("Set-Content -LiteralPath $scriptPath", script_start)
     script = text[script_start:script_end]
+    pickfirst = script.find('"PICKFIRST", "1"')
+    seed = script.find('"QS3DCURTAINP09SEED"')
+    if min(pickfirst, seed) < 0 or pickfirst > seed:
+        errors.append("P09 runner must enable PICKFIRST before probe selection is seeded")
     commands = (
         "QS3DCURTAINP09SEED", "QS3DGLASSWALL", "QS3DCURTAINP09PREPARE", "QS3DCURTAINP09BASELINE",
         "QS3DCURTAINP09ARMFINGERPRINT", "QS3DCURTAINP09VERIFYFINGERPRINT", "QS3DCURTAINP09PRECLEAN",
