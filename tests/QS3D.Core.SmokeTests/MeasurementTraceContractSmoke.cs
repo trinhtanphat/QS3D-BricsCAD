@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             DeterministicCanonicalRepresentation();
             SnapshotIsolation();
             OptionalMetadataNullability();
+            AdjustmentRuleIdentity();
             OptionalRulePair();
             InvalidStatesFailClosed();
         }
@@ -45,6 +46,7 @@ namespace QS3D.Core.SmokeTests
                 Equal(left.GetHashCode(), right.GetHashCode(), "Equivalent traces must have the same hash code.");
                 Equal(left.ToCanonicalString(), right.ToCanonicalString(), "Canonical trace text must not depend on input order or current culture.");
                 True(left.ToCanonicalString().Contains("4:1.25"), "Canonical numeric text must use invariant decimal formatting.");
+                True(left.ToCanonicalString().StartsWith("4:MTR1", StringComparison.Ordinal), "Legacy traces without adjustment rule metadata must remain on the MTR1 schema.");
             }
             finally
             {
@@ -94,6 +96,87 @@ namespace QS3D.Core.SmokeTests
                 "none");
             True(!trace.Equals((MeasurementTrace?)null), "Trace equality must reject null without throwing.");
             True(!trace.Equals((object?)null), "Object equality must reject null without throwing.");
+        }
+
+        private static void AdjustmentRuleIdentity()
+        {
+            var legacy = new MeasurementTraceAdjustment(
+                MeasurementTraceAdjustmentKind.Deduction,
+                1d,
+                "m2",
+                "opening",
+                "SRC-OPENING");
+            True(legacy.RuleId == null && legacy.RuleVersion == null, "Adjustment rule metadata must remain optional as a pair.");
+
+            var ruleAware = new MeasurementTraceAdjustment(
+                MeasurementTraceAdjustmentKind.Deduction,
+                1d,
+                "m2",
+                "opening",
+                "SRC-OPENING",
+                "opening-deduction",
+                "3");
+            Equal("opening-deduction", ruleAware.RuleId, "Adjustment rule id mismatch.");
+            Equal("3", ruleAware.RuleVersion, "Adjustment rule version mismatch.");
+            True(!legacy.Equals(ruleAware), "Adjustment rule identity must participate in structural equality.");
+
+            var ruleAwareClone = new MeasurementTraceAdjustment(
+                MeasurementTraceAdjustmentKind.Deduction,
+                1d,
+                "m2",
+                "opening",
+                "SRC-OPENING",
+                "opening-deduction",
+                "3");
+            True(ruleAware.Equals(ruleAwareClone), "Equivalent rule-aware adjustments must compare equal.");
+            Equal(ruleAware.GetHashCode(), ruleAwareClone.GetHashCode(), "Equivalent rule-aware adjustments must have the same hash code.");
+
+            Throws<ArgumentException>(() => new MeasurementTraceAdjustment(
+                MeasurementTraceAdjustmentKind.Deduction,
+                1d,
+                "m2",
+                "opening",
+                "SRC-OPENING",
+                ruleId: "opening-deduction"));
+            Throws<ArgumentException>(() => new MeasurementTraceAdjustment(
+                MeasurementTraceAdjustmentKind.Deduction,
+                1d,
+                "m2",
+                "opening",
+                "SRC-OPENING",
+                ruleVersion: "3"));
+
+            var legacyTrace = CreateAdjustmentTrace(legacy);
+            Equal(
+                "4:MTR110:SEM-WALL-18:SRC-WALL9:NetAreaM22:122:112:m24:none-;-;1:01:11:01:12:m27:opening11:SRC-OPENING1:01:0",
+                legacyTrace.ToCanonicalString(),
+                "Legacy adjustment traces must preserve the existing MTR1 canonical bytes.");
+
+            var ruleAwareTrace = CreateAdjustmentTrace(ruleAware);
+            True(ruleAwareTrace.ToCanonicalString().StartsWith("4:MTR2", StringComparison.Ordinal), "Rule-aware adjustment traces must use the MTR2 canonical schema.");
+            True(ruleAwareTrace.ToCanonicalString().Contains("opening-deduction"), "MTR2 canonical text must include adjustment rule identity.");
+            True(!legacyTrace.Equals(ruleAwareTrace), "Trace equality must distinguish adjustment rule provenance.");
+
+            var ruleA = new MeasurementTraceAdjustment(
+                MeasurementTraceAdjustmentKind.Deduction,
+                1d,
+                "m2",
+                "opening",
+                "SRC-OPENING",
+                "rule-a",
+                "1");
+            var ruleB = new MeasurementTraceAdjustment(
+                MeasurementTraceAdjustmentKind.Deduction,
+                1d,
+                "m2",
+                "opening",
+                "SRC-OPENING",
+                "rule-b",
+                "1");
+            var left = CreateAdjustmentTrace(ruleB, ruleA);
+            var right = CreateAdjustmentTrace(ruleA, ruleB);
+            Equal(left.ToCanonicalString(), right.ToCanonicalString(), "MTR2 adjustment ordering must include rule identity and remain independent of input order.");
+            True(left.Equals(right), "Rule-aware traces must compare equal after deterministic adjustment ordering.");
         }
 
         private static void OptionalRulePair()
@@ -201,6 +284,20 @@ namespace QS3D.Core.SmokeTests
                 assumptions,
                 "wall-net-area",
                 "2");
+        }
+
+        private static MeasurementTrace CreateAdjustmentTrace(params MeasurementTraceAdjustment[] adjustments)
+        {
+            return new MeasurementTrace(
+                "SEM-WALL-1",
+                "SRC-WALL",
+                "NetAreaM2",
+                Array.Empty<MeasurementTraceFact>(),
+                12d,
+                adjustments,
+                11d,
+                "m2",
+                "none");
         }
 
         private static void Equal<T>(T expected, T actual, string message)

@@ -59,16 +59,22 @@ namespace QS3D.Core.Measurement
             double amount,
             string unit,
             string reason,
-            string sourceIdentity)
+            string sourceIdentity,
+            string? ruleId = null,
+            string? ruleVersion = null)
         {
             if (!Enum.IsDefined(typeof(MeasurementTraceAdjustmentKind), kind))
                 throw new ArgumentOutOfRangeException(nameof(kind));
+            if ((ruleId == null) != (ruleVersion == null))
+                throw new ArgumentException("Measurement trace adjustment rule identity and version must be supplied together.");
 
             Kind = kind;
             Amount = MeasurementTraceContract.RequireNonNegativeFinite(amount, nameof(amount));
             Unit = MeasurementTraceContract.RequireUnit(unit, nameof(unit));
             Reason = MeasurementTraceContract.RequireText(reason, nameof(reason));
             SourceIdentity = MeasurementTraceContract.RequireToken(sourceIdentity, nameof(sourceIdentity));
+            RuleId = ruleId == null ? null : MeasurementTraceContract.RequireToken(ruleId, nameof(ruleId));
+            RuleVersion = ruleVersion == null ? null : MeasurementTraceContract.RequireToken(ruleVersion, nameof(ruleVersion));
         }
 
         public MeasurementTraceAdjustmentKind Kind { get; }
@@ -76,6 +82,8 @@ namespace QS3D.Core.Measurement
         public string Unit { get; }
         public string Reason { get; }
         public string SourceIdentity { get; }
+        public string? RuleId { get; }
+        public string? RuleVersion { get; }
 
         public bool Equals(MeasurementTraceAdjustment? other)
         {
@@ -84,7 +92,9 @@ namespace QS3D.Core.Measurement
                    Amount.Equals(other.Amount) &&
                    string.Equals(Unit, other.Unit, StringComparison.Ordinal) &&
                    string.Equals(Reason, other.Reason, StringComparison.Ordinal) &&
-                   string.Equals(SourceIdentity, other.SourceIdentity, StringComparison.Ordinal);
+                   string.Equals(SourceIdentity, other.SourceIdentity, StringComparison.Ordinal) &&
+                   string.Equals(RuleId, other.RuleId, StringComparison.Ordinal) &&
+                   string.Equals(RuleVersion, other.RuleVersion, StringComparison.Ordinal);
         }
 
         public override bool Equals(object? obj) => Equals(obj as MeasurementTraceAdjustment);
@@ -99,6 +109,11 @@ namespace QS3D.Core.Measurement
                 hash = MeasurementTraceContract.AddHash(hash, Unit);
                 hash = MeasurementTraceContract.AddHash(hash, Reason);
                 hash = MeasurementTraceContract.AddHash(hash, SourceIdentity);
+                if (RuleId != null)
+                {
+                    hash = MeasurementTraceContract.AddHash(hash, RuleId);
+                    hash = MeasurementTraceContract.AddHash(hash, RuleVersion);
+                }
                 return hash;
             }
         }
@@ -162,8 +177,16 @@ namespace QS3D.Core.Measurement
 
         public string ToCanonicalString()
         {
+            var hasAdjustmentRuleIdentity = false;
+            for (var i = 0; i < Adjustments.Count; i++)
+            {
+                if (Adjustments[i].RuleId == null) continue;
+                hasAdjustmentRuleIdentity = true;
+                break;
+            }
+
             var builder = new StringBuilder();
-            MeasurementTraceContract.AppendToken(builder, "MTR1");
+            MeasurementTraceContract.AppendToken(builder, hasAdjustmentRuleIdentity ? "MTR2" : "MTR1");
             MeasurementTraceContract.AppendToken(builder, SemanticIdentity);
             MeasurementTraceContract.AppendToken(builder, SourceIdentity);
             MeasurementTraceContract.AppendToken(builder, QuantityKey);
@@ -193,6 +216,11 @@ namespace QS3D.Core.Measurement
                 MeasurementTraceContract.AppendToken(builder, adjustment.Unit);
                 MeasurementTraceContract.AppendToken(builder, adjustment.Reason);
                 MeasurementTraceContract.AppendToken(builder, adjustment.SourceIdentity);
+                if (hasAdjustmentRuleIdentity)
+                {
+                    MeasurementTraceContract.AppendNullableToken(builder, adjustment.RuleId);
+                    MeasurementTraceContract.AppendNullableToken(builder, adjustment.RuleVersion);
+                }
             }
 
             MeasurementTraceContract.AppendMessages(builder, Warnings);
@@ -357,7 +385,11 @@ namespace QS3D.Core.Measurement
             if (compare != 0) return compare;
             compare = StringComparer.Ordinal.Compare(left.Unit, right.Unit);
             if (compare != 0) return compare;
-            return left.Amount.CompareTo(right.Amount);
+            compare = left.Amount.CompareTo(right.Amount);
+            if (compare != 0) return compare;
+            compare = StringComparer.Ordinal.Compare(left.RuleId ?? string.Empty, right.RuleId ?? string.Empty);
+            if (compare != 0) return compare;
+            return StringComparer.Ordinal.Compare(left.RuleVersion ?? string.Empty, right.RuleVersion ?? string.Empty);
         }
 
         internal static bool SequenceEqual<T>(IReadOnlyList<T> left, IReadOnlyList<T> right)
