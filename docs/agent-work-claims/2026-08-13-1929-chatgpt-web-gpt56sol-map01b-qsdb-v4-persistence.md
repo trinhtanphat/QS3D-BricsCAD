@@ -3,7 +3,7 @@
 - Status: `ACTIVE`
 - Agent: `chatgpt-web-gpt56sol-map01b-qsdb-v4-20260813-1929`
 - Registered UTC: `2026-08-13T12:29:00Z`
-- Last updated UTC: `2026-08-13T12:40:00Z`
+- Last updated UTC: `2026-08-13T15:52:00Z`
 - Baseline main SHA: `84c2361c2c86a2082aafec723ece532653378950`
 - Priority: `MAP-01B P0/P1` — make the verified MAP-01 mapping contract project-owned and persist it deterministically in QSDB
 
@@ -20,7 +20,8 @@ This is the persistence/schema follow-on intentionally excluded from MAP-01A. BL
 - `src/QS3D.Core/Persistence/ProjectSchemaMigrator.cs`
 - `src/QS3D.Core/Persistence/QsdbProjectStore.cs`
 - `src/QS3D.Core/Persistence/QsdbProjectXmlSchemaValidator.cs`
-- focused Mapping/Persistence smoke regression file(s) required for this lane
+- `tests/QS3D.Core.SmokeTests/QsdbMeasurementWorkItemMappingSmoke.cs`
+- `tests/QS3D.Core.SmokeTests/QsdbMeasurementWorkItemMappingRegistration.cs`
 - this claim file
 
 ## Planned bounded scope
@@ -36,3 +37,7 @@ This is the persistence/schema follow-on intentionally excluded from MAP-01A. BL
 ## Validation policy
 
 No GitHub Actions will be dispatched. Managed/native PASS will only be reported for gates actually executed; otherwise the claim closeout will state them as unexecuted. No force-push will be used.
+
+## Coordination update
+
+The original claim used a generic focused smoke placeholder because the former `src/QS3D.TestHarness` surface was no longer current. The live repository uses `tests/QS3D.Core.SmokeTests` with per-lane `ModuleInitializer` registration; the two exact smoke paths above are now reserved before any MAP-01B product-source write. Production overlap was rechecked from the claim commit through current `main` and none of the five reserved production files changed in that interval.
