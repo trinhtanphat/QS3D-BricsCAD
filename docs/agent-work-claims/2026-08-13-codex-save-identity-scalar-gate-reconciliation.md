@@ -1,6 +1,6 @@
 # Work claim — Save identity scalar-revision gate reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-save-identity-scalar-gate-20260813` (`/root/fix_rightpanel_thickness`)
 - Registered: `2026-08-13T21:45:00+07:00`
 - Baseline main SHA: `5e5866c47df6586f685665b7af762fc92f57b96f`
@@ -34,3 +34,11 @@ Current ACTIVE/BLOCKED claims and open PRs were inspected at the baseline. None 
 ## Completion condition
 
 Claim-only PR is merged before editing, the narrow gate correction is merged to current main, exact validation is recorded truthfully, and this claim is marked `COMPLETED` in a separate closeout.
+
+## Completion evidence
+
+- Claim-only PR `#1063` merged at `774676684a70cd3c342554b3ba969a50abc1c281` before implementation editing began.
+- Implementation commit `15152ffc8417b94333ee7d84f7a934cdcb0bcfd3` merged through PR `#1064` at `a335a66f33c2226a89120b656563c76134573b6c`.
+- The reconciled save-identity preflight PASS and the companion drawing-identity scalar-revision preflight PASS.
+- Aggregate source preflight PASS: 774/774 discovered gates. `git diff --check` PASS.
+- Only `scripts/preflight-project-save-identity-preflight-atomicity.py` changed. No production/P10/Source Reconcile/#987/workflow files changed; no BricsCAD runtime or GitHub Actions were run.
