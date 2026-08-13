@@ -56,19 +56,6 @@ namespace QS3D.Core.Diagnostics
         {
             if (element == null) throw new ArgumentNullException(nameof(element));
 
-            // Auto Room intentionally persists boundary provenance separately from SourceHandles so
-            // adjacent rooms do not claim the same source entity as their stable capture owner.
-            // Selection still needs those boundary references to resolve back to the Room when no
-            // explicit SourceHandles exist, matching the adapter's historical fail-closed fallback.
-            if (element.SourceHandles.Count == 0 &&
-                AutoRoomLifecycle.IsAutoRoom(element) &&
-                element.Properties.TryGetValue(AutoRoomLifecycle.BoundarySourceHandlesKey, out var boundaryHandles) &&
-                !string.IsNullOrWhiteSpace(boundaryHandles))
-            {
-                foreach (var handle in SplitHandles(boundaryHandles))
-                    yield return new KeyValuePair<string, string>(handle, AutoRoomLifecycle.BoundarySourceHandlesKey);
-            }
-
             foreach (var property in element.Properties)
             {
                 if (!IsOwnerSlot(property.Key) || string.IsNullOrWhiteSpace(property.Value)) continue;
