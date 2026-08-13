@@ -38,6 +38,31 @@ function Require-Qs3dValue {
     }
 }
 
+function Require-Qs3dAllowedValue {
+    param(
+        [Parameter(Mandatory = $true)]$Marker,
+        [Parameter(Mandatory = $true)][string]$Key,
+        [Parameter(Mandatory = $true)][string[]]$Allowed
+    )
+    if (-not $Marker.ContainsKey($Key)) { throw "LOCAL-004 marker is missing a sanitized diagnostic field." }
+    $actual = [string]$Marker[$Key]
+    if (-not ($Allowed -contains $actual)) { throw "LOCAL-004 marker contains an invalid sanitized diagnostic classification." }
+}
+
+function Require-FinalReconcileDiagnostics {
+    param([Parameter(Mandatory = $true)]$Marker)
+    Require-Qs3dAllowedValue $Marker "final_selection_class" @("BOTH_SOURCES", "LINE_ONLY", "POLY_ONLY", "OTHER_OR_MISSING")
+    Require-Qs3dAllowedValue $Marker "final_owner_match_class" @("BOTH", "LINE_ONLY", "POLY_ONLY", "NONE")
+    Require-Qs3dAllowedValue $Marker "final_generated_state" @("REMOVED_ALL", "RETAINED_ALL", "PARTIAL")
+    Require-Qs3dAllowedValue $Marker "final_project_state" @("CHANGED", "UNCHANGED")
+    Require-Qs3dAllowedValue $Marker "final_revision_state" @("ADVANCED", "UNCHANGED", "REGRESSED_OR_RESET")
+    Require-Qs3dAllowedValue $Marker "final_native_marker_state" @("ADVANCED", "UNCHANGED", "MISSING_OR_INVALID")
+    Require-Qs3dAllowedValue $Marker "final_history_before_state" @("NONE", "SYNCED", "MARKER_MISMATCH", "DESYNCHRONIZED")
+    Require-Qs3dAllowedValue $Marker "final_history_after_state" @("NONE", "SYNCED", "MARKER_MISMATCH", "DESYNCHRONIZED")
+    Require-Qs3dAllowedValue $Marker "final_history_entry_before_class" @("ONE", "MULTIPLE")
+    Require-Qs3dAllowedValue $Marker "final_history_entry_after_class" @("ONE", "MULTIPLE")
+}
+
 function Read-PositiveMarkerInt {
     param([Parameter(Mandatory = $true)]$Marker, [Parameter(Mandatory = $true)][string]$Key)
     if (-not $Marker.ContainsKey($Key)) { throw "LOCAL-004 marker is missing a required count." }
@@ -236,7 +261,17 @@ try {
     $deadlineOne = (Get-Date).AddSeconds($StartupTimeoutSeconds)
     $processOne = Start-Process -FilePath $bricscadExe -ArgumentList $argumentsOne -PassThru -WindowStyle Hidden -WorkingDirectory $ArtifactDir
     $proxyDialogsDismissed += Wait-Qs3dMarkerOrFailure -Process $processOne -ExpectedPath $phasePath -FailurePath $resultPath -Deadline $deadlineOne
-    if (Test-Path -LiteralPath $resultPath -PathType Leaf) { throw "LOCAL-004 session one published a sanitized failure marker." }
+    if (Test-Path -LiteralPath $resultPath -PathType Leaf) {
+        $finalMarker = Read-Qs3dMarker -Path $resultPath
+        Require-Qs3dValue -Marker $finalMarker -Key "status" -Expected "FAIL"
+        Require-Qs3dValue -Marker $finalMarker -Key "schema" -Expected "QS3D_SOURCE_RECONCILE_RUNTIME_V1"
+        Require-Qs3dValue -Marker $finalMarker -Key "qualification_boundary" -Expected "LOCAL_004_ONLY"
+        Require-Qs3dValue -Marker $finalMarker -Key "nonce" -Expected $nonce
+        if ([string]::Equals([string]$finalMarker["failure_phase"], "verify_final_reconcile", [StringComparison]::Ordinal)) {
+            Require-FinalReconcileDiagnostics -Marker $finalMarker
+        }
+        throw "LOCAL-004 session one published a sanitized failure marker."
+    }
     Wait-Qs3dExit -Process $processOne -Deadline $deadlineOne
     Stop-Qs3dLaunchedProcess -Process $processOne
     $phaseMarker = Read-Qs3dMarker -Path $phasePath
@@ -250,6 +285,7 @@ try {
         Require-Qs3dValue -Marker $phaseMarker -Key $key -Expected "true"
     }
     [void](Read-PositiveMarkerInt -Marker $phaseMarker -Key "generated_solid_count")
+    Require-FinalReconcileDiagnostics -Marker $phaseMarker
     $env:QS3D_SOURCE_RECONCILE_UNDO_COHERENT = [string]$phaseMarker["undo_coherent"]
     $env:QS3D_SOURCE_RECONCILE_REDO_COHERENT = [string]$phaseMarker["redo_coherent"]
     Remove-ExactFile -Path $scriptOnePath
