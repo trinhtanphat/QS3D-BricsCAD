@@ -1,0 +1,30 @@
+name: QS3D Release Dispatcher Temporary
+
+on:
+  push:
+    branches:
+      - ci/release-dispatch-20260813-1404
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch V25 preview release from current main
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'release-v25-cloud.yml',
+              ref: 'main',
+              inputs: {
+                release_tag: 'v0.1.0-preview.4',
+                confirm_release: 'RELEASE'
+              }
+            });
