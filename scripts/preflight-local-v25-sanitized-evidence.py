@@ -46,6 +46,10 @@ else:
         "(redacted label)",
         "(redacted non-main branch)",
         "(redacted release tag)",
+        "source.resolve()",
+        "destination.resolve()",
+        "source.samefile(destination)",
+        "sanitized summary output must not alias the input qualification report",
     ):
         if needle not in text:
             errors.append("sanitized evidence exporter missing contract token: " + needle)
@@ -204,6 +208,24 @@ if not errors:
                 if required not in summary:
                     errors.append("sanitized summary missing safe handoff field: " + required)
 
+        alias_source = temp / "alias-qualification.json"
+        alias_bytes = json.dumps(fixture, sort_keys=True).encode("utf-8")
+        alias_source.write_bytes(alias_bytes)
+        alias_completed = subprocess.run(
+            [sys.executable, str(EXPORTER), "--input", str(alias_source), "--output", str(alias_source)],
+            cwd=str(ROOT),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if alias_completed.returncode == 0:
+            errors.append("sanitized evidence exporter accepted an output path that aliases the input report")
+        if "sanitized summary output must not alias the input qualification report" not in alias_completed.stderr:
+            errors.append("sanitized evidence exporter alias rejection did not emit the deterministic safety error")
+        if alias_source.read_bytes() != alias_bytes:
+            errors.append("sanitized evidence exporter mutated raw qualification JSON when output aliased input")
+
         hostile = dict(fixture)
         hostile["qualificationScope"] = "C:/Users/PRIVATE_SCOPE_SENTINEL/customer.dwg"
         hostile["branch"] = "feature/PRIVATE_BRANCH_SENTINEL/customer-project"
@@ -236,4 +258,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: local V25 qualification evidence can be exported to a deterministic Markdown handoff without carrying machine/user/path/private-DWG/raw-error, untrusted step-label, branch, scope or release-tag fields; canonical runner labels/scopes stay readable and runtime-skip remains visibly non-release-qualified.")
+print("PASS: local V25 qualification evidence can be exported to a deterministic Markdown handoff without carrying machine/user/path/private-DWG/raw-error, untrusted step-label, branch, scope or release-tag fields; canonical runner labels/scopes stay readable, runtime-skip remains visibly non-release-qualified, and output cannot overwrite the raw input report through same-file aliasing.")
