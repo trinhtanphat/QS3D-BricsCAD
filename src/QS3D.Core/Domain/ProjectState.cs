@@ -52,7 +52,7 @@ namespace QS3D.Core.Domain
             set
             {
                 if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value), "Floor elevation must be finite.");
-                _elevationM = value;
+                _elevationM = value == 0d ? 0d : value;
             }
         }
 
@@ -96,7 +96,6 @@ namespace QS3D.Core.Domain
                 OnPropertyChanged();
             }
         }
-
         public IDictionary<string, string> Properties { get; }
 
         public event PropertyChangedEventHandler? PropertyChanged;
