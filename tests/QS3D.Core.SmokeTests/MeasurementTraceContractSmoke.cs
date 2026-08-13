@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             DeterministicCanonicalRepresentation();
             SnapshotIsolation();
             DuplicateEvidenceFailsClosed();
+            NoneRoundingRequiresReconciliation();
             OptionalMetadataNullability();
             AdjustmentRuleIdentity();
             OptionalRulePair();
@@ -107,6 +108,57 @@ namespace QS3D.Core.SmokeTests
                     "SRC-OPENING",
                     "opening-deduction",
                     "3")));
+        }
+
+        private static void NoneRoundingRequiresReconciliation()
+        {
+            var deduction = new MeasurementTraceAdjustment(
+                MeasurementTraceAdjustmentKind.Deduction,
+                1d,
+                "m2",
+                "opening",
+                "SRC-OPENING");
+            var addition = new MeasurementTraceAdjustment(
+                MeasurementTraceAdjustmentKind.Addition,
+                1d,
+                "m2",
+                "allowance",
+                "SRC-ALLOWANCE");
+
+            var reconciled = new MeasurementTrace(
+                "SEM-WALL-1",
+                "SRC-WALL",
+                "NetAreaM2",
+                Array.Empty<MeasurementTraceFact>(),
+                12d,
+                new[] { addition, deduction },
+                12d,
+                "m2",
+                "none");
+            Equal(12d, reconciled.NetValue, "No-rounding traces must accept reconciled deduction/addition evidence.");
+
+            Throws<ArgumentException>(() => new MeasurementTrace(
+                "SEM-WALL-1",
+                "SRC-WALL",
+                "NetAreaM2",
+                Array.Empty<MeasurementTraceFact>(),
+                12d,
+                new[] { deduction },
+                12d,
+                "m2",
+                "none"));
+
+            var explicitRounding = new MeasurementTrace(
+                "SEM-WALL-1",
+                "SRC-WALL",
+                "NetAreaM2",
+                Array.Empty<MeasurementTraceFact>(),
+                12d,
+                new[] { deduction },
+                12d,
+                "m2",
+                "nearest-cent");
+            Equal(12d, explicitRounding.NetValue, "Non-none rounding policies remain outside this reconciliation contract.");
         }
 
         private static void OptionalMetadataNullability()
@@ -222,8 +274,8 @@ namespace QS3D.Core.SmokeTests
                 "SRC-OPENING",
                 "rule-b",
                 "1");
-            var left = CreateAdjustmentTrace(ruleB, ruleA);
-            var right = CreateAdjustmentTrace(ruleA, ruleB);
+            var left = CreateAdjustmentTrace(10d, ruleB, ruleA);
+            var right = CreateAdjustmentTrace(10d, ruleA, ruleB);
             Equal(left.ToCanonicalString(), right.ToCanonicalString(), "MTR2 adjustment ordering must include rule identity and remain independent of input order.");
             True(left.Equals(right), "Rule-aware traces must compare equal after deterministic adjustment ordering.");
         }
@@ -337,6 +389,13 @@ namespace QS3D.Core.SmokeTests
 
         private static MeasurementTrace CreateAdjustmentTrace(params MeasurementTraceAdjustment[] adjustments)
         {
+            return CreateAdjustmentTrace(11d, adjustments);
+        }
+
+        private static MeasurementTrace CreateAdjustmentTrace(
+            double netValue,
+            params MeasurementTraceAdjustment[] adjustments)
+        {
             return new MeasurementTrace(
                 "SEM-WALL-1",
                 "SRC-WALL",
@@ -344,7 +403,7 @@ namespace QS3D.Core.SmokeTests
                 Array.Empty<MeasurementTraceFact>(),
                 12d,
                 adjustments,
-                11d,
+                netValue,
                 "m2",
                 "none");
         }
