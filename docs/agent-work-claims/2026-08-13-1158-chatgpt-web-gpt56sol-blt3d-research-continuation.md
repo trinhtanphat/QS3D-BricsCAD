@@ -8,37 +8,40 @@
 
 ## Reserved scope
 
-Update only the retained BLT3D Gemini research archive so the newer pasted snapshot extends Thread B without duplicating the already archived turns. Preserve provenance, source caveats, the distinction between research and verified BLT3D facts, and explicitly mark the late prototype/future-concept continuation as speculative. Review the existing agent-workstream document for whether the new material creates any genuinely new claimable QS3D lane; leave it unchanged if current boundaries already cover the useful ideas.
+Preserve the existing dated BLT3D Gemini master archive as the immutable baseline snapshot, then add a deduplicated continuation for only the public Thread B turns newly introduced by `Pasted markdown(2).md`, plus a small research index that gives the combined logical coverage and points agents to the existing implementation workstream. Preserve provenance, source caveats, the distinction between research and verified BLT3D facts, and explicitly classify the late prototype/future-concept continuation as speculative. Review the existing agent-workstream document for whether the new material creates any genuinely new claimable QS3D lane; leave it unchanged if current boundaries already cover the useful ideas.
 
 ## Expected surfaces
 
-- `docs/research/BLT3D-GEMINI-RESEARCH-MASTER-2026-08-12.md`
+- existing baseline retained unchanged: `docs/research/BLT3D-GEMINI-RESEARCH-MASTER-2026-08-12.md`
+- new deduplicated continuation: `docs/research/BLT3D-GEMINI-RESEARCH-CONTINUATION-2026-08-13.md`
+- new archive entry point: `docs/research/BLT3D-GEMINI-RESEARCH-INDEX.md`
 - `docs/BLT3D-RESEARCH-TO-QS3D-AGENT-WORKSTREAMS-2026-08-12.md` only if a necessary non-duplicative coordination update is proven
 - this claim file
 
 ## Excluded scope
 
 - No product source, tests, scripts, runtime evidence, build/release configuration, or implementation work.
+- No duplication of Thread B Turns 1–17 that are already retained in the baseline archive.
 - No promotion of Gemini-generated statements about BLT3D algorithms, architecture, market behavior, 4D–13D prototypes, cloud, AI, seismic simulation, robotics, interplanetary BIM, or similar future concepts to verified competitor facts.
 - No creation of new implementation lanes merely because the new transcript contains speculative concepts.
 - No GitHub Actions dispatch and no force-push.
 
 ## Validation plan
 
-- Verify the current research archive blob before edit and confirm the new pasted source is an extension of the previously archived Thread B.
-- Programmatically compare old/new pasted transcripts after removing Gemini UI/thought/action chrome, retaining only public user prompts and public Gemini responses.
-- Update source manifest/provenance and transcript counts.
-- Preserve existing Thread A unchanged.
-- Replace/extend Thread B so repeated turns appear once and newly supplied continuation turns are retained.
-- Add an explicit transition note before the prototype/future-concept portion so later creative material is not mistaken for verified BLT3D product behavior.
-- Re-fetch the committed archive and verify counts, source manifest, speculative marker, late-turn content, and final merge notes.
+- Verify the current baseline research archive blob and preserve it unchanged.
+- Programmatically compare `Pasted markdown(1).md` and `Pasted markdown(2).md` after removing Gemini UI/thought/action chrome, retaining only public user prompts and public Gemini responses.
+- Prove that the first 17 public turns are identical and that the newer source contributes exactly 13 new turns, yielding Thread B Turns 18–30.
+- Store only those 13 new turns in the continuation file with source size/SHA-256, deduplication facts and an explicit prototype/future-concept classification boundary.
+- Add a compact index recording the logical combined coverage: Thread A 14/13 + Thread B 30/30 = 44 prompts / 43 completed public responses.
+- Re-fetch the baseline archive and verify its blob remains unchanged.
+- Re-fetch the continuation/index and verify late-turn content including 10D/11D/12D/13D examples remains caveated as archival speculation.
 - Re-check the workstream note and record whether it required a change.
-- Close this claim as `COMPLETED` with the archive commit and actual validation recorded.
+- Close this claim as `COMPLETED` with the archive commits and actual validation recorded.
 
 ## Coordination
 
-No BLT3D/research-master claim was found among the current refreshed ownership surfaces. Existing active work visible at the baseline includes unrelated native Curtain qualification. The prior BLT3D research/workstream claims are `COMPLETED`. This claim reserves only the research-archive update and any strictly necessary matching coordination-note edit; it does not reserve any implementation lane described by the research.
+No BLT3D/research-master claim was found among the current refreshed ownership surfaces. Existing active work visible at the baseline includes unrelated native Curtain qualification. The prior BLT3D research/workstream claims are `COMPLETED`. This claim reserves only the research archive/index surfaces named above and any strictly necessary matching coordination-note edit; it does not reserve any implementation lane described by the research.
 
 ## Completion condition
 
-The newer Gemini snapshot is merged into the retained research master without duplicate earlier turns, provenance and speculative caveats are explicit, the workstream queue remains accurate without unnecessary churn, the result is pushed and re-fetched from `main`, and this claim is closed.
+The newer Gemini snapshot is represented without duplicate earlier turns, the dated baseline master remains intact for provenance, the continuation and index make the combined research coverage explicit, speculative caveats are prominent, the workstream queue remains accurate without unnecessary churn, all results are pushed/re-fetched from `main`, and this claim is closed.
