@@ -81,6 +81,7 @@ namespace QS3D.BricsCAD.V25
                 var metadataPath = Path.Combine(pluginDirectory, "PACKAGE-METADATA.json");
                 var hasPackageMetadata = File.Exists(metadataPath);
                 var metadata = ReadPackageMetadata(metadataPath);
+                var projectWasCached = ProjectContextCoordinator.TryGetCached(document, out _);
                 var hasProject = ProjectContextCoordinator.TryGetReadOnly(document, out var project);
 
                 var expectedRuntime = Major(brxAssembly) == ExpectedRuntimeMajor && Major(tdAssembly) == ExpectedRuntimeMajor;
@@ -109,17 +110,19 @@ namespace QS3D.BricsCAD.V25
                     !string.IsNullOrWhiteSpace(metadata.SignerThumbprint);
 
                 document.Editor.WriteMessage("\nQS3D Runtime Check");
-                document.Editor.WriteMessage(
-                    "\n  Running product: " + pluginProductVersion +
-                    " • Assembly: " + pluginAssemblyVersion +
-                    " • Core product: " + coreProductVersion +
-                    " • Core assembly: " + coreAssemblyVersion);
-                document.Editor.WriteMessage("\n  Loaded DLL: " + (string.IsNullOrWhiteSpace(pluginPath) ? "<unknown>" : pluginPath));
-                document.Editor.WriteMessage("\n  Process: PID " + processId + " • MVID: " + pluginMvid);
+                document.Editor.WriteMessage("\n  Running product: " + pluginProductVersion);
+                document.Editor.WriteMessage("\n  Running assembly: " + pluginAssemblyVersion);
+                document.Editor.WriteMessage("\n  Core product: " + coreProductVersion);
+                document.Editor.WriteMessage("\n  Core assembly: " + coreAssemblyVersion);
+                document.Editor.WriteMessage("\n  Loaded DLL path: " + (string.IsNullOrWhiteSpace(pluginPath) ? "<unknown>" : pluginPath));
+                document.Editor.WriteMessage("\n  Process ID: " + processId);
+                document.Editor.WriteMessage("\n  Module MVID: " + pluginMvid);
                 if (loadedFingerprintKnown)
                     document.Editor.WriteMessage("\n  Loaded-at-start SHA256: " + _loadedBinarySha256);
                 else
-                    document.Editor.WriteMessage("\n  Loaded-at-start SHA256: UNAVAILABLE • " + EmptyAsUnknown(_loadedBinaryCaptureError));
+                    document.Editor.WriteMessage("\n  Loaded-at-start SHA256: UNAVAILABLE");
+                if (!loadedFingerprintKnown)
+                    document.Editor.WriteMessage("\n  Loaded-at-start fingerprint error: " + EmptyAsUnknown(_loadedBinaryCaptureError));
 
                 if (!diskIdentity.Exists)
                 {
@@ -130,14 +133,14 @@ namespace QS3D.BricsCAD.V25
                 }
                 else if (!string.IsNullOrWhiteSpace(diskIdentity.Error))
                 {
-                    document.Editor.WriteMessage("\n  On-disk DLL: unreadable identity • " + diskIdentity.Error);
+                    document.Editor.WriteMessage("\n  On-disk DLL: unreadable identity");
+                    document.Editor.WriteMessage("\n  On-disk identity error: " + diskIdentity.Error);
                 }
                 else
                 {
-                    document.Editor.WriteMessage(
-                        "\n  On-disk DLL: product " + EmptyAsUnknown(diskIdentity.ProductVersion) +
-                        " • file " + EmptyAsUnknown(diskIdentity.FileVersion) +
-                        " • SHA256 " + EmptyAsUnknown(diskIdentity.Sha256));
+                    document.Editor.WriteMessage("\n  On-disk DLL product: " + EmptyAsUnknown(diskIdentity.ProductVersion));
+                    document.Editor.WriteMessage("\n  On-disk DLL file version: " + EmptyAsUnknown(diskIdentity.FileVersion));
+                    document.Editor.WriteMessage("\n  On-disk DLL SHA256: " + EmptyAsUnknown(diskIdentity.Sha256));
                     if (!diskVersionMatches)
                     {
                         document.Editor.WriteMessage(
@@ -156,21 +159,32 @@ namespace QS3D.BricsCAD.V25
                     }
                 }
 
-                document.Editor.WriteMessage("\n  BrxMgd: " + brxVersion + " • TD_Mgd: " + tdVersion);
-                document.Editor.WriteMessage("\n  Runtime: " + (expectedRuntime ? ExpectedRuntimeLabel : "NOT " + ExpectedRuntimeLabel) + " • " + (x64Runtime ? "x64" : "NOT x64"));
-                document.Editor.WriteMessage(hasProject
-                    ? "\n  Project: " + project.Elements.Count + " element(s) • " + project.Families.Count + " family/families"
-                    : "\n  Project: not loaded/persisted • runtime diagnostics remain read-only and do not create project state.");
+                document.Editor.WriteMessage("\n  BrxMgd version: " + brxVersion);
+                document.Editor.WriteMessage("\n  TD_Mgd version: " + tdVersion);
+                document.Editor.WriteMessage("\n  Runtime adapter: " + (expectedRuntime ? ExpectedRuntimeLabel : "NOT " + ExpectedRuntimeLabel));
+                document.Editor.WriteMessage("\n  Process architecture: " + (x64Runtime ? "x64" : "NOT x64"));
+                if (hasProject)
+                {
+                    document.Editor.WriteMessage("\n  Project state: AVAILABLE");
+                    document.Editor.WriteMessage("\n  Project source: " + (projectWasCached ? "LOADED in memory" : "PERSISTED sidecar loaded read-only"));
+                    document.Editor.WriteMessage("\n  Diagnostics access: READ-ONLY");
+                    document.Editor.WriteMessage("\n  Project elements: " + project.Elements.Count);
+                    document.Editor.WriteMessage("\n  Project families: " + project.Families.Count);
+                }
+                else
+                {
+                    document.Editor.WriteMessage("\n  Project state: UNAVAILABLE");
+                    document.Editor.WriteMessage("\n  Project source: NOT LOADED in memory; no PERSISTED sidecar found");
+                    document.Editor.WriteMessage("\n  Diagnostics access: READ-ONLY; no project state was created");
+                }
 
                 if (hasPackageMetadata)
                 {
-                    document.Editor.WriteMessage(
-                        "\n  Package metadata: product=" + (packageProductVersionMatches ? "OK" : "MISMATCH") +
-                        " • assembly=" + (packageAssemblyVersionMatches ? "OK" : "MISMATCH") +
-                        " • signature metadata=" + (signatureMetadataRecorded ? "recorded" : "not recorded"));
-                    document.Editor.WriteMessage(
-                        "\n  Package product: " + EmptyAsUnknown(metadata.ProductVersion) +
-                        " • package assembly: " + EmptyAsUnknown(metadata.AssemblyVersion));
+                    document.Editor.WriteMessage("\n  Package product identity: " + (packageProductVersionMatches ? "OK" : "MISMATCH"));
+                    document.Editor.WriteMessage("\n  Package assembly identity: " + (packageAssemblyVersionMatches ? "OK" : "MISMATCH"));
+                    document.Editor.WriteMessage("\n  Package signature metadata: " + (signatureMetadataRecorded ? "recorded" : "not recorded"));
+                    document.Editor.WriteMessage("\n  Package product version: " + EmptyAsUnknown(metadata.ProductVersion));
+                    document.Editor.WriteMessage("\n  Package assembly version: " + EmptyAsUnknown(metadata.AssemblyVersion));
                     if (!string.IsNullOrWhiteSpace(metadata.SignerThumbprint))
                         document.Editor.WriteMessage("\n  Recorded signer thumbprint: " + metadata.SignerThumbprint);
                     document.Editor.WriteMessage("\n  Authenticode: metadata only here; cryptographic publisher/timestamp verification belongs to the signed installer/release gate.");
