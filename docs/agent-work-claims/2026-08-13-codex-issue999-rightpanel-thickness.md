@@ -1,8 +1,9 @@
 # Work claim — V25 RightPanel separator Thickness compile fix
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-remote-issue999-rightpanel-thickness-20260813` (`/root/fix_rightpanel_thickness`)
 - Registered: `2026-08-13T15:22:59+07:00`
+- Completed: `2026-08-13T15:29:34+07:00`
 - Baseline main SHA: `a0953639f96c4ca51ab332798aab3a8d3223a93a`
 - Priority: GitHub issue `#999` blocked the exact-SHA V25 build needed by the already-reserved `LOCAL-004` qualification lane. Concurrent commit `a0953639f96c4ca51ab332798aab3a8d3223a93a` landed the one-line source correction while this claim was being prepared, so this reservation adopts that winning fix and owns only the missing focused regression, validation and issue closeout.
 
@@ -33,6 +34,21 @@ Guard the already-landed four-edge RightPanel separator margin so the invalid tw
 
 The completed RightPanel dark-host claim introduced the affected source and no longer reserves it. Concurrent unclaimed commit `a0953639f96c4ca51ab332798aab3a8d3223a93a` is retained verbatim as the source fix; this lane will not duplicate or rewrite it. Open PR `#975` changes `RightPanel.CompactShell.cs`, not this partial or its gate. The active `LOCAL-004` claim is the downstream runtime consumer and is explicitly excluded from this ordinary source-safe correction.
 
+## Result
+
+- Source fix retained without duplication: `a0953639f96c4ca51ab332798aab3a8d3223a93a` (`fix: use valid separator margin thickness`).
+- Claim-only PR `#1000` merged as `e4a0814f298c86fe1103a572d82c64a149c6e46c`.
+- Focused regression commit `fa3f530a9ea95ce220661acfb1a89fc437cc8219` merged by PR `#1002` as `2d636df43036eff03b6dacbf1dddbc9ed2b13be6`.
+- GitHub issue `#999` closed after exact-main validation.
+
+## Validation actually executed
+
+- Exact clean `main` SHA `2d636df43036eff03b6dacbf1dddbc9ed2b13be6` passed `scripts/preflight-rightpanel-dark-host-chrome.py`.
+- The aggregate auto-discovery runner passed all `730` feature preflight gates.
+- Installed-reference `QS3D.BricsCAD.V25` `Release|x64` build succeeded with `0 warnings / 0 errors` against `C:\Program Files\Bricsys\BricsCAD V25 en_US`; BricsCAD was not launched.
+- Final diff contains only the four-line focused static guard; no production source or `LOCAL-004` file was changed by this lane.
+- No GitHub Actions were dispatched, re-run or cancelled by this lane. No native runtime PASS is claimed.
+
 ## Completion condition
 
-The claim-first focused guard is merged normally to current `main` on top of the retained source-fix commit, the actually executed local validations are recorded without manufacturing runtime/CI evidence, issue `#999` is closed, and this claim is marked `COMPLETED` with exact SHAs.
+Satisfied: the claim-first focused guard is merged normally to current `main` on top of the retained source-fix commit, exact source/claim/regression merge SHAs and actual local validation are recorded, issue `#999` is closed, and no runtime/CI evidence is manufactured.
