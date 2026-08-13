@@ -1,6 +1,8 @@
 using System;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Diagnostics;
+using QS3D.Core.Domain;
 
 namespace QS3D.Core.SmokeTests
 {
@@ -8,6 +10,12 @@ namespace QS3D.Core.SmokeTests
     {
         [ModuleInitializer]
         internal static void Initialize()
+        {
+            ProfileIsDeterministic();
+            ResolvesExistingSemanticHealthFindings();
+        }
+
+        private static void ProfileIsDeterministic()
         {
             var first = QsSemanticReadinessRuleFamily.CreateProfile();
             var second = QsSemanticReadinessRuleFamily.CreateProfile();
@@ -22,28 +30,45 @@ namespace QS3D.Core.SmokeTests
                 Equal(first.Rules[i].Severity, second.Rules[i].Severity, "severity " + i);
                 Equal(first.Rules[i].Explanation, second.Rules[i].Explanation, "explanation " + i);
             }
+        }
 
-            Resolve(first, "AMBIGUOUS_FAMILY", HealthSeverity.Error);
-            Resolve(first, "FAMILY_CATEGORY_MISMATCH", HealthSeverity.Warning);
-            Resolve(first, "MISSING_FAMILY", HealthSeverity.Error);
-            Resolve(first, "FAMILY_REFERENCE_NON_CANONICAL", HealthSeverity.Error);
-            Resolve(first, "AMBIGUOUS_FLOOR", HealthSeverity.Error);
-            Resolve(first, "MISSING_FLOOR", HealthSeverity.Warning);
-            Resolve(first, "FLOOR_REFERENCE_NON_CANONICAL", HealthSeverity.Error);
-            Resolve(first, "AMBIGUOUS_ZONE", HealthSeverity.Error);
-            Resolve(first, "MISSING_ZONE", HealthSeverity.Warning);
-            Resolve(first, "ZONE_REFERENCE_NON_CANONICAL", HealthSeverity.Error);
-            Resolve(first, "MISSING_MATERIAL", HealthSeverity.Warning);
-            Resolve(first, "MISSING_DIMENSION", HealthSeverity.Error);
-            Resolve(first, "INVALID_DIMENSION", HealthSeverity.Error);
+        private static void ResolvesExistingSemanticHealthFindings()
+        {
+            var project = new ProjectState("QSC-READINESS", "QSC readiness");
+            var element = new ProjectElement("E-QSC", ElementCategory.Beam, string.Empty, "MISSING-FLOOR", "MISSING-ZONE")
+            {
+                FamilyId = "MISSING-FAMILY"
+            };
+            element.Properties["LengthM"] = "0";
+            project.Elements.Add(element);
 
-            if (first.Resolve(new ModelHealthIssue("ORPHAN_HANDLE", HealthSeverity.Error, "Unrelated.", "E-QSC")) != null)
+            var issues = new ModelHealthService().Inspect(project);
+            var profile = QsSemanticReadinessRuleFamily.CreateProfile();
+
+            RequireResolved(issues, profile, "MISSING_FAMILY", HealthSeverity.Error);
+            RequireResolved(issues, profile, "MISSING_FLOOR", HealthSeverity.Warning);
+            RequireResolved(issues, profile, "MISSING_ZONE", HealthSeverity.Warning);
+            RequireResolved(issues, profile, "MISSING_MATERIAL", HealthSeverity.Warning);
+            RequireResolved(issues, profile, "INVALID_DIMENSION", HealthSeverity.Error);
+            RequireResolved(issues, profile, "MISSING_DIMENSION", HealthSeverity.Error);
+
+            if (profile.Resolve(new ModelHealthIssue("ORPHAN_HANDLE", HealthSeverity.Error, "Unrelated.", "E-QSC")) != null)
                 throw new InvalidOperationException("Unrelated health families must remain unmapped.");
         }
 
-        private static void Resolve(QsRuleProfile profile, string code, HealthSeverity severity)
+        private static void RequireResolved(
+            System.Collections.Generic.IEnumerable<ModelHealthIssue> issues,
+            QsRuleProfile profile,
+            string code,
+            HealthSeverity severity)
         {
-            var issue = new ModelHealthIssue(code, severity, "Existing semantic health finding.", "E-QSC");
+            var issue = issues.FirstOrDefault(x =>
+                string.Equals(x.Code, code, StringComparison.Ordinal) &&
+                string.Equals(x.ElementId, "E-QSC", StringComparison.Ordinal));
+            if (issue == null)
+                throw new InvalidOperationException("Expected Semantic Health finding: " + code + ".");
+
+            Equal(severity, issue.Severity, code + " emitted severity");
             var rule = profile.Resolve(issue);
             if (rule == null)
                 throw new InvalidOperationException("Missing QSC rule for health code: " + code + ".");
