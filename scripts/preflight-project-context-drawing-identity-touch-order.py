@@ -36,40 +36,47 @@ else:
 
     if sync:
         noop = "if (SameDrawingName(storedPath, drawing)) return;"
-        touch = "project.Touch();"
         assign_path = "project.DrawingPath = drawing;"
-        for token in (noop, touch, assign_path):
+        for token in (noop, assign_path):
             if token not in sync:
                 errors.append("SyncDrawingIdentity missing contract token: " + token)
-        positions = [sync.find(noop), sync.find(touch), sync.find(assign_path)]
+        positions = [sync.find(noop), sync.find(assign_path)]
         if all(position >= 0 for position in positions) and positions != sorted(positions):
-            errors.append("SyncDrawingIdentity must no-op first, then Touch, then assign DrawingPath")
-        if "project.DrawingPath = drawing;\n            project.Touch();" in sync:
-            errors.append("SyncDrawingIdentity regressed to mutating DrawingPath before Touch")
+            errors.append("SyncDrawingIdentity must no-op before assigning DrawingPath")
+        if "project.Touch();" in sync:
+            errors.append("SyncDrawingIdentity must not add an adapter-owned revision before the persisted DrawingPath scalar")
 
     if adopt:
         snapshot = "var elements = project.Elements.ToList();"
         null_guard = "if (elements.Any(x => x == null))"
         null_error = 'throw new InvalidOperationException("Project contains a null element entry.");'
-        touch = "project.Touch();"
+        path_changed = "var pathChanged = !string.Equals(project.DrawingPath, drawing, StringComparison.Ordinal);"
+        fingerprint_changed = "var fingerprintChanged = !string.Equals(project.DrawingFingerprint, fingerprint, StringComparison.Ordinal);"
+        scalar_changes = "var scalarChanges = (pathChanged ? 1L : 0L) + (fingerprintChanged ? 1L : 0L);"
+        capacity = "_ = checked(project.ChangeVersion + scalarChanges);"
         assign_path = "project.DrawingPath = drawing;"
         assign_fingerprint = "project.DrawingFingerprint = fingerprint;"
         foreach_snapshot = "foreach (var element in elements)"
-        required = (snapshot, null_guard, null_error, touch, assign_path, assign_fingerprint, foreach_snapshot)
+        required = (
+            snapshot,
+            null_guard,
+            null_error,
+            path_changed,
+            fingerprint_changed,
+            scalar_changes,
+            capacity,
+            assign_path,
+            assign_fingerprint,
+            foreach_snapshot,
+        )
         for token in required:
             if token not in adopt:
                 errors.append("AdoptDrawingIdentity missing contract token: " + token)
-        positions = [
-            adopt.find(snapshot),
-            adopt.find(null_guard),
-            adopt.find(null_error),
-            adopt.find(touch),
-            adopt.find(assign_path),
-            adopt.find(assign_fingerprint),
-            adopt.find(foreach_snapshot),
-        ]
+        positions = [adopt.find(token) for token in required]
         if all(position >= 0 for position in positions) and positions != sorted(positions):
-            errors.append("AdoptDrawingIdentity must snapshot/validate elements and Touch before identity mutation")
+            errors.append("AdoptDrawingIdentity must validate the element snapshot and scalar revision capacity before identity mutation")
+        if "project.Touch();" in adopt:
+            errors.append("AdoptDrawingIdentity must not add an adapter-owned revision before persisted scalar assignments")
         if "foreach (var element in project.Elements)" in adopt:
             errors.append("AdoptDrawingIdentity must mutate the prevalidated element snapshot")
 
@@ -77,14 +84,20 @@ if not PROJECT_STATE.is_file():
     errors.append("missing ProjectState source")
 else:
     project_state = PROJECT_STATE.read_text(encoding="utf-8")
-    if "var nextChangeVersion = checked(ChangeVersion + 1L);" not in project_state:
-        errors.append("ProjectState.Touch no longer exposes the checked version-advance contract pinned by this gate")
+    required_state = (
+        "set => SetPersistedScalar(ref _drawingPath, value);",
+        "set => SetPersistedScalar(ref _drawingFingerprint, value);",
+        "var nextChangeVersion = checked(ChangeVersion + 1L);",
+    )
+    for token in required_state:
+        if token not in project_state:
+            errors.append("ProjectState missing scalar-owned revision contract token: " + token)
 
-print("QS3D project-context drawing-identity touch-order preflight")
+print("QS3D project-context drawing-identity scalar-revision preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: drawing identity synchronization validates first and advances project persistence state before mutation.")
+print("PASS: drawing identity synchronization validates first, preflights exact scalar revision capacity, and relies on persisted drawing scalars as the only project revision owners.")
