@@ -37,29 +37,45 @@
                 BorderThickness="0,0,0,1" Padding="8">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Top">
-                    <DockPanel>
-                        <Grid>
+                    <Grid x:Name="DrawingHeaderGrid">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0" MinWidth="0" Margin="0,0,8,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="3"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Border Grid.Column="0" Background="{StaticResource LuxuryBrush}"
                                     CornerRadius="2" Margin="0,1,0,1"/>
-                            <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                <TextBlock Text="QUẢN LÝ BẢN VẼ" Style="{StaticResource PanelTitle}" Margin="0"/>
-                                <TextBlock Text="Xref / Drawing" Style="{StaticResource Caption}" Margin="0,2,0,0"/>
+                            <StackPanel Grid.Column="1" MinWidth="0" Margin="8,0,0,0">
+                                <TextBlock Text="QUẢN LÝ BẢN VẼ"
+                                           Style="{StaticResource PanelTitle}"
+                                           Margin="0"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="Xref / Drawing"
+                                           Style="{StaticResource Caption}"
+                                           Margin="0,2,0,0"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
                         </Grid>
-                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center">
                             <Border Style="{StaticResource RightBadge}" VerticalAlignment="Center">
                                 <TextBlock Text="{Binding Drawings.Count, StringFormat={}{0} bản vẽ}"
-                                           Style="{StaticResource Caption}"/>
+                                           Style="{StaticResource Caption}"
+                                           TextWrapping="NoWrap"/>
                             </Border>
                             <Button Content="Bỏ chọn" ToolTip="Bỏ chọn Xref và selection CAD"
                                     Click="OnClearDrawingSelectionClick"
                                     Style="{StaticResource DenseButton}"/>
                         </StackPanel>
-                    </DockPanel>
+                    </Grid>
 
                     <Border Style="{StaticResource RightToolbarBand}" Margin="0,7,0,5">
                         <WrapPanel>
@@ -140,30 +156,45 @@
                 BorderThickness="0,1,0,0" Padding="8">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Top">
-                    <DockPanel>
-                        <Grid>
+                    <Grid x:Name="LayerHeaderGrid">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0" MinWidth="0" Margin="0,0,8,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="3"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Border Grid.Column="0" Background="{StaticResource LuxuryBrush}"
                                     CornerRadius="2" Margin="0,1,0,1"/>
-                            <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                <TextBlock Text="QUẢN LÝ LỚP" Style="{StaticResource PanelTitle}" Margin="0"/>
+                            <StackPanel Grid.Column="1" MinWidth="0" Margin="8,0,0,0">
+                                <TextBlock Text="QUẢN LÝ LỚP"
+                                           Style="{StaticResource PanelTitle}"
+                                           Margin="0"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"/>
                                 <TextBlock Text="Hiện / Ẩn / Khóa / Màu native"
-                                           Style="{StaticResource Caption}" Margin="0,2,0,0"/>
+                                           Style="{StaticResource Caption}"
+                                           Margin="0,2,0,0"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
                         </Grid>
-                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center">
                             <Border Style="{StaticResource RightBadge}" VerticalAlignment="Center">
                                 <TextBlock Text="{Binding LayerCountText}"
                                            Style="{StaticResource Caption}"
+                                           TextWrapping="NoWrap"
                                            ToolTip="Số lớp đang hiển thị / tổng số lớp"/>
                             </Border>
                             <Button Content="Làm mới" Click="OnRefreshClick"
                                     Style="{StaticResource DenseButton}"/>
                         </StackPanel>
-                    </DockPanel>
+                    </Grid>
 
                     <TextBlock Text="Tick đầu = hiện/ẩn; ô khóa = trạng thái native. Ctrl/Shift để chọn nhiều lớp."
                                Style="{StaticResource Caption}" TextWrapping="Wrap"
