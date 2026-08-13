@@ -90,12 +90,27 @@
                             <Button Content="Đặt Family đang chọn làm active"
                                     Click="OnActivateClick" Style="{StaticResource AccentButton}"
                                     Margin="0,7,0,9"/>
-                            <DockPanel>
-                                <TextBlock Text="Instance tham chiếu" Style="{StaticResource Caption}"/>
-                                <TextBlock x:Name="ReferenceCountText" DockPanel.Dock="Right"
+                            <Grid x:Name="FamilyReferenceSummaryGrid">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Text="Instance tham chiếu"
+                                           Style="{StaticResource Caption}"
+                                           MinWidth="0"
+                                           Margin="0,0,8,0"
+                                           VerticalAlignment="Center"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="ReferenceCountText"
+                                           Grid.Column="1"
                                            Text="0" FontSize="16" FontWeight="SemiBold"
-                                           Foreground="{StaticResource AccentHoverBrush}"/>
-                            </DockPanel>
+                                           Foreground="{StaticResource AccentHoverBrush}"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           TextWrapping="NoWrap"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -131,11 +146,26 @@
 
                     <Border Style="{StaticResource ManagerCard}" Margin="0,0,0,10">
                         <StackPanel>
-                            <DockPanel>
-                                <TextBlock Text="PROPERTY CỦA FAMILY" Style="{StaticResource PanelTitle}"/>
-                                <TextBlock DockPanel.Dock="Right" Text="KEY / VALUE"
-                                           Foreground="{StaticResource LuxuryBrush}" FontSize="9" FontWeight="SemiBold"/>
-                            </DockPanel>
+                            <Grid x:Name="FamilyPropertyHeaderGrid">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Text="PROPERTY CỦA FAMILY"
+                                           Style="{StaticResource PanelTitle}"
+                                           MinWidth="0"
+                                           Margin="0,0,8,0"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Grid.Column="1"
+                                           Text="KEY / VALUE"
+                                           Foreground="{StaticResource LuxuryBrush}"
+                                           FontSize="9" FontWeight="SemiBold"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           TextWrapping="NoWrap"/>
+                            </Grid>
                             <ListView x:Name="PropertyList" Height="270"
                                       SelectionChanged="OnPropertySelectionChanged">
                                 <ListView.View>
