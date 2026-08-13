@@ -71,6 +71,11 @@ namespace QS3D.Core.SmokeTests
                 Category = HostileText,
                 FamilyName = HostileText,
                 Material = HostileText,
+                WidthM = 0.9d,
+                HeightM = 2.1d,
+                SillHeightM = 0d,
+                ThicknessM = 0.1d,
+                OpeningAreaM2 = 1.89d,
                 Count = 1,
                 HostCount = 1
             };
