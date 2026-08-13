@@ -14,7 +14,7 @@ namespace QS3D.Core.Reporting
         {
             value = Finite(value, label);
             if (value < 0d) throw new InvalidOperationException("Quantity report value cannot be negative: " + label);
-            return value;
+            return value == 0d ? 0d : value;
         }
 
         public static double Add(double current, double value, string label)
