@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI.ViewModels;
 using QS3D.Core.Domain;
 using QS3D.Core.Model;
@@ -46,42 +45,25 @@ namespace QS3D.BricsCAD.V25.UI
                 return false;
             }
 
-            var matchesByHandle = requestedHandles.ToDictionary(
-                handle => handle,
-                _ => new List<ProjectElement>(),
-                StringComparer.OrdinalIgnoreCase);
-            foreach (var element in project.Elements)
+            IReadOnlyList<ProjectElement> selected;
+            try
             {
-                foreach (var alias in SemanticReferenceHandles.GetSelectionAliases(element))
-                {
-                    var normalized = (alias ?? string.Empty).Trim();
-                    if (normalized.Length == 0 || !matchesByHandle.TryGetValue(normalized, out var matches)) continue;
-                    if (!matches.Any(existing => string.Equals(existing.Id, element.Id, StringComparison.OrdinalIgnoreCase)))
-                        matches.Add(element);
-                }
+                selected = SemanticHandleOwnershipResolver.Resolve(project, rawHandles);
+            }
+            catch (InvalidOperationException ex)
+            {
+                error = "Không thể xác định semantic ownership an toàn; Property Inspector đã fail-closed: " + ex.Message;
+                return false;
             }
 
-            var selected = new List<ProjectElement>(rawHandles.Length);
-            var selectedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var handle in rawHandles)
+            // Workspace intentionally requires one distinct semantic owner for every selected
+            // CAD reference. The canonical resolver ignores unknown objects and collapses two
+            // panel/frame/source references owned by the same semantic element, so either case
+            // is detected by this exact cardinality check without rebuilding an alias index.
+            if (selected.Count != rawHandles.Length)
             {
-                var matches = matchesByHandle[handle];
-                if (matches.Count == 0)
-                {
-                    error = "Selection có đối tượng CAD chưa gắn semantic QS3D; Inspector không trộn semantic và non-semantic.";
-                    return false;
-                }
-                if (matches.Count != 1)
-                {
-                    error = "CAD handle " + handle + " khớp nhiều cấu kiện semantic; Property Inspector đã fail-closed.";
-                    return false;
-                }
-                if (!selectedIds.Add(matches[0].Id))
-                {
-                    error = "Selection chứa nhiều CAD reference của cùng một cấu kiện semantic; Property Inspector đã fail-closed.";
-                    return false;
-                }
-                selected.Add(matches[0]);
+                error = "Selection có đối tượng CAD chưa gắn semantic QS3D hoặc nhiều CAD reference của cùng một cấu kiện; Property Inspector đã fail-closed.";
+                return false;
             }
 
             elements = selected;
