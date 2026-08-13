@@ -232,6 +232,19 @@ def main(argv=None):
         return 2
 
     try:
+        source_identity = source.resolve()
+        destination_identity = destination.resolve()
+        aliases_input = source_identity == destination_identity
+        if not aliases_input and destination.exists():
+            aliases_input = source.samefile(destination)
+    except OSError as exc:
+        print(f"ERROR: could not resolve qualification input/output paths safely: {exc}", file=sys.stderr)
+        return 2
+    if aliases_input:
+        print("ERROR: sanitized summary output must not alias the input qualification report.", file=sys.stderr)
+        return 2
+
+    try:
         report = json.loads(source.read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError) as exc:
         print(f"ERROR: could not read qualification report: {exc}", file=sys.stderr)
