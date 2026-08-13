@@ -13,7 +13,7 @@ else:
     required = (
         'CommandMethod("QS3DRUNTIMECHECK"',
         "signatureMetadataRecorded",
-        "signature metadata=",
+        "Package signature metadata:",
         "Recorded signer thumbprint:",
         "Authenticode: metadata only here; cryptographic publisher/timestamp verification belongs to the signed installer/release gate.",
     )
