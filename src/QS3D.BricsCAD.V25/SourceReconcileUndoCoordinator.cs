@@ -550,24 +550,22 @@ namespace QS3D.BricsCAD.V25
                     if (!history.Entries.TryGetValue(nativeRevision, out targetEntry) ||
                         !history.Entries.TryGetValue(history.CurrentRevision, out currentEntry))
                     {
-                        history.Desynchronized = true;
                         throw new InvalidOperationException(
-                            "Source Reconcile native Undo reached a revision that is not available in this plugin session. Reload the project before further mutation.");
+                            "Source Reconcile native Undo reached a revision that is not available in this plugin session. Redo the native change or reload before further mutation.");
                     }
                 }
 
                 if (!ProjectContextCoordinator.TryGetCached(document, out var project) ||
                     !ReferenceEquals(project, history.Project) ||
                     !string.Equals(project.ProjectId, history.ProjectId, StringComparison.Ordinal))
-                    throw MarkDesynchronized(history,
-                        "Source Reconcile native Undo cannot target a missing or replaced canonical project. Reload the project before further mutation.");
+                    throw new InvalidOperationException(
+                        "Source Reconcile native Undo cannot target a missing or replaced canonical project. Redo the native change or reload before further mutation.");
 
                 try { ProjectContextCoordinator.RequireBackingStoreUnchanged(document, project, "Source Reconcile native Undo"); }
                 catch (Exception backingStoreError)
                 {
-                    throw MarkDesynchronized(
-                        history,
-                        "Source Reconcile native Undo was refused because the project backing store changed. Reload before continuing.",
+                    throw new InvalidOperationException(
+                        "Source Reconcile native Undo was refused because the project backing store changed. Redo the native change or reload before continuing.",
                         backingStoreError);
                 }
                 if (!currentEntry.Stamp.Matches(project))
@@ -589,14 +587,26 @@ namespace QS3D.BricsCAD.V25
                 }
                 catch (Exception restoreError)
                 {
-                    try { restoreRollback.Restore(project); }
+                    try
+                    {
+                        restoreRollback.Restore(project);
+                        if (!currentEntry.Stamp.Matches(project))
+                            throw new InvalidOperationException(
+                                "Recovered Source Reconcile semantic state does not match its current revision.");
+                    }
                     catch (Exception rollbackError)
                     {
                         throw MarkDesynchronized(history,
                             "Source Reconcile semantic Undo restore and recovery both failed.",
                             new AggregateException(restoreError, rollbackError));
                     }
-                    throw MarkDesynchronized(history, "Source Reconcile semantic Undo restore failed.", restoreError);
+                    // Successful recovery restored the canonical project to its
+                    // exact pre-observer snapshot. Keep CurrentRevision unchanged:
+                    // the live marker mismatch still blocks later mutation, but
+                    // returning the marker to CurrentRevision permits safe retry.
+                    throw new InvalidOperationException(
+                        "Source Reconcile semantic Undo restore failed and was recovered. Redo the native change or reload before continuing.",
+                        restoreError);
                 }
 
                 lock (Gate)
