@@ -257,7 +257,14 @@ namespace QS3D.BricsCAD.V25
             Execute("select_sources_final", () =>
             {
                 var context = ContextA();
-                SelectSources(context.Document, RequireOwners(context.Document, context.Project, State(context)));
+                var state = State(context);
+                var owners = RequireOwners(context.Document, context.Project, state);
+                state.FinalBeforeProjectDigest = ProjectDigest(context.Project);
+                state.FinalBeforeChangeVersion = context.Project.ChangeVersion;
+                state.FinalBeforeAuditCount = context.Project.AuditEvents.Count;
+                state.FinalBeforeUndoDiagnostic = SourceReconcileUndoCoordinator.CaptureSanitizedState(context.Document, context.Project);
+                SelectSources(context.Document, owners);
+                state.FinalSelectionClass = ClassifyFinalSelection(context.Document, owners);
             });
         }
 
@@ -271,8 +278,31 @@ namespace QS3D.BricsCAD.V25
                 var owners = RequireOwners(context.Document, context.Project, state);
                 var before = state.BeforeForcedFailure ?? throw new InvalidOperationException("LOCAL-004 pre-final state is missing.");
                 var current = Capture(context.Document, context.Project, owners);
-                RequireSemanticMatchesSources(context.Document, owners);
-                RequireNoGenerated(context.Document, current, before.GeneratedHandles, "final reconcile");
+                state.FinalOwnerMatchClass = ClassifyOwnerMatches(context.Document, owners);
+                state.FinalGeneratedState = ClassifyGeneratedState(context.Document, before, current);
+                state.FinalProjectState = string.Equals(
+                    state.FinalBeforeProjectDigest,
+                    current.ProjectDigest,
+                    StringComparison.Ordinal) ? "UNCHANGED" : "CHANGED";
+                state.FinalRevisionState = ClassifyRevisionState(
+                    state.FinalBeforeChangeVersion,
+                    state.FinalBeforeAuditCount,
+                    context.Project.ChangeVersion,
+                    context.Project.AuditEvents.Count);
+                var beforeUndo = state.FinalBeforeUndoDiagnostic
+                    ?? throw new InvalidOperationException("LOCAL-004 final Undo diagnostic baseline is missing.");
+                var afterUndo = SourceReconcileUndoCoordinator.CaptureSanitizedState(context.Document, context.Project);
+                state.FinalNativeMarkerState = afterUndo.CompareMarkerTo(beforeUndo);
+                state.FinalHistoryBeforeState = beforeUndo.HistoryState;
+                state.FinalHistoryAfterState = afterUndo.HistoryState;
+                state.FinalHistoryEntryBeforeClass = beforeUndo.EntryClass;
+                state.FinalHistoryEntryAfterClass = afterUndo.EntryClass;
+                state.FinalDiagnosticsCaptured = true;
+
+                if (!string.Equals(state.FinalOwnerMatchClass, "BOTH", StringComparison.Ordinal))
+                    throw new ProbeFailure("SEMANTIC_SOURCE_MISMATCH");
+                if (!string.Equals(state.FinalGeneratedState, "REMOVED_ALL", StringComparison.Ordinal))
+                    throw new InvalidOperationException("LOCAL-004 final reconcile retained stale generated output.");
                 if (!string.Equals(current.SourceDigest, before.SourceDigest, StringComparison.Ordinal))
                     throw new InvalidOperationException("LOCAL-004 final reconcile changed user source geometry.");
                 state.BeforeFinalSync = before;
@@ -351,7 +381,7 @@ namespace QS3D.BricsCAD.V25
                     "generated_replacement_verified=true",
                     "undo_coherent=" + Boolean(state.UndoCoherent),
                     "redo_coherent=" + Boolean(state.RedoCoherent)
-                });
+                }.Concat(FinalDiagnosticLines(state)));
             });
         }
 
@@ -473,6 +503,22 @@ namespace QS3D.BricsCAD.V25
         private static void SelectSources(Document document, Owners owners) =>
             SelectHandles(document, owners.Line.SourceHandles.Concat(owners.Polyline.SourceHandles));
 
+        private static string ClassifyFinalSelection(Document document, Owners owners)
+        {
+            var selected = document.Editor.SelectImplied();
+            if (selected.Status != Teigha.EditorInput.PromptStatus.OK || selected.Value == null)
+                return "OTHER_OR_MISSING";
+            var ids = selected.Value.GetObjectIds();
+            var line = CadHandleService.Resolve(document, owners.Line.SourceHandles).SingleOrDefault();
+            var polyline = CadHandleService.Resolve(document, owners.Polyline.SourceHandles).SingleOrDefault();
+            var hasLine = !line.IsNull && ids.Contains(line);
+            var hasPolyline = !polyline.IsNull && ids.Contains(polyline);
+            if (ids.Length == 2 && hasLine && hasPolyline) return "BOTH_SOURCES";
+            if (ids.Length == 1 && hasLine) return "LINE_ONLY";
+            if (ids.Length == 1 && hasPolyline) return "POLY_ONLY";
+            return "OTHER_OR_MISSING";
+        }
+
         private static void SelectHandles(Document document, IEnumerable<string> handles)
         {
             var values = handles.ToList();
@@ -578,23 +624,58 @@ namespace QS3D.BricsCAD.V25
         {
             foreach (var owner in owners.All)
             {
+                if (!SemanticMatchesSource(document, owner))
+                    throw new ProbeFailure("SEMANTIC_SOURCE_MISMATCH");
+            }
+        }
+
+        private static string ClassifyOwnerMatches(Document document, Owners owners)
+        {
+            var line = SemanticMatchesSource(document, owners.Line);
+            var polyline = SemanticMatchesSource(document, owners.Polyline);
+            if (line && polyline) return "BOTH";
+            if (line) return "LINE_ONLY";
+            if (polyline) return "POLY_ONLY";
+            return "NONE";
+        }
+
+        private static bool SemanticMatchesSource(Document document, ProjectElement owner)
+        {
+            try
+            {
                 var ids = CadHandleService.Resolve(document, owner.SourceHandles);
-                if (ids.Count != 1) throw new ProbeFailure("SOURCE_MISSING");
+                if (ids.Count != 1) return false;
                 double drawingLength;
                 using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
                 {
-                    var curve = transaction.GetObject(ids[0], OpenMode.ForRead, false) as Curve
-                        ?? throw new ProbeFailure("SOURCE_TYPE_REJECTED");
+                    var curve = transaction.GetObject(ids[0], OpenMode.ForRead, false) as Curve;
+                    if (curve == null) return false;
                     drawingLength = curve.GetDistanceAtParameter(curve.EndParam) - curve.GetDistanceAtParameter(curve.StartParam);
                 }
                 if (!owner.Properties.TryGetValue("LengthM", out var raw) ||
                     !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var semantic) ||
-                    !Finite(semantic))
-                    throw new ProbeFailure("SEMANTIC_LENGTH_REJECTED");
+                    !Finite(semantic)) return false;
                 var live = CadGeometryGuard.ToMeters(document, drawingLength, "LOCAL-004 source length");
-                if (Math.Abs(live - semantic) > 1e-9d)
-                    throw new ProbeFailure("SEMANTIC_SOURCE_MISMATCH");
+                return Math.Abs(live - semantic) <= 1e-9d;
             }
+            catch { return false; }
+        }
+
+        private static string ClassifyGeneratedState(Document document, Snapshot before, Snapshot after)
+        {
+            var livePrevious = CadHandleService.GetLiveHandles(document, before.GeneratedHandles).Count;
+            if (after.GeneratedHandles.Count == 0 && livePrevious == 0) return "REMOVED_ALL";
+            if (after.GeneratedHandles.SequenceEqual(before.GeneratedHandles, StringComparer.OrdinalIgnoreCase) &&
+                livePrevious == before.GeneratedHandles.Count) return "RETAINED_ALL";
+            return "PARTIAL";
+        }
+
+        private static string ClassifyRevisionState(long beforeVersion, int beforeAudit, long afterVersion, int afterAudit)
+        {
+            if (afterVersion == beforeVersion && afterAudit == beforeAudit) return "UNCHANGED";
+            if (afterVersion >= beforeVersion && afterAudit >= beforeAudit &&
+                (afterVersion > beforeVersion || afterAudit > beforeAudit)) return "ADVANCED";
+            return "REGRESSED_OR_RESET";
         }
 
         private static string ProjectDigest(ProjectState project)
@@ -707,15 +788,34 @@ namespace QS3D.BricsCAD.V25
                 if (!Guid.TryParseExact(nonce, "N", out _)) return;
                 var path = RequiredPath(ResultVariable, ResultFileName);
                 if (File.Exists(path)) return;
-                WriteMarkerAtomic(path, new[]
+                var lines = new List<string>
                 {
                     "status=FAIL", "command=QS3DSRTREOPEN", "nonce=" + nonce, "schema=" + Schema,
                     "qualification_boundary=LOCAL_004_ONLY", "production_local004_qualified=false",
                     "error_code=SOURCE_RECONCILE_RUNTIME_FAILED", "failure_phase=" + OneLine(phase),
                     "failure_code=" + OneLine(code)
-                });
+                };
+                SequenceState? state;
+                lock (Sync) state = _state;
+                if (state != null && state.FinalDiagnosticsCaptured)
+                    lines.AddRange(FinalDiagnosticLines(state));
+                WriteMarkerAtomic(path, lines);
             }
             catch { }
+        }
+
+        private static IEnumerable<string> FinalDiagnosticLines(SequenceState state)
+        {
+            yield return "final_selection_class=" + state.FinalSelectionClass;
+            yield return "final_owner_match_class=" + state.FinalOwnerMatchClass;
+            yield return "final_generated_state=" + state.FinalGeneratedState;
+            yield return "final_project_state=" + state.FinalProjectState;
+            yield return "final_revision_state=" + state.FinalRevisionState;
+            yield return "final_native_marker_state=" + state.FinalNativeMarkerState;
+            yield return "final_history_before_state=" + state.FinalHistoryBeforeState;
+            yield return "final_history_after_state=" + state.FinalHistoryAfterState;
+            yield return "final_history_entry_before_class=" + state.FinalHistoryEntryBeforeClass;
+            yield return "final_history_entry_after_class=" + state.FinalHistoryEntryAfterClass;
         }
 
         private static void WriteMarkerAtomic(string path, IEnumerable<string> lines)
@@ -811,6 +911,21 @@ namespace QS3D.BricsCAD.V25
             public Snapshot? BeforeFinalSync { get; set; }
             public Snapshot? AfterFinalSync { get; set; }
             public Snapshot? FinalRebuild { get; set; }
+            public string FinalBeforeProjectDigest { get; set; } = string.Empty;
+            public long FinalBeforeChangeVersion { get; set; }
+            public int FinalBeforeAuditCount { get; set; }
+            public SourceReconcileUndoCoordinator.SanitizedDiagnosticSnapshot? FinalBeforeUndoDiagnostic { get; set; }
+            public string FinalSelectionClass { get; set; } = "OTHER_OR_MISSING";
+            public string FinalOwnerMatchClass { get; set; } = "NONE";
+            public string FinalGeneratedState { get; set; } = "PARTIAL";
+            public string FinalProjectState { get; set; } = "UNCHANGED";
+            public string FinalRevisionState { get; set; } = "UNCHANGED";
+            public string FinalNativeMarkerState { get; set; } = "MISSING_OR_INVALID";
+            public string FinalHistoryBeforeState { get; set; } = "NONE";
+            public string FinalHistoryAfterState { get; set; } = "NONE";
+            public string FinalHistoryEntryBeforeClass { get; set; } = "ONE";
+            public string FinalHistoryEntryAfterClass { get; set; } = "ONE";
+            public bool FinalDiagnosticsCaptured { get; set; }
             public bool ForcedRollbackVerified { get; set; }
             public bool GeneratedRefusalVerified { get; set; }
             public bool AmbiguousRefusalVerified { get; set; }
