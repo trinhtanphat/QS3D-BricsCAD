@@ -11,7 +11,8 @@ namespace QS3D.Core.Formulas
         public double Evaluate(string expression, IReadOnlyDictionary<string, double>? variables = null)
         {
             ValidateExpression(expression);
-            return new Parser(expression, NormalizeVariables(variables)).Parse();
+            var result = new Parser(expression, NormalizeVariables(variables)).Parse();
+            return result == 0d ? 0d : result;
         }
 
         public IReadOnlyCollection<string> GetReferencedVariables(string expression)
