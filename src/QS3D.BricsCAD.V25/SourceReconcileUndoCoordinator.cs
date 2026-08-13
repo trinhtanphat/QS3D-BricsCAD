@@ -30,24 +30,42 @@ namespace QS3D.BricsCAD.V25
         internal sealed class PendingTransition : IDisposable
         {
             private readonly Document _document;
+            private readonly Database _database;
+            private readonly Transaction _transaction;
+            private readonly BlockTableRecord _modelSpace;
             private readonly DocumentHistory _history;
             private readonly string _previousRevision;
             private readonly string _nextRevision;
-            private HistoryEntry? _previousNextEntry;
+            private readonly HistoryEntry _beforeEntry;
+            private readonly bool _rebase;
+            private readonly bool _registeredHistory;
+            private Dictionary<string, HistoryEntry>? _stagedEntries;
             private bool _staged;
             private bool _committed;
             private bool _disposed;
 
             internal PendingTransition(
                 Document document,
+                Database database,
+                Transaction transaction,
+                BlockTableRecord modelSpace,
                 DocumentHistory history,
                 string previousRevision,
-                string nextRevision)
+                string nextRevision,
+                HistoryEntry beforeEntry,
+                bool rebase,
+                bool registeredHistory)
             {
                 _document = document;
+                _database = database;
+                _transaction = transaction;
+                _modelSpace = modelSpace;
                 _history = history;
                 _previousRevision = previousRevision;
                 _nextRevision = nextRevision;
+                _beforeEntry = beforeEntry;
+                _rebase = rebase;
+                _registeredHistory = registeredHistory;
             }
 
             public void StageAfter(ProjectState project, ProjectStateSnapshot snapshot)
@@ -61,34 +79,63 @@ namespace QS3D.BricsCAD.V25
                     if (_staged) throw new InvalidOperationException("Source Reconcile Undo transition is already staged.");
                     RequireCurrentHistory(_document, _history, project, _previousRevision);
 
-                    _history.Entries.TryGetValue(_nextRevision, out _previousNextEntry);
-                    _history.Entries[_nextRevision] = new HistoryEntry(snapshot, ProjectRevisionStamp.Capture(project));
-                    _history.CurrentRevision = _nextRevision;
+                    var stagedEntries = _rebase
+                        ? new Dictionary<string, HistoryEntry>(StringComparer.Ordinal)
+                        : new Dictionary<string, HistoryEntry>(_history.Entries, StringComparer.Ordinal);
+                    if (_rebase) stagedEntries.Add(_previousRevision, _beforeEntry);
+                    if (stagedEntries.Count >= MaxSnapshotsPerDocument)
+                        throw new InvalidOperationException(
+                            "Source Reconcile Undo history reached its safe in-session limit. Save, close and reopen the drawing before reconciling again.");
+                    stagedEntries.Add(_nextRevision, new HistoryEntry(snapshot, ProjectRevisionStamp.Capture(project)));
+                    _stagedEntries = stagedEntries;
                     _staged = true;
+                }
+
+                // Every managed allocation and history validation is complete
+                // before touching the native marker. The staged dictionary is
+                // private until ConfirmCommitted publishes it after CAD commit.
+                using (var marker = new ResultBuffer(
+                    new TypedValue((int)DxfCode.ExtendedDataRegAppName, RegAppName),
+                    new TypedValue((int)DxfCode.ExtendedDataAsciiString, MarkerVersion),
+                    new TypedValue((int)DxfCode.ExtendedDataAsciiString, _nextRevision)))
+                {
+                    EnsureRegApp(_database, _transaction);
+                    _modelSpace.XData = marker;
                 }
             }
 
             public void ConfirmCommitted()
             {
                 // StageAfter performs every allocation/validation before the CAD
-                // commit. This post-commit acknowledgement is intentionally a
-                // no-allocation state flip so a valid native commit cannot be
-                // reported as failed by Undo bookkeeping.
-                _committed = true;
+                // commit. Publish the already-built dictionary only after the
+                // native marker and CAD changes have committed together.
+                lock (Gate)
+                {
+                    if (_disposed || !_staged || _stagedEntries == null) return;
+                    if (!Histories.TryGetValue(_document, out var current) || !ReferenceEquals(current, _history))
+                    {
+                        _history.Desynchronized = true;
+                        _committed = true;
+                        return;
+                    }
+                    _history.Publish(_stagedEntries, _nextRevision);
+                    _committed = true;
+                }
             }
 
             public void Dispose()
             {
                 if (_disposed) return;
                 _disposed = true;
-                if (!_staged || _committed) return;
+                if (_committed) return;
 
                 lock (Gate)
                 {
-                    if (!Histories.TryGetValue(_document, out var current) || !ReferenceEquals(current, _history)) return;
-                    if (_previousNextEntry == null) _history.Entries.Remove(_nextRevision);
-                    else _history.Entries[_nextRevision] = _previousNextEntry;
-                    _history.CurrentRevision = _previousRevision;
+                    if (_registeredHistory &&
+                        Histories.TryGetValue(_document, out var current) &&
+                        ReferenceEquals(current, _history) &&
+                        string.Equals(_history.CurrentRevision, _previousRevision, StringComparison.Ordinal))
+                        Histories.Remove(_document);
                 }
             }
 
@@ -113,8 +160,14 @@ namespace QS3D.BricsCAD.V25
             public string ProjectId { get; }
             public string CurrentRevision { get; set; }
             public bool Desynchronized { get; set; }
-            public Dictionary<string, HistoryEntry> Entries { get; } =
+            public Dictionary<string, HistoryEntry> Entries { get; private set; } =
                 new Dictionary<string, HistoryEntry>(StringComparer.Ordinal);
+
+            public void Publish(Dictionary<string, HistoryEntry> entries, string revision)
+            {
+                Entries = entries;
+                CurrentRevision = revision;
+            }
         }
 
         internal sealed class HistoryEntry
@@ -163,7 +216,7 @@ namespace QS3D.BricsCAD.V25
             lock (Gate)
             {
                 if (CommandEndedHandlers.ContainsKey(document)) return;
-                CommandEventHandler handler = (sender, args) => OnCommandEnded(document);
+                CommandEventHandler handler = (sender, args) => OnCommandEnded(document, args);
                 document.CommandEnded += handler;
                 CommandEndedHandlers.Add(document, handler);
             }
@@ -216,13 +269,18 @@ namespace QS3D.BricsCAD.V25
             var modelSpace = OpenModelSpace(document.Database, transaction, OpenMode.ForWrite);
             var previousRevision = ReadRevision(modelSpace);
             DocumentHistory history;
+            HistoryEntry beforeEntry;
+            var rebase = false;
+            var registeredHistory = false;
             lock (Gate)
             {
+                beforeEntry = new HistoryEntry(beforeSnapshot, ProjectRevisionStamp.Capture(project));
                 if (!Histories.TryGetValue(document, out history))
                 {
                     history = new DocumentHistory(document, project, previousRevision);
-                    history.Entries.Add(previousRevision, new HistoryEntry(beforeSnapshot, ProjectRevisionStamp.Capture(project)));
+                    history.Entries.Add(previousRevision, beforeEntry);
                     Histories.Add(document, history);
+                    registeredHistory = true;
                 }
                 else
                 {
@@ -235,29 +293,33 @@ namespace QS3D.BricsCAD.V25
                         // of this new reconcile preserves those intervening edits.
                         // Older native marker revisions deliberately become unknown
                         // and will fail closed instead of restoring a stale snapshot.
-                        history.Entries.Clear();
-                        history.Entries.Add(previousRevision, new HistoryEntry(beforeSnapshot, ProjectRevisionStamp.Capture(project)));
+                        rebase = true;
                     }
                 }
 
-                if (history.Entries.Count >= MaxSnapshotsPerDocument)
+                if (!rebase && history.Entries.Count >= MaxSnapshotsPerDocument)
                     throw new InvalidOperationException(
                         "Source Reconcile Undo history reached its safe in-session limit. Save, close and reopen the drawing before reconciling again.");
             }
 
             var nextRevision = "SRU1:" + Guid.NewGuid().ToString("N");
-            EnsureRegApp(document.Database, transaction);
-            using (var marker = new ResultBuffer(
-                new TypedValue((int)DxfCode.ExtendedDataRegAppName, RegAppName),
-                new TypedValue((int)DxfCode.ExtendedDataAsciiString, MarkerVersion),
-                new TypedValue((int)DxfCode.ExtendedDataAsciiString, nextRevision)))
-                modelSpace.XData = marker;
-
-            return new PendingTransition(document, history, previousRevision, nextRevision);
+            return new PendingTransition(
+                document,
+                document.Database,
+                transaction,
+                modelSpace,
+                history,
+                previousRevision,
+                nextRevision,
+                beforeEntry,
+                rebase,
+                registeredHistory);
         }
 
-        private static void OnCommandEnded(Document document)
+        private static void OnCommandEnded(Document document, CommandEventArgs args)
         {
+            if (!IsNativeUndoRedo(args?.GlobalCommandName)) return;
+
             DocumentHistory history;
             lock (Gate)
             {
@@ -338,6 +400,18 @@ namespace QS3D.BricsCAD.V25
             {
                 Report(document, "QS3D Source Reconcile Undo sync warning: " + error.Message);
             }
+        }
+
+        private static bool IsNativeUndoRedo(string? globalCommandName)
+        {
+            var normalized = (globalCommandName ?? string.Empty).Trim();
+            if (normalized.Length == 0) return false;
+            while (normalized.Length > 0 && (normalized[0] == '_' || normalized[0] == '.'))
+                normalized = normalized.Substring(1);
+            return string.Equals(normalized, "UNDO", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normalized, "U", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normalized, "REDO", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normalized, "MREDO", StringComparison.OrdinalIgnoreCase);
         }
 
         private static InvalidOperationException MarkDesynchronized(
