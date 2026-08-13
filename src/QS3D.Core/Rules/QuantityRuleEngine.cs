@@ -225,11 +225,17 @@ namespace QS3D.Core.Rules
 
         private static void AddNumeric(IEnumerable<KeyValuePair<string, string>> source, IDictionary<string, double> target)
         {
+            var normalizedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in source)
             {
                 if (string.IsNullOrWhiteSpace(item.Key)) continue;
                 if (double.TryParse(item.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && !double.IsNaN(value) && !double.IsInfinity(value))
-                    AddVariable(target, item.Key, value);
+                {
+                    var normalizedName = item.Key.Trim();
+                    if (!normalizedNames.Add(normalizedName))
+                        throw new InvalidOperationException("Rule variable property name conflicts after normalization: " + item.Key + ".");
+                    AddVariable(target, normalizedName, value);
+                }
             }
         }
 
