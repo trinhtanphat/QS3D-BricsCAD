@@ -9,11 +9,12 @@ errors = []
 store = ROOT / "src/QS3D.BricsCAD.V25/Services/UserUiLayoutStore.cs"
 palette = ROOT / "src/QS3D.BricsCAD.V25/PaletteCoordinator.cs"
 splitter = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.LayoutPersistence.cs"
+compact = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.CompactShell.cs"
 workspace = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml"
 runtime = ROOT / "scripts/test-wpf-palettes-runtime.ps1"
 right_panel = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml"
 
-for path in (store, palette, splitter, workspace, right_panel, runtime):
+for path in (store, palette, splitter, compact, workspace, right_panel, runtime):
     if not path.is_file(): errors.append("missing UI layout persistence file: " + str(path.relative_to(ROOT)))
 
 if store.is_file():
@@ -165,6 +166,35 @@ if splitter.is_file():
     if "AttachLayoutPersistence();" not in base_text:
         errors.append("Workspace canonical constructor must attach splitter persistence exactly once after InitializeComponent")
 
+if compact.is_file():
+    text = compact.read_text(encoding="utf-8")
+    for needle in (
+        "var root = WorkspaceContentRoot;",
+        "root.RowDefinitions[0].Height = new GridLength(40);",
+        "root.RowDefinitions[2].Height = new GridLength(30);",
+        "splitter.ShowsPreview = true;",
+        "splitter.Focusable = false;",
+        "WorkspacePanel.LayoutPersistence.cs",
+        "must not",
+    ):
+        if needle not in text:
+            errors.append("Workspace compact shell missing non-persisted presentation contract: " + needle)
+
+    for forbidden in (
+        "workspace.ColumnDefinitions[0].Width =",
+        "workspace.ColumnDefinitions[0].MinWidth =",
+        "workspace.ColumnDefinitions[2].Width =",
+        "workspace.ColumnDefinitions[2].MinWidth =",
+        "familyAndProperties.RowDefinitions[0].Height =",
+        "familyAndProperties.RowDefinitions[0].MinHeight =",
+        "roomAndSelection.RowDefinitions[0].Height =",
+        "roomAndSelection.RowDefinitions[0].MinHeight =",
+    ):
+        if forbidden in text:
+            errors.append(
+                "Workspace compact shell must not overwrite a pane dimension restored by layout persistence: " + forbidden
+            )
+
 if runtime.is_file():
     text = runtime.read_text(encoding="utf-8")
     for needle in (
@@ -186,4 +216,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: centralized palette minimums preserve a compact 460x420 Workspace host while normal WPF content composition provides 560-DIP horizontal overflow without replacing the UserControl template; layout persistence remains atomic/best-effort.")
+print("PASS: centralized palette minimums preserve compact Workspace overflow, the compact presentation layer leaves persisted splitter dimensions intact, and layout persistence remains atomic/best-effort.")
