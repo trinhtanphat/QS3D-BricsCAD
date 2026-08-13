@@ -101,12 +101,24 @@ def main():
     if "version.ToString(4)" in runtime:
         return fail("runtime diagnostics must not call Version.ToString(4) on a version that may omit revision")
 
+    ui_startup_tokens = (
+        "RibbonInitializationCoordinator.Start();",
+        "PaletteCoordinator.EnsureCreated();",
+    )
+    runtime_startup_tokens = ui_startup_tokens + (
+        "DocumentLifecycleCoordinator.Start();",
+        "RibbonBootstrapper.TryInitialize();",
+        "UpdateBootstrapper.Start();",
+    )
     for plugin_entry_path in PLUGIN_ENTRIES:
         plugin_entry = plugin_entry_path.read_text(encoding="utf-8")
         capture = plugin_entry.find("RuntimeDiagnosticsCommands.CaptureLoadedBinaryIdentity();")
-        palette = plugin_entry.find("PaletteCoordinator.EnsureCreated();")
-        if capture < 0 or palette < 0 or capture > palette:
-            return fail(f"{plugin_entry_path} must capture the loaded QS3D binary fingerprint before UI/runtime startup")
+        ui_positions = [plugin_entry.find(token) for token in ui_startup_tokens]
+        ui_positions = [position for position in ui_positions if position >= 0]
+        startup_positions = [plugin_entry.find(token) for token in runtime_startup_tokens]
+        startup_positions = [position for position in startup_positions if position >= 0]
+        if capture < 0 or not ui_positions or not startup_positions or capture > min(startup_positions):
+            return fail(f"{plugin_entry_path} must capture the loaded QS3D binary fingerprint before recognized UI/runtime startup")
 
     update_coordinator = UPDATE_COORDINATOR.read_text(encoding="utf-8")
     if "AssemblyInformationalVersionAttribute" not in update_coordinator or "SemanticReleaseVersion.FromRunningVersion(informational" not in update_coordinator:
