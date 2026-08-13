@@ -156,6 +156,8 @@ namespace QS3D.Core.SmokeTests
         private static void AutoRoomStaleOverflowDoesNotCommit()
         {
             var source = new ProjectState("P-AUTOROOM-STALE-ATOMIC", "Auto-room stale atomicity");
+            source.Floors.Add(new FloorDefinition("L1", "Level 1", 0d));
+            source.Zones.Add(new ZoneDefinition("Z1", "Zone 1"));
             var room = new ProjectElement("ROOM-1", ElementCategory.Room, string.Empty, "L1", "Z1");
             room.Properties[AutoRoomLifecycle.BoundaryModeKey] = AutoRoomLifecycle.BoundaryModeAutoNetwork;
             room.Properties[AutoRoomLifecycle.BoundaryStateKey] = AutoRoomLifecycle.BoundaryStateActive;
