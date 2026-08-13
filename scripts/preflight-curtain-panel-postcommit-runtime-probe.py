@@ -124,6 +124,8 @@ if RUNNER.is_file():
         if ('"' + command + '"') not in script: errors.append("P09 runner missing state-machine command: " + command)
     if script.count('"QS3DCURTAIN3D"') != 4:
         errors.append("P09 runner must invoke production QS3DCURTAIN3D for baseline, two injected cases and clean recovery")
+    if script.count('"QS3DCURTAIN3D", "P", ""') != 4:
+        errors.append("P09 runner must answer every production selection prompt from the exact previous source set")
     order = (
         "QS3DCURTAINP09PREPARE", "QS3DCURTAIN3D", "QS3DCURTAINP09BASELINE",
         "QS3DCURTAINP09ARMFINGERPRINT", "QS3DCURTAIN3D", "QS3DCURTAINP09VERIFYFINGERPRINT",
