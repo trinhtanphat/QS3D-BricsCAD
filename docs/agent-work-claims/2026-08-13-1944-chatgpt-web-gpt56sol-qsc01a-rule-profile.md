@@ -1,40 +1,44 @@
 # Work claim — QSC-01A declarative QS rule profile foundation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-gpt56sol-qsc01a-rule-profile-20260813-2007`
 - Registered: `2026-08-13T20:07:00+07:00`
+- Completed: `2026-08-13T20:10:00+07:00`
 - Baseline main SHA: `ec0617d6a350315b8891bc175e54c863149b3e15`
-- Priority: `QSC-01 / P2` — add the smallest declarative QS rule/profile contract on top of existing Semantic Health without creating a second validation engine
+- Priority: `QSC-01 / P2`
 
 ## Coordination
 
-This is a reactivation of the previously released QSC-01A reservation. No QsRuleProfile implementation commit or source file exists at reactivation time. Current Zone/Floor revision, release-125 guards, MAP-01B, CST-04 and local/runtime lanes are disjoint.
+This reactivated the previously released QSC-01A reservation after fresh searches confirmed no competing `QsRuleProfile` implementation. Concurrent Zone/Floor revision, release-125 guards, MAP-01B, CST-04 and local/runtime work stayed disjoint.
 
-## Confirmed source gap
+## Implemented contract
 
-Current `ModelHealthIssue` exposes only health `Code`, `Severity`, `Message`, and `ElementId`, while `ModelHealthService` and category-specific health services emit those issues directly. Current source/history contains no declarative QS rule/profile contract that can give stable rule identity, configured severity, explanation, deterministic profile membership, and an explicit mapping back to existing health issue codes. The QSC workstream explicitly requires this layer to build on existing Semantic Health rather than duplicate its validation logic.
+- Added immutable `QsRuleDefinition` metadata with stable `RuleId`, existing `HealthIssueCode`, configured `HealthSeverity`, and validated explanation.
+- Added immutable/detached `QsRuleProfile` with stable profile identity, deterministic rule ordering, read-only snapshot semantics, case-insensitive duplicate rule-id rejection, and ambiguous duplicate health-code rejection.
+- Added `TryResolve` / `Resolve` mapping from existing `ModelHealthIssue` strictly through its health issue code; message, element id and runtime issue severity do not create a second predicate engine. Unmapped issues remain explicitly unmapped.
+- Added fail-closed input validation for null collections/items, malformed/blank identities, undefined severity, and blank/control-character explanations.
+- Existing `ModelHealthService`, health predicates, project state, persistence, UI and native BricsCAD code remain unchanged.
 
-## Reserved scope
+## Regression
 
-- new `src/QS3D.Core/Diagnostics/QsRuleProfile.cs`
-- new focused smoke under `tests/QS3D.Core.SmokeTests/`
-- this claim file
+`tests/QS3D.Core.SmokeTests/QsRuleProfileSmoke.cs` is registered with `[ModuleInitializer]` and covers deterministic ordering, detached/read-only behavior, mapped/unmapped resolution, case-insensitive identity collisions, duplicate health-code ambiguity, null inputs, malformed identities, invalid severity and invalid explanations.
 
-## Intended bounded change
+## Evidence
 
-- add immutable `QsRuleDefinition` metadata with stable rule id, existing health issue code, configured severity, and human explanation;
-- add immutable/detached `QsRuleProfile` with stable profile id, deterministic rule ordering, read-only snapshot semantics, duplicate rule-id rejection, and ambiguous duplicate health-code rejection;
-- resolve a `ModelHealthIssue` to profile metadata strictly by its existing issue code; unmapped health issues remain explicitly unmapped;
-- validate malformed identities, undefined severity, blank/control-character explanations, null collections, and null rule entries visibly;
-- add focused smoke regressions for ordering/detachment/read-only behavior, mapped/unmapped resolution, duplicate ambiguity, and malformed input.
+- reactivation commit on branch: `430ebd1e1546a6d17115b4abc3b1e17242ab4767`
+- source commit on branch: `6c6cdd23818d58a1f202221f7eeba71989e47bb6`
+- regression commit on branch: `de9cb0fb045d2b770b93a087ff132732781c20fb`
+- PR: `#1060`
+- squash merge to `main`: `a628cb831125d8d77649d7e491d2ef4ebb09065e`
+- source readback blob before merge: `a01423ae30dbeb4f45bb2653b9d5f2944cd621b4`
+- smoke readback blob before merge: `1e96b9580d45deb626a4965a41dd7614a8e5a6c2`
+- PR changed-files readback: exactly this claim file, `src/QS3D.Core/Diagnostics/QsRuleProfile.cs`, and `tests/QS3D.Core.SmokeTests/QsRuleProfileSmoke.cs`.
+- PR head had no status checks/workflow runs; no CI-green claim is made.
 
-## Excluded scope
+## Validation actually performed
 
-- no edits to `ModelHealthService`, existing health services, `ModelHealthIssue`, or health-check business logic;
-- no new predicate/condition evaluator, no parallel model-validation engine, and no mutation of `ProjectState`;
-- no QSC-02 high-value rule families, QSC-03 autofix/preview, UI/report rendering, persistence/schema, MAP, CST, native BricsCAD, or cross-repo platform work;
-- no GitHub Actions dispatch, force-push, or unexecuted managed/native PASS claim.
+Exact GitHub source/test readback, changed-file verification, moving-main comparison, PR mergeability check, and squash merge with expected head SHA. No managed build/smoke process, GitHub Actions, adapter build, packaging or licensed BricsCAD runtime execution was performed; no execution PASS is claimed.
 
 ## Completion condition
 
-After overlap recheck, the new Core profile contract plus focused registered smoke are committed on the branch, exact remote files are read back/reconciled, the branch is merged to current `main`, and this claim is closed `COMPLETED` with only validation actually executed recorded.
+Satisfied for the bounded QSC-01A Core source/static lane: declarative QS rule/profile metadata now builds on existing Semantic Health without duplicating validation logic, focused registered regression is on `main`, and unavailable execution/native gates remain explicitly unclaimed.
