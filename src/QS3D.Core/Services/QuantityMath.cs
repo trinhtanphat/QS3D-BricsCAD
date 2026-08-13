@@ -31,7 +31,7 @@ namespace QS3D.Core.Services
             RequireNonNegativeFinite(right, label);
             var result = left - right;
             if (!IsFinite(result)) throw new OverflowException("Quantity subtraction overflow: " + label);
-            return Math.Max(0d, result);
+            return result > 0d ? result : 0d;
         }
 
         public static double Divide(double numerator, double denominator, string label)
@@ -62,7 +62,8 @@ namespace QS3D.Core.Services
         {
             if (!IsFinite(value) || !IsFinite(minimum) || !IsFinite(maximum)) throw new InvalidOperationException("Quantity clamp requires finite values: " + label);
             if (minimum > maximum) throw new InvalidOperationException("Quantity clamp bounds are invalid: " + label);
-            return Math.Max(minimum, Math.Min(maximum, value));
+            var result = Math.Max(minimum, Math.Min(maximum, value));
+            return result == 0d ? 0d : result;
         }
 
         private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
