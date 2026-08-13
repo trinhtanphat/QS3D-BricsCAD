@@ -379,8 +379,18 @@ namespace QS3D.Core.Measurement
             items.Sort(CompareFacts);
             for (var i = 1; i < items.Count; i++)
             {
-                if (items[i - 1].Equals(items[i]))
+                var previous = items[i - 1];
+                var current = items[i];
+                if (!string.Equals(previous.Name, current.Name, StringComparison.Ordinal) ||
+                    !string.Equals(previous.SourceIdentity, current.SourceIdentity, StringComparison.Ordinal))
+                    continue;
+
+                if (previous.Equals(current))
                     throw new ArgumentException("Measurement trace facts must not contain duplicates.", parameterName);
+
+                throw new ArgumentException(
+                    "Measurement trace facts must not contain conflicting payloads for the same evidence identity.",
+                    parameterName);
             }
             return new ReadOnlyCollection<MeasurementTraceFact>(items.ToArray());
         }
