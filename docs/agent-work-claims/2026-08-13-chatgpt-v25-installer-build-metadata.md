@@ -1,8 +1,9 @@
 # Work claim — V25 installer SemVer build-metadata compatibility
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-13T12:06:48+07:00`
+- Completed: `2026-08-13T12:15:00+07:00`
 - Baseline main SHA: `5a2ac2eec479bc15afdd282dd3a4b0874e6a2a2e`
 - Priority: Owner reproduced an install-blocking failure from `v0.1.0-preview.3`: the packaged V25 DLL ProductVersion carries SDK source-revision SemVer build metadata (`+<commit>`) while `PACKAGE-METADATA.productVersion` carries the canonical source SemVer without build metadata. Owner explicitly requested a source fix committed and pushed to `main`.
 
@@ -38,6 +39,15 @@ Fix V25 package identity validation so canonical public SemVer identity remains 
 
 Recent installer package-identity claim history is already released/completed; current claim/code searches found no overlapping ACTIVE installer build-metadata lane. Concurrent Curtain/BLT3D work is outside this scope. Refresh `main` before each write and never force-push.
 
+## Completion
+
+- Source fix: `84ebcc7c9327954624e02e8ccc6bf4a2343f73a5` — `fix(installer): accept SemVer build metadata safely`.
+- Regression guard: `945d0cbdcae3957f5bfd90e6ccc8cf79f7f18a34` — `test(installer): guard SemVer build metadata identity`.
+- GitHub readback confirmed the installer now compares canonical/public SemVer identity without `+build-metadata`, while requiring both packaged managed DLLs to agree on the complete ProductVersion including build metadata.
+- The focused preflight models the exact owner-reported `0.1.0-preview.3+a99038557bfeab6fd8945cb28a0f890c46480184` case, canonical no-build-metadata packages, public-version mismatch rejection and mixed-source-revision rejection.
+- Existing SHA256SUMS, optional/required Authenticode, existing-install ownership and transactional rollback guards remain in place.
+- No GitHub Actions were dispatched by this work. No licensed BricsCAD installation/runtime PASS is claimed; runtime packaging/DemandLoad qualification remains under existing `LOCAL-001`.
+
 ## Completion condition
 
-Current `main` contains the source fix and focused regression guard, final source is read back from GitHub, this claim is marked `COMPLETED`, and no CI/runtime/release PASS is claimed without separate evidence.
+Satisfied: current `main` contains the source fix and focused regression guard, source/test commits were read back from GitHub, and this claim is closed without manufacturing CI/runtime/release evidence.
