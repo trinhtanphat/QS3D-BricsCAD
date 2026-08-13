@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             DeterministicCanonicalRepresentation();
             SnapshotIsolation();
+            OptionalMetadataNullability();
             OptionalRulePair();
             InvalidStatesFailClosed();
         }
@@ -65,6 +66,34 @@ namespace QS3D.Core.SmokeTests
 
             Equal(1, trace.InputFacts.Count, "Trace facts must be detached from caller collection mutation.");
             Equal(1, trace.Warnings.Count, "Trace warnings must be detached from caller collection mutation.");
+        }
+
+        private static void OptionalMetadataNullability()
+        {
+            var fact = new MeasurementTraceFact("Count", 1d, "ea");
+            True(fact.SourceIdentity == null, "Optional fact source identity must remain nullable.");
+            True(!fact.Equals((MeasurementTraceFact?)null), "Fact equality must reject null without throwing.");
+
+            var adjustment = new MeasurementTraceAdjustment(
+                MeasurementTraceAdjustmentKind.Deduction,
+                1d,
+                "m2",
+                "opening",
+                "SRC-OPENING");
+            True(!adjustment.Equals((MeasurementTraceAdjustment?)null), "Adjustment equality must reject null without throwing.");
+
+            var trace = new MeasurementTrace(
+                "SEM-WALL-1",
+                "SRC-WALL",
+                "NetAreaM2",
+                Array.Empty<MeasurementTraceFact>(),
+                12d,
+                Array.Empty<MeasurementTraceAdjustment>(),
+                12d,
+                "m2",
+                "none");
+            True(!trace.Equals((MeasurementTrace?)null), "Trace equality must reject null without throwing.");
+            True(!trace.Equals((object?)null), "Object equality must reject null without throwing.");
         }
 
         private static void OptionalRulePair()

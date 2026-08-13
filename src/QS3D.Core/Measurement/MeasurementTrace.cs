@@ -14,7 +14,7 @@ namespace QS3D.Core.Measurement
 
     public sealed class MeasurementTraceFact : IEquatable<MeasurementTraceFact>
     {
-        public MeasurementTraceFact(string name, double value, string unit, string sourceIdentity = null)
+        public MeasurementTraceFact(string name, double value, string unit, string? sourceIdentity = null)
         {
             Name = MeasurementTraceContract.RequireToken(name, nameof(name));
             Value = MeasurementTraceContract.RequireFinite(value, nameof(value));
@@ -25,9 +25,9 @@ namespace QS3D.Core.Measurement
         public string Name { get; }
         public double Value { get; }
         public string Unit { get; }
-        public string SourceIdentity { get; }
+        public string? SourceIdentity { get; }
 
-        public bool Equals(MeasurementTraceFact other)
+        public bool Equals(MeasurementTraceFact? other)
         {
             return other != null &&
                    string.Equals(Name, other.Name, StringComparison.Ordinal) &&
@@ -36,7 +36,7 @@ namespace QS3D.Core.Measurement
                    string.Equals(SourceIdentity, other.SourceIdentity, StringComparison.Ordinal);
         }
 
-        public override bool Equals(object obj) => Equals(obj as MeasurementTraceFact);
+        public override bool Equals(object? obj) => Equals(obj as MeasurementTraceFact);
 
         public override int GetHashCode()
         {
@@ -77,7 +77,7 @@ namespace QS3D.Core.Measurement
         public string Reason { get; }
         public string SourceIdentity { get; }
 
-        public bool Equals(MeasurementTraceAdjustment other)
+        public bool Equals(MeasurementTraceAdjustment? other)
         {
             return other != null &&
                    Kind == other.Kind &&
@@ -87,7 +87,7 @@ namespace QS3D.Core.Measurement
                    string.Equals(SourceIdentity, other.SourceIdentity, StringComparison.Ordinal);
         }
 
-        public override bool Equals(object obj) => Equals(obj as MeasurementTraceAdjustment);
+        public override bool Equals(object? obj) => Equals(obj as MeasurementTraceAdjustment);
 
         public override int GetHashCode()
         {
@@ -116,10 +116,10 @@ namespace QS3D.Core.Measurement
             double netValue,
             string unit,
             string roundingPolicy,
-            IEnumerable<string> warnings = null,
-            IEnumerable<string> assumptions = null,
-            string ruleId = null,
-            string ruleVersion = null)
+            IEnumerable<string>? warnings = null,
+            IEnumerable<string>? assumptions = null,
+            string? ruleId = null,
+            string? ruleVersion = null)
         {
             SemanticIdentity = MeasurementTraceContract.RequireToken(semanticIdentity, nameof(semanticIdentity));
             SourceIdentity = MeasurementTraceContract.RequireToken(sourceIdentity, nameof(sourceIdentity));
@@ -157,8 +157,8 @@ namespace QS3D.Core.Measurement
         public string RoundingPolicy { get; }
         public IReadOnlyList<string> Warnings { get; }
         public IReadOnlyList<string> Assumptions { get; }
-        public string RuleId { get; }
-        public string RuleVersion { get; }
+        public string? RuleId { get; }
+        public string? RuleVersion { get; }
 
         public string ToCanonicalString()
         {
@@ -200,7 +200,7 @@ namespace QS3D.Core.Measurement
             return builder.ToString();
         }
 
-        public bool Equals(MeasurementTrace other)
+        public bool Equals(MeasurementTrace? other)
         {
             if (other == null ||
                 !string.Equals(SemanticIdentity, other.SemanticIdentity, StringComparison.Ordinal) ||
@@ -220,7 +220,7 @@ namespace QS3D.Core.Measurement
                    MeasurementTraceContract.SequenceEqual(Assumptions, other.Assumptions);
         }
 
-        public override bool Equals(object obj) => Equals(obj as MeasurementTrace);
+        public override bool Equals(object? obj) => Equals(obj as MeasurementTrace);
 
         public override int GetHashCode()
         {
@@ -321,7 +321,7 @@ namespace QS3D.Core.Measurement
             return new ReadOnlyCollection<MeasurementTraceAdjustment>(items.ToArray());
         }
 
-        internal static IReadOnlyList<string> SnapshotMessages(IEnumerable<string> source)
+        internal static IReadOnlyList<string> SnapshotMessages(IEnumerable<string>? source)
         {
             if (source == null) return new ReadOnlyCollection<string>(Array.Empty<string>());
             var items = new List<string>();
@@ -378,7 +378,7 @@ namespace QS3D.Core.Measurement
             builder.Append(value);
         }
 
-        internal static void AppendNullableToken(StringBuilder builder, string value)
+        internal static void AppendNullableToken(StringBuilder builder, string? value)
         {
             if (value == null)
             {
@@ -404,7 +404,7 @@ namespace QS3D.Core.Measurement
             for (var i = 0; i < values.Count; i++) AppendToken(builder, values[i]);
         }
 
-        internal static int AddHash(int hash, string value)
+        internal static int AddHash(int hash, string? value)
         {
             unchecked
             {
@@ -426,7 +426,7 @@ namespace QS3D.Core.Measurement
             unchecked
             {
                 for (var i = 0; i < values.Count; i++)
-                    hash = (hash * 31) + (values[i] == null ? 0 : values[i].GetHashCode());
+                    hash = (hash * 31) + (values[i] == null ? 0 : values[i]!.GetHashCode());
                 return hash;
             }
         }
