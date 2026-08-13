@@ -15,8 +15,8 @@ namespace QS3D.BricsCAD.V25.UI
     {
         private void OnQuantityDetailLocateClick(object sender, RoutedEventArgs e)
         {
-            if (!(_quantityDetailSelector?.SelectedItem is QuantityInsightDetailOption option) && _quantityDetailOptions.Count == 1)
-                option = _quantityDetailOptions[0];
+            var option = _quantityDetailSelector?.SelectedItem as QuantityInsightDetailOption;
+            if (option == null && _quantityDetailOptions.Count == 1) option = _quantityDetailOptions[0];
             if (option == null) { _viewModel.Status = "Chọn một cấu kiện chi tiết trước khi định vị."; return; }
 
             var document = BcadApplication.DocumentManager.MdiActiveDocument;
