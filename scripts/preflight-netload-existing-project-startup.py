@@ -48,10 +48,11 @@ ribbon_tick = method(ribbon, "private static void OnRetryTick", "private static 
 lifecycle_start = method(lifecycle, "public static void Start()", "public static void Stop()", "DocumentLifecycleCoordinator.Start")
 lifecycle_created = method(lifecycle, "private static void OnDocumentCreated", "private static void OnDocumentActivated", "DocumentLifecycleCoordinator.OnDocumentCreated")
 lifecycle_activated = method(lifecycle, "private static void OnDocumentActivated", "private static void OnDocumentToBeDestroyed", "DocumentLifecycleCoordinator.OnDocumentActivated")
-lifecycle_to_destroy = method(lifecycle, "private static void OnDocumentToBeDestroyed", "private static void OnDocumentDestroyed", "DocumentLifecycleCoordinator.OnDocumentToBeDestroyed")
-lifecycle_destroyed = method(lifecycle, "private static void OnDocumentDestroyed", "private static void ScheduleReconcile", "DocumentLifecycleCoordinator.OnDocumentDestroyed")
+lifecycle_destroying = method(lifecycle, "private static void OnDocumentToBeDestroyed", "private static void OnDocumentDestroyed", "DocumentLifecycleCoordinator.OnDocumentToBeDestroyed")
+lifecycle_destroyed = method(lifecycle, "private static void OnDocumentDestroyed", "private static void AttachCriticalServices", "DocumentLifecycleCoordinator.OnDocumentDestroyed")
+lifecycle_critical = method(lifecycle, "private static void AttachCriticalServices", "private static void ScheduleReconcile", "DocumentLifecycleCoordinator.AttachCriticalServices")
 lifecycle_schedule = method(lifecycle, "private static void ScheduleReconcile", "private static void CancelPendingReconcile", "DocumentLifecycleCoordinator.ScheduleReconcile")
-lifecycle_idle_timer = method(lifecycle, "private static void StartLifecycleIdleTimer", "private static void StopLifecycleIdleTimer", "DocumentLifecycleCoordinator.StartLifecycleIdleTimer")
+lifecycle_timer = method(lifecycle, "private static void StartLifecycleIdleTimer", "private static void StopLifecycleIdleTimer", "DocumentLifecycleCoordinator.StartLifecycleIdleTimer")
 lifecycle_idle = method(lifecycle, "private static void OnLifecycleIdle", "private static void ReconcileDocument", "DocumentLifecycleCoordinator.OnLifecycleIdle")
 lifecycle_reconcile = method(lifecycle, "private static void ReconcileDocument", "private static void AttachProjectPersistence", "DocumentLifecycleCoordinator.ReconcileDocument")
 workspace_initial = method(workspace, "public WorkspacePanel()", "private void BindViewModel()", "WorkspacePanel initial load")
@@ -113,57 +114,67 @@ if "TryInitializeAll()" in ribbon_start:
 if "TryInitializeAll()" in ribbon_document:
     errors.append("RibbonInitializationCoordinator.OnDocumentAvailable must not synchronously reconcile the ribbon inside host document callbacks")
 
+require(lifecycle, "using System.Windows.Threading;", "DocumentLifecycleCoordinator")
+require(lifecycle_start, "AttachCriticalServices(docs.MdiActiveDocument);", "DocumentLifecycleCoordinator.Start")
 require(lifecycle_start, "ScheduleReconcile(docs.MdiActiveDocument, false);", "DocumentLifecycleCoordinator.Start")
+require(lifecycle_created, "AttachCriticalServices(e.Document);", "DocumentLifecycleCoordinator.OnDocumentCreated")
 require(lifecycle_created, "ScheduleReconcile(e.Document, false);", "DocumentLifecycleCoordinator.OnDocumentCreated")
+require(lifecycle_activated, "AttachCriticalServices(e.Document);", "DocumentLifecycleCoordinator.OnDocumentActivated")
 require(lifecycle_activated, "ScheduleReconcile(e.Document, true);", "DocumentLifecycleCoordinator.OnDocumentActivated")
-require(lifecycle_destroyed, "ScheduleReconcile(docs.MdiActiveDocument, true);", "DocumentLifecycleCoordinator.OnDocumentDestroyed")
-require(lifecycle_destroyed, "StartLifecycleIdleTimer();", "DocumentLifecycleCoordinator.OnDocumentDestroyed no-document path")
-require(lifecycle_schedule, "StartLifecycleIdleTimer();", "DocumentLifecycleCoordinator.ScheduleReconcile")
-require(lifecycle_idle_timer, "new DispatcherTimer(DispatcherPriority.ApplicationIdle)", "DocumentLifecycleCoordinator.StartLifecycleIdleTimer")
-require(lifecycle_idle, "ReconcileDocument(pair.Key, pair.Value);", "DocumentLifecycleCoordinator.OnLifecycleIdle")
-require(lifecycle_idle, "PaletteCoordinator.ResetForNoDocument();", "DocumentLifecycleCoordinator.OnLifecycleIdle")
-
+require(lifecycle_destroying, "CancelPendingReconcile(document);", "DocumentLifecycleCoordinator.OnDocumentToBeDestroyed")
+require(lifecycle_destroyed, "AttachCriticalServices(active);", "DocumentLifecycleCoordinator.OnDocumentDestroyed")
+require(lifecycle_destroyed, "ScheduleReconcile(active, true);", "DocumentLifecycleCoordinator.OnDocumentDestroyed")
 for token in (
     "AttachProjectPersistence(document);",
     "SourceReconcileUndoCoordinator.Attach(document);",
     "CurtainWallUndoCoordinator.Attach(document);",
+):
+    require(lifecycle_critical, token, "DocumentLifecycleCoordinator.AttachCriticalServices")
+if "SelectionSyncCoordinator.Attach(" in lifecycle_critical:
+    errors.append("DocumentLifecycleCoordinator.AttachCriticalServices must keep selection/UI work out of critical host-event subscriptions")
+
+require(lifecycle_schedule, "PendingReconciliation", "DocumentLifecycleCoordinator.ScheduleReconcile")
+require(lifecycle_schedule, "StartLifecycleIdleTimer();", "DocumentLifecycleCoordinator.ScheduleReconcile")
+require(lifecycle_timer, "new DispatcherTimer(DispatcherPriority.ApplicationIdle)", "DocumentLifecycleCoordinator.StartLifecycleIdleTimer")
+for token in (
     "SelectionSyncCoordinator.Attach(document);",
     "EnsureProject(document, refreshUi);",
     "SelectionSyncCoordinator.Refresh(document);",
 ):
     require(lifecycle_reconcile, token, "DocumentLifecycleCoordinator.ReconcileDocument")
-
 for token in (
-    "CancelPendingReconcile(document);",
-    "DetachProjectPersistence(document);",
-    "SourceReconcileUndoCoordinator.Detach(document);",
-    "CurtainWallUndoCoordinator.Detach(document);",
-    "SelectionSyncCoordinator.Detach(document);",
-    "ProjectContextCoordinator.Forget(document);",
-):
-    require(lifecycle_to_destroy, token, "DocumentLifecycleCoordinator.OnDocumentToBeDestroyed")
-
-host_callback_heavy_tokens = (
     "AttachProjectPersistence(",
     "SourceReconcileUndoCoordinator.Attach(",
     "CurtainWallUndoCoordinator.Attach(",
-    "SelectionSyncCoordinator.Attach(",
-    "EnsureProject(",
-    "SelectionSyncCoordinator.Refresh(",
-    "PaletteCoordinator.RefreshAll(",
-    "PaletteCoordinator.ResetForNoDocument(",
-)
-for label, block in (
-    ("Start/NETLOAD", lifecycle_start),
-    ("DocumentCreated", lifecycle_created),
-    ("DocumentActivated", lifecycle_activated),
-    ("DocumentDestroyed", lifecycle_destroyed),
 ):
-    for token in host_callback_heavy_tokens:
+    if token in lifecycle_reconcile:
+        errors.append("DocumentLifecycleCoordinator.ReconcileDocument must not defer critical save/Undo subscriptions: " + token)
+
+for label, block, forbidden in (
+    ("Start", lifecycle_start, (
+        "SelectionSyncCoordinator.Attach(docs.MdiActiveDocument);",
+        "EnsureProject(docs.MdiActiveDocument",
+        "SelectionSyncCoordinator.Refresh(docs.MdiActiveDocument",
+    )),
+    ("OnDocumentCreated", lifecycle_created, (
+        "SelectionSyncCoordinator.Attach(e.Document);",
+        "EnsureProject(e.Document",
+        "SelectionSyncCoordinator.Refresh(e.Document",
+    )),
+    ("OnDocumentActivated", lifecycle_activated, (
+        "SelectionSyncCoordinator.Attach(e.Document);",
+        "EnsureProject(e.Document",
+        "SelectionSyncCoordinator.Refresh(e.Document",
+    )),
+    ("OnDocumentDestroyed", lifecycle_destroyed, (
+        "SelectionSyncCoordinator.Attach(active);",
+        "EnsureProject(active",
+        "SelectionSyncCoordinator.Refresh(active",
+    )),
+):
+    for token in forbidden:
         if token in block:
-            errors.append("DocumentLifecycleCoordinator.%s must defer host-callback work; found %s" % (label, token))
-    if "ReconcileDocument(" in block:
-        errors.append("DocumentLifecycleCoordinator.%s must not call ReconcileDocument synchronously" % label)
+            errors.append("DocumentLifecycleCoordinator." + label + " must enqueue project/selection reconciliation instead of running " + token + " inline")
 
 if errors:
     for error in errors:
@@ -171,4 +182,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: V25 NETLOAD defers palette/ribbon/document-lifecycle work to application idle, coalesces document reconciliation outside host callbacks, preserves synchronous teardown, keeps Workspace/RightPanel initial refresh one-shot, and avoids duplicate first-show full refresh.")
+print("PASS: V25 NETLOAD keeps critical save/Undo hooks immediate, defers project/selection UI reconciliation and ribbon work to application idle, preserves synchronous teardown, makes Workspace/RightPanel initial refresh one-shot, and avoids duplicate first-show full refresh.")
