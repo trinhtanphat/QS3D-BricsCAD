@@ -69,6 +69,7 @@ namespace QS3D.Core.SmokeTests
                 BarMark = "B1",
                 ShapeCode = "00",
                 Notation = "1T10",
+                DiameterMm = 10d,
                 Quantity = 1,
                 CuttingLengthM = 1d,
                 TotalLengthM = 1d,
