@@ -1,5 +1,6 @@
 name: QS3D TEMP V25 Auto Release Until Success
 # QS3D_TEMP_AUTO_RELEASE_V25_UNTIL_SUCCESS
+# trigger: rerun after preflight gate fixes 2026-08-13T14:32+07:00
 
 on:
   push:
