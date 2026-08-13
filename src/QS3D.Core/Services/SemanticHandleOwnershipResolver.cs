@@ -13,7 +13,7 @@ namespace QS3D.Core.Services
         public static ProjectElement? ResolveUniqueSourceOwner(ProjectState project, string sourceHandle)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var normalized = (sourceHandle ?? string.Empty).Trim();
+            var normalized = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(sourceHandle);
             if (normalized.Length == 0) throw new ArgumentException("Source handle is required.", nameof(sourceHandle));
             EnsureUniqueElementIds(project);
 
@@ -39,7 +39,7 @@ namespace QS3D.Core.Services
         public static ProjectElement? ResolveCaptureTarget(ProjectState project, string sourceHandle, ElementCategory category, string canonicalId)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var normalizedHandle = (sourceHandle ?? string.Empty).Trim();
+            var normalizedHandle = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(sourceHandle);
             if (normalizedHandle.Length == 0) throw new ArgumentException("Source handle is required.", nameof(sourceHandle));
             var normalizedId = (canonicalId ?? string.Empty).Trim();
             if (normalizedId.Length == 0) throw new ArgumentException("Canonical element ID is required.", nameof(canonicalId));
@@ -70,7 +70,10 @@ namespace QS3D.Core.Services
             if (canonical == null) return null;
             if (canonical.Category != category)
                 throw new InvalidOperationException("Canonical semantic element " + normalizedId + " has category " + canonical.Category + ".");
-            if (canonical.SourceHandles.Any(x => !string.Equals(x, normalizedHandle, StringComparison.OrdinalIgnoreCase)))
+            if (canonical.SourceHandles.Any(x => !string.Equals(
+                    GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x),
+                    normalizedHandle,
+                    StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException(
                     "Canonical semantic element " + normalizedId + " is already bound to another CAD source handle.");
             return canonical;
@@ -136,7 +139,7 @@ namespace QS3D.Core.Services
                     throw new InvalidOperationException("Semantic handle selection cannot exceed " + MaxSelectedHandleInputCount + " input entries.");
                 inputCount++;
                 if (string.IsNullOrWhiteSpace(rawHandle)) continue;
-                selected.Add(rawHandle.Trim());
+                selected.Add(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(rawHandle));
             }
             return selected;
         }
@@ -183,7 +186,8 @@ namespace QS3D.Core.Services
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (var index = 0; index < element.SourceHandles.Count; index++)
             {
-                var handle = RequireCanonicalStoredSourceHandle(element, element.SourceHandles[index], index);
+                var handle = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(
+                    RequireCanonicalStoredSourceHandle(element, element.SourceHandles[index], index));
                 if (!seen.Add(handle))
                     throw new InvalidOperationException(
                         "Semantic element " + element.Id + " contains duplicate SourceHandles identity at index " + index + ": " + handle + ". Repair source ownership before continuing.");
@@ -212,7 +216,7 @@ namespace QS3D.Core.Services
             IDictionary<string, ProjectElement> owners,
             IDictionary<string, string> channels)
         {
-            var handle = (rawHandle ?? string.Empty).Trim();
+            var handle = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(rawHandle);
             if (handle.Length == 0 || !selected.Contains(handle)) return;
             if (owners.TryGetValue(handle, out var existing))
             {
