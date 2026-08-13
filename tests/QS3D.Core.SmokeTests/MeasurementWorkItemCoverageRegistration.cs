@@ -5,6 +5,10 @@ namespace QS3D.Core.SmokeTests
     internal static class MeasurementWorkItemCoverageRegistration
     {
         [ModuleInitializer]
-        internal static void Initialize() => MeasurementWorkItemCoverageSmoke.Run();
+        internal static void Initialize()
+        {
+            MeasurementWorkItemCoverageSmoke.Run();
+            MeasurementWorkItemCoverageReportSmoke.Run();
+        }
     }
 }
