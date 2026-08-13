@@ -13,7 +13,7 @@ namespace QS3D.BricsCAD.V25.UI
     /// </summary>
     public partial class WorkspacePanel
     {
-        private static readonly bool ViewportPolishRegistered = RegisterViewportPolish();
+        private static bool ViewportPolishRegistered { get; } = RegisterViewportPolish();
         private bool _viewportPolishApplied;
 
         private static bool RegisterViewportPolish()
