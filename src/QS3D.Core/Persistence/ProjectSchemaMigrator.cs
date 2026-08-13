@@ -33,6 +33,10 @@ namespace QS3D.Core.Persistence
                         MigrateV2ToV3(root);
                         schema = 3;
                         break;
+                    case 3:
+                        MigrateV3ToV4(root);
+                        schema = 4;
+                        break;
                     default:
                         throw new InvalidDataException("No migration path exists from QSDB schema " + schema.ToString(CultureInfo.InvariantCulture));
                 }
@@ -78,6 +82,12 @@ namespace QS3D.Core.Persistence
             SetMigrationOrigin(root, "2");
         }
 
+        private static void MigrateV3ToV4(XElement root)
+        {
+            if (root.Element("mappings") == null) root.Add(new XElement("mappings"));
+            SetMigrationOrigin(root, "3");
+        }
+
         private static void ValidateCurrentPersistenceState(XElement root)
         {
             RequirePersistenceValue(root, "updatedUtc", "Project root");
@@ -87,6 +97,7 @@ namespace QS3D.Core.Persistence
             var floors = RequireSingleContainer(root, "floors");
             RequireSingleContainer(root, "families");
             RequireSingleContainer(root, "rules");
+            RequireSingleContainer(root, "mappings");
             var elements = RequireSingleContainer(root, "elements");
             var audit = RequireSingleContainer(root, "audit");
 
