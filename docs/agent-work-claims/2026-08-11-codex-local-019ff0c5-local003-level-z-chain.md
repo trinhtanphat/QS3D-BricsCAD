@@ -1,6 +1,6 @@
 # Work claim — LOCAL-003 shared native Level Z-chain
 
-- Status: `ACTIVE`
+- Status: `BLOCKED`
 - Agent: `codex-local-019ff0c5` (`/root`, local Windows + licensed BricsCAD V25 agent)
 - Registered: `2026-08-11T19:43:12+07:00`
 - Baseline main SHA: `c7dd212d36677a1d2e005becf8709768fe98d6a1`
@@ -648,3 +648,9 @@ Within the already reserved Level runtime-probe surface, split the Curtain phase
 The next two clean exact-SHA launches never reached the command: the runner-owned BricsCAD process remained responsive but created no main window, generated no marker and timed out with drawing/sidecar/process/environment/script cleanup intact. Read-only inspection of the dedicated `QS3D-V25-TEST` profile found one `Drawing Recovery/Opened` record pointing exactly to the first disposable Level-Z copy. The failed probe rethrew after writing its marker, and the runner force-stopped the host before BricsCAD could clear the recovery record; subsequent hidden starts waited before script execution.
 
 Harden this already-reserved harness boundary so both PASS and FAIL return normally to the automation script after the sanitized marker, the script issues localized-safe `QUIT` with No-save, and the runner waits for and requires graceful exit before accepting PASS. Keep force termination only as a cleanup fallback. Remove only the exact stale recovery value pair that resolves under this repository's `artifacts/local-v25-level-z` root and has the guarded disposable suffix; preserve every other profile/recovery value. A fresh pushed exact-SHA run is required.
+
+## 2026-08-13 native host startup blocker
+
+The graceful no-save/diagnostic harness landed on `main` at exact SHA `38c22f168e530908a0eadebb5e740b16b2388939` after static validation and a strict installed-reference V25 build with zero warnings/errors. Before that correction could reach the plugin, repeated test-owned BricsCAD V25 launches stopped in native startup: the exact launched PID remained responsive at about one second of CPU, created no main application window, loaded neither `QS3D.BricsCAD.V25.dll` nor `QS3D.Core.dll`, wrote no marker and then accepted exact-PID timeout cleanup. Every disposable DWG retained SHA-256 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`; no sidecar, backup, script, environment variable or BricsCAD process remained.
+
+The startup failure reproduced with no DWG/plugin/script, with clones of both `QS3D-V25-TEST` and `Default`, with an officially clean new profile plus `/SAFEMODE /L`, and with explicit `/pr ultimate`. This rules out the Level runner, disposable drawing, test profile and third-party autoload as the immediate startup boundary. All temporary profiles were removed; original `Default` and `QS3D-V25-TEST` remain. The item is reserved but `BLOCKED` until Windows session/BricsCAD license-native startup is refreshed (normally sign out/restart Windows or operator license repair) and a test-owned BricsCAD launch can create its application window again. After recovery, reactivate/push the claim first, sync/rebuild the newest exact SHA, then rerun the granular Level probe. No GitHub Actions ran, and no user-owned BricsCAD process/profile/drawing was terminated or modified.
