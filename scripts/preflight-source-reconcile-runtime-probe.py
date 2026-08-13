@@ -135,12 +135,21 @@ if RUNNER.is_file():
         '@("ADVANCED", "UNCHANGED", "MISSING_OR_INVALID")',
         '@("NONE", "SYNCED", "MARKER_MISMATCH", "DESYNCHRONIZED")',
         '@("ONE", "MULTIPLE")',
+        'function Find-Qs3dHandoffProcess',
+        'function Wait-Qs3dHandoffProcess',
+        'function Stop-Qs3dLateHandoffProcesses',
+        'ParentProcessId = " + $LauncherId',
+        '[string]::Equals($candidatePath, $ExpectedExecutable, [StringComparison]::OrdinalIgnoreCase)',
+        'Wait-Qs3dMarkerOrFailure -Process ([ref]$processOne)',
+        'Wait-Qs3dMarkerOrFailure -Process ([ref]$processTwo)',
+        'Stop-Qs3dLateHandoffProcesses -LauncherIds @($launcherOneId, $launcherTwoId)',
         'Stop-Qs3dLaunchedProcess -Process $processOne',
         'Stop-Qs3dLaunchedProcess -Process $processTwo',
         'Remove-ExactFile -Path $drawingA',
         'Remove-ExactFile -Path $drawingB',
         'private_state_cleanup_verified',
         'drawing_restore_verified',
+        'launcher_handoffs',
     )
     for token in required:
         if token not in text:
