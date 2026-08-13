@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             DeterministicCanonicalRepresentation();
             SnapshotIsolation();
+            DuplicateEvidenceFailsClosed();
             OptionalMetadataNullability();
             AdjustmentRuleIdentity();
             OptionalRulePair();
@@ -68,6 +69,44 @@ namespace QS3D.Core.SmokeTests
 
             Equal(1, trace.InputFacts.Count, "Trace facts must be detached from caller collection mutation.");
             Equal(1, trace.Warnings.Count, "Trace warnings must be detached from caller collection mutation.");
+        }
+
+        private static void DuplicateEvidenceFailsClosed()
+        {
+            var duplicateFact = new MeasurementTraceFact("GrossAreaM2", 12d, "m2", "SRC-WALL");
+            Throws<ArgumentException>(() => new MeasurementTrace(
+                "SEM-WALL-1",
+                "SRC-WALL",
+                "NetAreaM2",
+                new[]
+                {
+                    duplicateFact,
+                    new MeasurementTraceFact("GrossAreaM2", 12d, "m2", "SRC-WALL")
+                },
+                12d,
+                Array.Empty<MeasurementTraceAdjustment>(),
+                12d,
+                "m2",
+                "none"));
+
+            var duplicateAdjustment = new MeasurementTraceAdjustment(
+                MeasurementTraceAdjustmentKind.Deduction,
+                1d,
+                "m2",
+                "opening",
+                "SRC-OPENING",
+                "opening-deduction",
+                "3");
+            Throws<ArgumentException>(() => CreateAdjustmentTrace(
+                duplicateAdjustment,
+                new MeasurementTraceAdjustment(
+                    MeasurementTraceAdjustmentKind.Deduction,
+                    1d,
+                    "m2",
+                    "opening",
+                    "SRC-OPENING",
+                    "opening-deduction",
+                    "3")));
         }
 
         private static void OptionalMetadataNullability()
