@@ -16,8 +16,8 @@ namespace QS3D.Core.Domain
                 throw new ArgumentOutOfRangeException(nameof(topElevationM), "Vertical placement height must be finite.");
             UsesBottomLevel = usesBottomLevel;
             UsesTopLevel = usesTopLevel;
-            BottomElevationM = bottomElevationM;
-            TopElevationM = topElevationM;
+            BottomElevationM = CanonicalZero(bottomElevationM);
+            TopElevationM = CanonicalZero(topElevationM);
             HeightM = heightM;
         }
 
@@ -26,6 +26,8 @@ namespace QS3D.Core.Domain
         public double BottomElevationM { get; }
         public double TopElevationM { get; }
         public double HeightM { get; }
+
+        private static double CanonicalZero(double value) => value == 0d ? 0d : value;
     }
 
     public sealed class HostedOpeningVerticalPlacement
@@ -39,7 +41,7 @@ namespace QS3D.Core.Domain
             Opening = opening ?? throw new ArgumentNullException(nameof(opening));
             if (double.IsNaN(relativeSillM) || double.IsInfinity(relativeSillM) || relativeSillM < 0d)
                 throw new ArgumentOutOfRangeException(nameof(relativeSillM));
-            RelativeSillM = relativeSillM;
+            RelativeSillM = relativeSillM == 0d ? 0d : relativeSillM;
         }
 
         public ElementVerticalPlacement Host { get; }
@@ -225,20 +227,20 @@ namespace QS3D.Core.Domain
                 !double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
                 double.IsNaN(value) || double.IsInfinity(value))
                 throw new InvalidOperationException(element.Id + "/" + key + " must be a finite invariant number.");
-            return value;
+            return CanonicalZero(value);
         }
 
         private static double Add(double left, double right, string label)
         {
             var value = left + right;
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new InvalidOperationException(label + " must be finite.");
-            return value;
+            return CanonicalZero(value);
         }
 
         private static double Finite(double value, string parameterName)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(parameterName, "Value must be finite.");
-            return value;
+            return CanonicalZero(value);
         }
 
         private static double Positive(double value, string parameterName)
@@ -247,5 +249,7 @@ namespace QS3D.Core.Domain
             if (value <= 0d) throw new ArgumentOutOfRangeException(parameterName, "Value must be > 0.");
             return value;
         }
+
+        private static double CanonicalZero(double value) => value == 0d ? 0d : value;
     }
 }
