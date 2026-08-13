@@ -30,13 +30,15 @@ Align static preflight assertions with the stronger stale-DLL/runtime diagnostic
 
 ## Implementation commits
 
-- `65a2760128b2943a5d110396387728aaa0f22e9b` — `fix(preflight): pin stronger runtime diagnostics predicate`
-- `325a34fad9721b44fc48022c7d3566a93b141c1f` — `fix(preflight): keep runtime signature truth contract semantic`
-- `73611391d7872f14e8f6804323ddd4aa6d8b0902` — `fix(preflight): validate release command at authoritative source`
-- `e9ad714a820da825593c8d2ca81d2b2628df9528` — `fix(preflight): align V26 guard with stale-binary hardening`
+- `65a2760b1a136a6d0c896e81d979788b2743b8af` — `fix(preflight): pin stronger runtime diagnostics predicate`
+- `325a34fe5d228593867eb101d9eb137292ad72ea` — `fix(preflight): keep runtime signature truth contract semantic`
+- `736113bbc4bb90c75e84a706b8a6b5109419b325` — `fix(preflight): validate release command at authoritative source`
+- `e9ad714cdef6ad0734b6aebf4123c2148dd712f4` — `fix(preflight): align V26 guard with stale-binary hardening`
 
 ## Validation evidence
 
 All four scripts were read back from `main` after their writes. The runtime diagnostics source still contains the stronger compile-selected V25/V26 host-major, x64, package-version, on-disk version, and binary-fingerprint predicate. `ReleaseReadinessCommands.cs` still owns `[CommandMethod("QS3DRELEASECHECK", CommandFlags.Modal)]` and resolves project state through `TryGetReadOnly`.
+
+GitHub ancestry check confirmed current `main` was 16 commits ahead of `e9ad714cdef6ad0734b6aebf4123c2148dd712f4`, with that implementation commit as the merge base, so the repaired V26/preflight lane was preserved through concurrent work.
 
 The source/preflight repair is complete. Full workflow success is deliberately not claimed here: a fresh owner-authorized manual `release-v25-cloud.yml` dispatch on a descendant SHA is required for CI proof because rerunning run #122 would re-test its old event/head SHA.
