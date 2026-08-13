@@ -22,9 +22,10 @@ namespace QS3D.Core.Domain
                 throw new InvalidOperationException("Zone id already exists: " + normalizedId);
             EnsureUniqueName(project, normalizedName, string.Empty);
             var zone = new ZoneDefinition(normalizedId, normalizedName);
-            project.Touch();
+            var activate = string.IsNullOrWhiteSpace(project.ActiveZoneId);
+            if (activate) project.ActiveZoneId = zone.Id;
+            else project.Touch();
             project.Zones.Add(zone);
-            if (string.IsNullOrWhiteSpace(project.ActiveZoneId)) project.ActiveZoneId = zone.Id;
             return zone;
         }
 
