@@ -24,14 +24,14 @@ namespace QS3D.Core.SmokeTests
             var hosted = new HostedOpeningVerticalPlacement(host, opening, -0d);
             CanonicalPositiveZero(hosted.RelativeSillM, "relative sill");
 
-            var element = new ProjectElement("E-VERTICAL-ZERO", ElementCategory.Wall);
+            var element = new ProjectElement("E-VERTICAL-ZERO", ElementCategory.ArchitecturalWall);
             element.Properties[ProjectFloorService.BottomLevelOffsetKey] = "-0";
             CanonicalPositiveZero(
                 ElementVerticalPlacementService.ReadLevelOffset(element, ProjectFloorService.BottomLevelOffsetKey),
                 "parsed level offset");
 
             var project = new ProjectState("P-VERTICAL-ZERO", "Vertical zero smoke");
-            var resolved = ElementVerticalPlacementService.Resolve(project, element: new ProjectElement("E-LEGACY-ZERO", ElementCategory.Wall), sourceBaseElevationM: -0d, legacyHeightM: 2d, legacyBottomOffsetM: -0d);
+            var resolved = ElementVerticalPlacementService.Resolve(project, element: new ProjectElement("E-LEGACY-ZERO", ElementCategory.ArchitecturalWall), sourceBaseElevationM: -0d, legacyHeightM: 2d, legacyBottomOffsetM: -0d);
             CanonicalPositiveZero(resolved.BottomElevationM, "resolved legacy bottom elevation");
             Equal(2d, resolved.TopElevationM, "resolved legacy top elevation");
 
