@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
 
@@ -18,7 +19,7 @@ namespace QS3D.Core.SmokeTests
         private static void RejectsNegativeAreaWhenConsumed()
         {
             var room = NewRoom();
-            room.AreaM2 = -1d;
+            SetLegacyMetric(room, "_areaM2", -1d);
             var settings = Only(ElementCategory.FloorFinish);
             Throws<InvalidOperationException>(() => RoomFinishGenerator.Generate(room, settings));
         }
@@ -38,8 +39,8 @@ namespace QS3D.Core.SmokeTests
         private static void IgnoresInvalidMetricWhenCorrespondingOutputsAreDisabled()
         {
             var room = NewRoom();
-            room.AreaM2 = -1d;
-            room.SideAreaM2 = -1d;
+            SetLegacyMetric(room, "_areaM2", -1d);
+            SetLegacyMetric(room, "_sideAreaM2", -1d);
             room.InnerPerimeterM = 7.5d;
 
             var output = RoomFinishGenerator.Generate(room, Only(ElementCategory.Skirting));
@@ -76,6 +77,14 @@ namespace QS3D.Core.SmokeTests
                 "R1",
                 new FamilyDefinition("Room", ElementCategory.Room, "Paint"),
                 "Level 1");
+        }
+
+        private static void SetLegacyMetric(ElementInstance room, string fieldName, double value)
+        {
+            var field = typeof(ElementInstance).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null)
+                throw new Exception("Expected private legacy metric field '" + fieldName + "'.");
+            field.SetValue(room, value);
         }
 
         private static RoomPropertySet Only(ElementCategory category)
