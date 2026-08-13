@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             CanonicalResultParityAndProvenance();
+            SignedZeroResultParity();
             MissingMetricStillFailsThroughCanonicalPath();
             InvalidDrawingUnitStillFailsThroughCanonicalPath();
         }
@@ -28,6 +29,22 @@ namespace QS3D.Core.SmokeTests
             AssertParity(entity, TakeoffKind.Length, DrawingUnit.Millimeter, "millimeter", 2500d);
             AssertParity(entity, TakeoffKind.Area, DrawingUnit.Millimeter, "millimeter2", 2000000d);
             AssertParity(entity, TakeoffKind.Volume, DrawingUnit.Millimeter, "millimeter3", 3000000000d);
+        }
+
+        private static void SignedZeroResultParity()
+        {
+            var direct = new TakeoffResult("Z0", TakeoffKind.Length, -0d, "m");
+            PositiveZero(direct.Value, "Direct TakeoffResult retained a negative-zero value.");
+
+            var entity = new EntitySnapshot("Z1", "Line", "QTO") { LengthDrawingUnits = -0d };
+            var calculated = QuantityEngine.Calculate(entity, TakeoffKind.Length, DrawingUnit.Meter);
+            PositiveZero(calculated.Value, "Canonical QuantityEngine result retained a negative-zero value.");
+
+            var traced = QuantityEngine.CalculateWithTrace(entity, TakeoffKind.Length, DrawingUnit.Meter);
+            PositiveZero(traced.Result.Value, "Traced TakeoffResult retained a negative-zero value.");
+            PositiveZero(traced.Trace.GrossValue, "Trace gross zero must remain canonical.");
+            PositiveZero(traced.Trace.NetValue, "Trace net zero must remain canonical.");
+            Equal(traced.Trace.NetValue, traced.Result.Value, "Takeoff result and trace zero quantities must remain equal.");
         }
 
         private static void AssertParity(
@@ -101,6 +118,12 @@ namespace QS3D.Core.SmokeTests
                 return exception.Message;
             }
             throw new InvalidOperationException("Expected " + typeof(TException).Name + ".");
+        }
+
+        private static void PositiveZero(double value, string message)
+        {
+            if (value != 0d || BitConverter.DoubleToInt64Bits(value) != 0L)
+                throw new InvalidOperationException(message);
         }
 
         private static void Equal<T>(T expected, T actual, string message)
