@@ -31,6 +31,8 @@ def require(text: str, token: str, label: str) -> None:
 entry = read("src/QS3D.BricsCAD.V25/PluginEntry.cs")
 palette = read("src/QS3D.BricsCAD.V25/PaletteCoordinator.cs")
 ribbon = read("src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator.cs")
+workspace = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs")
+right_panel = read("src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs")
 
 initialize = method(entry, "public void Initialize()", "public void Terminate()", "PluginEntry.Initialize")
 show = method(palette, "public static void Show()", "public static void Hide()", "PaletteCoordinator.Show")
@@ -42,6 +44,8 @@ ribbon_start = method(ribbon, "public static void Start()", "public static void 
 ribbon_document = method(ribbon, "private static void OnDocumentAvailable", "private static void StartTimedRetry", "RibbonInitializationCoordinator.OnDocumentAvailable")
 ribbon_retry = method(ribbon, "private static void StartTimedRetry", "private static void StopTimedRetry", "RibbonInitializationCoordinator.StartTimedRetry")
 ribbon_tick = method(ribbon, "private static void OnRetryTick", "private static bool TryInitializeAll", "RibbonInitializationCoordinator.OnRetryTick")
+workspace_initial = method(workspace, "public WorkspacePanel()", "private void BindViewModel()", "WorkspacePanel initial load")
+right_initial = method(right_panel, "public RightPanel()", "public void Refresh()", "RightPanel initial load")
 
 for token in (
     "RuntimeDiagnosticsCommands.CaptureLoadedBinaryIdentity();",
@@ -77,6 +81,18 @@ for token in (
     require(palette, token, "PaletteCoordinator")
 require(entry, "PaletteCoordinator.Dispose();", "PluginEntry.Terminate")
 
+for label, block, refresh in (
+    ("WorkspacePanel", workspace_initial, "RefreshProject();"),
+    ("RightPanel", right_initial, "Refresh();"),
+):
+    require(block, "Loaded += OnInitialLoaded;", label + " constructor")
+    require(block, "Loaded -= OnInitialLoaded;", label + " OnInitialLoaded")
+    require(block, refresh, label + " OnInitialLoaded")
+if "Loaded += (_, __) => RefreshProject();" in workspace:
+    errors.append("WorkspacePanel initial Loaded refresh must be one-shot, not a permanent anonymous handler")
+if "Loaded += (_, __) => Refresh();" in right_panel:
+    errors.append("RightPanel initial Loaded refresh must be one-shot, not a permanent anonymous handler")
+
 require(ribbon_start, "StartTimedRetry();", "RibbonInitializationCoordinator.Start")
 require(ribbon_document, "StartTimedRetry();", "RibbonInitializationCoordinator.OnDocumentAvailable")
 require(ribbon_retry, "new DispatcherTimer(DispatcherPriority.ApplicationIdle)", "RibbonInitializationCoordinator.StartTimedRetry")
@@ -93,4 +109,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: V25 NETLOAD defers palette/ribbon construction and keeps ribbon reconciliation at application-idle priority; first QS3D show avoids duplicate full refresh.")
+print("PASS: V25 NETLOAD defers palette/ribbon construction, keeps ribbon reconciliation at application-idle priority, makes Workspace/RightPanel initial refresh one-shot, and avoids duplicate first-show full refresh.")
