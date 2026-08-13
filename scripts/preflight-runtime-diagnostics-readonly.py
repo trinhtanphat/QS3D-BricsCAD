@@ -17,7 +17,7 @@ else:
         errors.append("QS3DRUNTIMECHECK must resolve project state read-only when available.")
     if "ProjectContextCoordinator.GetOrCreate(document)" in text:
         errors.append("QS3DRUNTIMECHECK must not create/cache project state merely to inspect runtime/package metadata.")
-    if "runtime diagnostics remain read-only and do not create project state" not in text:
+    if 'Diagnostics access: READ-ONLY; no project state was created' not in text:
         errors.append("QS3DRUNTIMECHECK must explain its no-project read-only behavior.")
     for token in (
         "private const int ExpectedRuntimeMajor = 26;",
