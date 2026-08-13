@@ -140,6 +140,11 @@ namespace QS3D.Core.Mapping
                 throw new InvalidOperationException("Quantity coverage " + label + " must not be blank.");
             if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
                 throw new InvalidOperationException("Quantity coverage " + label + " must not contain leading/trailing whitespace.");
+            for (var i = 0; i < value.Length; i++)
+            {
+                if (char.IsControl(value[i]))
+                    throw new InvalidOperationException("Quantity coverage " + label + " must not contain control characters.");
+            }
             return value;
         }
 
