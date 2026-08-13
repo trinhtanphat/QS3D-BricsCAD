@@ -1,32 +1,23 @@
 # Work claim — QSC-02 active Zone/Floor context integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-qsc02-active-context-integrity-20260813-2132`
 - Registered: `2026-08-13T21:32:00+07:00`
+- Completed: `2026-08-13T21:36:00+07:00`
 - Baseline main SHA: `b505ebe447b1bb5955be5003e3a914a2d1749a62`
-- Priority: `QSC-02 / P2`
+- Claim: `4e3185fd87176d3b5613a5be257dadcc07c21ba1`
+- Implementation: `cd2d0d1023a2123aab0657299989984d1ef602a8`
+- Regression: `f901883201f54bd3a54d32818f89af8863777f7c`
 
-## Confirmed gap
+## Result
 
-Current `ModelHealthService` already emits six project working-context findings for active Zone/Floor selection: `INVALID_ACTIVE_ZONE`, `AMBIGUOUS_ACTIVE_ZONE`, `ACTIVE_ZONE_NON_CANONICAL`, `INVALID_ACTIVE_FLOOR`, `AMBIGUOUS_ACTIVE_FLOOR`, and `ACTIVE_FLOOR_NON_CANONICAL`. QSC-01A supplies the declarative profile contract, while the completed semantic-readiness QSC-02 family covers element family/floor/zone/material/dimension findings and the completed host/opening family covers host findings. No QSC profile currently owns these six active-context codes.
+Added declarative QSC metadata for the six existing active Zone/Floor health codes and a focused smoke that exercises the existing `ModelHealthService` for missing, non-canonical, and ambiguous active context. Existing validation logic was not changed.
 
-## Reserved scope
+## Scope
 
-- new `src/QS3D.Core/Diagnostics/QsActiveContextIntegrityRuleFamily.cs`
-- new `tests/QS3D.Core.SmokeTests/QsActiveContextIntegrityRuleFamilySmoke.cs`
-- this claim file
+- `src/QS3D.Core/Diagnostics/QsActiveContextIntegrityRuleFamily.cs`
+- `tests/QS3D.Core.SmokeTests/QsActiveContextIntegrityRuleFamilySmoke.cs`
 
-## Intended bounded change
+## Validation
 
-- define a deterministic active-context profile over the six existing project-level Zone/Floor health codes with matching severities and human explanations;
-- focused smoke creates real missing, ambiguous, and non-canonical active Zone/Floor states and resolves the actual `ModelHealthService` findings through the QSC profile;
-- keep element semantic-readiness, host/opening, and unrelated health codes unmapped.
-
-## Excluded scope
-
-- no edits to `ModelHealthService`, `ModelHealthIssue`, `QsRuleProfile`, Zone/Floor mutation semantics, ProjectState, persistence/MAP, existing QSC families, QSC-03 autofix, UI, reports, native BricsCAD, release qualification, or cross-repo work;
-- no GitHub Actions, force-push, or unexecuted managed/native PASS claim.
-
-## Completion condition
-
-Claim-only first; refresh/recheck overlap; publish profile + focused smoke; reconcile current `main`; read back exact remote files; close `COMPLETED` with actual validation boundaries recorded.
+Remote source and smoke files were read back from `main`. No GitHub Actions or native BricsCAD qualification was run. Local managed execution was unavailable because no C# build toolchain is installed in this environment.
