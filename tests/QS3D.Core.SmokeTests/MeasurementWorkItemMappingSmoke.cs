@@ -56,10 +56,11 @@ namespace QS3D.Core.SmokeTests
             var mapped = catalog.Resolve(ElementCategory.ArchitecturalWall, "netwallaream2");
             True(mapped.IsMapped, "Case-insensitive measurement-item lookup must resolve a declared mapping.");
             Equal(MeasurementWorkItemMappingResolutionKind.Mapped, mapped.Kind, "Mapped resolution kind mismatch.");
-            True(ReferenceEquals(canonical, mapped.Mapping), "Mapped resolution must expose the canonical stored mapping entry.");
+            var resolvedMapping = mapped.Mapping ?? throw new InvalidOperationException("Mapped resolution must expose a mapping entry.");
+            True(ReferenceEquals(canonical, resolvedMapping), "Mapped resolution must expose the canonical stored mapping entry.");
             Equal("NetWallAreaM2", mapped.MeasurementItemId, "Mapped resolution must preserve canonical stored measurement-item spelling.");
-            Equal("class-wall", mapped.Mapping!.ClassificationId, "Mapped classification identity mismatch.");
-            Equal("work-wall-area", mapped.Mapping.WorkItemId, "Mapped work-item identity mismatch.");
+            Equal("class-wall", resolvedMapping.ClassificationId, "Mapped classification identity mismatch.");
+            Equal("work-wall-area", resolvedMapping.WorkItemId, "Mapped work-item identity mismatch.");
 
             var unmapped = catalog.Resolve(ElementCategory.ArchitecturalWall, "GrossWallAreaM2");
             True(!unmapped.IsMapped, "Unknown measurement item must remain explicitly unmapped.");
