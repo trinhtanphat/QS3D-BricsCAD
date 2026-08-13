@@ -1,6 +1,6 @@
 # Work claim — LOCAL-003 shared native Level Z-chain
 
-- Status: `ACTIVE`
+- Status: `BLOCKED`
 - Agent: `codex-local-019ff0c5` (`/root`, local Windows + licensed BricsCAD V25 agent)
 - Registered: `2026-08-11T19:43:12+07:00`
 - Baseline main SHA: `c7dd212d36677a1d2e005becf8709768fe98d6a1`
@@ -660,3 +660,9 @@ The startup failure reproduced with no DWG/plugin/script, with clones of both `Q
 The Windows host restarted and a normal operator-owned BricsCAD V25.2.10 x64 session now has a responsive main application window, so the earlier native-startup machine blocker is cleared. This status-only reactivation is based on synchronized `origin/main@561523e48ac1eaad3e3b5722cf74b3f7446b58dc` and must be visible on `origin/main` before renewed qualification begins.
 
 The operator-owned session currently has `MB MONG.dwg` open and remains strictly out of scope. The exact-SHA runner will not start, close or modify that process/drawing; it will wait until the operator saves and closes every BricsCAD session. After that precondition is satisfied, fetch current `main` again, rebuild the newest exact SHA against the installed V25 references, verify matching plugin/Core `ProductVersion`, run the focused deterministic gates and execute the granular Level probe from a fresh disposable artifact root. No GitHub Actions are authorized.
+
+## 2026-08-13 repeated blocker handoff
+
+The reactivated lane synchronized through `origin/main@3752d589634d5a909fb58691150f6fac2905c225`. All nine focused Level/static gates passed, and `QS3D.Core` Release built with zero warnings and zero errors under the local .NET 8.0.423 SDK. The required full Core smoke project then failed to compile at `tests/QS3D.Core.SmokeTests/MeasurementTraceContractSmoke.cs:98` with `CS8602`. This is a CAD-independent, remote-safe test nullable-flow defect; it was handed to non-local issue `#990` and this local worker did not edit the test or production MeasurementTrace source.
+
+Across three consecutive goal turns, issue `#990` remained open without an assignee/fix and the operator-owned responsive BricsCAD session continued to hold `MB MONG.dwg`. The runner correctly refuses any pre-existing BricsCAD process, and the local worker must neither close that process nor bypass the mandatory full-smoke gate. The claim is therefore `BLOCKED` while preserving its reservation. Resume only after a non-local fix makes the full Core smoke pass and the operator saves/closes every BricsCAD session; then reactivate/push the claim, fetch the newest `main`, rebuild and rerun all exact-SHA gates plus the fresh disposable Level probe. No GitHub Actions were dispatched.
