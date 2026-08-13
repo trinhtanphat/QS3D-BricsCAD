@@ -1,43 +1,27 @@
 # Work claim — V25 Floor / Level first-save project bootstrap
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-floor-level-first-save-bootstrap-20260813`
 - Registered: `2026-08-13T22:27:00+07:00`
+- Completed: `2026-08-13T22:55:00+07:00`
 - Baseline main SHA: `ba2932267f1ca168cb9a043faa88b3b58ea49cc7`
-- Priority: P1 user-visible bug. On a fresh/projectless drawing, `QS3DLEVELS` lets the user enter the first floor but `OnSaveFloorClick` immediately requires a project bound by the last Refresh, so the first explicit Save fails instead of creating the canonical QS3D project.
 
-## Reserved scope
+## Result
 
-- `src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml.cs`
-- `scripts/preflight-floor-level-stale-project-guard.py`
-- `scripts/preflight-floor-level-first-save-bootstrap.py` (new focused regression)
-- this claim file
+`QS3DLEVELS` now permits the explicit first **new-floor Save** on a drawing whose latest Refresh observed no QS3D project. The Save validates the floor draft first, verifies the bound DWG is still active, re-checks that no project appeared since Refresh, then uses the canonical `ProjectContextCoordinator.GetOrCreate` path. Existing-floor edits and all other Floor/Level mutations retain the exact refreshed-project fail-closed guard.
 
-## Intended change
+A failed mutation after first-save project creation restores the project snapshot and calls `ProjectContextCoordinator.Forget`, so a failed attempt does not strand a replacement in-memory project. Refresh and inspection remain non-creating.
 
-Allow only the explicit **new-floor Save** path to bootstrap the canonical project when the latest successful Level Picker refresh observed no project. Validate floor name/elevation before bootstrap; require the bound drawing to still be active; re-check that no project has appeared since Refresh; then use the existing canonical `ProjectContextCoordinator.GetOrCreate` creation path. Existing-floor edits and every other mutation keep the exact refreshed-project/reference-equality fail-closed contract.
+## Source / regression commits
 
-If the newly-created project cannot complete floor creation/audit, restore the project snapshot and forget the newly bootstrapped context so a failed first Save does not strand an empty replacement project. Read-only Refresh/inspection remain non-creating.
+- `e7c2db75bdea6dfd4cc845a600193e359aaa14ee` — guarded first-save project acquisition helper
+- `32151bfd7bd2670500627f56fbbfe10ba7193917` — focused Save handler with validation and rollback/Forget
+- `88cf3cca80170657de2f8a4bbd68fe7a8bec2bee` — wire XAML Save button to the guarded handler
+- `b6ebd54e0e9037612985d48c061038798844de74` — preserve/extend stale-project source guard
+- `ffff71f17d9582e59aa6c1084a44bec0264d3f81` — focused first-save bootstrap regression
 
-## Excluded scope
+`ffff71f17...` is an ancestor of the subsequently moving `main`; comparison against `9fd18c64574006ea4af01f64638a4efd59c58892` showed `behind_by=0`.
 
-- `ExistingProjectMutationContext` semantics
-- floor/level domain math, assignment, vertical placement or CAD movement
-- unrelated project lifecycle/capture flows
-- V26 and native BricsCAD runtime qualification
-- GitHub Actions dispatch
+## Validation boundary
 
-## Validation plan
-
-- Update the existing stale-project source guard so project creation is permitted only inside the explicit first-save bootstrap helper and rejected everywhere else in the modeless window.
-- Add a focused source regression requiring: validation before bootstrap, no-project re-check, exact new-save-only bootstrap, rollback/Forget on failed bootstrap mutation, existing-edit path still using `RequireBoundProjectForMutation`, and read-only callbacks remaining non-creating.
-- Re-fetch exact pushed source/guards and verify final ancestry against moving `main` before closeout.
-- Source/static evidence only; real V25 UI/NETLOAD qualification remains LOCAL_ONLY.
-
-## Coordination
-
-Recent Floor/Level responsive-footer work is already completed and reserved only XAML, not code-behind. The older stale-project lane is completed. Current NETLOAD/model-health claims are distinct. This claim deliberately preserves their stale-project safety invariant while fixing the explicit first-save UX hole.
-
-## Completion condition
-
-The first-floor Save fix and focused regression are on current `main`, exact source/guards and ancestry are verified, and this claim is marked `COMPLETED` with the remaining LOCAL_ONLY validation boundary recorded.
+Source wiring, canonical project acquisition, stale-project invariants, validation ordering, and rollback/Forget contracts were read back from `main`. The V25 project is SDK-style WPF so the new partial `.cs` files are included by default. No GitHub Actions workflow was dispatched. Real BricsCAD V25 NETLOAD/UI execution remains `LOCAL_ONLY` and is not claimed as runtime PASS here.
