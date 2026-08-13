@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -41,10 +40,14 @@ def main() -> int:
 
         require(launcher, "ExecutionPolicy RemoteSigned", "one-click launcher")
         require(launcher, "Get-AuthenticodeSignature", "one-click launcher")
-        require(launcher, "SignatureStatus]::Valid", "one-click launcher")
+        require(launcher, "SignatureStatus]::Valid", "signed installer bootstrap")
+        require(launcher, "SignatureStatus]::NotSigned", "unsigned preview bootstrap")
+        require(launcher, "Unblock-File -LiteralPath $p", "preview MOTW bootstrap")
+        require(launcher, "-Confirm:$false", "one-click non-interactive install")
         forbid(launcher, "ExecutionPolicy Bypass", "one-click launcher")
         require(package, "'INSTALL-QS3D.cmd'", "release package")
         require(package, "do not NETLOAD the DLL directly from Downloads", "safe install guidance")
+        require(package, "Unsigned cloud previews are explicitly warned", "preview install guidance")
 
         require(preferences, 'InstallOnExitValue = "InstallOnExit"', "update preference")
         require(preferences, "ReadBoolean(InstallOnExitValue, false)", "safe update-on-close default")
@@ -73,7 +76,7 @@ def main() -> int:
         print("ERROR:", exc)
         return 1
 
-    print("PASS: secure install, MOTW repair, automatic check, update-on-close, and ribbon update UX contracts are guarded.")
+    print("PASS: secure install, preview MOTW bootstrap, automatic check, update-on-close, and ribbon update UX contracts are guarded.")
     return 0
 
 
