@@ -8,6 +8,12 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
+            CanonicalCrossScopePrecedenceIsPreserved();
+            SamePropertyMapCollisionFailsBeforeMutation();
+        }
+
+        private static void CanonicalCrossScopePrecedenceIsPreserved()
+        {
             var project = new ProjectState("canonical-projection", "Canonical rule projection");
             var family = new ProjectFamily("beam", "Beam", ElementCategory.Beam);
             family.Properties[" Factor "] = "2";
@@ -29,6 +35,35 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Canonical variable precedence was not preserved.");
             if (!element.Properties.TryGetValue("Rule:ProjectedQuantity", out var provenance) || provenance != "beam-canonical-projected@1")
                 throw new InvalidOperationException("Quantity rule provenance was not recorded.");
+        }
+
+        private static void SamePropertyMapCollisionFailsBeforeMutation()
+        {
+            var project = new ProjectState("canonical-collision", "Canonical rule collision");
+            var element = new ProjectElement("B2", ElementCategory.Beam);
+            element.Properties["Factor"] = "2";
+            element.Properties[" Factor "] = "3";
+            project.Elements.Add(element);
+            project.QuantityRules.Add(new QuantityRule("beam-ambiguous", ElementCategory.Beam, "ProjectedQuantity", "Factor*2", "1"));
+
+            var beforeUpdatedUtc = element.UpdatedUtc;
+            var beforeDirty = element.Dirty;
+            try
+            {
+                new QuantityRuleEngine().ApplyMatching(project, element);
+                throw new InvalidOperationException("Expected normalized same-map variable-key collision to fail closed.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message == "Expected normalized same-map variable-key collision to fail closed.") throw;
+            }
+
+            if (element.Quantities.ContainsKey("ProjectedQuantity"))
+                throw new InvalidOperationException("Rejected normalized variable-key collision wrote a quantity output.");
+            if (element.Properties.ContainsKey("Rule:ProjectedQuantity"))
+                throw new InvalidOperationException("Rejected normalized variable-key collision wrote provenance.");
+            if (element.UpdatedUtc != beforeUpdatedUtc || element.Dirty != beforeDirty)
+                throw new InvalidOperationException("Rejected normalized variable-key collision changed element freshness state.");
         }
     }
 }
