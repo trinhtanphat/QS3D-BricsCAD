@@ -172,16 +172,16 @@ try {
         "QS3DCURTAINP09SEED",
         "QS3DGLASSWALL",
         "QS3DCURTAINP09PREPARE",
-        "QS3DCURTAIN3D",
+        "QS3DCURTAIN3D", "P", "",
         "QS3DCURTAINP09BASELINE",
         "QS3DCURTAINP09ARMFINGERPRINT",
-        "QS3DCURTAIN3D",
+        "QS3DCURTAIN3D", "P", "",
         "QS3DCURTAINP09VERIFYFINGERPRINT",
         "QS3DCURTAINP09PRECLEAN",
-        "QS3DCURTAIN3D",
+        "QS3DCURTAIN3D", "P", "",
         "QS3DCURTAINP09VERIFYCLEAN",
         "QS3DCURTAINP09ARMUI",
-        "QS3DCURTAIN3D",
+        "QS3DCURTAIN3D", "P", "",
         "QS3DCURTAINP09PROBE"
     )
     Set-Content -LiteralPath $scriptPath -Value $script -Encoding ASCII
