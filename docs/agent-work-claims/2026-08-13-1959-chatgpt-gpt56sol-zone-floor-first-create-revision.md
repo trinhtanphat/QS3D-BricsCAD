@@ -1,10 +1,11 @@
 # Work claim — first Zone/Floor create revision canonicality
 
-- Status: `ACTIVE_STATIC_REGRESSION`
+- Status: `BLOCKED_STATIC_REGRESSION_WRITE`
 - Agent: `chatgpt-gpt56sol-zone-floor-first-create-revision-20260813`
 - Registered: `2026-08-13T19:59:00+07:00`
 - Source fixed: `2026-08-13T20:09:00+07:00`
 - Static regression resumed: `2026-08-13T21:18:00+07:00`
+- Static regression write blocked: `2026-08-13T21:20:00+07:00`
 - Baseline main SHA: `af9e216176691ffd0d8f6942489ab50f347bf24d`
 - Static-regression baseline main SHA: `50ba32a6d0df94ae8433b643158a6fd67cdedfc6`
 - Priority: P0 deterministic persisted mutation revision semantics.
@@ -30,7 +31,9 @@ Repository convention review established the static fallback without guessing fi
 - `scripts/preflight-project-floor-zone-mutation-integrity.py` is the existing combined Floor/Zone domain mutation-integrity gate and already reads both `ProjectFloorService.cs` and `ProjectZoneService.cs`;
 - no separate `preflight-floor*` gate exists in repository search.
 
-The reserved regression target is therefore amended to `scripts/preflight-project-floor-zone-mutation-integrity.py`. The static regression will isolate both `Create()` methods and fail closed unless each method keeps the first-create active-id setter and subsequent-create `project.Touch()` as mutually exclusive revision owners, with the collection add occurring after that branch. It will also guard the persisted active-id setter contract in `ProjectState.cs` so the static proof continues to represent exactly one `ChangeVersion` increment on either path.
+The reserved regression target was therefore amended to `scripts/preflight-project-floor-zone-mutation-integrity.py`. A bounded replacement was prepared to isolate both `Create()` methods, require the first-create active-id setter and subsequent-create `project.Touch()` as mutually exclusive revision owners, require collection insertion after that branch, and guard the persisted active-id setter contract in `ProjectState.cs`.
+
+The connector/platform safety gate blocked the `update_file` attempt for that executable Python preflight before repository mutation. No regression commit resulted. This lane does not retry through `create_blob`, Git Data, force-ref movement, or another write mechanism because that would bypass the safety gate rather than resolve it.
 
 ## Coordination / moving-main reconciliation
 
@@ -38,8 +41,9 @@ The reserved regression target is therefore amended to `scripts/preflight-projec
 - Claim commit: `7479b252ee36dbf5fc1e0ee4ea79a69ad4f92316`.
 - Scope amendment commit: `4d1e501a66a81212e79d756455ec082ce1157adc`.
 - Blocked-regression record commit: `b7a30eefe5bddd604e66d3695f0b31b0219f5780`.
+- Static-regression resume/amendment commit: `913d5f0c74c6e6f9283c0629d1ea3431d5061f7c`.
 - Concurrent `ab9f1022ede0ff03b3d0ebafd7bedc41c83a35f4` touched only `scripts/preflight-runtime-product-version-identity.py`; it is disjoint from the reserved Domain files.
-- Moving `main` reached `50ba32a6d0df94ae8433b643158a6fd67cdedfc6` during static-regression recovery; that commit touches only `src/QS3D.Core/Revisions/RevisionMath.cs` and is disjoint from this lane.
+- Moving `main` reached `50ba32a6d0df94ae8433b643158a6fd67cdedfc6` before the claim amendment; that commit touches only `src/QS3D.Core/Revisions/RevisionMath.cs` and is disjoint from this lane.
 - Branch search for `zone-floor` returned no competing branch immediately before the static-regression amendment.
 - Exact remote source readback confirms both current Create implementations still contain the mutually exclusive active-setter/Touch paths.
 
@@ -49,9 +53,10 @@ The reserved regression target is therefore amended to `scripts/preflight-projec
 - exact remote Zone/Floor source readback: PASS;
 - exact `ProjectState` active-id persisted-scalar readback: PASS;
 - static gate discovery/readback: PASS;
+- static regression source landing: `BLOCKED_BY_PLATFORM_SAFETY_GATE`;
 - managed compile/smoke: `NOT_RUN`;
 - GitHub Actions/native BricsCAD/package/release qualification: `NOT_RUN`.
 
 ## Remaining completion condition
 
-Land and exact-readback the bounded static regression in `scripts/preflight-project-floor-zone-mutation-integrity.py`, validate its source-level conditions against the current Zone/Floor/ProjectState blobs, then close this claim with executable managed/native validation explicitly left `NOT_RUN`. Do not claim BricsCAD V25 `LOCAL_PASS` and do not dispatch GitHub Actions from this lane.
+When executable static-test writes are available without bypassing the safety gate, land the bounded regression in `scripts/preflight-project-floor-zone-mutation-integrity.py`, exact-readback it, and validate the source-level conditions against the current Zone/Floor/ProjectState blobs. Until then this claim remains blocked rather than falsely completed. Do not claim BricsCAD V25 `LOCAL_PASS` and do not dispatch GitHub Actions from this lane.
