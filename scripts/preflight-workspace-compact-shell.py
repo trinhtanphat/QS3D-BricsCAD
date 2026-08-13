@@ -100,8 +100,6 @@ if PARTIAL.is_file():
         "UseLayoutRounding = true",
         "SnapsToDevicePixels = true",
         "TuneWorkspaceGrid()",
-        "workspace.ColumnDefinitions[0].Width = new GridLength(165)",
-        "workspace.ColumnDefinitions[2].Width = new GridLength(255)",
         "ZoneCombo.MinHeight = 25",
         "FloorCombo.MinHeight = 25",
         "FamilyList.MinHeight = 82",
@@ -160,6 +158,10 @@ if PARTIAL.is_file():
         "OnSaveClick(",
         "Canvas.Set",
         "Margin = new Thickness(-",
+        # Persisted pane widths are owned by WorkspacePanel.LayoutPersistence.cs.
+        # Compact presentation may tune chrome/splitters, but must not overwrite them.
+        "workspace.ColumnDefinitions[0].Width",
+        "workspace.ColumnDefinitions[2].Width",
     ):
         if forbidden in partial:
             errors.append("Workspace compact presentation must remain presentation-only/collision-safe: " + forbidden)
@@ -190,6 +192,6 @@ if errors:
 
 print(
     "Workspace compact-shell preflight PASS: top-header breakpoints and the narrow MÔ HÌNH/Làm mới "
-    "section reserve collision-free space, existing Workspace actions remain wired, presentation stays "
-    "source-only, and the BricsCAD viewport boundary is preserved."
+    "section reserve collision-free space, existing Workspace actions remain wired, persisted pane widths "
+    "remain owned by layout persistence, presentation stays source-only, and the BricsCAD viewport boundary is preserved."
 )
