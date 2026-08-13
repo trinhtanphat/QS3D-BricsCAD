@@ -18,6 +18,10 @@ namespace QS3D.Core.SmokeTests
             var multiplyUnderflow = Capture<InvalidOperationException>(() => Invoke("Multiply", 1e-200d, 1e-200d, "multiply regression"));
             Equal("Quantity multiplication underflow: multiply regression", multiplyUnderflow.Message);
 
+            CanonicalPositiveZero(Invoke("Add", -0d, -0d, "negative-zero addition"));
+            Equal(3d, Invoke("Add", 1d, 2d, "ordinary addition"));
+            Equal(double.Epsilon, Invoke("Add", double.Epsilon, 0d, "subnormal addition"));
+
             Equal(0d, Invoke("Divide", 0d, 2d, "zero division"));
             CanonicalPositiveZero(Invoke("Divide", -0d, 2d, "negative-zero division"));
             Equal(double.Epsilon, Invoke("Divide", double.Epsilon, 1d, "subnormal division"));
