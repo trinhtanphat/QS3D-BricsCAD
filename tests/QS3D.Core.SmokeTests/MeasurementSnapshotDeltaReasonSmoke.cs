@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
             LifecycleReasonsAreExplicit();
             RuleVersionChangeIsVisible();
             AdjustmentRuleProvenanceIsVisible();
+            AdjustmentRuleAssociationIsVisible();
             CanonicalEvidenceDimensionsAreVisible();
             MultipleReasonsUseStableOrder();
             NumericOnlyChangeIsUnresolved();
@@ -52,6 +53,43 @@ namespace QS3D.Core.SmokeTests
             AssertReasons(
                 ChangedLine(before, after),
                 MeasurementSnapshotDeltaReasonKind.RuleProvenanceChanged,
+                MeasurementSnapshotDeltaReasonKind.AdjustmentsChanged);
+        }
+
+        private static void AdjustmentRuleAssociationIsVisible()
+        {
+            var before = Trace(
+                "SEM-A",
+                7d,
+                adjustments: new[]
+                {
+                    Adjustment(1d, "opening-a", "OPENING-A", "rule-a", "1"),
+                    Adjustment(2d, "opening-b", "OPENING-B", "rule-b", "1")
+                });
+            var after = Trace(
+                "SEM-A",
+                7d,
+                adjustments: new[]
+                {
+                    Adjustment(1d, "opening-a", "OPENING-A", "rule-b", "1"),
+                    Adjustment(2d, "opening-b", "OPENING-B", "rule-a", "1")
+                });
+
+            AssertReasons(
+                ChangedLine(before, after),
+                MeasurementSnapshotDeltaReasonKind.RuleProvenanceChanged,
+                MeasurementSnapshotDeltaReasonKind.AdjustmentsChanged);
+
+            var amountBefore = Trace(
+                "SEM-A",
+                9d,
+                adjustments: new[] { Adjustment(1d, "opening", "OPENING-1", "opening-deduction", "1") });
+            var amountAfter = Trace(
+                "SEM-A",
+                9d,
+                adjustments: new[] { Adjustment(2d, "opening", "OPENING-1", "opening-deduction", "1") });
+            AssertReasons(
+                ChangedLine(amountBefore, amountAfter),
                 MeasurementSnapshotDeltaReasonKind.AdjustmentsChanged);
         }
 
@@ -141,13 +179,28 @@ namespace QS3D.Core.SmokeTests
             string? ruleVersion = null,
             double? grossValue = null)
         {
+            var adjustmentItems = adjustments == null
+                ? new List<MeasurementTraceAdjustment>()
+                : new List<MeasurementTraceAdjustment>(adjustments);
+            var resolvedGrossValue = grossValue ?? netValue;
+            if (!grossValue.HasValue && string.Equals(roundingPolicy, "none", StringComparison.Ordinal))
+            {
+                for (var i = 0; i < adjustmentItems.Count; i++)
+                {
+                    var adjustment = adjustmentItems[i];
+                    resolvedGrossValue = adjustment.Kind == MeasurementTraceAdjustmentKind.Deduction
+                        ? resolvedGrossValue + adjustment.Amount
+                        : resolvedGrossValue - adjustment.Amount;
+                }
+            }
+
             return new MeasurementTrace(
                 semanticIdentity,
                 "SRC-A",
                 "NetAreaM2",
                 facts ?? Array.Empty<MeasurementTraceFact>(),
-                grossValue ?? netValue,
-                adjustments ?? Array.Empty<MeasurementTraceAdjustment>(),
+                resolvedGrossValue,
+                adjustmentItems,
                 netValue,
                 "m2",
                 roundingPolicy,
