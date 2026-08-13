@@ -24,6 +24,20 @@ def replacement_allowed(*, exists: bool, force: bool, is_directory: bool, qs3d_i
     return is_directory and qs3d_identity
 
 
+def public_semver_identity(value: str) -> str:
+    return value.split("+", 1)[0]
+
+
+def package_product_versions_allowed(metadata_version: str, dll_versions: tuple[str, ...]) -> bool:
+    if not dll_versions:
+        return False
+    metadata_public = public_semver_identity(metadata_version)
+    return (
+        all(public_semver_identity(version) == metadata_public for version in dll_versions)
+        and len(set(dll_versions)) == 1
+    )
+
+
 def main() -> int:
     installer = read(INSTALLER)
 
@@ -37,11 +51,32 @@ def main() -> int:
     require(installer, "Convert-ToStrictSemVerIdentity -Value ([string]$metadata.productVersion)", "metadata strict SemVer parse")
     require(installer, "$metadataAssemblyVersion.Build -ne $metadataProductVersion.Patch", "assembly/product core binding")
 
+    require(installer, "$text.IndexOf('+')", "SemVer build-metadata boundary")
+    require(installer, "PublicText = $publicText", "public SemVer identity")
+    require(installer, "$dllProductVersion.PublicText", "DLL public product identity")
+    require(installer, "$metadataProductVersion.PublicText", "metadata public product identity")
+    require(installer, "$fullDllProductVersion = $null", "full DLL ProductVersion provenance baseline")
+    require(installer, "Package managed DLL product versions disagree", "mixed-revision DLL refusal")
+    if "$dllProductVersion.Text, $metadataProductVersion.Text" in installer:
+        raise AssertionError("installer must not compare full DLL ProductVersion directly to canonical PACKAGE-METADATA productVersion")
+
+    reported = "0.1.0-preview.3+a99038557bfeab6fd8945cb28a0f890c46480184"
+    cases = (
+        ("0.1.0-preview.3", (reported, reported), True, "owner-reported SDK source revision metadata"),
+        ("0.1.0-preview.3", ("0.1.0-preview.3", "0.1.0-preview.3"), True, "no build metadata"),
+        ("0.1.0-preview.3", ("0.1.0-preview.4+abc", "0.1.0-preview.4+abc"), False, "public prerelease mismatch"),
+        ("0.1.0-preview.3", ("0.1.0-preview.3+aaa", "0.1.0-preview.3+bbb"), False, "mixed source revision metadata"),
+    )
+    for metadata_version, dll_versions, expected, label in cases:
+        actual = package_product_versions_allowed(metadata_version, dll_versions)
+        if actual is not expected:
+            raise AssertionError(f"product-version policy model mismatch for {label}: expected {expected}, got {actual}")
+
     require(installer, "foreach ($name in @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll'))", "both managed DLL identity checks")
     require(installer, "[Reflection.AssemblyName]::GetAssemblyName($path).Version", "DLL AssemblyVersion read")
     require(installer, "$assemblyVersion -ne $metadataAssemblyVersion", "DLL/metadata AssemblyVersion equality")
     require(installer, "[Diagnostics.FileVersionInfo]::GetVersionInfo($path).ProductVersion", "DLL ProductVersion read")
-    require(installer, "does not match PACKAGE-METADATA productVersion", "DLL/metadata ProductVersion equality")
+    require(installer, "does not match PACKAGE-METADATA productVersion", "DLL/metadata public ProductVersion equality")
 
     # A forced upgrade must prove the existing destructive target is QS3D-owned.
     require(installer, "function Assert-ExistingInstallDirectorySafeToReplace", "existing install replacement boundary")
@@ -100,7 +135,7 @@ def main() -> int:
     require(installer, "throw $originalError", "original install failure propagation")
 
     print(
-        "PASS: V25 installer binds hashed/signed source package identity and verifies an existing forced replacement target is a canonical QS3D V25 installation before its backup/move boundary, while preserving transactional safeguards."
+        "PASS: V25 installer accepts SDK SemVer build metadata only when public product identity matches, rejects mixed managed-DLL revisions, and preserves hashed/signed transactional install safeguards."
     )
     return 0
 
