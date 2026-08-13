@@ -8,7 +8,7 @@ BOOTSTRAP = RIBBON / "RibbonBootstrapper.cs"
 REFERENCE = RIBBON / "ReferenceWallRibbonAugmenter.cs"
 PROJECT = RIBBON / "ProjectRibbonAugmenter.cs"
 QUICK = RIBBON / "QuickWorkflowRibbonAugmenter.cs"
-PLUGIN = ROOT / "src/QS3D.BricsCAD.V25/PluginEntry.cs"
+COORDINATOR = RIBBON / "RibbonInitializationCoordinator.cs"
 errors = []
 
 
@@ -23,7 +23,7 @@ bootstrap = read(BOOTSTRAP)
 reference = read(REFERENCE)
 project = read(PROJECT)
 quick = read(QUICK)
-plugin = read(PLUGIN)
+coordinator = read(COORDINATOR)
 
 for token in (
     '"QS3D_AUTHOR"',
@@ -139,14 +139,14 @@ for name, text in (("ReferenceWallRibbonAugmenter", reference), ("ProjectRibbonA
         if forbidden in text:
             errors.append(name + " still relies on removed flat-panel/fallback routing: " + forbidden)
 
-bootstrap_call = plugin.find("RibbonBootstrapper.TryInitialize();")
-reference_call = plugin.find("ReferenceWallRibbonAugmenter.TryInitialize();")
-project_call = plugin.find("ProjectRibbonAugmenter.TryInitialize();")
-quick_call = plugin.find("QuickWorkflowRibbonAugmenter.TryInitialize();")
+bootstrap_call = coordinator.find("RibbonBootstrapper.TryInitialize()")
+reference_call = coordinator.find("ReferenceWallRibbonAugmenter.TryInitialize()")
+project_call = coordinator.find("ProjectRibbonAugmenter.TryInitialize()")
+quick_call = coordinator.find("QuickWorkflowRibbonAugmenter.TryInitialize()")
 if min(bootstrap_call, reference_call, project_call, quick_call) < 0 or not (
     bootstrap_call < reference_call < project_call < quick_call
 ):
-    errors.append("PluginEntry must initialize grouped RibbonBootstrapper before all legacy augmenters")
+    errors.append("RibbonInitializationCoordinator must initialize grouped RibbonBootstrapper before all grouped/dedicated augmenters")
 
 if errors:
     print("Ribbon augmenter grouped-panel preflight FAILED:")
@@ -156,5 +156,5 @@ if errors:
 
 print(
     "Ribbon augmenter grouped-panel preflight PASS: Reference Wall and Project Tools reconcile stable existing button state, "
-    "all legacy augmenters use deterministic grouped/dedicated panel sources without first-panel fallback, and command dispatch remains click-time active-document routed."
+    "all grouped/dedicated augmenters target deterministic panel sources through the bounded Ribbon coordinator without first-panel fallback, and command dispatch remains click-time active-document routed."
 )
