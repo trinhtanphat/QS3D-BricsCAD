@@ -44,3 +44,10 @@ The current ACTIVE/BLOCKED-claim and open-PR audit found no owner for P07, the p
 ## Completion condition
 
 The additive probe/runner/gate is merged, an exact-main licensed run records either the complete sanitized P07 PASS contract or an allowlisted diagnostic FAIL without overclaiming, docs are updated truthfully and this claim is marked `COMPLETED`. P08-P12 and overall `LOCAL-002` remain `PENDING_LOCAL`.
+
+## Source-preparation status
+
+- Additive command, runner, focused gate and runbook handoff are source-complete on the implementation branch; production Curtain code remains unchanged.
+- Strict installed-reference V25 `Release|x64` build passes with zero warnings/errors. P01-P07, native/orchestration/runtime-health/Level gates, the runner parser and `scripts/preflight.py` pass.
+- The 718-gate aggregate passes 717 gates; only the unrelated moving-main customer-release version mismatch remains (`plugin 0.1.0-preview.4` versus `Core 0.1.0-preview.3`). This claim does not own release/version files.
+- Runtime evidence remains `PENDING_LOCAL` until the source-preparation PR is merged and the exact clean merged SHA/DLL completes the licensed matrix.
