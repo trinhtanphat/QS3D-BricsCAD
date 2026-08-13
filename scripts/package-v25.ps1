@@ -38,10 +38,23 @@ function Convert-ToStrictSemVerText {
     return $text
 }
 
+function Get-SourceGitCommit {
+    $output = @(& git -C $root rev-parse --verify HEAD 2>&1)
+    if ($LASTEXITCODE -ne 0 -or $output.Count -ne 1) {
+        throw "Could not resolve the exact source Git HEAD for package provenance."
+    }
+    $commit = ([string]$output[0]).Trim().ToLowerInvariant()
+    if ($commit -notmatch '^[0-9a-f]{40}$') {
+        throw "Source Git HEAD is not one exact 40-hex commit: '$commit'."
+    }
+    return $commit
+}
+
 $pluginProject = Join-Path $root 'src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj'
 $coreProject = Join-Path $root 'src/QS3D.Core/QS3D.Core.csproj'
 $productVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $pluginProject) -Label 'QS3D plugin product version'
 $coreProductVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $coreProject) -Label 'QS3D Core product version'
+$gitCommit = Get-SourceGitCommit
 if (-not [string]::Equals($productVersion, $coreProductVersion, [StringComparison]::Ordinal)) {
     throw "QS3D plugin/Core product versions differ: plugin=$productVersion core=$coreProductVersion"
 }
@@ -102,6 +115,7 @@ $metadata = [ordered]@{
     target = 'BricsCAD V25 x64'
     productVersion = $productVersion
     version = $assemblyVersion.ToString()
+    gitCommit = $gitCommit
     generatedUtc = [DateTime]::UtcNow.ToString('o')
     commandCount = $commands.Count
     defaultLoadMode = 'OnCommand'
@@ -116,6 +130,7 @@ $metadata | ConvertTo-Json | Set-Content -Path (Join-Path $dist 'PACKAGE-METADAT
 QS3D for BricsCAD V25 x64
 Product version: $productVersion
 Assembly version: $($assemblyVersion.ToString())
+Source commit: $gitCommit
 
 Recommended install (avoids .NET 0x80131515 / Mark-of-the-Web NETLOAD failures):
 1. Close BricsCAD.
@@ -169,6 +184,7 @@ $zipHash = (Get-FileHash $zip -Algorithm SHA256).Hash
 Write-Host "Package ready: $zip"
 Write-Host "Product version: $productVersion"
 Write-Host "Assembly version: $($assemblyVersion.ToString())"
+Write-Host "Source commit: $gitCommit"
 Write-Host "Commands: $($commands.Count)"
 Write-Host "Plugin signature: $($signature.Status)"
 Write-Host "SHA256: $zipHash"
