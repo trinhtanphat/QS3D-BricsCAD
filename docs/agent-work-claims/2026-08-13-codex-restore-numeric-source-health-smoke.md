@@ -1,6 +1,6 @@
 # Work claim — Restore numeric source-health smoke contract
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-restore-numeric-source-health-smoke-20260813` (`/root/fix_rightpanel_thickness`)
 - Registered: `2026-08-13T22:00:00+07:00`
 - Baseline main SHA: `cd3a8eb17bf6dace92224c17cad826178bd78933`
@@ -36,3 +36,12 @@ The completed `2026-08-13-1933` claim defines numeric semantic-source duplicate,
 ## Completion condition
 
 This claim expansion is merged before production editing, numeric production identity plus the two-case comprehensive smoke contract are restored and merged, clean full Core smoke/aggregate results are recorded, and this claim is marked `COMPLETED` in a separate closeout.
+
+## Completion evidence
+
+- Original claim-only PR `#1072` merged at `71d5acb2e9240e06d65245dd52203e20e2bc62b7` before smoke editing. After direct production commit `f477ca54` widened the regression, claim-expansion PR `#1073` merged at `939d858183b1fab7e9026f716c883a4908dc8776` before any production edit.
+- Implementation commit `a4b854d1e81355ce35157932443e16761c734988` merged through PR `#1074` at `e7318dc41bc04b26bee9f5b4f6b985d38144c9bd`.
+- Exact merge SHA clean full Core smoke: `ALL PASS`; Core Release build: 0 warnings / 0 errors.
+- Generated-handle ownership, semantic SourceHandle numeric-identity, and Auto Room canonical-selection focused gates PASS; aggregate preflight PASS at 774/774; `git diff --check` PASS.
+- `ModelHealthSourceHandleSmoke.cs` required no edit. Production numeric source identity and comprehensive numeric-alias / true-missing orphan coverage are coherent again.
+- No P10 automation/Workspace/Curtain/workflow files changed; no BricsCAD runtime or GitHub Actions were run.
