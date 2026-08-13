@@ -84,7 +84,6 @@ namespace QS3D.Core.Persistence
 
         private static void MigrateV3ToV4(XElement root)
         {
-            if (root.Element("mappings") == null) root.Add(new XElement("mappings"));
             SetMigrationOrigin(root, "3");
         }
 
@@ -97,7 +96,6 @@ namespace QS3D.Core.Persistence
             var floors = RequireSingleContainer(root, "floors");
             RequireSingleContainer(root, "families");
             RequireSingleContainer(root, "rules");
-            RequireSingleContainer(root, "mappings");
             var elements = RequireSingleContainer(root, "elements");
             var audit = RequireSingleContainer(root, "audit");
 
