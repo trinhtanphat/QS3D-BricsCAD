@@ -1,6 +1,6 @@
 # Work claim — LOCAL-002 Curtain P12 multi-DWG modeless affinity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local-root-20260813`
 - Registered: `2026-08-13T14:28:03+07:00`
 - Baseline main SHA: `0413a7951f1946b54211f04ea3de2b901b0576a0`
@@ -45,3 +45,11 @@ Current active/blocked claim and open-PR scans at the baseline found no reservat
 ## Completion condition
 
 The claim is visible on current `origin/main`; the guarded probe/runner/gate are merged; one clean exact-SHA licensed V25 P12 result is recorded with sanitized evidence; and this claim is marked `COMPLETED`. A product failure leaves P12 `PENDING_LOCAL`/source-blocked with a remote handoff instead of being misreported as PASS.
+
+## Completion evidence
+
+- Source-preparation PR `#992` merged as `30fb30a7d91ec95f3a188ddd5cbc6cd792daeb5d`; BricsCAD-hosted WPF discovery hardening PR `#993` merged as `47b64868111522628fe90f1f00c409ea455160b6`; native close-boundary hardening PR `#994` merged as `1ddba400c2d781ee0f5ac6e2a507d26d33b37477`; exact private-state cleanup correction PR `#995` merged as `67426427d67490b246eb035af1bc19c930789686`.
+- Clean exact `main` SHA `67426427d67490b246eb035af1bc19c930789686` built the V25 x64 Release adapter with `0 warnings / 0 errors`; adapter SHA-256 was `85D36541D52A119DCCD031D0555EAB3EE097CB0E9D409A24B5F4A3B81A48DC51` and BricsCAD was `25.2.10`.
+- The real A-bound Curtain Hub refused routed Refresh and Frame Health while B was active without changing either project; A refresh succeeded after reactivation; destroying A closed the bound window and raised Closed; B remained active and unchanged.
+- Both ordinary repository-sample copies remained byte-identical to SHA-256 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`. Process and private-script cleanup passed, and an independent post-run scan found zero `.qsdb`, backup, lock, drawing-lock or script files.
+- The result promotes only P12 to bounded `LOCAL_PASS`. It does not qualify broad H.1, P10/P11, Level placement or overall LOCAL-002.
