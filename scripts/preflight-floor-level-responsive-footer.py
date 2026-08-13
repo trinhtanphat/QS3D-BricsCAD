@@ -67,7 +67,7 @@ for token in (
     'SelectionChanged="OnFloorSelectionChanged"',
     'Click="OnRefreshClick"',
     'Click="OnNewFloorClick"',
-    'Click="OnSaveFloorClick"',
+    'Click="OnSaveFloorFirstBootstrapClick"',
     'Click="OnDeleteFloorClick"',
     'Click="OnActivateClick"',
     'Click="OnAssignClick"',
