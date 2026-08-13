@@ -163,14 +163,12 @@ namespace QS3D.Core.Cost
 
         private static string? RequireAdjustmentReason(decimal adjustmentQuantity, string? reason)
         {
-            if (adjustmentQuantity != 0m && string.IsNullOrWhiteSpace(reason))
+            if (adjustmentQuantity == 0m) return null;
+            if (string.IsNullOrWhiteSpace(reason))
                 throw new ArgumentException(
                     "A non-zero commercial adjustment requires an explicit reason.",
                     nameof(reason));
 
-            if (reason == null) return null;
-            if (string.IsNullOrWhiteSpace(reason))
-                throw new ArgumentException("Commercial adjustment reason must not be blank.", nameof(reason));
             if (!string.Equals(reason, reason.Trim(), StringComparison.Ordinal))
                 throw new ArgumentException("Commercial adjustment reason must not contain surrounding whitespace.", nameof(reason));
 
