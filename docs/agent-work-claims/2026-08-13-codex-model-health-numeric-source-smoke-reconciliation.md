@@ -1,6 +1,6 @@
 # Work claim — Model Health numeric source smoke reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-model-health-numeric-source-smoke-20260813` (`/root/fix_rightpanel_thickness`)
 - Registered: `2026-08-13T21:50:00+07:00`
 - Baseline main SHA: `cd2d0d1023a2123aab0657299989984d1ef602a8`
@@ -33,3 +33,11 @@ The completed Model Health numeric SourceHandle claim establishes the authoritat
 ## Completion condition
 
 Claim-only PR is merged before test editing, the single-smoke correction is merged, exact validation is recorded, and this claim is marked `COMPLETED` in a separate closeout.
+
+## Completion evidence
+
+- Claim-only PR `#1066` merged at `b27afdae5f1b580873886ffdb6f2852e4d8b8620` before implementation editing began.
+- Implementation commit `43035744e7d146eb1446af1a5d6c04a39cc1c12b` merged through PR `#1067` at `18d3693f229d15746d414c4d3f94778c8f485adc`.
+- Core Release build PASS with 0 warnings / 0 errors; generated-handle ownership and semantic SourceHandle numeric-identity focused gates PASS; aggregate preflight PASS at 774/774; `git diff --check` PASS.
+- Full Core smoke no longer reported the stale `ORPHAN_HANDLE` assertion and progressed to the separately owned `WorkspaceCurtainOwnerSelectionSmoke` `HANDLE:00D2` fixture blocker; that unrelated fixture was not changed in this lane.
+- Only `ComprehensiveGeneratedLiveHandleIdentitySmoke.cs` changed. No production/P10 automation/workflow files changed; no BricsCAD runtime or GitHub Actions were run.
