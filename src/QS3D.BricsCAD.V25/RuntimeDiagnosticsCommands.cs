@@ -245,7 +245,11 @@ namespace QS3D.BricsCAD.V25
         {
             var normalized = (value ?? string.Empty).Trim();
             Version version;
-            return Version.TryParse(normalized, out version) && version != null ? version.ToString(4) : normalized;
+            if (!Version.TryParse(normalized, out version) || version == null) return normalized;
+            return version.Major + "." +
+                   version.Minor + "." +
+                   Math.Max(0, version.Build) + "." +
+                   Math.Max(0, version.Revision);
         }
 
         private static string EmptyAsUnknown(string value) =>
