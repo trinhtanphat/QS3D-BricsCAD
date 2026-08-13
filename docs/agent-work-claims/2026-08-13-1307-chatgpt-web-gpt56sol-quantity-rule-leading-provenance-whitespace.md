@@ -1,6 +1,6 @@
 # Work claim — Quantity Rule leading-whitespace provenance canonicality
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-quantity-rule-leading-provenance-whitespace-20260813-1307`
 - Registered: `2026-08-13T13:07:00+07:00`
 - Baseline main SHA: `1ebfd929e05db6c441b0a62fbc8632fcfcfe1f69`
@@ -8,30 +8,39 @@
 
 ## Confirmed gap
 
-The existing quantity-rule provenance read path rejects malformed keys such as `Rule: Ghost`, but `GetStaleManagedOutputs(...)` filters properties with `StartsWith("Rule:")` before canonicality validation. A persisted/directly injected key such as ` Rule:Ghost` therefore bypasses the rule-provenance namespace entirely. If `Ghost` is an active rule output, the engine can then write canonical `Rule:Ghost` while leaving the padded shadow key in place; if it is stale, cleanup never sees it. The existing `QuantityRuleProvenanceCanonicalReadSmoke` covers whitespace after the prefix and blank outputs, but not whitespace before the `Rule:` namespace.
+The existing quantity-rule provenance read path rejected malformed keys such as `Rule: Ghost`, but `GetStaleManagedOutputs(...)` filtered properties with `StartsWith("Rule:")` before canonicality validation. A persisted/directly injected key such as ` Rule:Ghost` therefore bypassed the rule-provenance namespace entirely. It could survive stale cleanup or coexist with a subsequently written canonical `Rule:Ghost` shadowing the same logical provenance output.
 
 ## Reserved scope
 
-- `src/QS3D.Core/Rules/QuantityRuleEngine.cs` — recognize a trimmed key that enters the `Rule:` namespace, then reject any whole-key whitespace non-canonicality before output/provenance mutation.
-- `tests/QS3D.Core.SmokeTests/QuantityRuleProvenanceCanonicalReadSmoke.cs` — add a focused leading-whitespace provenance regression while preserving existing canonical stale-cleanup behavior.
+- `src/QS3D.Core/Rules/QuantityRuleEngine.cs`
+- `tests/QS3D.Core.SmokeTests/QuantityRuleProvenanceCanonicalReadSmoke.cs`
 - this claim file.
 
-## Contract boundary
+## Implemented contract
 
-- Canonical `Rule:<OutputName>` behavior is unchanged.
-- Existing malformed `Rule: Ghost`, blank output, stale cleanup, dependency ordering, variable projection and provenance write semantics remain authoritative.
-- Only properties whose trimmed key enters the `Rule:` namespace are subject to this new whole-key canonicality guard; unrelated padded non-rule properties remain outside this lane.
+- `GetStaleManagedOutputs(...)` now inspects the trimmed form of every property key only to decide whether it enters the `Rule:` namespace.
+- If the trimmed key enters that namespace but differs from the raw key, evaluation fails closed with the existing malformed-provenance error before any rule output/provenance mutation.
+- Canonical `Rule:<OutputName>` handling, existing post-prefix canonicality checks, active-output behavior and canonical stale cleanup remain unchanged.
+- Unrelated padded non-rule properties are still ignored by this provenance guard.
 
-## Excluded scope
+## Commits
 
-- No MeasurementTrace/MTR files; the concurrent MTR-02 adjustment-rule-identity claim owns only `MeasurementTrace.cs` + `MeasurementTraceContractSmoke.cs` and explicitly excludes `QuantityRuleEngine`.
-- No QuantityRule Preview source, persistence/schema, reports/BOQ/estimate, palette, Curtain/native, LOCAL-003, installer, CI or GitHub Actions changes.
-- No new rule/provenance engine and no public rule model changes.
+- Claim-only: `320fe55eff4583e979fb0c9ca383c0f3efd07c58` — `chore(agent): claim leading-whitespace rule provenance canonicality`.
+- Production fix: `5b89db619ce783336aa944ce7cff5db012aa326e` — `fix(rules): reject padded provenance namespace keys`.
+- Regression: `5b3d55b0ba1ebd7fdbfbcefa0ee0178a12547588` — `test(rules): cover padded provenance namespace prefix`.
 
-## Validation plan
+## Validation actually executed
 
-- Regression injects ` Rule:Ghost` and proves `ApplyMatching(...)` fails before quantity/provenance/freshness mutation.
-- Existing cases continue to prove `Rule: Ghost` and `Rule:   ` fail closed and canonical `Rule:Ghost` stale provenance is removed exactly.
-- Re-fetch `main` immediately after claim and abort/source-skip on any overlapping Rules reservation.
-- Inspect exact production/test commit diffs and final current-main readback.
-- Connector-only validation is not an executable .NET build/smoke run; no managed/native PASS will be claimed unless actually executed.
+- Refreshed current `main` and reviewed the concurrent ACTIVE MTR-02 claim; its reserved files are only `MeasurementTrace.cs` + `MeasurementTraceContractSmoke.cs` and it explicitly excludes `QuantityRuleEngine`, so no ownership overlap exists.
+- Exact production commit diff confirms only `QuantityRuleEngine.cs` changed, replacing the raw-prefix filter with trimmed-namespace recognition plus whole-key canonicality rejection.
+- Exact regression commit diff confirms only `QuantityRuleProvenanceCanonicalReadSmoke.cs` changed, adding one leading-whitespace case.
+- Regression proves ` Rule:Ghost` fails before quantity/provenance/freshness mutation while the pre-existing smoke cases continue to cover `Rule: Ghost`, blank provenance output, active malformed provenance and exact canonical stale cleanup.
+- The provenance smoke remains automatically executed through its existing `[ModuleInitializer]`; no shared registration surface was edited.
+
+## Unexecuted gates
+
+- This connector environment did not execute `dotnet build`, the `QS3D.Core.SmokeTests` binary, GitHub Actions, or BricsCAD native/runtime qualification. No PASS is claimed for those unexecuted gates.
+
+## Completion condition
+
+Satisfied for this narrow P0 Measurement Rules provenance-integrity lane: ownership was claimed before source changes, leading-whitespace provenance namespace aliases now fail closed in the existing engine, regression is committed on the existing smoke surface, exact diffs were inspected, and the claim is released as `COMPLETED` without representing unexecuted managed/native gates as PASS.
