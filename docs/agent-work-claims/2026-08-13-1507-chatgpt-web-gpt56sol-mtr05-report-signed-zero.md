@@ -27,13 +27,14 @@ The change preserves:
 ## Expected surfaces
 
 - `src/QS3D.Core/Reporting/QuantityReportMath.cs`
-- `tests/QS3D.Core.SmokeTests/ProjectQuantitySmoke.cs`
+- `tests/QS3D.Core.SmokeTests/QuantityReportSignedZeroSmoke.cs`
 - this claim file
 
 ## Excluded scope
 
 - No `UnitScale`, `ProjectUnitPolicy`, MeasurementTrace/Snapshot/Delta/Inspector, rate/cost, persistence, exporter or UI changes.
 - No Auto Room reporting-fixture changes.
+- No edits to the shared `ProjectQuantitySmoke.cs` or smoke registration list; the focused regression uses the repository's existing `ModuleInitializer` smoke pattern.
 - No native BricsCAD V25/V26 adapter or LOCAL qualification changes.
 - No GitHub Actions and no BricsCAD native PASS claim.
 
