@@ -91,20 +91,89 @@ function Stop-Qs3dLaunchedProcess {
     if (-not $Process.HasExited) { throw "Launched LOCAL-004 BricsCAD process did not exit." }
 }
 
+function Find-Qs3dHandoffProcess {
+    param(
+        [Parameter(Mandatory = $true)][int]$LauncherId,
+        [Parameter(Mandatory = $true)][string]$ExpectedExecutable
+    )
+    $records = @(Get-CimInstance -ClassName Win32_Process -Filter ("Name = 'bricscad.exe' AND ParentProcessId = " + $LauncherId))
+    $matches = New-Object System.Collections.Generic.List[Diagnostics.Process]
+    foreach ($record in $records) {
+        $candidatePath = [string]$record.ExecutablePath
+        if ([string]::IsNullOrWhiteSpace($candidatePath)) { continue }
+        $candidatePath = [IO.Path]::GetFullPath($candidatePath)
+        if (-not [string]::Equals($candidatePath, $ExpectedExecutable, [StringComparison]::OrdinalIgnoreCase)) { continue }
+        $candidate = Get-Process -Id ([int]$record.ProcessId) -ErrorAction SilentlyContinue
+        if ($null -ne $candidate) { $matches.Add($candidate) }
+    }
+    if ($matches.Count -gt 1) { throw "LOCAL-004 launcher produced an ambiguous BricsCAD process handoff." }
+    if ($matches.Count -eq 1) { return $matches[0] }
+    return $null
+}
+
+function Wait-Qs3dHandoffProcess {
+    param(
+        [Parameter(Mandatory = $true)][int]$LauncherId,
+        [Parameter(Mandatory = $true)][string]$ExpectedExecutable,
+        [Parameter(Mandatory = $true)][DateTime]$Deadline
+    )
+    $handoffDeadline = (Get-Date).AddSeconds(30)
+    if ($handoffDeadline -gt $Deadline) { $handoffDeadline = $Deadline }
+    while ((Get-Date) -lt $handoffDeadline) {
+        $candidate = Find-Qs3dHandoffProcess -LauncherId $LauncherId -ExpectedExecutable $ExpectedExecutable
+        if ($null -ne $candidate) { return $candidate }
+        Start-Sleep -Milliseconds 250
+    }
+    throw "BricsCAD launcher exited without an exact child-process handoff or LOCAL-004 marker."
+}
+
+function Stop-Qs3dLateHandoffProcesses {
+    param(
+        [Parameter(Mandatory = $true)][int[]]$LauncherIds,
+        [Parameter(Mandatory = $true)][string]$ExpectedExecutable
+    )
+    $deadline = (Get-Date).AddSeconds(10)
+    do {
+        foreach ($launcherId in $LauncherIds) {
+            if ($launcherId -le 0) { continue }
+            $candidate = Find-Qs3dHandoffProcess -LauncherId $launcherId -ExpectedExecutable $ExpectedExecutable
+            if ($null -ne $candidate) { Stop-Qs3dLaunchedProcess -Process $candidate }
+        }
+        Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $deadline)
+    foreach ($launcherId in $LauncherIds) {
+        if ($launcherId -le 0) { continue }
+        if ($null -ne (Find-Qs3dHandoffProcess -LauncherId $launcherId -ExpectedExecutable $ExpectedExecutable)) {
+            throw "LOCAL-004 launcher retained a late BricsCAD child process."
+        }
+    }
+}
+
 function Wait-Qs3dMarkerOrFailure {
     param(
-        [Parameter(Mandatory = $true)][Diagnostics.Process]$Process,
+        [Parameter(Mandatory = $true)][ref]$Process,
+        [Parameter(Mandatory = $true)][ref]$HandoffCount,
+        [Parameter(Mandatory = $true)][string]$ExpectedExecutable,
         [Parameter(Mandatory = $true)][string]$ExpectedPath,
         [Parameter(Mandatory = $true)][string]$FailurePath,
         [Parameter(Mandatory = $true)][DateTime]$Deadline
     )
     $dismissed = 0
+    [Diagnostics.Process]$current = $Process.Value
+    $launcherId = $current.Id
+    $handoffAdopted = $false
     while ((Get-Date) -lt $Deadline) {
         if (Test-Path -LiteralPath $ExpectedPath -PathType Leaf) { return $dismissed }
         if (Test-Path -LiteralPath $FailurePath -PathType Leaf) { return $dismissed }
-        $dismissed += Close-Qs3dProxyInformationDialog -Process $Process
-        $Process.Refresh()
-        if ($Process.HasExited) { throw "BricsCAD exited before the LOCAL-004 marker was published." }
+        $dismissed += Close-Qs3dProxyInformationDialog -Process $current
+        $current.Refresh()
+        if ($current.HasExited) {
+            if ($handoffAdopted) { throw "BricsCAD exited before the LOCAL-004 marker was published." }
+            $current = Wait-Qs3dHandoffProcess -LauncherId $launcherId -ExpectedExecutable $ExpectedExecutable -Deadline $Deadline
+            $Process.Value = $current
+            $HandoffCount.Value = [int]$HandoffCount.Value + 1
+            $handoffAdopted = $true
+        }
         Start-Sleep -Milliseconds 500
     }
     throw "Timed out waiting for the LOCAL-004 marker."
@@ -222,6 +291,9 @@ foreach ($name in $environmentNames) { $oldEnvironment[$name] = [Environment]::G
 
 $processOne = $null
 $processTwo = $null
+$launcherOneId = 0
+$launcherTwoId = 0
+$launcherHandoffs = 0
 $phaseMarker = $null
 $finalMarker = $null
 $qualificationError = $null
@@ -260,7 +332,8 @@ try {
     $argumentsOne = '"' + $drawingA + '" /P "' + $Profile + '" /B "' + $scriptOnePath + '"'
     $deadlineOne = (Get-Date).AddSeconds($StartupTimeoutSeconds)
     $processOne = Start-Process -FilePath $bricscadExe -ArgumentList $argumentsOne -PassThru -WindowStyle Hidden -WorkingDirectory $ArtifactDir
-    $proxyDialogsDismissed += Wait-Qs3dMarkerOrFailure -Process $processOne -ExpectedPath $phasePath -FailurePath $resultPath -Deadline $deadlineOne
+    $launcherOneId = $processOne.Id
+    $proxyDialogsDismissed += Wait-Qs3dMarkerOrFailure -Process ([ref]$processOne) -HandoffCount ([ref]$launcherHandoffs) -ExpectedExecutable $bricscadExe -ExpectedPath $phasePath -FailurePath $resultPath -Deadline $deadlineOne
     if (Test-Path -LiteralPath $resultPath -PathType Leaf) {
         $finalMarker = Read-Qs3dMarker -Path $resultPath
         Require-Qs3dValue -Marker $finalMarker -Key "status" -Expected "FAIL"
@@ -298,7 +371,8 @@ try {
     $argumentsTwo = '"' + $drawingA + '" /P "' + $Profile + '" /B "' + $scriptTwoPath + '"'
     $deadlineTwo = (Get-Date).AddSeconds($StartupTimeoutSeconds)
     $processTwo = Start-Process -FilePath $bricscadExe -ArgumentList $argumentsTwo -PassThru -WindowStyle Hidden -WorkingDirectory $ArtifactDir
-    $proxyDialogsDismissed += Wait-Qs3dMarkerOrFailure -Process $processTwo -ExpectedPath $resultPath -FailurePath $resultPath -Deadline $deadlineTwo
+    $launcherTwoId = $processTwo.Id
+    $proxyDialogsDismissed += Wait-Qs3dMarkerOrFailure -Process ([ref]$processTwo) -HandoffCount ([ref]$launcherHandoffs) -ExpectedExecutable $bricscadExe -ExpectedPath $resultPath -FailurePath $resultPath -Deadline $deadlineTwo
     Wait-Qs3dExit -Process $processTwo -Deadline $deadlineTwo
     Stop-Qs3dLaunchedProcess -Process $processTwo
     $finalMarker = Read-Qs3dMarker -Path $resultPath
@@ -326,6 +400,7 @@ finally {
     try {
         Stop-Qs3dLaunchedProcess -Process $processOne
         Stop-Qs3dLaunchedProcess -Process $processTwo
+        Stop-Qs3dLateHandoffProcesses -LauncherIds @($launcherOneId, $launcherTwoId) -ExpectedExecutable $bricscadExe
         if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -ne 0) { throw "LOCAL-004 process cleanup is incomplete." }
         $processCleanupVerified = $true
         foreach ($scriptPath in @($scriptOnePath, $scriptTwoPath)) { Remove-ExactFile -Path $scriptPath }
@@ -363,6 +438,7 @@ $metadata = [ordered]@{
     private_state_cleanup_verified = $privateStateCleanupVerified
     drawing_restore_verified = $drawingRestoreVerified
     proxy_information_dialogs_dismissed = $proxyDialogsDismissed
+    launcher_handoffs = $launcherHandoffs
     marker = $finalMarker
 }
 $metadata | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
