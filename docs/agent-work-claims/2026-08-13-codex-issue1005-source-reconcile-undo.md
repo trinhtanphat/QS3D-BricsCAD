@@ -1,6 +1,6 @@
 # Work claim — Source Reconcile native Undo/Redo semantic coherence
 
-- Status: `COMPLETED`
+- Status: `ACTIVE`
 - Agent: `codex-issue1005-source-reconcile-undo-20260813` (`/root/fix_source_reconcile_undo`)
 - Registered: `2026-08-13T15:33:32+07:00`
 - Baseline main SHA: `f926c2dcbe9a850d8be2425e940c4d4c929d324f`
@@ -11,6 +11,8 @@
 Fix the production Source Reconcile command boundary so native Undo/Redo restores the canonical in-memory `ProjectState` snapshot corresponding to the CAD state committed by `QS3DSYNCSOURCE`. The integration must remain document/project bound, preserve the existing one-CAD-transaction invalidation and pre-commit `ProjectStateSnapshot` failure rollback, and fail closed rather than applying a semantic snapshot to a replaced project or another DWG.
 
 The implementation will use a native transaction-bound revision marker plus an in-session, document-scoped semantic snapshot history. Native Undo/Redo command completion will observe the marker restored by BricsCAD and restore only the matching snapshot for the same cached canonical project. Lifecycle teardown/reload/forget will discard stale history.
+
+This claim was reactivated after the exact-SHA V25 rerun exposed a second production defect at the failed-command boundary. The correction also owns transition state around a reconcile that writes/stages its native marker and then fails (including unit-policy refusal), so command completion cannot advance, restore, or rebase semantic history from an uncommitted transition before a later successful reconcile.
 
 ## Expected surfaces
 
@@ -42,7 +44,7 @@ The ACTIVE LOCAL-004 claim `2026-08-13-codex-local004-source-reconcile-runtime.m
 
 ## Completion condition
 
-The focused production fix and regressions are merged to current `main`, issue `#1005` is closed, this claim is `COMPLETED` with exact SHAs and executed validation, and LOCAL-004 remains `IN_PROGRESS / PENDING_LOCAL` with an exact fixed-SHA V25 rerun requested rather than falsely promoted from source evidence.
+The corrected production fix and regressions are merged to current `main`, the exact fixed-SHA LOCAL-004 V25 runner passes the full reconcile/failure/refusal/multi-DWG/Undo/Redo sequence, issue `#1005` is closed, and this claim is `COMPLETED` with exact SHAs and executed validation. Source/static/build evidence alone must not promote or close this claim again.
 
 ## Completion record
 
@@ -51,3 +53,9 @@ The focused production fix and regressions are merged to current `main`, issue `
 - Production issue `#1005` closed only after source PR `#1007` merged. The closing comment requests the guarded LOCAL-004 V25 rerun on exact main SHA `1c957ae2dc022db8cafbfcf0de91d9d47a53e68f`.
 - Executed locally without GitHub Actions or BricsCAD runtime: installed-reference V25 `Release|x64` adapter build PASS with `0 warnings / 0 errors`; Core smoke executable `ALL PASS`; strict manual-CI and generic preflight PASS; all `731` auto-discovered feature preflights PASS.
 - The additive LOCAL-004 probe/runner/gate remained unchanged. Licensed native Undo/Redo, rollback, multi-DWG and cold-reopen evidence remains `PENDING_LOCAL`; no source/static/build result is promoted to `LOCAL_PASS`.
+
+## Reactivation record
+
+- Exact candidate `1c957ae2dc022db8cafbfcf0de91d9d47a53e68f` failed on licensed BricsCAD `V25.2.10 x64` after the second reported-successful `QS3DSYNCSOURCE` and before native Undo: `failure_phase=verify_final_reconcile`, `failure_code=SEMANTIC_SOURCE_MISMATCH`.
+- The first reconcile/rebuild passed; the guarded sequence then exercised an intentional `INSUNITS` reconcile failure, generated/ambiguous refusal paths, and a document-B switch before the final reconcile. Cleanup evidence remained all true.
+- Issue `#1005` was reopened and must remain open until the corrected exact main SHA passes the existing guarded runner. This remote lane will audit the production pending-transition/command-ended/rebase boundary and add deterministic/static regression coverage without changing the additive LOCAL-004 probe or runner.
