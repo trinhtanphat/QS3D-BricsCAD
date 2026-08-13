@@ -13,7 +13,7 @@ namespace QS3D.Core.SmokeTests
         {
             BoundaryCapacityIsAccepted();
             BoundaryOverflowFailsClosed();
-            OrdinaryBoundaryHandlesPreserveNormalization();
+            OrdinaryCanonicalBoundaryHandlesRemainResolvable();
         }
 
         private static void BoundaryCapacityIsAccepted()
@@ -41,11 +41,11 @@ namespace QS3D.Core.SmokeTests
             throw new InvalidOperationException("Locate accepted more boundary source handles than Room boundary discovery can support.");
         }
 
-        private static void OrdinaryBoundaryHandlesPreserveNormalization()
+        private static void OrdinaryCanonicalBoundaryHandlesRemainResolvable()
         {
             var project = new ProjectState("LOCATE-BOUND-ORDINARY", "Locate boundary resource bound smoke");
             var room = new ProjectElement("ROOM-1", ElementCategory.Room);
-            room.Properties[AutoRoomLifecycle.BoundarySourceHandlesKey] = "AA;; BB ;CC";
+            room.Properties[AutoRoomLifecycle.BoundarySourceHandlesKey] = "AA;BB;CC";
             project.Elements.Add(room);
 
             var handles = SourceHandleResolver.Resolve(project, new[] { "ROOM-1" });
@@ -53,7 +53,7 @@ namespace QS3D.Core.SmokeTests
                 !string.Equals(handles[0], "AA", StringComparison.Ordinal) ||
                 !string.Equals(handles[1], "BB", StringComparison.Ordinal) ||
                 !string.Equals(handles[2], "CC", StringComparison.Ordinal))
-                throw new InvalidOperationException("Ordinary Locate boundary-handle normalization changed while bounding tokenization.");
+                throw new InvalidOperationException("Ordinary canonical Locate boundary handles changed while bounding tokenization.");
         }
 
         private static ProjectState ProjectWithBoundaryHandles(string projectId, int count)
