@@ -11,9 +11,10 @@ namespace QS3D.Core.SmokeTests
         {
             RejectsNonZeroLinearUnderflow();
             RejectsNonZeroFromMetersUnderflow();
-            PreservesExactZero();
+            CanonicalizesSignedZero();
             PreservesRepresentableSubnormalResult();
             PreservesOrdinaryConversion();
+            PreservesOrdinaryNegativeConversion();
         }
 
         private static void RejectsNonZeroLinearUnderflow()
@@ -26,10 +27,13 @@ namespace QS3D.Core.SmokeTests
             Throws<OverflowException>(() => UnitScale.FromMeters(double.Epsilon, DrawingUnit.Parsec));
         }
 
-        private static void PreservesExactZero()
+        private static void CanonicalizesSignedZero()
         {
-            if (UnitScale.ToMeters(0d, DrawingUnit.Angstrom) != 0d)
-                throw new InvalidOperationException("UnitScaleUnderflowSmoke expected exact zero input to remain zero.");
+            var negativeZero = BitConverter.Int64BitsToDouble(long.MinValue);
+            PositiveZero(UnitScale.ToMeters(negativeZero, DrawingUnit.Millimeter), "ToMeters");
+            PositiveZero(UnitScale.FromMeters(negativeZero, DrawingUnit.Millimeter), "FromMeters");
+            PositiveZero(UnitScale.ToSquareMeters(negativeZero, DrawingUnit.Millimeter), "ToSquareMeters");
+            PositiveZero(UnitScale.ToCubicMeters(negativeZero, DrawingUnit.Millimeter), "ToCubicMeters");
         }
 
         private static void PreservesRepresentableSubnormalResult()
@@ -44,6 +48,19 @@ namespace QS3D.Core.SmokeTests
             var result = UnitScale.ToMeters(1000d, DrawingUnit.Millimeter);
             if (Math.Abs(result - 1d) > 1e-12d)
                 throw new InvalidOperationException("UnitScaleUnderflowSmoke expected 1000 mm to remain 1 m.");
+        }
+
+        private static void PreservesOrdinaryNegativeConversion()
+        {
+            var result = UnitScale.ToMeters(-1000d, DrawingUnit.Millimeter);
+            if (Math.Abs(result + 1d) > 1e-12d)
+                throw new InvalidOperationException("UnitScaleUnderflowSmoke expected -1000 mm to remain -1 m.");
+        }
+
+        private static void PositiveZero(double value, string operation)
+        {
+            if (BitConverter.DoubleToInt64Bits(value) != 0L)
+                throw new InvalidOperationException("UnitScaleUnderflowSmoke expected " + operation + " to canonicalize signed zero to positive zero.");
         }
 
         private static void Throws<T>(Action action) where T : Exception
