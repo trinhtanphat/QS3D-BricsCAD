@@ -169,6 +169,27 @@ namespace QS3D.Core.Measurement
                 if (!string.Equals(Adjustments[i].Unit, Unit, StringComparison.Ordinal))
                     throw new ArgumentException("Measurement trace adjustment unit must match the trace unit.", nameof(adjustments));
             }
+
+            if (string.Equals(RoundingPolicy, "none", StringComparison.Ordinal))
+            {
+                var reconciledNetValue = GrossValue;
+                for (var i = 0; i < Adjustments.Count; i++)
+                {
+                    var adjustment = Adjustments[i];
+                    reconciledNetValue = adjustment.Kind == MeasurementTraceAdjustmentKind.Deduction
+                        ? reconciledNetValue - adjustment.Amount
+                        : reconciledNetValue + adjustment.Amount;
+                }
+
+                if (double.IsNaN(reconciledNetValue) ||
+                    double.IsInfinity(reconciledNetValue) ||
+                    !reconciledNetValue.Equals(NetValue))
+                {
+                    throw new ArgumentException(
+                        "Measurement trace with rounding policy 'none' must reconcile gross value, adjustments, and net value.",
+                        nameof(netValue));
+                }
+            }
         }
 
         public string SemanticIdentity { get; }
