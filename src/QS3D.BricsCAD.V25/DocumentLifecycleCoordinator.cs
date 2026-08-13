@@ -29,10 +29,14 @@ namespace QS3D.BricsCAD.V25
                 docs.DocumentActivated += OnDocumentActivated;
                 docs.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
                 docs.DocumentDestroyed += OnDocumentDestroyed;
+
+                // Keep save/close and Undo observers attached before NETLOAD returns so a
+                // higher-priority input/command cannot outrun the lifecycle hooks.
+                AttachCriticalServices(docs.MdiActiveDocument);
                 _started = true;
 
-                // NETLOAD is a host UI callback. Queue persistence/undo/selection/project
-                // reconciliation so the load callback can return before project-side work runs.
+                // Project/selection/UI reconciliation is the potentially expensive part.
+                // Queue it so NETLOAD can return before sidecar/palette work runs.
                 ScheduleReconcile(docs.MdiActiveDocument, false);
             }
             catch
@@ -79,15 +83,28 @@ namespace QS3D.BricsCAD.V25
 
         private static void OnDocumentCreated(object sender, DocumentCollectionEventArgs e)
         {
-            // BricsCAD document callbacks stay passive; coalesce work at application idle.
-            ScheduleReconcile(e.Document, false);
+            try
+            {
+                AttachCriticalServices(e.Document);
+                ScheduleReconcile(e.Document, false);
+            }
+            catch (Exception ex)
+            {
+                ReportLifecycleError(e.Document, ex);
+            }
         }
 
         private static void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
         {
-            // Activation can fire repeatedly while switching drawings. Coalesce the latest
-            // request and perform project/UI reconciliation only after the callback returns.
-            ScheduleReconcile(e.Document, true);
+            try
+            {
+                AttachCriticalServices(e.Document);
+                ScheduleReconcile(e.Document, true);
+            }
+            catch (Exception ex)
+            {
+                ReportLifecycleError(e.Document, ex);
+            }
         }
 
         private static void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
@@ -95,8 +112,8 @@ namespace QS3D.BricsCAD.V25
             var document = e.Document;
 
             // Teardown is intentionally synchronous: native handlers must be gone before
-            // BricsCAD destroys the document. Any queued attach/reconcile for this document
-            // is cancelled first so an idle callback can never resurrect stale handlers.
+            // BricsCAD destroys the document. Any queued reconcile for this document is
+            // cancelled first so an idle callback can never touch the destroyed document.
             CancelPendingReconcile(document);
             DetachProjectPersistence(document);
             SourceReconcileUndoCoordinator.Detach(document);
@@ -116,7 +133,25 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
-            ScheduleReconcile(docs.MdiActiveDocument, true);
+            var active = docs.MdiActiveDocument;
+            if (active == null) return;
+            try
+            {
+                AttachCriticalServices(active);
+                ScheduleReconcile(active, true);
+            }
+            catch (Exception ex)
+            {
+                ReportLifecycleError(active, ex);
+            }
+        }
+
+        private static void AttachCriticalServices(Document? document)
+        {
+            if (document == null) return;
+            AttachProjectPersistence(document);
+            SourceReconcileUndoCoordinator.Attach(document);
+            CurtainWallUndoCoordinator.Attach(document);
         }
 
         private static void ScheduleReconcile(Document? document, bool refreshUi)
@@ -196,16 +231,13 @@ namespace QS3D.BricsCAD.V25
         {
             try
             {
-                AttachProjectPersistence(document);
-                SourceReconcileUndoCoordinator.Attach(document);
-                CurtainWallUndoCoordinator.Attach(document);
                 SelectionSyncCoordinator.Attach(document);
                 EnsureProject(document, refreshUi);
                 if (refreshUi) SelectionSyncCoordinator.Refresh(document);
             }
             catch (Exception ex)
             {
-                Report(document, "QS3D document lifecycle reconcile error: " + ex.Message);
+                ReportLifecycleError(document, ex);
             }
         }
 
@@ -334,6 +366,11 @@ namespace QS3D.BricsCAD.V25
             catch { }
             try { PaletteCoordinator.SetStatus(message); }
             catch { }
+        }
+
+        private static void ReportLifecycleError(Document document, Exception error)
+        {
+            Report(document, "QS3D document lifecycle reconcile error: " + error.Message);
         }
 
         private static void EnsureProject(Document? document, bool refreshUi)
