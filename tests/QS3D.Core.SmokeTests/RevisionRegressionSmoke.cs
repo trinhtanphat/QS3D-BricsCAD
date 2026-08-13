@@ -9,6 +9,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             CaptureRejectsNonFiniteQuantities();
+            SignedZeroIsCanonicalized();
             CaptureRejectsDuplicateElementIds();
             CaptureRejectsPaddedReferenceIds();
             CaptureRejectsNonCanonicalMapKeys();
@@ -28,6 +29,26 @@ namespace QS3D.Core.SmokeTests
             element.Quantities["Bad"] = double.NaN;
             project.Elements.Add(element);
             Throws<InvalidOperationException>(() => new RevisionService().Capture(project, "bad"));
+        }
+
+        private static void SignedZeroIsCanonicalized()
+        {
+            var project = NewProject();
+            var element = new ProjectElement("REV-ZERO", ElementCategory.CustomQuantity, string.Empty, "f", "z");
+            element.Quantities["Zero"] = -0d;
+            project.Elements.Add(element);
+
+            var captured = new RevisionService().Capture(project, "signed-zero");
+            PositiveZero(captured.Elements[0].Quantities["Zero"]);
+
+            var row = new QuantityRevisionRow
+            {
+                ElementId = "REV-ZERO",
+                QuantityName = "Zero",
+                Before = 0d,
+                After = -0d
+            };
+            PositiveZero(row.Delta);
         }
 
         private static void CaptureRejectsDuplicateElementIds()
@@ -202,6 +223,12 @@ namespace QS3D.Core.SmokeTests
             project.ActiveZoneId = "z";
             project.ActiveFloorId = "f";
             return project;
+        }
+
+        private static void PositiveZero(double value)
+        {
+            if (value != 0d || BitConverter.DoubleToInt64Bits(value) != 0L)
+                throw new Exception("Expected canonical positive zero.");
         }
 
         private static void Throws<T>(Action action) where T : Exception
