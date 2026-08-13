@@ -1,7 +1,7 @@
 # Work claim — Curtain native Undo/Redo semantic coherence
 
 - Status: `ACTIVE`
-- Agent: `codex-issue987-curtain-native-undo-20260813` (`/root/fix_source_reconcile_undo`)
+- Agent: `codex-issue987-curtain-native-undo-20260813` (`/root/fix_source_reconcile_undo`, continued by `/root/fix_curtain_undo`)
 - Registered: `2026-08-13T17:05:00+07:00`
 - Baseline main SHA: `8d819d51a25009d2b99eea2dda0a9e158baa8439`
 - Priority: GitHub issue `#987` / `LOCAL-002 P11` production blocker reproduced on licensed BricsCAD V25
@@ -19,6 +19,7 @@ The implementation will use a native transaction-bound Curtain revision marker p
 - `src/QS3D.BricsCAD.V25/DocumentLifecycleCoordinator.cs`
 - `src/QS3D.BricsCAD.V25/ProjectContextCoordinator.cs` only for exact cached-project identity and lifecycle cleanup
 - focused deterministic/static regression coverage under `scripts/`
+- `src/QS3D.Core/Persistence/ProjectPersistenceCheckpoint.cs` plus focused Core smoke registration, only for an exact, selected-element persistence stamp checkpoint that restores `ProjectState.ChangeVersion` / `UpdatedUtc` and selected-owner `Dirty` / `UpdatedUtc` without `Touch()` or public setter sequencing
 - `docs/CURTAIN-NATIVE-PANELS.md`, `docs/LOCAL-AGENT-INBOX.md`, and this claim for the corrected exact-SHA handoff
 
 ## Excluded scope
@@ -27,17 +28,21 @@ The implementation will use a native transaction-bound Curtain revision marker p
 - No edits to any LOCAL-004 Source Reconcile probe, runner, gate, inbox contract or evidence.
 - No BricsCAD runtime, private/customer DWG, GitHub Actions, release, installer, signing or V26 work.
 - No Curtain geometry planning, clipping, source-shape support, ownership format, Health policy, P10 selection issue `#982`, P12 modeless/multi-DWG qualification, or broad global Undo framework.
+- No whole-project semantic rollback during native Undo/Redo, no AuditTrail mutation, and no general-purpose transaction framework; the Core checkpoint is persistence-stamp-only and selected-element-bounded.
 
 ## Validation plan
 
 - Add focused source/static coverage proving the Curtain marker is staged in the same outer native transaction only after semantic after-snapshot allocation, published history advances only after successful CAD commit, and command failure rollback remains unchanged.
 - Cover consecutive builds, semantic-only intervening work/rebase, known Undo/Redo marker transitions, unknown revision refusal, exact cached-project/document affinity, lifecycle cleanup, and unambiguous command-name filtering.
+- Deterministically prove exact persistence checkpoint restore at `long.MaxValue` without overflow/`Touch()`, exact selected-owner `Dirty`/timestamp restoration, project/element affinity refusal before mutation, unrelated element preservation, and no audit mutation.
 - Run focused Curtain/Undo preflights, strict manual-CI policy, generic preflight, all discovered feature gates, Core smoke, and installed-reference V25 `Release|x64` compile without launching BricsCAD.
 - Request the existing guarded P11 runner be rerun by its local owner on the exact merged source SHA.
 
 ## Coordination
 
 The completed local claim `2026-08-13-codex-local-curtain-p11-undo-save-reopen.md` owns only the guarded licensed probe/runner/evidence and explicitly excludes production source repair. Its sanitized V25 result is the handoff for issue `#987`. P10 (`#982`), P12 and LOCAL-004 remain independent and untouched.
+
+Concurrent claim `2026-08-13-1702-chatgpt-web-gpt56sol-curtain-undo-semantic-coherence.md` was published from the same baseline after this lane was already reserved and landed the initial `CurtainWallUndoCoordinator`/command/lifecycle/static-gate implementation. This lane adopts that current-main implementation instead of retaining its predecessor's duplicate coordinator. Review of the landed source proved the initial restore only copied selected generated properties/source handles and then called `project.Touch()`, while the authoritative P11 semantic signature also binds project `ChangeVersion`/`UpdatedUtc` and owner `Dirty`. The bounded continuation therefore owns only the exact persistence-state correction, strengthened gate/test, canonical handoff, and this original issue claim; it does not create a second Undo system.
 
 ## Completion condition
 
