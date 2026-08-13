@@ -34,6 +34,7 @@ def main() -> int:
         center = read("src/QS3D.BricsCAD.V25/Updates/UpdateCenterWindow.cs")
         launcher_cs = read("src/QS3D.BricsCAD.V25/Updates/SecureUpdateLauncher.cs")
         ribbon = read("src/QS3D.BricsCAD.V25/Ribbon/UpdateRibbonAugmenter.cs")
+        ribbon_coordinator = read("src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator.cs")
         entry = read("src/QS3D.BricsCAD.V25/PluginEntry.cs")
 
         require(installer, "ConfirmImpact = 'Medium'", "one-click ShouldProcess behavior")
@@ -79,14 +80,15 @@ def main() -> int:
         require(ribbon, '"Cập nhật QS3D", "QS3DUPDATE"', "update ribbon button")
         require(ribbon, '"Update khi đóng", "QS3DUPDATEONCLOSE"', "update-on-close ribbon button")
         require(ribbon, '"Trạng thái Update", "QS3DUPDATESTATUS"', "update status ribbon button")
-        require(entry, "UpdateRibbonAugmenter.TryInitialize();", "update ribbon bootstrap")
+        require(ribbon_coordinator, "UpdateRibbonAugmenter.TryInitialize()", "update ribbon retry bootstrap")
+        require(entry, "RibbonInitializationCoordinator.Start();", "ribbon initialization coordinator bootstrap")
         require(entry, "UpdateRibbonAugmenter.Reset();", "update ribbon teardown")
 
     except (OSError, UnicodeError, AssertionError) as exc:
         print("ERROR:", exc)
         return 1
 
-    print("PASS: secure install, one-process noninteractive preview bootstrap, signed release provenance, automatic check, update-on-close, and ribbon update UX contracts are guarded.")
+    print("PASS: secure install, one-process noninteractive preview bootstrap, signed release provenance, automatic check, update-on-close, and retry-coordinated ribbon update UX contracts are guarded.")
     return 0
 
 
