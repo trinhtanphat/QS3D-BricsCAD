@@ -39,6 +39,7 @@ namespace QS3D.BricsCAD.V25.Updates
         internal const string Repository = "trinhtanphat/QS3D-BricsCAD";
         internal const string ReleasesEndpoint = "https://api.github.com/repos/trinhtanphat/QS3D-BricsCAD/releases?per_page=20";
         internal const string UpdateManifestAssetName = "QS3D-BricsCAD-V25.update.json";
+        internal const string PackageAssetName = "QS3D-BricsCAD-V25.zip";
         private const int MaxResponseBytes = 2 * 1024 * 1024;
         private const int MaxReleasePages = 10;
 
@@ -109,17 +110,26 @@ namespace QS3D.BricsCAD.V25.Updates
                 if (release.Prerelease != version.IsPrerelease) continue;
                 if (!TryGitHubUri(release.HtmlUrl, out var pageUri) || pageUri == null) continue;
 
-                Uri? manifestUri = null;
-                var manifest = (release.Assets ?? Array.Empty<GitHubAssetDto?>())
-                    .FirstOrDefault(asset => asset != null && string.Equals(asset.Name, UpdateManifestAssetName, StringComparison.Ordinal));
-                if (manifest != null && TryGitHubUri(manifest.BrowserDownloadUrl, out var candidate) && candidate != null)
-                    manifestUri = candidate;
+                var assets = release.Assets ?? Array.Empty<GitHubAssetDto?>();
 
-                // Repository releases are shared by multiple BricsCAD host majors. A release
-                // belongs to this update channel only when it carries this client's exact
-                // host-major signed manifest asset. Ignore other-major/manual-only releases
-                // before latest-version selection instead of surfacing a false cross-channel update.
-                if (manifestUri == null) continue;
+                Uri? manifestUri = null;
+                var manifest = assets.FirstOrDefault(asset =>
+                    asset != null && string.Equals(asset.Name, UpdateManifestAssetName, StringComparison.Ordinal));
+                if (manifest != null && TryGitHubUri(manifest.BrowserDownloadUrl, out var manifestCandidate) && manifestCandidate != null)
+                    manifestUri = manifestCandidate;
+
+                Uri? packageUri = null;
+                var package = assets.FirstOrDefault(asset =>
+                    asset != null && string.Equals(asset.Name, PackageAssetName, StringComparison.Ordinal));
+                if (package != null && TryGitHubUri(package.BrowserDownloadUrl, out var packageCandidate) && packageCandidate != null)
+                    packageUri = packageCandidate;
+
+                // Repository releases are shared by multiple BricsCAD host majors. Keep a
+                // release in the V25 channel only when it carries the exact V25 manifest or
+                // V25 package asset. Manifest-less V25 previews remain visible so the
+                // coordinator can surface ManualInstallRequired instead of silently hiding
+                // a newer preview; one-click install still requires a verified signed manifest.
+                if (manifestUri == null && packageUri == null) continue;
 
                 var publishedUtc = DateTime.MinValue;
                 var publishedAt = release.PublishedAt;
