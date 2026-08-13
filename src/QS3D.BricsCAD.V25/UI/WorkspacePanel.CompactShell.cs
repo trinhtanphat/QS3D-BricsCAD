@@ -15,6 +15,8 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class WorkspacePanel
     {
         private bool _compactShellApplied;
+        private Border? _compactHeaderChrome;
+        private Border? _compactFooterChrome;
 
         static WorkspacePanel()
         {
@@ -52,7 +54,8 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void TuneWorkspaceGrid()
         {
-            if (!(Content is Grid root) || root.RowDefinitions.Count < 3)
+            var root = WorkspaceContentRoot;
+            if (root == null || root.RowDefinitions.Count < 3)
                 return;
 
             // Compact chrome leaves more room for model/property inspection on 1366x768-class CAD workstations.
@@ -177,7 +180,8 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void TuneResponsiveHeader()
         {
-            if (!(Content is Grid root))
+            var root = WorkspaceContentRoot;
+            if (root == null)
                 return;
 
             var headerBorder = root.Children
@@ -186,8 +190,51 @@ namespace QS3D.BricsCAD.V25.UI
             if (!(headerBorder?.Child is Grid header) || header.ColumnDefinitions.Count != 3)
                 return;
 
+            _compactHeaderChrome = headerBorder;
+            _compactFooterChrome = root.Children
+                .OfType<Border>()
+                .FirstOrDefault(border => Grid.GetRow(border) == 2);
+
+            WorkspaceOverflow.SizeChanged += OnCompactViewportSizeChanged;
+            WorkspaceOverflow.ScrollChanged += OnCompactViewportScrollChanged;
+            PinCompactChromeToViewport();
+
             header.SizeChanged += OnCompactHeaderSizeChanged;
             ApplyCompactHeaderBreakpoint(header);
+        }
+
+        private void OnCompactViewportSizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            PinCompactChromeToViewport();
+        }
+
+        private void OnCompactViewportScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            if (Math.Abs(e.HorizontalChange) > 0.01 || Math.Abs(e.ViewportWidthChange) > 0.01)
+                PinCompactChromeToViewport();
+        }
+
+        private void PinCompactChromeToViewport()
+        {
+            var viewportWidth = WorkspaceOverflow.ViewportWidth;
+            if (double.IsNaN(viewportWidth) || double.IsInfinity(viewportWidth) || viewportWidth <= 0)
+                viewportWidth = WorkspaceOverflow.ActualWidth;
+            if (double.IsNaN(viewportWidth) || double.IsInfinity(viewportWidth) || viewportWidth <= 0)
+                return;
+
+            var horizontalOffset = WorkspaceOverflow.HorizontalOffset;
+            PinCompactChrome(_compactHeaderChrome, viewportWidth, horizontalOffset);
+            PinCompactChrome(_compactFooterChrome, viewportWidth, horizontalOffset);
+        }
+
+        private static void PinCompactChrome(Border? chrome, double viewportWidth, double horizontalOffset)
+        {
+            if (chrome == null)
+                return;
+
+            chrome.Width = viewportWidth;
+            chrome.HorizontalAlignment = HorizontalAlignment.Left;
+            chrome.RenderTransform = new TranslateTransform(horizontalOffset, 0);
         }
 
         private static void OnCompactHeaderSizeChanged(object sender, SizeChangedEventArgs e)
