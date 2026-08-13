@@ -101,14 +101,15 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 ## LOCAL-004 — source reconcile native atomicity
 
 - Priority: P0
-- Status: OPEN
+- Status: IN_PROGRESS
 - Area: Source Reconcile / Modify
 - Why local: Requires real LINE/POLYLINE edits, native generated-object cleanup, transaction/undo behavior, and document switching.
-- Scenario: Exercise `QS3DSYNCSOURCE` after source edits; verify generated dependents invalidate safely, generated/ambiguous selections fail closed, forced failure restores project/native state, undo/redo is coherent, and document switches never mutate another project.
-- Evidence required: Exact SHA; source edit/reconcile results; injected failure evidence; undo/redo notes; multi-DWG result; save/reopen result.
+- Scenario: On a clean exact SHA, run `scripts/test-bricscad-v25-source-reconcile.ps1` with the repository-generated sample and initialized V25 profile. The runner creates two outside-repository disposable copies, authors tracked LINE/open-POLYLINE walls through production Direct Draw, edits both live sources, and drives production `QS3DSYNCSOURCE`/`QS3DBUILD3D`. It must verify ownership-scoped invalidation/rebuild, generated and intentionally ambiguous selection refusal, `INSUNITS` mismatch rollback after invalidation preparation, native Undo/Redo, B-document refusal/no cross-project mutation, `QS3DSAVE`, native save and cold reopen.
+- Evidence required: Exact SHA plus matching plugin/Core ProductVersion; sanitized V1 aggregate marker; two successful reconciles; generated/ambiguous/multi-DWG refusal; exact semantic/native rollback; Undo/Redo coherence; save/reopen; process/script/private-sidecar cleanup; both disposable copies restored to the repository fixture hash and removed. Any `NATIVE_UNDO_SEMANTIC_DIVERGENCE` or other production failure remains PENDING and is handed to a non-local source-fix lane.
 - Evidence: PENDING_LOCAL
-- Related docs: `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
-- Updated: 2026-08-11
+- Related docs: `docs/SOURCE-RECONCILE-GENERATED-OUTPUTS.md`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`; `scripts/test-bricscad-v25-source-reconcile.ps1`; `scripts/preflight-source-reconcile-runtime-probe.py`
+- Source-preparation note: The additive guarded probe/runner is source-visible only. It does not qualify BricsCAD runtime behavior until executed on the final clean exact SHA; no private/customer drawing is required.
+- Updated: 2026-08-13
 
 ## LOCAL-005 — polygon Slab/Foundation native reinforcement
 
