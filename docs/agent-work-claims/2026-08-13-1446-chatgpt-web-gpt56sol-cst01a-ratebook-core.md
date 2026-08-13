@@ -1,66 +1,61 @@
 # Work claim — CST-01A deterministic RateBook core contract
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-cst01a-ratebook-core-20260813-1446`
 - Registered: `2026-08-13T14:46:00+07:00`
 - Baseline main SHA: `30fb30a7d91ec95f3a188ddd5cbc6cd792daeb5d`
-- Priority: `CST-01 / P1` — establish the smallest deterministic commercial-rate identity/lookup foundation on top of the completed measurement/snapshot work without mixing cost assumptions into geometry or quantity engines
+- Priority: `CST-01 / P1` — establish the smallest deterministic commercial-rate identity/lookup foundation without mixing cost assumptions into geometry or quantity engines
 
 ## Confirmed gap
 
-The current workstream calls for a minimal `RateBook` / `RateItem` / `CostCode` foundation before `EstimateLine`. Current `main` contains no Cost/Estimate Core directory and repository source/history searches find no `RateBook`, `RateItem`, `CostCode`, `CST-01` or estimate-domain implementation. Existing Mapping/Measurement/Revision foundations are present, so this commercial contract can be added without inventing temporary quantity infrastructure.
+The workstream called for a minimal `RateBook` / `RateItem` / `CostCode` foundation before `EstimateLine`. Baseline `main` had no Cost/Estimate Core directory and source/history searches found no corresponding rate-domain implementation.
 
-## Reserved scope
+## Completed scope
 
-Add one pure-Core in-memory rate catalog contract with deterministic, fail-closed identity and as-of lookup semantics:
+Added a pure-Core in-memory rate catalog contract with deterministic, fail-closed identity and as-of lookup semantics:
 
-- canonical `CostCode` value identity;
-- immutable `RateItem` carrying item id, cost code, unit, currency, non-negative unit rate, effective UTC timestamp and explicit version token;
-- immutable/detached `RateBook` snapshot with deterministic ordering;
+- canonical case-insensitive `CostCode` value identity;
+- immutable `RateItem` with item id, cost code, canonical lower-case unit, three-letter upper-case currency, non-negative decimal unit rate, UTC effective timestamp and explicit version token;
+- detached/read-only `RateBook` snapshot with deterministic ordering;
 - case-insensitive duplicate rate-item ids fail visibly;
-- ambiguous natural keys `(cost code, unit, currency, effective timestamp)` fail visibly instead of depending on input order;
-- lookup by `(cost code, unit, currency, as-of UTC)` returns the latest eligible effective rate or an explicit unmatched result;
-- lookup does not perform unit conversion, currency conversion, quantity math, waste or estimating arithmetic.
+- ambiguous natural keys `(cost code, unit, currency, effective timestamp)` fail visibly;
+- lookup by `(cost code, unit, currency, as-of UTC)` returns the latest eligible rate or explicit `Unmatched` resolution;
+- no unit conversion, currency conversion, quantity math, waste or estimate arithmetic was added.
 
-Canonicality policy for this sub-lane:
+## Surfaces
 
-- identifiers/tokens reject blank, surrounding whitespace and control characters;
-- unit tokens are canonical lower-case;
-- currency tokens are exactly three ASCII upper-case letters;
-- UTC-effective timestamps and UTC lookup timestamps are required;
-- `decimal` unit rate must be non-negative; zero is allowed explicitly.
+- `src/QS3D.Core/Cost/RateBook.cs`
+- `tests/QS3D.Core.SmokeTests/RateBookSmoke.cs`
+- `tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs`
+- this claim file
 
-## Expected surfaces
+The initially planned standalone `RateBookRegistration.cs` creation was rejected by the connector before any write/commit occurred. Claim scope was refined first, then the existing aggregate registration surface was used.
 
-- new `src/QS3D.Core/Cost/RateBook.cs` — `CostCode`, `RateItem`, resolution and `RateBook` contract only;
-- new `tests/QS3D.Core.SmokeTests/RateBookSmoke.cs` — deterministic ordering/lookup/duplicate/canonicality/snapshot regression;
-- `tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs` — register the focused smoke through the existing aggregate runner;
-- this claim file.
+## Implementation
 
-The initially planned standalone `RateBookRegistration.cs` creation was rejected by the connector before any write/commit occurred. The existing aggregate registration file is therefore the reserved registration surface instead; no separate registration file is required.
+- Claim-only registration: `3e8732f20097194a52f7f781db0d99f473c11a20`.
+- Core contract: `3e6f9e0482130b6e5caa525cc2e12afb17088d0f`.
+- Focused smoke: `7b1e992dd823d67dfff83368c59b75792c92dffa`.
+- Registration-surface claim refinement: `c2ff49d1595afb44ec35dd9b206c96d5ea47f914`.
+- Aggregate smoke registration: `c3768490ba9ab057daa618f328881b6370cdadf6`.
 
-## Excluded scope
+## Validation actually executed
 
-- No persistence/schema/serialization in CST-01A; compatibility persistence remains a separate follow-on lane.
-- No `EstimateLine`, waste/commercial adjustment, quantity snapshot binding, cost delta, BOQ/BQ renderer or XLSX/DWG output.
-- No unit conversion or FX logic and no remote rate service.
-- No changes to geometry, semantic quantities, MeasurementTrace/Snapshot/Delta, Mapping coverage, REV-03A, Workspace UI, Curtain or LOCAL/native qualification.
-- No GitHub Actions and no BricsCAD native PASS claim.
+- Re-fetched current `main` after claim publication and after implementation work.
+- Re-fetched remote `RateBook.cs`; verified rate identity canonicality, duplicate/natural-key rejection, deterministic ordering, UTC-only as-of selection and explicit unmatched result are present.
+- Re-fetched remote `RateBookSmoke.cs`; verified coverage for culture/input-order independence, latest-effective selection, unmatched state, source-list isolation/read-only view, duplicate id, ambiguous natural key and malformed token/unit/currency/rate/time inputs.
+- Re-fetched `SmokeTestRegistration.cs`; verified `RateBookSmoke.Run()` is registered in the aggregate runner.
+- Repository commit search for `cost` showed no competing Cost/Rate implementation during this lane beyond these commits.
+- Executable managed smoke/build: `NOT_RUN`; this environment has no `dotnet`, `csc`, `msbuild` or `mcs`, and source inspection is not reported as PASS.
+- GitHub Actions: not dispatched by this lane.
+- BricsCAD native qualification: `NOT_APPLICABLE` to this pure Core contract; no native PASS claimed.
 
-## Validation plan
+## Excluded / remaining follow-ons
 
-- Re-fetch current `main` after claim publication and after this registration-surface refinement, then recheck new Cost/Rate claims before further changes.
-- Smoke covers canonical construction, deterministic ordering independent of input order/culture, latest-effective as-of selection, explicit unmatched state, duplicate id, ambiguous natural key, invalid UTC/currency/unit/token/rate inputs and source-list mutation isolation.
-- Re-fetch exact source/test/registration blobs from remote before closeout.
-- Executable managed smoke/build remains `NOT_RUN` unless a real .NET execution path becomes available; source inspection is not reported as PASS.
-
-## Coordination
-
-- REV-01/02 snapshot foundation and MTR foundations are completed prerequisites; this lane does not edit them.
-- REV-03A remains treated as reserved and excluded.
-- Current Workspace, Curtain and LOCAL lanes are unrelated and excluded.
-- MAP-03 is intentionally not claimed here because recent UI activity makes a pure-Core CST lane safer for parallel work.
+- Persistence/schema/serialization compatibility for rates remains a separate CST-01 follow-on.
+- `EstimateLine`, waste/commercial adjustment, measurement-snapshot binding, revision cost delta, BOQ/BQ/XLSX/DWG projections and FX remain unimplemented by this lane.
+- REV-03A, Workspace, Curtain and LOCAL/native work remained excluded.
 
 ## Completion condition
 
-A claim-first deterministic in-memory rate identity/catalog contract plus focused registered smoke is present on current `main`, no quantity/estimate/FX arithmetic is duplicated, remote source/test/registration are re-fetched, and this claim is closed with exact pushed SHAs plus validation actually executed.
+Satisfied: deterministic in-memory rate identity/catalog semantics and focused registered regression are present on current `main`, no quantity/estimate/FX arithmetic is duplicated, and validation is recorded only at the level actually executed.
