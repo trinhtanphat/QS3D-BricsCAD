@@ -20,8 +20,12 @@
         </Grid.RowDefinitions>
 
         <Border Background="{StaticResource Bg1Brush}" Padding="16,12" BorderThickness="0,0,0,1">
-            <DockPanel>
-                <StackPanel>
+            <Grid x:Name="RebarScheduleHeaderGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" MinWidth="0">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="BẢNG THỐNG KÊ CỐT THÉP" FontWeight="Bold" FontSize="18"/>
                         <Border Background="{StaticResource AccentSoftBrush}"
@@ -32,13 +36,17 @@
                         </Border>
                     </StackPanel>
                     <TextBlock Text="Review bar mark • notation • cutting length • weight • fabrication provenance trước khi xuất"
-                               Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
+                               Foreground="{StaticResource MutedBrush}" Margin="0,4,8,0"
+                               TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Right">
                     <Button Content="Locate" Click="OnLocateClick" Style="{StaticResource DenseButton}"/>
                     <Button Content="Xuất XLSX" Style="{StaticResource AccentButton}" Click="OnExportClick" Margin="7,0,0,0"/>
                 </StackPanel>
-            </DockPanel>
+            </Grid>
         </Border>
 
         <Border Grid.Row="1" Style="{StaticResource Card}" Padding="0" Margin="12,10">
@@ -67,13 +75,28 @@
         </Border>
 
         <Border Grid.Row="2" Background="{StaticResource Bg1Brush}" Padding="11,7" BorderThickness="0,1,0,0">
-            <DockPanel>
-                <Border Background="{StaticResource SuccessBrush}" CornerRadius="5"
+            <Grid x:Name="RebarScheduleStatusGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0"
+                        Background="{StaticResource SuccessBrush}" CornerRadius="5"
                         Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
-                <TextBlock x:Name="Totals" FontWeight="SemiBold"/>
-                <TextBlock DockPanel.Dock="Right" Text="PROVENANCE ≠ CODE COMPLIANCE • DOUBLE-CLICK TO LOCATE • EXPORT XLSX"
-                           Style="{StaticResource Caption}" Margin="12,0,0,0"/>
-            </DockPanel>
+                <TextBlock x:Name="Totals"
+                           Grid.Column="1"
+                           FontWeight="SemiBold"
+                           MinWidth="0"
+                           TextTrimming="CharacterEllipsis"/>
+                <TextBlock Grid.Column="2"
+                           Text="PROVENANCE ≠ CODE COMPLIANCE • DOUBLE-CLICK TO LOCATE • EXPORT XLSX"
+                           Style="{StaticResource Caption}"
+                           Margin="12,0,0,0"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center"
+                           TextWrapping="NoWrap"/>
+            </Grid>
         </Border>
     </Grid>
 </Window>
