@@ -29,16 +29,27 @@ for token in (
     "documents.DocumentActivated += OnDocumentAvailable",
     "documents.DocumentCreated -= OnDocumentAvailable",
     "documents.DocumentActivated -= OnDocumentAvailable",
-    "DispatcherTimer",
+    "new DispatcherTimer(DispatcherPriority.ApplicationIdle)",
     "if (!RibbonBootstrapper.TryInitialize()) return false;",
     "ReferenceWallRibbonAugmenter.TryInitialize()",
     "ProjectRibbonAugmenter.TryInitialize()",
     "QuickWorkflowRibbonAugmenter.TryInitialize()",
     "QuantityReferenceRibbonAugmenter.TryInitialize()",
     "UpdateRibbonAugmenter.TryInitialize()",
-    "if (TryInitializeAll() || _timedAttempts >= MaxTimedAttempts)",
+    "if (TryInitializeAll())",
+    "if (_timedAttempts >= MaxTimedAttempts)",
 ):
     require(coordinator, token, "RibbonInitializationCoordinator")
+
+start_begin = coordinator.find("public static void Start()")
+stop_begin = coordinator.find("public static void Stop()", start_begin)
+start_body = coordinator[start_begin:stop_begin] if start_begin >= 0 and stop_begin > start_begin else ""
+if not start_body:
+    errors.append("RibbonInitializationCoordinator.Start body could not be located")
+elif "TryInitializeAll()" in start_body:
+    errors.append("NETLOAD startup must not synchronously reconcile the Ribbon inside Start()")
+elif "StartTimedRetry();" not in start_body:
+    errors.append("RibbonInitializationCoordinator.Start must schedule the bounded retry path")
 
 for token in (
     "RibbonInitializationCoordinator.Start();",
@@ -59,4 +70,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: ribbon bootstrap and all augmenters retry for a bounded startup window and on document availability, with clean event/timer teardown.")
+print("PASS: ribbon bootstrap and all augmenters reconcile through a bounded ApplicationIdle retry path and document availability without synchronous NETLOAD work, with clean event/timer teardown.")
