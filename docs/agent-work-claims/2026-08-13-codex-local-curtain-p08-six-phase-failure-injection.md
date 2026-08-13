@@ -50,3 +50,10 @@ No current ACTIVE/BLOCKED claim or open PR owns P08, `CurtainWallBuildCommands.c
 ## Completion condition
 
 The seam/probe/runner/gate is merged, a clean exact-main licensed run either records the full sanitized seven-phase PASS contract or a bounded diagnostic FAIL, docs remain truthful and this claim is `COMPLETED`. P09-P12 and overall `LOCAL-002` remain `PENDING_LOCAL`.
+
+## Source-preparation status
+
+- The internal one-shot seam, seven post-phase orchestrator checks, mixed LINE/path probe, guarded runner, static/privacy gate and runbook handoff are source-complete. No builder, planner, Health, Level or UI implementation changed.
+- Strict installed-reference V25 `Release|x64` build passes at zero warnings/errors. P01-P08/native/orchestration/runtime-health/Level gates, runner parser and `scripts/preflight.py` pass.
+- The 719-gate aggregate passes 718 gates; only the unrelated moving-main customer-release version mismatch remains (`plugin 0.1.0-preview.4` versus `Core 0.1.0-preview.3`).
+- Runtime status remains `PENDING_LOCAL` until the source-preparation PR is merged and a clean exact merged SHA/DLL completes all seven licensed injections plus the valid control.

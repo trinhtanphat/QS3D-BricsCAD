@@ -44,6 +44,7 @@ namespace QS3D.BricsCAD.V25
                 // Resolve rule/dependency failures before native mutation. The command snapshot restores
                 // this semantic phase as well when any later host/frame phase fails before outer commit.
                 regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection.SemanticRegeneration);
 
                 var hostSolids = 0;
                 var frameElements = 0;
@@ -56,21 +57,27 @@ namespace QS3D.BricsCAD.V25
                 {
                     phase = "LINE host replacement";
                     lineHostSolids = WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.GlassWall);
+                    CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection.LineHost);
 
                     phase = "open-POLYLINE host replacement";
                     pathHostSolids = PolylineWallSolidBuilder.BuildSelected(document, project, ElementCategory.GlassWall);
+                    CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection.PathHost);
 
                     phase = "LINE frame replacement";
                     lineFrames = CurtainWallFrameSolidBuilder.BuildSelectedLineWalls(document, project);
+                    CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection.LineFrame);
 
                     phase = "open/bulged path frame replacement";
                     pathFrames = CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines(document, project);
+                    CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection.PathFrame);
 
                     phase = "LINE panel replacement";
                     linePanels = CurtainWallPanelSolidBuilder.BuildSelectedLineWalls(document, project);
+                    CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection.LinePanel);
 
                     phase = "open/bulged path panel replacement";
                     pathPanels = CurtainWallPathPanelSolidBuilder.BuildSelectedOpenPolylines(document, project);
+                    CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection.PathPanel);
 
                     hostSolids = checked(lineHostSolids + pathHostSolids);
                     frameElements = checked(lineFrames.Elements + pathFrames.Elements);
