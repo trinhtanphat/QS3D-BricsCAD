@@ -1,30 +1,25 @@
 # Work claim — OpeningPropertySet sill-offset signed-zero canonicality
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-gpt56sol-opening-sill-offset-signed-zero-20260813`
 - Registered: `2026-08-13T19:10:00+07:00`
+- Completed: `2026-08-13T19:12:00+07:00`
 - Baseline main SHA: `a5a4acaa70ecaf93c61c09606002ff65e76f7169`
 - Priority: P0 deterministic Core opening-metric canonicality.
 
 ## Confirmed defect
 
-`OpeningPropertySet.SillOffsetMm` is the one opening metric that legitimately accepts zero and negative values. Its setter delegates to `RequireFinite()`, which rejects NaN/infinity but returns the raw finite double. IEEE-754 `-0d` is therefore stored in the backing field and exposed unchanged by the getter.
+`OpeningPropertySet.SillOffsetMm` is the one opening metric that legitimately accepts zero and negative values. Its setter delegates to `RequireFinite()`, which rejected NaN/infinity but previously returned the raw finite double. IEEE-754 `-0d` could therefore be stored in the backing field and exposed unchanged by the getter.
 
 `WidthMm`, `HeightMm`, and `ThicknessMm` delegate through the same finite helper but are subsequently required to be strictly greater than zero, so this lane does not change their acceptance contract.
 
-## Reserved scope
+## Implemented scope
 
-- `src/QS3D.Core/Domain/OpeningPropertySet.cs`
-- `tests/QS3D.Core.SmokeTests/OpeningPropertySetSignedZeroSmoke.cs` (new focused registered smoke)
-- this claim file for closeout
-
-## Intended change
-
-- canonicalize every accepted finite zero in the shared `RequireFinite()` helper to literal `+0d`;
-- preserve NaN/infinity rejection;
-- preserve strictly-positive dimension validation because `RequirePositiveFinite()` continues to reject canonical zero with `<= 0d`;
-- preserve legal negative nonzero sill offsets;
-- add bit-level regression for `SillOffsetMm = -0d`, plus negative-nonzero, positive dimensions and non-finite/refusal sanity cases.
+- `RequireFinite()` still rejects NaN/infinity and now canonicalizes every accepted finite zero to literal `+0d`.
+- `SillOffsetMm` therefore stores/exposes canonical positive zero for `-0d` input.
+- Legal negative nonzero sill offsets remain unchanged.
+- `RequirePositiveFinite()` still applies `<= 0d` after finite normalization, so Width/Height/Thickness still reject both `+0d` and `-0d`.
+- New registered `OpeningPropertySetSignedZeroSmoke` bit-checks `SillOffsetMm = -0d`, verifies negative/positive nonzero sill offsets, verifies ordinary positive dimensions, rejects non-finite sill offsets, and guards strict-positive dimension refusal.
 
 ## Excluded scope
 
@@ -34,22 +29,24 @@
 - the concurrent Formula evaluator signed-zero lane, which reserves only Formula source/test files;
 - GitHub Actions, packaging, release and licensed BricsCAD runtime qualification.
 
-## Coordination
+## Coordination / moving-main reconciliation
 
-- Exact recent commit searches for `OpeningPropertySet signed zero` and `SillOffset signed zero` returned no competing lane immediately before the first claim attempt.
+- Exact recent commit searches for `OpeningPropertySet signed zero` and `SillOffset signed zero` returned no competing lane.
 - The first claim write was rejected with HTTP 409 because moving `main` advanced; no claim/source/test write occurred in that failed attempt.
-- Refreshed HEAD showed the intervening `a5a4acaa70ecaf93c61c09606002ff65e76f7169` Formula claim is disjoint.
-- The Core smoke project uses SDK default compile globs, so the new `[ModuleInitializer]` source file will be registered without csproj edits.
-- Current Opening source blob before claim remained `5008a5ee699325c74add2d25c306fea642bc31af`.
+- Refreshed HEAD showed intervening commit `a5a4acaa70ecaf93c61c09606002ff65e76f7169` claimed Formula evaluator signed-zero scope only and was disjoint.
+- Claim commit: `1ee73b982a80ce21cc8ec962129dfa414b02fe41`.
+- Production fix: `7667fad6ede3539e34af8f4ff63cd162c33604cd` — `fix(domain): canonicalize Opening sill-offset signed zero`.
+- Focused regression: `68398d6a1e5f86bdd0b54ad97af077c4701817d5` — `test(domain): guard Opening sill-offset signed zero`.
+- Post-regression refresh showed `main` exactly at `68398d6a1e5f86bdd0b54ad97af077c4701817d5`; no concurrent commit touched the reserved Opening source/test before closeout.
 
-## Validation plan
+## Validation actually executed
 
-- refresh `main` after claim and recheck OpeningPropertySet history before source mutation;
-- keep production change to shared finite zero canonicalization only;
-- add the focused smoke with exact sign-bit assertion using `BitConverter.DoubleToInt64Bits`;
-- re-fetch exact pushed source/test and reconcile moving-main ancestry before closeout;
-- managed/native execution remains `NOT_RUN` when unavailable; do not fabricate PASS.
+- Exact source readback confirmed blob `207b7bc0008e8f248182c0cc1bb7d53078e47636`; the production diff is the one zero-canonicalizing return in `RequireFinite()`.
+- Exact regression readback confirmed blob `6ead445c4dd3635115b45191d3228dbf5c30ac36`; it uses `BitConverter.DoubleToInt64Bits` for the signed-zero assertion and includes nonzero/strict-positive/non-finite sanity cases.
+- Smoke-project csproj readback confirmed SDK default compile globs and direct Core project reference, so the new `.cs` module initializer is registered without project-file edits.
+- Hosted environment has no `dotnet`, `csc`, `mcs` or `msbuild`, so managed compile/smoke execution is `NOT_RUN`; no managed PASS is claimed.
+- No GitHub Actions, packaging, adapter build or licensed BricsCAD runtime qualification was dispatched/executed.
 
 ## Completion condition
 
-`SillOffsetMm` stores/exposes canonical positive zero for zero-valued inputs, legal negative nonzero offsets and strict positive physical dimensions remain unchanged, focused source regression is on current `main`, and the claim closes with exact readback and truthful validation boundaries.
+Satisfied for this bounded Core source/static lane: `SillOffsetMm` stores/exposes canonical positive zero, legal negative nonzero offsets and strict-positive physical dimensions remain unchanged, exact source/test readback is complete, moving-main concurrency was reconciled without overwrite, and unavailable managed/native gates remain explicitly unclaimed.
