@@ -1,7 +1,7 @@
 # Work claim — Source Reconcile native Undo/Redo semantic coherence
 
 - Status: `ACTIVE`
-- Agent: `codex-issue1005-source-reconcile-undo-20260813` (`/root/fix_source_reconcile_undo`)
+- Agent: `codex-issue1005-source-reconcile-desync-20260813` (`/root/fix_source_reconcile_desync`; coordinated successor to `/root/fix_source_reconcile_undo`)
 - Registered: `2026-08-13T15:33:32+07:00`
 - Baseline main SHA: `f926c2dcbe9a850d8be2425e940c4d4c929d324f`
 - Priority: GitHub issue `#1005` / `LOCAL-004 P0` production blocker reproduced on licensed BricsCAD V25
@@ -13,6 +13,8 @@ Fix the production Source Reconcile command boundary so native Undo/Redo restore
 The implementation will use a native transaction-bound revision marker plus an in-session, document-scoped semantic snapshot history. Native Undo/Redo command completion will observe the marker restored by BricsCAD and restore only the matching snapshot for the same cached canonical project. Lifecycle teardown/reload/forget will discard stale history.
 
 This claim was reactivated after the exact-SHA V25 rerun exposed a second production defect at the failed-command boundary. The correction also owns transition state around a reconcile that writes/stages its native marker and then fails (including unit-policy refusal), so command completion cannot advance, restore, or rebase semantic history from an uncommitted transition before a later successful reconcile.
+
+The latest exact-SHA rerun still reaches `history=DESYNCHRONIZED` before the runner issues its first explicit native Undo. This successor pass owns the bounded event-intent contract: an Undo/Redo completion may inspect or poison Source Reconcile history only when it matches a prior active-document native Undo/Redo start for the same document. Cancelled, failed, inactive-document, unmatched, duplicated and stale internal command events must clear or ignore intent without weakening the existing fail-closed response to an unknown revision reached by a genuinely matched native Undo/Redo.
 
 ## Expected surfaces
 
@@ -41,6 +43,8 @@ This claim was reactivated after the exact-SHA V25 rerun exposed a second produc
 ## Coordination
 
 The ACTIVE LOCAL-004 claim `2026-08-13-codex-local004-source-reconcile-runtime.md` explicitly excludes production Source Reconcile/Undo integration and hands production defects to a remote source-fix lane. Its additive probe/runner remain owned by `codex-local-root-20260813`. Open PR `#975` is UI-only. Issue `#987` is the analogous Curtain blocker and is intentionally not implemented by this lane.
+
+Parent lane `/root` explicitly delegated this successor pass after `/root/fix_source_reconcile_undo` moved to the separate Curtain `#987` work. The successor reserves only `SourceReconcileUndoCoordinator.cs` and deterministic Source Reconcile Undo preflight/model coverage for the event-intent correction; it will not edit the LOCAL-004 probe, runner, qualification docs or inbox.
 
 ## Completion condition
 
