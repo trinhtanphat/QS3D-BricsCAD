@@ -70,11 +70,26 @@
             <StackPanel Margin="14">
                 <Border Style="{StaticResource ProjectCard}">
                     <StackPanel>
-                        <DockPanel Margin="0,0,0,6">
-                            <TextBlock Text="PROJECT SNAPSHOT" Style="{StaticResource PanelTitle}" Margin="0"/>
-                            <TextBlock DockPanel.Dock="Right" Text="LIVE • READ-ONLY"
-                                       Foreground="{StaticResource LuxuryBrush}" FontSize="9" FontWeight="SemiBold"/>
-                        </DockPanel>
+                        <Grid x:Name="ProjectSnapshotHeaderGrid" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Text="PROJECT SNAPSHOT"
+                                       Style="{StaticResource PanelTitle}"
+                                       Margin="0,0,8,0"
+                                       MinWidth="0"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Grid.Column="1"
+                                       Text="LIVE • READ-ONLY"
+                                       Foreground="{StaticResource LuxuryBrush}"
+                                       FontSize="9" FontWeight="SemiBold"
+                                       HorizontalAlignment="Right"
+                                       VerticalAlignment="Center"
+                                       TextWrapping="NoWrap"/>
+                        </Grid>
                         <UniformGrid Columns="4">
                             <Border Style="{StaticResource ProjectMetric}"><StackPanel><TextBlock Text="DỰ ÁN" Style="{StaticResource Caption}"/><TextBlock x:Name="ProjectNameText" Text="—" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" Margin="0,2,0,0"/></StackPanel></Border>
                             <Border Style="{StaticResource ProjectMetric}"><StackPanel><TextBlock Text="ZONE ACTIVE" Style="{StaticResource Caption}"/><TextBlock x:Name="ZoneText" Text="—" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/></StackPanel></Border>
@@ -92,15 +107,39 @@
 
                 <Border Style="{StaticResource ProjectCard}">
                     <StackPanel>
-                        <DockPanel Margin="0,0,0,6">
-                            <StackPanel>
-                                <TextBlock Text="PROJECT READINESS" Style="{StaticResource PanelTitle}" Margin="0"/>
-                                <TextBlock x:Name="ReadinessText" Text="Đang đọc trạng thái project…" Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"/>
+                        <Grid x:Name="ProjectReadinessHeaderGrid" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" MinWidth="0">
+                                <TextBlock Text="PROJECT READINESS"
+                                           Style="{StaticResource PanelTitle}"
+                                           Margin="0"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="ReadinessText"
+                                           Text="Đang đọc trạng thái project…"
+                                           Style="{StaticResource Caption}"
+                                           Margin="0,3,0,0"
+                                           TextWrapping="Wrap"/>
                             </StackPanel>
-                            <Border DockPanel.Dock="Right" Background="{StaticResource AccentSoftBrush}" BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1" CornerRadius="8" Padding="8,2" Margin="10,0,0,0" VerticalAlignment="Top">
-                                <TextBlock x:Name="ReadinessBadgeText" Text="READ-ONLY" Foreground="{StaticResource LuxuryBrush}" FontSize="9" FontWeight="SemiBold"/>
+                            <Border Grid.Column="1"
+                                    Background="{StaticResource AccentSoftBrush}"
+                                    BorderBrush="{StaticResource BorderStrongBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="8,2"
+                                    Margin="10,0,0,0"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Top">
+                                <TextBlock x:Name="ReadinessBadgeText"
+                                           Text="READ-ONLY"
+                                           Foreground="{StaticResource LuxuryBrush}"
+                                           FontSize="9" FontWeight="SemiBold"
+                                           TextWrapping="NoWrap"/>
                             </Border>
-                        </DockPanel>
+                        </Grid>
                         <UniformGrid Columns="5">
                             <Border Style="{StaticResource ProjectMetric}"><StackPanel><TextBlock Text="DIRTY" Style="{StaticResource Caption}"/><TextBlock x:Name="DirtyCountText" Text="0" FontWeight="SemiBold" FontSize="16" Margin="0,2,0,0"/></StackPanel></Border>
                             <Border Style="{StaticResource ProjectMetric}"><StackPanel><TextBlock Text="HÌNH HỌC" Style="{StaticResource Caption}"/><TextBlock x:Name="GeometryDirtyCountText" Text="0" FontWeight="SemiBold" FontSize="16" Margin="0,2,0,0"/></StackPanel></Border>
@@ -173,11 +212,30 @@
         </ScrollViewer>
 
         <Border Grid.Row="2" Background="{StaticResource Bg1Brush}" Padding="11,7" BorderThickness="0,1,0,0">
-            <DockPanel>
-                <Border Background="{StaticResource SuccessBrush}" CornerRadius="5" Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
-                <TextBlock x:Name="StatusText" Text="Sẵn sàng" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
-                <TextBlock DockPanel.Dock="Right" Text="PROJECT-SAFE • READ-ONLY SNAPSHOT • DWG CONTEXT LOCK" Style="{StaticResource Caption}" Margin="12,0,0,0"/>
-            </DockPanel>
+            <Grid x:Name="ProjectToolsStatusGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0"
+                        Background="{StaticResource SuccessBrush}"
+                        CornerRadius="5" Width="7" Height="7"
+                        VerticalAlignment="Center" Margin="0,0,7,0"/>
+                <TextBlock x:Name="StatusText"
+                           Grid.Column="1"
+                           Text="Sẵn sàng"
+                           Foreground="{StaticResource MutedBrush}"
+                           MinWidth="0"
+                           TextWrapping="Wrap"/>
+                <TextBlock Grid.Column="2"
+                           Text="PROJECT-SAFE • READ-ONLY SNAPSHOT • DWG CONTEXT LOCK"
+                           Style="{StaticResource Caption}"
+                           Margin="12,0,0,0"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center"
+                           TextWrapping="NoWrap"/>
+            </Grid>
         </Border>
     </Grid>
 </Window>
