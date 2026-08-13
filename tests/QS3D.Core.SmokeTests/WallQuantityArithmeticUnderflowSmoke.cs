@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             RejectsGrossVolumeUnderflow();
             PreservesRepresentableSubnormalOpeningArea();
             PreservesLegitimateZeroDimensions();
+            CanonicalizesSignedZeroDimensions();
             PreservesOrdinaryWallQuantities();
         }
 
@@ -52,6 +53,26 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("WallQuantityArithmeticUnderflowSmoke changed legitimate zero opening area.");
         }
 
+        private static void CanonicalizesSignedZeroDimensions()
+        {
+            var zeroArea = WallQuantityCalculator.Calculate(-0d, 3d, 0.2d);
+            PositiveZero(zeroArea.GrossAreaM2, "signed-zero gross area");
+            PositiveZero(zeroArea.OpeningAreaM2, "signed-zero opening area");
+            PositiveZero(zeroArea.NetAreaM2, "signed-zero net area");
+            PositiveZero(zeroArea.GrossVolumeM3, "signed-zero gross volume from zero area");
+            PositiveZero(zeroArea.DeductionVolumeM3, "signed-zero deduction volume from zero area");
+            PositiveZero(zeroArea.NetVolumeM3, "signed-zero net volume from zero area");
+            PositiveZero(zeroArea.TwoSideFinishAreaM2, "signed-zero finish area");
+
+            var zeroThickness = WallQuantityCalculator.Calculate(2d, 3d, -0d);
+            PositiveZero(zeroThickness.GrossVolumeM3, "signed-zero gross volume from zero thickness");
+            PositiveZero(zeroThickness.DeductionVolumeM3, "signed-zero deduction volume from zero thickness");
+            PositiveZero(zeroThickness.NetVolumeM3, "signed-zero net volume from zero thickness");
+
+            var opening = new OpeningCut { WidthM = -0d, HeightM = 3d };
+            PositiveZero(opening.AreaM2, "signed-zero opening cut area");
+        }
+
         private static void PreservesOrdinaryWallQuantities()
         {
             var result = WallQuantityCalculator.Calculate(10d, 3d, 0.2d, new[]
@@ -64,6 +85,12 @@ namespace QS3D.Core.SmokeTests
             Near(6d, result.GrossVolumeM3, "ordinary gross volume");
             Near(0.4d, result.DeductionVolumeM3, "ordinary deduction volume");
             Near(5.6d, result.NetVolumeM3, "ordinary net volume");
+        }
+
+        private static void PositiveZero(double value, string label)
+        {
+            if (BitConverter.DoubleToInt64Bits(value) != BitConverter.DoubleToInt64Bits(0d))
+                throw new InvalidOperationException("WallQuantityArithmeticUnderflowSmoke expected canonical positive zero for " + label + ".");
         }
 
         private static void Near(double expected, double actual, string label)
