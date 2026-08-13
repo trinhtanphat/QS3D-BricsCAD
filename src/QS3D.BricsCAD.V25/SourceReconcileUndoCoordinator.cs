@@ -22,10 +22,79 @@ namespace QS3D.BricsCAD.V25
         private const string MarkerVersion = "1";
         private const int MaxSnapshotsPerDocument = 128;
         private static readonly object Gate = new object();
-        private static readonly Dictionary<Document, CommandEventHandler> CommandEndedHandlers =
-            new Dictionary<Document, CommandEventHandler>();
+        private static readonly Dictionary<Document, ObserverRegistration> ObserverRegistrations =
+            new Dictionary<Document, ObserverRegistration>();
         private static readonly Dictionary<Document, DocumentHistory> Histories =
             new Dictionary<Document, DocumentHistory>();
+
+        private sealed class ObserverRegistration
+        {
+            public ObserverRegistration(
+                CommandEventHandler commandWillStart,
+                CommandEventHandler commandEnded,
+                CommandEventHandler commandCancelled,
+                CommandEventHandler commandFailed)
+            {
+                CommandWillStart = commandWillStart;
+                CommandEnded = commandEnded;
+                CommandCancelled = commandCancelled;
+                CommandFailed = commandFailed;
+            }
+
+            public CommandEventHandler CommandWillStart { get; }
+            public CommandEventHandler CommandEnded { get; }
+            public CommandEventHandler CommandCancelled { get; }
+            public CommandEventHandler CommandFailed { get; }
+            public string? PendingCommand { get; set; }
+
+            public void Subscribe(Document document)
+            {
+                var willStartSubscribed = false;
+                var endedSubscribed = false;
+                var cancelledSubscribed = false;
+                try
+                {
+                    document.CommandWillStart += CommandWillStart;
+                    willStartSubscribed = true;
+                    document.CommandEnded += CommandEnded;
+                    endedSubscribed = true;
+                    document.CommandCancelled += CommandCancelled;
+                    cancelledSubscribed = true;
+                    document.CommandFailed += CommandFailed;
+                }
+                catch
+                {
+                    if (cancelledSubscribed)
+                    {
+                        try { document.CommandCancelled -= CommandCancelled; }
+                        catch { }
+                    }
+                    if (endedSubscribed)
+                    {
+                        try { document.CommandEnded -= CommandEnded; }
+                        catch { }
+                    }
+                    if (willStartSubscribed)
+                    {
+                        try { document.CommandWillStart -= CommandWillStart; }
+                        catch { }
+                    }
+                    throw;
+                }
+            }
+
+            public void Unsubscribe(Document document)
+            {
+                try { document.CommandWillStart -= CommandWillStart; }
+                catch { }
+                try { document.CommandEnded -= CommandEnded; }
+                catch { }
+                try { document.CommandCancelled -= CommandCancelled; }
+                catch { }
+                try { document.CommandFailed -= CommandFailed; }
+                catch { }
+            }
+        }
 
         internal sealed class PendingTransition : IDisposable
         {
@@ -309,41 +378,54 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             lock (Gate)
             {
-                if (CommandEndedHandlers.ContainsKey(document)) return;
-                CommandEventHandler handler = (sender, args) => OnCommandEnded(document, args);
-                document.CommandEnded += handler;
-                CommandEndedHandlers.Add(document, handler);
+                if (ObserverRegistrations.ContainsKey(document)) return;
+                var registration = new ObserverRegistration(
+                    (sender, args) => OnCommandWillStart(document, args),
+                    (sender, args) => OnCommandEnded(document, args),
+                    (sender, args) => OnCommandAborted(document),
+                    (sender, args) => OnCommandAborted(document));
+                ObserverRegistrations.Add(document, registration);
+                try { registration.Subscribe(document); }
+                catch
+                {
+                    ObserverRegistrations.Remove(document);
+                    throw;
+                }
             }
         }
 
         public static void Detach(Document? document)
         {
             if (document == null) return;
-            CommandEventHandler? handler = null;
+            ObserverRegistration? registration = null;
             lock (Gate)
             {
-                if (CommandEndedHandlers.TryGetValue(document, out handler))
-                    CommandEndedHandlers.Remove(document);
+                if (ObserverRegistrations.TryGetValue(document, out registration))
+                {
+                    registration.PendingCommand = null;
+                    ObserverRegistrations.Remove(document);
+                }
                 Histories.Remove(document);
             }
-            if (handler != null)
-            {
-                try { document.CommandEnded -= handler; }
-                catch { }
-            }
+            registration?.Unsubscribe(document);
         }
 
         public static void Stop()
         {
             Document[] documents;
-            lock (Gate) documents = new List<Document>(CommandEndedHandlers.Keys).ToArray();
+            lock (Gate) documents = new List<Document>(ObserverRegistrations.Keys).ToArray();
             foreach (var document in documents) Detach(document);
         }
 
         public static void Forget(Document? document)
         {
             if (document == null) return;
-            lock (Gate) Histories.Remove(document);
+            lock (Gate)
+            {
+                Histories.Remove(document);
+                if (ObserverRegistrations.TryGetValue(document, out var registration))
+                    registration.PendingCommand = null;
+            }
         }
 
         public static PendingTransition BeginTransition(
@@ -410,9 +492,34 @@ namespace QS3D.BricsCAD.V25
                 registeredHistory);
         }
 
+        private static void OnCommandWillStart(Document document, CommandEventArgs args)
+        {
+            var normalized = NormalizeNativeUndoRedo(args?.GlobalCommandName);
+            lock (Gate)
+            {
+                if (!ObserverRegistrations.TryGetValue(document, out var registration)) return;
+
+                // A second start before the first command reaches a terminal
+                // event makes the event stream ambiguous. Invalidate the token
+                // rather than allowing a nested/internal completion to consume it.
+                if (registration.PendingCommand != null)
+                {
+                    registration.PendingCommand = null;
+                    return;
+                }
+                if (normalized == null || !IsActiveDocument(document)) return;
+                if (!Histories.TryGetValue(document, out var history) || history.Desynchronized) return;
+                registration.PendingCommand = normalized;
+            }
+        }
+
         private static void OnCommandEnded(Document document, CommandEventArgs args)
         {
-            if (!IsNativeUndoRedo(args?.GlobalCommandName)) return;
+            // CommandEnded alone is not evidence of a deliberate native Undo.
+            // BricsCAD can emit internal terminal events during failure cleanup
+            // and document close/discard. Restore only a matching command that
+            // started while this exact tracked document was active.
+            if (!TryConsumeMatchingCommand(document, args?.GlobalCommandName)) return;
 
             DocumentHistory history;
             lock (Gate)
@@ -505,15 +612,46 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static bool IsNativeUndoRedo(string? globalCommandName)
+        private static void OnCommandAborted(Document document)
+        {
+            lock (Gate)
+            {
+                if (ObserverRegistrations.TryGetValue(document, out var registration))
+                    registration.PendingCommand = null;
+            }
+        }
+
+        private static bool TryConsumeMatchingCommand(Document document, string? globalCommandName)
+        {
+            var normalized = NormalizeNativeUndoRedo(globalCommandName);
+            lock (Gate)
+            {
+                if (!ObserverRegistrations.TryGetValue(document, out var registration)) return false;
+                var pendingCommand = registration.PendingCommand;
+                registration.PendingCommand = null;
+                return normalized != null &&
+                    pendingCommand != null &&
+                    string.Equals(normalized, pendingCommand, StringComparison.Ordinal) &&
+                    IsActiveDocument(document);
+            }
+        }
+
+        private static bool IsActiveDocument(Document document)
+        {
+            try { return ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document); }
+            catch { return false; }
+        }
+
+        private static string? NormalizeNativeUndoRedo(string? globalCommandName)
         {
             var normalized = (globalCommandName ?? string.Empty).Trim();
-            if (normalized.Length == 0) return false;
+            if (normalized.Length == 0) return null;
             while (normalized.Length > 0 && (normalized[0] == '_' || normalized[0] == '.'))
                 normalized = normalized.Substring(1);
-            return string.Equals(normalized, "UNDO", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(normalized, "REDO", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(normalized, "MREDO", StringComparison.OrdinalIgnoreCase);
+            if (string.Equals(normalized, "UNDO", StringComparison.OrdinalIgnoreCase)) return "UNDO";
+            if (string.Equals(normalized, "REDO", StringComparison.OrdinalIgnoreCase)) return "REDO";
+            if (string.Equals(normalized, "MREDO", StringComparison.OrdinalIgnoreCase)) return "MREDO";
+            return null;
         }
 
         private static InvalidOperationException MarkDesynchronized(

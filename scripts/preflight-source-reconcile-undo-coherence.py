@@ -29,12 +29,24 @@ inbox = read(INBOX)
 for token in (
     'RegAppName = "QS3D_SRC_SYNC_UNDO"',
     'MarkerVersion = "1"',
-    "Dictionary<Document, CommandEventHandler>",
+    "Dictionary<Document, ObserverRegistration>",
     "Dictionary<Document, DocumentHistory>",
-    "document.CommandEnded += handler",
-    "document.CommandEnded -= handler",
+    "document.CommandWillStart += CommandWillStart",
+    "document.CommandEnded += CommandEnded",
+    "document.CommandCancelled += CommandCancelled",
+    "document.CommandFailed += CommandFailed",
+    "document.CommandWillStart -= CommandWillStart",
+    "document.CommandEnded -= CommandEnded",
+    "document.CommandCancelled -= CommandCancelled",
+    "document.CommandFailed -= CommandFailed",
+    "OnCommandWillStart(document, args)",
     "OnCommandEnded(document, args)",
-    "IsNativeUndoRedo(args?.GlobalCommandName)",
+    "OnCommandAborted(document)",
+    "TryConsumeMatchingCommand(document, args?.GlobalCommandName)",
+    "NormalizeNativeUndoRedo(args?.GlobalCommandName)",
+    "IsActiveDocument(document)",
+    "registration.PendingCommand = null",
+    "ObserverRegistrations.TryGetValue(document, out var registration)",
     'string.Equals(normalized, "UNDO", StringComparison.OrdinalIgnoreCase)',
     'string.Equals(normalized, "REDO", StringComparison.OrdinalIgnoreCase)',
     'string.Equals(normalized, "MREDO", StringComparison.OrdinalIgnoreCase)',
@@ -136,15 +148,25 @@ stage_start = coordinator.find("public void StageAfter(")
 confirm_start = coordinator.find("public void ConfirmCommitted()", stage_start)
 dispose_start = coordinator.find("public void Dispose()", confirm_start)
 begin_start = coordinator.find("public static PendingTransition BeginTransition(")
-observer_start = coordinator.find("private static void OnCommandEnded(", begin_start)
-filter_start = coordinator.find("private static bool IsNativeUndoRedo(", observer_start)
-mark_start = coordinator.find("private static InvalidOperationException MarkDesynchronized(", filter_start)
+will_start = coordinator.find("private static void OnCommandWillStart(", begin_start)
+ended_start = coordinator.find("private static void OnCommandEnded(", will_start)
+aborted_start = coordinator.find("private static void OnCommandAborted(", ended_start)
+consume_start = coordinator.find("private static bool TryConsumeMatchingCommand(", aborted_start)
+active_start = coordinator.find("private static bool IsActiveDocument(", consume_start)
+normalize_start = coordinator.find("private static string? NormalizeNativeUndoRedo(", active_start)
+mark_start = coordinator.find("private static InvalidOperationException MarkDesynchronized(", normalize_start)
 stage_body = coordinator[stage_start:confirm_start]
 confirm_body = coordinator[confirm_start:dispose_start]
-begin_body = coordinator[begin_start:observer_start]
-observer_body = coordinator[observer_start:filter_start]
-filter_body = coordinator[filter_start:mark_start]
-if min(stage_start, confirm_start, dispose_start, begin_start, observer_start, filter_start, mark_start) < 0:
+begin_body = coordinator[begin_start:will_start]
+will_body = coordinator[will_start:ended_start]
+ended_body = coordinator[ended_start:aborted_start]
+aborted_body = coordinator[aborted_start:consume_start]
+consume_body = coordinator[consume_start:active_start]
+filter_body = coordinator[normalize_start:mark_start]
+if min(
+    stage_start, confirm_start, dispose_start, begin_start, will_start,
+    ended_start, aborted_start, consume_start, active_start, normalize_start, mark_start,
+) < 0:
     errors.append("Undo coordinator transition method boundaries are missing")
 else:
     if "modelSpace.XData = marker" not in stage_body or "_stagedEntries = stagedEntries;" not in stage_body:
@@ -158,22 +180,109 @@ else:
     if 'string.Equals(normalized, "U", StringComparison.OrdinalIgnoreCase)' in filter_body:
         errors.append("single-letter U is ambiguous in BricsCAD V25 and must not drive semantic Undo observation")
 
-    marker_read_start = observer_body.find("try { nativeRevision = ReadRevision(document); }")
-    target_start = observer_body.find("HistoryEntry targetEntry;", marker_read_start)
-    stamp_start = observer_body.find("if (!currentEntry.Stamp.Matches(project))", target_start)
-    restore_start = observer_body.find("var restoreRollback = ProjectStateSnapshot.Capture(project);", stamp_start)
+    if (
+        "if (registration.PendingCommand != null)" not in will_body
+        or "registration.PendingCommand = null;" not in will_body
+        or "normalized == null || !IsActiveDocument(document)" not in will_body
+        or "registration.PendingCommand = normalized;" not in will_body
+    ):
+        errors.append("Undo observer must arm one active-document native command token and invalidate ambiguous nested starts")
+    consume_gate = ended_body.find("if (!TryConsumeMatchingCommand(document, args?.GlobalCommandName)) return;")
+    marker_read_start = ended_body.find("try { nativeRevision = ReadRevision(document); }")
+    if consume_gate < 0 or marker_read_start < 0 or consume_gate > marker_read_start:
+        errors.append("CommandEnded must consume a matching start token before inspecting or poisoning native history")
+    if (
+        "var pendingCommand = registration.PendingCommand;" not in consume_body
+        or "registration.PendingCommand = null;" not in consume_body
+        or "string.Equals(normalized, pendingCommand, StringComparison.Ordinal)" not in consume_body
+        or "IsActiveDocument(document)" not in consume_body
+    ):
+        errors.append("Undo completion must clear intent and match command plus active document exactly")
+    if "registration.PendingCommand = null;" not in aborted_body:
+        errors.append("cancelled and failed native commands must clear pending Undo intent")
+
+    target_start = ended_body.find("HistoryEntry targetEntry;", marker_read_start)
+    stamp_start = ended_body.find("if (!currentEntry.Stamp.Matches(project))", target_start)
+    restore_start = ended_body.find("var restoreRollback = ProjectStateSnapshot.Capture(project);", stamp_start)
     if min(marker_read_start, target_start, stamp_start, restore_start) < 0:
         errors.append("Undo observer marker/stamp refusal boundaries are missing")
     else:
-        if "MarkDesynchronized(" in observer_body[marker_read_start:target_start]:
+        if "MarkDesynchronized(" in ended_body[marker_read_start:target_start]:
             errors.append("a transient command-end marker read failure must not permanently poison history")
-        if "MarkDesynchronized(" in observer_body[stamp_start:restore_start]:
+        if "MarkDesynchronized(" in ended_body[stamp_start:restore_start]:
             errors.append("semantic-only drift refusal must remain recoverable when the native marker returns current")
 
-# Deterministic model of the production shadow-publication contract. The static
-# tokens above bind these states to the coordinator/service surfaces; this model
-# locks the regression sequence that failed on V25: success -> aborted reconcile
-# -> refusals/document switch -> final success -> native Undo/Redo.
+# Deterministic model of the production shadow-publication and event-intent
+# contracts. The static tokens above bind these states to the coordinator and
+# service surfaces. In particular, a terminal event named UNDO is insufficient
+# by itself: the exact V25 failure reached sticky desync before the runner sent
+# its first explicit Undo.
+def normalize_command(name):
+    normalized = (name or "").strip().lstrip("_.").upper()
+    return normalized if normalized in ("UNDO", "REDO", "MREDO") else None
+
+
+class CommandIntent:
+    def __init__(self):
+        self.pending = None
+
+    def will_start(self, name, active, history_current=True):
+        if self.pending is not None:
+            self.pending = None
+            return
+        normalized = normalize_command(name)
+        if normalized is not None and active and history_current:
+            self.pending = normalized
+
+    def ended(self, name, active):
+        normalized = normalize_command(name)
+        pending = self.pending
+        self.pending = None
+        return normalized is not None and normalized == pending and active
+
+    def aborted(self):
+        self.pending = None
+
+
+intent = CommandIntent()
+if intent.ended("UNDO", True):
+    errors.append("an unmatched internal CommandEnded(UNDO) reached semantic history")
+intent.will_start("UNDO", False)
+if intent.ended("UNDO", True):
+    errors.append("an inactive-document Undo start armed semantic history")
+intent.will_start("UNDO", True)
+if intent.ended("UNDO", False):
+    errors.append("an Undo completion after document deactivation reached semantic history")
+intent.will_start("UNDO", True)
+intent.aborted()
+if intent.ended("UNDO", True):
+    errors.append("a cancelled/failed Undo left stale intent")
+intent.will_start("UNDO", True)
+if intent.ended("REDO", True):
+    errors.append("a mismatched terminal event consumed Undo intent")
+intent.will_start("UNDO", True)
+intent.will_start("UNDO", True)
+if intent.ended("UNDO", True):
+    errors.append("ambiguous duplicate starts retained native Undo intent")
+intent.will_start("_UNDO", True)
+if not intent.ended(".UNDO", True):
+    errors.append("a matched active-document native Undo did not reach history")
+intent.will_start("REDO", True)
+if not intent.ended("REDO", True):
+    errors.append("a matched active-document native Redo did not reach history")
+intent.will_start("U", True)
+if intent.ended("U", True):
+    errors.append("single-letter U armed semantic Undo history")
+
+# Unknown revisions remain fail-closed when, and only when, a deliberate active
+# Undo/Redo pair was matched.
+unknown_revision_desynchronized = False
+intent.will_start("MREDO", True)
+if intent.ended("MREDO", True):
+    unknown_revision_desynchronized = True
+if not unknown_revision_desynchronized:
+    errors.append("matched native Undo/Redo no longer fails closed on an unknown revision")
+
 published = "first-success"
 shadow = "failed-reconcile"
 shadow = None  # transaction/transition disposed without publication
@@ -205,6 +314,17 @@ for token in (
         errors.append("Project cache lifecycle missing exact Undo identity/cleanup contract: " + token)
 if projects.count("SourceReconcileUndoCoordinator.Forget(document);") < 3:
     errors.append("Reload, Forget and ForgetByName must each invalidate Source Reconcile Undo history")
+
+forget_start = coordinator.find("public static void Forget(")
+begin_start_for_forget = coordinator.find("public static PendingTransition BeginTransition(", forget_start)
+forget_body = coordinator[forget_start:begin_start_for_forget]
+if (
+    forget_start < 0
+    or begin_start_for_forget < 0
+    or "Histories.Remove(document);" not in forget_body
+    or "registration.PendingCommand = null;" not in forget_body
+):
+    errors.append("project forget/reload must clear both semantic history and any pending native command intent")
 
 for token in (
     "native revision marker",
