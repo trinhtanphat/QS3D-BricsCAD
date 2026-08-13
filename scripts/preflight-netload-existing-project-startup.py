@@ -40,6 +40,7 @@ refresh_cad = method(palette, "public static void RefreshCad", "public static vo
 reset_unavailable = method(palette, "public static void ResetForUnavailableProject", "private static void ResetPreservingVisibility", "PaletteCoordinator.ResetForUnavailableProject")
 ribbon_start = method(ribbon, "public static void Start()", "public static void Stop()", "RibbonInitializationCoordinator.Start")
 ribbon_document = method(ribbon, "private static void OnDocumentAvailable", "private static void StartTimedRetry", "RibbonInitializationCoordinator.OnDocumentAvailable")
+ribbon_retry = method(ribbon, "private static void StartTimedRetry", "private static void StopTimedRetry", "RibbonInitializationCoordinator.StartTimedRetry")
 ribbon_tick = method(ribbon, "private static void OnRetryTick", "private static bool TryInitializeAll", "RibbonInitializationCoordinator.OnRetryTick")
 
 for token in (
@@ -78,6 +79,7 @@ require(entry, "PaletteCoordinator.Dispose();", "PluginEntry.Terminate")
 
 require(ribbon_start, "StartTimedRetry();", "RibbonInitializationCoordinator.Start")
 require(ribbon_document, "StartTimedRetry();", "RibbonInitializationCoordinator.OnDocumentAvailable")
+require(ribbon_retry, "new DispatcherTimer(DispatcherPriority.ApplicationIdle)", "RibbonInitializationCoordinator.StartTimedRetry")
 require(ribbon_tick, "TryInitializeAll()", "RibbonInitializationCoordinator.OnRetryTick")
 require(ribbon, "private static bool _initialized;", "RibbonInitializationCoordinator")
 if "TryInitializeAll()" in ribbon_start:
@@ -91,4 +93,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: V25 NETLOAD defers palette and ribbon construction, passive lifecycle calls stay lazy, and first QS3D show avoids duplicate full refresh.")
+print("PASS: V25 NETLOAD defers palette/ribbon construction and keeps ribbon reconciliation at application-idle priority; first QS3D show avoids duplicate full refresh.")
