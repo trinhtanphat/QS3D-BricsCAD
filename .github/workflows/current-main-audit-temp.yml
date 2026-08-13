@@ -1,0 +1,62 @@
+name: QS3D TEMP Current Main Audit
+
+on:
+  push:
+    branches:
+      - ci/current-main-audit-20260813-1540
+    paths:
+      - '.github/workflows/current-main-audit-temp.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+      - name: Record audited main SHA
+        shell: pwsh
+        run: git rev-parse HEAD
+      - name: Manual-only CI policy gate
+        run: python scripts/preflight-ci-manual-only.py
+      - name: Generic source guard
+        run: python scripts/preflight.py
+      - name: All discovered feature source guards
+        run: python scripts/preflight-all.py
+      - name: Validate release PowerShell syntax
+        shell: pwsh
+        run: |
+          foreach ($script in @(
+            'scripts/package-v25.ps1',
+            'scripts/install-v25-autoload.ps1',
+            'scripts/uninstall-v25-autoload.ps1',
+            'scripts/update-v25.ps1',
+            'scripts/new-v25-update-manifest.ps1',
+            'scripts/finalize-v25-signed-package.ps1',
+            'scripts/sign-v25.ps1',
+            'scripts/verify-v25-signatures.ps1'
+          )) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script).Path, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count -gt 0) {
+              $parseErrors | Format-Table -AutoSize | Out-String | Write-Host
+              throw "PowerShell parse failure: $script"
+            }
+          }
+      - name: Build Core Release
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+      - name: Build Core smoke harness
+        run: dotnet build tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
+      - name: Deterministic Core smoke tests
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release --no-build
