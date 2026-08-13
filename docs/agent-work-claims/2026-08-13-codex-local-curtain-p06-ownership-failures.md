@@ -1,6 +1,6 @@
 # Work claim — LOCAL-002 P06 Curtain panel ownership failures
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local-root` (`/root`, local Windows + licensed BricsCAD V25)
 - Registered: `2026-08-13T11:05:23+07:00`
 - Baseline main SHA: `d676bd9970910938d19cfbc3de333d52bf9b6af1`
@@ -46,3 +46,16 @@ Current ACTIVE/BLOCKED claim audit found no reservation for the P06 runtime scen
 ## Completion condition
 
 The additive source/runner/gate is merged, a fresh exact-main licensed V25 run either records the complete sanitized P06 PASS contract or records an allowlisted diagnostic FAIL without overclaiming, reusable docs are updated truthfully, and this claim is marked `COMPLETED`. P07-P12 and overall LOCAL-002 remain `PENDING_LOCAL`.
+
+## Completion evidence
+
+- Claim-only PR `#960` merged as `f1c90f045f11d5024b29cad08752723f923ec7e0` (claim commit `5d7e4a337225c7822c462dce490533851b5566f0`).
+- Additive probe/runner/gate preparation PR `#961` merged as `5189463ae85c399745d640d2081ff1aee0a44a2d` (source commit `40f2c341`).
+- Probe-isolation correction PR `#962` merged as `db8961a55b1dca51921546e23161ebd51884863c` (source commit `99094acc`); it restored the clean semantic baseline after each already-proven independent refusal so the final whole-project regeneration control did not invalidate prior per-case samples.
+- Drawing-lock cleanup hardening PR `#963` merged as exact runtime candidate `7c41ff875813a7773868240e8f79d22060eca196` (source commit `de4e4cde`).
+- The exact candidate built `Release|x64` against installed BricsCAD V25 references with zero warnings/errors. Adapter SHA-256 was `309E934D12581DCDD97D104BA46F13F2F5A03595B2C005DBE3B22FF5FB0E6DB6`.
+- Licensed BricsCAD `25.2.10` returned `QS3D_CURTAIN_PANEL_OWNERSHIP_RUNTIME_V1 / PASS`: 90 baseline panels; four of four unsafe cases refused; no erase/append; semantic metadata, surviving old sets, unrelated owners and foreign object preserved; final valid replacement produced 21 complete marked panels and zero panel Health issues.
+- The repository-generated disposable DWG SHA-256 remained `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`. Launched-process exit, private-script deletion, `.dwl`/`.dwl2` deletion and sidecar/backup absence were verified. Markers contained aggregate sanitized fields only.
+- Closeout validation passed the strict V25 `Release|x64` build with zero warnings/errors, the P01-P06/native/orchestration/runtime-health/Level focused gates, the runner parser and `scripts/preflight.py`. The 717-gate aggregate had one unrelated moving-main release-version failure (`plugin 0.1.0-preview.4` versus `Core 0.1.0-preview.3`); no release/version file is in this claim.
+- Earlier diagnostic FAIL/PASS attempts were used only to harden probe isolation and drawing-lock cleanup; they are not qualification evidence.
+- Only P06 is promoted to bounded `LOCAL_PASS`. P07-P12 and overall `LOCAL-002` remain `PENDING_LOCAL`.
