@@ -34,8 +34,10 @@ Canonicality policy for this sub-lane:
 
 - new `src/QS3D.Core/Cost/RateBook.cs` — `CostCode`, `RateItem`, resolution and `RateBook` contract only;
 - new `tests/QS3D.Core.SmokeTests/RateBookSmoke.cs` — deterministic ordering/lookup/duplicate/canonicality/snapshot regression;
-- new `tests/QS3D.Core.SmokeTests/RateBookRegistration.cs` — ModuleInitializer registration;
+- `tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs` — register the focused smoke through the existing aggregate runner;
 - this claim file.
+
+The initially planned standalone `RateBookRegistration.cs` creation was rejected by the connector before any write/commit occurred. The existing aggregate registration file is therefore the reserved registration surface instead; no separate registration file is required.
 
 ## Excluded scope
 
@@ -47,9 +49,9 @@ Canonicality policy for this sub-lane:
 
 ## Validation plan
 
-- Re-fetch current `main` after this claim-only commit and recheck new Cost/Rate claims before source changes.
+- Re-fetch current `main` after claim publication and after this registration-surface refinement, then recheck new Cost/Rate claims before further changes.
 - Smoke covers canonical construction, deterministic ordering independent of input order/culture, latest-effective as-of selection, explicit unmatched state, duplicate id, ambiguous natural key, invalid UTC/currency/unit/token/rate inputs and source-list mutation isolation.
-- Re-fetch exact source/test blobs from remote before closeout.
+- Re-fetch exact source/test/registration blobs from remote before closeout.
 - Executable managed smoke/build remains `NOT_RUN` unless a real .NET execution path becomes available; source inspection is not reported as PASS.
 
 ## Coordination
@@ -61,4 +63,4 @@ Canonicality policy for this sub-lane:
 
 ## Completion condition
 
-A claim-first deterministic in-memory rate identity/catalog contract plus focused auto-registered smoke is present on current `main`, no quantity/estimate/FX arithmetic is duplicated, remote source/test are re-fetched, and this claim is closed with exact pushed SHAs plus validation actually executed.
+A claim-first deterministic in-memory rate identity/catalog contract plus focused registered smoke is present on current `main`, no quantity/estimate/FX arithmetic is duplicated, remote source/test/registration are re-fetched, and this claim is closed with exact pushed SHAs plus validation actually executed.
