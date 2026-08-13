@@ -26,7 +26,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TARGET_WORKFLOW: release-v25-cloud.yml
-      BASELINE_MANUAL_POLICY_SHA: f1c90f045f11d5024b29cad08752723f923ec7e0
+      BASELINE_MANUAL_POLICY_SHA: b064215655e3da25c7855e18a85677ae5d4088f9
     steps:
       - uses: actions/checkout@v7
         with:
@@ -129,8 +129,8 @@ jobs:
           set -euo pipefail
           git fetch origin main
           git reset --hard origin/main
-          git show f1c90f045f11d5024b29cad08752723f923ec7e0:scripts/preflight-ci-manual-only.py > scripts/preflight-ci-manual-only.py
-          git show f1c90f045f11d5024b29cad08752723f923ec7e0:scripts/preflight.py > scripts/preflight.py
+          git show b064215655e3da25c7855e18a85677ae5d4088f9:scripts/preflight-ci-manual-only.py > scripts/preflight-ci-manual-only.py
+          git show b064215655e3da25c7855e18a85677ae5d4088f9:scripts/preflight.py > scripts/preflight.py
           git rm .github/workflows/release-v25-cloud-auto.yml
           git add scripts/preflight-ci-manual-only.py scripts/preflight.py
           if git diff --cached --quiet; then
