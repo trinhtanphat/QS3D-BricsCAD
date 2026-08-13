@@ -52,17 +52,33 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnLayoutSplitterDragCompleted(object sender, DragCompletedEventArgs e)
         {
             if (_layoutMainGrid == null || _layoutFamilyGrid == null || _layoutRoomGrid == null) return;
+
             var modelWidth = _layoutMainGrid.ColumnDefinitions[0].ActualWidth;
             var familyWidth = _layoutMainGrid.ColumnDefinitions[2].ActualWidth;
             var familyTop = _layoutFamilyGrid.RowDefinitions[0].ActualHeight;
             var roomTop = _layoutRoomGrid.RowDefinitions[0].ActualHeight;
+            var splitterGrid = (sender as FrameworkElement)?.Parent as Grid;
+            var narrowResponsiveLayout = _layoutMainGrid.ActualWidth > 0 && _layoutMainGrid.ActualWidth < 680;
 
             UserUiLayoutStore.Update(layout =>
             {
-                layout.ModelColumnWidth = modelWidth;
-                layout.FamilyColumnWidth = familyWidth;
-                layout.FamilyTopHeight = familyTop;
-                layout.RoomTopHeight = roomTop;
+                if (!narrowResponsiveLayout)
+                {
+                    layout.ModelColumnWidth = modelWidth;
+                    layout.FamilyColumnWidth = familyWidth;
+                    layout.FamilyTopHeight = familyTop;
+                    layout.RoomTopHeight = roomTop;
+                    return;
+                }
+
+                // At narrow widths CompactShell temporarily reflows the desktop 3-column grid
+                // into two tiers. Those transient column widths must never replace the user's
+                // saved desktop layout. Only persist a vertical split that the user actually
+                // dragged inside the Family/Properties or Room/Selection pane.
+                if (ReferenceEquals(splitterGrid, _layoutFamilyGrid))
+                    layout.FamilyTopHeight = familyTop;
+                else if (ReferenceEquals(splitterGrid, _layoutRoomGrid))
+                    layout.RoomTopHeight = roomTop;
             });
         }
     }
