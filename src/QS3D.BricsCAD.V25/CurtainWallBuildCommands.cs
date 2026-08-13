@@ -27,6 +27,7 @@ namespace QS3D.BricsCAD.V25
             var pathPanels = new CurtainPanelBuildResult();
             ProjectState? project = null;
             ProjectStateSnapshot? rollback = null;
+            CurtainNativeUndoCoordinator.PendingTransition? undoTransition = null;
             CurtainWallBuildSelection? validatedSelection = null;
             var nativeCommitted = false;
             try
@@ -42,6 +43,8 @@ namespace QS3D.BricsCAD.V25
                 phase = "canonical source prevalidation";
                 validatedSelection = CurtainWallBuildSelectionGuard.Validate(document, project);
                 rollback = ProjectStateSnapshot.Capture(project);
+                phase = "native Undo registration";
+                undoTransition = CurtainNativeUndoCoordinator.BeginTransition(document, project, rollback);
 
                 // Resolve rule/dependency failures before native mutation. The command snapshot restores
                 // this semantic phase as well when any later host/frame phase fails before outer commit.
@@ -94,7 +97,10 @@ namespace QS3D.BricsCAD.V25
                     frameSolids = checked(lineFrames.Frames + pathFrames.Frames);
                     panelElements = checked(linePanels.Elements + pathPanels.Elements);
                     panelSolids = checked(linePanels.Panels + pathPanels.Panels);
+                    phase = "native Undo marker";
+                    undoTransition.StageMarker(document.Database, commandTransaction, project);
                     commandTransaction.Commit();
+                    undoTransition.MarkNativeCommitted();
                     nativeCommitted = true;
                 }
 
@@ -106,6 +112,8 @@ namespace QS3D.BricsCAD.V25
                 var panelsStamped = panelElements > 0 ? CurtainWallPanelLiveStateService.TryStampSelected(document, project, out panelStampWarning) : 0;
                 if (!string.IsNullOrWhiteSpace(panelStampWarning))
                     stampWarning = string.IsNullOrWhiteSpace(stampWarning) ? panelStampWarning : stampWarning + " | " + panelStampWarning;
+                phase = "semantic Undo publication";
+                undoTransition.ConfirmCommitted(project, ProjectStateSnapshot.Capture(project));
                 if (hostSolids == 0 && frameSolids == 0 && panelSolids == 0)
                 {
                     Report(document, "Curtain 3D: chọn GlassWall semantic LINE hoặc open/bulged POLYLINE WCS-XY.");
@@ -116,6 +124,19 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
+                Exception? undoPublishError = null;
+                if (nativeCommitted && undoTransition != null && project != null)
+                {
+                    try
+                    {
+                        undoTransition.MarkNativeCommitted();
+                        undoTransition.ConfirmCommitted(project, ProjectStateSnapshot.Capture(project));
+                    }
+                    catch (Exception error)
+                    {
+                        undoPublishError = error;
+                    }
+                }
                 if (!nativeCommitted && rollback != null && project != null)
                 {
                     try { rollback.Restore(project); }
@@ -128,9 +149,12 @@ namespace QS3D.BricsCAD.V25
                     TryRegen(document);
                 }
                 ReportAtomicFailure(document, phase, nativeCommitted, ex);
+                if (undoPublishError != null)
+                    Report(document, "Curtain native Undo history warning: " + undoPublishError.Message);
             }
             finally
             {
+                if (undoTransition != null) undoTransition.Dispose();
                 TryRestoreSelection(document, validatedSelection);
             }
         }

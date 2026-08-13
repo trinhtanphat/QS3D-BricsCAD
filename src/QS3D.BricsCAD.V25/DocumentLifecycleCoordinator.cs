@@ -27,6 +27,7 @@ namespace QS3D.BricsCAD.V25
                 docs.DocumentDestroyed += OnDocumentDestroyed;
                 AttachProjectPersistence(docs.MdiActiveDocument);
                 SourceReconcileUndoCoordinator.Attach(docs.MdiActiveDocument);
+                CurtainNativeUndoCoordinator.Attach(docs.MdiActiveDocument);
                 SelectionSyncCoordinator.Attach(docs.MdiActiveDocument);
                 _started = true;
             }
@@ -38,6 +39,7 @@ namespace QS3D.BricsCAD.V25
                 try { docs.DocumentDestroyed -= OnDocumentDestroyed; } catch { }
                 foreach (var document in SaveCompleteHandlers.Keys.ToArray()) DetachProjectPersistence(document);
                 SourceReconcileUndoCoordinator.Stop();
+                CurtainNativeUndoCoordinator.Stop();
                 SelectionSyncCoordinator.Stop();
                 _started = false;
                 throw;
@@ -62,6 +64,8 @@ namespace QS3D.BricsCAD.V25
             }
             try { SourceReconcileUndoCoordinator.Stop(); }
             catch { }
+            try { CurtainNativeUndoCoordinator.Stop(); }
+            catch { }
             try { SelectionSyncCoordinator.Stop(); }
             catch { }
             _started = false;
@@ -71,6 +75,7 @@ namespace QS3D.BricsCAD.V25
         {
             AttachProjectPersistence(e.Document);
             SourceReconcileUndoCoordinator.Attach(e.Document);
+            CurtainNativeUndoCoordinator.Attach(e.Document);
             SelectionSyncCoordinator.Attach(e.Document);
             EnsureProject(e.Document, false);
         }
@@ -79,6 +84,7 @@ namespace QS3D.BricsCAD.V25
         {
             AttachProjectPersistence(e.Document);
             SourceReconcileUndoCoordinator.Attach(e.Document);
+            CurtainNativeUndoCoordinator.Attach(e.Document);
             SelectionSyncCoordinator.Attach(e.Document);
             EnsureProject(e.Document, true);
             SelectionSyncCoordinator.Refresh(e.Document);
@@ -89,6 +95,7 @@ namespace QS3D.BricsCAD.V25
             var document = e.Document;
             DetachProjectPersistence(document);
             SourceReconcileUndoCoordinator.Detach(document);
+            CurtainNativeUndoCoordinator.Detach(document);
             SelectionSyncCoordinator.Detach(document);
             ProjectContextCoordinator.Forget(document);
         }
@@ -107,6 +114,7 @@ namespace QS3D.BricsCAD.V25
             if (active == null) return;
             AttachProjectPersistence(active);
             SourceReconcileUndoCoordinator.Attach(active);
+            CurtainNativeUndoCoordinator.Attach(active);
             SelectionSyncCoordinator.Attach(active);
             EnsureProject(active, true);
             SelectionSyncCoordinator.Refresh(active);
