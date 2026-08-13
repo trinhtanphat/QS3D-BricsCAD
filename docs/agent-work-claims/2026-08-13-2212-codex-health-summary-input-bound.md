@@ -1,8 +1,9 @@
 # Work claim — HealthSummary bounded issue enumeration
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `Codex / GPT-5`
 - Registered: `2026-08-13T22:12:00+07:00`
+- Completed: `2026-08-13T22:18:45+07:00`
 - Baseline main SHA: `ae9a5fd8cdd6abb903c1c8f8394cae7bfeb97ab0`
 - Priority: evidence-driven remote-safe health/readiness integrity
 
@@ -29,4 +30,16 @@
 
 ## Completion condition
 
-Implementation is complete only when the focused health-summary gate, full Core smoke and aggregate source preflight pass on the implementation merge SHA, the implementation PR is merged normally, and this claim is updated to `COMPLETED` with exact merge and validation evidence.
+Satisfied. `HealthSummary` now snapshots its caller issue sequence exactly once, accepts `MaxIssueCount = 1000000`, and rejects the first excess item before returning a readiness object. The new focused smoke proves exact-cap acceptance, `MaxIssueCount + 1` rejection after exactly that many yielded items, single enumeration, and propagation of the original source enumeration exception. Existing null/severity/readiness smoke and every command surface remain unchanged.
+
+## Completion evidence
+
+- Claim PR: `#1079`; merge SHA `8ec8f1c7ca63d6425323a7d883a1c067f96be587`.
+- Implementation commit: `c67b1c5e4590a3ce28788a1011705396067f7996`.
+- Implementation PR: `#1080`; merge SHA `c493039351273ca335ca3f1b446eac51de22a98f`.
+- Exact implementation merge SHA `c493039351273ca335ca3f1b446eac51de22a98f` validation:
+  - `dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release` — `ALL PASS`;
+  - `py -3 scripts/preflight-health-release-readiness.py` — `PASS`;
+  - `py -3 scripts/preflight-all.py` — `PASS`, all `774/774` discovered gates;
+  - `git diff --cached --check` — `PASS` before implementation publication.
+- No GitHub Actions were dispatched or rerun. No BricsCAD runtime, command, release/installer, diagnostic-summary exporter, P10, `#987`, `#1005`, or LOCAL-only surface was touched.
