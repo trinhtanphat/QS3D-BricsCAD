@@ -104,11 +104,26 @@
 
                     <Border Grid.Column="2" Style="{StaticResource GeometryCard}" Margin="0">
                         <StackPanel>
-                            <DockPanel>
-                                <TextBlock Text="REBAR HEALTH" Style="{StaticResource PanelTitle}"/>
-                                <TextBlock DockPanel.Dock="Right" Text="FAIL-CLOSED"
-                                           Foreground="{StaticResource LuxuryBrush}" FontSize="9" FontWeight="SemiBold"/>
-                            </DockPanel>
+                            <Grid x:Name="RebarHealthHeaderGrid">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Text="REBAR HEALTH"
+                                           Style="{StaticResource PanelTitle}"
+                                           MinWidth="0"
+                                           Margin="0,0,8,0"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Grid.Column="1"
+                                           Text="FAIL-CLOSED"
+                                           Foreground="{StaticResource LuxuryBrush}"
+                                           FontSize="9" FontWeight="SemiBold"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           TextWrapping="NoWrap"/>
+                            </Grid>
                             <Button Content="Health — thanh dọc cột/dầm" Tag="QS3DREBARHEALTH" Style="{StaticResource GeometryCommand}" Click="OnCommandClick"/>
                             <Button Content="Health — BBS shape" Tag="QS3DREBARSHAPEHEALTH" Style="{StaticResource GeometryCommand}" Click="OnCommandClick"/>
                             <Button Content="Health — đai cột" Tag="QS3DREBARTIEHEALTH" Style="{StaticResource GeometryCommand}" Click="OnCommandClick"/>
@@ -123,15 +138,30 @@
         </ScrollViewer>
 
         <Border Grid.Row="2" Background="{StaticResource Bg1Brush}" Padding="11,7" BorderThickness="0,1,0,0">
-            <DockPanel>
-                <Border Background="{StaticResource WarningBrush}" CornerRadius="5"
+            <Grid x:Name="GeometryStatusGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0"
+                        Background="{StaticResource WarningBrush}" CornerRadius="5"
                         Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
                 <TextBlock x:Name="StatusText"
+                           Grid.Column="1"
                            Text="Các native geometry path vẫn cần Gate C BricsCAD V25 thật trước release."
-                           Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
-                <TextBlock DockPanel.Dock="Right" Text="PREVIEW / FINGERPRINT / HEALTH GATES"
-                           Style="{StaticResource Caption}" Margin="12,0,0,0"/>
-            </DockPanel>
+                           Foreground="{StaticResource MutedBrush}"
+                           MinWidth="0"
+                           TextWrapping="Wrap"
+                           TextTrimming="CharacterEllipsis"/>
+                <TextBlock Grid.Column="2"
+                           Text="PREVIEW / FINGERPRINT / HEALTH GATES"
+                           Style="{StaticResource Caption}"
+                           Margin="12,0,0,0"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center"
+                           TextWrapping="NoWrap"/>
+            </Grid>
         </Border>
     </Grid>
 </Window>
