@@ -1,6 +1,6 @@
 # Work claim — LOCAL-002/P05 Curtain panel stale/rebuild runtime probe
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local002-p05-curtain-panel-stale-rebuild-runtime-probe-20260812` (`/root/audit_preflight_latest`)
 - Registered: `2026-08-12T13:02:00+07:00`
 - Baseline main SHA: `5062ea60ec9fdf889f6b983fc1de91f3e496aebc`
@@ -48,3 +48,10 @@ This qualifies only one ordered synthetic P05 legacy/no-Level sequence. It does 
 - Merge this claim-only reservation before implementation and re-fetch active claims. Parse the runner; run focused P05/P04/P03/P02/native/stale/path/orchestration/runtime-health/Level/source-reconcile/command-wiring gates, aggregate preflight and installed-reference V25 `Release|x64` build without launching BricsCAD.
 - Deliver by normal PR/squash merge without force-push or Actions, close this source-preparation claim and hand one clean exact merged-main SHA to the local licensed agent.
 - No BricsCAD launch, GitHub Actions dispatch, private/customer fixture or private runtime artifact access is authorized in this source batch. P05 and overall LOCAL-002 remain `PENDING_LOCAL` until a fresh exact-SHA run returns the complete PASS/cleanup contract.
+
+## Completion evidence
+
+- Source-preparation commit `29cc105330f0169954b70ea8a7a1a05b674ab5dc` was merged by PR `#949` as `503592cdcc61955a28417dba97d91771dc2e227b`.
+- The new focused P05 gate, P01-P04/native/orchestration/runtime-health/Level/source-reconcile gates and all 716 aggregate feature gates passed. The runner parsed successfully and `git diff --check` passed.
+- A diagnostic installed-reference V25 `Release|x64` build compiled the new command and completed with no API/source errors. The strict build remained blocked only by eight unrelated current-main UI warnings promoted to errors in `QuantitySummaryWindow.xaml.cs` and `WorkspacePanel.FooterContext.cs`.
+- No BricsCAD launch, GitHub Actions, private/customer fixture, runtime artifact, release or package operation occurred. This closes only source preparation; P05 and overall LOCAL-002 remain `PENDING_LOCAL` pending a separately claimed exact-SHA licensed run.
