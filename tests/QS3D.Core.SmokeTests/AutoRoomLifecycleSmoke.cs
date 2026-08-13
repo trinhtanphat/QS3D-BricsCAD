@@ -101,7 +101,7 @@ namespace QS3D.Core.SmokeTests
             finish.DependsOn.Add(stale.Id);
             finish.SetQuantity("AreaM2", 20d);
             finish.MarkClean(ElementDirtyFlags.All);
-            var propertyOnlyFinish = new ProjectElement("STALE-FINISH-PROPERTY", ElementCategory.CeilingFinish, "finish", "f", "z");
+            var propertyOnlyFinish = new ProjectElement("STALE-FINISH-PROPERTY", ElementCategory.CeilingFinish, "ceiling-finish", "f", "z");
             propertyOnlyFinish.Properties[AutoRoomLifecycle.RoomSourceIdKey] = stale.Id;
             propertyOnlyFinish.SetQuantity("AreaM2", 7d);
             propertyOnlyFinish.MarkClean(ElementDirtyFlags.All);
@@ -110,6 +110,7 @@ namespace QS3D.Core.SmokeTests
             nested.SetQuantity("AreaM2", 4d);
             nested.MarkClean(ElementDirtyFlags.All);
             project.Families.Add(new ProjectFamily("finish", "Finish", ElementCategory.FloorFinish));
+            project.Families.Add(new ProjectFamily("ceiling-finish", "Ceiling Finish", ElementCategory.CeilingFinish));
             project.Families.Add(new ProjectFamily("nested", "Nested", ElementCategory.CustomQuantity));
             project.Elements.Add(stale); project.Elements.Add(active); project.Elements.Add(finish); project.Elements.Add(propertyOnlyFinish); project.Elements.Add(nested);
 
