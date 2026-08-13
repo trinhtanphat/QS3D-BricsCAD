@@ -25,12 +25,13 @@ The impact will expose:
 
 - previous/current measured quantity, commercial adjustment quantity, estimating quantity, unit rate and final amount;
 - measured, commercial-adjustment, estimating-quantity and unit-rate deltas;
-- quantity-driven cost effect using the explicit convention `(current estimating quantity - previous estimating quantity) * previous unit rate`;
-- rate-driven cost effect using `current estimating quantity * (current unit rate - previous unit rate)`;
-- total cost delta `current final amount - previous final amount`;
-- exact reconciliation `quantity-driven effect + rate-driven effect == total cost delta` using checked decimal arithmetic.
+- a quantity-driven cost effect calculated as `(current estimating quantity - previous estimating quantity) * previous unit rate`;
+- total cost delta calculated as `current final amount - previous final amount`;
+- a reconciliation-safe rate-driven cost effect defined as `total cost delta - quantity-driven cost effect`, guaranteeing exact decimal reconciliation with the already-frozen line amounts;
+- an independently computed diagnostic `RateEffectAtCurrentQuantity = current estimating quantity * (current unit rate - previous unit rate)` so callers/tests can observe any decimal-scale rounding difference instead of hiding it;
+- `RateEffectRoundingResidual = rate-driven reconciled effect - RateEffectAtCurrentQuantity`.
 
-The decomposition convention assigns the quantity/rate interaction term to the rate-driven effect by evaluating the rate delta at current estimating quantity. This convention is explicit in the contract/test; it is not hidden renderer logic.
+Why the refinement: independent high-scale `decimal` multiplications can round at different scale boundaries even when both source line amounts are valid. Defining the reconciled rate-driven effect as the exact residual preserves the authoritative frozen amounts, while the diagnostic current-quantity formula remains visible. No renderer is allowed to invent a different decomposition.
 
 ## Expected surfaces
 
@@ -48,9 +49,9 @@ The decomposition convention assigns the quantity/rate interaction term to the r
 
 ## Validation plan
 
-- Re-fetch current main after claim and reconcile Cost/CST overlap.
+- Re-fetch current main after claim/refinement and reconcile Cost/CST overlap.
 - Smoke covers quantity-only, rate-only, simultaneous quantity+rate change, commercial-adjustment delta, unchanged state, strict comparability failures and checked-overflow behavior.
-- Assert decomposition and total delta reconcile exactly in decimal arithmetic.
+- Assert `QuantityDrivenCostDelta + RateDrivenCostDelta == CostDelta` exactly, and separately assert/observe `RateEffectAtCurrentQuantity` plus rounding residual.
 - Re-fetch exact source/test/registration blobs before closeout.
 - Managed build/smoke remains `NOT_RUN` without an actual .NET toolchain.
 
@@ -62,4 +63,4 @@ The decomposition convention assigns the quantity/rate interaction term to the r
 
 ## Completion condition
 
-A claim-first immutable revision-cost impact model plus focused registered smoke is on current main; exact deterministic reconciliation is demonstrated by committed regression source; remote blobs are verified; and unexecuted gates are recorded honestly.
+A claim-first immutable revision-cost impact model plus focused registered smoke is on current main; exact deterministic reconciliation is demonstrated by committed regression source while decimal rounding residual remains explicit; remote blobs are verified; and unexecuted gates are recorded honestly.
