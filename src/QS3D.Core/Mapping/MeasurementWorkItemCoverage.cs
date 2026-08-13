@@ -43,6 +43,12 @@ namespace QS3D.Core.Mapping
 
     public static class MeasurementWorkItemCoverageEvaluator
     {
+        public static IReadOnlyList<MeasurementWorkItemCoverageFinding> Evaluate(ProjectState project)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            return Evaluate(project, new MeasurementWorkItemMappingCatalog(project.MeasurementWorkItemMappings));
+        }
+
         public static IReadOnlyList<MeasurementWorkItemCoverageFinding> Evaluate(
             ProjectState project,
             MeasurementWorkItemMappingCatalog catalog)
