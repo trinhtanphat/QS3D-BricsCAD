@@ -129,8 +129,19 @@ for needle in (
     if needle not in backing:
         errors.append("backing-store/path-transition guard changed: " + needle)
 
-if "project.Touch();" not in sync or "project.Touch();" not in adopt:
-    errors.append("test premise changed: drawing identity synchronizers are expected to remain state mutators")
+for block_name, synchronizer in (("SyncDrawingIdentity", sync), ("AdoptDrawingIdentity", adopt)):
+    if "project.Touch();" in synchronizer:
+        errors.append(block_name + " must rely on persisted drawing scalars for revision ownership, not adapter-owned Touch")
+
+if "project.DrawingPath = drawing;" not in sync:
+    errors.append("SyncDrawingIdentity must retain the persisted DrawingPath assignment that owns its revision")
+
+for needle in (
+    "project.DrawingPath = drawing;",
+    "project.DrawingFingerprint = fingerprint;",
+):
+    if needle not in adopt:
+        errors.append("AdoptDrawingIdentity missing scalar-owned revision assignment: " + needle)
 
 if errors:
     for error in errors:
