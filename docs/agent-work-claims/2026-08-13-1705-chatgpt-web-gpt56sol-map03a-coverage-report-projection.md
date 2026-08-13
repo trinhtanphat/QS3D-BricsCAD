@@ -27,8 +27,10 @@ The projection will:
 
 - new `src/QS3D.Core/Mapping/MeasurementWorkItemCoverageReport.cs` — detached row/report projection only;
 - new `tests/QS3D.Core.SmokeTests/MeasurementWorkItemCoverageReportSmoke.cs` — projection/count/order/detachment regression;
-- `tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs` — aggregate smoke registration;
+- `tests/QS3D.Core.SmokeTests/MeasurementWorkItemCoverageRegistration.cs` — extend the existing MAP-02 ModuleInitializer registration to invoke the MAP-03A smoke as well;
 - this claim file.
+
+Registration refinement: the initial claim named the aggregate `SmokeTestRegistration.cs` before the current MAP-02 registration surface was re-fetched. Current `main` already has dedicated `MeasurementWorkItemCoverageRegistration.cs`, so this claim is refined before registration write to reuse that narrower existing Mapping surface. The aggregate runner remains untouched.
 
 ## Excluded scope
 
@@ -41,7 +43,7 @@ The projection will:
 ## Validation plan
 
 - Re-fetch current `main` immediately after this claim-only commit and recheck recent MAP/coverage claims/commits for overlap.
-- Focused smoke will consume real MAP-02 evaluator findings, verify ready/not-ready and overlapping reason counts, mapping identity projection, deterministic ordering under reversed input/culture changes, read-only detached rows/issues, and null-input failure.
+- Focused smoke consumes real MAP-02 evaluator findings and verifies ready/not-ready and overlapping reason counts, mapping identity projection, deterministic ordering under reversed input/culture changes, read-only detached rows/issues, and null-input failure.
 - Re-fetch exact source/test/registration blobs from pushed `main` before closeout.
 - Managed build/smoke execution is `NOT_RUN` unless a real .NET execution path is available; source inspection is not reported as executable PASS.
 
