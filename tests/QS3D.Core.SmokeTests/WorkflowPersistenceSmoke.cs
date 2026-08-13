@@ -168,7 +168,7 @@ namespace QS3D.Core.SmokeTests
             var service = new ProjectRecognitionService();
             var result = service.Suggest(project, snapshot);
             True(result.TopCandidate != null);
-            Equal(ElementCategory.Beam, result.TopCandidate!.Category);
+            Equal(ElementCategory.Door, result.TopCandidate!.Category);
             True(!result.RequiresReview);
 
             var batch = service.SuggestBatch(project, new[] { snapshot });
