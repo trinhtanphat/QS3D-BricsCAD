@@ -120,7 +120,7 @@ namespace QS3D.Core.Domain
         {
             if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
                 throw new ArgumentOutOfRangeException(parameterName, "Element measurement must be finite and non-negative.");
-            return value;
+            return value == 0d ? 0d : value;
         }
     }
 }
