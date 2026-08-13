@@ -58,7 +58,9 @@ namespace QS3D.BricsCAD.V25.UI
             if (root == null || root.RowDefinitions.Count < 3)
                 return;
 
-            // Compact chrome leaves more room for model/property inspection on 1366x768-class CAD workstations.
+            // Compact only the non-persisted outer chrome. Pane widths/heights are owned by
+            // WorkspacePanel.xaml defaults plus WorkspacePanel.LayoutPersistence.cs and must not
+            // be overwritten here after AttachLayoutPersistence() has restored the user's values.
             root.RowDefinitions[0].Height = new GridLength(40);
             root.RowDefinitions[2].Height = new GridLength(30);
 
@@ -69,33 +71,6 @@ namespace QS3D.BricsCAD.V25.UI
                     candidate.ColumnDefinitions.Count == 5);
             if (workspace == null)
                 return;
-
-            workspace.ColumnDefinitions[0].Width = new GridLength(165);
-            workspace.ColumnDefinitions[0].MinWidth = 145;
-            workspace.ColumnDefinitions[1].Width = new GridLength(4);
-            workspace.ColumnDefinitions[2].Width = new GridLength(255);
-            workspace.ColumnDefinitions[2].MinWidth = 220;
-            workspace.ColumnDefinitions[3].Width = new GridLength(4);
-            workspace.ColumnDefinitions[4].Width = new GridLength(1, GridUnitType.Star);
-            workspace.ColumnDefinitions[4].MinWidth = 190;
-
-            var familyAndProperties = workspace.Children
-                .OfType<Grid>()
-                .FirstOrDefault(candidate => Grid.GetColumn(candidate) == 2 && candidate.RowDefinitions.Count == 3);
-            if (familyAndProperties != null)
-            {
-                familyAndProperties.RowDefinitions[0].Height = new GridLength(235);
-                familyAndProperties.RowDefinitions[0].MinHeight = 150;
-            }
-
-            var roomAndSelection = workspace.Children
-                .OfType<Grid>()
-                .FirstOrDefault(candidate => Grid.GetColumn(candidate) == 4 && candidate.RowDefinitions.Count == 3);
-            if (roomAndSelection != null)
-            {
-                roomAndSelection.RowDefinitions[0].Height = new GridLength(200);
-                roomAndSelection.RowDefinitions[0].MinHeight = 125;
-            }
 
             foreach (var splitter in workspace.Children.OfType<GridSplitter>())
             {
