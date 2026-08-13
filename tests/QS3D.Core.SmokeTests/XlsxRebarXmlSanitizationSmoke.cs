@@ -26,6 +26,8 @@ namespace QS3D.Core.SmokeTests
                         BarMark = "A\u0001B\uD800C<&" + supplementary,
                         ShapeCode = "00",
                         Notation = "1T10",
+                        DiameterMm = 10d,
+                        Quantity = 1,
                         FabricationStatus = "Ready " + supplementary
                     }
                 });
