@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FLOOR = ROOT / "src" / "QS3D.Core" / "Domain" / "ProjectFloorService.cs"
 ZONE = ROOT / "src" / "QS3D.Core" / "Domain" / "ProjectZoneService.cs"
+PROJECT_STATE = ROOT / "src" / "QS3D.Core" / "Domain" / "ProjectState.cs"
 SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "ProjectFloorZoneMutationIntegritySmoke.cs"
 REGISTRATION = ROOT / "tests" / "QS3D.Core.SmokeTests" / "ProjectFloorZoneMutationIntegritySmokeRegistration.cs"
 
@@ -20,9 +21,32 @@ def method_slice(text, start_token, end_token):
     return text[start:] if end < 0 else text[start:end]
 
 
+def require_create_revision_contract(text, label, active_property, item_name, collection_name, start_token, end_token, missing):
+    create = method_slice(text, start_token, end_token)
+    if not create:
+        missing.append(label + ": cannot isolate Create method")
+        return
+
+    activate = "var activate = string.IsNullOrWhiteSpace(project." + active_property + ");"
+    active_assign = "if (activate) project." + active_property + " = " + item_name + ".Id;"
+    touch = "else project.Touch();"
+    add = "project." + collection_name + ".Add(" + item_name + ");"
+    require(create, [activate, active_assign, touch, add], label + " create", missing)
+
+    positions = [create.find(activate), create.find(active_assign), create.find(touch), create.find(add)]
+    if all(position >= 0 for position in positions) and positions != sorted(positions):
+        missing.append(label + ": Create revision owner must be selected before collection insertion")
+
+    if create.count("project.Touch();") != 1:
+        missing.append(label + ": Create must contain exactly one Touch in the non-activation branch")
+    if "project.Touch();\n            if (activate)" in create or "project.Touch();\n            project." + active_property in create:
+        missing.append(label + ": Create must not Touch before assigning the first active id")
+
+
 def main():
     floor = FLOOR.read_text(encoding="utf-8")
     zone = ZONE.read_text(encoding="utf-8")
+    project_state = PROJECT_STATE.read_text(encoding="utf-8")
     smoke = SMOKE.read_text(encoding="utf-8")
     registration = REGISTRATION.read_text(encoding="utf-8")
 
@@ -37,6 +61,11 @@ def main():
         '.Where(x => !string.Equals((x.ZoneId ?? string.Empty).Trim(), zone.Id, StringComparison.OrdinalIgnoreCase))',
         'throw new InvalidOperationException("Zone assignment target collection contains a null element.");',
     ], "zone", missing)
+    require(project_state, [
+        'set => SetPersistedScalar(ref _activeFloorId, value);',
+        'set => SetPersistedScalar(ref _activeZoneId, value);',
+        'var nextChangeVersion = checked(ChangeVersion + 1L);',
+    ], "project state", missing)
     require(smoke, [
         'FloorActiveAliasIsCanonicalRepair();',
         'ZoneActiveAliasIsCanonicalRepair();',
@@ -55,6 +84,25 @@ def main():
         '[ModuleInitializer]',
         'ProjectFloorZoneMutationIntegritySmoke.Run();',
     ], "registration", missing)
+
+    require_create_revision_contract(
+        floor,
+        "floor",
+        "ActiveFloorId",
+        "floor",
+        "Floors",
+        'public static FloorDefinition Create(ProjectState project, string id, string name, double elevationM)',
+        'public static FloorDefinition Update(ProjectState project, string id, string name, double elevationM)',
+        missing)
+    require_create_revision_contract(
+        zone,
+        "zone",
+        "ActiveZoneId",
+        "zone",
+        "Zones",
+        'public static ZoneDefinition Create(ProjectState project, string id, string name)',
+        'public static ZoneDefinition Update(ProjectState project, string id, string name)',
+        missing)
 
     if missing:
         print("ERROR: Floor/Zone mutation-integrity contract is incomplete:")
@@ -113,7 +161,7 @@ def main():
         print("ERROR: Zone null-target validation must complete before mutation.")
         return 1
 
-    print("PASS: Floor/Zone active aliases are repaired to canonical ids exactly once; canonical activation/assignment remain no-ops, and null-containing object-target batches fail closed before mutation with module-registered Core regression coverage.")
+    print("PASS: Floor/Zone first create and subsequent create each have exactly one revision owner; active aliases are repaired canonically once, canonical activation/assignment remain no-ops, and null-containing target batches fail closed before mutation.")
     return 0
 
 
