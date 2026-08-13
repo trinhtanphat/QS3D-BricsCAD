@@ -1,8 +1,9 @@
 # Work claim — V25 dark selection and scope controls
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-v25-dark-selection-20260813`
 - Registered: `2026-08-13T14:11:12+07:00`
+- Completed: `2026-08-13T14:18:02+07:00`
 - Baseline main SHA: `eb842ad2237b0fea5c95e5dcc6f6a28e93253ffa`
 - Priority: User-visible BricsCAD V25 palette regression reproduced in the supplied screenshot: selected Model tree rows and Zone/Floor ComboBox chrome can fall back to bright host/system rendering inside the dark QS3D palette.
 
@@ -12,8 +13,8 @@ Make the existing QS3D V25 dark theme host-independent for the Workspace scope c
 
 ## Expected surfaces
 
-- `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.DarkHostTheme.cs` (new presentation-only host compatibility partial)
-- `scripts/preflight-workspace-dark-selection.py` (new focused source regression)
+- `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.DarkHostTheme.cs`
+- `scripts/preflight-workspace-dark-selection.py`
 - read-only contract references: `src/QS3D.BricsCAD.V25/UI/Theme.xaml`, `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml`
 
 ## Excluded scope
@@ -24,17 +25,27 @@ Make the existing QS3D V25 dark theme host-independent for the Workspace scope c
 - model/domain selection semantics, Zone/Floor business logic or project filtering
 - native BricsCAD runtime qualification and release/installer work
 
-## Validation plan
+## Result
 
-- Add a deterministic source regression that verifies the bridge explicitly applies the repository-owned ComboBox style to Zone/Floor and shadows both active/inactive WPF system selection brushes on `ModelTree`.
-- Verify the existing Theme still owns host-independent ComboBox chrome and dark `BgSelectedBrush` selection contract.
-- Run the focused Python preflight locally from an isolated materialization of the exact touched/current source where connector access permits; otherwise record the environment limitation and re-fetch exact source from `main` for structural verification.
-- Do not report native BricsCAD V25 visual PASS unless it is actually exercised in a licensed BricsCAD runtime.
+- Implementation: `426c606bf0fa30ce2c384c5e52142551bcbcba63` (`fix(v25): pin dark Workspace host selection chrome`).
+  - Resolves the existing implicit dark ComboBox style from `Theme.xaml` and assigns it locally to `ZoneCombo` / `FloorCombo`.
+  - Pins ComboBox background/foreground/border to `BgInputBrush`, `TextBrush` and `BorderStrongBrush` through dynamic resource references.
+  - Shadows active + inactive WPF `SystemColors` selection background/text brush keys in `ModelTree.Resources` with QS3D `BgSelectedBrush` / `TextBrush`, preventing the stock TreeViewItem template from asking the BricsCAD host for a bright selection surface.
+- Regression: `a1ca93dcec52f4f06fd74f1cb01179652ee8b46e` (`test(ui): guard V25 dark host selection chrome`).
+- Final pushed implementation/test SHA: `a1ca93dcec52f4f06fd74f1cb01179652ee8b46e`.
+
+## Validation actually executed
+
+- Re-fetched `WorkspacePanel.DarkHostTheme.cs`, the focused regression, the current `Theme.xaml` ComboBox/brush contract, and the current `WorkspacePanel.xaml` named controls from `main`; all required source contracts are present.
+- `python3 -m py_compile scripts/preflight-workspace-dark-selection.py` — PASS on an isolated connector-derived fixture containing the exact pushed regression and bridge plus the current-main Theme/Workspace contract snippets.
+- `python3 scripts/preflight-workspace-dark-selection.py` — `PASS: V25 Workspace dark host-selection contract` on that focused connector-derived fixture.
+- Environment limitation: the execution container cannot resolve `github.com`, and it has no `dotnet`, C# compiler or `pwsh`, so a fresh full checkout/build could not be executed there.
+- Native BricsCAD V25 visual/runtime qualification was not executed and is not claimed as PASS.
 
 ## Coordination
 
-The earlier `chatgpt-sol-ui-polish-20260813` palette claim is now closed on `main`. This lane intentionally avoids its shared XAML/compact-shell surfaces and addresses the separate bright host-selection/control-chrome defect visible in the new screenshots through a bounded host-compatibility bridge.
+The earlier `chatgpt-sol-ui-polish-20260813` palette claim was already closed on `main`. This lane avoided its shared XAML/compact-shell surfaces and addressed the separate bright host-selection/control-chrome defect visible in the new screenshots through a bounded host-compatibility bridge.
 
 ## Completion condition
 
-The focused fix and regression are pushed to current `main`, remote ancestry is verified, this claim is marked `COMPLETED` with exact implementation/final SHAs and validation actually executed, and no native BricsCAD PASS is claimed without runtime evidence.
+Satisfied for repository source/regression: the focused fix and test are pushed to `main`, remote source is re-fetched and verified, and native BricsCAD qualification remains explicitly unclaimed pending a licensed local runtime visual smoke.
