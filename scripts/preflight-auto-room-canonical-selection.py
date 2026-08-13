@@ -4,6 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs"
+RESOLVER = ROOT / "src/QS3D.Core/Services/SemanticHandleOwnershipResolver.cs"
 WORKSPACE = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.MultiSelectionProperties.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/WorkspaceCurtainOwnerSelectionSmoke.cs"
 
@@ -15,7 +16,7 @@ def require(text, token, label, errors):
 
 def main():
     errors = []
-    for path in (POLICY, WORKSPACE, SMOKE):
+    for path in (POLICY, RESOLVER, WORKSPACE, SMOKE):
         if not path.is_file():
             errors.append("missing canonical selection file: " + str(path.relative_to(ROOT)))
     if errors:
@@ -24,16 +25,21 @@ def main():
         return 1
 
     policy = POLICY.read_text(encoding="utf-8")
+    resolver = RESOLVER.read_text(encoding="utf-8")
     workspace = WORKSPACE.read_text(encoding="utf-8")
     smoke = SMOKE.read_text(encoding="utf-8")
 
     for token, label in (
-        ("AutoRoomLifecycle.IsAutoRoom(element)", "Auto Room ownership guard"),
         ("element.SourceHandles.Count == 0", "explicit SourceHandles precedence"),
+        ("AutoRoomLifecycle.IsAutoRoom(element)", "Auto Room selection guard"),
         ("AutoRoomLifecycle.BoundarySourceHandlesKey", "boundary provenance slot"),
-        ("SplitHandles(boundaryHandles)", "canonical CAD-handle normalization"),
+        ("boundaryHandles.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)", "boundary handle tokenization"),
+        ("Add(handle, element, AutoRoomLifecycle.BoundarySourceHandlesKey", "fail-closed semantic ownership channel"),
     ):
-        require(policy, token, label, errors)
+        require(resolver, token, label, errors)
+
+    if "BoundarySourceHandles" in policy:
+        errors.append("Auto Room boundary provenance must not be promoted into global generated ownership")
 
     require(
         workspace,
@@ -59,7 +65,7 @@ def main():
             print("ERROR:", error)
         print("FAILED with", len(errors), "error(s).")
         return 1
-    print("PASS: canonical semantic selection preserves Auto Room boundary provenance without overriding explicit SourceHandles, while Workspace remains on the authoritative ownership resolver.")
+    print("PASS: canonical semantic selection preserves Auto Room boundary provenance without promoting shared boundaries to generated ownership or overriding explicit SourceHandles.")
     return 0
 
 

@@ -4,11 +4,12 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 AUGMENTER = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/QuantityReferenceRibbonAugmenter.cs"
+COORDINATOR = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator.cs"
 PLUGIN = ROOT / "src/QS3D.BricsCAD.V25/PluginEntry.cs"
 BOOTSTRAP = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs"
 errors = []
 
-for path in (AUGMENTER, PLUGIN, BOOTSTRAP):
+for path in (AUGMENTER, COORDINATOR, PLUGIN, BOOTSTRAP):
     if not path.is_file():
         errors.append("missing quantity Ribbon parity source: " + str(path.relative_to(ROOT)))
 
@@ -49,21 +50,24 @@ if AUGMENTER.is_file():
         if forbidden in text:
             errors.append("quantity reference augmenter must remain additive/non-destructive: " + forbidden)
 
+if COORDINATOR.is_file():
+    text = COORDINATOR.read_text(encoding="utf-8")
+    bootstrap_pos = text.find("RibbonBootstrapper.TryInitialize()")
+    quick_pos = text.find("QuickWorkflowRibbonAugmenter.TryInitialize()")
+    quantity_pos = text.find("QuantityReferenceRibbonAugmenter.TryInitialize()")
+    update_pos = text.find("UpdateRibbonAugmenter.TryInitialize()")
+    if min(bootstrap_pos, quick_pos, quantity_pos, update_pos) < 0 or not bootstrap_pos < quick_pos < quantity_pos < update_pos:
+        errors.append("Quantity reference augmenter must run through RibbonInitializationCoordinator after canonical/quick Ribbon setup and before Update augmentation")
+
 if PLUGIN.is_file():
     text = PLUGIN.read_text(encoding="utf-8")
-    required = (
-        "RibbonBootstrapper.TryInitialize();",
-        "QuantityReferenceRibbonAugmenter.TryInitialize();",
+    for needle in (
+        "RibbonInitializationCoordinator.Start();",
         "QuantityReferenceRibbonAugmenter.Reset();",
         "RibbonBootstrapper.Reset();",
-    )
-    for needle in required:
+    ):
         if needle not in text:
-            errors.append("PluginEntry missing Quantity reference lifecycle hook: " + needle)
-    bootstrap_pos = text.find("RibbonBootstrapper.TryInitialize();")
-    quantity_pos = text.find("QuantityReferenceRibbonAugmenter.TryInitialize();")
-    if bootstrap_pos < 0 or quantity_pos < 0 or bootstrap_pos >= quantity_pos:
-        errors.append("Quantity reference augmenter must run after the canonical Ribbon bootstrap creates QS3D_QTY")
+            errors.append("PluginEntry missing coordinated Quantity reference lifecycle hook: " + needle)
 
 if BOOTSTRAP.is_file():
     text = BOOTSTRAP.read_text(encoding="utf-8")
@@ -106,4 +110,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: the additive QS3D_QTY reference panel reconciles eight real workflows by stable IDs, preserves canonical quantity panels, dispatches on the active DWG, and does not clear/remove Ribbon state.")
+print("PASS: the additive QS3D_QTY reference panel reconciles eight real workflows by stable IDs, preserves canonical quantity panels, initializes through the bounded Ribbon coordinator, dispatches on the active DWG, and does not clear/remove Ribbon state.")

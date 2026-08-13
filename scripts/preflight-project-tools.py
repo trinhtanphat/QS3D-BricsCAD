@@ -11,6 +11,7 @@ required = [
     "src/QS3D.BricsCAD.V25/UI/ProjectToolsWindow.xaml.cs",
     "src/QS3D.BricsCAD.V25/ProjectToolsCommands.cs",
     "src/QS3D.BricsCAD.V25/Ribbon/ProjectRibbonAugmenter.cs",
+    "src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator.cs",
     "src/QS3D.BricsCAD.V25/PluginEntry.cs",
 ]
 for relative in required:
@@ -51,7 +52,7 @@ checks = {
         "FindById(items, spec.Id)", "CommandParameter", "CommandHandler", "SendStringToExecute",
     ],
     "src/QS3D.BricsCAD.V25/PluginEntry.cs": [
-        "RibbonBootstrapper.TryInitialize();", "ProjectRibbonAugmenter.TryInitialize();", "ProjectRibbonAugmenter.Reset();", "RibbonBootstrapper.Reset();",
+        "RibbonInitializationCoordinator.Start();", "ProjectRibbonAugmenter.Reset();", "RibbonBootstrapper.Reset();",
     ],
 }
 for relative, needles in checks.items():
@@ -60,6 +61,16 @@ for relative, needles in checks.items():
     text = path.read_text(encoding="utf-8")
     for needle in needles:
         if needle not in text: errors.append(relative + " missing Project Tools guard/token: " + needle)
+
+coordinator_path = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator.cs"
+if coordinator_path.is_file():
+    coordinator = coordinator_path.read_text(encoding="utf-8")
+    bootstrap = coordinator.find("RibbonBootstrapper.TryInitialize()")
+    reference = coordinator.find("ReferenceWallRibbonAugmenter.TryInitialize()")
+    project = coordinator.find("ProjectRibbonAugmenter.TryInitialize()")
+    quick = coordinator.find("QuickWorkflowRibbonAugmenter.TryInitialize()")
+    if min(bootstrap, reference, project, quick) < 0 or not bootstrap < reference < project < quick:
+        errors.append("Project Tools Ribbon must initialize through RibbonInitializationCoordinator after base/reference and before quick-workflow augmentation")
 
 code = ROOT / "src/QS3D.BricsCAD.V25/UI/ProjectToolsWindow.xaml.cs"
 if code.is_file():
@@ -95,4 +106,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: document-bound Project Tools exposes a read-only Zone/Floor/readiness dashboard, observes persisted dirty/version state without mutation, never creates replacement state on open/refresh, and preserves existing command wiring.")
+print("PASS: document-bound Project Tools exposes a read-only Zone/Floor/readiness dashboard, observes persisted dirty/version state without mutation, initializes through the bounded Ribbon coordinator, and preserves existing command wiring.")

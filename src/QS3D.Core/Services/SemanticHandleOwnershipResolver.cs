@@ -100,6 +100,18 @@ namespace QS3D.Core.Services
                     Add(handle, element, "SourceHandles", selected, owners, channels);
                 foreach (var entry in GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element))
                     Add(entry.Key, element, entry.Value, selected, owners, channels);
+
+                // Auto Room boundaries are selection provenance, not global generated ownership.
+                // Preserve the historical Workspace alias only when explicit SourceHandles do not exist;
+                // shared boundaries still fail closed through Add when more than one Room matches.
+                if (element.SourceHandles.Count == 0 &&
+                    AutoRoomLifecycle.IsAutoRoom(element) &&
+                    element.Properties.TryGetValue(AutoRoomLifecycle.BoundarySourceHandlesKey, out var boundaryHandles) &&
+                    !string.IsNullOrWhiteSpace(boundaryHandles))
+                {
+                    foreach (var handle in boundaryHandles.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                        Add(handle, element, AutoRoomLifecycle.BoundarySourceHandlesKey, selected, owners, channels);
+                }
             }
 
             var matchedById = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);

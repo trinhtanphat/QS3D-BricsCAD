@@ -22,7 +22,7 @@ if SOURCE.is_file():
         'quick.Tag = "QS3DDRAWACTIVE";',
         'CreateMenuItem("Vẽ tùy chỉnh (Ctrl+Shift+D)", OnAdvancedDrawClick)',
         'advanced.Tag = "QS3DDRAWACTIVEADV";',
-        "if (e.Key != Key.D) return;",
+        "if (e.Key == Key.D)",
         "modifiers == ModifierKeys.Control",
         "modifiers == (ModifierKeys.Control | ModifierKeys.Shift)",
         "ExecuteWorkspaceDraw(advanced: false)",
@@ -37,8 +37,20 @@ if SOURCE.is_file():
         if token not in text:
             errors.append("Workspace active-family draw interaction missing: " + token)
 
-    if text.count("Send(command);") != 1:
-        errors.append("Workspace gesture layer must funnel Quick/Advanced through exactly one send site")
+    draw_start = text.find("private void ExecuteWorkspaceDraw(bool advanced)")
+    basic_start = text.find("private void ExecuteWorkspaceBasicDraw(string command, string label)")
+    if draw_start < 0 or basic_start < 0 or draw_start >= basic_start:
+        errors.append("Workspace quick/advanced and basic draw dispatchers must remain distinct canonical methods")
+    else:
+        draw_body = text[draw_start:basic_start]
+        basic_body = text[basic_start:]
+        if draw_body.count("Send(command);") != 1:
+            errors.append("Workspace Quick/Advanced dispatcher must contain exactly one Send(command) call")
+        if basic_body.count("Send(command);") != 1:
+            errors.append("Workspace basic-draw dispatcher must contain exactly one Send(command) call")
+
+    if text.count("Send(command);") != 2:
+        errors.append("Workspace gesture layer must keep exactly one send site in each of its two canonical dispatchers")
 
     for forbidden in (
         "new DirectDrawCommands",
