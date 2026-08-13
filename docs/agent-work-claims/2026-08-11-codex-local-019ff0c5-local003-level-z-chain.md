@@ -1,6 +1,6 @@
 # Work claim — LOCAL-003 shared native Level Z-chain
 
-- Status: `ACTIVE`
+- Status: `BLOCKED`
 - Agent: `codex-local-019ff0c5` (`/root`, local Windows + licensed BricsCAD V25 agent)
 - Registered: `2026-08-11T19:43:12+07:00`
 - Baseline main SHA: `c7dd212d36677a1d2e005becf8709768fe98d6a1`
@@ -626,3 +626,9 @@ The later local-code capability lock does not broaden this reservation: this coh
 Clean pushed candidate `45cf28c7af9be9df4949c05a975512ec253a747b` rebuilt against installed BricsCAD V25 at zero warnings/errors. Both plugin and Core ProductVersion values ended in that exact SHA, the focused gates passed and Core smoke reported `ALL PASS`. The first guarded runner attempt did not enter BricsCAD: its `git rev-parse` output was the correct single 40-character SHA, but piping it through `Select-Object -First 1` caused this Windows PowerShell host to leave `$LASTEXITCODE=-1`, so the prelaunch guard rejected two visibly identical SHAs.
 
 The already-reserved local runner now captures the native Git output and exit code before any PowerShell pipeline processing, requires exactly one hexadecimal 40-character result, separately captures the worktree-status exit code and adds a static guard against reintroducing the early-closing pipeline. This is a LOCAL_ONLY harness correction observed on the installed Windows runtime path; it does not change Level product logic or convert any unrelated validation failure into local coding scope. A new clean pushed SHA/build and fresh artifact root are required for the retry. Runtime remains `PENDING_LOCAL`.
+
+## 2026-08-13 blocked handoff
+
+Status is now `BLOCKED` after the same two external conditions repeated across three consecutive goal turns. Synchronized `main@e2ef91fccd3019ccc6dfeaa4dc14b905bec859ad` differs from the pushed Level candidate only through later concurrent work, but its strict installed-reference V25 build stops before Level/native compilation on 15 nullable compiler errors in the independently merged remote-safe `src/QS3D.Core/Measurement/MeasurementTrace.cs`. Under the local-worker capability lock this agent must report that observation and must not claim or repair the general Core defect. No matching MTR/measurement correction branch was visible remotely at the final audit.
+
+The user-owned BricsCAD V25 process remains open from Explorer with `Drawing1`, so the isolated runner must not launch or close that session on the user's behalf. Resume this claim only after a non-local agent lands the MTR compiler correction and the user saves/closes every BricsCAD session. On resume, set the claim/inbox back to `IN_PROGRESS`, fetch current `main`, rebuild plugin/Core with zero warnings/errors, verify exact ProductVersion SHA, create a fresh disposable artifact root and rerun the full focused probe. No GitHub Actions were dispatched.
