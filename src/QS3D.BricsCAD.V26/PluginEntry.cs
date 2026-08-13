@@ -8,6 +8,7 @@ namespace QS3D.BricsCAD.V25
     {
         public void Initialize()
         {
+            RuntimeDiagnosticsCommands.CaptureLoadedBinaryIdentity();
             PaletteCoordinator.EnsureCreated();
             DocumentLifecycleCoordinator.Start();
             RibbonBootstrapper.TryInitialize();
