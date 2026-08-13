@@ -13,6 +13,8 @@ namespace QS3D.Core.SmokeTests
             DuplicateWithinElementIsVisible();
             UniqueHandleStaysClean();
             CrossElementCollisionIsPreserved();
+            NumericAliasesShareIdentity();
+            MalformedTextCompatibilityIsPreserved();
         }
 
         private static void DuplicateWithinElementIsVisible()
@@ -79,6 +81,64 @@ namespace QS3D.Core.SmokeTests
             False(
                 issues.Any(x => x.Code == "DUPLICATE_SOURCE_HANDLE"),
                 "One handle per element must not be classified as an intra-element duplicate.");
+        }
+
+        private static void NumericAliasesShareIdentity()
+        {
+            var intraProject = NewProject();
+            var duplicated = NewRoom("R1");
+            duplicated.SourceHandles.Add("A");
+            duplicated.SourceHandles.Add("00a");
+            intraProject.Elements.Add(duplicated);
+
+            var intraIssues = new ModelHealthService().Inspect(
+                intraProject,
+                new HashSet<string>(new[] { "0xA" }, StringComparer.OrdinalIgnoreCase));
+            Equal(
+                1,
+                intraIssues.Count(x => x.Code == "DUPLICATE_SOURCE_HANDLE" && x.ElementId == "R1"),
+                "Numeric aliases of one CAD handle must be one intra-element SourceHandle identity.");
+            False(
+                intraIssues.Any(x => x.Code == "ORPHAN_HANDLE" && x.ElementId == "R1"),
+                "A live numeric alias must satisfy SourceHandle liveness.");
+
+            var crossProject = NewProject();
+            var first = NewRoom("R1");
+            first.SourceHandles.Add("A");
+            var second = NewRoom("R2");
+            second.SourceHandles.Add("0xA");
+            crossProject.Elements.Add(first);
+            crossProject.Elements.Add(second);
+
+            var crossIssues = new ModelHealthService().Inspect(
+                crossProject,
+                new HashSet<string>(new[] { "00a" }, StringComparer.OrdinalIgnoreCase));
+            Equal(
+                1,
+                crossIssues.Count(x => x.Code == "DUPLICATE_HANDLE"),
+                "Numeric aliases owned by different elements must retain cross-element ambiguity diagnostics.");
+            False(
+                crossIssues.Any(x => x.Code == "ORPHAN_HANDLE"),
+                "Numeric alias live matching must prevent false orphan diagnostics across owners.");
+        }
+
+        private static void MalformedTextCompatibilityIsPreserved()
+        {
+            var project = NewProject();
+            var element = NewRoom("R1");
+            element.SourceHandles.Add("NOT-HEX");
+            project.Elements.Add(element);
+
+            var issues = new ModelHealthService().Inspect(
+                project,
+                new HashSet<string>(new[] { " not-hex " }, StringComparer.OrdinalIgnoreCase));
+
+            False(
+                issues.Any(x => x.Code == "ORPHAN_HANDLE" && x.ElementId == "R1"),
+                "Malformed textual SourceHandle compatibility must remain trimmed and case-insensitive.");
+            False(
+                issues.Any(x => x.Code == "DUPLICATE_SOURCE_HANDLE" && x.ElementId == "R1"),
+                "One malformed textual SourceHandle must remain a unique identity.");
         }
 
         private static ProjectState NewProject()
