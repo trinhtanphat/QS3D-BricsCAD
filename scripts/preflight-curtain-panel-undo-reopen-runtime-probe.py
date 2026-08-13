@@ -83,7 +83,7 @@ if RUNNER.is_file():
         '"QS3DDRAWGLASSWALL"',
         '"QS3DCURTAINP11PREPARE"',
         '"QS3DCURTAINP11SELECT"',
-        '"QS3DCURTAIN3D"',
+        '"QS3DCURTAIN3D", "P", ""',
         '"QS3DCURTAINP11BASELINE"',
         '"_.UNDO", "1"',
         '"QS3DCURTAINP11CHECKUNDO"',
@@ -115,12 +115,14 @@ if RUNNER.is_file():
         errors.append("Curtain P11 runner must launch exactly two isolated BricsCAD sessions")
     if text.count('"QS3DCURTAINP11SELECT"') != 2:
         errors.append("Curtain P11 runner must restore the canonical source selection immediately before both builds")
+    if text.count('"QS3DCURTAIN3D", "P", ""') != 2:
+        errors.append("Curtain P11 runner must explicitly accept the previous canonical source selection for both production builds")
     first_prepare = text.find('"QS3DCURTAINP11PREPARE"')
     first_select = text.find('"QS3DCURTAINP11SELECT"', first_prepare)
-    first_build = text.find('"QS3DCURTAIN3D"', first_select)
+    first_build = text.find('"QS3DCURTAIN3D", "P", ""', first_select)
     reopen = text.find('"QS3DCURTAINP11REOPEN"')
     second_select = text.find('"QS3DCURTAINP11SELECT"', reopen)
-    second_build = text.find('"QS3DCURTAIN3D"', second_select)
+    second_build = text.find('"QS3DCURTAIN3D", "P", ""', second_select)
     if not (first_prepare < first_select < first_build and reopen < second_select < second_build):
         errors.append("Curtain P11 runner must reselect at a distinct command boundary immediately before each production build")
     if text.find('"_.UNDO", "1"') > text.find('"_.REDO"'):
