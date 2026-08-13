@@ -15,7 +15,8 @@ namespace QS3D.Core.SmokeTests
             NumericLiveAliasMatchesCanonicalPersistedHandle();
             CanonicalLiveHandleMatchesPaddedNumericPersistedIdentity();
             TrulyMissingGeneratedHandleStillFailsVisible();
-            SourceLiveSemanticsRemainTextual();
+            NumericSourceLiveAliasMatchesCanonicalIdentity();
+            TrulyMissingSourceHandleStillFailsVisible();
         }
 
         private static void NumericLiveAliasMatchesCanonicalPersistedHandle()
@@ -43,11 +44,21 @@ namespace QS3D.Core.SmokeTests
             Require(issues, element.Id, "GENERATED_SOLID_MISSING");
         }
 
-        private static void SourceLiveSemanticsRemainTextual()
+        private static void NumericSourceLiveAliasMatchesCanonicalIdentity()
         {
             var project = Project("SOURCE");
             var element = new ProjectElement("E-1", ElementCategory.ArchitecturalWall);
             element.SourceHandles.Add("0A");
+            project.Elements.Add(element);
+            var issues = new ComprehensiveModelHealthService().Inspect(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "A" }, null);
+            EnsureAbsent(issues, "ORPHAN_HANDLE", "Numeric-equivalent live source handle must satisfy the persisted semantic source identity.");
+        }
+
+        private static void TrulyMissingSourceHandleStillFailsVisible()
+        {
+            var project = Project("SOURCE-MISSING");
+            var element = new ProjectElement("E-1", ElementCategory.ArchitecturalWall);
+            element.SourceHandles.Add("B");
             project.Elements.Add(element);
             var issues = new ComprehensiveModelHealthService().Inspect(project, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "A" }, null);
             Require(issues, element.Id, "ORPHAN_HANDLE");
