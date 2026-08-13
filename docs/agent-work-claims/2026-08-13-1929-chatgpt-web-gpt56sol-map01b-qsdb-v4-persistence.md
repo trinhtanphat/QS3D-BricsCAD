@@ -16,6 +16,7 @@ This is the persistence/schema follow-on intentionally excluded from MAP-01A. BL
 ## Reserved files
 
 - `src/QS3D.Core/Domain/ProjectState.cs`
+- `src/QS3D.Core/Domain/ProjectMeasurementWorkItemMappingCollection.cs`
 - `src/QS3D.Core/Persistence/ProjectStateSnapshot.cs`
 - `src/QS3D.Core/Persistence/ProjectSchemaMigrator.cs`
 - `src/QS3D.Core/Persistence/QsdbProjectStore.cs`
@@ -35,9 +36,11 @@ This is the persistence/schema follow-on intentionally excluded from MAP-01A. BL
 
 ## Implementation checkpoint
 
-- Revalidated against live `main` `d9aff385c63effd895a933c0e6e60fcddb268427`; commits since the prior source snapshot do not touch the reserved MAP-01B source/test files.
-- Source patch and focused smoke regressions are prepared for schema v4 round-trip, deterministic mapping order, v3 migration, and ambiguous persisted mapping rejection.
-- No substantive source/test change has been published yet; this claim remains `ACTIVE` until implementation is reconciled, pushed, verified, and closed.
+- Revalidated through live `main` `994b2b20c5aa888cf464d9d61d5c9b58668c14f9`; commits since the prior checkpoint do not touch the reserved MAP-01B source/test scope.
+- The v4 representation is narrowed to a canonical reserved project-metadata namespace (`QS3D.Mapping.v1.*`) rather than adding a parallel XML container. This reuses the existing QSDB metadata round-trip and deterministic ordering while a project-owned collection/metadata guard decodes and validates entries through `MeasurementWorkItemMappingCatalog`.
+- The existing detached snapshot already copies project metadata, so focused regression will prove mapping detachment without modifying snapshot implementation unless evidence shows otherwise.
+- The existing store/XML envelope can remain unchanged if the metadata-backed contract proves safe round-trip and fail-closed malformed/duplicate/ambiguous mapping handling; those reserved files remain protected until closeout in case validation proves a source change is required.
+- No substantive source/test change has been published to `main` yet; this claim remains `ACTIVE` until implementation is reconciled, pushed, verified, and closed.
 
 ## Validation policy
 
