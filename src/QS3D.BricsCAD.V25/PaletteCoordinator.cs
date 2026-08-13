@@ -87,7 +87,6 @@ namespace QS3D.BricsCAD.V25
                 if (_workspace != null) _workspace.Visible = true;
                 if (_right != null) _right.Visible = true;
                 if (_quantityInsight != null) _quantityInsight.Visible = true;
-                RefreshAll();
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
             }
             catch (Exception)
