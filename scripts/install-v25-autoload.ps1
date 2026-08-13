@@ -200,8 +200,12 @@ function Convert-ToStrictSemVerIdentity {
         }
     }
 
+    $buildMetadataIndex = $text.IndexOf('+')
+    $publicText = if ($buildMetadataIndex -ge 0) { $text.Substring(0, $buildMetadataIndex) } else { $text }
+
     return [pscustomobject]@{
         Text = $text
+        PublicText = $publicText
         Major = [int]$components[0]
         Minor = [int]$components[1]
         Patch = [int]$components[2]
@@ -231,6 +235,7 @@ function Assert-PackageIdentity {
         throw "PACKAGE-METADATA assembly version $metadataAssemblyVersion does not match productVersion core $($metadataProductVersion.Major).$($metadataProductVersion.Minor).$($metadataProductVersion.Patch)."
     }
 
+    $fullDllProductVersion = $null
     foreach ($name in @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')) {
         $path = Join-Path $Directory $name
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Package identity payload is missing: $name" }
@@ -245,8 +250,14 @@ function Assert-PackageIdentity {
         try { $productVersionText = [string][Diagnostics.FileVersionInfo]::GetVersionInfo($path).ProductVersion }
         catch { throw "$name product version is unreadable: $($_.Exception.Message)" }
         $dllProductVersion = Convert-ToStrictSemVerIdentity -Value $productVersionText -Label ("$name product version")
-        if (-not [string]::Equals($dllProductVersion.Text, $metadataProductVersion.Text, [StringComparison]::Ordinal)) {
-            throw "$name product version $($dllProductVersion.Text) does not match PACKAGE-METADATA productVersion $($metadataProductVersion.Text)."
+        if (-not [string]::Equals($dllProductVersion.PublicText, $metadataProductVersion.PublicText, [StringComparison]::Ordinal)) {
+            throw "$name public product version $($dllProductVersion.PublicText) does not match PACKAGE-METADATA productVersion public identity $($metadataProductVersion.PublicText)."
+        }
+        if ($null -eq $fullDllProductVersion) {
+            $fullDllProductVersion = $dllProductVersion.Text
+        }
+        elseif (-not [string]::Equals($dllProductVersion.Text, $fullDllProductVersion, [StringComparison]::Ordinal)) {
+            throw "Package managed DLL product versions disagree: expected $fullDllProductVersion, got $($dllProductVersion.Text) for $name."
         }
     }
 }
