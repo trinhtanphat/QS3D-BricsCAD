@@ -136,7 +136,6 @@ namespace QS3D.BricsCAD.V25
         {
             try
             {
-                EnsureCreated();
                 _workspacePanel?.SetStatus(status);
             }
             catch (Exception)
@@ -147,12 +146,11 @@ namespace QS3D.BricsCAD.V25
 
         public static void RefreshProject()
         {
-            EnsureCreated();
             _workspacePanel?.RefreshProject();
             _quantityInsightPanel?.RefreshQuantityInsights();
         }
 
-        public static void RefreshCad() { EnsureCreated(); _rightPanel?.Refresh(); }
+        public static void RefreshCad() { _rightPanel?.Refresh(); }
         public static void RefreshAll() { RefreshProject(); RefreshCad(); }
 
         public static void ResetForNoDocument()
@@ -162,7 +160,6 @@ namespace QS3D.BricsCAD.V25
 
         public static void ResetForUnavailableProject(string status)
         {
-            EnsureCreated();
             _workspacePanel?.ClearProject(status);
             _quantityInsightPanel?.ClearQuantityInsights(status);
             try { _rightPanel?.Refresh(); }
