@@ -31,6 +31,7 @@ def require(text: str, token: str, label: str) -> None:
 entry = read("src/QS3D.BricsCAD.V25/PluginEntry.cs")
 palette = read("src/QS3D.BricsCAD.V25/PaletteCoordinator.cs")
 ribbon = read("src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator.cs")
+lifecycle = read("src/QS3D.BricsCAD.V25/DocumentLifecycleCoordinator.cs")
 workspace = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs")
 right_panel = read("src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs")
 
@@ -44,6 +45,15 @@ ribbon_start = method(ribbon, "public static void Start()", "public static void 
 ribbon_document = method(ribbon, "private static void OnDocumentAvailable", "private static void StartTimedRetry", "RibbonInitializationCoordinator.OnDocumentAvailable")
 ribbon_retry = method(ribbon, "private static void StartTimedRetry", "private static void StopTimedRetry", "RibbonInitializationCoordinator.StartTimedRetry")
 ribbon_tick = method(ribbon, "private static void OnRetryTick", "private static bool TryInitializeAll", "RibbonInitializationCoordinator.OnRetryTick")
+lifecycle_start = method(lifecycle, "public static void Start()", "public static void Stop()", "DocumentLifecycleCoordinator.Start")
+lifecycle_created = method(lifecycle, "private static void OnDocumentCreated", "private static void OnDocumentActivated", "DocumentLifecycleCoordinator.OnDocumentCreated")
+lifecycle_activated = method(lifecycle, "private static void OnDocumentActivated", "private static void OnDocumentToBeDestroyed", "DocumentLifecycleCoordinator.OnDocumentActivated")
+lifecycle_to_destroy = method(lifecycle, "private static void OnDocumentToBeDestroyed", "private static void OnDocumentDestroyed", "DocumentLifecycleCoordinator.OnDocumentToBeDestroyed")
+lifecycle_destroyed = method(lifecycle, "private static void OnDocumentDestroyed", "private static void ScheduleReconcile", "DocumentLifecycleCoordinator.OnDocumentDestroyed")
+lifecycle_schedule = method(lifecycle, "private static void ScheduleReconcile", "private static void CancelPendingReconcile", "DocumentLifecycleCoordinator.ScheduleReconcile")
+lifecycle_idle_timer = method(lifecycle, "private static void StartLifecycleIdleTimer", "private static void StopLifecycleIdleTimer", "DocumentLifecycleCoordinator.StartLifecycleIdleTimer")
+lifecycle_idle = method(lifecycle, "private static void OnLifecycleIdle", "private static void ReconcileDocument", "DocumentLifecycleCoordinator.OnLifecycleIdle")
+lifecycle_reconcile = method(lifecycle, "private static void ReconcileDocument", "private static void AttachProjectPersistence", "DocumentLifecycleCoordinator.ReconcileDocument")
 workspace_initial = method(workspace, "public WorkspacePanel()", "private void BindViewModel()", "WorkspacePanel initial load")
 right_initial = method(right_panel, "public RightPanel()", "public void Refresh()", "RightPanel initial load")
 
@@ -103,10 +113,62 @@ if "TryInitializeAll()" in ribbon_start:
 if "TryInitializeAll()" in ribbon_document:
     errors.append("RibbonInitializationCoordinator.OnDocumentAvailable must not synchronously reconcile the ribbon inside host document callbacks")
 
+require(lifecycle_start, "ScheduleReconcile(docs.MdiActiveDocument, false);", "DocumentLifecycleCoordinator.Start")
+require(lifecycle_created, "ScheduleReconcile(e.Document, false);", "DocumentLifecycleCoordinator.OnDocumentCreated")
+require(lifecycle_activated, "ScheduleReconcile(e.Document, true);", "DocumentLifecycleCoordinator.OnDocumentActivated")
+require(lifecycle_destroyed, "ScheduleReconcile(docs.MdiActiveDocument, true);", "DocumentLifecycleCoordinator.OnDocumentDestroyed")
+require(lifecycle_destroyed, "StartLifecycleIdleTimer();", "DocumentLifecycleCoordinator.OnDocumentDestroyed no-document path")
+require(lifecycle_schedule, "StartLifecycleIdleTimer();", "DocumentLifecycleCoordinator.ScheduleReconcile")
+require(lifecycle_idle_timer, "new DispatcherTimer(DispatcherPriority.ApplicationIdle)", "DocumentLifecycleCoordinator.StartLifecycleIdleTimer")
+require(lifecycle_idle, "ReconcileDocument(pair.Key, pair.Value);", "DocumentLifecycleCoordinator.OnLifecycleIdle")
+require(lifecycle_idle, "PaletteCoordinator.ResetForNoDocument();", "DocumentLifecycleCoordinator.OnLifecycleIdle")
+
+for token in (
+    "AttachProjectPersistence(document);",
+    "SourceReconcileUndoCoordinator.Attach(document);",
+    "CurtainWallUndoCoordinator.Attach(document);",
+    "SelectionSyncCoordinator.Attach(document);",
+    "EnsureProject(document, refreshUi);",
+    "SelectionSyncCoordinator.Refresh(document);",
+):
+    require(lifecycle_reconcile, token, "DocumentLifecycleCoordinator.ReconcileDocument")
+
+for token in (
+    "CancelPendingReconcile(document);",
+    "DetachProjectPersistence(document);",
+    "SourceReconcileUndoCoordinator.Detach(document);",
+    "CurtainWallUndoCoordinator.Detach(document);",
+    "SelectionSyncCoordinator.Detach(document);",
+    "ProjectContextCoordinator.Forget(document);",
+):
+    require(lifecycle_to_destroy, token, "DocumentLifecycleCoordinator.OnDocumentToBeDestroyed")
+
+host_callback_heavy_tokens = (
+    "AttachProjectPersistence(",
+    "SourceReconcileUndoCoordinator.Attach(",
+    "CurtainWallUndoCoordinator.Attach(",
+    "SelectionSyncCoordinator.Attach(",
+    "EnsureProject(",
+    "SelectionSyncCoordinator.Refresh(",
+    "PaletteCoordinator.RefreshAll(",
+    "PaletteCoordinator.ResetForNoDocument(",
+)
+for label, block in (
+    ("Start/NETLOAD", lifecycle_start),
+    ("DocumentCreated", lifecycle_created),
+    ("DocumentActivated", lifecycle_activated),
+    ("DocumentDestroyed", lifecycle_destroyed),
+):
+    for token in host_callback_heavy_tokens:
+        if token in block:
+            errors.append("DocumentLifecycleCoordinator.%s must defer host-callback work; found %s" % (label, token))
+    if "ReconcileDocument(" in block:
+        errors.append("DocumentLifecycleCoordinator.%s must not call ReconcileDocument synchronously" % label)
+
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: V25 NETLOAD defers palette/ribbon construction, keeps ribbon reconciliation at application-idle priority, makes Workspace/RightPanel initial refresh one-shot, and avoids duplicate first-show full refresh.")
+print("PASS: V25 NETLOAD defers palette/ribbon/document-lifecycle work to application idle, coalesces document reconciliation outside host callbacks, preserves synchronous teardown, keeps Workspace/RightPanel initial refresh one-shot, and avoids duplicate first-show full refresh.")
