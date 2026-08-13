@@ -21,7 +21,7 @@ namespace QS3D.Core.SmokeTests
             var project = BuildProject();
             var beforeVersion = project.ChangeVersion;
             var roots = Enumerable.Repeat("   ", 9997)
-                .Concat(new[] { " root ", "ROOT", "missing" });
+                .Concat(new[] { " root ", "ROOT", "\tROOT\t" });
 
             var handles = SourceHandleResolver.Resolve(project, roots);
 
