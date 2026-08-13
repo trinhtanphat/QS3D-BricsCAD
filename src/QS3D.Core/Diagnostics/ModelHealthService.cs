@@ -82,7 +82,7 @@ namespace QS3D.Core.Diagnostics
 
                 var normalizedSourceHandles = element.SourceHandles
                     .Where(x => !string.IsNullOrWhiteSpace(x))
-                    .Select(x => x.Trim())
+                    .Select(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity)
                     .ToList();
                 var duplicateSourceHandles = normalizedSourceHandles
                     .GroupBy(x => x, StringComparer.OrdinalIgnoreCase)
@@ -112,7 +112,7 @@ namespace QS3D.Core.Diagnostics
         {
             if (handles == null) return null;
             return new HashSet<string>(
-                handles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
+                handles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity),
                 StringComparer.OrdinalIgnoreCase);
         }
 
