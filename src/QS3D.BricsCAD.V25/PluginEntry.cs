@@ -11,17 +11,13 @@ namespace QS3D.BricsCAD.V25
             RuntimeDiagnosticsCommands.CaptureLoadedBinaryIdentity();
             PaletteCoordinator.EnsureCreated();
             DocumentLifecycleCoordinator.Start();
-            RibbonBootstrapper.TryInitialize();
-            ReferenceWallRibbonAugmenter.TryInitialize();
-            ProjectRibbonAugmenter.TryInitialize();
-            QuickWorkflowRibbonAugmenter.TryInitialize();
-            QuantityReferenceRibbonAugmenter.TryInitialize();
-            UpdateRibbonAugmenter.TryInitialize();
+            RibbonInitializationCoordinator.Start();
             UpdateBootstrapper.Start();
         }
         public void Terminate()
         {
             UpdateBootstrapper.Stop();
+            RibbonInitializationCoordinator.Stop();
             DocumentLifecycleCoordinator.Stop();
             PaletteCoordinator.Dispose();
             UpdateRibbonAugmenter.Reset();
