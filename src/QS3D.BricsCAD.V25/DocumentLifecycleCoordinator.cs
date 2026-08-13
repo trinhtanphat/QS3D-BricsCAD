@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using System.Windows.Threading;
 using Bricscad.ApplicationServices;
 using Teigha.DatabaseServices;
 using Application = Bricscad.ApplicationServices.Application;
@@ -14,6 +15,9 @@ namespace QS3D.BricsCAD.V25
         private static bool _started;
         private static readonly Dictionary<Document, DatabaseIOEventHandler> SaveCompleteHandlers = new Dictionary<Document, DatabaseIOEventHandler>();
         private static readonly Dictionary<Document, DocumentBeginCloseEventHandler> BeginCloseHandlers = new Dictionary<Document, DocumentBeginCloseEventHandler>();
+        private static readonly Dictionary<Document, bool> PendingReconciliation = new Dictionary<Document, bool>();
+        private static DispatcherTimer? _lifecycleIdleTimer;
+        private static bool _pendingNoDocumentReset;
 
         public static void Start()
         {
@@ -25,11 +29,11 @@ namespace QS3D.BricsCAD.V25
                 docs.DocumentActivated += OnDocumentActivated;
                 docs.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
                 docs.DocumentDestroyed += OnDocumentDestroyed;
-                AttachProjectPersistence(docs.MdiActiveDocument);
-                SourceReconcileUndoCoordinator.Attach(docs.MdiActiveDocument);
-                CurtainWallUndoCoordinator.Attach(docs.MdiActiveDocument);
-                SelectionSyncCoordinator.Attach(docs.MdiActiveDocument);
                 _started = true;
+
+                // NETLOAD is a host UI callback. Queue persistence/undo/selection/project
+                // reconciliation so the load callback can return before project-side work runs.
+                ScheduleReconcile(docs.MdiActiveDocument, false);
             }
             catch
             {
@@ -37,6 +41,7 @@ namespace QS3D.BricsCAD.V25
                 try { docs.DocumentActivated -= OnDocumentActivated; } catch { }
                 try { docs.DocumentToBeDestroyed -= OnDocumentToBeDestroyed; } catch { }
                 try { docs.DocumentDestroyed -= OnDocumentDestroyed; } catch { }
+                StopPendingLifecycleWork();
                 foreach (var document in SaveCompleteHandlers.Keys.ToArray()) DetachProjectPersistence(document);
                 SourceReconcileUndoCoordinator.Stop();
                 CurtainWallUndoCoordinator.Stop();
@@ -49,11 +54,13 @@ namespace QS3D.BricsCAD.V25
         public static void Stop()
         {
             if (!_started) return;
+            _started = false;
             var docs = Application.DocumentManager;
             try { docs.DocumentCreated -= OnDocumentCreated; } catch { }
             try { docs.DocumentActivated -= OnDocumentActivated; } catch { }
             try { docs.DocumentToBeDestroyed -= OnDocumentToBeDestroyed; } catch { }
             try { docs.DocumentDestroyed -= OnDocumentDestroyed; } catch { }
+            StopPendingLifecycleWork();
             try
             {
                 foreach (var document in SaveCompleteHandlers.Keys.ToArray()) DetachProjectPersistence(document);
@@ -68,31 +75,29 @@ namespace QS3D.BricsCAD.V25
             catch { }
             try { SelectionSyncCoordinator.Stop(); }
             catch { }
-            _started = false;
         }
 
         private static void OnDocumentCreated(object sender, DocumentCollectionEventArgs e)
         {
-            AttachProjectPersistence(e.Document);
-            SourceReconcileUndoCoordinator.Attach(e.Document);
-            CurtainWallUndoCoordinator.Attach(e.Document);
-            SelectionSyncCoordinator.Attach(e.Document);
-            EnsureProject(e.Document, false);
+            // BricsCAD document callbacks stay passive; coalesce work at application idle.
+            ScheduleReconcile(e.Document, false);
         }
 
         private static void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
         {
-            AttachProjectPersistence(e.Document);
-            SourceReconcileUndoCoordinator.Attach(e.Document);
-            CurtainWallUndoCoordinator.Attach(e.Document);
-            SelectionSyncCoordinator.Attach(e.Document);
-            EnsureProject(e.Document, true);
-            SelectionSyncCoordinator.Refresh(e.Document);
+            // Activation can fire repeatedly while switching drawings. Coalesce the latest
+            // request and perform project/UI reconciliation only after the callback returns.
+            ScheduleReconcile(e.Document, true);
         }
 
         private static void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
         {
             var document = e.Document;
+
+            // Teardown is intentionally synchronous: native handlers must be gone before
+            // BricsCAD destroys the document. Any queued attach/reconcile for this document
+            // is cancelled first so an idle callback can never resurrect stale handlers.
+            CancelPendingReconcile(document);
             DetachProjectPersistence(document);
             SourceReconcileUndoCoordinator.Detach(document);
             CurtainWallUndoCoordinator.Detach(document);
@@ -105,19 +110,103 @@ namespace QS3D.BricsCAD.V25
             var docs = Application.DocumentManager;
             if (docs.Count == 0)
             {
-                SelectionSyncCoordinator.Refresh(null);
-                PaletteCoordinator.ResetForNoDocument();
+                PendingReconciliation.Clear();
+                _pendingNoDocumentReset = true;
+                StartLifecycleIdleTimer();
                 return;
             }
 
-            var active = docs.MdiActiveDocument;
-            if (active == null) return;
-            AttachProjectPersistence(active);
-            SourceReconcileUndoCoordinator.Attach(active);
-            CurtainWallUndoCoordinator.Attach(active);
-            SelectionSyncCoordinator.Attach(active);
-            EnsureProject(active, true);
-            SelectionSyncCoordinator.Refresh(active);
+            ScheduleReconcile(docs.MdiActiveDocument, true);
+        }
+
+        private static void ScheduleReconcile(Document? document, bool refreshUi)
+        {
+            if (!_started || document == null) return;
+            if (PendingReconciliation.TryGetValue(document, out var pendingRefresh))
+                PendingReconciliation[document] = pendingRefresh || refreshUi;
+            else
+                PendingReconciliation.Add(document, refreshUi);
+            _pendingNoDocumentReset = false;
+            StartLifecycleIdleTimer();
+        }
+
+        private static void CancelPendingReconcile(Document? document)
+        {
+            if (document == null) return;
+            PendingReconciliation.Remove(document);
+            if (PendingReconciliation.Count == 0 && !_pendingNoDocumentReset)
+                StopLifecycleIdleTimer();
+        }
+
+        private static void StartLifecycleIdleTimer()
+        {
+            if (!_started || _lifecycleIdleTimer != null) return;
+            var timer = new DispatcherTimer(DispatcherPriority.ApplicationIdle)
+            {
+                Interval = TimeSpan.FromMilliseconds(1d)
+            };
+            timer.Tick += OnLifecycleIdle;
+            _lifecycleIdleTimer = timer;
+            timer.Start();
+        }
+
+        private static void StopLifecycleIdleTimer()
+        {
+            var timer = _lifecycleIdleTimer;
+            _lifecycleIdleTimer = null;
+            if (timer == null) return;
+            try { timer.Stop(); } catch { }
+            try { timer.Tick -= OnLifecycleIdle; } catch { }
+        }
+
+        private static void StopPendingLifecycleWork()
+        {
+            StopLifecycleIdleTimer();
+            PendingReconciliation.Clear();
+            _pendingNoDocumentReset = false;
+        }
+
+        private static void OnLifecycleIdle(object? sender, EventArgs e)
+        {
+            StopLifecycleIdleTimer();
+            if (!_started) return;
+
+            var pending = PendingReconciliation.ToArray();
+            PendingReconciliation.Clear();
+            var resetForNoDocument = _pendingNoDocumentReset;
+            _pendingNoDocumentReset = false;
+
+            if (resetForNoDocument && Application.DocumentManager.Count == 0)
+            {
+                try { SelectionSyncCoordinator.Refresh(null); } catch { }
+                try { PaletteCoordinator.ResetForNoDocument(); } catch { }
+            }
+
+            foreach (var pair in pending)
+            {
+                if (!_started) break;
+                ReconcileDocument(pair.Key, pair.Value);
+            }
+
+            if (_started && (PendingReconciliation.Count > 0 || _pendingNoDocumentReset))
+                StartLifecycleIdleTimer();
+        }
+
+        private static void ReconcileDocument(Document document, bool refreshUi)
+        {
+            try
+            {
+                AttachProjectPersistence(document);
+                SourceReconcileUndoCoordinator.Attach(document);
+                CurtainWallUndoCoordinator.Attach(document);
+                SelectionSyncCoordinator.Attach(document);
+                EnsureProject(document, refreshUi);
+                if (refreshUi) SelectionSyncCoordinator.Refresh(document);
+            }
+            catch (Exception ex)
+            {
+                Report(document, "QS3D document lifecycle reconcile error: " + ex.Message);
+            }
         }
 
         private static void AttachProjectPersistence(Document? document)
