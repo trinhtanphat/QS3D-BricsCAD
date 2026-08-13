@@ -14,7 +14,7 @@ namespace QS3D.Core.Takeoff
 
             Handle = handle.Trim();
             Kind = kind;
-            Value = value;
+            Value = value == 0d ? 0d : value;
             Unit = unit.Trim();
         }
 
