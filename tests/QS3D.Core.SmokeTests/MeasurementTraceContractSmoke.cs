@@ -90,6 +90,53 @@ namespace QS3D.Core.SmokeTests
                 "m2",
                 "none"));
 
+            Throws<ArgumentException>(() => new MeasurementTrace(
+                "SEM-WALL-1",
+                "SRC-WALL",
+                "NetAreaM2",
+                new[]
+                {
+                    new MeasurementTraceFact("GrossAreaM2", 12d, "m2", "SRC-WALL"),
+                    new MeasurementTraceFact("GrossAreaM2", 13d, "m2", "SRC-WALL")
+                },
+                12d,
+                Array.Empty<MeasurementTraceAdjustment>(),
+                12d,
+                "m2",
+                "none"));
+
+            Throws<ArgumentException>(() => new MeasurementTrace(
+                "SEM-WALL-1",
+                "SRC-WALL",
+                "NetAreaM2",
+                new[]
+                {
+                    new MeasurementTraceFact("GrossAreaM2", 12d, "m2", "SRC-WALL"),
+                    new MeasurementTraceFact("GrossAreaM2", 12d, "m", "SRC-WALL")
+                },
+                12d,
+                Array.Empty<MeasurementTraceAdjustment>(),
+                12d,
+                "m2",
+                "none"));
+
+            var distinctFacts = new MeasurementTrace(
+                "SEM-WALL-1",
+                "SRC-WALL",
+                "NetAreaM2",
+                new[]
+                {
+                    new MeasurementTraceFact("GrossAreaM2", 12d, "m2", "SRC-WALL"),
+                    new MeasurementTraceFact("LengthM", 4d, "m", "SRC-WALL"),
+                    new MeasurementTraceFact("GrossAreaM2", 12d, "m2", "SRC-WALL-ALT")
+                },
+                12d,
+                Array.Empty<MeasurementTraceAdjustment>(),
+                12d,
+                "m2",
+                "none");
+            Equal(3, distinctFacts.InputFacts.Count, "Fact evidence must remain distinct when name or source identity differs.");
+
             var duplicateAdjustment = new MeasurementTraceAdjustment(
                 MeasurementTraceAdjustmentKind.Deduction,
                 1d,
