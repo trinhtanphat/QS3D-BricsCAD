@@ -72,7 +72,11 @@ namespace QS3D.Core.SmokeTests
                 GrossConcreteM3 = 1d,
                 DeductionM3 = 2d
             };
-            ExpectThrows<InvalidOperationException>(() => QuantityReportBuilder.Group(new[] { negativeNet }));
+            var negativeNetRow = QuantityReportBuilder.Group(new[] { negativeNet }).Single();
+            if (Math.Abs(negativeNetRow.GrossConcreteM3 - 1d) > 1e-12 ||
+                Math.Abs(negativeNetRow.DeductionM3 - 2d) > 1e-12 ||
+                Math.Abs(negativeNetRow.NetConcreteM3) > 1e-12)
+                throw new Exception("Legacy quantity report must preserve gross/deduction values while clamping derived net concrete to zero.");
 
             var negativeTotalRow = new QuantityReportRow { Count = 1, LengthM = -0.5d };
             ExpectThrows<InvalidOperationException>(() => QuantityReportTotals.FromRows(new[] { negativeTotalRow }));
