@@ -1,10 +1,11 @@
 # Work claim — V25 Recognition DataGrid/Grid row compile fix
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-remote-recognition-datagrid-row-20260813` (`/root/fix_rightpanel_thickness`)
 - Registered: `2026-08-13T16:03:00+07:00`
 - Scope expanded: `2026-08-13T16:08:00+07:00` after the same PR `#1008` audit exposed four aggregate presentation-contract failures
 - Gate refinement registered: `2026-08-13T16:11:00+07:00` after focused rerun proved the developer warning retained both safety clauses but the existing gate compared obsolete punctuation
+- Completed: `2026-08-13T16:13:00+07:00`
 - Baseline main SHA: `9446d962fb31b3541110b934c88919d5a73e7a76`
 - Priority: current-main V25 compilation is blocked after UI integration PR `#1008` because the Recognition XAML-generated `DataGrid Grid` member shadows the WPF `Grid` type at two attached-row getter call sites.
 
@@ -42,6 +43,22 @@ Refine the existing developer-layout preflight so its warning check requires bot
 
 PR `#1008` is merged and introduced both regressions; its older UI-polish claim is closed. The Quantity Insight contrast lane completed on a different file as PR `#1012`. Current open PR inventory is empty, and no `ACTIVE`/`BLOCKED` claim references the Recognition compact-shell or Quantity Settings XAML surfaces. The active Source Reconcile lane is unrelated and explicitly excluded.
 
+## Result
+
+- Claim-only PR `#1011` merged as `c8f3f5d067ad006fbca9fc6d2b450c4c2a06fb9d`.
+- Claim expansion PR `#1013` merged as `72fa00cef4776fbc93da2b8d5c806d774166284d`; gate-refinement claim PR `#1014` merged as `acfb8195527a4efddd2767dde07eafa09a6acb90`.
+- Implementation commit `5f280066ad03cb4e2230b65b8efada80e3c64e37` merged by PR `#1015` as `980f0d6c8024c836788bb0cbc66ac42aa733dcbb`.
+- Both Recognition row lookups now explicitly call `System.Windows.Controls.Grid.GetRow`, so the XAML-generated `DataGrid Grid` member cannot shadow the WPF attached-property owner.
+- PR `#1008` responsive Quantity Settings layout remains intact. Only the four canonical rule/developer labels were restored; the warning gate now checks both safety clauses without requiring obsolete punctuation.
+
+## Validation actually executed
+
+- Exact clean `main` SHA `980f0d6c8024c836788bb0cbc66ac42aa733dcbb` passed the new Recognition collision gate and all four affected Quantity Settings gates.
+- The aggregate auto-discovery runner passed all `732` feature preflight gates on that exact SHA.
+- Installed-reference `QS3D.BricsCAD.V25` `Release|x64` build succeeded with `0 warnings / 0 errors` against `C:\Program Files\Bricsys\BricsCAD V25 en_US`; BricsCAD was not launched.
+- `git diff --check` passed. The implementation PR changed only the two reserved UI source files and two reserved static gates; Source Reconcile/`LOCAL-004` remained untouched.
+- No GitHub Actions were dispatched, re-run or cancelled. No native BricsCAD runtime PASS is claimed.
+
 ## Completion condition
 
-The claim-first two-call qualification, focused guard and four text-only contract restorations are merged normally to current `main`, installed-reference V25 compilation and all focused/aggregate gates pass, and this claim is marked `COMPLETED` with exact merge SHAs and truthful non-runtime/non-CI evidence.
+Satisfied: the claim-first two-call qualification, focused guard, four text-only contract restorations and punctuation-tolerant warning assertion are merged normally to current `main`; exact-main V25 compilation and all focused/aggregate gates pass; exact SHAs and truthful non-runtime/non-CI evidence are recorded.
