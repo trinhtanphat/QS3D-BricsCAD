@@ -5,6 +5,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 WINDOW = ROOT / "src" / "QS3D.BricsCAD.V25" / "DirectDrawWindowCommands.cs"
 RIBBON = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "QuickWorkflowRibbonAugmenter.cs"
+COORDINATOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "RibbonInitializationCoordinator.cs"
 PLUGIN = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
 PLAN = ROOT / "src" / "QS3D.BricsCAD.V25" / "PlanTo3DCommands.cs"
 SCHEDULE = ROOT / "src" / "QS3D.Core" / "Reporting" / "DoorOpeningSchedule.cs"
@@ -22,6 +23,7 @@ def read(path):
 
 window = read(WINDOW)
 ribbon = read(RIBBON)
+coordinator = read(COORDINATOR)
 plugin = read(PLUGIN)
 plan = read(PLAN)
 schedule = read(SCHEDULE)
@@ -74,9 +76,15 @@ for token, label in (
     if token not in ribbon:
         errors.append(label + " missing token: " + token)
 
-for token in ('QuickWorkflowRibbonAugmenter.TryInitialize()', 'QuickWorkflowRibbonAugmenter.Reset()'):
+bootstrap = coordinator.find("RibbonBootstrapper.TryInitialize()")
+project_ribbon = coordinator.find("ProjectRibbonAugmenter.TryInitialize()")
+quick = coordinator.find("QuickWorkflowRibbonAugmenter.TryInitialize()")
+quantity = coordinator.find("QuantityReferenceRibbonAugmenter.TryInitialize()")
+if min(bootstrap, project_ribbon, quick, quantity) < 0 or not bootstrap < project_ribbon < quick < quantity:
+    errors.append("QuickWorkflowRibbonAugmenter must initialize through RibbonInitializationCoordinator after base/project and before quantity augmentation")
+for token in ("RibbonInitializationCoordinator.Start();", "QuickWorkflowRibbonAugmenter.Reset();"):
     if token not in plugin:
-        errors.append("PluginEntry missing quick-workflow lifecycle token: " + token)
+        errors.append("PluginEntry missing coordinated quick-workflow lifecycle token: " + token)
 
 for token, label in (
     ('CommandMethod("QS3DCONVERT2D"', "2D conversion command"),
@@ -130,4 +138,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: quick 2D->3D workflow is discoverable in TAO MOI, Window authoring reuses guarded WallOpening+AutoHost semantics with rollback, schedules preserve a Window usage group, and existing preview-to-commit/local-runtime qualification contracts remain documented.")
+print("PASS: quick 2D->3D workflow is discoverable in TAO MOI, Window authoring reuses guarded WallOpening+AutoHost semantics with rollback, Ribbon initialization follows the bounded coordinator, schedules preserve a Window usage group, and local-runtime qualification remains pending until exact evidence exists.")
