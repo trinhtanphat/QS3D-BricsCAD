@@ -77,3 +77,10 @@ The corrected production fix and regressions are merged to current `main`, the e
 - Exact candidate `b48503307c28ae8abbc5e324e53c581915f51a23` still produced the same pre-final `DESYNCHRONIZED` / `MULTIPLE` tuple before the runner's first explicit Undo. Active-document WillStart/Ended pairing therefore does not distinguish every internal BricsCAD command pair.
 - This successor pass reserves the coordinator's sticky state classification and deterministic gate. Read-only observer refusals, plus a failed semantic restore followed by successful rollback, will leave `CurrentRevision` unchanged rather than poison history; the live native marker mismatch continues to block all mutation fail-closed until the marker returns to that current revision.
 - Sticky desynchronization remains reserved for the only semantically uncertain state: both target restore and recovery rollback fail. Intent pairing remains as defense-in-depth. LOCAL-004 probe/runner/inbox/qualification surfaces, BricsCAD runtime, private data and Actions remain excluded.
+
+## State-classification candidate record
+
+- Claim refinement PR `#1043` merged as `559c5f2ea955f839e502f5f8b9f527a4275649b3`. Implementation commit `025de3d505c79aa0ae1f06b2d348e96964860a6b` and source PR `#1045` merged as exact rerun candidate `9017a49a7d595a8828e5a2b8f1b42d1515884f1c`.
+- Deterministic coverage proves read-only refusals and successfully recovered restore failures preserve the canonical project and `CurrentRevision`; persistent marker mismatch blocks transitions, marker return permits safe retry/rebase, and combined restore/recovery failure remains sticky.
+- Focused Source Reconcile gates, strict manual-CI and generic preflight PASS; installed-reference V25 `Release|x64` build PASS with `0 warnings / 0 errors`. Full Core smoke is blocked on unchanged main by separately owned `WorkspaceCurtainOwnerSelectionSmoke` `HANDLE:00D2`; this lane did not modify that surface.
+- Exact-SHA rerun request is issue comment `#issuecomment-5279358976`. Issue `#1005` and this claim remain `OPEN` / `ACTIVE` / `PENDING_LOCAL`; no runtime result is promoted.
