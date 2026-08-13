@@ -13,6 +13,7 @@ namespace QS3D.Core.Diagnostics
     {
         public const string FormatName = "QS3D.DiagnosticSummary";
         public const int FormatVersion = 1;
+        public const int MaxIssueCount = 1000000;
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public static string BuildSemantic(ProjectState project)
@@ -26,7 +27,7 @@ namespace QS3D.Core.Diagnostics
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (issues == null) throw new ArgumentNullException(nameof(issues));
 
-            var normalizedIssues = issues.ToList();
+            var normalizedIssues = MaterializeIssues(issues);
             if (normalizedIssues.Any(x => x == null))
                 throw new InvalidOperationException("Diagnostic summary cannot contain a null health issue.");
             foreach (var issue in normalizedIssues)
@@ -104,6 +105,21 @@ namespace QS3D.Core.Diagnostics
             sb.Append("  }\n");
             sb.Append("}\n");
             return sb.ToString();
+        }
+
+        private static List<ModelHealthIssue> MaterializeIssues(IEnumerable<ModelHealthIssue> issues)
+        {
+            var result = new List<ModelHealthIssue>(Math.Min(MaxIssueCount, 256));
+            using (var enumerator = issues.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= MaxIssueCount)
+                        throw new InvalidOperationException("Diagnostic summary supports at most " + MaxIssueCount.ToString(CultureInfo.InvariantCulture) + " health issues.");
+                    result.Add(enumerator.Current);
+                }
+            }
+            return result;
         }
 
         public static void Export(string path, ProjectState project, IEnumerable<ModelHealthIssue> issues)
