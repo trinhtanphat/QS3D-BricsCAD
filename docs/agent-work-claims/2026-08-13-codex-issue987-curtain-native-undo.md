@@ -3,7 +3,9 @@
 - Status: `ACTIVE`
 - Agent: `codex-issue987-curtain-native-undo-20260813` (`/root/fix_source_reconcile_undo`, continued by `/root/fix_curtain_undo`)
 - Registered: `2026-08-13T17:05:00+07:00`
+- Reactivated after exact-SHA rerun: `2026-08-13T17:44:00+07:00`
 - Baseline main SHA: `8d819d51a25009d2b99eea2dda0a9e158baa8439`
+- Observer follow-up baseline: `559c5f2ea955f839e502f5f8b9f527a4275649b3`
 - Priority: GitHub issue `#987` / `LOCAL-002 P11` production blocker reproduced on licensed BricsCAD V25
 
 ## Reserved scope
@@ -19,6 +21,7 @@ The implementation will use a native transaction-bound Curtain revision marker p
 - `src/QS3D.BricsCAD.V25/DocumentLifecycleCoordinator.cs`
 - `src/QS3D.BricsCAD.V25/ProjectContextCoordinator.cs` only for exact cached-project identity and lifecycle cleanup
 - focused deterministic/static regression coverage under `scripts/`
+- matched native-command observer registration and stable command-boundary reconciliation inside `src/QS3D.BricsCAD.V25/CurtainWallUndoCoordinator.cs`
 - `src/QS3D.Core/Persistence/ProjectPersistenceCheckpoint.cs` plus focused Core smoke registration, only for an exact, selected-element persistence stamp checkpoint that restores `ProjectState.ChangeVersion` / `UpdatedUtc` and selected-owner `Dirty` / `UpdatedUtc` without `Touch()` or public setter sequencing
 - `docs/CURTAIN-NATIVE-PANELS.md`, `docs/LOCAL-AGENT-INBOX.md`, and this claim for the corrected exact-SHA handoff
 
@@ -34,6 +37,7 @@ The implementation will use a native transaction-bound Curtain revision marker p
 
 - Add focused source/static coverage proving the Curtain marker is staged in the same outer native transaction only after semantic after-snapshot allocation, published history advances only after successful CAD commit, and command failure rollback remains unchanged.
 - Cover consecutive builds, semantic-only intervening work/rebase, known Undo/Redo marker transitions, unknown revision refusal, exact cached-project/document affinity, lifecycle cleanup, and unambiguous command-name filtering.
+- Cover matched active-document `CommandWillStart`/`CommandEnded` intent, cancellation/failure token cleanup, ambiguous/nested start refusal, and recovery of a missed terminal observation at the next stable command boundary before that command executes.
 - Deterministically prove exact persistence checkpoint restore at `long.MaxValue` without overflow/`Touch()`, exact selected-owner `Dirty`/timestamp restoration, project/element affinity refusal before mutation, unrelated element preservation, and no audit mutation.
 - Run focused Curtain/Undo preflights, strict manual-CI policy, generic preflight, all discovered feature gates, Core smoke, and installed-reference V25 `Release|x64` compile without launching BricsCAD.
 - Request the existing guarded P11 runner be rerun by its local owner on the exact merged source SHA.
@@ -52,6 +56,10 @@ Concurrent claim `2026-08-13-1702-chatgpt-web-gpt56sol-curtain-undo-semantic-coh
 - `CurtainWallUndoCoordinator` now includes that exact persistence checkpoint in its before/after signatures, refuses intervening persistence drift, refreshes the committed after-snapshot only after live fingerprinting, verifies exact target restore, and clears document history on explicit reload/forget as well as document destruction.
 - Validation on the synchronized implementation head passed the focused Curtain semantic-coherence gate, full Core smoke (`ALL PASS`), installed-reference BricsCAD V25 `Release|x64` build (`0 warnings / 0 errors`), manual-CI policy and generic preflight. The aggregate feature-gate run exposed one unrelated current-main updater/V26 token drift after concurrent fixes; it is outside this claim and was not edited. No GitHub Actions or BricsCAD runtime was launched.
 - Source is `SOURCE_READY / PENDING_LOCAL`. The existing additive P11 probe, runner and gate were not edited. Issue `#987` and this claim remain open/`ACTIVE` until the local owner passes the complete guarded runner against the final exact merged `main` SHA.
+
+## Exact-SHA observer follow-up
+
+The licensed rerun at `b48503307c28ae8abbc5e324e53c581915f51a23` still returned `native_undo / SEMANTIC_NATIVE_DIVERGENCE`, while native Redo, cold reopen, rebuild, source/sentinel preservation, ownership/count stability, Health and cleanup all passed. This disproves persistence-stamp restoration as the sole defect. The current Curtain coordinator observes only `CommandEnded`; unlike the corrected Source Reconcile precedent, it does not bind terminal handling to a matching active-document command start, clear ambiguous/aborted intent, or reconcile a known marker transition at the next stable command boundary when the terminal callback races or is missed. This continuation reserves that bounded observer correction and its static lifecycle model. It does not change the marker, snapshot scope, persistence checkpoint, native build transaction or local P11 automation.
 
 ## Completion condition
 
