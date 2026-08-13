@@ -50,10 +50,38 @@ namespace QS3D.BricsCAD.V25.UI
             TuneModelSectionHeaderCollision();
         }
 
+        private Grid? ResolveWorkspaceRoot()
+        {
+            if (Content is Grid grid)
+                return grid;
+
+            // WorkspacePanel.xaml intentionally wraps the root Grid in a ScrollViewer.
+            // The old compact-shell code only handled a direct Grid, so every grid/header
+            // breakpoint silently became a no-op in the actual BricsCAD palette.
+            if (Content is ScrollViewer scrollViewer && scrollViewer.Content is Grid wrappedGrid)
+                return wrappedGrid;
+
+            return null;
+        }
+
         private void TuneWorkspaceGrid()
         {
-            if (!(Content is Grid root) || root.RowDefinitions.Count < 3)
+            var root = ResolveWorkspaceRoot();
+            if (root == null || root.RowDefinitions.Count < 3)
                 return;
+
+            root.MinWidth = 0;
+            root.HorizontalAlignment = HorizontalAlignment.Stretch;
+
+            if (Content is ScrollViewer overflow)
+            {
+                // The body now reflows instead of requiring the historical 560 px canvas.
+                // Removing the horizontal scrollbar is important in docked/narrow palettes:
+                // otherwise BricsCAD clips the useful right edge exactly as in the screenshot.
+                overflow.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+                overflow.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+                overflow.PanningMode = PanningMode.None;
+            }
 
             // Compact chrome leaves more room for model/property inspection on 1366x768-class CAD workstations.
             root.RowDefinitions[0].Height = new GridLength(40);
@@ -67,38 +95,159 @@ namespace QS3D.BricsCAD.V25.UI
             if (workspace == null)
                 return;
 
-            workspace.ColumnDefinitions[0].Width = new GridLength(165);
-            workspace.ColumnDefinitions[0].MinWidth = 145;
-            workspace.ColumnDefinitions[1].Width = new GridLength(4);
-            workspace.ColumnDefinitions[2].Width = new GridLength(255);
-            workspace.ColumnDefinitions[2].MinWidth = 220;
-            workspace.ColumnDefinitions[3].Width = new GridLength(4);
-            workspace.ColumnDefinitions[4].Width = new GridLength(1, GridUnitType.Star);
-            workspace.ColumnDefinitions[4].MinWidth = 190;
+            while (workspace.RowDefinitions.Count < 3)
+                workspace.RowDefinitions.Add(new RowDefinition());
 
+            var modelPane = workspace.Children
+                .OfType<FrameworkElement>()
+                .FirstOrDefault(candidate =>
+                    !(candidate is GridSplitter) && Grid.GetColumn(candidate) == 0);
             var familyAndProperties = workspace.Children
                 .OfType<Grid>()
                 .FirstOrDefault(candidate => Grid.GetColumn(candidate) == 2 && candidate.RowDefinitions.Count == 3);
-            if (familyAndProperties != null)
-            {
-                familyAndProperties.RowDefinitions[0].Height = new GridLength(235);
-                familyAndProperties.RowDefinitions[0].MinHeight = 150;
-            }
-
             var roomAndSelection = workspace.Children
                 .OfType<Grid>()
                 .FirstOrDefault(candidate => Grid.GetColumn(candidate) == 4 && candidate.RowDefinitions.Count == 3);
-            if (roomAndSelection != null)
-            {
-                roomAndSelection.RowDefinitions[0].Height = new GridLength(200);
-                roomAndSelection.RowDefinitions[0].MinHeight = 125;
-            }
+            var splitters = workspace.Children
+                .OfType<GridSplitter>()
+                .OrderBy(Grid.GetColumn)
+                .ToArray();
 
-            foreach (var splitter in workspace.Children.OfType<GridSplitter>())
+            if (modelPane == null || familyAndProperties == null || roomAndSelection == null || splitters.Length < 2)
+                return;
+
+            foreach (var splitter in splitters)
             {
                 splitter.ShowsPreview = true;
                 splitter.Focusable = false;
             }
+
+            void ApplyBreakpoint()
+            {
+                ApplyWorkspaceBreakpoint(
+                    workspace,
+                    modelPane,
+                    splitters[0],
+                    familyAndProperties,
+                    splitters[1],
+                    roomAndSelection);
+            }
+
+            workspace.SizeChanged += (_, __) => ApplyBreakpoint();
+            ApplyBreakpoint();
+        }
+
+        private static void ApplyWorkspaceBreakpoint(
+            Grid workspace,
+            FrameworkElement modelPane,
+            GridSplitter primarySplitter,
+            Grid familyAndProperties,
+            GridSplitter secondarySplitter,
+            Grid roomAndSelection)
+        {
+            if (workspace.RowDefinitions.Count < 3 || workspace.ColumnDefinitions.Count < 5)
+                return;
+
+            var width = workspace.ActualWidth;
+            var narrow = width > 0 && width < 680;
+
+            if (narrow)
+            {
+                // Two-tier layout for docked palettes: model + family/property on top,
+                // room/selection below. This keeps all three work areas visible without
+                // a horizontal scroll canvas or clipped controls.
+                workspace.RowDefinitions[0].Height = new GridLength(1.25, GridUnitType.Star);
+                workspace.RowDefinitions[0].MinHeight = 245;
+                workspace.RowDefinitions[1].Height = new GridLength(4);
+                workspace.RowDefinitions[1].MinHeight = 0;
+                workspace.RowDefinitions[2].Height = new GridLength(1, GridUnitType.Star);
+                workspace.RowDefinitions[2].MinHeight = 190;
+
+                workspace.ColumnDefinitions[0].Width = new GridLength(width < 470 ? 132 : 150);
+                workspace.ColumnDefinitions[0].MinWidth = width < 470 ? 112 : 125;
+                workspace.ColumnDefinitions[1].Width = new GridLength(4);
+                workspace.ColumnDefinitions[1].MinWidth = 4;
+                workspace.ColumnDefinitions[2].Width = new GridLength(1, GridUnitType.Star);
+                workspace.ColumnDefinitions[2].MinWidth = 0;
+                workspace.ColumnDefinitions[3].Width = new GridLength(0);
+                workspace.ColumnDefinitions[3].MinWidth = 0;
+                workspace.ColumnDefinitions[4].Width = new GridLength(0);
+                workspace.ColumnDefinitions[4].MinWidth = 0;
+
+                Place(modelPane, 0, 0, 1, 1);
+                Place(primarySplitter, 0, 1, 1, 1);
+                Place(familyAndProperties, 0, 2, 1, 1);
+                Place(secondarySplitter, 1, 0, 1, 3);
+                Place(roomAndSelection, 2, 0, 1, 3);
+
+                primarySplitter.ResizeDirection = GridResizeDirection.Columns;
+                primarySplitter.Width = 4;
+                primarySplitter.Height = double.NaN;
+                primarySplitter.HorizontalAlignment = HorizontalAlignment.Stretch;
+                primarySplitter.VerticalAlignment = VerticalAlignment.Stretch;
+
+                secondarySplitter.ResizeDirection = GridResizeDirection.Rows;
+                secondarySplitter.Width = double.NaN;
+                secondarySplitter.Height = 4;
+                secondarySplitter.HorizontalAlignment = HorizontalAlignment.Stretch;
+                secondarySplitter.VerticalAlignment = VerticalAlignment.Stretch;
+
+                familyAndProperties.RowDefinitions[0].Height = new GridLength(190);
+                familyAndProperties.RowDefinitions[0].MinHeight = 125;
+                roomAndSelection.RowDefinitions[0].Height = new GridLength(150);
+                roomAndSelection.RowDefinitions[0].MinHeight = 95;
+                return;
+            }
+
+            // Original three-column desktop arrangement, with sane minimums.
+            workspace.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
+            workspace.RowDefinitions[0].MinHeight = 0;
+            workspace.RowDefinitions[1].Height = new GridLength(0);
+            workspace.RowDefinitions[1].MinHeight = 0;
+            workspace.RowDefinitions[2].Height = new GridLength(0);
+            workspace.RowDefinitions[2].MinHeight = 0;
+
+            workspace.ColumnDefinitions[0].Width = new GridLength(165);
+            workspace.ColumnDefinitions[0].MinWidth = 145;
+            workspace.ColumnDefinitions[1].Width = new GridLength(4);
+            workspace.ColumnDefinitions[1].MinWidth = 4;
+            workspace.ColumnDefinitions[2].Width = new GridLength(255);
+            workspace.ColumnDefinitions[2].MinWidth = 220;
+            workspace.ColumnDefinitions[3].Width = new GridLength(4);
+            workspace.ColumnDefinitions[3].MinWidth = 4;
+            workspace.ColumnDefinitions[4].Width = new GridLength(1, GridUnitType.Star);
+            workspace.ColumnDefinitions[4].MinWidth = 190;
+
+            Place(modelPane, 0, 0, 1, 1);
+            Place(primarySplitter, 0, 1, 1, 1);
+            Place(familyAndProperties, 0, 2, 1, 1);
+            Place(secondarySplitter, 0, 3, 1, 1);
+            Place(roomAndSelection, 0, 4, 1, 1);
+
+            primarySplitter.ResizeDirection = GridResizeDirection.Columns;
+            primarySplitter.Width = 4;
+            primarySplitter.Height = double.NaN;
+            primarySplitter.HorizontalAlignment = HorizontalAlignment.Stretch;
+            primarySplitter.VerticalAlignment = VerticalAlignment.Stretch;
+
+            secondarySplitter.ResizeDirection = GridResizeDirection.Columns;
+            secondarySplitter.Width = 4;
+            secondarySplitter.Height = double.NaN;
+            secondarySplitter.HorizontalAlignment = HorizontalAlignment.Stretch;
+            secondarySplitter.VerticalAlignment = VerticalAlignment.Stretch;
+
+            familyAndProperties.RowDefinitions[0].Height = new GridLength(235);
+            familyAndProperties.RowDefinitions[0].MinHeight = 150;
+            roomAndSelection.RowDefinitions[0].Height = new GridLength(200);
+            roomAndSelection.RowDefinitions[0].MinHeight = 125;
+        }
+
+        private static void Place(FrameworkElement element, int row, int column, int rowSpan, int columnSpan)
+        {
+            Grid.SetRow(element, row);
+            Grid.SetColumn(element, column);
+            Grid.SetRowSpan(element, rowSpan);
+            Grid.SetColumnSpan(element, columnSpan);
         }
 
         private void TuneNamedWorkspaceControls()
@@ -170,14 +319,15 @@ namespace QS3D.BricsCAD.V25.UI
                     continue;
 
                 text.FontWeight = FontWeights.SemiBold;
-                if (text.FontSize < 11)
-                    text.FontSize = 11;
+                if (text.FontSize < 11.5)
+                    text.FontSize = 11.5;
             }
         }
 
         private void TuneResponsiveHeader()
         {
-            if (!(Content is Grid root))
+            var root = ResolveWorkspaceRoot();
+            if (root == null)
                 return;
 
             var headerBorder = root.Children
@@ -212,8 +362,9 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
 
             var width = header.ActualWidth;
-            var narrow = width > 0 && width < 570;
-            var compact = width > 0 && width < 700;
+            var ultraNarrow = width > 0 && width < 460;
+            var narrow = width > 0 && width < 610;
+            var compact = width > 0 && width < 760;
 
             var workspaceBadge = FindHeaderBadge(branding, "BIM WORKSPACE");
             if (workspaceBadge != null)
@@ -225,17 +376,18 @@ namespace QS3D.BricsCAD.V25.UI
 
             if (status != null)
             {
-                status.Margin = narrow ? new Thickness(4, 0, 4, 0) : new Thickness(8, 0, 8, 0);
+                status.Visibility = ultraNarrow ? Visibility.Collapsed : Visibility.Visible;
+                status.Margin = narrow ? new Thickness(3, 0, 3, 0) : new Thickness(8, 0, 8, 0);
                 status.MinWidth = 0;
                 status.TextAlignment = TextAlignment.Center;
             }
 
-            branding.Margin = new Thickness(0, 0, narrow ? 4 : 8, 0);
-            actions.Margin = new Thickness(narrow ? 2 : 4, 0, 0, 0);
+            branding.Margin = new Thickness(0, 0, narrow ? 3 : 8, 0);
+            actions.Margin = new Thickness(narrow ? 1 : 4, 0, 0, 0);
 
             foreach (var button in actions.Children.OfType<Button>())
             {
-                button.Padding = narrow ? new Thickness(5, 2, 5, 2) : new Thickness(6, 2, 6, 2);
+                button.Padding = narrow ? new Thickness(4, 2, 4, 2) : new Thickness(6, 2, 6, 2);
 
                 var label = button.Content as string;
                 if (string.Equals(label, "Xoay 3D", StringComparison.Ordinal) ||
