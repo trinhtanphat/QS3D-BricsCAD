@@ -70,7 +70,7 @@ checks = {
     "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.xaml": [
         'x:Class="QS3D.BricsCAD.V25.UI.FloorLevelWindow"', 'x:Name="FloorList"', 'x:Name="ActiveFloorText"',
         'x:Name="FloorNameBox"', 'x:Name="FloorElevationBox"', 'x:Name="ReferenceCountText"',
-        'Click="OnNewFloorClick"', 'Click="OnSaveFloorClick"', 'Click="OnDeleteFloorClick"',
+        'Click="OnNewFloorClick"', 'Click="OnSaveFloorFirstBootstrapClick"', 'Click="OnDeleteFloorClick"',
         'Click="OnActivateClick"', 'Click="OnAssignClick"', "KHÔNG tự Move/Translate source CAD",
         "Không thể xóa tầng active hoặc tầng còn semantic element tham chiếu",
     ],
