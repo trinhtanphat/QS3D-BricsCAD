@@ -1,6 +1,6 @@
 name: QS3D TEMP V25 Auto Release Until Success
 # QS3D_TEMP_AUTO_RELEASE_V25_UNTIL_SUCCESS
-# trigger: rerun after smoke compile fixes 2026-08-13T15:08+07:00
+# trigger: robust latest-main dispatch during concurrent agent writes
 
 on:
   push:
@@ -35,22 +35,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Ignore superseded push
+      - name: Refresh latest main source
         id: head
         shell: bash
         run: |
           set -euo pipefail
           git fetch origin main
-          remote_sha="$(git rev-parse origin/main)"
-          if [[ "$remote_sha" != "$GITHUB_SHA" ]]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "Push $GITHUB_SHA is superseded by $remote_sha; no release will be dispatched from stale source."
-            exit 0
-          fi
-          echo "skip=false" >> "$GITHUB_OUTPUT"
+          git reset --hard origin/main
+          remote_sha="$(git rev-parse HEAD)"
+          echo "target_sha=$remote_sha" >> "$GITHUB_OUTPUT"
+          echo "Dispatching from latest main: $remote_sha"
 
       - name: Resolve current prerelease tag
-        if: ${{ steps.head.outputs.skip != 'true' }}
         id: version
         shell: bash
         run: |
@@ -68,8 +64,7 @@ jobs:
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
           echo "Resolved release tag: $release_tag"
 
-      - name: Dispatch exact V25 cloud workflow
-        if: ${{ steps.head.outputs.skip != 'true' }}
+      - name: Dispatch V25 cloud workflow on latest main
         id: dispatch
         shell: bash
         run: |
@@ -82,10 +77,9 @@ jobs:
             -f "inputs[release_tag]=${{ steps.version.outputs.release_tag }}" \
             -f "inputs[confirm_release]=RELEASE" \
             --silent
-          echo "Dispatched release-v25-cloud.yml for $GITHUB_SHA."
+          echo "Dispatched release-v25-cloud.yml from latest main (resolved ${{ steps.head.outputs.target_sha }})."
 
-      - name: Wait for exact dispatched release result
-        if: ${{ steps.head.outputs.skip != 'true' }}
+      - name: Wait for dispatched release result
         shell: bash
         run: |
           set -euo pipefail
@@ -93,16 +87,15 @@ jobs:
           for attempt in $(seq 1 60); do
             payload="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$TARGET_WORKFLOW/runs?event=workflow_dispatch&branch=main&per_page=50")"
             run_id="$(printf '%s' "$payload" | jq -r \
-              --arg sha "$GITHUB_SHA" \
               --arg started "${{ steps.dispatch.outputs.started_at }}" \
-              '[.workflow_runs[] | select(.head_sha == $sha and .created_at >= $started)] | sort_by(.created_at) | last | .id // empty')"
+              '[.workflow_runs[] | select(.created_at >= $started)] | sort_by(.created_at) | last | .id // empty')"
             if [[ -n "$run_id" ]]; then
               break
             fi
             sleep 10
           done
           if [[ -z "$run_id" ]]; then
-            echo "Could not locate dispatched release workflow run for $GITHUB_SHA." >&2
+            echo "Could not locate dispatched release workflow run." >&2
             exit 1
           fi
 
@@ -112,7 +105,8 @@ jobs:
             status="$(printf '%s' "$run" | jq -r '.status')"
             conclusion="$(printf '%s' "$run" | jq -r '.conclusion // ""')"
             url="$(printf '%s' "$run" | jq -r '.html_url')"
-            echo "release run $run_id: status=$status conclusion=$conclusion url=$url"
+            head_sha="$(printf '%s' "$run" | jq -r '.head_sha')"
+            echo "release run $run_id: head=$head_sha status=$status conclusion=$conclusion url=$url"
             if [[ "$status" == "completed" ]]; then
               if [[ "$conclusion" != "success" ]]; then
                 echo "V25 cloud release failed with conclusion: $conclusion" >&2
