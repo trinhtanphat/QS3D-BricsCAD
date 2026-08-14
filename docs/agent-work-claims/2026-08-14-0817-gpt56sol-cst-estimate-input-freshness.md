@@ -1,6 +1,6 @@
 # Work claim — CST estimate input freshness
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `gpt56sol-cst-estimate-freshness-20260814-0817`
 - Registered: `2026-08-14T08:17:00+07:00`
 - Baseline main SHA: `317036d921834d779d2db6f5b36cf23a5dbbd214`
@@ -8,41 +8,49 @@
 
 ## Confirmed gap
 
-The current Cost domain can create an `EstimateLine` from a frozen `MeasurementSnapshot` and `RateBook`, and can project/revision-compare that frozen estimate state, but it has no pure-Core way to tell whether the line's measurement/rate inputs are still current relative to newer canonical snapshots. Callers therefore have to reimplement stale-input checks or silently continue presenting a frozen line without an explicit freshness finding.
+The Cost domain could create an `EstimateLine` from a frozen `MeasurementSnapshot` and `RateBook`, and could project/revision-compare that frozen estimate state, but it had no pure-Core way to tell whether the line's measurement/rate inputs were still current relative to newer canonical snapshots. Callers otherwise had to reimplement stale-input checks or silently continue presenting a frozen line without an explicit freshness finding.
 
 ## Reserved scope
 
-- `src/QS3D.Core/Cost/EstimateLineFreshness.cs` — new file only
-- `tests/QS3D.Core.SmokeTests/EstimateLineFreshnessSmoke.cs` — new focused self-registering smoke only
+- `src/QS3D.Core/Cost/EstimateLineFreshness.cs` — new file
+- `tests/QS3D.Core.SmokeTests/EstimateLineFreshnessSmoke.cs` — new focused self-registering smoke
 - this claim file
 
-## Intended contract
+## Implemented contract
 
-Evaluate one existing `EstimateLine` against a current `MeasurementSnapshot` and current `RateBook` without recalculating quantity, commercial adjustment, unit rate, or final amount.
+`EstimateLineFreshnessEvaluator.Evaluate()` compares one existing frozen estimate line against a current `MeasurementSnapshot` and current `RateBook` without recalculating quantity, commercial adjustment, unit rate, final amount, or BQ totals.
 
-Deterministic findings may include:
-- referenced measurement identity is missing;
+Deterministic findings are emitted for:
+- referenced measurement identity missing;
 - referenced measurement trace changed;
 - rate-book provenance identity changed;
-- the current rate source cannot resolve the line's cost-code/unit/currency at the frozen `RateAsOfUtc`;
-- the resolved rate item payload/provenance changed.
+- current rate source unable to resolve the frozen cost-code/unit/currency at the line's `RateAsOfUtc`;
+- resolved rate item payload/provenance changed.
 
-The evaluator must preserve exact measurement identity semantics, reuse `MeasurementTrace.Equals` for canonical measurement content, reuse `RateBook.Resolve` at the line's frozen lookup timestamp, and return findings in deterministic order. A cloned current input with the same canonical frozen evidence remains current.
+The evaluator uses exact ordinal measurement identity, `MeasurementTrace.Equals` for canonical measurement content, `RateBook.Resolve` at the frozen lookup timestamp, case-insensitive `RateItemId` identity consistent with `RateBook` duplicate identity handling, and fixed deterministic finding order. Equivalent cloned measurement/rate inputs remain current.
 
-## Excluded scope
+## Commits
+
+- Claim-only: `5e6c2d9f63d44e3f28b630dd04a92100282ba260`
+- Source: `acb3946eedf11b6a13908b02cac1cccd8b066037`
+- Focused smoke: `2b653325a1d3ab980cf733217d76d3a96e7b6470`
+
+## Validation actually performed
+
+- Remote source commit readback verified the new evaluator is isolated to `src/QS3D.Core/Cost/EstimateLineFreshness.cs` and does not edit existing Cost/Measurement formulas.
+- Remote smoke commit readback verified focused coverage for equivalent current inputs, changed/missing measurement, changed rate-book provenance, unavailable rate, changed rate, combined deterministic findings, RateItem identity casing, and null guards.
+- Smoke self-registers through the repository's existing `[ModuleInitializer]` pattern; no shared smoke registration file was modified.
+- Current-main lineage check after the smoke commit showed one intervening V25 UpdateCenterWindow-only commit and no changes to the reserved Cost/test files.
+- GitHub combined status for smoke SHA reports no attached statuses/checks (`total_count = 0`); no GitHub Actions were dispatched.
+- Local/container executable check found `dotnet` is not installed, so managed Core smoke/build execution is `NOT_RUN` and is not claimed as PASS.
+- BricsCAD V25/V26 native runtime is outside this pure-Core evaluator and no native PASS is claimed.
+
+## Excluded scope preserved
 
 - no recalculation of measured/estimating quantity, commercial adjustment, unit rate, amount, revision cost impact, or BQ totals;
 - no edits to `EstimateLine.cs`, `RateBook.cs`, `FrozenEstimateProjection.cs`, `EstimateRevisionCostImpact.cs`, MeasurementTrace/Snapshot source, persistence, UI, export, native BricsCAD, Rebar, MAP/QSC, or release automation;
-- no GitHub Actions/native qualification.
+- no force-push and no GitHub Actions dispatch.
 
-## Validation plan
+## Completion
 
-Focused smoke source will cover current inputs, missing/changed measurement, changed rate-book provenance, unmatched rate lookup, changed rate item, combined findings, deterministic finding order, and null guards. After each push re-fetch current `main`, inspect exact remote diff/readback, and record only validation actually executed.
-
-## Coordination
-
-Recent CST-01/02/03/04 claims are completed; current recent main activity is Rebar procurement, V25 update UX and completed MAP/IFC lanes. This claim uses new Cost/test files only and does not reserve any existing shared source file.
-
-## Completion condition
-
-Claim-first reservation, minimal freshness evaluator, focused regression, current-main ancestry/readback and an explicit validation boundary are all present on `main`, then this claim is closed `COMPLETED`.
+`COMPLETED`: claim-first reservation, pure-Core freshness projection, focused regression, remote readback/lineage verification and explicit validation boundary are all recorded on `main`.
