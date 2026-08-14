@@ -21,6 +21,7 @@ required_home = {
 required_primary_tabs = [
     ("QS3D_HOME", "KHỞI ĐẦU"),
     ("QS3D_PROJECT", "THIẾT LẬP DỰ ÁN"),
+    ("QS3D_AUTHOR", "TẠO MỚI"),
     ("QS3D_BIM", "MÔ HÌNH BIM"),
     ("QS3D_RECOGNIZE", "NHẬN DẠNG"),
     ("QS3D_DRAW", "VẼ"),
