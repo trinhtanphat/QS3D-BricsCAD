@@ -5,6 +5,7 @@
 - Registered: `2026-08-14T20:39:11+07:00`
 - Baseline main SHA: `ce29bc89113961a4cd3874f5b5352ca50af5e260`
 - Implementation branch: `agent/chatgpt-web-gpt56sol/drawing-fingerprint-mutation-canonicality-20260814`
+- Implementation commit: `d0e1531e9db15d55c1f14501b63c011ebc0da12f`
 - Integration batch: `integration/chatgpt-web-gpt56sol-drawing-fingerprint-mutation-canonicality-20260814`
 - Priority: Core P1 persistence integrity; public domain setters can currently admit a non-canonical drawing fingerprint that the canonical QSDB schema rejects on publication/readback.
 
@@ -33,6 +34,10 @@ Close the public-mutation gap for project/element `DrawingFingerprint` only. Pub
 - Prove control-character assignment rejects before mutation; for project state, rejection must leave both the previous fingerprint and `ChangeVersion` unchanged; for element state, rejection must leave the previous fingerprint unchanged.
 - Re-read source/test on the implementation branch and inspect the final diff against the refreshed integration baseline.
 - Use the repository's standing automatic post-integration V25 cloud workflow only if/when this source lane is landed to `main`; do not manually dispatch Actions.
+
+## Implementation status
+
+The dedicated implementation branch contains one atomic source/test commit, `d0e1531e9db15d55c1f14501b63c011ebc0da12f`. Its diff is limited to the three reserved files. Source/test blobs were re-read after creation; the control-character fixture uses the C# `\u0001` runtime escape, and no excluded persistence/Source Reconcile/native surfaces were changed. The claim remains `ACTIVE` until integration and current-main reachability are verified.
 
 ## Coordination
 
