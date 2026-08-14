@@ -9,12 +9,14 @@ namespace QS3D.Core.Domain
     internal sealed class ProjectMeasurementWorkItemMappingCollection : ICollection<MeasurementWorkItemMapping>
     {
         private readonly ProjectState _project;
-        private readonly IDictionary<string, string> _metadata;
+        private readonly ProjectMetadataDictionary _metadata;
 
         internal ProjectMeasurementWorkItemMappingCollection(ProjectState project, IDictionary<string, string> metadata)
         {
             _project = project ?? throw new ArgumentNullException(nameof(project));
-            _metadata = metadata ?? throw new ArgumentNullException(nameof(metadata));
+            _metadata = metadata as ProjectMetadataDictionary
+                ?? throw new ArgumentException("Project measurement/work-item mappings require the project metadata store.", nameof(metadata));
+            _metadata.BindProject(project);
         }
 
         public int Count { get { return Snapshot().Count; } }
@@ -30,16 +32,15 @@ namespace QS3D.Core.Domain
             var value = ProjectMeasurementWorkItemMappingCodec.Value(item);
             if (_metadata.ContainsKey(key)) throw new ArgumentException("Duplicate measurement/work-item mapping id: " + item.MappingId + ".", nameof(item));
             _project.Touch();
-            _metadata.Add(key, value);
+            _metadata.AddOwned(key, value);
         }
 
         public void Clear()
         {
-            var keys = _metadata.Keys.Where(ProjectMeasurementWorkItemMappingCodec.IsReservedKey).ToArray();
-            if (keys.Length == 0) return;
+            if (!_metadata.Keys.Any(ProjectMeasurementWorkItemMappingCodec.IsReservedKey)) return;
             Snapshot();
             _project.Touch();
-            foreach (var key in keys) _metadata.Remove(key);
+            _metadata.ClearReservedOwned();
         }
 
         public bool Contains(MeasurementWorkItemMapping item) { return item != null && Snapshot().Any(x => Same(x, item)); }
@@ -52,7 +53,7 @@ namespace QS3D.Core.Domain
             if (match == null) return false;
             var key = ProjectMeasurementWorkItemMappingCodec.Key(match);
             _project.Touch();
-            if (!_metadata.Remove(key))
+            if (!_metadata.RemoveOwned(key))
                 throw new InvalidOperationException("Project measurement/work-item mapping disappeared during removal: " + match.MappingId + ".");
             return true;
         }
