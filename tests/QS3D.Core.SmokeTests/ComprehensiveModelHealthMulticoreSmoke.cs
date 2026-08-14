@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
@@ -10,6 +9,9 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
+            ThrowsArgumentOutOfRange(0);
+            ThrowsArgumentOutOfRange(5);
+
             var project = NewProject();
             project.Elements.Add(null!);
 
@@ -33,40 +35,18 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(curtain);
 
             var liveSourceHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var service = new ComprehensiveModelHealthService();
-            var expected = InvokeSequential(service, project, liveSourceHandles);
+            var singleWorker = new ComprehensiveModelHealthService(1);
+            var multiWorker = new ComprehensiveModelHealthService(4);
+            var expected = singleWorker.Inspect(project, liveSourceHandles, null);
             if (expected.Count == 0)
-                throw new InvalidOperationException("Sequential comprehensive health oracle unexpectedly produced no diagnostics.");
+                throw new InvalidOperationException("Single-worker comprehensive health oracle unexpectedly produced no diagnostics.");
             RequireCode(expected, "HEALTH_PROVIDER_FAILED");
             RequireCode(expected, "ORPHAN_HANDLE");
 
             for (var iteration = 0; iteration < 32; iteration++)
             {
-                var actual = service.Inspect(project, liveSourceHandles, null);
+                var actual = multiWorker.Inspect(project, liveSourceHandles, null);
                 AssertEquivalent(expected, actual, iteration);
-            }
-        }
-
-        private static IReadOnlyList<ModelHealthIssue> InvokeSequential(
-            ComprehensiveModelHealthService service,
-            ProjectState project,
-            ISet<string> liveSourceHandles)
-        {
-            var method = typeof(ComprehensiveModelHealthService).GetMethod(
-                "InspectSequential",
-                BindingFlags.Instance | BindingFlags.NonPublic);
-            if (method == null)
-                throw new InvalidOperationException("Comprehensive health sequential parity oracle is unavailable.");
-
-            try
-            {
-                var result = method.Invoke(service, new object?[] { project, liveSourceHandles, null });
-                if (result is IReadOnlyList<ModelHealthIssue> issues) return issues;
-                throw new InvalidOperationException("Comprehensive health sequential parity oracle returned an unexpected result.");
-            }
-            catch (TargetInvocationException ex) when (ex.InnerException != null)
-            {
-                throw ex.InnerException;
             }
         }
 
@@ -78,6 +58,19 @@ namespace QS3D.Core.SmokeTests
             project.ActiveZoneId = "zone-1";
             project.ActiveFloorId = "floor-0";
             return project;
+        }
+
+        private static void ThrowsArgumentOutOfRange(int maxDegreeOfParallelism)
+        {
+            try
+            {
+                _ = new ComprehensiveModelHealthService(maxDegreeOfParallelism);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return;
+            }
+            throw new InvalidOperationException("Expected bounded comprehensive health parallelism validation failure.");
         }
 
         private static void RequireCode(IReadOnlyList<ModelHealthIssue> issues, string code)

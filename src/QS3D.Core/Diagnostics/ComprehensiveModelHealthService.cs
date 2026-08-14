@@ -9,6 +9,7 @@ namespace QS3D.Core.Diagnostics
     public sealed class ComprehensiveModelHealthService
     {
         private const int MaximumProviderParallelism = 4;
+        private readonly int _maxDegreeOfParallelism;
 
         private static readonly string[] GeneratedOutputCodeTokens =
         {
@@ -58,27 +59,31 @@ namespace QS3D.Core.Diagnostics
             public Exception? FatalException { get; set; }
         }
 
+        public ComprehensiveModelHealthService(int? maxDegreeOfParallelism = null)
+        {
+            var safeDefault = Math.Max(1, Math.Min(MaximumProviderParallelism, Environment.ProcessorCount));
+            var configured = maxDegreeOfParallelism ?? safeDefault;
+            if (configured < 1 || configured > MaximumProviderParallelism)
+                throw new ArgumentOutOfRangeException(
+                    nameof(maxDegreeOfParallelism),
+                    configured,
+                    "Comprehensive model-health parallelism must be between 1 and " + MaximumProviderParallelism + ".");
+            _maxDegreeOfParallelism = configured;
+        }
+
         public IReadOnlyList<ModelHealthIssue> Inspect(
             ProjectState project,
             ISet<string>? liveSourceHandles = null,
             ISet<string>? liveGeneratedSolidHandles = null)
         {
-            return InspectCore(project, liveSourceHandles, liveGeneratedSolidHandles, true);
-        }
-
-        private IReadOnlyList<ModelHealthIssue> InspectSequential(
-            ProjectState project,
-            ISet<string>? liveSourceHandles = null,
-            ISet<string>? liveGeneratedSolidHandles = null)
-        {
-            return InspectCore(project, liveSourceHandles, liveGeneratedSolidHandles, false);
+            return InspectCore(project, liveSourceHandles, liveGeneratedSolidHandles, _maxDegreeOfParallelism);
         }
 
         private static IReadOnlyList<ModelHealthIssue> InspectCore(
             ProjectState project,
             ISet<string>? liveSourceHandles,
             ISet<string>? liveGeneratedSolidHandles,
-            bool executeInParallel)
+            int maxDegreeOfParallelism)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
 
@@ -111,9 +116,9 @@ namespace QS3D.Core.Diagnostics
                 new DiagnosticProvider("GeneratedCurtainPanelHealthService", () => new GeneratedCurtainPanelHealthService().Inspect(project, normalizedLiveGeneratedSolidHandles))
             };
 
-            var results = executeInParallel
-                ? ExecuteProvidersInParallel(providers)
-                : ExecuteProvidersSequentially(providers);
+            var results = maxDegreeOfParallelism == 1
+                ? ExecuteProvidersSequentially(providers)
+                : ExecuteProvidersInParallel(providers, maxDegreeOfParallelism);
             var issues = new List<ModelHealthIssue>();
             var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -139,13 +144,10 @@ namespace QS3D.Core.Diagnostics
             return false;
         }
 
-        private static DiagnosticProviderResult[] ExecuteProvidersInParallel(DiagnosticProvider[] providers)
+        private static DiagnosticProviderResult[] ExecuteProvidersInParallel(DiagnosticProvider[] providers, int maxDegreeOfParallelism)
         {
             var results = new DiagnosticProviderResult[providers.Length];
-            var options = new ParallelOptions
-            {
-                MaxDegreeOfParallelism = Math.Max(1, Math.Min(MaximumProviderParallelism, Environment.ProcessorCount))
-            };
+            var options = new ParallelOptions { MaxDegreeOfParallelism = maxDegreeOfParallelism };
             Parallel.For(0, providers.Length, options, index =>
             {
                 results[index] = ExecuteProvider(providers[index]);
