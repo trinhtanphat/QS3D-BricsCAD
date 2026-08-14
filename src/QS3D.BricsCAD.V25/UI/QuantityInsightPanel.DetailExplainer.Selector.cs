@@ -11,7 +11,13 @@ namespace QS3D.BricsCAD.V25.UI
             _quantityDetailSelector.SelectionChanged += OnQuantityDetailSelectionChanged;
             root.Children.Add(_quantityDetailSelector);
             _quantityDetailBody = new StackPanel { Visibility = Visibility.Collapsed };
-            root.Children.Add(_quantityDetailBody);
+            root.Children.Add(new ScrollViewer
+            {
+                Content = _quantityDetailBody,
+                MaxHeight = 245d,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+            });
             _quantityDetailContext = new TextBlock { FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap };
             _quantityDetailCount = CaptionText();
             _quantityDetailBody.Children.Add(_quantityDetailContext);
