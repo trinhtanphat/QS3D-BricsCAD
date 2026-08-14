@@ -140,7 +140,9 @@ namespace QS3D.Core.Documentation
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (definitions == null) throw new ArgumentNullException(nameof(definitions));
 
+            var projectSnapshot = CaptureProjectStructure(project);
             var materialized = MaterializeCatalogBounded(definitions);
+            EnsureProjectStructureUnchanged(project, projectSnapshot);
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var plans = new List<SemanticViewPlan>(materialized.Count);
@@ -153,11 +155,38 @@ namespace QS3D.Core.Documentation
                 plans.Add(plan);
             }
 
-            return plans
+            var result = plans
                 .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList()
                 .AsReadOnly();
+            EnsureProjectStructureUnchanged(project, projectSnapshot);
+            return result;
+        }
+
+        private static ProjectStructureSnapshot CaptureProjectStructure(ProjectState project) =>
+            new ProjectStructureSnapshot(
+                project.ChangeVersion,
+                project.Elements.ToArray(),
+                project.Floors.ToArray(),
+                project.Zones.ToArray());
+
+        private static void EnsureProjectStructureUnchanged(ProjectState project, ProjectStructureSnapshot snapshot)
+        {
+            if (project.ChangeVersion != snapshot.ChangeVersion)
+                throw new InvalidOperationException("Project changed while the semantic view catalog was being planned.");
+            EnsureSameReferences(project.Elements, snapshot.Elements);
+            EnsureSameReferences(project.Floors, snapshot.Floors);
+            EnsureSameReferences(project.Zones, snapshot.Zones);
+        }
+
+        private static void EnsureSameReferences<T>(IList<T> current, IReadOnlyList<T> expected) where T : class
+        {
+            if (current.Count != expected.Count)
+                throw new InvalidOperationException("Project structure changed while the semantic view catalog was being planned.");
+            for (var i = 0; i < expected.Count; i++)
+                if (!ReferenceEquals(current[i], expected[i]))
+                    throw new InvalidOperationException("Project structure changed while the semantic view catalog was being planned.");
         }
 
         private static List<SemanticViewDefinition> MaterializeCatalogBounded(IEnumerable<SemanticViewDefinition> definitions)
@@ -173,6 +202,26 @@ namespace QS3D.Core.Documentation
                 }
             }
             return result;
+        }
+
+        private sealed class ProjectStructureSnapshot
+        {
+            public ProjectStructureSnapshot(
+                long changeVersion,
+                IReadOnlyList<ProjectElement> elements,
+                IReadOnlyList<FloorDefinition> floors,
+                IReadOnlyList<ZoneDefinition> zones)
+            {
+                ChangeVersion = changeVersion;
+                Elements = elements;
+                Floors = floors;
+                Zones = zones;
+            }
+
+            public long ChangeVersion { get; }
+            public IReadOnlyList<ProjectElement> Elements { get; }
+            public IReadOnlyList<FloorDefinition> Floors { get; }
+            public IReadOnlyList<ZoneDefinition> Zones { get; }
         }
 
         private static Dictionary<string, ProjectElement> BuildUniqueElementIndex(ProjectState project)
