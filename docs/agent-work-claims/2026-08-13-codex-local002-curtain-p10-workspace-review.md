@@ -1,6 +1,6 @@
 # Work claim — LOCAL-002 P10 generated Curtain Workspace review
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local002-p10-20260813` (`/root`, local Windows + licensed BricsCAD V25 worker)
 - Registered: `2026-08-13T17:54:48+07:00`
 - Baseline main SHA: `68bbfc36f3ce1f178db8b716454c1435a9027fe5`
@@ -91,3 +91,9 @@ The guarded licensed rerun on exact main SHA `22cca51cd40fbccf1e3b0ee72cddd9e6de
 Source audit found no production Workspace, Health or Release defect. The runner opened several modeless/modal review commands after the first exact-panel reseed and did not re-establish the stored panel immediately before completion. In addition, `QS3DCURTAINP10COMPLETE` did not request the incoming PICKFIRST set. The automation correction therefore reuses the existing `QS3DCURTAINP10RESELECT` immediately after `QS3DCURTAINP10PROGRESSRELEASE`, then invokes completion as `Modal | UsePickSet`. Completion remains read-only and now maps only to six allowlisted branch codes: `PROJECT_STATE_REJECTED`, `PREREQUISITES_REJECTED`, `RELEASE_STATUS_NOT_READY`, `SOURCE_PANEL_LIVE_REJECTED`, `PANEL_SELECTION_NOT_CURRENT`, and `CURTAIN_PANEL_HEALTH_REJECTED`. No raw status, text, count, identifier, path or exception payload is emitted.
 
 PR `#1288` merged this probe/runner/focused-gate-only correction at exact main SHA `4b6cfbec31f76e7bd4f3ed0c907963516221c7c8`. On that exact merge, the PowerShell parser and focused P10 gate passed; the installed-reference BricsCAD V25 `Release|x64` build passed with zero warnings and zero errors, and adapter ProductVersion was `0.1.0-preview.11+4b6cfbec31f76e7bd4f3ed0c907963516221c7c8`. Production Release, Workspace and Health source remained unchanged; no BricsCAD process, private data or GitHub Actions was used. This claim stays `ACTIVE`; P10 and overall LOCAL-002 remain `PENDING_LOCAL` for a guarded licensed rerun on an exact descendant.
+
+## 2026-08-14 licensed PASS and closeout
+
+The guarded licensed rerun on exact merged-main descendant `6c56a10add09a8ab4a844178c0f264d0f109cf73` passed the complete P10 contract. Its sanitized marker reported exactly one selected generated panel and one canonical GlassWall owner, correct Family review and instance scope, Health All `READY`, Release Check `READY`, unchanged project state, preserved source, one live panel, zero Curtain health issues and `p10_qualified=true`. Process, private-state, script, drawing-hash and UI-layout cleanup all passed, with zero remaining BricsCAD processes. The evidence is recorded on issue `#1106`, which is closed.
+
+P10 is `LOCAL_PASS` and this bounded claim is `COMPLETED`. Overall LOCAL-002 remains `PENDING_LOCAL` because independent P11 / issue `#987` native Undo qualification is still unresolved. No broader LOCAL-002 promotion is inferred from this P10 result.
