@@ -26,6 +26,7 @@ namespace QS3D.BricsCAD.V25
             new Dictionary<Document, ObserverRegistration>();
         private static readonly Dictionary<Document, DocumentHistory> Histories =
             new Dictionary<Document, DocumentHistory>();
+        private static bool _suppressUndoUntilStableCommand;
 
         private sealed class ObserverRegistration
         {
@@ -46,6 +47,7 @@ namespace QS3D.BricsCAD.V25
             public CommandEventHandler CommandCancelled { get; }
             public CommandEventHandler CommandFailed { get; }
             public string? PendingCommand { get; set; }
+            public int ActiveCommandDepth { get; set; }
 
             public void Subscribe(Document document)
             {
@@ -183,7 +185,7 @@ namespace QS3D.BricsCAD.V25
                     if (_disposed || !_staged || _stagedEntries == null) return;
                     if (!Histories.TryGetValue(_document, out var current) || !ReferenceEquals(current, _history))
                     {
-                        _history.Desynchronized = true;
+                        _history.MarkDesynchronized(DesynchronizationCause.CommitHistoryLost);
                         _committed = true;
                         return;
                     }
@@ -214,6 +216,13 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        internal enum DesynchronizationCause
+        {
+            None,
+            CommitHistoryLost,
+            RestoreRecoveryFailed
+        }
+
         internal sealed class DocumentHistory
         {
             public DocumentHistory(Document document, ProjectState project, string revision)
@@ -228,9 +237,17 @@ namespace QS3D.BricsCAD.V25
             public ProjectState Project { get; }
             public string ProjectId { get; }
             public string CurrentRevision { get; set; }
-            public bool Desynchronized { get; set; }
+            public bool Desynchronized => Cause != DesynchronizationCause.None;
+            public DesynchronizationCause Cause { get; private set; }
             public Dictionary<string, HistoryEntry> Entries { get; private set; } =
                 new Dictionary<string, HistoryEntry>(StringComparer.Ordinal);
+
+            public void MarkDesynchronized(DesynchronizationCause cause)
+            {
+                if (cause == DesynchronizationCause.None)
+                    throw new ArgumentOutOfRangeException(nameof(cause));
+                Cause = cause;
+            }
 
             public void Publish(Dictionary<string, HistoryEntry> entries, string revision)
             {
@@ -287,17 +304,20 @@ namespace QS3D.BricsCAD.V25
             internal SanitizedDiagnosticSnapshot(
                 string historyState,
                 string entryClass,
+                string desynchronizationCause,
                 string nativeRevision,
                 bool markerValid)
             {
                 HistoryState = historyState;
                 EntryClass = entryClass;
+                DesynchronizationCause = desynchronizationCause;
                 _nativeRevision = nativeRevision;
                 _markerValid = markerValid;
             }
 
             public string HistoryState { get; }
             public string EntryClass { get; }
+            public string DesynchronizationCause { get; }
 
             public string CompareMarkerTo(SanitizedDiagnosticSnapshot before)
             {
@@ -341,36 +361,59 @@ namespace QS3D.BricsCAD.V25
             lock (Gate)
             {
                 if (!Histories.TryGetValue(document, out history))
-                    return new SanitizedDiagnosticSnapshot("NONE", "ONE", nativeRevision, markerValid);
+                    return new SanitizedDiagnosticSnapshot("NONE", "ONE", "NONE", nativeRevision, markerValid);
 
                 entryClass = history.Entries.Count > 1 ? "MULTIPLE" : "ONE";
-                if (history.Desynchronized ||
-                    !ReferenceEquals(history.Document, document) ||
+                if (history.Desynchronized)
+                    return new SanitizedDiagnosticSnapshot(
+                        "DESYNCHRONIZED",
+                        entryClass,
+                        ClassifyDesynchronizationCause(history.Cause),
+                        nativeRevision,
+                        markerValid);
+                if (!ReferenceEquals(history.Document, document) ||
                     !ReferenceEquals(history.Project, project) ||
                     !string.Equals(history.ProjectId, project.ProjectId, StringComparison.Ordinal))
-                    return new SanitizedDiagnosticSnapshot("DESYNCHRONIZED", entryClass, nativeRevision, markerValid);
+                    return new SanitizedDiagnosticSnapshot(
+                        "DESYNCHRONIZED", entryClass, "HISTORY_AFFINITY_MISMATCH", nativeRevision, markerValid);
             }
 
             if (!ProjectContextCoordinator.TryGetCached(document, out var cached) || !ReferenceEquals(cached, project))
-                return new SanitizedDiagnosticSnapshot("DESYNCHRONIZED", entryClass, nativeRevision, markerValid);
+                return new SanitizedDiagnosticSnapshot(
+                    "DESYNCHRONIZED", entryClass, "CACHE_PROJECT_MISMATCH", nativeRevision, markerValid);
 
             lock (Gate)
             {
                 if (!Histories.TryGetValue(document, out var currentHistory) || !ReferenceEquals(currentHistory, history))
-                    return new SanitizedDiagnosticSnapshot("NONE", "ONE", nativeRevision, markerValid);
+                    return new SanitizedDiagnosticSnapshot("NONE", "ONE", "NONE", nativeRevision, markerValid);
 
                 entryClass = history.Entries.Count > 1 ? "MULTIPLE" : "ONE";
-                if (history.Desynchronized ||
-                    !ReferenceEquals(history.Document, document) ||
+                if (history.Desynchronized)
+                    return new SanitizedDiagnosticSnapshot(
+                        "DESYNCHRONIZED",
+                        entryClass,
+                        ClassifyDesynchronizationCause(history.Cause),
+                        nativeRevision,
+                        markerValid);
+                if (!ReferenceEquals(history.Document, document) ||
                     !ReferenceEquals(history.Project, project) ||
                     !string.Equals(history.ProjectId, project.ProjectId, StringComparison.Ordinal))
-                    return new SanitizedDiagnosticSnapshot("DESYNCHRONIZED", entryClass, nativeRevision, markerValid);
+                    return new SanitizedDiagnosticSnapshot(
+                        "DESYNCHRONIZED", entryClass, "HISTORY_AFFINITY_MISMATCH", nativeRevision, markerValid);
 
                 if (!markerValid || !string.Equals(nativeRevision, history.CurrentRevision, StringComparison.Ordinal))
-                    return new SanitizedDiagnosticSnapshot("MARKER_MISMATCH", entryClass, nativeRevision, markerValid);
+                    return new SanitizedDiagnosticSnapshot(
+                        "MARKER_MISMATCH", entryClass, "NONE", nativeRevision, markerValid);
 
-                return new SanitizedDiagnosticSnapshot("SYNCED", entryClass, nativeRevision, markerValid);
+                return new SanitizedDiagnosticSnapshot("SYNCED", entryClass, "NONE", nativeRevision, markerValid);
             }
+        }
+
+        private static string ClassifyDesynchronizationCause(DesynchronizationCause cause)
+        {
+            if (cause == DesynchronizationCause.CommitHistoryLost) return "COMMIT_HISTORY_LOST";
+            if (cause == DesynchronizationCause.RestoreRecoveryFailed) return "RESTORE_RECOVERY_FAILED";
+            return "NONE";
         }
 
         public static void Attach(Document? document)
@@ -402,7 +445,10 @@ namespace QS3D.BricsCAD.V25
             {
                 if (ObserverRegistrations.TryGetValue(document, out registration))
                 {
+                    if (registration.ActiveCommandDepth > 0)
+                        _suppressUndoUntilStableCommand = true;
                     registration.PendingCommand = null;
+                    registration.ActiveCommandDepth = 0;
                     ObserverRegistrations.Remove(document);
                 }
                 Histories.Remove(document);
@@ -415,6 +461,7 @@ namespace QS3D.BricsCAD.V25
             Document[] documents;
             lock (Gate) documents = new List<Document>(ObserverRegistrations.Keys).ToArray();
             foreach (var document in documents) Detach(document);
+            lock (Gate) _suppressUndoUntilStableCommand = false;
         }
 
         public static void Forget(Document? document)
@@ -499,6 +546,23 @@ namespace QS3D.BricsCAD.V25
             {
                 if (!ObserverRegistrations.TryGetValue(document, out var registration)) return;
 
+                var nested = HasActiveCommand();
+                if (_suppressUndoUntilStableCommand &&
+                    normalized == null &&
+                    !nested &&
+                    IsActiveDocument(document))
+                {
+                    // A document can be detached while its outer command is
+                    // still executing (for example CloseAndDiscard from a
+                    // command in that document). Its terminal callback is then
+                    // intentionally unavailable. The next ordinary top-level
+                    // command is the first stable boundary at which a later
+                    // user Undo may be armed safely.
+                    _suppressUndoUntilStableCommand = false;
+                }
+                var topLevel = !_suppressUndoUntilStableCommand && !nested;
+                registration.ActiveCommandDepth++;
+
                 // A second start before the first command reaches a terminal
                 // event makes the event stream ambiguous. Invalidate the token
                 // rather than allowing a nested/internal completion to consume it.
@@ -507,7 +571,7 @@ namespace QS3D.BricsCAD.V25
                     registration.PendingCommand = null;
                     return;
                 }
-                if (normalized == null || !IsActiveDocument(document)) return;
+                if (normalized == null || !topLevel || !IsActiveDocument(document)) return;
                 if (!Histories.TryGetValue(document, out var history) || history.Desynchronized) return;
                 registration.PendingCommand = normalized;
             }
@@ -627,7 +691,11 @@ namespace QS3D.BricsCAD.V25
             lock (Gate)
             {
                 if (ObserverRegistrations.TryGetValue(document, out var registration))
+                {
                     registration.PendingCommand = null;
+                    if (registration.ActiveCommandDepth > 0)
+                        registration.ActiveCommandDepth--;
+                }
             }
         }
 
@@ -639,11 +707,22 @@ namespace QS3D.BricsCAD.V25
                 if (!ObserverRegistrations.TryGetValue(document, out var registration)) return false;
                 var pendingCommand = registration.PendingCommand;
                 registration.PendingCommand = null;
+                if (registration.ActiveCommandDepth <= 0) return false;
+                registration.ActiveCommandDepth--;
                 return normalized != null &&
                     pendingCommand != null &&
                     string.Equals(normalized, pendingCommand, StringComparison.Ordinal) &&
                     IsActiveDocument(document);
             }
+        }
+
+        private static bool HasActiveCommand()
+        {
+            foreach (var registration in ObserverRegistrations.Values)
+            {
+                if (registration.ActiveCommandDepth > 0) return true;
+            }
+            return false;
         }
 
         private static bool IsActiveDocument(Document document)
@@ -669,7 +748,7 @@ namespace QS3D.BricsCAD.V25
             string message,
             Exception? inner = null)
         {
-            lock (Gate) history.Desynchronized = true;
+            lock (Gate) history.MarkDesynchronized(DesynchronizationCause.RestoreRecoveryFailed);
             return inner == null ? new InvalidOperationException(message) : new InvalidOperationException(message, inner);
         }
 

@@ -44,6 +44,10 @@ for token in (
     "OnCommandAborted(document)",
     "TryConsumeMatchingCommand(document, args?.GlobalCommandName)",
     "NormalizeNativeUndoRedo(args?.GlobalCommandName)",
+    "registration.ActiveCommandDepth++",
+    "registration.ActiveCommandDepth--",
+    "HasActiveCommand()",
+    "_suppressUndoUntilStableCommand",
     "IsActiveDocument(document)",
     "registration.PendingCommand = null",
     "ObserverRegistrations.TryGetValue(document, out var registration)",
@@ -61,7 +65,8 @@ for token in (
     "modelSpace.XData = marker",
     "OpenModelSpace(document.Database, transaction, OpenMode.ForWrite)",
     "MaxSnapshotsPerDocument = 128",
-    "history.Desynchronized = true",
+    "history.MarkDesynchronized(DesynchronizationCause.RestoreRecoveryFailed)",
+    "_history.MarkDesynchronized(DesynchronizationCause.CommitHistoryLost)",
     "new Dictionary<string, HistoryEntry>(_history.Entries, StringComparer.Ordinal)",
     "_history.Publish(_stagedEntries, _nextRevision);",
     "_registeredHistory",
@@ -71,6 +76,7 @@ for token in (
     "internal static SanitizedDiagnosticSnapshot CaptureSanitizedState(",
     "public string HistoryState { get; }",
     "public string EntryClass { get; }",
+    "public string DesynchronizationCause { get; }",
     "public string CompareMarkerTo(SanitizedDiagnosticSnapshot before)",
     'return "MISSING_OR_INVALID";',
     '? "UNCHANGED"',
@@ -124,6 +130,8 @@ else:
     for token in (
         '"NONE"', '"SYNCED"', '"MARKER_MISMATCH"', '"DESYNCHRONIZED"',
         '"ONE"', '"MULTIPLE"', '"ADVANCED"', '"UNCHANGED"', '"MISSING_OR_INVALID"',
+        '"COMMIT_HISTORY_LOST"', '"RESTORE_RECOVERY_FAILED"',
+        '"HISTORY_AFFINITY_MISMATCH"', '"CACHE_PROJECT_MISMATCH"',
         "private readonly string _nativeRevision;",
         "ProjectContextCoordinator.TryGetCached(document, out var cached)",
         "ReferenceEquals(cached, project)",
@@ -136,6 +144,8 @@ else:
         "public string ProjectId",
         "public int EntryCount",
         "return _nativeRevision",
+        "return history.ProjectId",
+        "return history.CurrentRevision",
         "Attach(document)",
         "Histories.Add(",
         "Histories.Remove(",
@@ -175,6 +185,11 @@ else:
         errors.append("BeginTransition must not mutate the native marker before fallible reconcile work completes")
     if "_history.Publish(_stagedEntries, _nextRevision);" not in confirm_body:
         errors.append("published semantic revision must advance only in post-CAD-commit confirmation")
+    if (
+        "!Histories.TryGetValue(_document, out var current) || !ReferenceEquals(current, _history)" not in confirm_body
+        or "_history.MarkDesynchronized(DesynchronizationCause.CommitHistoryLost);" not in confirm_body
+    ):
+        errors.append("commit-history loss must be classified only on the orphaned/replaced transition history")
     if "CurrentRevision = _nextRevision" in stage_body:
         errors.append("StageAfter must not expose an uncommitted semantic revision")
     if 'string.Equals(normalized, "U", StringComparison.OrdinalIgnoreCase)' in filter_body:
@@ -183,10 +198,13 @@ else:
     if (
         "if (registration.PendingCommand != null)" not in will_body
         or "registration.PendingCommand = null;" not in will_body
-        or "normalized == null || !IsActiveDocument(document)" not in will_body
+        or "var nested = HasActiveCommand();" not in will_body
+        or "var topLevel = !_suppressUndoUntilStableCommand && !nested;" not in will_body
+        or "registration.ActiveCommandDepth++;" not in will_body
+        or "normalized == null || !topLevel || !IsActiveDocument(document)" not in will_body
         or "registration.PendingCommand = normalized;" not in will_body
     ):
-        errors.append("Undo observer must arm one active-document native command token and invalidate ambiguous nested starts")
+        errors.append("Undo observer must arm one globally top-level active-document native command token and invalidate nested starts")
     consume_gate = ended_body.find("if (!TryConsumeMatchingCommand(document, args?.GlobalCommandName)) return;")
     marker_read_start = ended_body.find("try { nativeRevision = ReadRevision(document); }")
     if consume_gate < 0 or marker_read_start < 0 or consume_gate > marker_read_start:
@@ -194,12 +212,17 @@ else:
     if (
         "var pendingCommand = registration.PendingCommand;" not in consume_body
         or "registration.PendingCommand = null;" not in consume_body
+        or "if (registration.ActiveCommandDepth <= 0) return false;" not in consume_body
+        or "registration.ActiveCommandDepth--;" not in consume_body
         or "string.Equals(normalized, pendingCommand, StringComparison.Ordinal)" not in consume_body
         or "IsActiveDocument(document)" not in consume_body
     ):
         errors.append("Undo completion must clear intent and match command plus active document exactly")
-    if "registration.PendingCommand = null;" not in aborted_body:
-        errors.append("cancelled and failed native commands must clear pending Undo intent")
+    if (
+        "registration.PendingCommand = null;" not in aborted_body
+        or "registration.ActiveCommandDepth--;" not in aborted_body
+    ):
+        errors.append("cancelled and failed commands must clear pending Undo intent and close command depth")
 
     target_start = ended_body.find("HistoryEntry targetEntry;", marker_read_start)
     stamp_start = ended_body.find("if (!currentEntry.Stamp.Matches(project))", target_start)
@@ -237,6 +260,9 @@ else:
         double_failure = ended_body[rollback_failure_start:recovered_restore_start]
         if "MarkDesynchronized(history," not in double_failure or "new AggregateException(restoreError, rollbackError)" not in double_failure:
             errors.append("sticky desync must remain bound to combined semantic restore and recovery failure")
+        mark_body = coordinator[mark_start:coordinator.find("private static void RequireCurrentHistory(", mark_start)]
+        if "history.MarkDesynchronized(DesynchronizationCause.RestoreRecoveryFailed);" not in mark_body:
+            errors.append("live sticky history must carry the RESTORE_RECOVERY_FAILED sanitized cause")
         if "CurrentRevision =" in ended_body[target_start:advance_start]:
             errors.append("all observer refusals and recovered restore failures must leave CurrentRevision unchanged")
 
@@ -250,57 +276,105 @@ def normalize_command(name):
     return normalized if normalized in ("UNDO", "REDO", "MREDO") else None
 
 
-class CommandIntent:
+class CommandRegistration:
     def __init__(self):
         self.pending = None
+        self.depth = 0
 
-    def will_start(self, name, active, history_current=True):
-        if self.pending is not None:
-            self.pending = None
+
+class CommandIntent:
+    def __init__(self, *documents):
+        self.registrations = {document: CommandRegistration() for document in documents}
+        self.suppress_until_stable = False
+
+    def has_active_command(self):
+        return any(registration.depth > 0 for registration in self.registrations.values())
+
+    def will_start(self, document, name, active, history_current=True):
+        registration = self.registrations[document]
+        normalized = normalize_command(name)
+        nested = self.has_active_command()
+        if self.suppress_until_stable and normalized is None and not nested and active:
+            self.suppress_until_stable = False
+        top_level = not self.suppress_until_stable and not nested
+        registration.depth += 1
+        if registration.pending is not None:
+            registration.pending = None
             return
-        normalized = normalize_command(name)
-        if normalized is not None and active and history_current:
-            self.pending = normalized
+        if normalized is not None and top_level and active and history_current:
+            registration.pending = normalized
 
-    def ended(self, name, active):
+    def ended(self, document, name, active):
+        registration = self.registrations[document]
         normalized = normalize_command(name)
-        pending = self.pending
-        self.pending = None
+        pending = registration.pending
+        registration.pending = None
+        if registration.depth <= 0:
+            return False
+        registration.depth -= 1
         return normalized is not None and normalized == pending and active
 
-    def aborted(self):
-        self.pending = None
+    def aborted(self, document):
+        registration = self.registrations[document]
+        registration.pending = None
+        if registration.depth > 0:
+            registration.depth -= 1
+
+    def detach(self, document):
+        registration = self.registrations.pop(document)
+        if registration.depth > 0:
+            self.suppress_until_stable = True
 
 
-intent = CommandIntent()
-if intent.ended("UNDO", True):
+intent = CommandIntent("A", "B")
+if intent.ended("A", "UNDO", True):
     errors.append("an unmatched internal CommandEnded(UNDO) reached semantic history")
-intent.will_start("UNDO", False)
-if intent.ended("UNDO", True):
+intent.will_start("A", "UNDO", False)
+if intent.ended("A", "UNDO", True):
     errors.append("an inactive-document Undo start armed semantic history")
-intent.will_start("UNDO", True)
-if intent.ended("UNDO", False):
+intent.will_start("A", "UNDO", True)
+if intent.ended("A", "UNDO", False):
     errors.append("an Undo completion after document deactivation reached semantic history")
-intent.will_start("UNDO", True)
-intent.aborted()
-if intent.ended("UNDO", True):
+intent.will_start("A", "UNDO", True)
+intent.aborted("A")
+if intent.ended("A", "UNDO", True):
     errors.append("a cancelled/failed Undo left stale intent")
-intent.will_start("UNDO", True)
-if intent.ended("REDO", True):
+intent.will_start("A", "UNDO", True)
+if intent.ended("A", "REDO", True):
     errors.append("a mismatched terminal event consumed Undo intent")
-intent.will_start("UNDO", True)
-intent.will_start("UNDO", True)
-if intent.ended("UNDO", True):
+intent.will_start("A", "UNDO", True)
+intent.will_start("A", "UNDO", True)
+if intent.ended("A", "UNDO", True):
     errors.append("ambiguous duplicate starts retained native Undo intent")
-intent.will_start("_UNDO", True)
-if not intent.ended(".UNDO", True):
+intent.ended("A", "UNDO", True)
+intent.will_start("A", "_UNDO", True)
+if not intent.ended("A", ".UNDO", True):
     errors.append("a matched active-document native Undo did not reach history")
-intent.will_start("REDO", True)
-if not intent.ended("REDO", True):
+intent.will_start("A", "REDO", True)
+if not intent.ended("A", "REDO", True):
     errors.append("a matched active-document native Redo did not reach history")
-intent.will_start("U", True)
-if intent.ended("U", True):
+intent.will_start("A", "U", True)
+if intent.ended("A", "U", True):
     errors.append("single-letter U armed semantic Undo history")
+
+# A modal command in B can activate A and close B. Any complete native Undo
+# pair emitted for A while B's command is live is internal host work, not user
+# Undo authority. If B is detached before its terminal event, suppression must
+# survive that missing callback until A reaches an ordinary stable boundary.
+intent = CommandIntent("A", "B")
+intent.will_start("B", "QS3DSRTCHECKB", True)
+intent.will_start("A", "UNDO", True)
+if intent.ended("A", "UNDO", True):
+    errors.append("cross-document nested Undo reached Source Reconcile history")
+intent.detach("B")
+intent.will_start("A", "REDO", True)
+if intent.ended("A", "REDO", True):
+    errors.append("post-detach internal Redo escaped incomplete-command suppression")
+intent.will_start("A", "QS3DSRTSELECTSOURCES", True)
+intent.ended("A", "QS3DSRTSELECTSOURCES", True)
+intent.will_start("A", "UNDO", True)
+if not intent.ended("A", "UNDO", True):
+    errors.append("stable ordinary command boundary did not re-enable deliberate top-level Undo")
 
 # State classification is independent of command provenance. Internal BricsCAD
 # work can emit a complete native command pair, so read-only refusal must rely
