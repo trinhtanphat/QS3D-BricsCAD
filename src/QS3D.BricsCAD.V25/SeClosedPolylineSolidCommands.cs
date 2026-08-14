@@ -77,56 +77,63 @@ namespace QS3D.BricsCAD.V25
                     .GroupBy(x => x.Handle, StringComparer.OrdinalIgnoreCase)
                     .Select(x => x.First())
                     .ToList();
-                var originalHandles = sources.Select(x => x.Handle).ToArray();
-                var failures = new List<string>();
-                var successCount = 0;
+                if (sources.Count == 0)
+                {
+                    Report(document, "SE: no usable source was selected.");
+                    return;
+                }
 
+                var originalHandles = sources.Select(x => x.Handle).ToArray();
+                var sourceIds = new List<ObjectId>(sources.Count);
+
+                // Validate the complete input batch before any semantic mutation. This keeps a bad
+                // profile from leaving a successfully-created subset behind.
+                foreach (var snapshot in sources)
+                    sourceIds.Add(RequireClosedPolylineSource(document, snapshot.Handle));
+
+                var batchRollback = ProjectStateSnapshot.Capture(project);
                 try
                 {
                     foreach (var snapshot in sources)
                     {
-                        var rollback = ProjectStateSnapshot.Capture(project);
-                        try
-                        {
-                            activeFamily = ProjectFamilyActivationService.GetActive(project);
-                            RequireSameActiveFamily(activeFamily, expectedFamilyId, expectedCategory);
-
-                            var sourceId = RequireClosedPolylineSource(document, snapshot.Handle);
-                            if (!SemanticCaptureActiveFamilyAdapter.CaptureSnapshot(document, project, snapshot, activeFamily!))
-                                throw new InvalidOperationException("Semantic capture did not update an element.");
-
-                            document.Editor.SetImpliedSelection(new[] { sourceId });
-                            if (StructuralSolidBuilder.BuildSelected(document, project, expectedCategory) != 1)
-                                throw new InvalidOperationException("Native solid builder did not create exactly one solid.");
-
-                            successCount++;
-                        }
-                        catch (Exception itemError)
-                        {
-                            try
-                            {
-                                rollback.Restore(project);
-                            }
-                            catch (Exception restoreError)
-                            {
-                                throw new InvalidOperationException(
-                                    "SE item failed and project rollback also failed.",
-                                    new AggregateException(itemError, restoreError));
-                            }
-                            failures.Add(snapshot.Handle + ": " + itemError.Message);
-                        }
+                        activeFamily = ProjectFamilyActivationService.GetActive(project);
+                        RequireSameActiveFamily(activeFamily, expectedFamilyId, expectedCategory);
+                        if (!SemanticCaptureActiveFamilyAdapter.CaptureSnapshot(document, project, snapshot, activeFamily!))
+                            throw new InvalidOperationException("Semantic capture did not update source " + snapshot.Handle + ".");
                     }
+
+                    // StructuralSolidBuilder owns one CAD transaction for the implied selection.
+                    // Supplying the whole batch at once makes a builder exception abort every
+                    // native solid instead of committing profile-by-profile.
+                    document.Editor.SetImpliedSelection(sourceIds.ToArray());
+                    var built = StructuralSolidBuilder.BuildSelected(document, project, expectedCategory);
+                    if (built != sources.Count)
+                        throw new InvalidOperationException(
+                            "Native solid builder created " + built + " of " + sources.Count + " requested solids.");
+
+                    Report(document, "SE: " + built + "/" + sources.Count + " source(s) created native solids atomically; source polylines were retained.");
+                }
+                catch (Exception batchError)
+                {
+                    try
+                    {
+                        batchRollback.Restore(project);
+                    }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException(
+                            "SE batch failed and project rollback also failed.",
+                            new AggregateException(batchError, restoreError));
+                    }
+
+                    throw new InvalidOperationException(
+                        "SE batch failed; QS3D semantic changes were rolled back. " + batchError.Message,
+                        batchError);
                 }
                 finally
                 {
                     RestoreSelection(document, originalHandles);
                 }
-
-                Report(document, "SE: " + successCount + "/" + sources.Count + " source(s) created native solids; source polylines were retained.");
-                for (var i = 0; i < Math.Min(failures.Count, 10); i++)
-                    Report(document, "SE skipped " + failures[i]);
-                if (failures.Count > 10)
-                    Report(document, "SE: " + (failures.Count - 10) + " additional item error(s).");
             }
             catch (Exception ex)
             {
@@ -148,6 +155,12 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("SE accepts live POLYLINE sources only.");
                 if (!polyline.Closed)
                     throw new InvalidOperationException("SE accepts closed POLYLINE sources only.");
+
+                var normal = polyline.Normal;
+                if (Math.Abs(normal.X) > 1e-9 ||
+                    Math.Abs(normal.Y) > 1e-9 ||
+                    Math.Abs(Math.Abs(normal.Z) - 1d) > 1e-9)
+                    throw new InvalidOperationException("SE requires a planar 2D POLYLINE parallel to the drawing XY plane.");
 
                 var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
                 if (polyline.OwnerId != blockTable[BlockTableRecord.ModelSpace])
