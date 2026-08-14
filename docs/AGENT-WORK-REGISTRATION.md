@@ -87,6 +87,38 @@ For a specific owner request, agents may state **ALL MERGED TO MAIN** only after
 
 `ALL MERGED TO MAIN` means repository integration is complete for the specified owner request. It does **not** automatically mean every LOCAL_ONLY runtime qualification, signing/release gate or unrelated repository claim is complete. Use `ALL DONE` only when those additional requested gates are also satisfied.
 
+## Integration freeze gate before final CI
+
+Branch, issue and pull-request state are coordination signals, not independent proof that the requested batch is integrated. Before dispatching or treating any GitHub Actions run as the **final integrated CI** for a multi-agent batch, the integration reviewer must establish one explicit integration freeze point.
+
+1. **Freeze the participating batch:** identify the exact owner request/batch and stop participating agents from landing additional source changes until the candidate final SHA is recorded. Unrelated repository work may continue only when it cannot change the tree or required evidence for the batch; if it changes `main`, the candidate SHA is no longer current.
+2. **Claims are authoritative for active ownership:** every participating claim must be `COMPLETED`, `RELEASED`, or explicitly excluded from the batch. Any required `ACTIVE` or `BLOCKED` claim means the batch is not yet `ALL MERGED TO MAIN`.
+3. **PR state is not sufficient:** every required PR must either be merged into `main` or explicitly classified as unnecessary/superseded. A `CLOSED` but unmerged PR is not integrated merely because it is closed. A merged PR is still verified by checking the resulting commit/tree against current `main`.
+4. **Issue state is not merge evidence:** an issue may remain open as a tracking item after its required code has landed, and an issue may be closed before all related code is integrated. Do not use `OPEN`/`CLOSED` alone to decide whether final CI is safe.
+5. **Branch existence is not merge evidence:** an agent branch may remain after all of its required commits are already reachable from `main`; conversely, a branch can be deleted while a required commit was never integrated. Verify required commit reachability instead of counting branches.
+6. **Verify every required commit:** for each implementation/close-out commit that belongs to the batch, verify `git merge-base --is-ancestor <commit> origin/main` succeeds. Any required commit that is not reachable blocks the freeze.
+7. **Check for stranded work:** confirm there is no required code only in a branch, PR, local worktree, stash, draft patch, issue attachment or agent handoff note. Such work must be integrated or explicitly removed from the requested batch before final CI.
+8. **Refresh after the last landing:** fetch `origin/main` only after the last participating agent push/merge and record the resulting exact 40-character SHA as `FINAL_INTEGRATION_SHA`.
+9. **Integration review the combined tree:** inspect the final tree for unresolved merge markers, accidental reversions, duplicated implementations, API/semantic mismatches and tests that only passed on pre-integration trees.
+10. **Run final CI only for the freeze SHA:** subject to `CI_POLICY.md` and owner authorization, dispatch/accept the final integrated CI only when it is tied to `FINAL_INTEGRATION_SHA`.
+11. **Invalidate stale CI immediately:** if `main` moves after `FINAL_INTEGRATION_SHA` is recorded, a green run for the old SHA remains evidence only for that old SHA. It is not proof that current `main` is green. Re-establish the freeze on the new head and run/accept exact-SHA CI again when required.
+12. **Report the gate explicitly:** final coordination reports should include at minimum `ALL MERGED TO MAIN`, `FINAL_INTEGRATION_SHA`, participating active-required claims count, required open/unmerged PR count, required unreachable commit count, integration-review result and exact-SHA CI status.
+
+Canonical state progression for a multi-agent batch:
+
+```text
+AGENTS_WORKING
+    -> AGENTS_LANDING
+    -> INTEGRATION_REVIEW
+    -> ALL_MERGED_TO_MAIN
+    -> FINAL_INTEGRATION_SHA locked
+    -> CI_EXACT_SHA
+    -> CI_GREEN
+    -> ALL_DONE
+```
+
+Do not compress these states into “all done” merely because each agent individually reported a successful commit, a PR shows `Merged`, an issue shows `Closed`, or a branch disappeared. The final integration decision is based on the combined current `main` tree and exact commit reachability.
+
 ## Required claim contents
 
 Every claim must include:
