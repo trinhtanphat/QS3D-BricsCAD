@@ -357,6 +357,7 @@ namespace QS3D.Core.Domain
             }
             return changed;
         }
+
         private bool MarkGeneratedCurtainPanelOutputStale(out bool hasOutput)
         {
             var signature = CurtainPanelOutputSignature();
