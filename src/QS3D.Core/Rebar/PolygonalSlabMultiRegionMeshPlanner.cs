@@ -62,11 +62,12 @@ namespace QS3D.Core.Rebar
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
             if (input.Regions == null) throw new ArgumentNullException(nameof(input.Regions));
-            if (input.Regions.Count > MaxRegions)
+            var regionCount = input.Regions.Count;
+            if (regionCount > MaxRegions)
                 throw new ArgumentException("Polygonal slab multi-region mesh exceeds the supported " + MaxRegions + " region limit.", nameof(input.Regions));
 
-            var seeds = new List<PolygonRegionSeed2>(input.Regions.Count);
-            for (var index = 0; index < input.Regions.Count; index++)
+            var seeds = new List<PolygonRegionSeed2>(regionCount);
+            for (var index = 0; index < regionCount; index++)
             {
                 var region = input.Regions[index] ?? throw new ArgumentException("Polygonal slab multi-region input cannot contain a null region at index " + index + ".", nameof(input.Regions));
                 if (region.FootprintM == null) throw new ArgumentException("Polygonal slab multi-region footprint cannot be null at index " + index + ".", nameof(input.Regions));
