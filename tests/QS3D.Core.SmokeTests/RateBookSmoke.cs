@@ -39,6 +39,7 @@ namespace QS3D.Core.SmokeTests
                 var january = left.Resolve(new CostCode("conc"), "m3", "VND", Utc(2026, 1, 15));
                 True(january.IsMatched, "January lookup should match the first concrete rate.");
                 Equal("RATE-CONC-1", january.Item!.RateItemId, "January lookup rate id mismatch.");
+                Equal("CONC", january.CostCode.Value, "Matched resolution must expose the selected catalog CostCode identity.");
                 Equal(1500000m, january.Item.UnitRate, "January lookup unit rate mismatch.");
                 Equal("v1", january.Item.Version, "January lookup version mismatch.");
 
