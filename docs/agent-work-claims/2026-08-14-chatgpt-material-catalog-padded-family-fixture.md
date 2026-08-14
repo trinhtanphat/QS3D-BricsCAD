@@ -1,6 +1,6 @@
 # Work claim — Material Catalog padded FamilyId smoke reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-14T15:53:00+07:00`
 - Baseline main SHA: `f9bc896a7ae5fe4fc6a3abb1059409a7119547c3`
@@ -33,4 +33,9 @@ Reconcile only the padded-FamilyId regression expectation/message with canonical
 
 ## Completion record
 
-Pending implementation after this claim is merged to `main`.
+- Claim-only PR `#1243` merged at `ad86ce7999f234b46925d0c8bc5b2916a44f7465` before implementation.
+- Implementation commit `64f3d0aef2acd85d05829e5043c0631d9446dbab` changed only the final padded-FamilyId assertion/message; branch compare showed exactly one addition and one deletion in `ProjectMaterialCatalogSmoke.cs`.
+- Implementation PR `#1248` merged to `main` at `22bab55d7c3b9eda453ba8ea9c358d2a23576d1f`.
+- Readback of merged `main` confirms the regression still assigns a padded FamilyId, preserves the material rename/stale/dirty assertions, and now requires the canonical stored `family.Id` after rename.
+- No production code, preflight gate, native/local runner, workflow, Actions dispatch, release, or packaging surface changed.
+- This tool environment has no `dotnet`, so no fresh Core build/full-smoke PASS is claimed here. The next exact-main runner should use this merged SHA or a descendant and report the next independent blocker if one remains.
