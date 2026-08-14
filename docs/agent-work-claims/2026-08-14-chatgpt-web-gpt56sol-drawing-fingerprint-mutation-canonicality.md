@@ -1,48 +1,47 @@
 # Work claim — Drawing fingerprint public-mutation canonicality
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-14T20:39:11+07:00`
 - Baseline main SHA: `ce29bc89113961a4cd3874f5b5352ca50af5e260`
+- Claim commit: `69171c7c16840da804a9d397fd0e908b6f284d16`
 - Implementation branch: `agent/chatgpt-web-gpt56sol/drawing-fingerprint-mutation-canonicality-20260814`
 - Implementation commit: `d0e1531e9db15d55c1f14501b63c011ebc0da12f`
 - Integration batch: `integration/chatgpt-web-gpt56sol-drawing-fingerprint-mutation-canonicality-20260814`
-- Priority: Core P1 persistence integrity; public domain setters can currently admit a non-canonical drawing fingerprint that the canonical QSDB schema rejects on publication/readback.
+- Initial integration candidate: `807158a2332bf31d2cf4c0274b93c544c443d248`
+- Reconciled integration / final source landing: `9a6a3124265956bda4524901861cb8ba412f0adb`
+- Priority: Core P1 persistence integrity; public domain setters could admit a non-canonical drawing fingerprint that the canonical QSDB schema rejects on publication/readback.
 
 ## Reserved scope
 
-Close the public-mutation gap for project/element `DrawingFingerprint` only. Public assignments must normalize optional fingerprint identity consistently with the existing QSDB canonical attribute contract, reject control-character values before mutation, and preserve the existing valid value/revision state on rejection. Keep canonical/empty assignments round-trippable.
+Closed the public-mutation gap for project/element `DrawingFingerprint` only. Public assignments now normalize optional fingerprint identity consistently with the existing QSDB canonical attribute contract, reject control-character values before mutation, and preserve the existing valid value/revision state on rejection. Canonical/empty assignments remain round-trippable.
 
-## Expected surfaces
+## Changed surfaces
 
-- `src/QS3D.Core/Domain/ProjectState.cs` — `ProjectState.DrawingFingerprint` canonical optional identity mutation; preserve exact-once project persistence version semantics after normalization.
-- `src/QS3D.Core/Domain/ProjectElement.cs` — `ProjectElement.DrawingFingerprint` canonical optional identity mutation.
-- `tests/QS3D.Core.SmokeTests/QsdbDrawingFingerprintCanonicalitySmoke.cs` — focused public-mutation and QSDB round-trip regressions.
+- `src/QS3D.Core/Domain/ProjectState.cs` — `ProjectState.DrawingFingerprint` now validates raw control characters, trims to canonical optional identity, then delegates to the existing exact-once persisted-scalar revision path; canonical no-op assignment does not increment `ChangeVersion`.
+- `src/QS3D.Core/Domain/ProjectElement.cs` — `ProjectElement.DrawingFingerprint` now rejects control characters before mutation and trims accepted values.
+- `tests/QS3D.Core.SmokeTests/QsdbDrawingFingerprintCanonicalitySmoke.cs` — focused regression coverage for project/element public mutation, project revision atomicity, rejection atomicity, and padded public assignment Save→Load canonical round-trip while retaining the existing tampered-XML rejection coverage.
 
-## Excluded scope
+## Excluded scope preserved
 
-- Do not change `src/QS3D.Core/Persistence/QsdbProjectStore.cs` or XML schema validation semantics; the current canonical QSDB validator/load contract is the boundary this lane aligns public mutation with.
-- Do not change drawing path semantics.
-- Do not change Source Reconcile, cleanup authorization, command-plan freshness, `DESYNCHRONIZED` guards, or issue #1005 behavior.
-- Do not change BricsCAD adapter/native drawing identity capture or claim native V25/V26 runtime evidence.
-- Do not enter the active `slabOpen`/host-health claim or its diagnostics/BricsCAD surfaces.
+- `src/QS3D.Core/Persistence/QsdbProjectStore.cs` and XML schema validation semantics were not changed.
+- Drawing path semantics were not changed.
+- Source Reconcile, cleanup authorization, command-plan freshness, `DESYNCHRONIZED` guards, issue #1005, BricsCAD adapter/native drawing identity capture, and the concurrent `slabOpen` lane were not touched.
 
-## Validation plan
+## Validation and integration evidence
 
-- Add deterministic smoke coverage proving padded project/element fingerprints normalize to the canonical value and round-trip through QSDB.
-- Prove project canonical no-op assignment does not increment `ChangeVersion` after normalization.
-- Prove control-character assignment rejects before mutation; for project state, rejection must leave both the previous fingerprint and `ChangeVersion` unchanged; for element state, rejection must leave the previous fingerprint unchanged.
-- Re-read source/test on the implementation branch and inspect the final diff against the refreshed integration baseline.
-- Use the repository's standing automatic post-integration V25 cloud workflow only if/when this source lane is landed to `main`; do not manually dispatch Actions.
-
-## Implementation status
-
-The dedicated implementation branch contains one atomic source/test commit, `d0e1531e9db15d55c1f14501b63c011ebc0da12f`. Its diff is limited to the three reserved files. Source/test blobs were re-read after creation; the control-character fixture uses the C# `\u0001` runtime escape, and no excluded persistence/Source Reconcile/native surfaces were changed. The claim remains `ACTIVE` until integration and current-main reachability are verified.
+- Claim-only coordination landed before implementation at `69171c7c16840da804a9d397fd0e908b6f284d16` and remained visible on current-main ancestry before source work.
+- Implementation commit `d0e1531e9db15d55c1f14501b63c011ebc0da12f` was read back and its diff contains exactly the three reserved source/test files.
+- Source/test blobs were re-read after creation; the negative fixture uses the C# `\u0001` runtime escape and the new guards validate before mutation.
+- Initial integration candidate `807158a2332bf31d2cf4c0274b93c544c443d248` was based on refreshed `main`. A concurrent docs-only claim update moved `main` during the final fast-forward window; GitHub rejected the stale non-fast-forward update, no force was used, and compare showed the concurrent commit touched only the other claim file.
+- Reconciliation merge `9a6a3124265956bda4524901861cb8ba412f0adb` preserved that concurrent docs commit plus the exact three reserved changes. The final `main` update then succeeded with `force:false`, and immediate readback showed `main` exactly at `9a6a3124265956bda4524901861cb8ba412f0adb`.
+- No manual GitHub Actions dispatch was performed. The standing automatic post-integration workflow started run `31806466444` (`Dispatch V25 cloud CI after main integration`) for exact source SHA `9a6a3124265956bda4524901861cb8ba412f0adb`; at claim close it was still `in_progress` in the debounce/dispatch stage, so this claim does not report cloud CI PASS.
+- This environment did not execute licensed BricsCAD NETLOAD/native acceptance; no native V25/V26 runtime PASS is claimed.
 
 ## Coordination
 
-The historical QSDB drawing-fingerprint canonicality claim completed on 2026-08-12 and added XML validator/load coverage for padded attributes. This lane is deliberately narrower/different: it aligns the still-public in-memory mutation APIs with that already-canonical persistence contract so callers cannot construct self-invalidating persisted state. Current recent-history/claim audit found no active reservation on these exact project/element drawing-fingerprint setter surfaces. The active `slabOpen` claim is non-overlapping and owns separate Direct Draw/host-health surfaces.
+The historical QSDB drawing-fingerprint canonicality claim completed on 2026-08-12 and added XML validator/load coverage for padded attributes. This completed lane is deliberately narrower/different: it aligns the public in-memory mutation APIs with that already-canonical persistence contract so callers cannot construct self-invalidating persisted state. The concurrent `slabOpen` and release-prerelease-ordinal claims remained separate.
 
-## Completion condition
+## Completion
 
-Current `main` contains the public project/element drawing-fingerprint canonicalization and focused regressions, the implementation is represented in the dedicated integration result and final main landing, remote-safe validation evidence is recorded accurately, and this claim is then closed `COMPLETED` with exact implementation/integration/main SHAs. Native BricsCAD runtime evidence remains separate.
+The source fix and regressions are on `main` at `9a6a3124265956bda4524901861cb8ba412f0adb`; implementation/integration SHAs and validation boundaries are recorded above. Automatic cloud CI remains separate evidence and was still in progress at close; native BricsCAD acceptance remains LOCAL_ONLY.
