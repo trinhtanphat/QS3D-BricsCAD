@@ -233,7 +233,7 @@ namespace QS3D.Core.Domain
             }
         }
 
-        private static void ValidateMemberPropertyKeysForMutation(IReadOnlyList<ProjectElement> members, string repairOperation)
+        internal static void ValidateMemberPropertyKeysForMutation(IReadOnlyList<ProjectElement> members, string repairOperation)
         {
             foreach (var element in members)
             {
