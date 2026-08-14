@@ -136,7 +136,7 @@ namespace QS3D.Core.Domain
 
         public ProjectState(string projectId, string name)
         {
-            ProjectId = string.IsNullOrWhiteSpace(projectId) ? throw new ArgumentException("Project id is required.", nameof(projectId)) : projectId.Trim();
+            ProjectId = RequireProjectId(projectId);
             _name = string.IsNullOrWhiteSpace(name) ? "QS3D Project" : RequireProjectName(name);
             Zones = new List<ZoneDefinition>();
             Floors = new List<FloorDefinition>();
@@ -236,6 +236,16 @@ namespace QS3D.Core.Domain
             if (value.Kind != DateTimeKind.Utc)
                 throw new ArgumentException("Project persistence timestamp must be UTC.", parameterName);
             return value;
+        }
+
+        private static string RequireProjectId(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException("Project id is required.", nameof(value));
+            var normalized = value.Trim();
+            if (normalized.Any(char.IsControl))
+                throw new ArgumentException("Project id cannot contain control characters.", nameof(value));
+            return normalized;
         }
 
         private static string RequireProjectName(string value)
