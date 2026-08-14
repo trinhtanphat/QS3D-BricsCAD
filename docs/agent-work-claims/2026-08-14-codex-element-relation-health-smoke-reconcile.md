@@ -1,6 +1,6 @@
 # Work claim — ProjectElement relation health smoke reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-element-relation-health-smoke-reconcile-20260814` (`/root/fix_source_reconcile_desync`)
 - Registered: `2026-08-14T15:35:00+07:00`
 - Baseline main SHA: `d15271a3b1f46aacaf1dcd2ee81dc35f93b8901e`
@@ -33,3 +33,12 @@ Existing reachable coverage remains unchanged: missing relation diagnostics, amb
 - generic/manual-only source policy gates as appropriate.
 
 If the full smoke advances to another unrelated failure, record that exact first blocker without expanding this claim.
+
+## Completion record
+
+- Claim PR `#1217` merged as `089ce72b144078df6fe3e1b1fa938ba4f1808ad6`.
+- Test commit `8e0330ad6` merged through PR `#1218` as `f40774eb4b234972e3b8e2f3cda48157d8a011e2`.
+- The one reserved smoke now asserts supported padded writes persist canonical Family/Floor/Zone values without canonicality diagnostics. Whitespace-only Family input persists as the empty optional relation and retains `MISSING_FAMILY`. Production and every existing ambiguity/HostWall canonicality fixture remain unchanged.
+- Core Release build PASS with `0 warnings / 0 errors`. Focused model-health identity ambiguity, comprehensive model-health and host-link canonicalization gates PASS; generic and manual-only policy gates PASS.
+- Full Core smoke advances beyond `ModelHealthElementRelationCanonicalitySmoke` and stops at the next independent fixture drift: `ProjectBrowserQueryReferenceCanonicalitySmoke` still expects a padded FamilyId setter value to survive and be rejected, while the completed relation setter now normalizes it before the query planner reads it. This lane did not edit or absorb that blocker.
+- No production, LOCAL, issue `#1005`, BricsCAD/native/private data or GitHub Actions surfaces were changed/run.
