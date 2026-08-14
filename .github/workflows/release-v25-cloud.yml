@@ -3,6 +3,10 @@ name: QS3D Cloud V25 Preview Build & Release
 on:
   workflow_dispatch:
     inputs:
+      source_sha:
+        description: "Optional exact 40-hex source commit; automatic dispatcher pins the triggering main integration SHA"
+        required: false
+        type: string
       release_tag:
         description: "Preview tag to publish, for example v0.1.0-preview.7; source identity is synchronized automatically"
         required: true
@@ -28,6 +32,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' }}
     runs-on: windows-latest
     env:
+      SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
       RELEASE_TAG: ${{ inputs.release_tag }}
       BRICSCAD_V25_MIRROR_MSI_URL: http://103.9.157.20/BricsCAD-V25.2.10-1-en_US%28x64%29.msi
       BRICSCAD_V25_PUBLIC_MSI_URL: https://storage.googleapis.com/production-boa-storage/ftp/release/en_US/BricsCAD/Windows/25.2.10/BricsCAD-V25.2.10-1-en_US%28x64%29.msi
@@ -38,7 +43,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 1
+          ref: ${{ inputs.source_sha || github.sha }}
+          fetch-depth: 0
           fetch-tags: true
 
       - name: Validate cloud prerelease request
@@ -46,6 +52,22 @@ jobs:
         run: |
           if ($env:GITHUB_REF -ne 'refs/heads/main') {
             throw "Cloud V25 preview releases must be dispatched from refs/heads/main. Current ref: $env:GITHUB_REF"
+          }
+          $sourceSha = ([string]$env:SOURCE_SHA).Trim().ToLowerInvariant()
+          if ($sourceSha -notmatch '^[0-9a-f]{40}$') {
+            throw "Cloud release source_sha must be one exact 40-hex commit. Got: $env:SOURCE_SHA"
+          }
+          $head = ([string](git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $head -ne $sourceSha) {
+            throw "Cloud release checkout must equal SOURCE_SHA. Expected $sourceSha, got $head."
+          }
+          & git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not refresh origin/main for source ancestry validation.'
+          }
+          & git merge-base --is-ancestor $sourceSha origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw "Cloud release source SHA must be reachable from current main: $sourceSha"
           }
           if ($env:RELEASE_TAG -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)-preview\.[1-9][0-9]*$') {
             throw "Cloud release accepts exact preview tags only, such as v0.1.0-preview.7."
@@ -100,7 +122,7 @@ jobs:
       - name: Prepare exact release source commit
         shell: powershell
         run: |
-          $releaseCommit = (& .\scripts\prepare-v25-cloud-release.ps1 -ReleaseTag $env:RELEASE_TAG -DispatchSha $env:GITHUB_SHA | Select-Object -Last 1)
+          $releaseCommit = (& .\scripts\prepare-v25-cloud-release.ps1 -ReleaseTag $env:RELEASE_TAG -DispatchSha $env:SOURCE_SHA | Select-Object -Last 1)
           if ([string]::IsNullOrWhiteSpace([string]$releaseCommit)) {
             throw 'Release source preparation did not return an exact commit SHA.'
           }
