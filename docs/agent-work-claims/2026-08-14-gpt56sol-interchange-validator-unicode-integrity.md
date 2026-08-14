@@ -1,6 +1,6 @@
 # Work claim — Interchange validator Unicode integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `gpt56sol /root/fix_level_curtain_frame_z`
 - Registered: `2026-08-14T15:38:35+07:00`
 - Baseline main SHA: `7ccd75c52a26d038e80f28ab82a80ca688662d2a`
@@ -36,3 +36,15 @@ No open PR or ACTIVE/BLOCKED claim owns validator Unicode. The active Core mutat
 ## Completion condition
 
 A normal implementation PR is merged to current `main`, issue #84 receives a source-only update, and this claim records exact validation and merge evidence without overstating broader interoperability or native runtime completion.
+
+## Completion evidence
+
+- Claim commit: `c0c6438f9036183fb25831bf21847b6bd6846c36`; claim-only PR #1223 merged as `50a622d51f208c126d361ec099e288cc46b8960c` before source edits.
+- Implementation commit: `94d539e2044d8a2efd18a6160f5cab287b98f2a7`.
+- Implementation PR #1228 merged normally to `main` as `5ce2459d134e7562ac56d6d9a2969bbebb1f1c40`.
+- Exact implementation diff: validator strict string encoding, new auto-registered validator/typed-reader Unicode smoke, and the existing interchange-validation preflight only.
+- PASS: `preflight-interchange-validation.py`, `preflight-interchange-validated-reader.py`, `preflight-interchange-validator-canonical.py`, `preflight-interchange-bounded-file-read.py`, and `preflight-interchange-json.py` via `py -3`.
+- PASS: `QS3D.Core` Release build and `QS3D.Core.SmokeTests` Release build, each with 0 warnings / 0 errors; the focused Unicode initializer executed successfully before later unrelated module-initializer failures.
+- Full Core smoke was rerun on exact implementation merge `5ce2459d134e7562ac56d6d9a2969bbebb1f1c40` and does not have a PASS claim: after the concurrent Project Browser fixture fix, the first out-of-lane failure is `ProjectElementNullScalarPersistabilitySmoke.ConstructorTrimAndSetterExactnessRemain`, whose padded `FamilyId` expectation predates canonical relation setter trimming.
+- Issue #84 source updates: https://github.com/trinhtanphat/QS3D-BricsCAD/issues/84#issuecomment-5291333732 and exact-merge rerun https://github.com/trinhtanphat/QS3D-BricsCAD/issues/84#issuecomment-5291341089.
+- No exporter, typed-reader implementation, import mutation policy, native/UI, documentation, BricsCAD runtime, private data, GitHub Actions, release, or LOCAL surface was changed.
