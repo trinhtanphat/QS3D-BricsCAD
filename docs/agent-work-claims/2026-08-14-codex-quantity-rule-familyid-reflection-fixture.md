@@ -1,8 +1,9 @@
 # Work claim — Quantity Rule raw FamilyId fixture boundary
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-quantity-rule-familyid-reflection-fixture-20260814` (`/root/fix_level_curtain_frame_z`)
 - Registered: `2026-08-14T16:22:00+07:00`
+- Completed: `2026-08-14T16:26:00+07:00`
 - Baseline main SHA: `f77ab1d3e6b89891efe5f18defdc0160414c57ce`
 - Priority: next deterministic full Core smoke blocker after ProjectElement relation writers became canonical
 
@@ -37,4 +38,10 @@ Construct the padded-case element through the valid canonical public boundary an
 
 ## Completion record
 
-Pending implementation and validation after this claim is merged to `main`.
+- Claim PR `#1277` merged as `838385ddf285b46059305edd4b9e7581528d2463`.
+- This lane prepared equivalent test commit `24d0577bb0d3d6d0e9010265a1c25efea6781d22` and PR `#1279`, but closed that PR unmerged after the later duplicate lane's reviewed-equivalent implementation landed first. No force update or duplicate code reapplication occurred.
+- Reused implementation commit `cc6ac8ba4f08c0596785c3d03b889ffa048ff8ff` merged through PR `#1280` as `57448276afeac45127fad0843d498e2ef0b459fc`.
+- The merged smoke proves the public padded setter stores canonical `FAM-1`, injects only private `_familyId` back to padded raw state, asserts the getter sees it, and retains the noncanonical exception plus old managed quantity/provenance preservation and absence of new outputs. Whitespace-to-empty and case-varied canonical controls remain unchanged.
+- Current-main Core Release build PASS with `0 warnings / 0 errors`. All seven Quantity Rule create, UI, freshness, preview, apply-tracking and provenance focused gates PASS under Python UTF-8 mode.
+- Full Core smoke advances beyond this fixture and stops at the next independent blocker: `ReportingReferenceIdCanonicalitySmoke.PaddedFloorReferenceFailsClosed` does not receive the expected `InvalidOperationException` because its public FloorId writer now canonicalizes padded input.
+- No production, gate, LOCAL runner/probe, BricsCAD/native/private data, GitHub Actions, release or packaging surface was changed or run by this lane.
