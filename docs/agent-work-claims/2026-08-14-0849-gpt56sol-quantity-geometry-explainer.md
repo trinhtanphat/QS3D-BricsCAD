@@ -1,40 +1,52 @@
 # Work claim — Geometry-backed quantity explanation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `gpt56sol-quantity-geometry-explainer-20260814-0849`
 - Registered: `2026-08-14T08:49:00+07:00`
+- Completed: `2026-08-14T12:03:00+07:00`
 - Baseline main SHA: `01215685c429e54f657735be7bfc79f526aee53c`
-- Priority: User-requested implementation of the attached “Diễn giải khối lượng chi tiết” specification; the existing quantity-detail panel explains report arithmetic but does not yet reserve an exact-geometry intersection/contact lane.
+- Priority: User-requested implementation of the attached “Diễn giải khối lượng chi tiết” specification; the existing quantity-detail panel explained report arithmetic but did not reserve an exact-geometry intersection/contact lane.
 
-## Reserved scope
+## Delivered scope
 
-Implement the V25 quantity explanation lane for a selected QS3D element: exact 3D solid-intersection deductions after BoundingBox candidate filtering, union-before-total-deduction semantics, per-face formwork gross/deduction/net explanation including face-contact/coverage classification, stable explanation data contracts, panel projection, and click-through 3D locating/highlighting/zoom hooks. Add dirty/stale invalidation integration only where required for these explanation results.
+Implemented the V25 quantity explanation lane for a selected QS3D element:
 
-## Expected surfaces
+- exact `Solid3d` boolean intersection after BoundingBox-only candidate pruning;
+- residual subtraction semantics so overlapping causes are not double-deducted from net volume while individual cause rows remain visible;
+- CAD-agnostic quantity geometry contracts with dependency/fingerprint/dirty evidence and specification tolerances;
+- BREP face enumeration and gross/deduction/net formwork areas with `Bottom`, `Side`, `End`, `Top`, and `Other` classification;
+- face-only contact probing using a tolerance-offset solid plus exact target intersection;
+- multi-`Solid3d` face identities scoped by component/global index so coincident faces from different solids do not cross-match;
+- SI unit normalization from drawing `INSUNITS`;
+- native clone/residual disposal on all completion paths;
+- quantity-detail UI projection with `V gộp`, `Trừ giao`, `V còn`, per-face `S gộp`, `Trừ`, `S còn`, fingerprint/dependency/diagnostic evidence;
+- deduction-row click-through that selects the target + cause live CAD handles and invokes `QS3DZOOMSELECTED`;
+- V25 BREP project/reference validation for `TD_MgdBrep.dll`;
+- a standalone `preflight-quantity-geometry-explainer.py`, auto-discovered by `scripts/preflight-all.py`.
 
-- `src/QS3D.Core/Reporting/QuantityGeometryExplanation*.cs` (new CAD-agnostic contracts/planning helpers as needed)
-- `src/QS3D.BricsCAD.V25/Reporting/QuantityGeometryExplanation*.cs` (new exact-host geometry service)
-- `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.*.cs`
-- `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.Runtime.cs` and narrowly required quantity-panel wiring
-- existing V25 selection/highlight/viewport helpers only if reusable without changing their neighboring contracts; otherwise a quantity-owned helper under the new reporting/UI surface
-- focused quantity-geometry regression/probe files that do not collide with an ACTIVE shared smoke-registration claim
+## Mainline evidence
 
-## Excluded scope
+The user explicitly authorized direct merge/commit/push to `main`, so the final implementation was landed directly on main rather than being held behind a PR.
 
-- General quantity-report Family identity/canonicalization, BQ/Material Usage, estimate/procurement, IFC, curtain/door/room schedules, rebar, QSDB publication, release/version automation, and LOCAL-003 native-startup diagnosis.
-- `tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs` while the visible Curtain schedule Family-integrity claim reserves that shared file; this lane will use an independently registered/standalone guard first and will only expand after a fresh claim collision check if shared registration becomes necessary.
-- Changing model geometry, authoring tools, or global NETLOAD/document lifecycle behavior unrelated to quantity-result invalidation.
+Key mainline commits/evidence:
 
-## Validation plan
+- `8eea882b75c99fba8c186e36044fdb4124a709ac` — bind exact geometry values into the quantity-detail metrics.
+- `f42171d3f9dab336fa8874547a3016271977546d` — fix contact-plane matching so an offset probe's inward cut face cannot masquerade as the original target face and erase a face-contact deduction.
+- `5b3a09733302ed7f135f9876345fe93350abb445` — lock quantity geometry source contracts and the strict contact-plane regression guard.
+- `2191050d573075dfe07efa4e57741ce1384bf706` — coordinated V25 release guard requires `TD_MgdBrep.dll`.
 
-- Core tests/guards for tolerance normalization, individual deduction rows, union-total semantics, net-volume/formwork invariants, contact-vs-volume classification, and dirty-state transitions.
-- V25 project compile/preflight where remote-safe; source guard must prove BoundingBox is candidate-only and final volume comes from exact boolean geometry.
-- Native BricsCAD V25 probe remains explicit for Solid3d/BRep runtime behavior, row click highlighting/zoom, and contact-area acceptance if cloud CI cannot host BricsCAD.
+The latest verified main descendant before claim close was `ad0a1a48ec102b027cbc80e7954a8afe1fde7269`; compare evidence shows it is 17 commits ahead of `5b3a09733302ed7f135f9876345fe93350abb445` with zero commits behind, so all quantity fixes above remain in main history.
+
+## Validation evidence
+
+- QS3D Core CI run `31771581071` / run number 44: `preflight` = SUCCESS and `core` = SUCCESS.
+- In that run, Manual-only policy, Generic source guard, All discovered feature source guards (including `preflight-quantity-geometry-explainer.py`), PowerShell syntax validation, Core build, and deterministic Core smoke tests all completed successfully.
+- V25 integration run `31771501089` was dispatched with `run_runtime=false` on the self-hosted `[windows, x64, bricscad-v25]` runner. At claim close the `plugin` job (`94678222968`) is still queued because the self-hosted runner has not accepted it yet; this is retained as explicit native-host evidence rather than being marked PASS without execution.
+
+## Native acceptance note
+
+Remote-safe implementation is complete and mainlined. Exact BricsCAD-native acceptance for BREP runtime behavior remains represented by queued run `31771501089`. The implemented row interaction selects/zooms target + cause handles; a dedicated transient translucent intersection solid and exact BREP sub-face GS highlight are not claimed as completed because those require a reliable native subentity/transient mapping probe on BricsCAD V25.
 
 ## Coordination
 
-The earlier quantity detail-explainer claim is completed and its panel shell is treated as an extension point. The recent quantity-report FamilyId claim is completed. Current Curtain schedule Family-integrity work owns its schedule files and `SmokeTestRegistration.cs`; this claim deliberately excludes those surfaces. QSDB stale-backup and LOCAL-003 host lanes are unrelated. Recheck all ACTIVE/BLOCKED claims immediately before every write.
-
-## Completion condition
-
-Geometry-backed explanation contracts/service and quantity-panel integration are pushed on a feature branch with focused regression evidence and a PR; claim is then updated with exact SHAs, CI/preflight evidence, and any remaining BricsCAD-native acceptance gate.
+This lane did not modify the shared smoke registration reserved by concurrent work and did not touch unrelated Curtain schedule, QSDB, LOCAL-003/004, release-version, or general NETLOAD lifecycle source. Temporary one-shot CI dispatchers were removed after dispatch.
