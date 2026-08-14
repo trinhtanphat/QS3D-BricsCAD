@@ -1,6 +1,6 @@
 # Work claim — LOCAL-003 shared native Level Z-chain
 
-- Status: `ACTIVE`
+- Status: `BLOCKED`
 - Agent: `codex-local-019ff0c5` (`/root`, local Windows + licensed BricsCAD V25 agent)
 - Registered: `2026-08-11T19:43:12+07:00`
 - Baseline main SHA: `c7dd212d36677a1d2e005becf8709768fe98d6a1`
@@ -710,6 +710,12 @@ Keep this claim `BLOCKED` only while the operator-owned session remains active, 
 The operator-owned BricsCAD session closed normally and a fresh process audit found zero BricsCAD processes. The checkout is clean and synchronized with `origin/main@b0c4122575b2c29a49a381591252c9c669734fbf`; current ACTIVE/BLOCKED claims do not reserve Level placement, the Level runner or LOCAL-003 evidence.
 
 This reactivation-only status must be visible on `origin/main` before qualification restarts. After publication, fetch and audit again, require a newest clean exact SHA, run full Core Release/smoke, all nine focused Level/static gates and the installed-reference V25 `Release|x64` build, verify matching plugin/Core `ProductVersion`, then run a fresh disposable Level probe. Do not run concurrently with any newly opened operator BricsCAD session, absorb unrelated source defects or dispatch GitHub Actions.
+
+## 2026-08-14 current-main Room Finish smoke blocker handoff
+
+Qualification on clean exact SHA `497b1936792fd0194494896128628fc4de08bf15` passed the Core Release build with `0 warnings / 0 errors`, then the mandatory full Core smoke failed in `RoomFinishFamilyCategorySmoke.MissingFamilyPreservesFallbackBehavior`. The newly merged smoke expects a missing Family reference to survive as a fallback, while the canonical shared `ReportingProjectIdentityGuard.RequireExistingFamilyReference(...)` fails closed first for the same `MISSING` FamilyId. The sanitized non-local handoff is GitHub issue `#1101`.
+
+This is a CAD-independent source/test contract conflict. This local worker did not edit Core or the smoke, and the focused Level gates, V25 build and native Level probe were not run after the mandatory full-smoke prerequisite failed. Keep this claim reserved but `BLOCKED` until a non-local fix makes the complete Core smoke pass on current `main`; then reactivate/push the claim before rebuilding all exact-current gates and running a fresh disposable probe. No GitHub Actions were dispatched.
 
 ## 2026-08-14 resumed after operator session closed
 
