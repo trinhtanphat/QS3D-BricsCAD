@@ -34,13 +34,14 @@ namespace QS3D.Core.Domain
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
             if (addOnly && _items.ContainsKey(key)) throw new ArgumentException("An item with the same key has already been added.", nameof(key));
+            var normalizedValue = value ?? string.Empty;
             if (ProjectMeasurementWorkItemMappingCodec.IsReservedKey(key))
             {
                 var next = new Dictionary<string, string>(_items, StringComparer.OrdinalIgnoreCase);
-                next[key] = value;
+                next[key] = normalizedValue;
                 ProjectMeasurementWorkItemMappingCodec.Read(next);
             }
-            if (addOnly) _items.Add(key, value); else _items[key] = value;
+            if (addOnly) _items.Add(key, normalizedValue); else _items[key] = normalizedValue;
         }
     }
 }
