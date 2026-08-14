@@ -156,6 +156,9 @@ namespace QS3D.Core.Services
             }
 
             if (pending.Count == 0) return 0;
+            var pendingElements = new List<ProjectElement>(pending.Count);
+            foreach (var item in pending) pendingElements.Add(item.Element);
+            ProjectFamilyService.ValidateMemberPropertyKeysForMutation(pendingElements, "bulk assigning a Family");
             return ProjectSemanticMutationExecutor.Execute(project, "bulk.assign-family", () =>
             {
                 foreach (var item in pending)
