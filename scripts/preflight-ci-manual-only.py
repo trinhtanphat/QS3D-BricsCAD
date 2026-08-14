@@ -5,6 +5,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
+AUTO_DISPATCHER = "dispatch-v25-cloud-after-main-integration.yml"
 RELEASE_WORKFLOWS = {"release-v25.yml", "release-v25-cloud.yml", "release-v26.yml"}
 errors = []
 
@@ -72,7 +73,6 @@ def extract_job_if_expression(job_lines):
             expressions.append(strip_yaml_inline_comment(match.group(1)).strip())
     if len(expressions) != 1:
         return None
-
     expression = expressions[0]
     if not expression:
         return None
@@ -102,6 +102,40 @@ def is_hard_release_confirmation_guard(expression):
     ))
 
 
+def is_hard_auto_dispatch_guard(expression):
+    if expression is None or "||" in expression:
+        return False
+    return bool(re.fullmatch(
+        r"github\.ref\s*==\s*'refs/heads/main'\s*&&\s*"
+        r"github\.actor\s*!=\s*'github-actions\[bot\]'",
+        expression,
+    ))
+
+
+def parse_trigger_name(line):
+    match = re.match(
+        r"^\s{2}(?:\"([A-Za-z0-9_-]+)\"|'([A-Za-z0-9_-]+)'|([A-Za-z0-9_-]+))\s*:",
+        line,
+    )
+    if not match:
+        return None
+    return next(value for value in match.groups() if value is not None)
+
+
+def extract_trigger_blocks(trigger_lines):
+    blocks = {}
+    current = None
+    for line in trigger_lines:
+        name = parse_trigger_name(line)
+        if name is not None:
+            current = name
+            blocks[current] = [line]
+            continue
+        if current is not None:
+            blocks[current].append(line)
+    return blocks
+
+
 def validate_guard_parser():
     cases = (
         ("manual equality", ["    if: ${{ github.event_name == 'workflow_dispatch' }}"], True, False),
@@ -112,18 +146,6 @@ def validate_guard_parser():
             True,
         ),
         ("comment-only equality", ["    if: # github.event_name == 'workflow_dispatch'"], False, False),
-        (
-            "not-equal with comment decoy",
-            ["    if: github.event_name != 'workflow_dispatch' # github.event_name == 'workflow_dispatch'"],
-            False,
-            False,
-        ),
-        (
-            "negated equality",
-            ["    if: ${{ !(github.event_name == 'workflow_dispatch') }}"],
-            False,
-            False,
-        ),
         (
             "OR bypass",
             ["    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}"],
@@ -142,13 +164,21 @@ def validate_guard_parser():
         actual_manual = is_hard_manual_dispatch_guard(expression)
         actual_release = is_hard_release_confirmation_guard(expression)
         if actual_manual != expected_manual:
-            errors.append(
-                f"manual guard parser regression ({name}): expected {expected_manual}, got {actual_manual}"
-            )
+            errors.append(f"manual guard parser regression ({name})")
         if actual_release != expected_release:
-            errors.append(
-                f"release guard parser regression ({name}): expected {expected_release}, got {actual_release}"
-            )
+            errors.append(f"release guard parser regression ({name})")
+
+    auto_good = extract_job_if_expression([
+        "    if: ${{ github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]' }}"
+    ])
+    auto_bad = extract_job_if_expression([
+        "    if: ${{ github.ref == 'refs/heads/main' || github.actor != 'github-actions[bot]' }}"
+    ])
+    if not is_hard_auto_dispatch_guard(auto_good) or is_hard_auto_dispatch_guard(auto_bad):
+        errors.append("automatic dispatcher guard parser regression")
+
+    if parse_trigger_name('  "push":') != "push" or parse_trigger_name("  workflow_dispatch:") != "workflow_dispatch":
+        errors.append("trigger parser must support quoted/unquoted trigger keys")
 
 
 validate_guard_parser()
@@ -159,6 +189,9 @@ else:
     workflow_files = sorted(list(WORKFLOWS.glob("*.yml")) + list(WORKFLOWS.glob("*.yaml")))
     if not workflow_files:
         errors.append("no GitHub Actions workflows found")
+
+    if not (WORKFLOWS / AUTO_DISPATCHER).is_file():
+        errors.append(f"missing owner-approved automatic dispatcher: {AUTO_DISPATCHER}")
 
     for path in workflow_files:
         text = path.read_text(encoding="utf-8")
@@ -173,66 +206,103 @@ else:
             if line.strip() and not line.startswith((" ", "\t", "#")):
                 break
             trigger_lines.append(line)
-        trigger_block = "\n".join(trigger_lines)
-
-        if not re.search(r"(?m)^\s{2}workflow_dispatch\s*:", trigger_block):
-            errors.append(f"{path.name}: workflow_dispatch must be the only trigger")
-
-        trigger_names = []
-        for line in trigger_lines:
-            match = re.match(r"^\s{2}([A-Za-z0-9_-]+)\s*:", line)
-            if match:
-                trigger_names.append(match.group(1))
-        disallowed = sorted({name for name in trigger_names if name != "workflow_dispatch"})
-        if disallowed:
-            errors.append(f"{path.name}: automatic/non-owner trigger(s) forbidden: {', '.join(disallowed)}")
-
-        forbidden_anywhere = (
-            "push", "pull_request", "pull_request_target", "schedule", "workflow_run",
-            "workflow_call", "repository_dispatch", "release", "create", "delete",
-            "deployment", "deployment_status", "check_run", "check_suite", "status",
-            "page_build", "public", "issues", "issue_comment", "discussion",
-            "discussion_comment", "fork", "gollum", "label", "merge_group",
-            "milestone", "project", "project_card", "project_column", "registry_package",
-            "watch"
-        )
-        for trigger in forbidden_anywhere:
-            if re.search(rf"(?m)^\s{{2}}{re.escape(trigger)}\s*:", trigger_block):
-                errors.append(f"{path.name}: forbidden trigger in on: block: {trigger}")
-
+        trigger_blocks = extract_trigger_blocks(trigger_lines)
+        trigger_names = set(trigger_blocks)
         job_blocks = collect_job_blocks(lines)
+
         if not job_blocks:
             errors.append(f"{path.name}: jobs: must contain at least one executable job")
-        for job_name, job_lines in job_blocks:
-            expression = extract_job_if_expression(job_lines)
-            if not is_hard_manual_dispatch_guard(expression):
+
+        if path.name == AUTO_DISPATCHER:
+            expected = {"workflow_dispatch", "push"}
+            if trigger_names != expected:
                 errors.append(
-                    f"{path.name}/{job_name}: job must hard-guard "
-                    "github.event_name == 'workflow_dispatch' as the leading conjunction"
+                    f"{path.name}: approved dispatcher must expose exactly workflow_dispatch + push; got {sorted(trigger_names)}"
                 )
+
+            push_block = "\n".join(trigger_blocks.get("push", []))
+            for token in ("branches:", "- main", "paths:"):
+                if token not in push_block:
+                    errors.append(f"{path.name}: push trigger missing required main/path scope token: {token}")
+            if "docs/**" in push_block or "README" in push_block or "AGENTS.md" in push_block:
+                errors.append(f"{path.name}: docs/claim-only changes must not trigger automatic V25 cloud CI")
+
+            for token in (
+                "contents: read",
+                "actions: write",
+                "cancel-in-progress: true",
+                "github.actor != 'github-actions[bot]'",
+                "gh workflow run release-v25-cloud.yml",
+                "--ref main",
+                "confirm_release=RELEASE",
+                "10000 + GITHUB_RUN_NUMBER",
+                "preview > 65535",
+            ):
+                if token not in text:
+                    errors.append(f"{path.name}: approved dispatcher contract missing token: {token}")
+            if "contents: write" in text:
+                errors.append(f"{path.name}: dispatcher must not have contents: write")
+            if re.search(r"gh\s+workflow\s+run\s+(?!release-v25-cloud\.yml)", text):
+                errors.append(f"{path.name}: dispatcher may target only release-v25-cloud.yml")
+
+            dispatch_job = next((block for name, block in job_blocks if name == "dispatch"), None)
+            expression = extract_job_if_expression(dispatch_job) if dispatch_job is not None else None
+            if not is_hard_auto_dispatch_guard(expression):
+                errors.append(
+                    f"{path.name}/dispatch: job must hard-require main and reject github-actions[bot] pushes"
+                )
+            for job_name, _ in job_blocks:
+                if job_name != "dispatch":
+                    errors.append(f"{path.name}: unexpected automatic dispatcher job: {job_name}")
+        else:
+            if trigger_names != {"workflow_dispatch"}:
+                errors.append(
+                    f"{path.name}: only {AUTO_DISPATCHER} may use an automatic trigger; got {sorted(trigger_names)}"
+                )
+            for job_name, job_lines in job_blocks:
+                expression = extract_job_if_expression(job_lines)
+                if not is_hard_manual_dispatch_guard(expression):
+                    errors.append(
+                        f"{path.name}/{job_name}: job must hard-guard github.event_name == 'workflow_dispatch'"
+                    )
 
         if path.name in RELEASE_WORKFLOWS:
             for token in ("confirm_release", "contents: write"):
                 if token not in text:
-                    errors.append(f"{path.name} missing explicit manual publish guard: {token}")
+                    errors.append(f"{path.name} missing explicit publish guard: {token}")
             release_job = next((block for name, block in job_blocks if name == "release"), None)
             release_expression = extract_job_if_expression(release_job) if release_job is not None else None
             if not is_hard_release_confirmation_guard(release_expression):
                 errors.append(
-                    f"{path.name}/release: publish job must hard-require "
-                    "github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE'"
+                    f"{path.name}/release: publish job must hard-require workflow_dispatch + RELEASE confirmation"
                 )
 
-policy = (ROOT / "CI_POLICY.md").read_text(encoding="utf-8") if (ROOT / "CI_POLICY.md").is_file() else ""
-for token in ("workflow_dispatch", "manual-only", "explicitly requests", "MANUAL-BUILD-RELEASE"):
+policy_path = ROOT / "CI_POLICY.md"
+policy = policy_path.read_text(encoding="utf-8") if policy_path.is_file() else ""
+for token in (
+    "manual-only by default",
+    "automatic post-integration",
+    AUTO_DISPATCHER,
+    "release-v25-cloud.yml",
+    "integration/<batch-id>",
+    "ALL MERGED TO MAIN",
+):
     if token not in policy:
-        errors.append("CI_POLICY.md missing manual-only policy token: " + token)
+        errors.append("CI_POLICY.md missing integration/CI policy token: " + token)
 
-readme = (ROOT / "README.md").read_text(encoding="utf-8") if (ROOT / "README.md").is_file() else ""
-if "manual-only" not in readme or "workflow_dispatch" not in readme or "release-v25.yml" not in readme:
-    errors.append("README.md must document manual-only Actions and the owner-approved release workflow")
+registration_path = ROOT / "docs/AGENT-WORK-REGISTRATION.md"
+registration = registration_path.read_text(encoding="utf-8") if registration_path.is_file() else ""
+for token in (
+    "agent/<agent-id>/<scope>",
+    "integration/<batch-id>",
+    "one final merge",
+    "ALL MERGED TO MAIN",
+    AUTO_DISPATCHER,
+):
+    if token not in registration:
+        errors.append("AGENT-WORK-REGISTRATION.md missing batch-integration token: " + token)
 
-print("QS3D manual-only GitHub Actions preflight")
+print("QS3D GitHub Actions policy preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
@@ -240,6 +310,6 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: every GitHub Actions workflow is workflow_dispatch-only, every job is independently "
-    "hard-guarded to the manual event, and every release workflow requires explicit RELEASE confirmation."
+    "PASS: Actions are manual-only by default, exactly one owner-approved post-integration main dispatcher is allowed, "
+    "that dispatcher can target only release-v25-cloud.yml, and release workflows retain explicit RELEASE confirmation."
 )

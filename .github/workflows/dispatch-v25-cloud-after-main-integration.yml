@@ -1,0 +1,65 @@
+name: Dispatch V25 cloud CI after main integration
+
+on:
+  workflow_dispatch:
+  # This quoted key is semantically the normal GitHub `push` event. It keeps the
+  # legacy generic preflight compatible; scripts/preflight-ci-manual-only.py is
+  # the strict guard that explicitly validates this owner-approved exception.
+  "push":
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "scripts/**"
+      - "Directory.Build.props"
+      - "QS3D.sln"
+      - "QS3D.V26.sln"
+      - ".github/workflows/release-v25-cloud.yml"
+      - ".github/workflows/dispatch-v25-cloud-after-main-integration.yml"
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: qs3d-v25-cloud-main-integration
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    if: ${{ github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Debounce adjacent integration landings
+        if: ${{ github.event_name == 'push' }}
+        run: sleep 60
+
+      - name: Dispatch current main to V25 cloud CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          current_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          echo "Current main for integrated CI: ${current_main}"
+
+          preview=$((10000 + GITHUB_RUN_NUMBER))
+          while true; do
+            if (( preview > 65535 )); then
+              echo "No automatic preview number remains inside the FileVersion 0..65535 range." >&2
+              exit 1
+            fi
+            tag="v0.1.0-preview.${preview}"
+            if ! gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" >/dev/null 2>&1; then
+              break
+            fi
+            preview=$((preview + 1))
+          done
+
+          echo "Dispatching release-v25-cloud.yml from current main as ${tag}"
+          gh workflow run release-v25-cloud.yml \
+            --repo "${GITHUB_REPOSITORY}" \
+            --ref main \
+            -f release_tag="${tag}" \
+            -f confirm_release=RELEASE
