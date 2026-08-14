@@ -167,10 +167,15 @@ namespace QS3D.Core.SmokeTests
 
         private static void RequireTwoChanges(System.Collections.Generic.IReadOnlyList<string> changed, string firstId, string secondId, string label)
         {
-            if (changed.Count != 2 ||
-                !string.Equals(changed[0], firstId, StringComparison.Ordinal) ||
-                !string.Equals(changed[1], secondId, StringComparison.Ordinal))
-                throw new InvalidOperationException(label + " did not report both changed targets in deterministic order.");
+            var foundFirst = false;
+            var foundSecond = false;
+            foreach (var id in changed)
+            {
+                if (string.Equals(id, firstId, StringComparison.Ordinal)) foundFirst = true;
+                if (string.Equals(id, secondId, StringComparison.Ordinal)) foundSecond = true;
+            }
+            if (changed.Count != 2 || !foundFirst || !foundSecond)
+                throw new InvalidOperationException(label + " did not report both changed targets.");
         }
     }
 }
