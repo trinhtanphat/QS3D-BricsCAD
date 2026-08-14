@@ -31,6 +31,11 @@ for token in (
     'MarkerVersion = "1"',
     "Dictionary<Document, ObserverRegistration>",
     "Dictionary<Document, DocumentHistory>",
+    "public Document SubscribedDocument { get; }",
+    "ReferenceEquals(existing.SubscribedDocument, document)",
+    "existing.Unsubscribe();",
+    "registration.Subscribe();",
+    "registration?.Unsubscribe();",
     "document.CommandWillStart += CommandWillStart",
     "document.CommandEnded += CommandEnded",
     "document.CommandCancelled += CommandCancelled",
@@ -85,6 +90,32 @@ for token in (
 ):
     if token not in coordinator:
         errors.append("Undo coordinator missing contract: " + token)
+
+attach_start = coordinator.find("public static void Attach(")
+detach_start = coordinator.find("public static void Detach(", attach_start)
+stop_start = coordinator.find("public static void Stop(", detach_start)
+forget_start = coordinator.find("public static void Forget(", stop_start)
+attach_body = coordinator[attach_start:detach_start]
+detach_body = coordinator[detach_start:stop_start]
+stop_body = coordinator[stop_start:forget_start]
+if min(attach_start, detach_start, stop_start, forget_start) < 0:
+    errors.append("Undo observer lifecycle boundaries are missing")
+else:
+    same_wrapper = attach_body.find("if (ReferenceEquals(existing.SubscribedDocument, document)) return;")
+    unsubscribe_old = attach_body.find("existing.Unsubscribe();", same_wrapper)
+    remove_old = attach_body.find("ObserverRegistrations.Remove(document);", unsubscribe_old)
+    bind_current = attach_body.find("new ObserverRegistration(\n                    document,", remove_old)
+    subscribe_current = attach_body.find("registration.Subscribe();", bind_current)
+    if min(same_wrapper, unsubscribe_old, remove_old, bind_current, subscribe_current) < 0 or not (
+        same_wrapper < unsubscribe_old < remove_old < bind_current < subscribe_current
+    ):
+        errors.append("equality-equivalent observer wrappers must unsubscribe/rebind to the exact current instance before transition registration")
+    if "ObserverRegistrations.ContainsKey(document)" in attach_body:
+        errors.append("equality-only observer lookup must not retain a stale wrapper subscription")
+    if "registration?.Unsubscribe();" not in detach_body:
+        errors.append("Detach must unsubscribe the exact wrapper recorded by the resolved registration")
+    if ".ConvertAll(x => x.SubscribedDocument)" not in stop_body:
+        errors.append("Stop must detach the exact subscribed wrapper instances")
 
 for forbidden in (
     "ProjectContextCoordinator.GetOrCreate(",
@@ -363,6 +394,40 @@ if is_current_history(histories, document_a_first_wrapper, history_a):
     errors.append("a replaced history object remained current through an equivalent wrapper")
 if not is_current_history(histories, document_a_first_wrapper, replacement_history):
     errors.append("dictionary-equivalent wrapper did not resolve the replacement current history")
+
+
+class WrapperBoundRegistration:
+    def __init__(self, subscribed_document):
+        self.subscribed_document = subscribed_document
+        self.subscribed = True
+
+
+def attach_wrapper(registrations, document):
+    existing = registrations.get(document)
+    if existing is not None and existing.subscribed_document is document:
+        return existing
+    if existing is not None:
+        existing.subscribed = False
+        registrations.pop(document)
+    current = WrapperBoundRegistration(document)
+    registrations[document] = current
+    return current
+
+
+registrations = {}
+first_registration = attach_wrapper(registrations, document_a_first_wrapper)
+if attach_wrapper(registrations, document_a_first_wrapper) is not first_registration:
+    errors.append("same-wrapper observer attach lost idempotence")
+replacement_registration = attach_wrapper(registrations, document_a_after_mdi_switch)
+if first_registration.subscribed:
+    errors.append("equality-equivalent stale wrapper remained subscribed after rebind")
+if replacement_registration.subscribed_document is not document_a_after_mdi_switch:
+    errors.append("observer rebind did not capture the exact current managed wrapper")
+if registrations.get(document_a_first_wrapper) is not replacement_registration:
+    errors.append("replacement wrapper registration lost dictionary affinity")
+document_b_registration = attach_wrapper(registrations, document_b)
+if registrations.get(document_b) is not document_b_registration or len(registrations) != 2:
+    errors.append("distinct document key was not isolated during observer rebind")
 
 
 class CommandRegistration:
