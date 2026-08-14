@@ -12,10 +12,12 @@ Prevent the Core smoke executable from terminating through an uncaught registere
 
 ## Reserved surfaces
 
-- `tests/QS3D.Core.SmokeTests/Program.cs`
-- one focused static regression/preflight under `scripts/` if needed to lock top-level failure containment
+- `tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj`
+- new `tests/QS3D.Core.SmokeTests/SmokeTestEntryPoint.cs`
+- read-only `tests/QS3D.Core.SmokeTests/Program.cs` and `SmokeTestRegistration.cs`
+- one focused static regression/preflight under `scripts/`
 
-Read-only inspection of `SmokeTestRegistration.cs` and current smoke failure issues is allowed for diagnosis.
+The implementation deliberately avoids editing the large legacy `Program.cs`: the csproj selects a small guarded entry point that invokes the existing private `Program.Main()` and converts any escaping exception into deterministic console failure + exit code 1.
 
 ## Excluded scope
 
@@ -27,15 +29,16 @@ Read-only inspection of `SmokeTestRegistration.cs` and current smoke failure iss
 
 ## Acceptance
 
-- Any exception escaping `SmokeTestRegistration.RunAll()` is caught at the executable boundary.
-- Failure output names the registered-smoke phase and includes the original exception type/message.
+- Any exception escaping the existing smoke runner is caught at the executable boundary.
+- Failure output names the top-level smoke phase and includes the original exception type/message.
 - Process exits non-zero on failure and does not rethrow the exception after reporting.
-- Existing per-test `Test(...)` behavior remains unchanged.
-- A focused source guard prevents `SmokeTestRegistration.RunAll()` from returning to an unguarded top-level call.
+- Existing `Program.Main()` and per-test `Test(...)` behavior remain unchanged.
+- The entry point fails closed if the legacy `Program.Main()` cannot be resolved or returns an unexpected type.
+- A focused source guard proves the csproj selects the guarded entry point and the wrapper unwraps `TargetInvocationException`.
 
 ## Coordination
 
-Refresh `main` immediately before each write. Abort/re-scope if another ACTIVE/BLOCKED claim reserves `Program.cs` or the new guard path.
+Refresh `main` immediately before each write. Abort/re-scope if another ACTIVE/BLOCKED claim reserves the csproj, the new entry-point path, or the new guard path.
 
 ## Completion condition
 
