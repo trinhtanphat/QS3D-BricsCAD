@@ -40,14 +40,23 @@ jobs:
           fetch-depth: 1
           fetch-tags: true
 
-      - name: Dispatch current main to V25 cloud CI
+      - name: Dispatch triggering main SHA to V25 cloud CI
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
+          source_sha="${GITHUB_SHA,,}"
+          if [[ ! "${source_sha}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Triggering source SHA is not one exact 40-hex commit: ${source_sha}" >&2
+            exit 1
+          fi
           current_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
-          echo "Current main for integrated CI: ${current_main}"
+          echo "Triggering integration source: ${source_sha}"
+          echo "Current main at dispatch time: ${current_main}"
+          if [[ "${current_main}" != "${source_sha}" ]]; then
+            echo "main advanced during debounce; release will remain pinned to triggering source ${source_sha}."
+          fi
 
           git fetch --force --tags origin
           series_prefix="v0.1.0-preview."
@@ -86,9 +95,10 @@ jobs:
           fi
           tag="${series_prefix}${preview}"
 
-          echo "Dispatching release-v25-cloud.yml from current main as ${tag}"
+          echo "Dispatching release-v25-cloud.yml for ${source_sha} as ${tag}"
           gh workflow run release-v25-cloud.yml \
             --repo "${GITHUB_REPOSITORY}" \
             --ref main \
+            -f source_sha="${source_sha}" \
             -f release_tag="${tag}" \
             -f confirm_release=RELEASE
