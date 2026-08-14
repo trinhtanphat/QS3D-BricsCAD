@@ -1,6 +1,6 @@
 # Work claim — Floor/Zone active-setter fixture and gate reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `/root/fix_curtain_method_gates`
 - Registered: `2026-08-14T15:29:00+07:00`
 - Baseline main SHA: `f16f97490bb5d18da676d92770d9b80df41dcec4`
@@ -25,3 +25,11 @@ Commit `0a06a9e61929d80866bd7f48021a46f0b1dde7fb` intentionally routed `ActiveFl
 - Validate the Core `Release` build, the focused mutation-integrity and canonical-reference preflights, and the full Core smoke iteratively; report the next independent blocker without expanding this claim.
 
 Completion means the bounded test/gate-only reconciliation is merged through a normal PR, this claim is closed, and exact merged-main evidence is returned to `/root`.
+
+## Outcome
+
+- Merged test/gate-only reconciliation: PR `#1214`, main SHA `0e0c8dbad6e0adea3681ad6345308d7b0dc96531`.
+- Core `Release` build passed with 0 warnings and 0 errors.
+- The mutation-integrity and canonical-reference preflights passed, as did the Floor/Zone name, editor atomicity, assign no-op audit, and active no-op audit gates.
+- Full Core smoke reached the independent `ModelHealthElementRelationCanonicalitySmoke.PaddedFamilyFailsVisible` fixture after the relation setter began trimming padded Family IDs; that fixture was not expanded into this claim.
+- Active-delete protection and all missing/invalid, ambiguity, and case-sensitive non-canonical health coverage remain intact. Production, Level, P10, #1005, #77, native, private-data, and Actions surfaces were untouched.
