@@ -42,3 +42,7 @@ Layer-mapping category canonicality, mapping prefix casing, template collection 
 ## Remaining gates
 
 The added deterministic Core smoke should run in the repository's normal managed smoke/build qualification environment. No LOCAL_ONLY or native product behavior is newly claimed by this change.
+
+## 2026-08-14 nullable compile follow-up
+
+The target nullable compiler reports `CS8602` at the integrated `raw.Trim()` guard. Parent `/root` delegated only the behavior-preserving explicit-null compile correction to `/root/fix_curtain_method_gates` under claim `2026-08-14-codex-template-layer-pattern-nullable.md`. This completed claim retains its canonicality history; the follow-up will not change accepted/rejected values or recognition behavior.
