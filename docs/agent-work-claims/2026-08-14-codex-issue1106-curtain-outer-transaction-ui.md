@@ -1,6 +1,6 @@
 # Work claim — Curtain3D aggregate post-commit UI boundary
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `/root/fix_curtain_method_gates`
 - Registered: `2026-08-14T13:17:39+07:00`
 - Baseline main SHA: `30afa77de4cf2db06af41e2685a637f4323fe350`
@@ -41,3 +41,12 @@ The first LINE host phase still calls `WallSolidBuilder.BuildSelectedLineWalls` 
 No P10 runner/probe/local-evidence edit or execution; no BricsCAD launch/private data/Actions; no frame/panel builder changes; no selection/UsePickSet change; no outer transaction, Undo, geometry, ownership, Health, Level, V26, release or signing work.
 
 Completion means the bounded source/gate PR is merged, this claim is closed, and the exact merged-main SHA is returned to `/root` for the licensed P10 rerun. Static/build success is not P10 `LOCAL_PASS`.
+
+## Integrated result
+
+- Claim PR `#1157` merged at `9d7c0c71b1b64587c6b10ef33c4b35d722094064`; stale-consumer claim amendment PR `#1160` merged at `cb1d842c932adf31648f308272a338696fd67cc4` before those gate edits.
+- Source/gate PR `#1163` merged at exact main SHA `03bd7e014ddf0cfeee69824b20a649f1a2e3140e`.
+- The LINE/path host builders retain default standalone post-commit UI behavior; only `QS3DCURTAIN3D` passes `allowPostCommitUi: false`, leaving its final Regen in `FinalizeUi` after the outer transaction commits.
+- Fourteen focused Curtain/builder gates passed after final main synchronization. Installed-reference BricsCAD V25 `Release|x64` built with zero warnings/errors.
+- Aggregate preflight discovered 794 gates; every claimed/relevant gate passed. Its two remaining failures (`preflight-ci-manual-only.py`, `preflight-direct-draw.py`) are unrelated current-main work. Core smoke is independently blocked by a control-character schedule-collision fixture outside this claim.
+- No BricsCAD/private data/P10 runner/probe/docs implementation/Actions work was performed. P10 and overall LOCAL-002 remain `PENDING_LOCAL`; parent `/root` must rerun the licensed guarded P10 path on an exact descendant of the merged source.
