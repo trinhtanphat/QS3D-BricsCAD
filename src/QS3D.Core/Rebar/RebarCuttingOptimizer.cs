@@ -197,24 +197,21 @@ namespace QS3D.Core.Rebar
             var exactFillCutCount = Math.Max(0, pieceCount - 1);
             var exactFillKerfM = RebarMath.Multiply(kerfPerCutM, exactFillCutCount, "cutting optimisation exact-fill kerf");
             var exactFillConsumedM = RebarMath.Add(allocatedLengthM, exactFillKerfM, "cutting optimisation exact-fill consumption");
-            if (NearlyEqual(exactFillConsumedM, stockLengthM))
+            if (exactFillConsumedM <= stockLengthM && stockLengthM - exactFillConsumedM <= FitToleranceM)
                 return new BarMetrics(true, allocatedLengthM, exactFillCutCount, exactFillKerfM, 0d);
-            if (exactFillConsumedM > stockLengthM + FitToleranceM)
+            if (exactFillConsumedM > stockLengthM)
                 return BarMetrics.DoesNotFit;
 
             var tailCutCount = pieceCount;
             var tailKerfM = RebarMath.Multiply(kerfPerCutM, tailCutCount, "cutting optimisation tail kerf");
             var consumedM = RebarMath.Add(allocatedLengthM, tailKerfM, "cutting optimisation stock consumption");
-            if (consumedM > stockLengthM + FitToleranceM)
+            if (consumedM > stockLengthM)
                 return BarMetrics.DoesNotFit;
 
             var offCutLengthM = stockLengthM - consumedM;
-            if (offCutLengthM < 0d && offCutLengthM >= -FitToleranceM) offCutLengthM = 0d;
-            if (offCutLengthM < 0d) return BarMetrics.DoesNotFit;
+            if (offCutLengthM <= FitToleranceM) offCutLengthM = 0d;
             return new BarMetrics(true, allocatedLengthM, tailCutCount, tailKerfM, offCutLengthM);
         }
-
-        private static bool NearlyEqual(double left, double right) => Math.Abs(left - right) <= FitToleranceM;
 
         private sealed class Piece
         {
