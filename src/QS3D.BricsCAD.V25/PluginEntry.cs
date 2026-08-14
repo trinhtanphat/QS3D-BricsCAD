@@ -1,6 +1,7 @@
 using System;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Ribbon;
+using QS3D.BricsCAD.V25.UI;
 using QS3D.BricsCAD.V25.Updates;
 using Teigha.Runtime;
 
@@ -11,6 +12,7 @@ namespace QS3D.BricsCAD.V25
         public void Initialize()
         {
             RuntimeDiagnosticsCommands.CaptureLoadedBinaryIdentity();
+            ProductionUiPolish.EnsureRegistered();
             try
             {
                 DocumentLifecycleCoordinator.Start();
