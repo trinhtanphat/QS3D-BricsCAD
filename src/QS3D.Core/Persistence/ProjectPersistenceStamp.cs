@@ -101,6 +101,8 @@ namespace QS3D.Core.Persistence
         private static string SnapshotNestedPersistedContent(ProjectState project)
         {
             var snapshot = new StringBuilder();
+            AppendString(snapshot, project.Name);
+            AppendDateTime(snapshot, project.UpdatedUtc);
 
             AppendSequenceCount(snapshot, project.Zones.Count);
             foreach (var zone in project.Zones)
