@@ -228,12 +228,14 @@ namespace QS3D.BricsCAD.V25
             public DocumentHistory(Document document, ProjectState project, string revision)
             {
                 Document = document;
+                Database = document.Database;
                 Project = project;
                 ProjectId = project.ProjectId;
                 CurrentRevision = revision;
             }
 
             public Document Document { get; }
+            public Database Database { get; }
             public ProjectState Project { get; }
             public string ProjectId { get; }
             public string CurrentRevision { get; set; }
@@ -371,7 +373,7 @@ namespace QS3D.BricsCAD.V25
                         ClassifyDesynchronizationCause(history.Cause),
                         nativeRevision,
                         markerValid);
-                if (!ReferenceEquals(history.Document, document) ||
+                if (!IsSameNativeDrawing(history, document) ||
                     !ReferenceEquals(history.Project, project) ||
                     !string.Equals(history.ProjectId, project.ProjectId, StringComparison.Ordinal))
                     return new SanitizedDiagnosticSnapshot(
@@ -395,7 +397,7 @@ namespace QS3D.BricsCAD.V25
                         ClassifyDesynchronizationCause(history.Cause),
                         nativeRevision,
                         markerValid);
-                if (!ReferenceEquals(history.Document, document) ||
+                if (!IsSameNativeDrawing(history, document) ||
                     !ReferenceEquals(history.Project, project) ||
                     !string.Equals(history.ProjectId, project.ProjectId, StringComparison.Ordinal))
                     return new SanitizedDiagnosticSnapshot(
@@ -741,7 +743,25 @@ namespace QS3D.BricsCAD.V25
 
         private static bool IsActiveDocument(Document document)
         {
-            try { return ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document); }
+            try
+            {
+                var active = Application.DocumentManager.MdiActiveDocument;
+                return active != null && IsSameNativeDrawing(active, document);
+            }
+            catch { return false; }
+        }
+
+        private static bool IsSameNativeDrawing(DocumentHistory history, Document document)
+        {
+            if (ReferenceEquals(history.Document, document)) return true;
+            try { return ReferenceEquals(history.Database, document.Database); }
+            catch { return false; }
+        }
+
+        private static bool IsSameNativeDrawing(Document left, Document right)
+        {
+            if (ReferenceEquals(left, right)) return true;
+            try { return ReferenceEquals(left.Database, right.Database); }
             catch { return false; }
         }
 
@@ -773,7 +793,7 @@ namespace QS3D.BricsCAD.V25
             string nativeRevision)
         {
             if (history.Desynchronized ||
-                !ReferenceEquals(history.Document, document) ||
+                !IsSameNativeDrawing(history, document) ||
                 !ReferenceEquals(history.Project, project) ||
                 !string.Equals(history.ProjectId, project.ProjectId, StringComparison.Ordinal) ||
                 !string.Equals(history.CurrentRevision, nativeRevision, StringComparison.Ordinal))
@@ -829,7 +849,8 @@ namespace QS3D.BricsCAD.V25
         {
             try
             {
-                if (ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                var active = Application.DocumentManager.MdiActiveDocument;
+                if (active != null && IsSameNativeDrawing(active, document))
                 {
                     PaletteCoordinator.RefreshProject();
                     document.Editor.Regen();
