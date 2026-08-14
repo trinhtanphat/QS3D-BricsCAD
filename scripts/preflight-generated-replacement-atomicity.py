@@ -8,12 +8,12 @@ errors = []
 contracts = {
     "LINE wall": {
         "path": "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs",
-        "start": "public static int BuildSelectedLineWalls(Document document, ProjectState project, ElementCategory category)",
+        "start": "public static int BuildSelectedLineWalls(\n            Document document,\n            ProjectState project,\n            ElementCategory category,\n            bool allowPostCommitUi = true)",
         "end": "private static SourceBatchKind ValidateSourceBatch",
     },
     "POLYLINE wall": {
         "path": "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs",
-        "start": "public static int BuildSelected(Document document, ProjectState project, ElementCategory category)",
+        "start": "public static int BuildSelected(\n            Document document,\n            ProjectState project,\n            ElementCategory category,\n            bool allowPostCommitUi = true)",
         "end": "private static void CommitWallPierPathSnapshot",
     },
     "WallPier profile": {

@@ -33,7 +33,11 @@ namespace QS3D.BricsCAD.V25.Cad
         public static int BuildSelectedLineWalls(Document document, ProjectState project) =>
             BuildSelectedLineWalls(document, project, ElementCategory.ArchitecturalWall);
 
-        public static int BuildSelectedLineWalls(Document document, ProjectState project, ElementCategory category)
+        public static int BuildSelectedLineWalls(
+            Document document,
+            ProjectState project,
+            ElementCategory category,
+            bool allowPostCommitUi = true)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -163,7 +167,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 throw;
             }
 
-            if (pending.Count > 0)
+            if (pending.Count > 0 && allowPostCommitUi)
                 CadPostCommitUi.TryRegen(document, "LINE wall native 3D");
             return pending.Count;
         }
