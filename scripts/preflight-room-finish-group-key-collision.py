@@ -76,9 +76,14 @@ else:
                 cursor = next_pos
 
 for token in (
-    'const string separator = "\\u001f";',
+    'const string separator = "|";',
     'new FloorDefinition("A" + separator + "B", "Floor AB", 0d)',
     'new FloorDefinition("A", "Floor A", 3d)',
+    'LegacyDelimitedKey(separator, "A" + separator + "B", "C", "WallFinish", "wf", "Paint", "m\\u00b2")',
+    'LegacyDelimitedKey(separator, "A", "B" + separator + "C", "WallFinish", "wf", "Paint", "m\\u00b2")',
+    '"fixture tuples collide under six-token delimiter-only grouping"',
+    'private static string LegacyDelimitedKey(string separator, params string[] tokens)',
+    'string.Join(separator, tokens)',
     'var firstRoom = Room("C", roomFamily.Id, "A" + separator + "B", "Room C");',
     'var secondRoom = Room("B" + separator + "C", roomFamily.Id, "A", "Room BC");',
     'var first = LinkedFinish("finish-1", finishFamily.Id, "A" + separator + "B", firstRoom.Id, 2d, "A1");',
@@ -118,4 +123,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Room Finish grouping uses collision-free length-prefixed identity, preserves case-insensitive grouping, and regression coverage separates accepted U+001F-bearing floor/room tuples while retaining valid Room finish identity and normal grouping/provenance.")
+print("PASS: Room Finish grouping uses collision-free length-prefixed identity, preserves case-insensitive grouping, and regression coverage proves the historical six-token collision with accepted printable-delimiter floor/room tuples while retaining valid Room finish identity and normal grouping/provenance.")
