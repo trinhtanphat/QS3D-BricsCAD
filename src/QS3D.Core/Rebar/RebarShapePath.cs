@@ -56,8 +56,12 @@ namespace QS3D.Core.Rebar
             var x = 0d; var y = 0d; var angle = 0d;
             for (var index = 0; index < legs.Count; index++)
             {
-                x = AddFinite(x, legs[index] * Math.Cos(angle), "rebar shape X");
-                y = AddFinite(y, legs[index] * Math.Sin(angle), "rebar shape Y");
+                var nextX = AddFinite(x, legs[index] * Math.Cos(angle), "rebar shape X");
+                var nextY = AddFinite(y, legs[index] * Math.Sin(angle), "rebar shape Y");
+                if (nextX == x && nextY == y)
+                    throw new OverflowException("Rebar shape positive leg at index " + index + " collapsed at the current coordinate scale.");
+                x = nextX;
+                y = nextY;
                 points.Add(new RebarShapePoint(x, y));
                 if (index < turns.Count) angle = AddFinite(angle, turns[index] * Math.PI / 180d, "rebar shape angle");
             }
