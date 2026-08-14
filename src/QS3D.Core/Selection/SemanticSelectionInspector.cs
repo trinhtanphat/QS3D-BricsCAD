@@ -291,7 +291,17 @@ namespace QS3D.Core.Selection
         {
             var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in selected)
-                foreach (var key in element.Quantities.Keys) keys.Add(key);
+            {
+                foreach (var key in element.Quantities.Keys)
+                {
+                    if (string.IsNullOrWhiteSpace(key))
+                        throw new InvalidOperationException("Selected element contains an empty quantity name: " + element.Id + ".");
+                    var canonicalKey = key.Trim();
+                    if (!string.Equals(key, canonicalKey, StringComparison.Ordinal))
+                        throw new InvalidOperationException("Selected element contains a non-canonical quantity name: " + element.Id + "/" + key + ".");
+                    keys.Add(key);
+                }
+            }
 
             var result = new List<SemanticSelectionQuantityValue>(keys.Count);
             foreach (var key in keys.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ThenBy(x => x, StringComparer.Ordinal))
