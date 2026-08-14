@@ -6,6 +6,7 @@ ribbon = (ROOT / "src/QS3D.BricsCAD.V25/Ribbon/QuickWorkflowRibbonAugmenter.cs")
 commands = (ROOT / "src/QS3D.BricsCAD.V25/ReferenceUiCommands.cs").read_text(encoding="utf-8")
 tree = (ROOT / "src/QS3D.BricsCAD.V25/UI/ReferenceWorkspaceTreeAugmenter.cs").read_text(encoding="utf-8")
 registration = (ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.ReferenceTreeRegistration.cs").read_text(encoding="utf-8")
+command_doc = (ROOT / "docs/COMMANDS.md").read_text(encoding="utf-8")
 
 required_ribbon = {
     "Theo nét CAD": "QS3DDRAWBYCAD",
@@ -27,6 +28,12 @@ for label, command in required_ribbon.items():
         errors.append(f"missing Ribbon mapping: {label} -> {command}")
     if command not in commands and command not in {"QS3DDRAWCIRCLE"}:
         errors.append(f"missing adapter command implementation: {command}")
+    if f"`{command}`" not in command_doc:
+        errors.append(f"missing command reference documentation: {command}")
+
+for command in ["QS3DDRAWLINE", "QS3DDRAWRECT", "QS3DDRAWCIRCLE"]:
+    if f"`{command}`" not in command_doc:
+        errors.append(f"missing context-aware basic drawing documentation: {command}")
 
 for label in [
     "Lưới Thẳng", "Lưới Cong", "Dầm HCN", "Giằng Tường", "Lanh Tô",

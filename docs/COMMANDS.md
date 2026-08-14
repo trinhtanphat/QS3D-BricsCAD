@@ -1,6 +1,6 @@
 # QS3D command reference
 
-Updated for the integrated source baseline on 2026-08-10. These names are **BricsCAD command-line/plugin commands after QS3D is loaded**, not standalone EXE or PowerShell commands. Commands that create/mutate native BricsCAD geometry remain subject to the licensed V25 runtime gate.
+Updated for the integrated source baseline on 2026-08-14. These names are **BricsCAD command-line/plugin commands after QS3D is loaded**, not standalone EXE or PowerShell commands. Commands that create/mutate native BricsCAD geometry remain subject to the licensed V25 runtime gate.
 
 ## Workspace, project and schedules
 
@@ -38,6 +38,26 @@ The Workspace property pane has two scopes:
 - **Đối tượng / Instance** — used when exactly one semantic element is selected; edits affect only that element and `↺` resets an override to the current Family value.
 
 Typed controls include finite-number/text fields, boolean checkbox and editable choices. Semantic selection resolves source handles and generated owner slots, including slab/wall/Foundation mesh and Curtain frame handles.
+
+## VẼ / reference-workflow utility commands
+
+The 2026-08-14 clean-room screenshot parity pass exposes these additional user-facing entry points. They reuse existing QS3D semantics or delegate to the installed BricsCAD native command engine; they are not a second CAD/IFC implementation.
+
+- `QS3DDRAWLINE` — context-aware QS3D line using the active Project/Family/Floor/Zone and native LINE geometry with QS3D context XData.
+- `QS3DDRAWRECT` — context-aware QS3D rectangle using the active Project/Family/Floor/Zone.
+- `QS3DDRAWCIRCLE` — context-aware QS3D circle using the active Project/Family/Floor/Zone.
+- `QS3DDRAWBYCAD` — **Theo nét CAD**; forwards into the existing `QS3DCONVERT2D` workflow.
+- `QS3DDRAWPROFILE` — **Biên dạng**; delegates to BricsCAD native `PLINE` for profile drafting.
+- `QS3DFLOORSLOPE` — **Dốc sàn**; delegates to native `3DROTATE` so the operator controls the actual rotation axis/angle.
+- `QS3DSLABCUT` — **Cắt sàn**; delegates to native `SUBTRACT`; operator selection remains authoritative and normal native Undo/Cancel semantics apply.
+- `QS3DJOINCORNER` — **Nối góc**; delegates to native `FILLET`.
+- `QS3DJOINTEE` — **Nối chữ T**; delegates to native `EXTEND`.
+- `QS3DIFCIMPORT` — **Nhập IFC**; opens BricsCAD native `IMPORT`, where IFC/IFCZIP and installed-edition options are selected by the operator.
+- `QS3DIFCIMPORTLIGHT` — **Nhập IFC (nhẹ)**; opens the same native `IMPORT` path and instructs the operator to use the installed BricsCAD IFC XRef/spatial-split profile when available. It does not silently invent a separate lightweight IFC parser.
+- `QS3DIFCREMOVE` — **Xóa IFC**; opens native `XREF` management so an IFC imported as XRef can be detached explicitly.
+- `QS3DIFCEXPORT` — **Xuất IFC**; delegates to native BricsCAD BIM `IFCEXPORT`.
+
+These buttons are source-wired and statically guarded. Visibility, installed-edition command availability, IFC options, DPI rendering and native Undo/Cancel remain exact-V25 runtime acceptance items.
 
 ## Direct Draw / Tạo mới
 
