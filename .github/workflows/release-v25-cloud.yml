@@ -273,17 +273,19 @@ jobs:
 
           $brx = @(Get-ChildItem -LiteralPath $extract -Recurse -File -Filter 'BrxMgd.dll')
           $td = @(Get-ChildItem -LiteralPath $extract -Recurse -File -Filter 'TD_Mgd.dll')
-          if ($brx.Count -lt 1 -or $td.Count -lt 1) {
-            throw 'Could not locate BrxMgd.dll and TD_Mgd.dll in the extracted V25 installer.'
+          $brep = @(Get-ChildItem -LiteralPath $extract -Recurse -File -Filter 'TD_MgdBrep.dll')
+          if ($brx.Count -lt 1 -or $td.Count -lt 1 -or $brep.Count -lt 1) {
+            throw 'Could not locate BrxMgd.dll, TD_Mgd.dll, and TD_MgdBrep.dll in the extracted V25 installer.'
           }
 
           $candidateDirs = @($brx | ForEach-Object { $_.Directory.FullName } | Sort-Object -Unique)
           $bricsDir = $candidateDirs | Where-Object {
             (Test-Path -LiteralPath (Join-Path $_ 'BrxMgd.dll') -PathType Leaf) -and
-            (Test-Path -LiteralPath (Join-Path $_ 'TD_Mgd.dll') -PathType Leaf)
+            (Test-Path -LiteralPath (Join-Path $_ 'TD_Mgd.dll') -PathType Leaf) -and
+            (Test-Path -LiteralPath (Join-Path $_ 'TD_MgdBrep.dll') -PathType Leaf)
           } | Select-Object -First 1
           if ([string]::IsNullOrWhiteSpace($bricsDir)) {
-            throw 'BrxMgd.dll and TD_Mgd.dll were not found together in one extracted V25 runtime directory.'
+            throw 'BrxMgd.dll, TD_Mgd.dll, and TD_MgdBrep.dll were not found together in one extracted V25 runtime directory.'
           }
 
           "BRICSCAD_V25_DIR=$bricsDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -300,7 +302,7 @@ jobs:
         shell: powershell
         run: |
           if (-not $env:BRICSCAD_V25_DIR) { throw 'BRICSCAD_V25_DIR was not resolved from the pinned installer.' }
-          foreach ($name in @('BrxMgd.dll', 'TD_Mgd.dll')) {
+          foreach ($name in @('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')) {
             if (-not (Test-Path -LiteralPath (Join-Path $env:BRICSCAD_V25_DIR $name) -PathType Leaf)) {
               throw "Required BricsCAD V25 compile reference is missing: $name"
             }
