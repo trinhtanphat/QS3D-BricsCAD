@@ -295,6 +295,10 @@ The full Core smoke next reaches `CurtainWallScheduleGroupKeyCollisionSmoke`, wh
 
 Reserve only those three smoke files to add the minimum matching project definitions while preserving the delimiter-bearing IDs and visible labels that form each collision tuple: Curtain gets its two Floor and two GlassWall Family definitions, Door gets its two Door Family definitions, and Room Finish gets its referenced Zone. Preserve grouping keys, row counts, quantities, names/materials/provenance and every assertion. Do not edit any reporting builder, identity guard, grouping algorithm or production domain policy. Re-run the complete Core smoke after this fixture-data-only reconciliation.
 
+### 2026-08-14 Curtain collision fixture delegation
+
+Current Floor/Family persistability validation makes U+001F definition identities unreachable. Parent task `/root` explicitly delegates only `tests/QS3D.Core.SmokeTests/CurtainWallScheduleGroupKeyCollisionSmoke.cs` to `/root/fix_level_curtain_frame_z` under `2026-08-14-codex-curtain-schedule-valid-collision-fixture.md`: use valid printable-delimiter identities plus an explicit test-local legacy delimiter-collision assertion. The parent retains LOCAL-003 probe/runner ownership and will not edit this smoke while the child claim is `ACTIVE`.
+
 ## 2026-08-12 base schedule reference-integrity fixture reconciliation expansion
 
 Baseline audited after a clean fetch and fast-forward: `origin/main@f74dbc55d5c141b78d7f20d0a65bac26b901126f`.
