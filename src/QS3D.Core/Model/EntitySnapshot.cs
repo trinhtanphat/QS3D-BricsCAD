@@ -13,9 +13,9 @@ namespace QS3D.Core.Model
 
         public EntitySnapshot(string handle, string entityType, string layer)
         {
-            if (string.IsNullOrWhiteSpace(handle)) throw new ArgumentException("Handle is required.", nameof(handle));
-            if (string.IsNullOrWhiteSpace(entityType)) throw new ArgumentException("Entity type is required.", nameof(entityType));
-            Handle = handle.Trim(); EntityType = entityType.Trim(); Layer = layer ?? string.Empty;
+            Handle = CanonicalIdentifier(handle, nameof(handle), "Handle is required.", "Handle must not contain control characters.");
+            EntityType = CanonicalIdentifier(entityType, nameof(entityType), "Entity type is required.", "Entity type must not contain control characters.");
+            Layer = layer ?? string.Empty;
             Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
         public string Handle { get; }
@@ -47,6 +47,18 @@ namespace QS3D.Core.Model
         }
         public bool HasQs3dGeneratedOwnershipMarker { get; set; }
         public IDictionary<string, string> Metadata { get; }
+
+        private static string CanonicalIdentifier(string value, string parameterName, string requiredMessage, string controlMessage)
+        {
+            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException(requiredMessage, parameterName);
+            var canonical = value.Trim();
+            for (var index = 0; index < canonical.Length; index++)
+            {
+                if (char.IsControl(canonical[index]))
+                    throw new ArgumentException(controlMessage, parameterName);
+            }
+            return canonical;
+        }
 
         private static double? RequireFinite(double? value, string parameterName)
         {
