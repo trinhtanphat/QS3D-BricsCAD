@@ -1,49 +1,51 @@
 # Work claim — CST-01B canonical matched CostCode identity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-cst01b-ratebook-costcode-20260814-0827`
 - Registered: `2026-08-14T08:27:30+07:00`
+- Last updated: `2026-08-14T08:32:18+07:00`
 - Baseline main SHA: `28e19a066f89b67b12ff9bdbdfef3bbceb5568e3`
 - Priority: `CST-01 / P1 deterministic identity hardening` — matched RateBook resolutions must expose the selected canonical rate identity rather than a caller-supplied case alias
 
 ## Confirmed source gap
 
-`CostCode` identity compares case-insensitively and `RateBook.Resolve(...)` intentionally accepts case aliases such as `conc` for a catalog item stored as `CONC`. The current matched path nevertheless builds `RateBookResolution` with the caller's `CostCode` object. As a result, two semantically identical lookups can resolve the same `RateItem` while exposing different observable `RateBookResolution.CostCode.Value` casing.
+`CostCode` identity compares case-insensitively and `RateBook.Resolve(...)` intentionally accepts case aliases such as `conc` for a catalog item stored as `CONC`. The matched path nevertheless built `RateBookResolution` with the caller's `CostCode` object. As a result, two semantically identical lookups could resolve the same `RateItem` while exposing different observable `RateBookResolution.CostCode.Value` casing.
 
-The existing deterministic RateBook smoke already exercises a lowercase `conc` lookup against canonical `CONC`, but does not assert the resolution identity. This lane pins that mismatch without changing lookup matching, rate selection, unmatched semantics, persistence, estimate math, or currency/unit policy.
+The existing deterministic RateBook smoke already exercised a lowercase `conc` lookup against canonical `CONC`, but did not assert the resolution identity.
 
-## Reserved scope
+## Completed implementation
 
-- For a matched `RateBook.Resolve(...)`, make `RateBookResolution.CostCode` come from the selected `RateItem.CostCode` so the matched result exposes the selected catalog identity.
-- Keep unmatched results tied to the requested `CostCode`, because no catalog item exists to supply a selected identity.
-- Add one focused regression assertion proving a lowercase alias lookup returns the canonical selected item CostCode.
+- Source commit: `06df9150d99dcf1a888a74812ba6a5de27cfb3c8` (`fix(cost): canonicalize matched RateBook CostCode`).
+- Regression commit: `a4058f12400a2aaa9a43a2902b4c30a5715ab5ee` (`test(cost): guard matched RateBook CostCode identity`).
+- Matched `RateBook.Resolve(...)` now constructs the resolution with `match.CostCode`, preserving the identity of the selected catalog item.
+- Unmatched results still retain the requested `CostCode`, because there is no selected catalog item in that state.
+- Existing matching, effective-date selection, duplicate/ambiguity handling, unit/currency policy, signed-zero behavior and ordering are unchanged.
 
-## Expected surfaces
+## Files changed
 
 - `src/QS3D.Core/Cost/RateBook.cs`
 - `tests/QS3D.Core.SmokeTests/RateBookSmoke.cs`
 - this claim file
 
-## Excluded scope
+## Regression coverage
 
-- No changes to RateBook matching rules, effective-date selection, duplicate/ambiguity rules, unit/currency canonicality, signed-zero handling, RateItem ordering, persistence, EstimateLine, estimate freshness, revision cost impact, report/BQ, IFC, UI, BricsCAD adapters, release tooling or native qualification.
-- No new cost/rate model and no change to unmatched resolution semantics.
-- No GitHub Actions dispatch and no native BricsCAD claim.
+The already registered `RateBookSmoke.DeterministicOrderingAndLatestLookup()` case resolves lowercase alias `conc` against the catalog item stored as `CONC` and now asserts `RateBookResolution.CostCode.Value == "CONC"`. The assertion fails against the pre-fix implementation and pins the canonical matched identity behavior.
 
-## Validation plan
+## Validation actually performed
 
-- Publish this claim alone to `main`, refresh and verify it remains on current lineage, then recheck concurrent claims/commits for the two exact reserved files before implementation.
-- Apply the minimal matched-result identity fix and extend the already registered `RateBookSmoke` deterministic lookup case.
-- Re-fetch the pushed implementation and compare the exact diff from its parent.
-- Managed smoke execution is `NOT_RUN` unless a real .NET execution path becomes available; do not claim PASS from source inspection.
+- Claim-only commit published to `main`: `21730dfb89a7c943d0b95ca0609458979781f82e`.
+- Refreshed `main` and checked concurrent commits before source/test writes; no concurrent commit touched either reserved file.
+- Re-fetched both implementation commits. Source diff is exactly the matched `CostCode` argument substitution; regression diff is exactly one assertion in the existing deterministic lookup case.
+- Live `main` was re-fetched after source/test publication; `a4058f12400a2aaa9a43a2902b4c30a5715ab5ee` is on current lineage and was immediately followed only by unrelated semantic-selection hardening at the verification point `8e888ddf371aa7bbd8c7d34e1e1ea84dcb7fef66`.
+- Local managed smoke execution: **NOT_RUN** — this container has no `dotnet`, `csc`, or `mcs` executable.
+- GitHub Actions: **not dispatched**.
+- BricsCAD/native qualification: **not executed** and no native PASS is claimed.
+- Force-push: **not used**.
 
-## Coordination
+## Excluded scope preserved
 
-- CST-01A RateBook core is completed and is consumed as-is except for this narrow matched identity correction.
-- The just-completed estimate-input-freshness lane, current Family-category lanes, IFC-02E, MAP-03C, V25 release/update and LOCAL_ONLY qualification work are explicitly outside this claim.
-- Targeted RateBook/CostCode history shows no current overlapping RateBook claim after CST-01A completion.
-- Concurrent commits through `28e19a066f89b67b12ff9bdbdfef3bbceb5568e3` were compared before registration and did not touch either reserved production/test file.
+No changes were made to persistence, EstimateLine, estimate freshness, revision cost impact, report/BQ, IFC, UI, BricsCAD adapters, release tooling or native qualification. No new rate/cost engine was introduced.
 
-## Completion condition
+## Completion
 
-Current `main` contains the minimal matched CostCode canonicality correction plus focused regression coverage, the pushed source is re-fetched/verified, validation is reported truthfully, and this claim is updated to `COMPLETED` with the exact implementation SHA.
+CST-01B is complete and no longer reserves `RateBook.cs` or `RateBookSmoke.cs`. Later cost work should treat the selected `RateItem` identity as authoritative for matched resolution output while preserving explicit unmatched request identity.
