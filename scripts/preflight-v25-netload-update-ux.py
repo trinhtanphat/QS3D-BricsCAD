@@ -32,15 +32,24 @@ if COMMANDS.is_file():
         '[CommandMethod("QSVER", CommandFlags.Modal)]',
         'WriteVersionCore("QS3DVER")',
         'WriteVersionCore("QSVER")',
-        "Assembly.GetExecutingAssembly()",
+        "typeof(global::QS3D.BricsCAD.V25.RuntimeDiagnosticsCommands).Assembly",
+        "ProductVersionText(assembly)",
+        "AssemblyInformationalVersionAttribute",
         "assembly.Location",
-        "UpdateCoordinator.Instance.LastResult",
+        "Version source: loaded QS3D assembly (not updater cache or GitHub metadata).",
         "Run QS3DUPDATE to check GitHub Releases.",
     ):
         if token not in text:
             errors.append("UpdateCommands.cs missing customer update/version contract: " + token)
     if version_registration in text:
         errors.append("UpdateCommands.cs must not re-register canonical QS3DVERSION")
+    for stale_token in (
+        "Assembly.GetExecutingAssembly()",
+        "UpdateCoordinator.Instance.LastResult",
+        "result.CurrentVersion",
+    ):
+        if stale_token in text:
+            errors.append("UpdateCommands.cs version aliases must use the loaded QS3D assembly, not updater/cache identity: " + stale_token)
 
 if RUNTIME_DIAGNOSTICS.is_file():
     text = RUNTIME_DIAGNOSTICS.read_text(encoding="utf-8")
