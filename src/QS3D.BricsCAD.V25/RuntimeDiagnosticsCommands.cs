@@ -51,7 +51,7 @@ namespace QS3D.BricsCAD.V25
         [CommandMethod("QS3DVERSION", CommandFlags.Modal)]
         public void VersionCheck()
         {
-            RuntimeCheck();
+            WriteVersionSummary();
         }
 
         [CommandMethod("QS3DRUNTIMECHECK", CommandFlags.Modal)]
@@ -206,6 +206,33 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private static void WriteVersionSummary()
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null) return;
+            try
+            {
+                var assembly = typeof(RuntimeDiagnosticsCommands).Assembly;
+                var originalVersion = ProductVersionText(assembly);
+                var displayVersion = NormalizeProductVersion(originalVersion);
+                if (!displayVersion.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                    displayVersion = "v" + displayVersion;
+                var buildIdentity = BuildIdentity(originalVersion);
+                var path = string.IsNullOrWhiteSpace(assembly.Location) ? "<unknown>" : assembly.Location;
+
+                document.Editor.WriteMessage("\nQS3D product version: " + displayVersion);
+                if (!string.IsNullOrWhiteSpace(buildIdentity))
+                    document.Editor.WriteMessage("\nBuild identity: " + buildIdentity);
+                document.Editor.WriteMessage("\nAssembly ABI version: " + VersionText(assembly) + " (internal compatibility version)");
+                document.Editor.WriteMessage("\nLoaded DLL: " + path);
+                document.Editor.WriteMessage("\nRun QS3DRUNTIMECHECK for full runtime/package verification.");
+            }
+            catch (System.Exception ex)
+            {
+                document.Editor.WriteMessage("\nQS3DVERSION error: " + ex.Message);
+            }
+        }
+
         private sealed class PackageMetadata
         {
             public string ProductVersion { get; set; } = string.Empty;
@@ -313,6 +340,14 @@ namespace QS3D.BricsCAD.V25
                     return informational.InformationalVersion.Trim();
             }
             return VersionText(assembly);
+        }
+
+        private static string BuildIdentity(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+            var buildMetadata = value.IndexOf('+');
+            if (buildMetadata < 0 || buildMetadata + 1 >= value.Length) return string.Empty;
+            return value.Substring(buildMetadata + 1).Trim();
         }
 
         private static bool ProductVersionsEqual(string left, string right) =>
