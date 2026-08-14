@@ -1,6 +1,6 @@
 # Work claim — semantic mutation relation canonical rollback fixture
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-root`
 - Registered: `2026-08-14T16:05:00+07:00`
 - Baseline main SHA: `6aa34b7ac`
@@ -40,4 +40,9 @@ The completed snapshot-fidelity contract still requires rollback to restore the 
 
 ## Completion record
 
-Pending implementation after this claim is merged and verified reachable from `origin/main`.
+- Claim PR #1251 merged as `968761f9cf97850cb3e43f3b5e009e04b7765f07` (claim head `0089859fb36e717e42639dd2c929f3eeb555579c`).
+- Implementation commit `9e8efaf137db7d527fed76e824be291194aab789` merged through PR #1256 as `5b73758ad4a3a0ae3e50f8f782fd96a6ec3a03c1`.
+- The diff changes only the reserved smoke: padded public relation writes are asserted canonical before the injected mutation, and rollback is checked against the exact captured canonical state.
+- Core SmokeTests Release build passed with 0 warnings / 0 errors; semantic-mutation, generic and manual-only preflights passed.
+- Full registered Core smoke advanced past this fixture and next stopped independently at `ProjectStatePersistedScalarVersioningSmoke`, whose ActiveZone expectation still assumes pre-canonicalization padded storage.
+- No production, native BricsCAD, LOCAL, workflow, private-data or GitHub Actions surface changed or ran.
