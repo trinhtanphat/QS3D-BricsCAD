@@ -6,6 +6,9 @@ using System.Windows;
 using System.Windows.Controls;
 using QS3D.BricsCAD.V25.Reporting;
 using QS3D.BricsCAD.V25.Services;
+using QS3D.Core.Domain;
+using QS3D.Core.Model;
+using QS3D.Core.Persistence;
 using QS3D.Core.Reporting;
 using QS3D.Core.Services;
 using BcadApplication = Bricscad.ApplicationServices.Application;
@@ -229,14 +232,19 @@ namespace QS3D.BricsCAD.V25.UI
 
             try
             {
-                var currentRow = ProjectQuantityReportBuilder.Detail(project, option.Row.ElementIds)
-                    .FirstOrDefault(x => CanonicalIds(x.ElementIds).SequenceEqual(CanonicalIds(option.Row.ElementIds), StringComparer.OrdinalIgnoreCase));
-                if (currentRow == null)
+                var preview = ProjectStateSnapshot.CreateDetachedCopy(project);
+                new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(preview);
+                var ids = CanonicalIds(option.Row.ElementIds);
+                var matches = ProjectQuantityReportBuilder.Detail(preview, ids)
+                    .Where(x => SameElementIdentity(ids, x))
+                    .ToList();
+                if (matches.Count != 1 || !SameRow(option.Row, matches[0]))
                 {
-                    _viewModel.Status = "Dữ liệu detail đã cũ; bấm Làm mới trước khi định vị giao.";
+                    _viewModel.Status = "Dữ liệu detail hoặc provenance đã thay đổi; bấm Làm mới trước khi định vị giao.";
                     return;
                 }
 
+                var currentRow = matches[0];
                 var semanticIds = currentRow.ElementIds
                     .Concat(new[] { deduction.ElementId })
                     .Where(x => !string.IsNullOrWhiteSpace(x))
