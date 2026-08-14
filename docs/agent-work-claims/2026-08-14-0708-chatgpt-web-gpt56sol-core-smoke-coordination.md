@@ -39,6 +39,10 @@ After amendment commit `404e110d954a354541cefaf0c3dddde5e399c0e7` landed and was
 
 The amendment does **not** reserve LOCAL-003 native BricsCAD qualification or any other source lane. If the work requires another source/test path, stop and land another claim amendment before reading/diagnosing/editing/testing that new path.
 
+## 2026-08-14 read-only normalizer verification amendment
+
+Before inspecting the implementation behind the newly used normalizer, this claim also reserves **read-only verification** of the symbol `GeneratedHandleIdentity` and the single source file that defines that symbol once located. The purpose is limited to confirming the exact numeric-alias and malformed-text fallback semantics required by #1092. This amendment does **not** authorize editing that helper. If a helper defect is found, stop and publish another claim amendment naming its exact path before any source modification or test expansion.
+
 ## Source fix currently on main
 
 - `d03edf8e4c476ee929d731a2c0c7400a8b8d14e4` updates `ModelHealthService` so persisted and live source handles use the existing `GeneratedHandleIdentity.Normalize` identity contract.
@@ -72,6 +76,7 @@ This incident is recorded in `docs/AGENT-CONCURRENCY-HANDOFF-2026-08-14.md` and 
 
 - `36a0762c5e5565f19e2fb99e771e248213e982e8` — enforce claim amendments and just-in-time collision checks.
 - `d06bfc8a41092d74f57ffbc5f93150ab03c1fc50` — shared 2026-08-14 Core-smoke/concurrency handoff.
+- `aef15cf1a7a8294fcd2503683abeadc85b79f5b4` — correct stale V25 run number/SHA in shared handoff.
 
 ## Completion criteria
 
