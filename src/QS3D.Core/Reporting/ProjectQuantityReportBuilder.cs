@@ -48,6 +48,8 @@ namespace QS3D.Core.Reporting
                 var floor = floors.TryGetValue(floorId, out var floorName) ? floorName : floorId;
                 var zone = zones.TryGetValue(zoneId, out var zoneName) ? zoneName : zoneId;
                 families.TryGetValue(familyId, out var family);
+                if (family != null && family.Category != element.Category)
+                    throw new InvalidOperationException("Quantity report element " + element.Id + " category " + element.Category + " does not match Family " + family.Id + " category " + family.Category + ". Repair the Family relation before reporting.");
                 if (family != null) familyId = family.Id;
                 var familyName = family != null ? family.Name : familyId;
                 var elementName = FirstInstanceProperty(element, "Name", "TenCauKien");
