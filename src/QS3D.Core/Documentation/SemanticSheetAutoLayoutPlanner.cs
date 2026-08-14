@@ -310,12 +310,14 @@ namespace QS3D.Core.Documentation
 
                 if (_started)
                 {
-                    if (FitsWithin(_cursorX, item.WidthMm, usableWidth))
+                    var wrapRow = !FitsWithin(_cursorX, item.WidthMm, usableWidth);
+                    if (!wrapRow)
                     {
                         localX = AdvanceGap(_cursorX, options.HorizontalGapMm, "automatic sheet horizontal gap");
+                        wrapRow = !FitsWithin(localX, item.WidthMm, usableWidth);
                     }
 
-                    if (!FitsWithin(localX, item.WidthMm, usableWidth))
+                    if (wrapRow)
                     {
                         var rowBottom = AdvanceEdge(_cursorY, rowHeight, "automatic sheet row height");
                         if (!FitsWithin(rowBottom, item.HeightMm, usableHeight)) return false;
