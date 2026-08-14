@@ -8,7 +8,7 @@
 
 ## Reserved scope
 
-Harden the V25 release-package/manual-NETLOAD path against Windows Mark-of-the-Web (`Zone.Identifier`) failures without weakening BricsCAD or PowerShell security. Add a package-local one-click recovery helper, package it deterministically, document the safe install/manual fallback, and add a focused static regression guard for this distribution contract.
+Harden the V25 release-package/manual-NETLOAD path against Windows Mark-of-the-Web (`Zone.Identifier`) failures without weakening BricsCAD or PowerShell security. Add a package-local one-click recovery helper, package it deterministically, keep signed-release executable coverage complete, document the safe install/manual fallback, and add a focused static regression guard for this distribution contract.
 
 ## Expected surfaces
 
@@ -16,7 +16,9 @@ Harden the V25 release-package/manual-NETLOAD path against Windows Mark-of-the-W
 - `scripts/INSTALL-QS3D.cmd` only for comparison; no behavior change expected
 - `scripts/UNBLOCK-QS3D.cmd` (new)
 - `scripts/unblock-v25-netload.ps1` (new fail-closed package-integrity helper)
-- `scripts/preflight-update-install-ux.py` — extend the existing installer/MOTW source guard rather than adding a duplicate preflight
+- `scripts/finalize-v25-signed-package.ps1` — include the new executable helper in signed payload coverage
+- `.github/workflows/release-v25.yml` — sign/verify the new executable helper when signed V25 packaging is requested; do not dispatch the workflow
+- `scripts/preflight-update-install-ux.py` — extend the existing installer/MOTW source guard and lock signed-helper coverage
 - `README.md`
 - generated V25 `README.txt` text embedded in `scripts/package-v25.ps1`
 - this claim file for close-out
@@ -38,6 +40,7 @@ Harden the V25 release-package/manual-NETLOAD path against Windows Mark-of-the-W
 - make `unblock-v25-netload.ps1` verify the full `SHA256SUMS.txt` coverage and required V25 package identity files before recursively removing Mark-of-the-Web
 - verify `UNBLOCK-QS3D.cmd` uses one `RemoteSigned` PowerShell process and invokes the package verifier; invalid or incomplete packages must fail before payload unblocking
 - verify `package-v25.ps1` includes both new recovery files before `SHA256SUMS.txt` generation
+- require signed V25 releases to Authenticode-sign and verify `unblock-v25-netload.ps1`, and have signed-package finalization record it in `signedExecutablePayload`
 - extend/run the focused deterministic `preflight-update-install-ux.py` guard where execution is available; otherwise perform exact-source readback and report the execution limitation without fabricating a PASS
 - re-fetch `main` and recheck same-path claims immediately before implementation push
 
@@ -47,4 +50,4 @@ The earlier V25 preview package/run-140 claim currently uses a non-reserving `SO
 
 ## Completion condition
 
-The secure manual-NETLOAD MOTW recovery path, packaging inclusion, documentation and regression guard are pushed to current `main`; the claim is marked `COMPLETED` with exact implementation SHA/readback evidence and any remaining LOCAL_ONLY V25 validation is stated explicitly.
+The secure manual-NETLOAD MOTW recovery path, signed-release coverage, packaging inclusion, documentation and regression guard are pushed to current `main`; the claim is marked `COMPLETED` with exact implementation SHA/readback evidence and any remaining LOCAL_ONLY V25 validation is stated explicitly.
