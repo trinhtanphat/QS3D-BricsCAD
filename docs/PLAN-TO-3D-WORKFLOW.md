@@ -72,6 +72,8 @@ Static lifecycle contract được khóa bởi `scripts/preflight-plan-to-3d-pro
 
 Exact BricsCAD V25 proof cho toàn bộ Plan-to-3D command contract — quick no-prompt defaults của `QS3DCONVERT2D` / `QS3DPLAN2WALLS`, advanced prompt cancellation của `QS3DCONVERT2DADV`, preview-to-commit freshness, scoped regeneration và ownership-scoped compensation — nằm trong **LOCAL-014** của `docs/LOCAL-AGENT-INBOX.md`. Automation-only `QS3DPLAN2DPROBE` và `scripts/test-bricscad-v25-plan-to-3d.ps1` đã PASS P01 quick-positive tại exact SHA `21ca2d08427013f3ef8154708fef85fb2454ff8f`, nhưng các nhánh alias/open-POLYLINE/preferred-Family/advanced-cancel/drift/rollback/Undo/save-reopen vẫn `PENDING_LOCAL`. Runtime proof cho `QS3DDRAWWINDOW`, các quick-workflow Ribbon entry, Auto Host và explicit `QS3DCUTSELECTEDOPENINGS` handoff nằm trong **LOCAL-008**. Cả hai vẫn là `PENDING_LOCAL`; source review không được coi là `LOCAL_PASS` và không xác nhận các source gap chưa được sửa.
 
+P02 source-ready handoff cho LOCAL-014 dùng automation-only `QS3DPLAN2DP02PREPARE`, production quick alias `QS3DCONVERT2D`, `QS3DPLAN2DP02SELECTALIAS`, production quick alias `QS3DPLAN2WALLS`, rồi `QS3DPLAN2DP02VERIFY` qua runner `scripts/test-bricscad-v25-plan-to-3d-p02.ps1`. Probe tạo đúng một LINE và một open straight POLYLINE, áp preferred active `ArchitecturalWall` Family `0.31 m / 4.2 m / 0.45 m`, và yêu cầu unrelated dirty semantic state được giữ nguyên. Đây chỉ là `SOURCE_READY / PENDING_LOCAL`: chưa chạy BricsCAD và không bao phủ advanced prompt drift/cancel, rollback injection, Undo/Redo hay save/reopen; toàn bộ LOCAL-014 vẫn `PENDING_LOCAL` cho đến exact licensed run.
+
 ## Bước 3 — Hoàn thiện mô hình
 
 Sau khi có tường 3D, tiếp tục trực tiếp trong BricsCAD bằng các công cụ QS3D:
