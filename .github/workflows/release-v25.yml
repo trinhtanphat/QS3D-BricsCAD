@@ -171,7 +171,8 @@ jobs:
             'dist\QS3D-BricsCAD-V25\QS3D.Core.dll',
             'dist\QS3D-BricsCAD-V25\install-v25-autoload.ps1',
             'dist\QS3D-BricsCAD-V25\uninstall-v25-autoload.ps1',
-            'dist\QS3D-BricsCAD-V25\update-v25.ps1'
+            'dist\QS3D-BricsCAD-V25\update-v25.ps1',
+            'dist\QS3D-BricsCAD-V25\unblock-v25-netload.ps1'
           )
           & .\scripts\sign-v25.ps1 `
             -Path $payload `
@@ -188,7 +189,8 @@ jobs:
             'dist\QS3D-BricsCAD-V25\QS3D.Core.dll',
             'dist\QS3D-BricsCAD-V25\install-v25-autoload.ps1',
             'dist\QS3D-BricsCAD-V25\uninstall-v25-autoload.ps1',
-            'dist\QS3D-BricsCAD-V25\update-v25.ps1'
+            'dist\QS3D-BricsCAD-V25\update-v25.ps1',
+            'dist\QS3D-BricsCAD-V25\unblock-v25-netload.ps1'
           )
           & .\scripts\verify-v25-signatures.ps1 `
             -Path $payload `
@@ -327,7 +329,7 @@ jobs:
               -Uri ($uploadBase + '?name=' + $encodedName) `
               -Headers $headers `
               -ContentType $contentType `
-               -InFile $asset | Out-Null
+              -InFile $asset | Out-Null
           }
 
           $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$($release.id)"
