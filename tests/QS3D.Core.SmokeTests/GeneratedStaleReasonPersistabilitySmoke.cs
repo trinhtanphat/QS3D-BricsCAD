@@ -14,7 +14,7 @@ namespace QS3D.Core.SmokeTests
 
         internal static void Run()
         {
-            var element = new ProjectElement("E-STALE", ElementCategory.CurtainWall);
+            var element = new ProjectElement("E-STALE", ElementCategory.GlassWall);
             element.Properties["GeneratedCurtainFrameHandles"] = "AB12";
             element.MarkClean(ElementDirtyFlags.All);
 
