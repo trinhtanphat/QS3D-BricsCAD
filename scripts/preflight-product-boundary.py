@@ -27,7 +27,7 @@ required = {
     "docs/ARCHITECTURE.md": ("Hosted-plugin boundary", "QS3D is a **BricsCAD-hosted plugin**", "`QS3D.BricsCAD.V25` — BricsCAD V25", "`QS3D.BricsCAD.V26` — BricsCAD V26", "not a standalone"),
     "docs/UI-SPEC.md": ("Plugin hosting boundary", "no separate QS3D desktop shell", "workflow/UX familiarity only"),
     "docs/V25-INSTALL.md": ("This installs a **BricsCAD V25 plugin**", "There is intentionally no `QS3D.exe`", "DemandLoad or `NETLOAD`"),
-    "docs/BLT3D-RESEARCH.md": ("Product-form clarification", "BricsCAD V25 plugin", "workflow/UX only"),
+    "docs/BLT3D-RESEARCH.md": ("Product-form clarification", "BricsCAD-hosted plugin", "current V25/V26", "workflow/UX only"),
     "docs/DIRECT-DRAW-WORKFLOW.md": ("QS3D remains a **BricsCAD V25 x64 .NET plugin**", "not a request to create a standalone"),
     "docs/DIRECT-DRAW-P0-IMPLEMENTATION.md": ("QS3D remains a **BricsCAD V25 x64 .NET plugin**", "does not introduce a standalone CAD engine"),
     "docs/DIRECT-DRAW-P1-IMPLEMENTATION.md": ("QS3D remains a **BricsCAD V25 x64 .NET plugin**", "not a standalone CAD application"),
