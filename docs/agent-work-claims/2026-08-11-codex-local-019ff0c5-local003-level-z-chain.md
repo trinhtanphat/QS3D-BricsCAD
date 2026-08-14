@@ -734,3 +734,9 @@ This claim is reactivated before any renewed build or native launch. After this 
 Clean exact SHA `945f26795725114c33251fc6eca031458e59fd1e` reached licensed BricsCAD V25.2.10 and returned sanitized `LEVEL_Z_RUNTIME_CURTAIN_RANGE_FAILED`: the Level-resolved host occupied `3 m .. 7 m`, panels occupied `3.05 m .. 6.95 m`, but frame output occupied `1 m .. 6.975 m`. The local worker made no builder change and opened source issue `#1125`.
 
 Parent task `/root` explicitly delegated the CAD-independent production correction to `/root/fix_level_curtain_frame_z`. Claim `2026-08-14-codex-issue1125-level-curtain-frame-z.md` exclusively owns `CurtainWallFrameSolidBuilder.cs`, `CurtainWallPathFrameSolidBuilder.cs`, and the minimum deterministic source-contract coverage for this mismatch. This LOCAL-003 claim retains the Level probe/runner, exact-SHA licensed rerun, cleanup evidence, and final runtime status, and will not concurrently edit those production source surfaces while the delegated claim is `ACTIVE`.
+
+## 2026-08-14 issue #1125 Level rebar successor split
+
+The exact `8676b6a8430062931356be7dca3bace268ca233d` licensed rerun verified the corrected Curtain chain and then returned sanitized `LEVEL_Z_RUNTIME_REBAR_FAILED` with complete cleanup. The local worker made no rebar builder change.
+
+Parent task `/root` explicitly delegated the CAD-independent Level-rebar source correction to `/root/fix_level_curtain_frame_z`. Reactivated claim `2026-08-14-codex-issue1125-level-curtain-frame-z.md` owns only the implicated production rebar/mesh builder placement and minimum focused source coverage. This LOCAL-003 claim retains all runtime probe/runner/evidence and will not concurrently edit those successor source surfaces while the delegated claim is `ACTIVE`.
