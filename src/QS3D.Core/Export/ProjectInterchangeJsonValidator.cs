@@ -6,6 +6,8 @@ using System.Linq;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
+using System.Xml;
+using System.Xml.Linq;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
@@ -175,6 +177,15 @@ namespace QS3D.Core.Export
                 return Result(null, issues);
             }
 
+            try
+            {
+                ValidateNoUnknownMembers(utf8, issues);
+            }
+            catch (Exception ex) when (ex is SerializationException || ex is XmlException)
+            {
+                issues.Error("JSON_PARSE", "Semantic snapshot JSON shape cannot be inspected: " + ex.Message, "$.");
+                return Result(null, issues);
+            }
             ValidateHeader(snapshot, issues);
             ValidateProject(snapshot.Project, issues);
             RequireCollection(snapshot.Zones, "zones", issues);
@@ -205,6 +216,68 @@ namespace QS3D.Core.Export
                 elements.Count,
                 issues.Items);
         }
+
+        private static void ValidateNoUnknownMembers(byte[] utf8, IssueCollector issues)
+        {
+            XDocument document;
+            using (var reader = JsonReaderWriterFactory.CreateJsonReader(utf8, XmlDictionaryReaderQuotas.Max))
+                document = XDocument.Load(reader, LoadOptions.None);
+
+            var root = document.Root;
+            if (root == null) return;
+            ValidateObjectMembers(root, "$", RootMembers, issues);
+            ValidateObjectMembers(Member(root, "units"), "$.units", UnitsMembers, issues);
+            ValidateObjectMembers(Member(root, "project"), "$.project", ProjectMembers, issues);
+            ValidateArrayObjectMembers(Member(root, "zones"), "$.zones", ZoneMembers, issues);
+            ValidateArrayObjectMembers(Member(root, "floors"), "$.floors", FloorMembers, issues);
+            ValidateArrayObjectMembers(Member(root, "families"), "$.families", FamilyMembers, issues);
+            ValidateArrayObjectMembers(Member(root, "elements"), "$.elements", ElementMembers, issues);
+        }
+
+        private static void ValidateObjectMembers(XElement? value, string path, ISet<string> allowedMembers, IssueCollector issues)
+        {
+            if (value == null) return;
+            foreach (var member in value.Elements())
+            {
+                if (issues.Full) return;
+                var name = JsonMemberName(member);
+                if (!allowedMembers.Contains(name))
+                    issues.Error("JSON_UNKNOWN_MEMBER", "Semantic snapshot contains a JSON member outside the supported v1 object contract: " + name + ".", path);
+            }
+        }
+
+        private static void ValidateArrayObjectMembers(XElement? value, string path, ISet<string> allowedMembers, IssueCollector issues)
+        {
+            if (value == null) return;
+            var index = 0;
+            foreach (var item in value.Elements())
+            {
+                if (issues.Full) return;
+                ValidateObjectMembers(item, path + "[" + index.ToString(CultureInfo.InvariantCulture) + "]", allowedMembers, issues);
+                index++;
+            }
+        }
+
+        private static XElement? Member(XElement value, string name) =>
+            value.Elements().FirstOrDefault(x => string.Equals(JsonMemberName(x), name, StringComparison.Ordinal));
+
+        private static string JsonMemberName(XElement value)
+        {
+            var encodedName = value.Attribute("item");
+            return string.Equals(value.Name.NamespaceName, "item", StringComparison.Ordinal) && encodedName != null
+                ? encodedName.Value
+                : value.Name.LocalName;
+        }
+
+        private static readonly ISet<string> RootMembers = Members("format", "formatVersion", "units", "project", "zones", "floors", "families", "elements");
+        private static readonly ISet<string> UnitsMembers = Members("length", "area", "volume", "mass");
+        private static readonly ISet<string> ProjectMembers = Members("id", "name", "schemaVersion", "drawingFingerprint", "updatedUtc");
+        private static readonly ISet<string> ZoneMembers = Members("id", "name");
+        private static readonly ISet<string> FloorMembers = Members("id", "name", "elevationM");
+        private static readonly ISet<string> FamilyMembers = Members("id", "name", "category", "properties");
+        private static readonly ISet<string> ElementMembers = Members("id", "category", "familyId", "floorId", "zoneId", "drawingFingerprint", "updatedUtc", "sourceRefScope", "sourceHandles", "dependencies", "properties", "quantities");
+
+        private static ISet<string> Members(params string[] values) => new HashSet<string>(values, StringComparer.Ordinal);
 
         private static void ValidateHeader(SnapshotContract snapshot, IssueCollector issues)
         {
