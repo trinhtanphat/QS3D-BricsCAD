@@ -141,7 +141,12 @@ namespace QS3D.Core.SmokeTests
             ExpectThrows<InvalidOperationException>(() => MeasurementWorkItemCoverageEvaluator.Evaluate(paddedQuantity, catalog));
 
             var controlIdentity = new ProjectState("control", "Control");
-            controlIdentity.Elements.Add(CleanQuantityElement("Bad\u0001Id", ElementCategory.Slab, "NetVolumeM3", 1d));
+            var controlIdElement = CleanQuantityElement("CorruptId", ElementCategory.Slab, "NetVolumeM3", 1d);
+            var idField = typeof(ProjectElement).GetField("<Id>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement Id backing field changed; update corruption regression intentionally.");
+            idField.SetValue(controlIdElement, "Bad\u0001Id");
+            Equal("Bad\u0001Id", controlIdElement.Id, "Control-character corruption fixture must reach the evaluator.");
+            controlIdentity.Elements.Add(controlIdElement);
             ExpectThrows<InvalidOperationException>(() => MeasurementWorkItemCoverageEvaluator.Evaluate(controlIdentity, catalog));
 
             var undefinedCategory = new ProjectState("category", "Category");
