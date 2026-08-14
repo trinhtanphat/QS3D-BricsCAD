@@ -28,9 +28,9 @@ def main() -> int:
         "does not expose an Enhanced Key Usage extension",
         "New-Object Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension",
         "$enhancedEku.CopyFrom($eku)",
-        "foreach ($usage in $enhancedEku.EnhancedKeyUsages)",
-        "[string]::Equals([string]$usage.Value, $codeSigningOid, [StringComparison]::Ordinal)",
-        "if (-not $hasCodeSigningEku)",
+        "$enhancedEku.EnhancedKeyUsages | Where-Object { $_.Value -eq $codeSigningOid }",
+        "if (-not @(",
+        "is not valid for Code Signing ($codeSigningOid)",
         "Set-AuthenticodeSignature",
     )
     for token in required_tokens:
@@ -52,20 +52,18 @@ def main() -> int:
 
     eku_lookup = text.find("$eku = $certificate.Extensions")
     eku_copy = text.find("$enhancedEku.CopyFrom($eku)")
-    eku_loop = text.find("foreach ($usage in $enhancedEku.EnhancedKeyUsages)")
-    eku_refusal = text.find("if (-not $hasCodeSigningEku)")
+    eku_filter = text.find("$enhancedEku.EnhancedKeyUsages | Where-Object { $_.Value -eq $codeSigningOid }")
+    eku_refusal = text.find("is not valid for Code Signing ($codeSigningOid)")
     cert_resolve = text.find("$certificate = Get-CodeSigningCertificate -Thumbprint $CertificateThumbprint")
     sign_call = text.find("$signature = Set-AuthenticodeSignature")
-    positions = (eku_lookup, eku_copy, eku_loop, eku_refusal, cert_resolve, sign_call)
+    positions = (eku_lookup, eku_copy, eku_filter, eku_refusal, cert_resolve, sign_call)
     require(min(positions) >= 0, "signing EKU/signing ordering token is missing")
     require(
-        eku_lookup < eku_copy < eku_loop < eku_refusal < cert_resolve < sign_call,
+        eku_lookup < eku_copy < eku_filter < eku_refusal < cert_resolve < sign_call,
         "certificate EKU OID validation must complete before any Set-AuthenticodeSignature call",
     )
 
-    print(
-        "PASS: V25 signing requires a structured EKU extension containing the exact Code Signing OID before Authenticode signing and does not depend on localized extension display text."
-    )
+    print("PASS: V25 signing requires a structured EKU extension containing the exact Code Signing OID before Authenticode signing and does not depend on localized extension display text.")
     return 0
 
 

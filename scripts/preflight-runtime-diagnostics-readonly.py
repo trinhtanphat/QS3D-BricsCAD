@@ -30,7 +30,9 @@ else:
     for token in (
         "private const int ExpectedRuntimeMajor = 26;",
         "private const int ExpectedRuntimeMajor = 25;",
-        "var expectedRuntime = Major(brxAssembly) == ExpectedRuntimeMajor && Major(tdAssembly) == ExpectedRuntimeMajor;",
+        "var expectedRuntime = NativeRuntimeAssembliesMatch(brxAssembly, tdAssembly);",
+        "if (Major(brxAssembly) != ExpectedRuntimeMajor || Major(tdAssembly) != ExpectedRuntimeMajor)",
+        "return Major(typeof(Brep).Assembly) == ExpectedRuntimeMajor;",
         "var ok = expectedRuntime && x64Runtime && packageVersionMatches && diskVersionMatches && diskFingerprintMatches;",
     ):
         if token not in text:
@@ -42,4 +44,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3DRUNTIMECHECK inspects the compile-time V25/V26 host-major/package and loaded/on-disk binary identity state independently of optional semantic project presence and never creates project state.")
+print("PASS: QS3DRUNTIMECHECK inspects the compile-time V25/V26 complete native host-major/package and loaded/on-disk binary identity state independently of optional semantic project presence and never creates project state.")

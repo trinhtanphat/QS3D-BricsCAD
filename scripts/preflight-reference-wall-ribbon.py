@@ -25,8 +25,8 @@ if PLUGIN.is_file():
     text = PLUGIN.read_text(encoding="utf-8")
     if "RibbonInitializationCoordinator.Start();" not in text:
         errors.append("PluginEntry must start the bounded Ribbon initialization coordinator")
-    if "ReferenceWallRibbonAugmenter.Reset();" not in text:
-        errors.append("reference-wall ribbon augmenter must reset during plugin termination")
+    if "TryCleanup(ReferenceWallRibbonAugmenter.Reset);" not in text:
+        errors.append("reference-wall ribbon augmenter must participate in contained plugin teardown")
 
 if AUGMENTER.is_file():
     text = AUGMENTER.read_text(encoding="utf-8")
@@ -55,4 +55,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3D_AUTHOR exposes the PICKFIRST-capable reference-wall command through the bounded Ribbon coordinator without replacing existing wall authoring.")
+print("PASS: QS3D_AUTHOR exposes the PICKFIRST-capable reference-wall command through the bounded Ribbon coordinator, with contained teardown, without replacing existing wall authoring.")

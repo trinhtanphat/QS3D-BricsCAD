@@ -63,8 +63,8 @@ if PLUGIN.is_file():
     text = PLUGIN.read_text(encoding="utf-8")
     for needle in (
         "RibbonInitializationCoordinator.Start();",
-        "QuantityReferenceRibbonAugmenter.Reset();",
-        "RibbonBootstrapper.Reset();",
+        "TryCleanup(QuantityReferenceRibbonAugmenter.Reset);",
+        "TryCleanup(RibbonBootstrapper.Reset);",
     ):
         if needle not in text:
             errors.append("PluginEntry missing coordinated Quantity reference lifecycle hook: " + needle)
@@ -110,4 +110,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: the additive QS3D_QTY reference panel reconciles eight real workflows by stable IDs, preserves canonical quantity panels, initializes through the bounded Ribbon coordinator, dispatches on the active DWG, and does not clear/remove Ribbon state.")
+print("PASS: the additive QS3D_QTY reference panel reconciles eight real workflows by stable IDs, preserves canonical quantity panels, initializes through the bounded Ribbon coordinator, dispatches on the active DWG, and participates in contained teardown without clearing/removing Ribbon state.")
