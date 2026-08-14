@@ -22,29 +22,34 @@ namespace QS3D.Core.SmokeTests
                 "DrawingPath",
                 project => project.DrawingPath,
                 (project, value) => project.DrawingPath = value,
+                " drawing/path.dwg ",
                 " drawing/path.dwg ");
             AssertScalarMutation(
                 "DrawingFingerprint",
                 project => project.DrawingFingerprint,
                 (project, value) => project.DrawingFingerprint = value,
+                " fingerprint-value ",
                 " fingerprint-value ");
             AssertScalarMutation(
                 "ActiveZoneId",
                 project => project.ActiveZoneId,
                 (project, value) => project.ActiveZoneId = value,
-                " zone-a ");
+                " zone-a ",
+                "zone-a");
             AssertScalarMutation(
                 "ActiveFloorId",
                 project => project.ActiveFloorId,
                 (project, value) => project.ActiveFloorId = value,
-                " floor-a ");
+                " floor-a ",
+                "floor-a");
         }
 
         private static void AssertScalarMutation(
             string label,
             Func<ProjectState, string> read,
             Action<ProjectState, string> write,
-            string value)
+            string value,
+            string expectedStoredValue)
         {
             var project = new ProjectState("scalar-" + label, "Persisted scalar " + label);
             var oldTimestamp = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -55,7 +60,7 @@ namespace QS3D.Core.SmokeTests
 
             Require(project.ChangeVersion == beforeVersion + 1L, label + " real change must advance ChangeVersion exactly once.");
             Require(project.UpdatedUtc != oldTimestamp, label + " real change must refresh UpdatedUtc.");
-            Require(string.Equals(read(project), value, StringComparison.Ordinal), label + " must preserve exact string storage semantics.");
+            Require(string.Equals(read(project), expectedStoredValue, StringComparison.Ordinal), label + " stored value did not match its persistence contract.");
 
             var changedVersion = project.ChangeVersion;
             var changedTimestamp = project.UpdatedUtc;
