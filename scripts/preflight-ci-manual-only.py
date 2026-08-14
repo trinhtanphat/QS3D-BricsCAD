@@ -235,11 +235,20 @@ else:
                 "gh workflow run release-v25-cloud.yml",
                 "--ref main",
                 "confirm_release=RELEASE",
-                "10000 + GITHUB_RUN_NUMBER",
-                "preview > 65535",
+                "git fetch --force --tags origin",
+                'series_prefix="v0.1.0-preview."',
+                'git tag --list "${series_prefix}*"',
+                "ordinal > 65535",
+                "max_preview >= 65535",
+                "preview=$((max_preview + 1))",
             ):
                 if token not in text:
                     errors.append(f"{path.name}: approved dispatcher contract missing token: {token}")
+            for forbidden_token in ("GITHUB_RUN_NUMBER", "10000 +"):
+                if forbidden_token in text:
+                    errors.append(
+                        f"{path.name}: dispatcher must not derive public preview ordinals from Actions run numbering: {forbidden_token}"
+                    )
             if "contents: write" in text:
                 errors.append(f"{path.name}: dispatcher must not have contents: write")
             if re.search(r"gh\s+workflow\s+run\s+(?!release-v25-cloud\.yml)", text):
