@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             CommercialAdjustmentChangeRemainsQuantityDriven();
             UnchangedStateIsZero();
             ComparableScopeIsStrict();
+            MeasurementIdentityScopeIsStrict();
             DecompositionOverflowFailsClosed();
         }
 
@@ -123,6 +124,21 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentNullException>(() => EstimateRevisionCostImpact.Create(baseline, null!));
         }
 
+        private static void MeasurementIdentityScopeIsStrict()
+        {
+            var baseline = Line("LINE", 1d, "ea", "ITEM", "USD", 1m);
+
+            Throws<ArgumentException>(() => EstimateRevisionCostImpact.Create(
+                baseline,
+                Line("LINE", 1d, "ea", "ITEM", "USD", 1m, semanticIdentity: "sem")));
+            Throws<ArgumentException>(() => EstimateRevisionCostImpact.Create(
+                baseline,
+                Line("LINE", 1d, "ea", "ITEM", "USD", 1m, sourceIdentity: "SRC-OTHER")));
+            Throws<ArgumentException>(() => EstimateRevisionCostImpact.Create(
+                baseline,
+                Line("LINE", 1d, "ea", "ITEM", "USD", 1m, quantityKey: "QTY-OTHER")));
+        }
+
         private static void DecompositionOverflowFailsClosed()
         {
             var previous = Line("LINE", 1d, "m3", "CONC", "USD", decimal.MaxValue);
@@ -138,14 +154,17 @@ namespace QS3D.Core.SmokeTests
             string currency,
             decimal unitRate,
             decimal adjustment = 0m,
-            string? adjustmentReason = null)
+            string? adjustmentReason = null,
+            string semanticIdentity = "SEM",
+            string sourceIdentity = "SRC",
+            string quantityKey = "QTY")
         {
             var snapshot = new MeasurementSnapshot(new[]
             {
                 new MeasurementTrace(
-                    "SEM",
-                    "SRC",
-                    "QTY",
+                    semanticIdentity,
+                    sourceIdentity,
+                    quantityKey,
                     Array.Empty<MeasurementTraceFact>(),
                     measuredQuantity,
                     Array.Empty<MeasurementTraceAdjustment>(),
@@ -168,9 +187,9 @@ namespace QS3D.Core.SmokeTests
             return EstimateLine.Create(
                 lineId,
                 snapshot,
-                "SEM",
-                "SRC",
-                "QTY",
+                semanticIdentity,
+                sourceIdentity,
+                quantityKey,
                 book,
                 new CostCode(costCode),
                 currency,
