@@ -28,6 +28,9 @@ checks = {
         'Tag="QS3DLEVELS"', 'Tag="QS3DZONES"', 'Tag="QS3DMATERIALS"', 'Tag="QS3DMATERIALXLSX"',
         'Tag="QS3DTEMPLATEEXPORT"', 'Tag="QS3DTEMPLATEIMPORT"', 'Tag="QS3DCURTAIN"', 'Tag="QS3DGEOMETRYEXT"',
         'Tag="QS3DREBARHUB"', 'Tag="QS3DBQ"', 'Tag="QS3DHEALTHALL"', 'Tag="QS3DAUDIT"', 'Click="OnCommandClick"',
+        'Text="GRID / REFERENCE WORKFLOW"', 'Tag="QS3DGRID"', 'Tag="QS3DGRIDNUMBER"',
+        'Tag="QS3DGRIDANNOTATE"', 'Tag="QS3DGRIDANNOTATEALL"', 'Tag="QS3DGRIDINTERSECTIONS"',
+        'Tag="QS3DGRIDNUMBERAUTO"', 'Tag="QS3DGRIDSYSTEMPREVIEW"',
         "Cửa sổ khóa theo bản vẽ đã mở", "READ-ONLY SNAPSHOT",
     ],
     "src/QS3D.BricsCAD.V25/UI/ProjectToolsWindow.xaml.cs": [
@@ -49,6 +52,10 @@ checks = {
         'new ButtonSpec("QS3D_PROJECT_LEVELS", "Tầng / Cao độ", "QS3DLEVELS")',
         'new ButtonSpec("QS3D_PROJECT_ZONES", "Khu vực / Zone", "QS3DZONES")',
         'new ButtonSpec("QS3D_PROJECT_MATERIALS", "Vật liệu", "QS3DMATERIALS")',
+        'new ButtonSpec("QS3D_PROJECT_GRID", "Grid / Trục", "QS3DGRID")',
+        'new ButtonSpec("QS3D_PROJECT_GRIDNUMBER", "Đánh số Grid", "QS3DGRIDNUMBER")',
+        'new ButtonSpec("QS3D_PROJECT_GRIDANNOTATE", "Gắn nhãn Grid", "QS3DGRIDANNOTATE")',
+        'new ButtonSpec("QS3D_PROJECT_GRIDANNOTATEALL", "Gắn nhãn tất cả Grid", "QS3DGRIDANNOTATEALL")',
         "FindById(items, spec.Id)", "CommandParameter", "CommandHandler", "SendStringToExecute",
     ],
     "src/QS3D.BricsCAD.V25/PluginEntry.cs": [
@@ -98,6 +105,7 @@ if adapter.is_dir():
 for command in (
     "QS3DPROJECTTOOLS", "QS3DLEVELS", "QS3DZONES", "QS3DMATERIALS", "QS3DMATERIALXLSX", "QS3DTEMPLATEEXPORT", "QS3DTEMPLATEIMPORT",
     "QS3DSAVE", "QS3DRELOAD", "QS3DCURTAIN", "QS3DGEOMETRYEXT", "QS3DREBARHUB", "QS3DBQ",
+    "QS3DGRID", "QS3DGRIDNUMBER", "QS3DGRIDANNOTATE", "QS3DGRIDANNOTATEALL", "QS3DGRIDINTERSECTIONS", "QS3DGRIDNUMBERAUTO", "QS3DGRIDSYSTEMPREVIEW",
     "QS3DREGEN", "QS3DHEALTHALL", "QS3DAUDIT", "QS3D", "QS3DREFRESH"):
     if commands.count(command) != 1: errors.append(command + " must be declared exactly once for Project Tools wiring")
 
@@ -106,4 +114,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: document-bound Project Tools exposes a read-only Zone/Floor/readiness dashboard, observes persisted dirty/version state without mutation, initializes through the bounded Ribbon coordinator, and preserves existing command wiring.")
+print("PASS: document-bound Project Tools exposes a read-only Zone/Floor/readiness dashboard plus the canonical Grid capture/number/annotation/planner-review workflow, observes persisted dirty/version state without mutation, initializes through the bounded Ribbon coordinator, and preserves existing command wiring.")
