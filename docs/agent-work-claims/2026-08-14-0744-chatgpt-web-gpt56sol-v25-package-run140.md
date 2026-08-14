@@ -12,6 +12,8 @@
   - `49ddf3bdcd03197e200ff45acb2ef86deb318c82` — focused static regression guard
   - `c7e5356829a50fb1fe3706f90c355dcd0720c84b` — dirty-index/worktree fail-closed hardening
   - `ec8671d8095865d6edddc758eaf431b3a04b64ea` — regression guard for dirty-tree/staged provenance
+  - `f38cc3464a11c62df31d50c186012a654b192e1f` — exclude the known NuGet cache before porcelain status parsing
+  - `bb27dc0cd65065ae67663ddc32e72cfe26ace220` — regression guard for NuGet status exclusion
 - Priority: V25 preview release identity and exact-source provenance.
 
 ## Reserved scope
@@ -29,10 +31,11 @@ Fresh run #141 (`31758733099`, job `94640258685`) on `e8b2625310c9772934f8f2e8e8
 - `release_tag` remains the single owner-provided preview-version input.
 - The workflow prepares one exact release source commit and records `RELEASE_COMMIT_SHA`.
 - Only the three aligned product `.csproj` files may be modified/staged by automatic version preparation.
-- Release preparation rejects any pre-existing staged or tracked dirty path and any unexpected untracked path. The workflow's known Actions cache under `.nuget/packages/` is the sole pre-existing untracked exception and is never staged by the helper.
+- Release preparation rejects any pre-existing staged or tracked dirty path and any unexpected untracked path.
+- The workflow's known repository-local Actions cache under `.nuget/packages/**` is excluded directly in the Git status pathspec before porcelain output is parsed. It is never staged by the explicit three-project `git add` allowlist.
 - After synchronization, only unstaged modifications to the explicit three-project allowlist are accepted; renamed/deleted/added/staged/unexpected statuses fail closed.
 - After explicit staging, the staged set must exactly equal the validated changed set, with no residual unstaged/unexpected path; the helper checks the cached diff again before commit.
-- After commit, no dirty/staged path may remain other than the known untracked NuGet cache.
+- After commit, the pathspec-filtered working tree/index must be clean.
 - `origin/main` must still equal the dispatched SHA before the non-force preparation push, and the pushed commit must read back exactly.
 - Package metadata `gitCommit`, local `HEAD`, and GitHub prerelease `target_commitish` remain bound to exact `RELEASE_COMMIT_SHA`, never stale `GITHUB_SHA` after an automatic version commit.
 - Manual-only trigger policy remains unchanged.
@@ -41,19 +44,19 @@ Fresh run #141 (`31758733099`, job `94640258685`) on `e8b2625310c9772934f8f2e8e8
 
 A remote audit found that the original preparation helper used `git diff --name-only`, which could not see a pre-existing staged path. That could allow an unrelated already-staged file to be included by the later release-preparation commit despite the three-project allowlist.
 
-`c7e5356829a50fb1fe3706f90c355dcd0720c84b` fixes that gap by using full porcelain status boundaries before synchronization, after synchronization, after staging and after commit. It also compares the staged set bidirectionally against the validated changed set and runs `git diff --cached --check` before commit. The only untracked exception is `.nuget/packages/`, because the workflow restores that repository-local Actions cache before release preparation; it remains untracked and is never included by the explicit `git add -- @allowed`.
+`c7e5356829a50fb1fe3706f90c355dcd0720c84b` fixes that gap by using full porcelain status boundaries before synchronization, after synchronization, after staging and after commit. It also compares the staged set bidirectionally against the validated changed set and runs `git diff --cached --check` before commit.
 
-`ec8671d8095865d6edddc758eaf431b3a04b64ea` extends `scripts/preflight-v25-preview-release-sync.py` to pin the clean-index/full-status ordering, exact staged-set checks, cached-diff check, post-commit cleanliness and non-force push contract. Exact-file readback confirms both commits are present, and GitHub compare confirms `ec8671d...` is an ancestor of current `main` after unrelated concurrent commits.
+A second audit found that parsing every untracked file under the restored `.nuget/packages/` cache was unnecessarily fragile on Windows: a legitimate cached package path that Git renders with quoting could be rejected before the helper had a chance to classify it as cache data. `f38cc3464a11c62df31d50c186012a654b192e1f` removes that ambiguity by excluding `.nuget/packages/**` in Git's pathspec before porcelain output is produced; unexpected paths outside the cache remain fail-closed. `bb27dc0cd65065ae67663ddc32e72cfe26ace220` pins this contract and rejects reintroduction of the old per-path cache parser.
 
 ## Validation status
 
 - Source version correction: proven by run #141 end-to-end `SUCCESS`.
 - Automatic source-sync/provenance implementation: pushed to `main`.
-- Dirty-index/worktree safety hardening and focused static guard: pushed and read back from exact SHA.
+- Dirty-index/worktree safety hardening, NuGet status parsing hardening and focused static guards: pushed and read back from exact SHAs.
 - No PowerShell runtime is available in this remote execution environment, so the preparation helper was not executed locally and no PowerShell/runtime PASS is fabricated.
 - A direct container checkout could not be obtained because this execution container has no outbound DNS; this does not alter GitHub source readback evidence.
-- No new GitHub Actions run was dispatched because the current owner request authorizes source fix/update/commit/push, not Actions execution.
-- Fresh automation acceptance remains required on a workflow run whose `head_sha` contains the automation and dirty-tree hardening commits. Rerunning #140/#141 is not sufficient because reruns use their original source/workflow SHA.
+- No new GitHub Actions release run was dispatched because a new run requires an owner-selected new release tag and would publish a prerelease; no new tag was invented.
+- Fresh automation acceptance remains required on a workflow run whose `head_sha` contains the automation and safety-hardening commits. Rerunning #140/#141 is not sufficient because reruns use their original source/workflow SHA.
 
 ## Excluded scope
 
