@@ -10,20 +10,41 @@ namespace QS3D.BricsCAD.V25.Updates
         internal static void Start()
         {
             if (_started) return;
-            _started = true;
-            UpdateCoordinator.Instance.AutomaticUpdateFound += OnAutomaticUpdateFound;
-            UpdateCoordinator.Instance.Start();
+
+            var subscribed = false;
+            try
+            {
+                UpdateCoordinator.Instance.AutomaticUpdateFound += OnAutomaticUpdateFound;
+                subscribed = true;
+                UpdateCoordinator.Instance.Start();
+                _started = true;
+            }
+            catch
+            {
+                if (subscribed)
+                {
+                    try { UpdateCoordinator.Instance.AutomaticUpdateFound -= OnAutomaticUpdateFound; }
+                    catch { }
+                }
+                try { UpdateCoordinator.Instance.Stop(); }
+                catch { }
+                _started = false;
+                throw;
+            }
         }
 
         internal static void Stop()
         {
             if (!_started) return;
 
-            TryScheduleVerifiedUpdateOnExit();
             _started = false;
-            UpdateCoordinator.Instance.AutomaticUpdateFound -= OnAutomaticUpdateFound;
-            UpdateCoordinator.Instance.Stop();
-            UpdateCenterWindowHost.Close();
+            TryScheduleVerifiedUpdateOnExit();
+            try { UpdateCoordinator.Instance.AutomaticUpdateFound -= OnAutomaticUpdateFound; }
+            catch { }
+            try { UpdateCoordinator.Instance.Stop(); }
+            catch { }
+            try { UpdateCenterWindowHost.Close(); }
+            catch { }
         }
 
         private static void TryScheduleVerifiedUpdateOnExit()
