@@ -1,8 +1,9 @@
 # Work claim — Floor/Zone assignment smoke canonical relation expectations
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-project-floor-zone-assignment-fixture-20260814` (`/root/fix_level_curtain_frame_z`)
-- Registered: `2026-08-14T16:00:00+07:00`
+- Registered: `2026-08-14T15:49:00+07:00`
+- Completed: `2026-08-14T15:52:00+07:00`
 - Baseline main SHA: `f6c35385939dae0969206b67707e49adca73623b`
 - Priority: next deterministic Core full-smoke blocker after completed ProjectElement relation normalization
 
@@ -35,4 +36,9 @@ Change only the two post-assignment relation expectations from padded aliases to
 
 ## Completion record
 
-Pending implementation and validation after this claim is merged to `main`.
+- Claim PR `#1238` merged as `c8302de334d08957588ea27c5938cd304d98c5f7`.
+- Test commit `5b6dd3e1c505fc4de7a7108fe3fd77e5f404b52f` merged through PR `#1240` as `3ccb9c4a2aa93405da8828b9c6fe919fd01aa011`.
+- The one reserved smoke now expects the already-stored trimmed lowercase Floor/Zone aliases `f-01` and `z-01`. Both assignment calls still assert `changed == 0`, unchanged project revision, clean element state, unchanged timestamp and canonical owned-target lookup; all active-alias repair and null-target atomicity cases remain unchanged.
+- Core Release build PASS with `0 warnings / 0 errors`. The mutation-integrity, canonical-reference, name-invariant, editor-atomicity, assignment-audit and active-audit Floor/Zone gates all PASS unchanged.
+- Full Core smoke advances beyond this fixture and stops at the next independent blocker: `ProjectMaterialCatalogSmoke.RenameStalesInheritedConsumerWithPaddedFamilyId` line 143 reports that the material-rename fixture expected padded stored `FamilyId` text although the authoritative relation setter already trimmed it.
+- No production, focused gate, `preflight-qsdb-relation-identity.py`, LOCAL runner/probe, BricsCAD/native/private data, GitHub Actions, release or packaging surface changed.
