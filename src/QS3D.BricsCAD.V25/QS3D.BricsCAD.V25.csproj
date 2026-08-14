@@ -18,10 +18,12 @@
   <ItemGroup>
     <Reference Include="BrxMgd"><HintPath>$(BRICSCAD_V25_DIR)\BrxMgd.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="TD_Mgd"><HintPath>$(BRICSCAD_V25_DIR)\TD_Mgd.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TD_MgdBrep"><HintPath>$(BRICSCAD_V25_DIR)\TD_MgdBrep.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
   <Target Name="ValidateBricsCadReferences" BeforeTargets="ResolveReferences">
     <Error Condition="'$(BRICSCAD_V25_DIR)' == ''" Text="BRICSCAD_V25_DIR is not set. Point it to the licensed BricsCAD V25 installation directory." />
     <Error Condition="!Exists('$(BRICSCAD_V25_DIR)\BrxMgd.dll')" Text="BrxMgd.dll not found under BRICSCAD_V25_DIR." />
     <Error Condition="!Exists('$(BRICSCAD_V25_DIR)\TD_Mgd.dll')" Text="TD_Mgd.dll not found under BRICSCAD_V25_DIR." />
+    <Error Condition="!Exists('$(BRICSCAD_V25_DIR)\TD_MgdBrep.dll')" Text="TD_MgdBrep.dll not found under BRICSCAD_V25_DIR; BREP quantity explanation requires the licensed V25 BREP API assembly." />
   </Target>
 </Project>
