@@ -1,6 +1,6 @@
 # Work claim — Semantic Selection numeric underflow parity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol-selection-numeric-underflow-20260814-0830`
 - Registered: `2026-08-14T08:30:00+07:00`
 - Baseline main SHA: `21730dfb89a7c943d0b95ca0609458979781f82e`
@@ -8,7 +8,7 @@
 
 ## Confirmed source gap
 
-`BulkEditService.MultiplyNumericProperty(...)` already fails closed on both numeric-literal underflow (a syntactically non-zero token that parses to exact zero) and multiplication underflow (finite non-zero operands whose product collapses to exact zero). `SemanticSelectionBulkEditService.MultiplyNumericProperty(...)` performs the equivalent semantic selection edit, but currently checks only parse validity and NaN/Infinity. It can therefore materialize an instance override of `0` from non-zero source magnitude, diverging from the established bulk-edit safety contract and losing semantic data.
+`BulkEditService.MultiplyNumericProperty(...)` already fails closed on both numeric-literal underflow (a syntactically non-zero token that parses to exact zero) and multiplication underflow (finite non-zero operands whose product collapses to exact zero). `SemanticSelectionBulkEditService.MultiplyNumericProperty(...)` performed the equivalent semantic selection edit, but checked only parse validity and NaN/Infinity. It could therefore materialize an instance override of `0` from non-zero source magnitude, diverging from the established bulk-edit safety contract and losing semantic data.
 
 ## Reserved scope
 
@@ -33,13 +33,19 @@ No changes to `BulkEditService`, formula evaluation, quantity arithmetic, family
 
 - `e16e5629b456c92b9ec614d25b422404e645a028` established fail-closed numeric-underflow semantics in `BulkEditService`.
 - `bb1a84e78ff490cead56bec10731464a8b2e48f2` added the adjacent bulk-edit regression.
-- Current semantic-selection source at the baseline still lacks those two guards; current focused smoke covers invalid numeric preflight but not underflow.
-- Targeted commit search found no existing semantic-selection underflow claim/fix.
+- Targeted commit search found no pre-existing semantic-selection underflow claim/fix before registration.
 
-## Validation plan
+## Completion record
 
-Publish this claim alone to `main`; refresh live `main` and recheck overlapping claims/changes for the two reserved files. Then apply the minimal parity guards and focused regression, reconcile current `main`, push without force, re-fetch exact diff/source, and close this claim `COMPLETED`. Managed/native execution is `NOT_RUN` unless a real executable toolchain is available; source inspection is not reported as runtime PASS.
+- Claim-only commit: `ea04043354223dd96d35788a455a78b1065f4c01`.
+- Production fix: `8e888ddf371aa7bbd8c7d34e1e1ea84dcb7fef66` (`fix(core): reject semantic selection numeric underflow`).
+- Focused regression: `ec94279b6da01b601449307b7cac5523da11696f` (`test(core): cover semantic selection numeric underflow`).
+- Remote verification: re-fetched current `main` at `ec94279b6da01b601449307b7cac5523da11696f`, confirmed the production blob still contains both fail-closed guards and the focused smoke contains parse-underflow atomicity, multiplication-underflow atomicity, legitimate zero, representable subnormal, and explicit zero-factor coverage.
+- Concurrent reconciliation: unrelated Room Finish and other agent commits were allowed to advance `main`; no reserved source/test overlap was observed before regression push.
+- Managed .NET smoke execution: `NOT_RUN` — no executable .NET toolchain was available through the connected repository workflow used in this session.
+- GitHub Actions: `NOT_DISPATCHED`.
+- BricsCAD/native runtime qualification: `NOT_RUN` / not claimed.
 
 ## Completion condition
 
-Current `main` contains the minimal semantic-selection underflow fix plus focused regression coverage, the pushed source/diff is verified remotely, and this claim is updated to `COMPLETED` with the implementation SHA and truthful validation status.
+Satisfied: current `main` contains the minimal semantic-selection underflow fix plus focused regression coverage, the pushed source/diff was re-fetched and verified remotely, and this claim is closed `COMPLETED` with exact commit references and truthful validation status.
