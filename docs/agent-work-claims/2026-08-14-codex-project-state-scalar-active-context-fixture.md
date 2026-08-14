@@ -1,6 +1,6 @@
 # Work claim — ProjectState scalar active-context fixture reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-root`
 - Registered: `2026-08-14T16:08:00+07:00`
 - Baseline main SHA: `1ea25aa7f69c70f72a81187a3d72f1766375a7e3`
@@ -41,4 +41,9 @@ DrawingPath and DrawingFingerprint must retain exact raw string storage. ActiveZ
 
 ## Completion record
 
-Pending implementation after the claim is merged and verified reachable from `origin/main`.
+- Claim PR #1259 merged as `1c3954a60f016a2080ab3178b89c7fba3d84dfbf` (claim head `6e14c7300977b6d4b069540a94631ab9243ed9c7`).
+- Implementation commit `783a394dc2c3d7f88834abd8529dcaf4b92da0cb` merged through PR #1262 as `2428e63869a51dc6d9c8d1d77a8cd2e61832fb38`.
+- The one-smoke diff retains exact padded storage for DrawingPath/Fingerprint and expects canonical trimmed ActiveZone/ActiveFloor values while preserving exactly-once version/timestamp and repeated padded-write no-op assertions.
+- Core SmokeTests Release build passed with 0 warnings / 0 errors; Floor/Zone mutation-integrity, rollback-matrix, generic and manual-only preflights passed.
+- Full registered Core smoke advanced and next stopped independently in `QsdbRelationIdentityCanonicalSmoke`, whose padded relation setup is canonicalized before Save.
+- No production, native BricsCAD, LOCAL, workflow, private-data or GitHub Actions surface changed or ran.
