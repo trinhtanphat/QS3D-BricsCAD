@@ -18,35 +18,35 @@ jobs:
         with:
           fetch-depth: 0
       - name: Move release preparation before toolchain setup
-        shell: python
+        shell: python {0}
         run: |
           from pathlib import Path
           p = Path('.github/workflows/release-v25-cloud.yml')
           s = p.read_text(encoding='utf-8')
-          setup = '''      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: "8.0.x"
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v5
-        with:
-          path: ${{ env.NUGET_PACKAGES }}
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', 'nuget.config') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-
-
-'''
-          anchor = '''          Write-Host "Exact release source commit: $releaseCommit"
-
-'''
+          setup = "\n".join([
+              "      - uses: actions/setup-python@v7",
+              "        with:",
+              "          python-version: \"3.12\"",
+              "",
+              "      - uses: actions/setup-dotnet@v6",
+              "        with:",
+              "          dotnet-version: \"8.0.x\"",
+              "",
+              "      - name: Cache NuGet packages",
+              "        uses: actions/cache@v5",
+              "        with:",
+              "          path: ${{ env.NUGET_PACKAGES }}",
+              "          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', 'nuget.config') }}",
+              "          restore-keys: |",
+              "            nuget-${{ runner.os }}-",
+              "",
+              "",
+          ])
+          anchor = '          Write-Host "Exact release source commit: $releaseCommit"\n\n'
           if s.count(setup) != 1:
-              raise SystemExit('Expected exactly one toolchain setup block')
+              raise SystemExit(f'Expected exactly one toolchain setup block, got {s.count(setup)}')
           if s.count(anchor) != 1:
-              raise SystemExit('Expected exactly one release preparation anchor')
+              raise SystemExit(f'Expected exactly one release preparation anchor, got {s.count(anchor)}')
           s = s.replace(setup, '', 1)
           s = s.replace(anchor, anchor + setup, 1)
           p.write_text(s, encoding='utf-8')
