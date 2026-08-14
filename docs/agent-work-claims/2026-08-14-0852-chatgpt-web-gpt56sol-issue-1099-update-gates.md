@@ -1,12 +1,16 @@
 # Work claim — Issue #1099 duplicate QS3DVERSION and Update gates
 
-- Status: `SOURCE_FIXED / PENDING_FRESH_VALIDATION`
+- Status: `COMPLETED`
+- Phase: `SOURCE_FIXED / EXACT_MAIN_VALIDATED / ISSUE_CLOSED`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-14T08:52:00+07:00`
+- Completed: `2026-08-14T10:09:23+07:00`
 - Baseline main SHA: `b8df1d0915ea69aa18313c0c593680f44660d3dc`
 - Claim SHA: `b0c4122575b2c29a49a381591252c9c669734fbf`
 - Source fix SHA: `d92c7eb404b4c5dfeb8aee039905f83ad30bbce5`
-- Issue: `#1099`
+- Exact validation SHA: `907a2e9fa2c0c1282c8361ee8f02b49e7b2687ae`
+- Validation closeout commit: `16d47ef46c4a955587f398d5597fb84ebce32c2e`
+- Issue: `#1099` — CLOSED / completed
 
 ## Reserved scope
 
@@ -17,24 +21,31 @@ Fix the remote-safe Update-lane regressions recorded in #1099 without touching L
 - reconcile `scripts/preflight-update-manifest-preclose.py`, `scripts/preflight-update-manual-preview-channel.py`, and `scripts/preflight-v25-netload-update-ux.py` with the current stronger source copy/contracts;
 - make stale-gate failure reporting safe on Windows legacy console encodings so an assertion is not hidden by `UnicodeEncodeError`.
 
-## Source fix evidence
+## Implemented source correction
 
-`d92c7eb404b4c5dfeb8aee039905f83ad30bbce5` (`fix(update): resolve version command and stale gates`) landed atomically on `main` and was read back there.
+`d92c7eb404b4c5dfeb8aee039905f83ad30bbce5` (`fix(update): resolve version command and stale gates`) landed on `main` and was read back there.
 
 - `UpdateCommands.cs` no longer registers `QS3DVERSION`; `QS3DVER` and `QSVER` remain and still call `WriteVersionCore`.
-- `RuntimeDiagnosticsCommands.cs` still owns `[CommandMethod("QS3DVERSION", CommandFlags.Modal)]` and routes it through `VersionCheck()` -> `RuntimeCheck()`, preserving loaded-binary identity diagnostics.
-- manifest-preclose gate now checks the current `Gói cập nhật ký số đã được xác minh trước khi đóng BricsCAD` contract.
-- manual-preview gate now checks the current preview/manual-install wording and the stronger `QS3D không hạ kiểm tra bảo mật để tự động thay DLL chưa ký.` security boundary.
-- NETLOAD/update UX gate now explicitly rejects a second `QS3DVERSION` registration in `UpdateCommands`, requires exactly one canonical registration in runtime diagnostics, retains both short aliases, and checks the current `Run QS3DUPDATE to check GitHub Releases.` guidance.
-- failure output in the affected gates uses stdout-encoding-aware `backslashreplace`; a cp1252 simulation preserved Vietnamese assertion text as escaped output without raising `UnicodeEncodeError`.
+- `RuntimeDiagnosticsCommands.cs` retains the canonical `QS3DVERSION` registration and loaded-binary identity path.
+- The three stale Update gates follow the current signed-manifest/manual-preview/update UX contracts.
+- Affected failure-output paths are console-encoding safe and no longer mask assertions with `UnicodeEncodeError`.
+- Later owner refinements `b4059961315ba7e6b5455ea8d41af65fe3c23227` and `f3b9bf99bbcfd566586dcbfa496fede3346816ee` preserve one concise canonical `QS3DVERSION` and the separate deep `QS3DRUNTIMECHECK` path.
+- Focused gate correction `e7c8416e6de2248f85bdbf836447252b1cbc94e8` merged through PR #1110 at `a33240db617541f425163936095d8b136d3b6ad2`.
 
-## Validation status
+## Exact validation closeout
 
-The current tool runtime cannot clone/download the full repository through its shell network, so the issue-requested installed-reference V25 build, five broad duplicate-command preflights, three Update preflights as executable files in a full checkout, and aggregate `preflight-all.py` have **not** been claimed as executed in this lane.
+Successor claim `docs/agent-work-claims/2026-08-14-codex-issue1099-update-validation-closeout.md` completed at commit `16d47ef46c4a955587f398d5597fb84ebce32c2e` against exact main `907a2e9fa2c0c1282c8361ee8f02b49e7b2687ae`:
 
-Read-back/static contract validation above is complete. A fresh full-checkout validation is still required before this claim or #1099 is marked completed.
+- installed-reference V25 `Release|x64` build: PASS, `0 warnings / 0 errors`;
+- exact product version: `0.1.0-preview.7+907a2e9fa2c0c1282c8361ee8f02b49e7b2687ae`;
+- five duplicate-command gates: PASS;
+- all three issue-named Update gates: PASS;
+- broader `preflight-auto-update.py`: PASS;
+- explicit cp1252 probes for the three affected console-safe helpers: PASS, with no `UnicodeEncodeError`;
+- aggregate `scripts/preflight-all.py`: PASS, all 783 discovered feature gates passed;
+- no interactive BricsCAD/private-data operation and no GitHub Actions operation was used for this closeout.
 
-No GitHub Actions workflow was dispatched for this work, matching both repository CI policy and #1099's `no GitHub Actions operation` requirement.
+GitHub issue #1099 was closed as `completed` after this exact validation. This original source claim no longer reserves any implementation, test, preflight, release, or LOCAL-002 surface.
 
 ## Excluded scope
 
@@ -44,4 +55,4 @@ No GitHub Actions workflow was dispatched for this work, matching both repositor
 
 ## Completion condition
 
-Run the issue-named installed-reference V25 build, the eight named preflights and aggregate `preflight-all.py` against `d92c7eb404b4c5dfeb8aee039905f83ad30bbce5` or a descendant that preserves these four changed files. If they pass, record exact evidence and mark this claim `COMPLETED`; otherwise reopen source work on the concrete failing contract.
+Satisfied. Source correction is on `main`, exact full-checkout validation is green, aggregate preflight is green, issue #1099 is closed, and the claim is released for future non-overlapping work.
