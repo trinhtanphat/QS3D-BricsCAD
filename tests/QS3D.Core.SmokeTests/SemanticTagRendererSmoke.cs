@@ -107,36 +107,48 @@ namespace QS3D.Core.SmokeTests
         {
             var familyFixture = BuildFixture();
             familyFixture.Element.FamilyId = " FAM-B";
+            if (familyFixture.Element.FamilyId != "FAM-B") throw new Exception("Family setter must canonicalize padded relation IDs.");
+            SetRawRelation(familyFixture.Element, "_familyId", " FAM-B");
             MustFail(
                 () => SemanticTagRenderer.Render(familyFixture.Project, familyFixture.Element, "{Family}"),
                 "Whitespace-padded Family references must fail closed instead of being normalized during render.");
 
             var floorFixture = BuildFixture();
             floorFixture.Element.FloorId = "F-02 ";
+            if (floorFixture.Element.FloorId != "F-02") throw new Exception("Floor setter must canonicalize padded relation IDs.");
+            SetRawRelation(floorFixture.Element, "_floorId", "F-02 ");
             MustFail(
                 () => SemanticTagRenderer.Render(floorFixture.Project, floorFixture.Element, "{Floor}"),
                 "Whitespace-padded Floor references must fail closed instead of being normalized during render.");
 
             var zoneFixture = BuildFixture();
             zoneFixture.Element.ZoneId = "\tZ-A";
+            if (zoneFixture.Element.ZoneId != "Z-A") throw new Exception("Zone setter must canonicalize padded relation IDs.");
+            SetRawRelation(zoneFixture.Element, "_zoneId", "\tZ-A");
             MustFail(
                 () => SemanticTagRenderer.Render(zoneFixture.Project, zoneFixture.Element, "{Zone}"),
                 "Whitespace-padded Zone references must fail closed instead of being normalized during render.");
 
             var blankFamilyFixture = BuildFixture();
             blankFamilyFixture.Element.FamilyId = "   ";
+            if (blankFamilyFixture.Element.FamilyId != string.Empty) throw new Exception("Family setter must canonicalize whitespace-only relation IDs to empty.");
+            SetRawRelation(blankFamilyFixture.Element, "_familyId", "   ");
             MustFail(
                 () => SemanticTagRenderer.Render(blankFamilyFixture.Project, blankFamilyFixture.Element, "{Family}"),
                 "Whitespace-only Family references must fail closed instead of being treated as unassigned.");
 
             var blankFloorFixture = BuildFixture();
             blankFloorFixture.Element.FloorId = "\t";
+            if (blankFloorFixture.Element.FloorId != string.Empty) throw new Exception("Floor setter must canonicalize whitespace-only relation IDs to empty.");
+            SetRawRelation(blankFloorFixture.Element, "_floorId", "\t");
             MustFail(
                 () => SemanticTagRenderer.Render(blankFloorFixture.Project, blankFloorFixture.Element, "{Floor}"),
                 "Whitespace-only Floor references must fail closed instead of being treated as unassigned.");
 
             var blankZoneFixture = BuildFixture();
             blankZoneFixture.Element.ZoneId = "  \t  ";
+            if (blankZoneFixture.Element.ZoneId != string.Empty) throw new Exception("Zone setter must canonicalize whitespace-only relation IDs to empty.");
+            SetRawRelation(blankZoneFixture.Element, "_zoneId", "  \t  ");
             MustFail(
                 () => SemanticTagRenderer.Render(blankZoneFixture.Project, blankZoneFixture.Element, "{Zone}"),
                 "Whitespace-only Zone references must fail closed instead of being treated as unassigned.");
@@ -213,6 +225,14 @@ namespace QS3D.Core.SmokeTests
             try { action(); }
             catch (InvalidOperationException) { failed = true; }
             if (!failed) throw new Exception(message);
+        }
+
+        private static void SetRawRelation(ProjectElement element, string fieldName, string rawId)
+        {
+            var field = typeof(ProjectElement).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null) throw new Exception("ProjectElement relation field " + fieldName + " is unavailable for the malformed-state fixture.");
+            if (field.FieldType != typeof(string)) throw new Exception("ProjectElement relation field " + fieldName + " must remain a string.");
+            field.SetValue(element, rawId);
         }
 
         private static void SetRawOwnerId(object owner, string rawId)
