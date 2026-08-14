@@ -9,6 +9,8 @@
 - Reserved surface: release/version naming documentation only.
 - Exclusions: no workflow/source/test changes, no release deletion or retagging, no mutation of historical tags/releases, no CI dispatch, no product-version bump.
 - Validation: review the final Markdown for deterministic examples, SemVer ordering safety, V25/V26 compatibility placement, and explicit migration guidance from the historical `v0.1.0-preview.10014` tag; verify the implementation diff is limited to the reserved documentation surface.
+- Implementation branch: `agent/chatgpt-gpt56sol/release-naming-policy`
+- Implementation commit: `8cdeb722f3d6dd43e82d0f565f3a701db15912a8`
 
 ## Owner intent
 
