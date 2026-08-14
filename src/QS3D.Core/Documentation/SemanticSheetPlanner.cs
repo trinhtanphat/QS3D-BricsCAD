@@ -200,7 +200,9 @@ namespace QS3D.Core.Documentation
             {
                 var placement = definition.Placements[i] ?? throw new ArgumentException("Semantic sheet placement cannot be null at index " + i + ".", nameof(definition));
                 var viewId = Required(placement.ViewId, "placements[" + i + "].ViewId", MaxIdLength);
-                if (!viewIndex.ContainsKey(viewId)) throw new InvalidOperationException("Semantic sheet references missing view id: " + viewId + ".");
+                if (!viewIndex.TryGetValue(viewId, out var view)) throw new InvalidOperationException("Semantic sheet references missing view id: " + viewId + ".");
+                if (view.Kind == SemanticViewKind.Schedule)
+                    throw new InvalidOperationException("Semantic sheet cannot place schedule view id as a sheet view: " + viewId + ".");
                 if (!placedViews.Add(viewId)) throw new InvalidOperationException("Semantic sheet cannot place the same view more than once: " + viewId + ".");
 
                 NonNegativeFinite(placement.Xmm, "placements[" + i + "].Xmm");

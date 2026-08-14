@@ -38,4 +38,14 @@ catalog = text[build_catalog_start:catalog_end]
 require("var views = MaterializeAvailableViewsBounded(availableViews);" in catalog, "BuildCatalog bypasses bounded available-view materialization")
 require("BuildUniqueViewIndex(views);" in catalog, "BuildCatalog must validate bounded available views before sheet planning")
 
+validated_start = text.index("private static SemanticSheetPlan BuildValidated(")
+materialize_start = text.index("private static List<SemanticSheetDefinition> MaterializeCatalogBounded(", validated_start)
+validated = text[validated_start:materialize_start]
+require("viewIndex.TryGetValue(viewId, out var view)" in validated, "sheet placements must resolve the referenced view plan")
+require("view.Kind == SemanticViewKind.Schedule" in validated, "sheet placements must reject Schedule-kind views")
+require(
+    "Semantic sheet cannot place schedule view id as a sheet view: " in validated,
+    "missing explicit Schedule-kind sheet-placement diagnostic",
+)
+
 print("semantic-sheet-planner preflight passed")
