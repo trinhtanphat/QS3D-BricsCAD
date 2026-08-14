@@ -32,9 +32,7 @@ def validate_sequence(existing_tags: list[str], requested: str) -> None:
         if not candidate:
             raise ValueError(f"malformed matching-series tag: {tag}")
         candidate_series = (
-            candidate["major"],
-            candidate["minor"],
-            candidate["patch"],
+            candidate["major"], candidate["minor"], candidate["patch"]
         )
         if candidate_series != series:
             raise ValueError(f"series mismatch after prefix selection: {tag}")
@@ -50,9 +48,7 @@ def validate_sequence(existing_tags: list[str], requested: str) -> None:
         raise ValueError("series exhausted Int64 ordinal range")
     expected = max(ordinals, default=0) + 1
     if requested_ordinal != expected:
-        raise ValueError(
-            f"expected {prefix}{expected}, got {requested}"
-        )
+        raise ValueError(f"expected {prefix}{expected}, got {requested}")
 
 
 def expect_ok(existing: list[str], requested: str) -> None:
@@ -71,33 +67,25 @@ def expect_fail(existing: list[str], requested: str) -> None:
 
 
 def main() -> int:
-    helper = (ROOT / "scripts" / "validate-preview-release-sequence.ps1").read_text(
-        encoding="utf-8"
-    )
-    prepare = (ROOT / "scripts" / "prepare-v25-cloud-release.ps1").read_text(
-        encoding="utf-8"
-    )
-    workflow = (ROOT / ".github" / "workflows" / "release-v25-cloud.yml").read_text(
-        encoding="utf-8"
-    )
+    helper = (ROOT / "scripts" / "validate-preview-release-sequence.ps1").read_text(encoding="utf-8")
+    prepare = (ROOT / "scripts" / "prepare-v25-cloud-release.ps1").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "release-v25-cloud.yml").read_text(encoding="utf-8")
+    dispatcher = (ROOT / ".github" / "workflows" / "dispatch-v25-cloud-after-main-integration.yml").read_text(encoding="utf-8")
 
-    required_helper_tokens = (
+    for token in (
         "git fetch --force --tags origin",
         "git tag --list",
         "Matching-series Git tag is not canonical",
         "ReleaseTag must use the next preview ordinal for its exact series",
         "[long]::MaxValue",
-    )
-    for token in required_helper_tokens:
+    ):
         if token not in helper:
             fail(f"preview sequence helper is missing required guard token: {token}")
 
     gate_call = "validate-preview-release-sequence.ps1"
     sync_call = "sync-preview-release-version.ps1"
-    if gate_call not in prepare:
-        fail("release preparation does not invoke the preview sequence gate")
-    if sync_call not in prepare:
-        fail("release preparation no longer invokes preview source synchronization")
+    if gate_call not in prepare or sync_call not in prepare:
+        fail("release preparation lost the sequence or source-synchronization gate")
     if prepare.index(gate_call) > prepare.index(sync_call):
         fail("preview sequence validation must run before release source mutation")
 
@@ -108,12 +96,23 @@ def main() -> int:
     if workflow.index(workflow_prepare) > workflow.index(publish_step):
         fail("V25 release workflow publishes before guarded release preparation")
 
+    if "GITHUB_RUN_NUMBER" in dispatcher or "10000 +" in dispatcher:
+        fail("automatic dispatcher must not derive public preview ordinals from Actions run numbering")
+    for token in (
+        "actions/checkout@v7",
+        "git fetch --force --tags origin",
+        'series_prefix="v0.1.0-preview."',
+        'git tag --list "${series_prefix}*"',
+        "preview=$((max_preview + 1))",
+        "max_preview >= 65535",
+        '-f release_tag="${tag}"',
+    ):
+        if token not in dispatcher:
+            fail(f"automatic preview dispatcher is missing required history-derived token: {token}")
+
     expect_ok([], "v0.1.1-preview.1")
     expect_ok(["v0.1.1-preview.1"], "v0.1.1-preview.2")
-    expect_ok(
-        ["v0.1.1-preview.1", "v0.1.1-preview.2"],
-        "v0.1.1-preview.3",
-    )
+    expect_ok(["v0.1.1-preview.1", "v0.1.1-preview.2"], "v0.1.1-preview.3")
     expect_fail(["v0.1.1-preview.1", "v0.1.1-preview.2"], "v0.1.1-preview.2")
     expect_fail(["v0.1.1-preview.1", "v0.1.1-preview.2"], "v0.1.1-preview.1")
     expect_fail(["v0.1.1-preview.1", "v0.1.1-preview.2"], "v0.1.1-preview.4")
