@@ -1,10 +1,51 @@
 # GitHub Actions / CI Policy
 
-This file is the repository-level source of truth for when GitHub Actions may run and how multi-agent work is integrated before final CI.
+This file is the repository-level source of truth for CI ownership, multi-agent integration and final exact-SHA evidence.
 
-## Default policy: manual-only, with one owner-approved post-integration exception
+**Owner policy — 2026-08-14:** task-scoped, non-destructive CI/verification is part of the normal AI agent/chat-session completion loop. This does **not** grant release/publish authority and does **not** grant permission to write or merge `main`.
 
-GitHub Actions remain **manual-only by default**. The only automatic trigger approved by the repository owner is:
+Read `docs/AI-SESSION-WORKFLOW.md` and `docs/AGENT-WORK-REGISTRATION.md` together with this file.
+
+## Main remains integration-only
+
+Ordinary implementation/CI agents must not independently land claim/status/source/test/script/workflow/packaging/release changes directly onto `main`.
+
+The phrases `fix bug`, `update code`, `commit push git`, `continue all`, `implement all`, `run CI`, `fix CI`, `loop until success` or equivalent do not authorize `main` writes.
+
+Only explicit owner integration authority permits a `main` merge/write, for example `merge all to main`, `you are the integration coordinator`, or `allow merge PR #... to main`.
+
+CI authorization and integration authorization are separate.
+
+## Task-scoped CI standing authorization
+
+A session that owns a registered lane may run/observe/retry **applicable, non-destructive CI/checks for that lane** on its agent/recovery branch, PR or authorized integration candidate when the repository exposes such checks.
+
+The required loop is:
+
+1. bind the diagnosis to the exact workflow run/check and exact tested SHA;
+2. inspect the failing job/step/log and determine root cause against current source;
+3. fix on the agent/recovery branch, not on `main`;
+4. add/retain deterministic regression coverage when appropriate;
+5. commit and push the fix;
+6. run/observe a fresh relevant attempt;
+7. repeat from the newest relevant failure until every required/applicable lane check is green.
+
+Never weaken tests, source guards, architecture/product contracts, security checks, release-integrity gates or expected behavior merely to get green CI.
+
+This standing authorization does **not** permit:
+
+- publishing a GitHub Release or package;
+- supplying release-confirmation inputs merely to create a CI signal;
+- dispatching unrelated workflows;
+- changing or merging `main`;
+- manufacturing licensed/local BricsCAD evidence;
+- bypassing required approvals or secrets.
+
+If branch/PR CI does not exist for a docs-only change, or path filters intentionally skip code/release jobs, record that fact rather than manufacturing a release run. Required docs/static/preflight checks still must pass when they exist.
+
+## Existing automatic post-integration V25 cloud exception
+
+GitHub Actions remain manual-only by default except the previously owner-approved automatic dispatcher:
 
 - `.github/workflows/dispatch-v25-cloud-after-main-integration.yml`
 
@@ -12,157 +53,112 @@ That dispatcher may run on an integration-relevant `push` to `main` and may disp
 
 - `.github/workflows/release-v25-cloud.yml`
 
-All other workflows remain `workflow_dispatch`-only unless the owner explicitly changes this policy again.
+Its purpose is to validate the single combined `main` landing after an authorized multi-agent integration batch. It is not permission for ordinary agents to merge `main` or publish arbitrary releases.
 
-The automatic dispatcher is intentionally narrow. It exists to validate the single combined `main` landing after a multi-agent batch has been integrated. It is not permission for agents to run arbitrary CI, publish unrelated releases, or add more automatic triggers.
+The dispatcher must remain narrow:
 
-## Canonical multi-agent landing model
+- integration-relevant `push` to `main` only;
+- documentation-only changes ignored by path filtering;
+- `github-actions[bot]` release-preparation pushes ignored to prevent recursion;
+- newest relevant batch wins when adjacent landings overlap;
+- only `release-v25-cloud.yml` may be dispatched;
+- the release workflow retains exact-source preparation, source guards, Core smoke, BricsCAD V25 compile-reference, packaging and release-integrity gates;
+- its existing explicit `confirm_release=RELEASE` contract remains required for the approved automatic path.
 
-For implementation work, agents must **not independently land source/test/script changes directly onto `main`**.
+All other automatic triggers remain disallowed unless the owner explicitly changes this policy again.
 
-The canonical model is:
+## Manual release workflows remain release-controlled
 
-1. publish the required claim-only Markdown reservation to `origin/main` so every agent can see lane ownership;
-2. create or use a dedicated implementation branch, normally `agent/<agent-id>/<scope>`;
-3. implement, test and commit the reserved source work on that branch;
-4. keep the claim `ACTIVE` while the implementation is not yet integrated;
-5. when the participating lanes are ready, merge/cherry-pick/rebase those implementation branches into one shared batch branch, normally `integration/<batch-id>`;
-6. resolve conflicts and run remote-safe preflights/tests against that **combined integration branch**, not only against each agent branch in isolation;
-7. perform one final integration review;
-8. merge the integration branch into `main` **once**;
-9. after that one integration-relevant landing reaches `main`, the automatic dispatcher starts the V25 cloud CI/release workflow for current `main`.
+The following remain release/operator lanes rather than ordinary branch CI:
 
-Claim/status documentation commits may still be pushed directly to `main`; the automatic dispatcher ignores documentation-only landings by path filter. Release-preparation commits pushed by `github-actions[bot]` are also ignored so the release workflow cannot recursively trigger itself.
+- `.github/workflows/release-v25.yml`;
+- `.github/workflows/release-v25-cloud.yml` when manually invoked;
+- `.github/workflows/release-v26.yml`.
 
-This section supersedes older repository wording that told implementation agents to push their completed source batch directly to `main`. Claim publication still uses `main`; implementation landing now uses agent branches plus a single integration branch.
+Do not use release workflows merely to validate a documentation or ordinary feature branch. Manual release/publish operations require explicit owner release authorization and their own confirmations.
 
-## Why the integration branch exists
+## Canonical multi-agent progression
 
-Merging every agent PR separately into `main` would cause repeated final-CI runs and would test intermediate trees where only part of the owner request is integrated. The repository owner instead wants one combined landing.
+For ordinary registered work:
 
-Therefore:
+```text
+CLAIM_ISSUE_OR_PR_VISIBLE
+  -> AGENT_BRANCH_IMPLEMENTATION
+  -> BRANCH/PR_VALIDATION
+  -> CI_GREEN_FOR_LANE
+  -> READY_FOR_INTEGRATION
+```
 
-- agent implementation branches are staging inputs, not final release candidates;
-- the integration branch is the combined candidate;
-- `main` receives one final integration landing for the batch;
-- the automatic V25 cloud CI is evidence for the combined landing, not for a partially merged sequence.
+If the owner later authorizes final integration:
 
-If `main` changes again with integration-relevant source after that landing, the new current tree is a new candidate and another automatic run is expected. A green workflow for an older SHA does not prove a newer `main` SHA.
+```text
+READY_LANES
+  -> INTEGRATION_BRANCH
+  -> INTEGRATION_REVIEW
+  -> ONE_AUTHORIZED_FINAL_MERGE_TO_MAIN
+  -> EXACT_CURRENT_MAIN_RECORDED
+  -> AUTO_V25_CLOUD_CI
+  -> CI_GREEN
+  -> ALL_DONE
+```
+
+A session can therefore finish its assigned lane at `READY_FOR_INTEGRATION` when the prompt did not grant `main` authority, provided its scope is fully implemented, no known in-scope defect remains, required/applicable lane validation is green and the repository-side handoff is complete. It must report `MERGED TO MAIN: NO`.
+
+## Integration coordinator responsibilities
+
+Only an explicitly authorized integration coordinator may assemble and land the combined batch.
+
+Before the final `main` landing, the coordinator must:
+
+1. refresh current `origin/main`;
+2. enumerate participating claim issues/PRs/branches and exact implementation SHAs;
+3. combine every required lane into `integration/<batch-id>` or another explicitly approved candidate;
+4. resolve semantic/API/test conflicts deliberately;
+5. verify no required implementation remains only off-candidate;
+6. run relevant combined-tree preflights/builds/smoke/tests;
+7. inspect for accidental reversions and duplicate competing implementations;
+8. freeze the batch;
+9. perform the explicitly authorized final PR/merge to `main`;
+10. refresh `main` and record the exact resulting SHA;
+11. observe/fix the exact-current-main final CI through the appropriate authorized recovery path until green.
 
 ## Definition of `ALL MERGED TO MAIN`
 
-For a specific owner request, agents may report **ALL MERGED TO MAIN** only when an integration reviewer has freshly verified all of the following:
+For a specific owner request, report `ALL MERGED TO MAIN` only when an authorized reviewer has freshly verified:
 
-- every participating required claim is terminal or explicitly excluded from the batch;
-- every required implementation change is present in the integration result and then reachable from current `main`;
-- no required code exists only on an agent branch, local worktree, draft patch or unmerged PR;
-- the final combined tree has no unresolved merge markers, accidental reversions, duplicate competing implementations, or known semantic/API/test collisions;
-- remote-safe build/tests/smoke/preflights for the combined tree have passed, or any environment-gated evidence is explicitly handed off;
-- the exact current `main` SHA after the single integration landing is recorded.
+- every required lane is represented in current `main` or explicitly excluded/superseded;
+- no required code exists only on an agent branch, local worktree, stash, draft patch or unmerged PR;
+- the combined current tree has no unresolved merge markers, accidental reversions, duplicate competing implementations or known semantic/API/test collisions;
+- required combined-tree validation is acceptable;
+- the exact current `main` SHA is recorded.
 
-A branch existing or being deleted is not proof of integration. A PR showing `Merged` is not enough by itself. Commit/tree reachability and the combined current `main` tree are authoritative.
+A branch existing/deleted, issue state, PR UI state or green CI for an older SHA is not sufficient proof.
 
-## Automatic post-integration V25 cloud CI
+## Exact-SHA and evidence rules
 
-The owner-approved automatic dispatcher is `.github/workflows/dispatch-v25-cloud-after-main-integration.yml`.
+CI evidence proves only the exact tree it tested. A green run for an older SHA does not prove a newer branch, integration candidate or `main`.
 
-Its contract is:
+The V25 cloud workflow is not licensed local BricsCAD runtime proof. Real `NETLOAD`/DemandLoad, native UI/runtime, private-DWG, signing, clean-machine installer and other `LOCAL_ONLY` evidence remain separate.
 
-- automatic trigger: integration-relevant `push` to `main` only;
-- manual `workflow_dispatch` remains available for operator recovery/testing;
-- documentation-only claim/handoff updates do not trigger it;
-- `github-actions[bot]` pushes do not execute the dispatch job;
-- concurrent adjacent integration landings are debounced/cancelled so the newest batch wins before dispatch;
-- it dispatches only `release-v25-cloud.yml` from `main`;
-- it generates a preview tag in the reserved automatic range starting at `v0.1.0-preview.10001` and skips an already-existing tag;
-- it passes `confirm_release=RELEASE` because this automatic path is itself the repository owner's standing approval for the post-integration V25 cloud preview release;
-- `release-v25-cloud.yml` keeps its own exact-source, source-guard, Core smoke, BricsCAD V25 compile-reference, packaging and release-integrity gates.
+V25 and V26 runtime evidence are independent.
 
-The automatic cloud run does **not** prove licensed local BricsCAD `NETLOAD`, native UI/runtime, private-DWG behavior, signing credentials, or other `LOCAL_ONLY` gates. Those evidence classes remain separate.
+## Completion and session-close gate
 
-## Manual workflows remain manual
+Every AI/chat session must follow `docs/AI-SESSION-WORKFLOW.md` and report:
 
-Except for the single dispatcher above, workflows under `.github/workflows/` remain owner-controlled `workflow_dispatch` lanes. In particular, the following release workflows remain manually invoked release tools:
+- `PROMPT/LANE STATUS: 100% COMPLETE` or `NOT 100% COMPLETE`;
+- `SESSION CAN BE CLOSED/DELETED: YES` or `NO`;
+- `MERGED TO MAIN: YES` or `NO`;
+- exact branch/PR/issue, implementation SHA(s), validation/CI results and blockers.
 
-- `.github/workflows/release-v25.yml`;
-- `.github/workflows/release-v25-cloud.yml` itself;
-- `.github/workflows/release-v26.yml`.
+If required/applicable CI is red, the lane is not complete. Continue diagnose -> fix -> push -> fresh run until green while actionable work remains within the session's tools/permissions/scope.
 
-`release-v25-cloud.yml` is automatically started only **through the approved post-integration dispatcher**. It must retain explicit `confirm_release=RELEASE`, exact-source preparation and its release-integrity guards.
-
-Do not add `push`, `pull_request`, `pull_request_target`, `schedule`, `workflow_run`, `repository_dispatch`, release/deployment events, or other automatic triggers to any other workflow without another explicit owner policy change.
-
-## Agent execution roles and CI authorization
-
-Normal coding agents concentrate on finding/fixing bugs, updating source, adding deterministic regressions/static guards, reviewing diffs and committing coherent implementation work to their implementation branches.
-
-- Claim publication to `main` does not authorize arbitrary Actions operations.
-- A normal `continue all`, `fix bug`, `update code`, `commit`, review or handoff assignment does not authorize manually dispatching/re-running/cancelling unrelated workflows.
-- The automatic post-integration dispatcher requires no per-run agent approval after a valid integration landing; it is standing owner policy.
-- Manual CI operations outside that automatic path still require explicit owner authorization and remain agent/scope-specific.
-- The local workers (`agent/local002`, `agent/local003`, and successor sessions acting in those roles) remain LOCAL_ONLY by default and must not treat GitHub Actions failures as their general coding backlog unless the owner separately assigns that exact work.
-
-Coding agents and CI-designated agents may work concurrently. A red cloud workflow should be diagnosed/fixed by the appropriate remote/source agent unless the failure genuinely requires a LOCAL_ONLY environment.
-
-## Integration freeze before the single main landing
-
-Before merging `integration/<batch-id>` into `main`, the integration reviewer must establish a final integration freeze:
-
-1. identify the owner request/batch and the participating claims;
-2. stop participating agents from adding more source changes to that batch candidate;
-3. verify all required agent branches/PRs are integrated into the integration branch or explicitly excluded/superseded;
-4. verify every required implementation commit is represented in the combined integration tree;
-5. run the relevant remote-safe preflights/tests on that combined tree;
-6. inspect the combined diff for semantic conflicts, duplicate implementations and accidental reversions;
-7. record the integration branch candidate SHA;
-8. merge the integration branch to `main` once;
-9. refresh `main` and record the resulting exact final SHA;
-10. let the automatic dispatcher run `release-v25-cloud.yml` for the current integrated tree.
-
-Canonical state progression:
-
-```text
-AGENTS_WORKING
-    -> AGENT_BRANCHES_READY
-    -> INTEGRATION_BRANCH
-    -> INTEGRATION_REVIEW
-    -> ONE_FINAL_MERGE_TO_MAIN
-    -> ALL_MERGED_TO_MAIN
-    -> AUTO_V25_CLOUD_CI
-    -> CI_GREEN
-    -> ALL_DONE
-```
-
-If integration-relevant `main` changes after CI starts, the old run remains evidence only for its own source/release commit. The newest current tree requires new current-head evidence.
-
-## Manual build/release sequence outside the automatic path
-
-When the owner explicitly requests another manual release lane:
-
-1. resolve the exact candidate commit/tag;
-2. choose the requested host-major workflow;
-3. dispatch manually with the required inputs/confirmation;
-4. run repository preflights and deterministic Core smoke tests;
-5. compile the matching host adapter against the required BricsCAD environment/references;
-6. run the host-major runtime/signing gates required by that release type;
-7. package only the matching host-major assets;
-8. publish only after release-integrity checks succeed.
-
-See `docs/MANUAL-BUILD-RELEASE.md` and `docs/MANUAL-BUILD-RELEASE-V26.md` for operator details.
-
-## Local/static validation
-
-Repository-local/static validation may be run before integration without starting GitHub Actions. Passing static review is not equivalent to licensed BricsCAD runtime evidence.
-
-V25 and V26 runtime proof are independent. A V25 PASS cannot be reported as V26 evidence, and vice versa.
+If a required local/proprietary prerequisite prevents proof, register the blocker precisely and do not claim unavailable evidence as PASS.
 
 ## Enforcement
 
-- `scripts/preflight.py` retains the broad repository/source policy and legacy workflow safety checks.
-- `scripts/preflight-ci-manual-only.py` is the strict Actions-policy gate. Despite its historical filename, it now enforces **manual-only by default plus exactly one approved automatic post-integration dispatcher**.
-- That strict gate must reject any second automatic workflow, any broadened automatic event, any automatic dispatcher that can target a workflow other than `release-v25-cloud.yml`, and any release workflow that loses explicit `RELEASE` confirmation.
-- `scripts/preflight-all.py` auto-discovers the strict CI policy gate with the other feature preflights.
+- `scripts/preflight.py` retains broad repository/source policy checks.
+- `scripts/preflight-ci-manual-only.py` remains the strict Actions trigger-safety gate and must continue allowing only the single approved automatic post-integration dispatcher while rejecting unauthorized automatic triggers/workflows.
+- `scripts/preflight-all.py` should continue discovering the strict CI policy guard with other feature preflights.
 
-Keep these guards in place unless the repository owner explicitly changes the policy again.
-
-Related documentation: `AGENTS.md`, `docs/AGENT-WORK-REGISTRATION.md`, `README.md`, `docs/CI.md`, `docs/CI-READINESS.md`, `docs/MANUAL-BUILD-RELEASE.md`, `docs/MANUAL-BUILD-RELEASE-V26.md`, `docs/LOCAL-V25-QUALIFICATION.md`, `docs/LOCAL-V26-QUALIFICATION.md`.
+Related documentation: `AGENTS.md`, `docs/AI-SESSION-WORKFLOW.md`, `docs/AGENT-WORK-REGISTRATION.md`, `docs/CI.md`, `docs/CI-READINESS.md`, `docs/MANUAL-BUILD-RELEASE.md`, `docs/MANUAL-BUILD-RELEASE-V26.md`, `docs/LOCAL-V25-QUALIFICATION.md`, `docs/LOCAL-V26-QUALIFICATION.md`.
