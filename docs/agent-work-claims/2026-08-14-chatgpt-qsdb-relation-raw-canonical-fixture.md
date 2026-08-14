@@ -1,8 +1,9 @@
 # Work claim — QSDB raw relation canonicality smoke reconciliation
 
-- Status: `ACTIVE`
+- Status: `RELEASED_DUPLICATE`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-14T16:14:00+07:00`
+- Released: `2026-08-14T16:18:00+07:00`
 - Baseline main SHA: `552aa7433ab6fe438076337bc9ba7c86cb9c1cbe`
 - Priority: next deterministic full Core smoke blocker reported independently by PRs #1262 and #1266
 
@@ -17,20 +18,16 @@ Production `QsdbProjectStore.ValidateProject(...)` still fail-closes through `Va
 - `tests/QS3D.Core.SmokeTests/QsdbRelationIdentityCanonicalSmoke.cs`
 - this claim document only
 
-Keep the existing padded public-setter literals so the smoke proves current canonicalization first, then inject only the relevant private backing field through test-local reflection to represent raw legacy/corrupt persisted state before Save. Assert the injected raw value is visible, Save throws `InvalidDataException`, the raw relation remains byte-for-byte unchanged in memory, and timestamps remain unchanged. Preserve the empty optional-relation round-trip case.
+The intended approach was to keep the padded public-setter literals, prove current canonicalization first, then inject only the relevant private backing field through test-local reflection to represent raw legacy/corrupt persisted state before Save.
 
-## Explicit exclusions
+## Release reason
 
-- no changes to `QsdbProjectStore`, `ProjectState`, `ProjectElement`, QSDB schema/migration, `preflight-qsdb-relation-identity.py`, other persistence gates, native BricsCAD, LOCAL runners/probes, workflows, release, private data, or GitHub Actions;
-- do not replace the rejection contract with successful canonical Save;
-- do not weaken unknown/orphan/duplicate relation validation.
+An earlier owner had already registered the exact same raw-relation fixture lane through claim PR `#1267`, then merged the validated implementation/gate update through PR `#1269` as main SHA `e367f9193322c35819fcf44a4ce3dd66bfe49d97`. Their closeout PR `#1272` merged as `d0918936f791494a468e61f0056e23284ac38340` and records Core Release 0/0, five focused QSDB gate PASS results, and full Core smoke advancing beyond this fixture.
 
-## Validation
+This later claim PR `#1270` was therefore a duplicate. The implementation PR `#1273` was explicitly closed without merge after compare showed the winning changes had already modified both the smoke and its focused gate. No stale implementation from this lane was merged into `main`.
 
-- exact one-smoke diff/readback;
-- preserve `preflight-qsdb-relation-identity.py` source literals and validator locks;
-- use available owner full-smoke validation after merge to identify the next independent blocker; do not claim a local full-suite PASS from this web environment.
+## Preserved outcome
 
-## Completion record
-
-Pending implementation after claim merge.
+- Winning QSDB implementation remains authoritative; this claim releases ownership immediately.
+- No production, QSDB schema/migration, native/LOCAL, workflow, release, private-data, or Actions changes were made by this duplicate lane.
+- The next independent full-smoke blocker reported by the winning closeout is `QuantityRuleFamilyIdCanonicalitySmoke.PaddedFamilyIdFailsBeforeStaleCleanup`.
