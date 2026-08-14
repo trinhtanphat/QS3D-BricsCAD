@@ -1,42 +1,45 @@
 # Work claim — ZoneDefinition text persistability
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `gpt56sol-zone-definition-persistability-20260814-1317`
 - Registered: `2026-08-14T13:17:00+07:00`
+- Completed: `2026-08-14T13:19:00+07:00`
 - Workstream: `CORE / persistence-integrity`
 - Priority: `P1`
 - Baseline: `1aeb1c3d1d7f487d8eccb2c970cc67dedb6070ab`
+- Claim commit: `ec0ed999566b2a64ace7de213d8eddffaa1db555`
 - Pre-write source blob: `c50d6e6e684b3f96bd0e73eccb9a47733f67907f`
+- Source: `719e74e8c205151df52c42a88782ba91b97f5262`
+- Regression: `30afa77de4cf2db06af41e2685a637f4323fe350`
 
 ## Confirmed defect
 
-`ZoneDefinition` persists both immutable `Id` and mutable `Name` as QSDB XML attributes. Construction and rename share one private `Require` helper which currently rejects blank text and trims surrounding whitespace but accepts embedded control characters. Therefore supported construction or rename can create zone state that QSDB later rejects during XML-character preflight.
+`ZoneDefinition` persists both immutable `Id` and mutable `Name` as QSDB XML attributes. Construction and rename shared one private `Require` helper which rejected blank text and trimmed surrounding whitespace but accepted embedded control characters. Supported construction or rename could therefore create zone state that QSDB later rejected during XML-character preflight.
 
-The shared helper is the defect boundary for both persisted fields, so this claim intentionally covers only `ZoneDefinition.Id` and `ZoneDefinition.Name` together rather than splitting one source hunk into artificial competing claims.
+The shared helper was the actual defect boundary for both persisted fields, so this lane covered only `ZoneDefinition.Id` and `ZoneDefinition.Name` together rather than splitting one source hunk into artificial claims.
 
-## Reserved scope
+## Completed change
 
-- `src/QS3D.Core/Domain/ProjectState.cs` — only `ZoneDefinition.Require` behavior.
-- new `tests/QS3D.Core.SmokeTests/ZoneDefinitionPersistabilitySmoke.cs`.
-- this claim file.
+- Preserved blank rejection and surrounding-whitespace normalization in `ZoneDefinition.Require`.
+- Added control-character rejection after normalization and before id assignment/name mutation.
+- Left `FloorDefinition`, active-zone services/canonicalization/audit, ProjectState revision behavior, QSDB loader/schema/migrations and all other identity models unchanged.
 
-## Intended change
+## Regression coverage
 
-Preserve blank rejection and surrounding-whitespace normalization for zone ids/names. Reject control characters in normalized text before immutable id assignment or name mutation. Preserve all active-zone selection/canonicalization/audit semantics and ProjectState revision behavior.
+Added self-registering `ZoneDefinitionPersistabilitySmoke` which pins:
 
-## Regression plan
+1. padded id/name constructor input still normalizes to canonical text;
+2. valid padded rename still normalizes;
+3. constructor rejects a `U+0001` zone id;
+4. constructor rejects a `U+0001` zone name;
+5. setter rejects a `U+0001` rename and preserves the prior name.
 
-Focused self-registering smoke will prove canonical/padded id+name behavior, constructor rejection for control-character id/name, and failed mutable name update preserves prior value.
+## Validation
 
-## Explicit non-scope
+Remote GitHub source diff for `719e74e8c205151df52c42a88782ba91b97f5262` confirms exactly one `ZoneDefinition.Require` hunk and shows `FloorDefinition` untouched. Remote regression diff for `30afa77de4cf2db06af41e2685a637f4323fe350` confirms the focused cases with C# `\u0001` literals. GitHub compare reports the regression SHA is ahead of the source SHA with `719e74e8c205151df52c42a88782ba91b97f5262` as merge base.
 
-- no FloorDefinition changes;
-- no Project/Family/Element/rule identity changes;
-- no active-zone service/canonicalization changes;
-- no QSDB loader/schema/migration changes;
-- no UI/native changes;
-- no GitHub Actions or licensed BricsCAD qualification.
+Executable .NET/native validation was **not run** in this environment because there is no local checkout/.NET/native runner. No GitHub Actions were dispatched and no BricsCAD/native/runtime PASS is claimed.
 
-## Validation boundary
+## Completion condition
 
-GitHub connector read/write is available, but there is no local checkout/.NET/native runner. Executable PASS will not be claimed without independent evidence; completion requires remote diff/readback and ancestry verification.
+Satisfied: claim-first reservation, isolated shared ZoneDefinition writer fix, focused regression source, remote diff/ancestry verification and explicit validation limitations are present on `main`.
