@@ -1,6 +1,6 @@
 # Work claim — LOCAL-003 shared native Level Z-chain
 
-- Status: `BLOCKED`
+- Status: `ACTIVE`
 - Agent: `codex-local-019ff0c5` (`/root`, local Windows + licensed BricsCAD V25 agent)
 - Registered: `2026-08-11T19:43:12+07:00`
 - Baseline main SHA: `c7dd212d36677a1d2e005becf8709768fe98d6a1`
@@ -666,3 +666,9 @@ The operator-owned session currently has `MB MONG.dwg` open and remains strictly
 The reactivated lane synchronized through `origin/main@3752d589634d5a909fb58691150f6fac2905c225`. All nine focused Level/static gates passed, and `QS3D.Core` Release built with zero warnings and zero errors under the local .NET 8.0.423 SDK. The required full Core smoke project then failed to compile at `tests/QS3D.Core.SmokeTests/MeasurementTraceContractSmoke.cs:98` with `CS8602`. This is a CAD-independent, remote-safe test nullable-flow defect; it was handed to non-local issue `#990` and this local worker did not edit the test or production MeasurementTrace source.
 
 Across three consecutive goal turns, issue `#990` remained open without an assignee/fix and the operator-owned responsive BricsCAD session continued to hold `MB MONG.dwg`. The runner correctly refuses any pre-existing BricsCAD process, and the local worker must neither close that process nor bypass the mandatory full-smoke gate. The claim is therefore `BLOCKED` while preserving its reservation. Resume only after a non-local fix makes the full Core smoke pass and the operator saves/closes every BricsCAD session; then reactivate/push the claim, fetch the newest `main`, rebuild and rerun all exact-SHA gates plus the fresh disposable Level probe. No GitHub Actions were dispatched.
+
+## 2026-08-14 resumed after both prerequisites cleared
+
+The lane resumes from synchronized `origin/main@93a5547224a5248ae741ccd8dd4368bac27b6b00`. Issue `#990` is `CLOSED / COMPLETED`; current `MeasurementTraceContractSmoke` uses the corrected null-safe equality assertion. A fresh process audit found no running BricsCAD process, so the earlier operator-session exclusion is also clear without the agent closing or modifying the user's drawing.
+
+This status-only reactivation must be visible on current `origin/main` before renewed qualification. After publication, fetch again, re-audit concurrent claims, build Core and the V25 adapter from the newest exact SHA, require the complete smoke and focused Level/static gates to pass, verify matching plugin/Core `ProductVersion`, create a new disposable `*.level-z-probe-copy.dwg` and fresh artifact directory, then execute `scripts/test-bricscad-v25-level-z.ps1`. Any new CAD-independent defect is handed to a non-local owner; no GitHub Actions are authorized.
