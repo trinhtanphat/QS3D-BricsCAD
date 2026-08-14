@@ -225,17 +225,13 @@ namespace QS3D.BricsCAD.V25
 
         internal sealed class DocumentHistory
         {
-            public DocumentHistory(Document document, ProjectState project, string revision)
+            public DocumentHistory(ProjectState project, string revision)
             {
-                Document = document;
-                Database = document.Database;
                 Project = project;
                 ProjectId = project.ProjectId;
                 CurrentRevision = revision;
             }
 
-            public Document Document { get; }
-            public Database Database { get; }
             public ProjectState Project { get; }
             public string ProjectId { get; }
             public string CurrentRevision { get; set; }
@@ -373,8 +369,7 @@ namespace QS3D.BricsCAD.V25
                         ClassifyDesynchronizationCause(history.Cause),
                         nativeRevision,
                         markerValid);
-                if (!IsSameNativeDrawing(history, document) ||
-                    !ReferenceEquals(history.Project, project) ||
+                if (!ReferenceEquals(history.Project, project) ||
                     !string.Equals(history.ProjectId, project.ProjectId, StringComparison.Ordinal))
                     return new SanitizedDiagnosticSnapshot(
                         "NONE", entryClass, "HISTORY_AFFINITY_MISMATCH", nativeRevision, markerValid);
@@ -386,7 +381,7 @@ namespace QS3D.BricsCAD.V25
 
             lock (Gate)
             {
-                if (!Histories.TryGetValue(document, out var currentHistory) || !ReferenceEquals(currentHistory, history))
+                if (!IsCurrentHistory(document, history))
                     return new SanitizedDiagnosticSnapshot("NONE", "ONE", "NONE", nativeRevision, markerValid);
 
                 entryClass = history.Entries.Count > 1 ? "MULTIPLE" : "ONE";
@@ -397,8 +392,7 @@ namespace QS3D.BricsCAD.V25
                         ClassifyDesynchronizationCause(history.Cause),
                         nativeRevision,
                         markerValid);
-                if (!IsSameNativeDrawing(history, document) ||
-                    !ReferenceEquals(history.Project, project) ||
+                if (!ReferenceEquals(history.Project, project) ||
                     !string.Equals(history.ProjectId, project.ProjectId, StringComparison.Ordinal))
                     return new SanitizedDiagnosticSnapshot(
                         "NONE", entryClass, "HISTORY_AFFINITY_MISMATCH", nativeRevision, markerValid);
@@ -516,7 +510,7 @@ namespace QS3D.BricsCAD.V25
                 beforeEntry = new HistoryEntry(beforeSnapshot, ProjectRevisionStamp.Capture(project));
                 if (!Histories.TryGetValue(document, out history))
                 {
-                    history = new DocumentHistory(document, project, previousRevision);
+                    history = new DocumentHistory(project, previousRevision);
                     history.Entries.Add(previousRevision, beforeEntry);
                     Histories.Add(document, history);
                     registeredHistory = true;
@@ -625,7 +619,7 @@ namespace QS3D.BricsCAD.V25
                 HistoryEntry currentEntry;
                 lock (Gate)
                 {
-                    if (!Histories.TryGetValue(document, out var currentHistory) || !ReferenceEquals(currentHistory, history)) return;
+                    if (!IsCurrentHistory(document, history)) return;
                     if (string.Equals(nativeRevision, history.CurrentRevision, StringComparison.Ordinal)) return;
                     if (!history.Entries.TryGetValue(nativeRevision, out targetEntry) ||
                         !history.Entries.TryGetValue(history.CurrentRevision, out currentEntry))
@@ -691,7 +685,7 @@ namespace QS3D.BricsCAD.V25
 
                 lock (Gate)
                 {
-                    if (Histories.TryGetValue(document, out var currentHistory) && ReferenceEquals(currentHistory, history))
+                    if (IsCurrentHistory(document, history))
                         history.CurrentRevision = nativeRevision;
                 }
                 RefreshAfterRestore(document);
@@ -746,23 +740,27 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var active = Application.DocumentManager.MdiActiveDocument;
-                return active != null && IsSameNativeDrawing(active, document);
+                return active != null && IsSameDocumentKey(active, document);
             }
             catch { return false; }
         }
 
-        private static bool IsSameNativeDrawing(DocumentHistory history, Document document)
+        private static bool IsCurrentHistory(Document document, DocumentHistory history)
         {
-            if (ReferenceEquals(history.Document, document)) return true;
-            try { return ReferenceEquals(history.Database, document.Database); }
-            catch { return false; }
+            // Callers hold Gate. Dictionary membership is the authoritative
+            // document-affinity contract: applying a stricter wrapper/native
+            // reference test after TryGetValue can reject the exact entry that
+            // Dictionary<Document, ...> already resolved for this document.
+            return Histories.TryGetValue(document, out var current) &&
+                ReferenceEquals(current, history);
         }
 
-        private static bool IsSameNativeDrawing(Document left, Document right)
+        private static bool IsSameDocumentKey(Document left, Document right)
         {
-            if (ReferenceEquals(left, right)) return true;
-            try { return ReferenceEquals(left.Database, right.Database); }
-            catch { return false; }
+            // Match the default comparer used by the history, observer and
+            // canonical-project dictionaries. Distinct dictionary keys remain
+            // isolated; equivalent managed wrappers share the current entry.
+            return EqualityComparer<Document>.Default.Equals(left, right);
         }
 
         private static string? NormalizeNativeUndoRedo(string? globalCommandName)
@@ -793,7 +791,7 @@ namespace QS3D.BricsCAD.V25
             string nativeRevision)
         {
             if (history.Desynchronized ||
-                !IsSameNativeDrawing(history, document) ||
+                !IsCurrentHistory(document, history) ||
                 !ReferenceEquals(history.Project, project) ||
                 !string.Equals(history.ProjectId, project.ProjectId, StringComparison.Ordinal) ||
                 !string.Equals(history.CurrentRevision, nativeRevision, StringComparison.Ordinal))
@@ -850,7 +848,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var active = Application.DocumentManager.MdiActiveDocument;
-                if (active != null && IsSameNativeDrawing(active, document))
+                if (active != null && IsSameDocumentKey(active, document))
                 {
                     PaletteCoordinator.RefreshProject();
                     document.Editor.Regen();

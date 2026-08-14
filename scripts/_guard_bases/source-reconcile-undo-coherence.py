@@ -31,7 +31,6 @@ for token in (
     'MarkerVersion = "1"',
     "Dictionary<Document, ObserverRegistration>",
     "Dictionary<Document, DocumentHistory>",
-    "public Database Database { get; }",
     "document.CommandWillStart += CommandWillStart",
     "document.CommandEnded += CommandEnded",
     "document.CommandCancelled += CommandCancelled",
@@ -50,9 +49,9 @@ for token in (
     "HasActiveCommand()",
     "_suppressUndoUntilStableCommand",
     "IsActiveDocument(document)",
-    "IsSameNativeDrawing(history, document)",
-    "ReferenceEquals(history.Database, document.Database)",
-    "active != null && IsSameNativeDrawing(active, document)",
+    "IsCurrentHistory(document, history)",
+    "EqualityComparer<Document>.Default.Equals(left, right)",
+    "active != null && IsSameDocumentKey(active, document)",
     "registration.PendingCommand = null",
     "ObserverRegistrations.TryGetValue(document, out var registration)",
     'string.Equals(normalized, "UNDO", StringComparison.OrdinalIgnoreCase)',
@@ -98,6 +97,9 @@ for forbidden in (
     "_history.CurrentRevision = _nextRevision",
     "history.Entries.Clear();",
     'string.Equals(normalized, "U", StringComparison.OrdinalIgnoreCase)',
+    "public Document Document { get; }",
+    "public Database Database { get; }",
+    "IsSameNativeDrawing(",
 ):
     if forbidden in coordinator:
         errors.append("Undo observer must not load/create/switch/drive a project or command: " + forbidden)
@@ -160,8 +162,12 @@ else:
             errors.append("sanitized diagnostic accessor exposes raw state or mutates coordination: " + forbidden)
     if diagnostic.count("ProjectSanitizedHistoryState(history.Cause)") != 2:
         errors.append("persistent history cause must be projected consistently before and after cache validation")
-    if diagnostic.count("!IsSameNativeDrawing(history, document)") != 2:
-        errors.append("sanitized history affinity must use exact native Database identity across managed Document wrappers")
+    if diagnostic.count("!ReferenceEquals(history.Project, project)") != 2:
+        errors.append("sanitized history affinity must retain exact canonical project identity")
+    if "if (!IsCurrentHistory(document, history))" not in diagnostic:
+        errors.append("sanitized history must remain the dictionary's current entry across cache validation")
+    if "history.Document" in diagnostic or "history.Database" in diagnostic:
+        errors.append("sanitized history must not impose wrapper/native identity stricter than dictionary lookup")
     if '"NONE", entryClass, "HISTORY_AFFINITY_MISMATCH"' not in diagnostic:
         errors.append("history affinity mismatch must project to existing NONE state without hiding its private sanitized cause")
     if '"NONE", entryClass, "CACHE_PROJECT_MISMATCH"' not in diagnostic:
@@ -184,8 +190,8 @@ ended_start = coordinator.find("private static void OnCommandEnded(", will_start
 aborted_start = coordinator.find("private static void OnCommandAborted(", ended_start)
 consume_start = coordinator.find("private static bool TryConsumeMatchingCommand(", aborted_start)
 active_start = coordinator.find("private static bool IsActiveDocument(", consume_start)
-same_history_start = coordinator.find("private static bool IsSameNativeDrawing(DocumentHistory history", active_start)
-same_documents_start = coordinator.find("private static bool IsSameNativeDrawing(Document left", same_history_start)
+current_history_start = coordinator.find("private static bool IsCurrentHistory(", active_start)
+same_document_start = coordinator.find("private static bool IsSameDocumentKey(", current_history_start)
 normalize_start = coordinator.find("private static string? NormalizeNativeUndoRedo(", active_start)
 mark_start = coordinator.find("private static InvalidOperationException MarkDesynchronized(", normalize_start)
 stage_body = coordinator[stage_start:confirm_start]
@@ -198,8 +204,8 @@ consume_body = coordinator[consume_start:active_start]
 filter_body = coordinator[normalize_start:mark_start]
 if min(
     stage_start, confirm_start, dispose_start, begin_start, will_start,
-    ended_start, aborted_start, consume_start, active_start, same_history_start,
-    same_documents_start, normalize_start, mark_start,
+    ended_start, aborted_start, consume_start, active_start, current_history_start,
+    same_document_start, normalize_start, mark_start,
 ) < 0:
     errors.append("Undo coordinator transition method boundaries are missing")
 else:
@@ -242,23 +248,24 @@ else:
         or "IsActiveDocument(document)" not in consume_body
     ):
         errors.append("Undo completion must clear intent and match command plus active document exactly")
-    active_body = coordinator[active_start:same_history_start]
-    same_history_body = coordinator[same_history_start:same_documents_start]
-    same_documents_body = coordinator[same_documents_start:normalize_start]
-    if "active != null && IsSameNativeDrawing(active, document)" not in active_body:
-        errors.append("active-document Undo authority must accept only the same native drawing across managed wrappers")
+    active_body = coordinator[active_start:current_history_start]
+    current_history_body = coordinator[current_history_start:same_document_start]
+    same_document_body = coordinator[same_document_start:normalize_start]
+    if "active != null && IsSameDocumentKey(active, document)" not in active_body:
+        errors.append("active-document Undo authority must use the same comparer as document dictionaries")
     if (
-        "ReferenceEquals(history.Document, document)" not in same_history_body
-        or "ReferenceEquals(history.Database, document.Database)" not in same_history_body
-        or ".Name" in same_history_body
+        "Histories.TryGetValue(document, out var current)" not in current_history_body
+        or "ReferenceEquals(current, history)" not in current_history_body
+        or ".Name" in current_history_body
+        or ".Database" in current_history_body
     ):
-        errors.append("history affinity must use wrapper-or-exact-Database identity, never drawing name/path")
+        errors.append("history affinity must require the dictionary's exact current entry without wrapper/native fallback")
     if (
-        "ReferenceEquals(left, right)" not in same_documents_body
-        or "ReferenceEquals(left.Database, right.Database)" not in same_documents_body
-        or ".Name" in same_documents_body
+        "EqualityComparer<Document>.Default.Equals(left, right)" not in same_document_body
+        or ".Database" in same_document_body
+        or ".Name" in same_document_body
     ):
-        errors.append("document affinity must use wrapper-or-exact-Database identity, never drawing name/path")
+        errors.append("active-document affinity must match Dictionary<Document, ...> default-comparer semantics")
     if (
         "registration.PendingCommand = null;" not in aborted_body
         or "registration.ActiveCommandDepth--;" not in aborted_body
@@ -308,12 +315,12 @@ else:
         require_end = coordinator.find("private static string ReadRevision(Document document)", require_start)
         require_body = coordinator[require_start:require_end]
         if (
-            "!IsSameNativeDrawing(history, document)" not in require_body
+            "!IsCurrentHistory(document, history)" not in require_body
             or "!ReferenceEquals(history.Project, project)" not in require_body
             or "!string.Equals(history.ProjectId, project.ProjectId" not in require_body
             or "!string.Equals(history.CurrentRevision, nativeRevision" not in require_body
         ):
-            errors.append("transition affinity must normalize only Document wrappers while retaining project/revision fail-closed guards")
+            errors.append("transition affinity must require current dictionary membership while retaining project/revision fail-closed guards")
         if "CurrentRevision =" in ended_body[target_start:advance_start]:
             errors.append("all observer refusals and recovered restore failures must leave CurrentRevision unchanged")
 
@@ -328,23 +335,36 @@ def normalize_command(name):
 
 
 class ManagedDocument:
-    def __init__(self, database):
-        self.database = database
+    def __init__(self, dictionary_key, wrapper):
+        self.dictionary_key = dictionary_key
+        self.wrapper = wrapper
+
+    def __hash__(self):
+        return hash(self.dictionary_key)
+
+    def __eq__(self, other):
+        return isinstance(other, ManagedDocument) and self.dictionary_key == other.dictionary_key
 
 
-def same_native_drawing(left, right):
-    return left is right or left.database is right.database
+def is_current_history(histories, document, history):
+    return histories.get(document) is history
 
 
-database_a = object()
-database_b = object()
-document_a_first_wrapper = ManagedDocument(database_a)
-document_a_after_mdi_switch = ManagedDocument(database_a)
-document_b = ManagedDocument(database_b)
-if not same_native_drawing(document_a_first_wrapper, document_a_after_mdi_switch):
-    errors.append("same native drawing was rejected after managed Document wrapper replacement")
-if same_native_drawing(document_a_first_wrapper, document_b):
-    errors.append("different native Database objects crossed document affinity")
+document_a_first_wrapper = ManagedDocument("A", "first")
+document_a_after_mdi_switch = ManagedDocument("A", "replacement")
+document_b = ManagedDocument("B", "first")
+history_a = object()
+histories = {document_a_first_wrapper: history_a}
+if not is_current_history(histories, document_a_after_mdi_switch, history_a):
+    errors.append("dictionary-equivalent managed Document wrapper lost its current history")
+if is_current_history(histories, document_b, history_a):
+    errors.append("a distinct dictionary document key crossed history affinity")
+replacement_history = object()
+histories[document_a_after_mdi_switch] = replacement_history
+if is_current_history(histories, document_a_first_wrapper, history_a):
+    errors.append("a replaced history object remained current through an equivalent wrapper")
+if not is_current_history(histories, document_a_first_wrapper, replacement_history):
+    errors.append("dictionary-equivalent wrapper did not resolve the replacement current history")
 
 
 class CommandRegistration:
