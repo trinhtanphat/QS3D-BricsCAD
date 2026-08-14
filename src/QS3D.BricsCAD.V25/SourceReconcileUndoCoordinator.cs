@@ -545,6 +545,12 @@ namespace QS3D.BricsCAD.V25
 
         private static void OnCommandWillStart(Document document, CommandEventArgs args)
         {
+            // CommandEnded is not a sufficient observation boundary in V25:
+            // native Undo/Redo can complete without a usable terminal callback.
+            // Before the next active-document command runs, reconcile the
+            // already-committed native marker through the same exact guards.
+            if (IsActiveDocument(document)) SynchronizeToNativeRevision(document);
+
             var normalized = NormalizeNativeUndoRedo(args?.GlobalCommandName);
             lock (Gate)
             {
@@ -566,7 +572,11 @@ namespace QS3D.BricsCAD.V25
             // and document close/discard. Restore only a matching command that
             // started while this exact tracked document was active.
             if (!TryConsumeMatchingCommand(document, args?.GlobalCommandName)) return;
+            SynchronizeToNativeRevision(document);
+        }
 
+        private static void SynchronizeToNativeRevision(Document document)
+        {
             DocumentHistory history;
             lock (Gate)
             {
@@ -579,7 +589,8 @@ namespace QS3D.BricsCAD.V25
                 try { nativeRevision = ReadRevision(document); }
                 catch (Exception markerError)
                 {
-                    // A command-end read can race native transaction cleanup.
+                    // A terminal-boundary read can race native transaction
+                    // cleanup; a later command-start fallback will retry.
                     // Without a readable marker transition there is no evidence
                     // that semantic state must be permanently poisoned. The next
                     // mutation still reads/compares the marker and fails closed.
