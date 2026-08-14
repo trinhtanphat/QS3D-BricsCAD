@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using QS3D.Core.Domain;
 
@@ -128,7 +129,12 @@ namespace QS3D.Core.SmokeTests
             project.Families.Add(family);
 
             var inherited = new ProjectElement("e-padded", ElementCategory.ArchitecturalWall, family.Id, "floor", "zone");
-            inherited.FamilyId = "  " + family.Id + "  ";
+            if (inherited.FamilyId != family.Id) throw new Exception("Valid construction must store the canonical FamilyId before boundary injection.");
+            var paddedFamilyId = "  " + family.Id + "  ";
+            var familyIdField = typeof(ProjectElement).GetField("_familyId", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (familyIdField == null) throw new Exception("ProjectElement._familyId reflection boundary was not found.");
+            familyIdField.SetValue(inherited, paddedFamilyId);
+            if (inherited.FamilyId != paddedFamilyId) throw new Exception("Padded raw FamilyId boundary injection did not reach the element.");
             inherited.Properties["GeneratedSolidHandle"] = "EE";
             inherited.ClearGeneratedGeometryStale();
             inherited.MarkClean(ElementDirtyFlags.All);
@@ -140,7 +146,7 @@ namespace QS3D.Core.SmokeTests
             if (!inherited.IsGeneratedSolidStale()) throw new Exception("Padded but semantically identical FamilyId must still stale inherited material consumers.");
             if ((inherited.Dirty & (ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity)) != (ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity))
                 throw new Exception("Padded FamilyId inherited consumer must be dirtied for Properties and Quantity.");
-            if (inherited.FamilyId != family.Id) throw new Exception("Material rename must preserve the canonical stored FamilyId.");
+            if (inherited.FamilyId != paddedFamilyId) throw new Exception("Material rename must not rewrite the stored FamilyId while canonicalizing lookup identity.");
         }
 
         private static void RenameRejectsCorruptReferenceGraphBeforeMutation()
