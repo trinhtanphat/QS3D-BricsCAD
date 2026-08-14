@@ -10,7 +10,11 @@ ROOT = Path(__file__).resolve().parents[1]
 UI_DIR = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI"
 THEME = UI_DIR / "Theme.xaml"
 POLISH = UI_DIR / "ProductionUiPolish.cs"
-PLUGIN_ENTRY = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
+PLUGIN_ENTRIES = (
+    ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs",
+    ROOT / "src" / "QS3D.BricsCAD.V26" / "PluginEntry.cs",
+)
+V26_PLUGIN_ENTRY = PLUGIN_ENTRIES[1]
 WPF_NS = "http://schemas.microsoft.com/winfx/2006/xaml/presentation"
 
 errors: list[str] = []
@@ -119,9 +123,22 @@ def main() -> int:
                 f"globally against the BricsCAD AppDomain: {forbidden_token}"
             )
 
-    plugin_entry = read_text(PLUGIN_ENTRY)
-    if "ProductionUiPolish.EnsureRegistered();" not in plugin_entry:
-        fail("PluginEntry.cs: ProductionUiPolish must be registered before QS3D host UI starts.")
+    for plugin_entry_path in PLUGIN_ENTRIES:
+        plugin_entry = read_text(plugin_entry_path)
+        if "ProductionUiPolish.EnsureRegistered();" not in plugin_entry:
+            fail(
+                f"{plugin_entry_path.relative_to(ROOT)}: ProductionUiPolish must be "
+                "registered before QS3D host UI starts."
+            )
+
+    v26_plugin_entry = read_text(V26_PLUGIN_ENTRY)
+    register_index = v26_plugin_entry.find("ProductionUiPolish.EnsureRegistered();")
+    palette_index = v26_plugin_entry.find("PaletteCoordinator.EnsureCreated();")
+    if register_index >= 0 and palette_index >= 0 and register_index > palette_index:
+        fail(
+            "src/QS3D.BricsCAD.V26/PluginEntry.cs: ProductionUiPolish registration must "
+            "run before V26 palette creation."
+        )
 
     anti_patterns = (
         (
@@ -154,7 +171,7 @@ def main() -> int:
             print(f" - {error}", file=sys.stderr)
         return 1
 
-    print(f"UI_PRODUCTION_POLISH_PREFLIGHT=PASS files_scanned={len(xaml_files)}")
+    print(f"UI_PRODUCTION_POLISH_PREFLIGHT=PASS files_scanned={len(xaml_files)} host_entries={len(PLUGIN_ENTRIES)}")
     return 0
 
 
