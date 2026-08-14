@@ -146,6 +146,34 @@ function Stop-Qs3dLevelProcess {
     catch { }
 }
 
+function Restore-Qs3dLevelDrawingAndPrivateState {
+    param(
+        [Parameter(Mandatory = $true)][string]$scriptPath,
+        [Parameter(Mandatory = $true)][string]$projectSidecar,
+        [Parameter(Mandatory = $true)][string]$DrawingCopy,
+        [Parameter(Mandatory = $true)][string]$drawingBackupPath
+    )
+
+    if (Test-Path -LiteralPath $scriptPath -PathType Leaf) {
+        Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue
+    }
+    foreach ($privatePath in @(
+        $projectSidecar,
+        ($projectSidecar + ".bak"),
+        [IO.Path]::ChangeExtension($DrawingCopy, ".bak"),
+        [IO.Path]::ChangeExtension($DrawingCopy, ".dwl"),
+        [IO.Path]::ChangeExtension($DrawingCopy, ".dwl2")
+    )) {
+        if (Test-Path -LiteralPath $privatePath -PathType Leaf) {
+            Remove-Item -LiteralPath $privatePath -Force -ErrorAction SilentlyContinue
+        }
+    }
+    if (Test-Path -LiteralPath $drawingBackupPath -PathType Leaf) {
+        Copy-Item -LiteralPath $drawingBackupPath -Destination $DrawingCopy -Force -ErrorAction Stop
+        Remove-Item -LiteralPath $drawingBackupPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw "Level Z runtime qualification requires Windows." }
 if (-not [Environment]::UserInteractive) { throw "Level Z runtime qualification requires an interactive Windows session." }
 if (-not $ConfirmDisposableCopy) { throw "Pass -ConfirmDisposableCopy only for a disposable synthetic drawing copy." }
@@ -291,12 +319,23 @@ try {
     if ($rebarCount -ne 4) { throw "Level Z runtime expected exactly four Beam longitudinal bars." }
 
     Stop-Qs3dLevelProcess -Process $process
+    Restore-Qs3dLevelDrawingAndPrivateState -ScriptPath $scriptPath -ProjectSidecar $projectSidecar -DrawingCopy $DrawingCopy -DrawingBackupPath $drawingBackupPath
+    $processCleanupVerified = @(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -eq 0
+    if (-not $processCleanupVerified) { throw "Level Z runtime left a BricsCAD process after cleanup." }
+    $scriptCleanupVerified = -not (Test-Path -LiteralPath $scriptPath)
+    if (-not $scriptCleanupVerified) { throw "Level Z runtime left its private script after cleanup." }
+    $privateStateCleanupVerified = -not (
+        (Test-Path -LiteralPath $projectSidecar) -or
+        (Test-Path -LiteralPath ($projectSidecar + ".bak")) -or
+        (Test-Path -LiteralPath ([IO.Path]::ChangeExtension($DrawingCopy, ".bak"))) -or
+        (Test-Path -LiteralPath ([IO.Path]::ChangeExtension($DrawingCopy, ".dwl"))) -or
+        (Test-Path -LiteralPath ([IO.Path]::ChangeExtension($DrawingCopy, ".dwl2")))
+    )
+    if (-not $privateStateCleanupVerified) { throw "Level Z runtime left private drawing state after cleanup." }
     $drawingHashAfter = (Get-FileHash -LiteralPath $DrawingCopy -Algorithm SHA256).Hash.ToUpperInvariant()
-    if (-not [string]::Equals($drawingHashBefore, $drawingHashAfter, [StringComparison]::Ordinal)) {
+    $drawingRestoreVerified = [string]::Equals($drawingHashBefore, $drawingHashAfter, [StringComparison]::Ordinal)
+    if (-not $drawingRestoreVerified) {
         throw "The disposable Level Z drawing was written unexpectedly."
-    }
-    if ((Test-Path -LiteralPath $projectSidecar) -or (Test-Path -LiteralPath ($projectSidecar + ".bak"))) {
-        throw "Level Z runtime probe unexpectedly persisted a QS3D sidecar."
     }
 
     $metadata = [ordered]@{
@@ -311,6 +350,10 @@ try {
         drawing_copy_sha256_after = $drawingHashAfter
         proxy_information_dialogs_dismissed = $proxyInformationDialogsDismissed
         graceful_exit = $gracefulExit
+        process_cleanup_verified = $processCleanupVerified
+        script_cleanup_verified = $scriptCleanupVerified
+        private_state_cleanup_verified = $privateStateCleanupVerified
+        drawing_restore_verified = $drawingRestoreVerified
         curtain_frame_count = $frameCount
         curtain_panel_count = $panelCount
         beam_rebar_count = $rebarCount
@@ -327,24 +370,7 @@ try {
 }
 finally {
     Stop-Qs3dLevelProcess -Process $process
-    if (Test-Path -LiteralPath $scriptPath -PathType Leaf) {
-        Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue
-    }
-    foreach ($privatePath in @(
-        $projectSidecar,
-        ($projectSidecar + ".bak"),
-        [IO.Path]::ChangeExtension($DrawingCopy, ".bak"),
-        [IO.Path]::ChangeExtension($DrawingCopy, ".dwl"),
-        [IO.Path]::ChangeExtension($DrawingCopy, ".dwl2")
-    )) {
-        if (Test-Path -LiteralPath $privatePath -PathType Leaf) {
-            Remove-Item -LiteralPath $privatePath -Force -ErrorAction SilentlyContinue
-        }
-    }
-    if (Test-Path -LiteralPath $drawingBackupPath -PathType Leaf) {
-        Copy-Item -LiteralPath $drawingBackupPath -Destination $DrawingCopy -Force -ErrorAction Stop
-        Remove-Item -LiteralPath $drawingBackupPath -Force -ErrorAction SilentlyContinue
-    }
+    Restore-Qs3dLevelDrawingAndPrivateState -ScriptPath $scriptPath -ProjectSidecar $projectSidecar -DrawingCopy $DrawingCopy -DrawingBackupPath $drawingBackupPath
     Restore-EnvironmentValue -Name "QS3D_LEVEL_Z_RESULT" -Value $oldResult
     Restore-EnvironmentValue -Name "QS3D_LEVEL_Z_NONCE" -Value $oldNonce
     Restore-EnvironmentValue -Name "QS3D_LEVEL_Z_SOURCE_SHA" -Value $oldSourceSha

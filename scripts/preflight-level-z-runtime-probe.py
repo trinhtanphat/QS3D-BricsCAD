@@ -135,12 +135,18 @@ if RUNNER.is_file():
         'Start-Process -FilePath $bricscadExe',
         '-WindowStyle Hidden',
         'Stop-Qs3dLevelProcess -Process $process',
+        'function Restore-Qs3dLevelDrawingAndPrivateState {',
+        'Restore-Qs3dLevelDrawingAndPrivateState -ScriptPath $scriptPath -ProjectSidecar $projectSidecar -DrawingCopy $DrawingCopy -DrawingBackupPath $drawingBackupPath',
         'Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue',
         '$gracefulExit = $process.WaitForExit(15000)',
         'BricsCAD did not exit gracefully after the Level Z marker.',
         'graceful_exit = $gracefulExit',
         'drawing_copy_sha256_before',
         'drawing_copy_sha256_after',
+        'process_cleanup_verified = $processCleanupVerified',
+        'script_cleanup_verified = $scriptCleanupVerified',
+        'private_state_cleanup_verified = $privateStateCleanupVerified',
+        'drawing_restore_verified = $drawingRestoreVerified',
         '$drawingBackupPath = Join-Path $ArtifactDir "level-z-original.dwg"',
         'Copy-Item -LiteralPath $DrawingCopy -Destination $drawingBackupPath -ErrorAction Stop',
         'Copy-Item -LiteralPath $drawingBackupPath -Destination $DrawingCopy -Force -ErrorAction Stop',
@@ -172,6 +178,18 @@ if RUNNER.is_file():
             errors.append("Level-Z runner contains broad process/window action: " + forbidden)
     if "rev-parse HEAD 2>$null | Select-Object -First 1" in text:
         errors.append("Level-Z runner must not pipe rev-parse through Select-Object because early pipeline closure can corrupt LASTEXITCODE")
+    restore_call = 'Restore-Qs3dLevelDrawingAndPrivateState -ScriptPath $scriptPath -ProjectSidecar $projectSidecar -DrawingCopy $DrawingCopy -DrawingBackupPath $drawingBackupPath'
+    validation = text.find('if ($rebarCount -ne 4)')
+    stop = text.find('Stop-Qs3dLevelProcess -Process $process', validation)
+    restore = text.find(restore_call, stop)
+    drawing_hash = text.find('$drawingHashAfter =', restore)
+    metadata = text.find('$metadata =', drawing_hash)
+    finalizer = text.find('finally {', metadata)
+    finalizer_restore = text.find(restore_call, finalizer)
+    if min(validation, stop, restore, drawing_hash, metadata, finalizer, finalizer_restore) < 0 or not (
+        validation < stop < restore < drawing_hash < metadata < finalizer < finalizer_restore
+    ):
+        errors.append("Level-Z runner must stop the host, restore the drawing/private state before hash verification and retry the same idempotent restore in finally")
 
 if COMMAND.is_file():
     text = COMMAND.read_text(encoding="utf-8")
