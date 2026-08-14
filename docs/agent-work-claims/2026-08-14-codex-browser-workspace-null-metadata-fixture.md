@@ -1,8 +1,9 @@
 # Work claim — Browser workspace null-metadata fixture reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-browser-workspace-null-metadata-fixture-20260814` (`/root/fix_level_curtain_frame_z`, delegated by `/root`)
 - Registered: `2026-08-14T13:57:06+07:00`
+- Completed: `2026-08-14T14:00:06+07:00`
 - Baseline main SHA: `2ac289098c73e9873d466349701f1d6264c589d7`
 - Priority: continue the first observable contained Core smoke blocker after Preview Review reconciliation
 
@@ -27,3 +28,11 @@ No production metadata/browser/workspace/domain/persistence change, no runner/mo
 ## Validation and completion
 
 Run the strict Core smoke Release build, registered full Core smoke, and focused Browser/workspace/metadata gates. If the complete smoke reaches a separate stale fixture, report it without expanding this claim. Merge the test-only correction through a normal PR, record exact SHAs, then mark this claim `COMPLETED`.
+
+## Completion record
+
+- Claim-only PR `#1178` merged as `b238052408fc2531e4a14ef142a3693e6edd3b05` before the test edit.
+- Implementation source commit `8bcfb30f1ee44332a24bcaba613ed17336ed8300` merged through PR `#1179` as `e23c7473a3783407a4ebc4d2db38a4848e1f644e`.
+- The fixture retains the null request and present-key fail-closed path, explicitly pins immediate null-to-empty metadata canonicalization, and compares post-rejection metadata against the canonical value captured before Load while preserving `UpdatedUtc` and `ChangeVersion` assertions.
+- Core smoke Release build passed with zero warnings/errors. All six focused Browser/workspace/metadata gates passed. The complete registered smoke advanced through this fixture and then stopped at the independent `ProjectQuantityReportGroupKeySmoke.DelimiterInjectionDoesNotMergeDistinctRows` U+001F Family-ID fixture; Project Quantity remains unchanged and outside this claim.
+- No production, domain, runner/module-initializer, Level, probe/runner, BricsCAD, private-data or GitHub Actions surface was changed or executed.
