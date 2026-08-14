@@ -143,8 +143,7 @@ if QSDB.is_file():
 if SNAPSHOT.is_file():
     text = SNAPSHOT.read_text(encoding="utf-8")
     for token in (
-        "target.Metadata.Clear();",
-        "foreach (var item in source.Metadata) target.Metadata[item.Key] = item.Value;",
+        "targetMetadata.ReplacePersistenceState(source.Metadata);",
         "target.RestorePersistenceState(source.UpdatedUtc, source.ChangeVersion);",
     ):
         if token not in text: errors.append("ProjectStateSnapshot must include project Metadata and persistence state for rollback-safe native Table mutation: " + token)
