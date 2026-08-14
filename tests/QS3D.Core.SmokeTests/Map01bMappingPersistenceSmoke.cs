@@ -16,6 +16,8 @@ namespace QS3D.Core.SmokeTests
             MetadataRoundtripIsCanonical();
             SnapshotIsDetached();
             PersistedConflictsFailClosed();
+            MappingMutationsAdvanceProjectRevision();
+            RevisionOverflowFailsBeforeMappingWrite();
         }
 
         private static void MetadataRoundtripIsCanonical()
@@ -67,11 +69,77 @@ namespace QS3D.Core.SmokeTests
             ExpectFailure(() => duplicate.Metadata.Add(Entries(duplicateOther)[0].Key, Entries(duplicateOther)[0].Value), "Duplicate persisted mapping id was accepted.");
         }
 
+        private static void MappingMutationsAdvanceProjectRevision()
+        {
+            var remove = NewProject("revision-remove");
+            var baseline = new DateTime(2026, 8, 14, 0, 0, 0, DateTimeKind.Utc);
+            remove.UpdatedUtc = baseline;
+            var mapping = Mapping("map-a", ElementCategory.Room, "AreaM2", "class-room", "work-room");
+            remove.MeasurementWorkItemMappings.Add(mapping);
+            if (remove.ChangeVersion != 1L || remove.UpdatedUtc <= baseline)
+                throw new Exception("Adding a project mapping did not advance project persistence state exactly once.");
+
+            var afterAddVersion = remove.ChangeVersion;
+            var afterAddUpdated = remove.UpdatedUtc;
+            ExpectFailure(() => remove.MeasurementWorkItemMappings.Add(mapping), "Duplicate mapping add unexpectedly succeeded.");
+            if (remove.ChangeVersion != afterAddVersion || remove.UpdatedUtc != afterAddUpdated)
+                throw new Exception("Rejected mapping add changed project persistence state.");
+
+            var missing = Mapping("missing", ElementCategory.Room, "PerimeterM", "class-missing", "work-missing");
+            if (remove.MeasurementWorkItemMappings.Remove(missing)) throw new Exception("Missing mapping removal unexpectedly succeeded.");
+            if (remove.ChangeVersion != afterAddVersion || remove.UpdatedUtc != afterAddUpdated)
+                throw new Exception("Missing mapping removal changed project persistence state.");
+
+            if (!remove.MeasurementWorkItemMappings.Remove(mapping)) throw new Exception("Existing mapping removal unexpectedly failed.");
+            if (remove.ChangeVersion != afterAddVersion + 1L || Entries(remove).Length != 0)
+                throw new Exception("Existing mapping removal did not advance project revision exactly once.");
+
+            var clear = NewProject("revision-clear");
+            Add(clear, "map-a", ElementCategory.Room, "AreaM2", "class-room", "work-room");
+            Add(clear, "map-b", ElementCategory.Column, "VolumeM3", "class-column", "work-column");
+            var beforeClearVersion = clear.ChangeVersion;
+            clear.MeasurementWorkItemMappings.Clear();
+            if (clear.ChangeVersion != beforeClearVersion + 1L || Entries(clear).Length != 0)
+                throw new Exception("Non-empty mapping clear did not advance project revision exactly once.");
+            var afterClearVersion = clear.ChangeVersion;
+            var afterClearUpdated = clear.UpdatedUtc;
+            clear.MeasurementWorkItemMappings.Clear();
+            if (clear.ChangeVersion != afterClearVersion || clear.UpdatedUtc != afterClearUpdated)
+                throw new Exception("Empty mapping clear changed project persistence state.");
+        }
+
+        private static void RevisionOverflowFailsBeforeMappingWrite()
+        {
+            var project = NewProject("revision-overflow");
+            var changeVersion = typeof(ProjectState).GetProperty(nameof(ProjectState.ChangeVersion))
+                ?? throw new Exception("Project ChangeVersion property is unavailable.");
+            var setter = changeVersion.GetSetMethod(true)
+                ?? throw new Exception("Project ChangeVersion private setter is unavailable.");
+            setter.Invoke(project, new object[] { long.MaxValue });
+            var beforeUpdated = project.UpdatedUtc;
+
+            try
+            {
+                Add(project, "map-a", ElementCategory.Room, "AreaM2", "class-room", "work-room");
+            }
+            catch (OverflowException)
+            {
+                if (project.ChangeVersion != long.MaxValue || project.UpdatedUtc != beforeUpdated || Entries(project).Length != 0)
+                    throw new Exception("Mapping revision overflow mutated project persistence state before failing.");
+                return;
+            }
+
+            throw new Exception("Mapping mutation accepted a project ChangeVersion overflow.");
+        }
+
         private static System.Collections.Generic.KeyValuePair<string, string>[] Entries(ProjectState project) =>
             project.Metadata.Where(x => x.Key.StartsWith(Prefix, StringComparison.Ordinal)).OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Key, StringComparer.Ordinal).ToArray();
 
+        private static MeasurementWorkItemMapping Mapping(string id, ElementCategory category, string item, string classification, string work) =>
+            new MeasurementWorkItemMapping(id, category, item, classification, work);
+
         private static void Add(ProjectState project, string id, ElementCategory category, string item, string classification, string work) =>
-            project.MeasurementWorkItemMappings.Add(new MeasurementWorkItemMapping(id, category, item, classification, work));
+            project.MeasurementWorkItemMappings.Add(Mapping(id, category, item, classification, work));
 
         private static void ExpectFailure(Action action, string message)
         {
