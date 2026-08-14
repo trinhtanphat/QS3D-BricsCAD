@@ -120,3 +120,10 @@ The corrected production fix and regressions are merged to current `main`, the e
 - `COMMIT_HISTORY_LOST` marks only a transition-owned object after that object is already absent from or replaced in the history dictionary, so it cannot produce the current dictionary's `MULTIPLE` entry class. Canonical project replacement cannot explain the tuple either: every project-cache remove/replace path calls `SourceReconcileUndoCoordinator.Forget` first and would remove the history instead of retaining multiple entries.
 - Baseline `main` is `d321660c632b2c66cf0cefe78c9c0ecea93bb198`. This pass reserves only `SourceReconcileUndoCoordinator.cs`, the focused coherence guard base, and this claim. It will treat managed `Document` wrappers as the same drawing only when their exact native `Database` reference is identical; cached canonical `ProjectState` reference, ProjectId, semantic stamp, native marker and backing-store checks remain unchanged and fail closed.
 - The LOCAL-004 probe/runner/gates/docs, project-cache lifecycle, private data, BricsCAD execution and GitHub Actions remain excluded. Issue `#1005` stays open until the unchanged exact-SHA matrix passes.
+
+## Native-drawing affinity candidate
+
+- Source commit `67edeb6617fe3a57b66e585bcf93ab1d9cffc281` merged through PR `#1137` as exact rerun candidate `5d918ac29c2a4a2e49e11b3d7563bcadf4b69136`.
+- History now captures the exact native `Database` object and accepts a replacement managed `Document` wrapper only when that Database reference is identical. Cached canonical project reference, ProjectId, semantic stamp, native marker and backing-store guards remain exact and fail closed; different native databases remain isolated.
+- Focused Source Reconcile gates, strict manual-CI and generic preflight PASS; Core smoke `ALL PASS`; installed-reference V25 `Release|x64` build PASS with `0 warnings / 0 errors`.
+- Exact rerun request is issue comment `#issuecomment-5289848675`. Issue `#1005` and this claim remain `OPEN` / `ACTIVE` / `PENDING_LOCAL`; no runtime PASS is inferred.
