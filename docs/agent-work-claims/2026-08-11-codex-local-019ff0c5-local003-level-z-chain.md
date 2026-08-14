@@ -319,6 +319,10 @@ After the independent Measurement fixture owner landed its correction, the full 
 
 Completed through PR `#1176` at `6a99f3d48dad7dc52580790f4bc5c7fb607e88d9`. The registered smoke now advances through the invalid-provenance case and reaches the separate stale `XmlValidWhitespaceRoundTripsExactly` tab-bearing rule-ID fixture; no Level or production surface changed.
 
+### 2026-08-14 Browser workspace null-metadata fixture delegation
+
+After the independent Preview Review tab fixture owner landed its correction, the full smoke reached `ProjectBrowserWorkspaceEmptyMetadataSmoke.NullMetadataFailsWithoutMutation`. Parent task `/root` explicitly delegates only that smoke file to `/root/fix_level_curtain_frame_z` under `2026-08-14-codex-browser-workspace-null-metadata-fixture.md`: preserve the null request and loader fail-closed/freshness assertions while comparing Load no-mutation against the canonical value stored before Load. The parent retains LOCAL-003 probe/runner ownership and will not edit this smoke while the child claim is `ACTIVE`.
+
 ## 2026-08-12 base schedule reference-integrity fixture reconciliation expansion
 
 Baseline audited after a clean fetch and fast-forward: `origin/main@f74dbc55d5c141b78d7f20d0a65bac26b901126f`.
