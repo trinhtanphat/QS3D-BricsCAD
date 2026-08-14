@@ -184,7 +184,7 @@ namespace QS3D.Core.Domain
         public string DrawingFingerprint
         {
             get => _drawingFingerprint;
-            set => SetPersistedScalar(ref _drawingFingerprint, value);
+            set => SetCanonicalOptionalIdentity(ref _drawingFingerprint, value, "Drawing fingerprint");
         }
         public string ActiveZoneId
         {
@@ -239,6 +239,14 @@ namespace QS3D.Core.Domain
             if (normalizedValue.Any(char.IsControl))
                 throw new ArgumentException("Active context id cannot contain control characters.", nameof(value));
             SetPersistedScalar(ref field, normalizedValue);
+        }
+
+        private void SetCanonicalOptionalIdentity(ref string field, string? value, string label)
+        {
+            var rawValue = value ?? string.Empty;
+            if (rawValue.Any(char.IsControl))
+                throw new ArgumentException(label + " cannot contain control characters.", nameof(value));
+            SetPersistedScalar(ref field, rawValue.Trim());
         }
 
         private void SetPersistedScalar(ref string field, string value)
