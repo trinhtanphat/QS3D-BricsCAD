@@ -55,6 +55,38 @@ Do not delete completed/released claims; they are lightweight coordination histo
 
 A local commit, private branch, chat note or unpushed Markdown file is not a reservation. If a registration push is rejected because `main` moved, fetch/integrate the new head, re-read claims, and publish the reservation only if it is still non-overlapping.
 
+## Canonical multi-agent execution order
+
+For every owner request that uses multiple agents, including broad `continue all` work, the following phase order is mandatory. Agents may execute implementation in parallel only after ownership is published and only when their lanes are demonstrably non-overlapping.
+
+1. **Coordinator snapshot:** fetch the latest `origin/main`, record the exact head SHA, inspect recent commits, current `ACTIVE`/`BLOCKED` claims and the relevant product/runtime queue.
+2. **Partition the request:** split the owner request into narrow, independently verifiable lanes. Treat semantic/API/test/runtime overlap as a collision even when the agents expect to edit different files.
+3. **Claim before implementation:** every implementation/qualification agent publishes a claim-only commit, verifies that it is reachable from the latest `origin/main`, then rechecks concurrent claims. No source/test/script implementation begins before this step succeeds.
+4. **Implement from current main:** work from the latest integrated head, keep the patch inside the reserved scope, and avoid opportunistic neighboring cleanup.
+5. **Just-in-time collision check:** immediately before each material write and before integration, refresh `origin/main`, inspect new commits and claims, and stop rather than stacking a duplicate or conflicting patch.
+6. **Integrate safely:** if `main` moved, rebase/reapply/merge the intended patch onto the newest head without discarding newer work. Never force-push `main`, reset it backwards, or choose `ours`/`theirs` blindly for a semantic conflict.
+7. **Validate the integrated result:** rerun the relevant build, deterministic tests, smoke tests and preflights after the final rebase/reapply, not only on the stale pre-integration tree.
+8. **Push and close the lane:** push the coherent implementation/close-out, update the claim to `COMPLETED` (or `RELEASED` when intentionally abandoned), and verify every claimed implementation commit is an ancestor of the current `origin/main`.
+9. **Integration review:** after participating agents finish, one integration reviewer refreshes `main` again, checks that the request's claims are terminal, verifies commit ancestry and checks for duplicate/semantic collisions across the combined result.
+10. **Exact-head evidence:** report the final `main` SHA and validation tied to that SHA. GitHub Actions/release execution remains subject to `CI_POLICY.md`; when the owner explicitly authorized CI for the request, the required exact-SHA workflow must be green before reporting CI completion.
+
+The order of these phases is mandatory even when implementation agents run concurrently. A later phase never retroactively satisfies an earlier phase: an implementation commit is not a substitute for a claim, a branch push is not a merge to `main`, and a green stale-SHA test is not proof for the current integrated head.
+
+## Definition of `ALL MERGED TO MAIN`
+
+For a specific owner request, agents may state **ALL MERGED TO MAIN** only after an integration reviewer has verified all of the following against a freshly fetched current `origin/main`:
+
+- every claim participating in that owner request is terminal: `COMPLETED` or intentionally `RELEASED`; a `BLOCKED` claim may remain only when the owner request explicitly leaves that work as a documented handoff rather than claiming it completed;
+- every implementation/close-out commit that is part of the requested result is reachable from the current `origin/main` (`git merge-base --is-ancestor <sha> origin/main` succeeds);
+- no required change for that request exists only on an agent branch, local worktree, draft patch or unmerged pull request;
+- the reviewer refreshed `origin/main` after the last participating agent push, so the reported final head is not a stale snapshot;
+- the integrated current-head tree contains the intended combined behavior without unresolved merge markers, duplicate competing implementations, silently reverted neighboring work or known semantic/API/test collisions;
+- all required remote-safe build/tests/smoke/preflights for the integrated tree pass, or any environment-gated evidence is explicitly classified and handed off according to this repository's local/remote policy;
+- if the owner separately authorized GitHub Actions for this request, required workflow evidence is tied to the exact integrated SHA and is green; if CI was not authorized, do not dispatch it merely to satisfy this definition;
+- the final report names the exact current `main` SHA used for the verification.
+
+`ALL MERGED TO MAIN` means repository integration is complete for the specified owner request. It does **not** automatically mean every LOCAL_ONLY runtime qualification, signing/release gate or unrelated repository claim is complete. Use `ALL DONE` only when those additional requested gates are also satisfied.
+
 ## Required claim contents
 
 Every claim must include:
