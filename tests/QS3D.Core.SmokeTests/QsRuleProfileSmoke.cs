@@ -70,9 +70,12 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentNullException>(() => new QsRuleProfile("PROFILE.NULL", null!));
             Throws<ArgumentException>(() => new QsRuleProfile("PROFILE.NULL-RULE", new QsRuleDefinition[1]));
             Throws<ArgumentException>(() => new QsRuleProfile(" ", new[] { first }));
+            Throws<ArgumentException>(() => new QsRuleProfile(" PROFILE.PADDED ", new[] { first }));
             Throws<ArgumentException>(() => new QsRuleProfile("PROFILE BAD", new[] { first }));
 
             Throws<ArgumentException>(() => new QsRuleDefinition(" ", "CODE", HealthSeverity.Info, "Explanation."));
+            Throws<ArgumentException>(() => new QsRuleDefinition(" QSC.PADDED ", "CODE", HealthSeverity.Info, "Explanation."));
+            Throws<ArgumentException>(() => new QsRuleDefinition("QSC.PADDED", " CODE ", HealthSeverity.Info, "Explanation."));
             Throws<ArgumentException>(() => new QsRuleDefinition("QSC.BAD ID", "CODE", HealthSeverity.Info, "Explanation."));
             Throws<ArgumentException>(() => new QsRuleDefinition("QSC.BAD", "CODE/BAD", HealthSeverity.Info, "Explanation."));
             Throws<ArgumentOutOfRangeException>(() => new QsRuleDefinition("QSC.BAD", "CODE", (HealthSeverity)999, "Explanation."));
