@@ -1,6 +1,6 @@
 # Work claim — Level-resolved Curtain frame Z placement
 
-- Status: `ACTIVE`
+- Status: `COMPLETED / SOURCE_FIXED / PENDING_LOCAL`
 - Agent: `codex-issue1125-level-curtain-frame-z-20260814` (`/root/fix_level_curtain_frame_z`, remote-safe source lane delegated by `/root`)
 - Registered: `2026-08-14T12:17:22+07:00`
 - Baseline main SHA: `8480fdfb8bfb26bb5195a07e179579f3c6dbff52`
@@ -49,4 +49,12 @@ On synchronized baseline `d321660c632b2c66cf0cefe78c9c0ecea93bb198`, both native
 
 The focused Level/Curtain placement, opening, path, noninteractive, ownership, health and native-panel gates pass. Core Release builds with zero warnings/errors, the complete Core smoke reports `ALL PASS`, and the installed-reference BricsCAD V25 `Release|x64` adapter builds with zero warnings/errors. Aggregate discovery ran all 787 gates and found four pre-existing frame/orchestration isolation failures whose start tokens still require the old two-argument public builder signatures; current `origin/main` already exposes the newer optional `allowInteractiveSelection` parameter from issue `#1106`. This lane did not edit those unrelated gates or weaken their contracts.
 
-The claim remains `ACTIVE / SOURCE_READY / PENDING_MERGE`. No BricsCAD runtime or GitHub Actions were run. After the source PR merges, record the exact merged `main` SHA here and on issue `#1125`, then hand that SHA to the LOCAL-003 owner.
+At candidate time the claim remained `ACTIVE / SOURCE_READY / PENDING_MERGE`. No BricsCAD runtime or GitHub Actions were run before merge; the completion record below is authoritative.
+
+## Completion record
+
+- Claim-only PR `#1128` merged as `734af3dd1f5e9c1459416e14c128a4fe2483f002` before implementation began.
+- Implementation source commit `e3d201c958480a1d830eb39106d29344e74658f7` merged through PR `#1133` as exact production SHA `8676b6a8430062931356be7dca3bace268ca233d`.
+- Focused Level/Curtain placement, opening, path, noninteractive, ownership, Health and native-panel gates passed; Core Release built with zero warnings/errors; Core smoke returned `ALL PASS`; installed-reference BricsCAD V25 `Release|x64` compiled with zero warnings/errors.
+- Aggregate preflight discovered 787 gates and retained four pre-existing frame/orchestration isolation failures caused by stale two-argument builder start tokens after issue `#1106`; this correction did not edit those unrelated gates.
+- GitHub Actions and BricsCAD runtime were not run. Issue `#1125` remains `OPEN / PENDING_LOCAL`, and the parent LOCAL-003 owner must rerun the guarded Level matrix on exact SHA `8676b6a8430062931356be7dca3bace268ca233d` before any `LOCAL_PASS` or issue closure.
