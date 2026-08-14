@@ -369,6 +369,20 @@ jobs:
           $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  QS3D-BricsCAD-V25.zip" | Set-Content 'dist\QS3D-BricsCAD-V25.zip.sha256' -Encoding ASCII
 
+      - name: Verify V25 package integrity before upload
+        shell: powershell
+        run: |
+          .\scripts\verify-v25-package.ps1 -ZipPath 'dist\QS3D-BricsCAD-V25.zip' -ChecksumPath 'dist\QS3D-BricsCAD-V25.zip.sha256' -RequiredEntries @(
+            'QS3D.BricsCAD.V25.dll',
+            'QS3D.Core.dll',
+            'PACKAGE-METADATA.json',
+            'README.txt',
+            'COMMANDS.txt',
+            'INSTALL-QS3D.cmd',
+            'UNBLOCK-QS3D.cmd',
+            'SHA256SUMS.txt'
+          )
+
       - name: Upload cloud preview artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -400,7 +414,7 @@ jobs:
             tag_name = $env:RELEASE_TAG
             target_commitish = $env:RELEASE_COMMIT_SHA
             name = "QS3D for BricsCAD V25 $env:RELEASE_TAG"
-            body = "Owner-approved GitHub-hosted preview build. Exact release source commit: $env:RELEASE_COMMIT_SHA. Source guards, Core build/smoke tests and the V25 adapter compile completed on windows-latest against managed references extracted from the pinned BricsCAD V25.2.10 x64 installer. The exact V25.2.10 MSI SHA-256 is pinned in the workflow; an Actions cache may restore that exact installer, otherwise the approved mirror, pinned official HTTPS object, and same-object signed HTTPS fallback are tried in order. Every restored or downloaded installer is re-hashed, requires a valid Bricsys Authenticode signer, and must report the expected BricsCAD ProductName and V25.2.10 ProductVersion before extraction. Real BricsCAD NETLOAD/runtime validation was not executed in this cloud workflow. Package is an unsigned prerelease preview and intentionally excludes BricsCAD runtime assemblies."
+            body = "Owner-approved GitHub-hosted preview build. Exact release source commit: $env:RELEASE_COMMIT_SHA. Source guards, Core build/smoke tests and the V25 adapter compile completed on windows-latest against managed references extracted from the pinned BricsCAD V25.2.10 x64 installer. The exact V25.2.10 MSI SHA-256 is pinned in the workflow; an Actions cache may restore that exact installer, otherwise the approved mirror, pinned official HTTPS object, and same-object signed HTTPS fallback are tried in order. Every restored or downloaded installer is re-hashed, requires a valid Bricsys Authenticode signer, and must report the expected BricsCAD ProductName and V25.2.10 ProductVersion before extraction. The preview ZIP is verified against its external SHA-256 and complete internal SHA256SUMS.txt before upload; the exact draft-release assets are then downloaded back, byte-hash compared with the local upload sources, and verified again before the draft can be published. Real BricsCAD NETLOAD/runtime validation was not executed in this cloud workflow. Package is an unsigned prerelease preview and intentionally excludes BricsCAD runtime assemblies."
             draft = $true
             prerelease = $true
             generate_release_notes = $true
@@ -419,11 +433,54 @@ jobs:
           }
           $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$($release.id)"
           $draftRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
-          foreach ($expectedAsset in @('QS3D-BricsCAD-V25.zip', 'QS3D-BricsCAD-V25.zip.sha256')) {
-            if ($expectedAsset -notin @($draftRelease.assets | ForEach-Object { $_.name })) {
-              throw "Expected release asset was not uploaded: $expectedAsset. Release remains a draft."
+          $expectedAssets = @('QS3D-BricsCAD-V25.zip', 'QS3D-BricsCAD-V25.zip.sha256')
+          foreach ($expectedAsset in $expectedAssets) {
+            $matches = @($draftRelease.assets | Where-Object { [string]::Equals([string]$_.name, $expectedAsset, [StringComparison]::Ordinal) })
+            if ($matches.Count -ne 1) {
+              throw "Expected exactly one release asset named $expectedAsset, found $($matches.Count). Release remains a draft."
+            }
+            if ([int64]$matches[0].size -le 0) {
+              throw "Uploaded release asset is empty: $expectedAsset. Release remains a draft."
             }
           }
+
+          $verifyDir = Join-Path $env:RUNNER_TEMP ('qs3d-release-asset-verify-' + [Guid]::NewGuid().ToString('N'))
+          Remove-Item -LiteralPath $verifyDir -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $verifyDir -Force | Out-Null
+          $downloadHeaders = @{}
+          foreach ($key in $headers.Keys) { $downloadHeaders[$key] = $headers[$key] }
+          $downloadHeaders['Accept'] = 'application/octet-stream'
+
+          foreach ($expectedAsset in $expectedAssets) {
+            $assetInfo = @($draftRelease.assets | Where-Object { [string]::Equals([string]$_.name, $expectedAsset, [StringComparison]::Ordinal) })[0]
+            $downloadPath = Join-Path $verifyDir $expectedAsset
+            Invoke-WebRequest -Method Get -Uri $assetInfo.url -Headers $downloadHeaders -OutFile $downloadPath -MaximumRedirection 10 -UseBasicParsing
+            if (-not (Test-Path -LiteralPath $downloadPath -PathType Leaf)) {
+              throw "Downloaded release asset is missing: $expectedAsset. Release remains a draft."
+            }
+            $downloadInfo = Get-Item -LiteralPath $downloadPath
+            if ($downloadInfo.Length -ne [int64]$assetInfo.size) {
+              throw "Downloaded release asset size mismatch for $expectedAsset. API=$($assetInfo.size), downloaded=$($downloadInfo.Length). Release remains a draft."
+            }
+            $localPath = (Resolve-Path (Join-Path 'dist' $expectedAsset)).Path
+            $localHash = (Get-FileHash -LiteralPath $localPath -Algorithm SHA256).Hash
+            $downloadHash = (Get-FileHash -LiteralPath $downloadPath -Algorithm SHA256).Hash
+            if (-not [string]::Equals($localHash, $downloadHash, [StringComparison]::OrdinalIgnoreCase)) {
+              throw "Uploaded/downloaded release asset byte hash mismatch for $expectedAsset. Release remains a draft."
+            }
+          }
+
+          .\scripts\verify-v25-package.ps1 -ZipPath (Join-Path $verifyDir 'QS3D-BricsCAD-V25.zip') -ChecksumPath (Join-Path $verifyDir 'QS3D-BricsCAD-V25.zip.sha256') -RequiredEntries @(
+            'QS3D.BricsCAD.V25.dll',
+            'QS3D.Core.dll',
+            'PACKAGE-METADATA.json',
+            'README.txt',
+            'COMMANDS.txt',
+            'INSTALL-QS3D.cmd',
+            'UNBLOCK-QS3D.cmd',
+            'SHA256SUMS.txt'
+          )
+
           $publishBody = @{ draft = $false } | ConvertTo-Json
           $publishedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $publishBody
           if ($publishedRelease.draft -ne $false) {
