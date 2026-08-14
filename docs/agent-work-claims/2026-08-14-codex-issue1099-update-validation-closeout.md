@@ -43,3 +43,18 @@ This is the fresh-validator successor to `docs/agent-work-claims/2026-08-14-0852
 ## Completion condition
 
 Current-main descendant passes the installed-reference V25 build, every issue-named focused gate, the affected broader Update gate, explicit legacy-console output check, and aggregate preflight; any concrete regression is corrected and revalidated; this claim records exact SHAs/results; the coherent close-out is merged; and issue #1099 is closed without touching excluded lanes or GitHub Actions.
+
+## Validation checkpoint — 2026-08-14 09:27 UTC+7
+
+Fresh full-checkout validation found one issue-scoped stale gate and no remaining production-source defect:
+
+- installed-reference V25 `Release|x64` build at `77ebd673a9f81ca3628e75328319427fa298a33f`: PASS, 0 warnings / 0 errors; product version `0.1.0-preview.7+77ebd673a9f81ca3628e75328319427fa298a33f`;
+- all five duplicate-command gates from #1099: PASS;
+- manifest-preclose, manual-preview and broader auto-update gates: PASS;
+- `scripts/preflight-v25-netload-update-ux.py`: initially failed because it still required the superseded `VersionCheck()` → `RuntimeCheck()` forwarding and the pre-Build-identity single-line Update Center text;
+- issue-scoped correction: require the current concise `WriteVersionSummary()` path, retain the separate `QS3DRUNTIMECHECK` deep-check handoff, and lock both loaded-DLL UI branches plus the full product-version tooltip;
+- all nine focused issue/Update gates after that correction: PASS;
+- explicit `PYTHONIOENCODING=cp1252` probes for all three affected `console_safe(...)` helpers emitted escaped Vietnamese assertion text and exited normally, with no `UnicodeEncodeError`;
+- aggregate `scripts/preflight-all.py`: executed, 781 gates discovered, but not yet green because three unrelated current-main gates fail on research-document wording and Wall Junction signature drift (`preflight-product-boundary.py`, `preflight-research-implementation-status.py`, `preflight-wall-junctions.py`). Those surfaces are outside this reservation and were not edited.
+
+The #1099 gate correction may be published while this claim remains `ACTIVE`; final close-out and issue closure wait for a fresh aggregate result on a current-main descendant. No GitHub Actions operation was performed.
