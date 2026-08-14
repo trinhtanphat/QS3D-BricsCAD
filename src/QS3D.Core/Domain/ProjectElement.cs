@@ -63,8 +63,7 @@ namespace QS3D.Core.Domain
 
         public ProjectElement(string id, ElementCategory category, string familyId, string floorId, string zoneId)
         {
-            if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Element id is required.", nameof(id));
-            Id = id.Trim();
+            Id = RequireId(id);
             _category = RequireCategory(category);
             FamilyId = familyId?.Trim() ?? string.Empty;
             FloorId = floorId?.Trim() ?? string.Empty;
@@ -280,6 +279,14 @@ namespace QS3D.Core.Domain
                 MarkGeneratedGeometryStale("Semantic/source state changed.");
             Dirty |= flags;
             UpdatedUtc = DateTime.UtcNow;
+        }
+
+        private static string RequireId(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Element id is required.", nameof(id));
+            var normalized = id.Trim();
+            if (normalized.Any(char.IsControl)) throw new ArgumentException("Element id cannot contain control characters.", nameof(id));
+            return normalized;
         }
 
         private static ElementCategory RequireCategory(ElementCategory value)
