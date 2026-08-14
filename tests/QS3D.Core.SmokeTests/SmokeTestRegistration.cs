@@ -75,6 +75,7 @@ namespace QS3D.Core.SmokeTests
             FloorGeneratedIdentitySmoke.Run();
             ModelHealthIdentityAmbiguitySmoke.Run();
             ModelHealthSourceHandleSmoke.Run();
+            ComprehensiveModelHealthMulticoreSmoke.Run();
             GridNamingSmoke.Run();
             GridNamingHealthSmoke.Run();
             GridIntersectionPlannerSmoke.Run();
