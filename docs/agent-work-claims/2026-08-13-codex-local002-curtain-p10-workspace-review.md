@@ -43,3 +43,9 @@ The completed `2026-08-13-codex-issue982-workspace-curtain-owner-selection.md` s
 ## Completion condition
 
 The additive probe/runner/gate is integrated on current `main`, one clean exact-SHA V25 run records truthful bounded P10 evidence with all cleanup postconditions, docs mark only P10 `LOCAL_PASS` or retain `PENDING_LOCAL` with a source-blocking handoff, this claim is `COMPLETED`, and no GitHub Actions or private/customer data is used.
+
+## Licensed attempt — 2026-08-14 NO_RESULT
+
+The first clean licensed attempt used exact merged `main` SHA `337e97d32b6642b3a3d013596ffa1545df168999`, BricsCAD `25.2.10` and x64 Release adapter SHA-256 `17AE9378E46ACD18B50611A268C939B19F0EDAF51DCE59EA4F1D744DDB063229`. BricsCAD did not emit the P10 marker within the guarded 900-second startup window and no launcher-to-host handoff occurred, so this is `NO_RESULT`, not a product PASS or FAIL.
+
+The runner nevertheless proved its failure cleanup contract: the launched process exited, private script and sidecar state were removed, the UI layout was restored, and the disposable DWG returned byte-for-byte to SHA-256 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`. No private path, profile value, drawing content or exception payload is retained here. P10 remains `SOURCE_READY / PENDING_LOCAL`, and this claim remains `ACTIVE` pending a fresh initialized-profile run that reaches the sanitized production marker.
