@@ -45,6 +45,8 @@ namespace QS3D.Core.Reporting
                 var floorId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FloorId);
                 var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
                 families.TryGetValue(familyId, out var family);
+                if (family != null && family.Category != element.Category)
+                    throw new InvalidOperationException("Door/opening schedule element " + element.Id + " category " + element.Category + " does not match Family " + family.Id + " category " + family.Category + ". Repair the Family relation before reporting.");
                 var widthM = Positive(Number(element, family, "WidthM", 0.9d), element.Id + "/WidthM");
                 var heightM = Positive(Number(element, family, "HeightM", 2.2d), element.Id + "/HeightM");
                 var sillM = NonNegative(Number(element, family, "SillHeightM", Number(element, family, "BottomOffsetM", 0d)), element.Id + "/SillHeightM");
