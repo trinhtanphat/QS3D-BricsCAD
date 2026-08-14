@@ -44,3 +44,13 @@ The ACTIVE Curtain Undo/Redo claim `2026-08-13-codex-issue987-curtain-native-und
 ## Exclusions
 
 No builder geometry/planner/ownership/Health/Level changes; no Direct Draw change; no P01-P09/P11/P12 runner edits; no Source Reconcile/LOCAL-004; no private/customer DWG; no V26/release/signing; no GitHub Actions; no overall LOCAL-002 promotion without complete bounded runtime evidence.
+
+## Integrated source result — licensed rerun pending
+
+- Claim PR `#1107` merged before production edits.
+- Source commit `e03150ff3a1f87a3054377c36f771f417b3a50b6` merged through PR `#1109` at `50d074eb579a3e9503b623fd37fd50a4e82c5b9b` and closed issue `#1106`.
+- `CurtainWallBuildCommands` now skips absent LINE/path host, frame and panel builder calls while retaining every phase label/failure hook, the outer transaction, rollback/Undo registration, final complete selection, fingerprint and UI ordering.
+- The focused empty-partition, P10, native-panel, orchestration, P08, P09 and P11 gates passed; the installed-reference V25 Release|x64 build passed with zero warnings/errors. Aggregate preflight reached `783/783 PASS` after unrelated gate reconciliation.
+- Exact current `main` `16d47ef46c4a955587f398d5597fb84ebce32c2e` builds adapter SHA-256 `A259BCF151D50B1BE9E6EC10EAAD469AC6E6E0FEFE6F01D9BD4A839E6E91E3B1`; P10/empty-partition focused gates pass on that checkout.
+
+The exact licensed completion run is still pending the runner's mandatory zero-preexisting-BricsCAD-process boundary. A refused launch did not build a disposable copy, start another host or create private artifacts, and no existing process was terminated. This claim remains `ACTIVE` until a fresh exact-SHA P10 run advances beyond `source_selection_prepared` and produces the full sanitized Workspace/Health/Release result with all cleanup postconditions. Neither the source merge nor the static/build evidence is a P10 or overall LOCAL-002 `LOCAL_PASS`.
