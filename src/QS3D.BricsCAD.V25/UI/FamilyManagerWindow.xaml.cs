@@ -83,7 +83,7 @@ namespace QS3D.BricsCAD.V25.UI
             PropertyValueBox.Text = string.Empty;
             ReferenceCountText.Text = "0";
             FamilyNameBox.Focus();
-            SetStatus("Tạo Family mới: chọn Category, nhập tên rồi bấm Lưu tên.");
+            SetStatus("Tạo Family mới: chọn Category, nhập tên rồi bấm Lưu tên. Custom property là tùy chọn.");
         }
 
         private void OnDuplicateClick(object sender, RoutedEventArgs e)
@@ -172,10 +172,16 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                var key = (PropertyKeyBox.Text ?? string.Empty).Trim();
+                if (key.Length == 0)
+                {
+                    SetStatus("Custom property là tùy chọn. Family và các property chuẩn vẫn được giữ; nhập Key chỉ khi cần thêm hoặc sửa custom property.");
+                    return;
+                }
+
                 EnsureActive("lưu Family property");
                 var project = ExistingProjectMutationContext.Require(_document, "Lưu Family property");
                 var family = RequireSelectedFamily(project);
-                var key = PropertyKeyBox.Text;
                 var value = PropertyValueBox.Text;
                 var result = ExecuteAtomic(project, () =>
                 {
@@ -198,10 +204,16 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                var key = (PropertyKeyBox.Text ?? string.Empty).Trim();
+                if (key.Length == 0)
+                {
+                    SetStatus("Custom property là tùy chọn. Chọn một property hoặc nhập Key trước khi xóa.");
+                    return;
+                }
+
                 EnsureActive("xóa Family property");
                 var project = ExistingProjectMutationContext.Require(_document, "Xóa Family property");
                 var family = RequireSelectedFamily(project);
-                var key = PropertyKeyBox.Text;
                 var result = ExecuteAtomic(project, () =>
                 {
                     var beforeVersion = project.ChangeVersion;

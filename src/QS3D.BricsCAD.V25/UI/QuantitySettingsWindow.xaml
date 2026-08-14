@@ -4,7 +4,7 @@
         Title="Cài đặt thông số tính toán"
         Width="980" Height="700" MinWidth="820" MinHeight="560"
         WindowStartupLocation="CenterScreen"
-        Background="{StaticResource Bg0Brush}" Foreground="{StaticResource TextBrush}"
+        Background="{DynamicResource Bg0Brush}" Foreground="{DynamicResource TextBrush}"
         FontFamily="Segoe UI" FontSize="11"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
         TextOptions.TextFormattingMode="Display"

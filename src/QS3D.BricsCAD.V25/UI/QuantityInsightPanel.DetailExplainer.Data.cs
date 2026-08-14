@@ -57,14 +57,30 @@ namespace QS3D.BricsCAD.V25.UI
                     return;
                 }
 
-                _quantityDetailOptions = details.Select((row, index) => new QuantityInsightDetailOption(row, index + 1)).ToList();
+                var options = details.Select((row, index) => new QuantityInsightDetailOption(row, index + 1)).ToList();
+                var firstOption = options.FirstOrDefault();
+                if (firstOption == null)
+                {
+                    ClearQuantityDetail("Dòng này chưa có detail row canonical để diễn giải.");
+                    return;
+                }
+
+                _quantityDetailOptions = options;
                 if (_quantityDetailSelector != null)
                 {
-                    _quantityDetailSelector.ItemsSource = _quantityDetailOptions;
-                    _quantityDetailSelector.Visibility = _quantityDetailOptions.Count > 1 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
-                    _quantityDetailSelector.SelectedIndex = 0;
+                    _quantityDetailSelectionLoading = true;
+                    try
+                    {
+                        _quantityDetailSelector.ItemsSource = options;
+                        _quantityDetailSelector.Visibility = options.Count > 1 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+                        _quantityDetailSelector.SelectedItem = firstOption;
+                    }
+                    finally
+                    {
+                        _quantityDetailSelectionLoading = false;
+                    }
                 }
-                RenderQuantityDetail(_quantityDetailOptions[0]);
+                RenderQuantityDetail(firstOption);
                 _viewModel.Status = "Chi tiết read-only • " + details.Count.ToString("N0", CultureInfo.CurrentCulture) + " cấu kiện canonical.";
             }
             catch (Exception ex)
