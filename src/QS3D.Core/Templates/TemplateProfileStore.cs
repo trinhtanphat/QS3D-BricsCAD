@@ -229,7 +229,7 @@ namespace QS3D.Core.Templates
             var mappingPatterns = new List<string>();
             foreach (var item in root.Element("layerMappings")?.Elements("map") ?? Enumerable.Empty<XElement>())
             {
-                var pattern = Required(item, "pattern");
+                var pattern = RequiredCanonicalLayerMappingPattern(item);
                 if (profile.LayerMappings.ContainsKey(pattern)) throw new InvalidDataException("Duplicate template layer mapping: " + pattern);
                 profile.LayerMappings.Add(pattern, RequiredCanonicalLayerMappingCategory(item));
                 mappingPatterns.Add(pattern);
@@ -410,6 +410,14 @@ namespace QS3D.Core.Templates
                 !string.Equals(raw, category.ToString(), StringComparison.Ordinal))
                 throw new InvalidDataException("Invalid or non-canonical template " + label + " category.");
             return category;
+        }
+
+        private static string RequiredCanonicalLayerMappingPattern(XElement element)
+        {
+            var raw = element.Attribute("pattern")?.Value;
+            if (string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("Template layer mapping pattern is empty or non-canonical.");
+            return raw;
         }
 
         private static string RequiredCanonicalLayerMappingCategory(XElement element)
