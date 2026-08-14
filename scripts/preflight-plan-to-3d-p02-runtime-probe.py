@@ -160,6 +160,19 @@ if RUNNER.is_file():
     for forbidden in ("SilentlyContinue", "catch { }"):
         if forbidden in stop_body:
             errors.append("Plan-to-3D P02 launched-process cleanup must fail visible: " + forbidden)
+    success_start = text.find("Require-Qs3dValue -Marker $marker -Key \"production_local014_qualified\"")
+    success_end = text.find("$metadata = [ordered]@{", success_start)
+    success = text[success_start:success_end]
+    success_stop = success.find("Stop-Qs3dLaunchedProcess -Process $process")
+    success_script = success.find("if (Test-Path -LiteralPath $scriptPath) { Remove-Item")
+    success_private = success.find("Remove-Qs3dPrivateArtifacts -Paths $privateDrawingArtifacts")
+    success_hash = success.find("$drawingHashAfter =")
+    if min(success_stop, success_script, success_private, success_hash) < 0 or not (
+        success_stop < success_script < success_private < success_hash
+    ):
+        errors.append("Plan-to-3D P02 success cleanup must stop the launched process, delete the private script and remove disposable drawing state before hash/metadata verification")
+    if "Plan-to-3D P02 unexpectedly created private drawing state." in text:
+        errors.append("Plan-to-3D P02 runner must clean allowlisted disposable drawing state before asserting its absence")
     metadata_start = text.find("$metadata = [ordered]@{")
     metadata_end = text.find("$metadata | ConvertTo-Json", metadata_start)
     metadata = text[metadata_start:metadata_end]
