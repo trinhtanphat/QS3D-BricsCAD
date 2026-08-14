@@ -1,6 +1,6 @@
 # Work claim — Grid reference-curve Unicode integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `/root/fix_curtain_method_gates`
 - Registered: `2026-08-14T15:34:00+07:00`
 - Baseline main SHA: `7fdbf55506ed8d3c1029facf905a6d6221bfd395`
@@ -26,3 +26,12 @@ No open PR or active exact claim owns this factory boundary. The completed Grid 
 - Validate focused Grid intersection/identity gates, Core `Release` build, and full Core smoke; report the next unrelated blocker without expanding scope.
 
 Completion means the source/smoke fix is merged by normal PR, this claim is closed, and the exact merged-main SHA is returned to `/root`.
+
+## Outcome
+
+- Merged source/smoke fix: PR `#1224`, main SHA `010aadc852a097d6704c4e4705e5b814c7185858`.
+- `GridReferenceCurve.Line` and `.Arc` now reject malformed high/low surrogate IDs before any intersection can be published; valid supplementary Unicode retains trim-only curve identity and flows through intersection planning into the existing deterministic pair token.
+- Core and smoke-project `Release` builds passed with 0 warnings and 0 errors.
+- Grid intersection, intersection-identity, system-planner, and spatial-ordering preflights passed.
+- Full Core smoke advanced beyond this Grid Unicode fixture and next stopped at the independent `ProjectBrowserReferenceCanonicalitySmoke` padded-Floor expectation; no scope expansion was made.
+- No Level/Floor source, native geometry/UI, LOCAL automation, BricsCAD/private data, release/signing, or Actions surface changed.
