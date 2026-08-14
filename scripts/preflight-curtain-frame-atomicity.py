@@ -8,13 +8,13 @@ errors = []
 contracts = {
     "LINE curtain frames": {
         "path": "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameSolidBuilder.cs",
-        "start": "public static CurtainFrameBuildResult BuildSelectedLineWalls(Document document, ProjectState project)",
+        "start": "public static CurtainFrameBuildResult BuildSelectedLineWalls(Document document, ProjectState project, bool allowInteractiveSelection = true)",
         "end": "private static void CommitSemanticUpdate",
         "audit": 'AuditTrail.ForProject(project).Record("geometry.curtain.frames"',
     },
     "path curtain frames": {
         "path": "src/QS3D.BricsCAD.V25/Cad/CurtainWallPathFrameSolidBuilder.cs",
-        "start": "public static CurtainFrameBuildResult BuildSelectedOpenPolylines(Document document, ProjectState project)",
+        "start": "public static CurtainFrameBuildResult BuildSelectedOpenPolylines(Document document, ProjectState project, bool allowInteractiveSelection = true)",
         "end": "private static void CommitSemanticUpdate",
         "audit": 'AuditTrail.ForProject(project).Record("geometry.curtain.path.frames"',
     },
