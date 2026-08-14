@@ -57,7 +57,6 @@ required = {
         "Direct Draw rollback còn generated CAD handle chưa xóa",
         "Direct Draw rollback còn source CAD chưa xóa",
         'element.Properties.TryGetValue("GeneratedSolidHandle"',
-        "QS3DVIEW3D",
     ],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedGeometryService.cs": [
         "FindMatchingOwnedHandles",
