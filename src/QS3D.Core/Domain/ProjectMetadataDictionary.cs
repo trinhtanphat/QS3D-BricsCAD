@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml;
 
 namespace QS3D.Core.Domain
 {
@@ -10,7 +11,7 @@ namespace QS3D.Core.Domain
         private readonly Dictionary<string, string> _items = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private ProjectState? _project;
 
-        public string this[string key] { get => _items[key]; set => Set(key, value, false, true); }
+        public string this[string key] { get => _items[key]; set => SetPublic(key, value, false); }
         public ICollection<string> Keys => _items.Keys;
         public ICollection<string> Values => _items.Values;
         public int Count => _items.Count;
@@ -24,7 +25,7 @@ namespace QS3D.Core.Domain
             _project = project;
         }
 
-        public void Add(string key, string value) => Set(key, value, true, true);
+        public void Add(string key, string value) => SetPublic(key, value, true);
         public bool ContainsKey(string key) => _items.ContainsKey(key);
         public bool Remove(string key) => Remove(key, true);
         public bool TryGetValue(string key, out string value)
@@ -105,6 +106,13 @@ namespace QS3D.Core.Domain
             return _items.Remove(key);
         }
 
+        private void SetPublic(string key, string value, bool addOnly)
+        {
+            var canonicalKey = RequirePublicKey(key);
+            var xmlValue = RequireXmlText(value ?? string.Empty, nameof(value), "Project metadata value");
+            Set(canonicalKey, xmlValue, addOnly, true);
+        }
+
         private void Set(string key, string value, bool addOnly, bool touchReserved)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
@@ -120,6 +128,29 @@ namespace QS3D.Core.Domain
                 if (touchReserved) TouchReserved();
             }
             if (addOnly) _items.Add(key, normalizedValue); else _items[key] = normalizedValue;
+        }
+
+        private static string RequirePublicKey(string key)
+        {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+            if (string.IsNullOrWhiteSpace(key))
+                throw new ArgumentException("Project metadata key is required.", nameof(key));
+            if (!string.Equals(key, key.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Project metadata key must not contain leading or trailing whitespace.", nameof(key));
+            return RequireXmlText(key, nameof(key), "Project metadata key");
+        }
+
+        private static string RequireXmlText(string value, string parameterName, string label)
+        {
+            try
+            {
+                XmlConvert.VerifyXmlChars(value);
+                return value;
+            }
+            catch (XmlException)
+            {
+                throw new ArgumentException(label + " contains characters that are invalid in XML.", parameterName);
+            }
         }
 
         private void TouchReserved()
