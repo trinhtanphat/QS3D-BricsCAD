@@ -32,6 +32,23 @@ function Read-Qs3dMarker {
     return $marker
 }
 
+function Read-Qs3dProgressPhase {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+    $lines = @(Get-Content -LiteralPath $Path)
+    if ($lines.Count -ne 1 -or $lines[0] -notmatch '^phase=([a-z_]+)$') {
+        throw "Malformed Curtain P10 progress marker."
+    }
+    $phase = [string]$Matches[1]
+    if ($phase -notin @(
+        "plugin_loaded", "direct_draw_complete", "source_selection_prepared", "curtain_build_complete",
+        "panel_selected", "workspace_opened", "workspace_inspected", "workspace_verified",
+        "health_all_opened", "health_verified", "release_check_opened")) {
+        throw "Curtain P10 progress marker has an unknown phase."
+    }
+    return $phase
+}
+
 function Require-Qs3dValue {
     param(
         [Parameter(Mandatory = $true)]$Marker,
@@ -201,12 +218,13 @@ if (Test-Path -LiteralPath $ArtifactDir) {
 else { New-Item -ItemType Directory -Path $ArtifactDir | Out-Null }
 
 $resultPath = Join-Path $ArtifactDir "curtain-panel-workspace-review-result.txt"
+$progressPath = Join-Path $ArtifactDir "curtain-panel-workspace-review-progress.txt"
 $scriptPath = Join-Path $ArtifactDir "curtain-panel-workspace-review.private.scr"
 $metadataPath = Join-Path $ArtifactDir "curtain-panel-workspace-review-metadata.json"
 $originalCopyPath = Join-Path $ArtifactDir "curtain-panel-workspace-review-original.private.dwg"
 $uiLayoutBackupPath = Join-Path $ArtifactDir "curtain-panel-workspace-review-ui-layout.private.txt"
 $uiLayoutPath = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) "QS3D\BricsCAD-V25\ui-layout-v1.txt"
-foreach ($output in @($resultPath, $scriptPath, $metadataPath, $originalCopyPath, $uiLayoutBackupPath)) {
+foreach ($output in @($resultPath, $progressPath, $scriptPath, $metadataPath, $originalCopyPath, $uiLayoutBackupPath)) {
     if (Test-Path -LiteralPath $output) { throw "Curtain P10 output already exists." }
 }
 
@@ -233,6 +251,7 @@ if ($uiLayoutExisted) {
 $nonce = [Guid]::NewGuid().ToString("N")
 $oldResult = [Environment]::GetEnvironmentVariable("QS3D_CURTAIN_P10_RESULT", "Process")
 $oldNonce = [Environment]::GetEnvironmentVariable("QS3D_CURTAIN_P10_NONCE", "Process")
+$oldProgress = [Environment]::GetEnvironmentVariable("QS3D_CURTAIN_P10_PROGRESS", "Process")
 $process = $null
 $launcherId = 0
 $launcherHandoffs = 0
@@ -246,10 +265,12 @@ $scriptCleanupVerified = $false
 $privateStateCleanupVerified = $false
 $drawingRestoreVerified = $false
 $uiLayoutRestoreVerified = $false
+$lastProgressPhase = $null
 
 try {
     $env:QS3D_CURTAIN_P10_RESULT = $resultPath
     $env:QS3D_CURTAIN_P10_NONCE = $nonce
+    $env:QS3D_CURTAIN_P10_PROGRESS = $progressPath
     $script = @(
         "FILEDIA", "0",
         "CMDECHO", "1",
@@ -257,17 +278,28 @@ try {
         "INSUNITS", "4",
         "UCS", "W",
         "NETLOAD", ('"' + $PluginDll + '"'),
+        "QS3DCURTAINP10PROGRESSLOAD",
         "QS3DDRAWGLASSWALL",
         "0,0", "5000,0", "",
+        "QS3DCURTAINP10PROGRESSDRAW",
         "QS3DCURTAINPANELPREPARE",
+        "QS3DCURTAINP10PROGRESSPREPARE",
         "QS3DCURTAIN3D",
+        "QS3DCURTAINP10PROGRESSBUILD",
         "QS3DCURTAINP10SELECT",
+        "QS3DCURTAINP10PROGRESSSELECT",
         "QS3D",
+        "QS3DCURTAINP10PROGRESSWORKSPACE",
         "QS3DINSPECT",
+        "QS3DCURTAINP10PROGRESSINSPECT",
         "QS3DCURTAINP10CHECKWORKSPACE",
+        "QS3DCURTAINP10PROGRESSREVIEW",
         "QS3DHEALTHALL",
+        "QS3DCURTAINP10PROGRESSHEALTH",
         "QS3DCURTAINP10CHECKHEALTH",
+        "QS3DCURTAINP10PROGRESSHEALTHCHECK",
         "QS3DRELEASECHECK",
+        "QS3DCURTAINP10PROGRESSRELEASE",
         "QS3DCURTAINP10COMPLETE",
         "QS3DHIDE",
         "_.QUIT", "_Y"
@@ -351,7 +383,11 @@ finally {
     catch { if ($null -eq $cleanupError) { $cleanupError = $_ } }
     Restore-EnvironmentValue -Name "QS3D_CURTAIN_P10_RESULT" -Value $oldResult
     Restore-EnvironmentValue -Name "QS3D_CURTAIN_P10_NONCE" -Value $oldNonce
+    Restore-EnvironmentValue -Name "QS3D_CURTAIN_P10_PROGRESS" -Value $oldProgress
 }
+
+try { $lastProgressPhase = Read-Qs3dProgressPhase -Path $progressPath }
+catch { if ($null -eq $cleanupError) { $cleanupError = $_ } }
 
 $metadata = [ordered]@{
     status = if ($null -eq $qualificationError -and $null -eq $cleanupError) { "PASS" } else { "FAIL" }
@@ -369,6 +405,7 @@ $metadata = [ordered]@{
     ui_layout_restore_verified = $uiLayoutRestoreVerified
     proxy_information_dialogs_dismissed = $proxyDialogsDismissed
     launcher_handoffs = $launcherHandoffs
+    last_progress_phase = $lastProgressPhase
     marker = $marker
 }
 $metadata | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $metadataPath -Encoding UTF8

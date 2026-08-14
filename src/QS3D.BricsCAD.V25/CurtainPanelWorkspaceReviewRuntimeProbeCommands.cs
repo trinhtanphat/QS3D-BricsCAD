@@ -27,10 +27,45 @@ namespace QS3D.BricsCAD.V25
     {
         private const string ResultVariable = "QS3D_CURTAIN_P10_RESULT";
         private const string NonceVariable = "QS3D_CURTAIN_P10_NONCE";
+        private const string ProgressVariable = "QS3D_CURTAIN_P10_PROGRESS";
         private const string ResultFileName = "curtain-panel-workspace-review-result.txt";
+        private const string ProgressFileName = "curtain-panel-workspace-review-progress.txt";
         private const string Schema = "QS3D_CURTAIN_PANEL_WORKSPACE_REVIEW_RUNTIME_V1";
         private static readonly object Gate = new object();
         private static ProbeState? _state;
+
+        [CommandMethod("QS3DCURTAINP10PROGRESSLOAD", CommandFlags.Modal)]
+        public void ProgressPluginLoaded() => WriteProgress("plugin_loaded");
+
+        [CommandMethod("QS3DCURTAINP10PROGRESSDRAW", CommandFlags.Modal)]
+        public void ProgressDirectDrawComplete() => WriteProgress("direct_draw_complete");
+
+        [CommandMethod("QS3DCURTAINP10PROGRESSPREPARE", CommandFlags.Modal)]
+        public void ProgressSelectionPrepared() => WriteProgress("source_selection_prepared");
+
+        [CommandMethod("QS3DCURTAINP10PROGRESSBUILD", CommandFlags.Modal)]
+        public void ProgressCurtainBuilt() => WriteProgress("curtain_build_complete");
+
+        [CommandMethod("QS3DCURTAINP10PROGRESSSELECT", CommandFlags.Modal)]
+        public void ProgressPanelSelected() => WriteProgress("panel_selected");
+
+        [CommandMethod("QS3DCURTAINP10PROGRESSWORKSPACE", CommandFlags.Modal)]
+        public void ProgressWorkspaceOpened() => WriteProgress("workspace_opened");
+
+        [CommandMethod("QS3DCURTAINP10PROGRESSINSPECT", CommandFlags.Modal)]
+        public void ProgressWorkspaceInspected() => WriteProgress("workspace_inspected");
+
+        [CommandMethod("QS3DCURTAINP10PROGRESSREVIEW", CommandFlags.Modal)]
+        public void ProgressWorkspaceVerified() => WriteProgress("workspace_verified");
+
+        [CommandMethod("QS3DCURTAINP10PROGRESSHEALTH", CommandFlags.Modal)]
+        public void ProgressHealthOpened() => WriteProgress("health_all_opened");
+
+        [CommandMethod("QS3DCURTAINP10PROGRESSHEALTHCHECK", CommandFlags.Modal)]
+        public void ProgressHealthVerified() => WriteProgress("health_verified");
+
+        [CommandMethod("QS3DCURTAINP10PROGRESSRELEASE", CommandFlags.Modal)]
+        public void ProgressReleaseOpened() => WriteProgress("release_check_opened");
 
         [CommandMethod("QS3DCURTAINP10SELECT", CommandFlags.Modal)]
         public void SelectGeneratedPanel() => RunPhase("select_panel", "PANEL_SELECTION_REJECTED", () =>
@@ -220,6 +255,44 @@ namespace QS3D.BricsCAD.V25
             if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
                 throw new DirectoryNotFoundException("Curtain P10 result directory must already exist.");
             return fullPath;
+        }
+
+        private static string RequiredProgressPath(string value)
+        {
+            var fullPath = Path.GetFullPath(value);
+            var directory = Path.GetDirectoryName(fullPath);
+            if (!string.Equals(Path.GetFileName(fullPath), ProgressFileName, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Curtain P10 progress filename is invalid.");
+            if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+                throw new DirectoryNotFoundException("Curtain P10 progress directory must already exist.");
+            return fullPath;
+        }
+
+        private static void WriteProgress(string phase)
+        {
+            var requestedPath = Environment.GetEnvironmentVariable(ProgressVariable);
+            var nonce = Environment.GetEnvironmentVariable(NonceVariable) ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(requestedPath) || !Guid.TryParseExact(nonce, "N", out _))
+                throw new InvalidOperationException("Curtain P10 progress probe is automation-only.");
+            var fullPath = RequiredProgressPath(requestedPath);
+            var tempPath = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
+                {
+                    writer.WriteLine("phase=" + phase);
+                    writer.Flush();
+                    stream.Flush(true);
+                }
+                if (File.Exists(fullPath)) File.Replace(tempPath, fullPath, null);
+                else File.Move(tempPath, fullPath);
+            }
+            finally
+            {
+                try { if (File.Exists(tempPath)) File.Delete(tempPath); }
+                catch { }
+            }
         }
 
         private static void TryWriteFailure(string? requestedPath, string phase, string failureCode)
