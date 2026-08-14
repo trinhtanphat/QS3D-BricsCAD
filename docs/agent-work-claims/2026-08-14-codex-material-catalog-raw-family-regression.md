@@ -1,8 +1,9 @@
 # Work claim — Restore Material Catalog raw FamilyId regression boundary
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-material-catalog-raw-family-regression-20260814` (`/root/fix_level_curtain_frame_z`)
 - Registered: `2026-08-14T16:01:00+07:00`
+- Completed: `2026-08-14T16:04:00+07:00`
 - Baseline main SHA: `6aa34b7ac2a9331b1ba00dff9d722f78f2f112cd`
 - Priority: restore the original #525 regression coverage weakened by PR #1248
 
@@ -33,4 +34,10 @@ Construct the inherited element through the valid canonical public boundary and 
 
 ## Completion record
 
-Pending implementation and validation after this successor claim is merged to `main`.
+- Successor claim PR `#1250` merged as `d4178ff7670f0d6f3b4520c843165c85451ab208`.
+- Test commit `13192874cfcacf254dcdba182672b49db83d39c0` merged through PR `#1253` as `f2c9955cacadaee9989a6586b212c5b7b83de27e`.
+- The smoke now constructs and asserts canonical `FamilyId`, injects only private `_familyId` with the padded raw boundary through test-local reflection, asserts the injection, and retains the original #525 Family material rename, inherited generated-solid stale, Properties/Quantity dirty, and final exact raw no-rewrite assertions.
+- Core Release build PASS with `0 warnings / 0 errors`. Material Catalog dark-selection, integrity, open-project lifecycle, project lifecycle, responsive-footer and material/floor picker gates PASS unchanged.
+- `preflight-material-catalog-atomicity.py` remains independently blocked on the unchanged stale `ProjectStateSnapshot` literal `target.Metadata.Clear();`; neither that gate nor snapshot production is in this claim.
+- Full Core smoke advances beyond Material Catalog and stops at the next independent blocker: `ProjectSemanticMutationExecutorSmoke.MutableRelationWhitespaceRollsBackExactly` line 99 expects padded `FamilyId` text although the authoritative relation setter stored `FAM-1`.
+- No production, focused gate, LOCAL runner/probe, BricsCAD/native/private data, GitHub Actions, release or packaging surface changed.
