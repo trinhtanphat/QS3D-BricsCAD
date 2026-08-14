@@ -699,6 +699,12 @@ The `NO_RESULT` is not a launcher-to-host tracking defect. Four zero-process dia
 
 This is `BLOCKED_LOCAL_ENVIRONMENT / NO_RESULT`, not a Level product PASS or FAIL. No runner/helper/product change is justified by the evidence, so this worker did not edit them. Resume only after an operator Windows sign-out/restart or BricsCAD/license repair makes the official shortcut create a visible responsive main window again. Then reactivate and push this claim first, synchronize the newest `main`, rebuild all exact-SHA gates and rerun the fresh disposable Level probe. Do not close or modify an operator-owned BricsCAD session or drawing.
 
+## 2026-08-14 native startup recovered; operator session active
+
+A newly user-started, no-argument BricsCAD V25 process created a visible responsive `BricsCAD Ultimate` main window and opened an operator-owned drawing. This proves the earlier native startup-without-window blocker has cleared without a repository or runner change. The process and drawing are strictly out of scope and this worker did not close, modify or interact with either.
+
+Keep this claim `BLOCKED` only while the operator-owned session remains active, because the isolated Level runner requires zero pre-existing BricsCAD processes. After the operator saves and closes every BricsCAD session, re-fetch current `main`, reactivate and push this claim before any renewed qualification, rebuild the newest exact SHA and rerun the fresh disposable Level probe. Do not run the probe concurrently with the operator session.
+
 ## 2026-08-14 resumed after operator session closed
 
 The local checkout is synchronized with `origin/main@604b8662be656e5a87fd8b43769526b1debec7b5`, issue `#1092` remains closed with fresh deterministic smoke evidence, and a new process audit found no running BricsCAD process. Newly added active claims were read and do not reserve Level placement, the Level runner, or LOCAL-003 evidence.
