@@ -16,58 +16,56 @@ If investigation discovers a path/symbol/test/runtime surface not named in the c
 
 The canonical detailed protocol is `docs/AGENT-WORK-REGISTRATION.md`.
 
-## Current deterministic Core smoke blocker handoff
+## Current remote/cloud state
 
-LOCAL-003 qualification on clean exact SHA `2dc87bf0985c5967f9ca45f09aac22ba85e2e0cd` passed Core Release, nine focused Level/static gates and the installed-reference BricsCAD V25 build, then the mandatory full Core smoke failed in:
+The former deterministic Core smoke blocker in issue `#1092` is resolved. Do **not** reopen or reimplement that lane from the historical LOCAL-003 failure in this document.
 
-- `ModelHealthSourceHandleSmoke.NumericAliasesShareIdentity`
-- expected one `DUPLICATE_SOURCE_HANDLE` for numeric aliases `A` / `00a`
-- actual duplicate-source issue count: `0`
-- live alias case includes `0xA`
-
-The local agent correctly did not edit CAD-independent Core/tests and handed the blocker to issue `#1092`; LOCAL-003 is `BLOCKED` until full Core smoke is clean again, then the local owner must reactivate its own claim before resuming exact-SHA native qualification.
-
-An older cloud V25 run is also useful historical evidence but must not be treated as current-HEAD proof:
+The strongest completed remote evidence at this checkpoint is V25 cloud release run `#146`:
 
 - workflow: `.github/workflows/release-v25-cloud.yml`
-- workflow run number `#138`, run id `31755659447`
-- job `94630732537`
-- SHA `93a5547224a5248ae741ccd8dd4368bac27b6b00`
-- failed at `Run deterministic Core smoke`
+- run id: `31770525546`
+- conclusion: `success`
+- source guards, Core Release build, deterministic Core smoke, BricsCAD V25 reference acquisition/validation, V25 plugin build, packaging, version binding, checksum, artifact upload and prerelease publication all completed successfully
+- published prerelease: `v0.1.0-preview.8`
+- release target: `80ba5ce2cc28cbfadbec6bb70c7a43e1ad5c8fa6`
+- package digest: `sha256:b506d20c2f1f93a5cf3fedfb3f4cc1e51e7772eaacf0a200284327cdd5e4b05d`
 
-Current source-level blocker evidence comes from the newer `2dc87bf...` local exact-SHA run above, not from assuming the stale cloud run still represents `main`.
+That successful run is completed evidence for its exact release source only; it is not proof for commits that landed afterward.
 
-## #1092 source state and concurrency incident
+At the time of this refresh, V25 cloud run `#147` (run id `31770836729`) was in progress from `f29e6bc8206aa7599c43aa6d2ab4d624079e4411`. `main` had already advanced beyond that run to newer concurrent work, so agents must inspect the final #147 conclusion and its exact source before using it as evidence. Do not manually rerun/dispatch merely because this handoff records an in-progress run.
 
-`chatgpt-web-gpt56sol` published:
+## Resolved #1092 history
 
-- initial coordination claim: `3cb24f5d9041209e00704d8270c61218278d8baf`
-- exact #1092 source/test scope amendment: `404e110d954a354541cefaf0c3dddde5e399c0e7`
+The old LOCAL-003 qualification on `2dc87bf0985c5967f9ca45f09aac22ba85e2e0cd` exposed `ModelHealthSourceHandleSmoke.NumericAliasesShareIdentity`: aliases such as `A`, `00a` and live `0xA` were not being treated as one canonical source-handle identity.
 
-The amendment reserved:
+The corresponding source lane was repaired and later remote smoke/release evidence passed. Historical coordination details remain useful for avoiding duplicate work:
 
-- `src/QS3D.Core/Diagnostics/ModelHealthService.cs`
-- `tests/QS3D.Core.SmokeTests/ModelHealthSourceHandleSmoke.cs`
-- issue `#1092` closeout tied to that fix
+- initial claim: `3cb24f5d9041209e00704d8270c61218278d8baf`
+- scope amendment: `404e110d954a354541cefaf0c3dddde5e399c0e7`
+- overlapping direct-main fix observed at `d03edf8e4c476ee929d731a2c0c7400a8b8d14e4`
+- redundant PR `#1093` was correctly closed unmerged
 
-Historical commit `a4b854d1e81355ce35157932443e16761c734988` showed the previously qualified contract: persisted and live semantic source handles must use canonical numeric CAD-handle identity while generated-solid handle normalization remains separate.
+Do not reopen PR `#1093` or create another #1092 normalization patch without new failing evidence on a newer exact SHA.
 
-While that claim was already visible, concurrent commit `d03edf8e4c476ee929d731a2c0c7400a8b8d14e4` landed directly on `main` and modified the same `ModelHealthService.cs` lane. Its patch canonicalizes persisted and live source handles through `GeneratedHandleIdentity.Normalize` and adds a dedicated live-source normalization set. This is exactly the kind of overlap claim-first registration is intended to prevent.
+## Native/local acceptance still separate
 
-A redundant recovery commit had already been prepared as `4922d0c8287ea2427cedf3a4526daef4e73b2246`, and PR `#1093` exposed only one file with `+10/-2`; after detecting `d03edf8...`, PR `#1093` was closed unmerged rather than stacking a duplicate patch. Do not reopen/merge that PR unless the repository owner explicitly establishes a new need.
+Remote/cloud success does not replace licensed/native BricsCAD acceptance.
 
-## Required next evidence for #1092
+- `#982`: source-side work exists, but any required exact-SHA licensed V25 acceptance remains local/native evidence.
+- `#1005`: do not weaken Source Reconcile, drawing-fingerprint, command-plan freshness or `DESYNCHRONIZED` fail-closed guards. The latest handoff requires native/local lifecycle/context diagnosis and correctly timed command-plan recapture rather than a speculative remote relaxation.
+- LOCAL_ONLY owners must reactivate/claim their own runtime lanes before new native work.
 
-Do not declare #1092 complete merely because the source patch exists. The next remote-safe step is to verify current `main` with the deterministic Core smoke that contains `ModelHealthSourceHandleSmoke.NumericAliasesShareIdentity` and confirm the existing positive/negative cases remain clean. Do not weaken the smoke to obtain green status.
+## Next-agent rule
 
-If another failure appears:
+Do not treat a resolved historical failure as the next task. Start from the newest `main`, newest workflow result, open issues and current claims. A new remote/source lane requires concrete current evidence: an exact failing test/build/preflight, a reproducible source invariant violation, or an explicitly unimplemented remote-owned requirement.
 
-- identify the exact exception/test first;
+If a new failure appears:
+
+- identify the exact exception/test/gate first;
 - recheck `ACTIVE` / `BLOCKED` claims;
-- claim the new exact lane with a claim-only commit;
-- only then inspect or change its source/test paths.
-
-If full Core smoke passes on current `main`, record the exact SHA/evidence in issue `#1092` and the owning claim, then close #1092. LOCAL-003 remains a separate local-only runtime qualification and must be reactivated by its local owner before BricsCAD work resumes.
+- claim the exact source/test/runtime surface with a claim-only commit;
+- only then inspect or change the reserved implementation paths;
+- preserve fail-closed semantics and existing positive/negative regression coverage.
 
 ## Boundaries
 
