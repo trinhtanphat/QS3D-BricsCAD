@@ -124,6 +124,7 @@ if RUNNER.is_file():
         'Copy-Item -LiteralPath $DrawingCopy -Destination $drawingBackupPath -ErrorAction Stop',
         'Copy-Item -LiteralPath $drawingBackupPath -Destination $DrawingCopy -Force -ErrorAction Stop',
         '($projectSidecar + ".bak")',
+        '[IO.Path]::ChangeExtension($DrawingCopy, ".bak")',
         '[IO.Path]::ChangeExtension($DrawingCopy, ".dwl")',
         '[IO.Path]::ChangeExtension($DrawingCopy, ".dwl2")',
         'physical_opening_volume_reduced',
