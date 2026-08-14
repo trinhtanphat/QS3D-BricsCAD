@@ -153,9 +153,18 @@ if any(position < 0 for position in positions) or list(positions) != sorted(posi
     )
 
 snapshot = service.find("var rollback = ProjectStateSnapshot.Capture(project);")
-transaction = service.find("document.Database.TransactionManager.StartTransaction()", snapshot)
-if min(snapshot, transaction, begin) < 0 or not snapshot < transaction < begin:
-    errors.append("Source Reconcile must capture rollback before the native transaction and delay the Undo transition until all reconcile work is ready")
+stamp = service.find(
+    "var rollbackStamp = SourceReconcileUndoCoordinator.ProjectRevisionStamp.Capture(project);",
+    snapshot,
+)
+transaction = service.find("document.Database.TransactionManager.StartTransaction()", stamp)
+if min(snapshot, stamp, transaction, begin) < 0 or not snapshot < stamp < transaction < begin:
+    errors.append(
+        "Source Reconcile must pair its rollback snapshot with a pre-mutation revision stamp before the native transaction and delay the Undo transition until all reconcile work is ready"
+    )
+begin_call = service[begin:stage]
+if "rollback,\n                        rollbackStamp))" not in begin_call:
+    errors.append("Source Reconcile must pass the captured pre-mutation stamp with its rollback snapshot")
 if "if (!cadCommitted)" not in service or "new AggregateException(operationError, restoreError)" not in service:
     errors.append("Source Reconcile command-failure semantic rollback contract drifted")
 
@@ -242,6 +251,13 @@ if min(
 ) < 0:
     errors.append("Undo coordinator transition method boundaries are missing")
 else:
+    if (
+        "ProjectStateSnapshot beforeSnapshot,\n            ProjectRevisionStamp beforeStamp)" not in begin_body
+        or "beforeEntry = new HistoryEntry(beforeSnapshot, beforeStamp);" not in begin_body
+    ):
+        errors.append("the before history entry must pair the rollback snapshot with its captured pre-mutation stamp")
+    if "new HistoryEntry(beforeSnapshot, ProjectRevisionStamp.Capture(project))" in begin_body:
+        errors.append("BeginTransition must not pair the before snapshot with a live post-mutation project stamp")
     if "modelSpace.XData = marker" not in stage_body or "_stagedEntries = stagedEntries;" not in stage_body:
         errors.append("native marker must be written only after the private shadow history is fully staged")
     if "modelSpace.XData = marker" in begin_body or "EnsureRegApp" in begin_body:
