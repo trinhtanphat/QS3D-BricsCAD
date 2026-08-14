@@ -307,6 +307,10 @@ Parent task `/root` explicitly delegates only `tests/QS3D.Core.SmokeTests/DoorOp
 
 Completed through PR `#1168` at `ce3180dbd22dbc11e2d2e29e78547dfc07e55b50`. The registered smoke now advances past the Door collision fixture and reaches the separate stale MaterialUsage collision fixture; no Level or production surface changed.
 
+### 2026-08-14 Material Usage collision fixture delegation
+
+Parent task `/root` explicitly delegates only `tests/QS3D.Core.SmokeTests/MaterialUsageScheduleGroupKeyCollisionSmoke.cs` to `/root/fix_level_curtain_frame_z` under `2026-08-14-codex-material-usage-valid-collision-fixture.md`: replace unreachable U+001F Floor identity data with valid printable-delimiter values and add an explicit test-local legacy delimiter-collision assertion over the existing grouping tuple. The parent retains LOCAL-003 probe/runner ownership and will not edit this smoke while the child claim is `ACTIVE`.
+
 ## 2026-08-12 base schedule reference-integrity fixture reconciliation expansion
 
 Baseline audited after a clean fetch and fast-forward: `origin/main@f74dbc55d5c141b78d7f20d0a65bac26b901126f`.
