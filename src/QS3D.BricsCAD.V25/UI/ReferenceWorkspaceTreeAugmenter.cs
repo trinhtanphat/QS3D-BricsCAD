@@ -12,17 +12,32 @@ namespace QS3D.BricsCAD.V25.UI
     /// </summary>
     internal static class ReferenceWorkspaceTreeAugmenter
     {
+        private static readonly object RegistrationGate = new object();
         private static bool _registered;
 
-        public static void EnsureRegistered()
+        public static bool EnsureRegistered()
         {
-            if (_registered) return;
-            _registered = true;
-            EventManager.RegisterClassHandler(
-                typeof(WorkspacePanel),
-                FrameworkElement.LoadedEvent,
-                new RoutedEventHandler(OnWorkspaceLoaded),
-                true);
+            lock (RegistrationGate)
+            {
+                if (_registered) return true;
+                try
+                {
+                    EventManager.RegisterClassHandler(
+                        typeof(WorkspacePanel),
+                        FrameworkElement.LoadedEvent,
+                        new RoutedEventHandler(OnWorkspaceLoaded),
+                        true);
+                    _registered = true;
+                    return true;
+                }
+                catch
+                {
+                    // This augmenter is presentation-only. A transient WPF registration failure must
+                    // not poison WorkspacePanel type initialization; leave the latch clear so a later
+                    // caller can retry the exact same class-handler registration.
+                    return false;
+                }
+            }
         }
 
         private static void OnWorkspaceLoaded(object sender, RoutedEventArgs e)
