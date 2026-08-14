@@ -20,7 +20,7 @@ namespace QS3D.Core.Diagnostics
                     "QSC.HOST.CATEGORY",
                     "INVALID_HOST_CATEGORY",
                     HealthSeverity.Error,
-                    "Door or opening host must reference a wall-category semantic element."),
+                    "Door or opening host must match the host category required by its semantic contract."),
                 new QsRuleDefinition(
                     "QSC.HOST.INVALID",
                     "INVALID_HOST",
@@ -30,12 +30,12 @@ namespace QS3D.Core.Diagnostics
                     "QSC.HOST.MISSING",
                     "MISSING_HOST",
                     HealthSeverity.Error,
-                    "Door or opening must declare a HostWallId before host-dependent workflows can proceed."),
+                    "Door or opening must declare the host reference required by its semantic contract before host-dependent workflows can proceed."),
                 new QsRuleDefinition(
                     "QSC.HOST.NON_CANONICAL",
                     "HOST_REFERENCE_NON_CANONICAL",
                     HealthSeverity.Error,
-                    "HostWallId must exactly match the canonical semantic id of its host wall.")
+                    "The declared host reference must exactly match the canonical semantic id of its required host.")
             });
     }
 }
