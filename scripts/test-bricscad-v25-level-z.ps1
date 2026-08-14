@@ -73,6 +73,60 @@ function Read-PositiveLevelInt {
     return $value
 }
 
+function Read-NonNegativeLevelInt {
+    param([Parameter(Mandatory = $true)]$Marker, [Parameter(Mandatory = $true)][string]$Key)
+    if (-not $Marker.ContainsKey($Key)) { return }
+    [int]$value = 0
+    if (-not [int]::TryParse([string]$Marker[$Key], [Globalization.NumberStyles]::None, [Globalization.CultureInfo]::InvariantCulture, [ref]$value) -or $value -lt 0) {
+        throw "Level Z sanitized failure count '$Key' is invalid."
+    }
+}
+
+function Require-Qs3dLevelFailure {
+    param([Parameter(Mandatory = $true)]$Marker)
+    Require-Qs3dLevelValue -Marker $Marker -Key "command" -Expected "QS3DLEVELZPROBE"
+    $allowedCodes = @(
+        "LEVEL_Z_RUNTIME_CONTEXT_FAILED", "LEVEL_Z_RUNTIME_SOURCE_FAILED", "LEVEL_Z_RUNTIME_HOST_BUILD_FAILED",
+        "LEVEL_Z_RUNTIME_OPENING_FAILED", "LEVEL_Z_RUNTIME_CURTAIN_FRAME_BUILD_FAILED",
+        "LEVEL_Z_RUNTIME_CURTAIN_PANEL_BUILD_FAILED", "LEVEL_Z_RUNTIME_CURTAIN_RANGE_FAILED",
+        "LEVEL_Z_RUNTIME_CURTAIN_MODE_FAILED", "LEVEL_Z_RUNTIME_REBAR_FAILED",
+        "LEVEL_Z_RUNTIME_LEVEL_EDIT_FAILED", "LEVEL_Z_RUNTIME_MARKER_FAILED"
+    )
+    $failureCode = [string]$Marker["error_code"]
+    if (-not ($allowedCodes -contains $failureCode)) { throw "Level Z marker has an invalid sanitized failure code." }
+    if ($failureCode -ne "LEVEL_Z_RUNTIME_REBAR_FAILED") { throw "Level Z runtime probe reported sanitized failure '$failureCode'." }
+
+    $allowedStages = @(
+        "longitudinal_build", "longitudinal_count", "stirrup_build", "stirrup_count",
+        "longitudinal_range_read", "stirrup_range_read", "longitudinal_containment",
+        "stirrup_containment", "complete"
+    )
+    if (-not $Marker.ContainsKey("rebar_stage") -or -not ($allowedStages -contains [string]$Marker["rebar_stage"])) {
+        throw "Level Z marker has an invalid sanitized rebar stage."
+    }
+    foreach ($key in @("observed_beam_rebar_count", "observed_beam_stirrup_element_count", "observed_beam_stirrup_count")) {
+        Read-NonNegativeLevelInt -Marker $Marker -Key $key
+    }
+    foreach ($key in @("observed_rebar_min_z_m", "observed_rebar_max_z_m", "observed_stirrup_min_z_m", "observed_stirrup_max_z_m")) {
+        if ($Marker.ContainsKey($key)) {
+            [double]$number = 0
+            if (-not [double]::TryParse([string]$Marker[$key], [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$number) -or
+                [double]::IsNaN($number) -or [double]::IsInfinity($number)) {
+                throw "Level Z marker contains an invalid sanitized Z range."
+            }
+        }
+    }
+    foreach ($key in @("exception_type", "exception_target", "exception_hresult")) {
+        if (-not $Marker.ContainsKey($key)) { throw "Level Z marker is missing sanitized exception classification." }
+    }
+    if ([string]$Marker["exception_type"] -notmatch '^[A-Za-z0-9_.+`]+$' -or
+        [string]$Marker["exception_target"] -notmatch '^[A-Za-z0-9_.<>+`]*$' -or
+        [string]$Marker["exception_hresult"] -notmatch '^0x[0-9A-F]{8}$') {
+        throw "Level Z marker contains an invalid sanitized exception classification."
+    }
+    throw "Level Z runtime probe reported sanitized rebar failure at stage '$([string]$Marker["rebar_stage"])'."
+}
+
 function Restore-EnvironmentValue {
     param([Parameter(Mandatory = $true)][string]$Name, [AllowNull()][string]$Value)
     if ($null -eq $Value) { Remove-Item -LiteralPath ("Env:" + $Name) -ErrorAction SilentlyContinue }
@@ -207,6 +261,9 @@ try {
     }
 
     $marker = Read-Qs3dLevelMarker -Path $resultPath
+    if ([string]::Equals([string]$marker["status"], "FAIL", [StringComparison]::OrdinalIgnoreCase)) {
+        Require-Qs3dLevelFailure -Marker $marker
+    }
     Require-Qs3dLevelValue -Marker $marker -Key "status" -Expected "PASS"
     Require-Qs3dLevelValue -Marker $marker -Key "command" -Expected "QS3DLEVELZPROBE"
     Require-Qs3dLevelValue -Marker $marker -Key "process" -Expected "bricscad"

@@ -52,6 +52,24 @@ if COMMAND.is_file():
         'LEVEL_Z_RUNTIME_CURTAIN_RANGE_FAILED',
         'LEVEL_Z_RUNTIME_CURTAIN_MODE_FAILED',
         'LEVEL_Z_RUNTIME_REBAR_FAILED',
+        'rebarStage = "longitudinal_build";',
+        'rebarStage = "longitudinal_count";',
+        'rebarStage = "stirrup_build";',
+        'rebarStage = "stirrup_count";',
+        'rebarStage = "longitudinal_range_read";',
+        'rebarStage = "stirrup_range_read";',
+        'rebarStage = "longitudinal_containment";',
+        'rebarStage = "stirrup_containment";',
+        'rebarStage = "complete";',
+        'observed_beam_rebar_count',
+        'observed_beam_stirrup_element_count',
+        'observed_beam_stirrup_count',
+        'AddObservedRange(lines, "rebar", observedRebarRange);',
+        'AddObservedRange(lines, "stirrup", observedStirrupRange);',
+        'exception_type=',
+        'exception_target=',
+        'exception_hresult=0x',
+        'catch (System.Exception error)',
         'LEVEL_Z_RUNTIME_LEVEL_EDIT_FAILED',
         'observedGlassRange = glassRange;',
         'observedFrameRange = frameRange;',
@@ -80,6 +98,9 @@ if COMMAND.is_file():
     for forbidden in ("handle=", "element_id=", "drawing_path=", "layer=", "family_name="):
         if forbidden in marker.lower():
             errors.append("Level-Z marker leaks identity field: " + forbidden)
+    for forbidden in ("error.Message", "error.StackTrace", "error.Source", "error.Data"):
+        if forbidden in text:
+            errors.append("Level-Z failure marker exposes raw exception detail: " + forbidden)
 
 if STRUCTURAL.is_file():
     text = STRUCTURAL.read_text(encoding="utf-8")
@@ -133,6 +154,13 @@ if RUNNER.is_file():
         'beam_rebar_count',
         'beam_stirrup_count',
         'stale_snapshot_count_after_edit',
+        'Require-Qs3dLevelFailure -Marker $marker',
+        '"longitudinal_build", "longitudinal_count", "stirrup_build", "stirrup_count"',
+        '"longitudinal_range_read", "stirrup_range_read", "longitudinal_containment"',
+        '"stirrup_containment", "complete"',
+        '"observed_beam_rebar_count", "observed_beam_stirrup_element_count", "observed_beam_stirrup_count"',
+        '"observed_rebar_min_z_m", "observed_rebar_max_z_m", "observed_stirrup_min_z_m", "observed_stirrup_max_z_m"',
+        '"exception_type", "exception_target", "exception_hresult"',
         'Restore-EnvironmentValue -Name "QS3D_LEVEL_Z_RESULT"',
         'Restore-EnvironmentValue -Name "QS3D_LEVEL_Z_NONCE"',
         'Restore-EnvironmentValue -Name "QS3D_LEVEL_Z_SOURCE_SHA"',
