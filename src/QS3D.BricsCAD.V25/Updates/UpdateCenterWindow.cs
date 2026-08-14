@@ -249,7 +249,7 @@ namespace QS3D.BricsCAD.V25.Updates
         private static Button MakeButton(string text, bool primary)
         {
             var normal = primary
-                ? new SolidColorBrush(Color.FromRgb(56, 116, 255))
+                ? new SolidColorBrush(Color.FromRgb(44, 96, 210))
                 : new SolidColorBrush(Color.FromRgb(47, 55, 68));
 
             return new Button
@@ -270,10 +270,10 @@ namespace QS3D.BricsCAD.V25.Updates
         private static ControlTemplate CreateButtonTemplate(bool primary, Brush normal)
         {
             var hover = primary
-                ? new SolidColorBrush(Color.FromRgb(75, 130, 255))
+                ? new SolidColorBrush(Color.FromRgb(52, 108, 224))
                 : new SolidColorBrush(Color.FromRgb(59, 70, 86));
             var pressed = primary
-                ? new SolidColorBrush(Color.FromRgb(47, 98, 214))
+                ? new SolidColorBrush(Color.FromRgb(37, 82, 185))
                 : new SolidColorBrush(Color.FromRgb(39, 48, 60));
             var disabled = new SolidColorBrush(Color.FromRgb(45, 52, 64));
 
