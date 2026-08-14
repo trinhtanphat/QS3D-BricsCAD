@@ -159,7 +159,11 @@ namespace QS3D.Core.Diagnostics
         {
             var results = new DiagnosticProviderResult[providers.Length];
             for (var index = 0; index < providers.Length; index++)
-                results[index] = ExecuteProvider(providers[index]);
+            {
+                var result = ExecuteProvider(providers[index]);
+                results[index] = result;
+                if (result.FatalException != null) break;
+            }
             return results;
         }
 
