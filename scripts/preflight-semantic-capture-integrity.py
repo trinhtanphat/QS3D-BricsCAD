@@ -35,7 +35,7 @@ checks = {
         "CopyInto(_snapshot, project, preservedZones, preservedFloors, preservedFamilies, preservedElements);",
         "target.Zones.Clear()", "target.Floors.Clear()",
         "target.Families.Clear()", "target.Elements.Clear()", "target.QuantityRules.Clear()", "target.AuditEvents.Clear()",
-        "target.Metadata.Clear()", "RestorePersistenceState", "target.RestorePersistenceState(source.UpdatedUtc, source.ChangeVersion)",
+        "targetMetadata.ReplacePersistenceState(source.Metadata)", "RestorePersistenceState", "target.RestorePersistenceState(source.UpdatedUtc, source.ChangeVersion)",
     ],
     "policy": ["TryFindOwner", "EnumerateOwnerHandles", "CollectOwnerHandles"],
     "source_owner": [
