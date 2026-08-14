@@ -43,3 +43,10 @@ The baseline scan found no ACTIVE/BLOCKED claim, open PR or existing runner owni
 ## Completion condition
 
 The claim is visible on `origin/main`; the guarded probe/runner/gate are merged; an exact-SHA licensed result covers success, generated/ambiguous refusal, forced rollback, Undo/Redo, multi-DWG and cold reopen; LOCAL-004 evidence is recorded; and the claim is `COMPLETED`. A reproduced production defect leaves LOCAL-004 source-blocked/PENDING with a remote issue and sanitized handoff rather than a false local pass.
+
+## 2026-08-14 exact-SHA rerun evidence
+
+- Clean candidate `f42171d3f9dab336fa8874547a3016271977546d` built against installed BricsCAD V25 references with `0 warnings / 0 errors`; Core smoke returned `ALL PASS`, and the focused Source Reconcile runtime/coherence/preflight gates passed before launch. The exact adapter SHA-256 was `E36D98EC5097339F0D76EBB78CF6C38C7C1F9D78A0C43590E99B50666583F4B8`.
+- The guarded BricsCAD `25.2.10` runner returned sanitized `FAIL` at `verify_final_reconcile / SEMANTIC_SOURCE_MISMATCH`. Selection was `BOTH_SOURCES`, owner match was `NONE`, generated state was `RETAINED_ALL`, and project/revision/native marker were all `UNCHANGED`. History was already `DESYNCHRONIZED` before the final command and remained so afterward, with entry class `MULTIPLE` on both sides.
+- Process, private script, private state and drawing restoration were all verified clean; launcher handoffs were zero. No source file or runtime harness was changed by the local worker. Sanitized handoff is recorded in GitHub issue `#1005` comment `#issuecomment-5289658766`.
+- The claim remains `ACTIVE / PENDING_LOCAL`. The source defect is assigned back to the non-local source-fix lane; no LOCAL-004 acceptance or issue closure is claimed.
