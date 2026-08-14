@@ -10,7 +10,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             var project = new ProjectState("FAMILY-RENAME-ATOMIC", "Family rename atomicity");
-            var family = ProjectFamilyService.Create(project, "FAMILY-1", "Tường 200", ElementCategory.Wall);
+            var family = ProjectFamilyService.Create(project, "FAMILY-1", "Tường 200", ElementCategory.StructuralWall);
 
             var beforeName = family.Name;
             var beforeVersion = project.ChangeVersion;
