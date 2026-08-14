@@ -13,13 +13,13 @@ BUILDERS = [
     ),
     (
         ROOT / "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs",
-        "public static int BuildSelectedLineWalls(Document document, ProjectState project, ElementCategory category)",
+        "public static int BuildSelectedLineWalls(\n            Document document,\n            ProjectState project,\n            ElementCategory category,\n            bool allowPostCommitUi = true)",
         "private static SourceBatchKind ValidateSourceBatch",
         'CadPostCommitUi.TryRegen(document, "LINE wall native 3D");',
     ),
     (
         ROOT / "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs",
-        "public static int BuildSelected(Document document, ProjectState project, ElementCategory category)",
+        "public static int BuildSelected(\n            Document document,\n            ProjectState project,\n            ElementCategory category,\n            bool allowPostCommitUi = true)",
         "private static void CommitWallPierPathSnapshot",
         'CadPostCommitUi.TryRegen(document, "Polyline wall native 3D");',
     ),

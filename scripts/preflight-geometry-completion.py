@@ -93,14 +93,14 @@ checks = {
         "EnsureOwned", "ownership conflict", "Refusing destructive erase", "SourceHandles", "AddProtected"
     ],
     "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs": [
-        "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelectedLineWalls(Document document, ProjectState project, ElementCategory category)",
+        "ElementCategory.GlassWall", "ElementCategory.WallPier", "bool allowPostCommitUi = true",
         "GeneratedGeometryService.PrepareReplacement(document, transaction, project, element)",
         "GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category)",
         "GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, category)"
     ],
     "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs": [
         "WallFootprintEngine", "BulgeArcTessellator.Tessellate", "Region.CreateFromCurves", "CreateExtrudedSolid", "WallJoinMode",
-        "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelected(Document document, ProjectState project, ElementCategory category)",
+        "ElementCategory.GlassWall", "ElementCategory.WallPier", "bool allowPostCommitUi = true",
         "GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category)",
         "GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, category)"
     ],
