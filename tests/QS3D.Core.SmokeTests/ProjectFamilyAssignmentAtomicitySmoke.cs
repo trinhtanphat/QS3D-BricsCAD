@@ -67,6 +67,8 @@ namespace QS3D.Core.SmokeTests
 
             var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall, target.Id, string.Empty, string.Empty);
             element.FamilyId = "  target  ";
+            Equal("target", element.FamilyId, "FamilyId setter must canonicalize padded assignment input.");
+            SetRawFamilyId(element, "  target  ");
             element.Properties["InstanceOverride"] = "keep";
             element.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(element);
@@ -262,6 +264,15 @@ namespace QS3D.Core.SmokeTests
             Equal("MISSING", setup.Second.FamilyId, operation + " overwrote a dangling family reference instead of failing closed.");
             Equal("legacy", setup.Second.Properties["ThicknessM"], operation + " changed ambiguous properties on a dangling family reference.");
             if (setup.Project.UpdatedUtc != beforeUpdated) throw new Exception(operation + " touched project timestamp on a rejected dangling-family batch.");
+        }
+
+        private static void SetRawFamilyId(ProjectElement element, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_familyId", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectElement FamilyId backing field was not found for the raw no-op fixture.");
+            if (field.FieldType != typeof(string))
+                throw new Exception("ProjectElement FamilyId backing field must remain a string.");
+            field.SetValue(element, value);
         }
 
         private static void Equal(string expected, string actual, string message)
