@@ -38,13 +38,15 @@ namespace QS3D.BricsCAD.V25.Cad
             public string ConfigFingerprint { get; set; } = string.Empty;
         }
 
-        public static CurtainFrameBuildResult BuildSelectedOpenPolylines(Document document, ProjectState project)
+        public static CurtainFrameBuildResult BuildSelectedOpenPolylines(Document document, ProjectState project, bool allowInteractiveSelection = true)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
             var selection = document.Editor.SelectImplied();
             if (selection.Status != PromptStatus.OK || selection.Value == null)
             {
+                if (!allowInteractiveSelection)
+                    throw new InvalidOperationException("Curtain path frame build requires the canonical implied selection; interactive selection is disabled inside QS3DCURTAIN3D.");
                 selection = document.Editor.GetSelection();
                 if (selection.Status != PromptStatus.OK || selection.Value == null) return new CurtainFrameBuildResult();
                 document.Editor.SetImpliedSelection(selection.Value.GetObjectIds());
