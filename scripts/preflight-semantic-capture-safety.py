@@ -70,7 +70,15 @@ if review.is_file():
 
 if snapshot.is_file():
     text = snapshot.read_text(encoding="utf-8")
-    for needle in ("public static ProjectStateSnapshot Capture", "public void Restore", "target.Families.Clear()", "target.Elements.Clear()", "target.AuditEvents.Clear()", "target.Metadata.Clear()"):
+    for needle in (
+        "public static ProjectStateSnapshot Capture",
+        "public void Restore",
+        "target.Families.Clear()",
+        "target.Elements.Clear()",
+        "target.AuditEvents.Clear()",
+        "targetMetadata.ReplacePersistenceState(source.Metadata)",
+        "target.RestorePersistenceState(source.UpdatedUtc, source.ChangeVersion)",
+    ):
         if needle not in text:
             errors.append("ProjectStateSnapshot is not deep enough for semantic capture rollback: " + needle)
 
