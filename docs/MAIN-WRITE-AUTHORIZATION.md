@@ -2,6 +2,12 @@
 
 This document is the canonical repository rule for who may change `main`. It overrides older wording in `AGENTS.md`, `CI_POLICY.md`, handoffs, claim files, or historical instructions that allowed claim/docs/chore/source commits directly to `main`.
 
+## Activation boundary
+
+This policy becomes repository-active when the owner-authorized governance PR containing it is merged into `main`. Until then, current `main` may still contain older direct-to-main wording and other concurrent agents may continue following that older policy.
+
+The existence of an open policy PR does not itself rewrite `main`. The migration is complete only after an explicitly authorized merge plus a fresh read-back of current `main`.
+
 ## Default rule: agents treat `main` as read-only
 
 Unless the repository owner explicitly authorizes the current agent/session to integrate or merge, every AI agent/chat session must treat `origin/main` as **read-only**.
@@ -100,7 +106,7 @@ Repository policy must be backed by GitHub branch protection/rulesets where avai
 - keep owner/admin bypass narrow and deliberate;
 - use required checks when stable check names are available.
 
-Until GitHub reports protection/ruleset enforcement, this Markdown rule remains mandatory but cannot physically stop a credential with write permission from bypassing it. Track hard-enforcement work in the repository governance issue for `main` protection.
+Until GitHub reports protection/ruleset enforcement, this Markdown rule remains mandatory after activation but cannot physically stop a credential with write permission from bypassing it. Track hard-enforcement work in the repository governance issue for `main` protection.
 
 ## Precedence
 
