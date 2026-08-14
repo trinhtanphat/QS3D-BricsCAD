@@ -47,7 +47,10 @@ namespace QS3D.Core.Reporting
                 var floorId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FloorId);
                 var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
                 var floor = floors.TryGetValue(floorId, out var floorName) ? floorName : floorId;
-                var family = families.TryGetValue(familyId, out var familyDefinition) ? familyDefinition.Name : familyId;
+                families.TryGetValue(familyId, out var familyDefinition);
+                if (familyDefinition != null && familyDefinition.Category != element.Category)
+                    throw new InvalidOperationException("Curtain wall schedule element " + element.Id + " category " + element.Category + " does not match Family " + familyDefinition.Id + " category " + familyDefinition.Category + ". Repair the Family relation before reporting.");
+                var family = familyDefinition?.Name ?? familyId;
                 var key = GroupKey(floorId, familyId);
                 if (!rows.TryGetValue(key, out var row))
                 {
