@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -31,21 +32,6 @@ namespace QS3D.BricsCAD.V25.UI
                 FrameworkElement.LoadedEvent,
                 new RoutedEventHandler(OnQs3dRootLoaded),
                 true);
-            EventManager.RegisterClassHandler(
-                typeof(DataGrid),
-                FrameworkElement.LoadedEvent,
-                new RoutedEventHandler(OnDataGridLoaded),
-                true);
-            EventManager.RegisterClassHandler(
-                typeof(ListBox),
-                FrameworkElement.LoadedEvent,
-                new RoutedEventHandler(OnListBoxLoaded),
-                true);
-            EventManager.RegisterClassHandler(
-                typeof(TreeView),
-                FrameworkElement.LoadedEvent,
-                new RoutedEventHandler(OnTreeViewLoaded),
-                true);
         }
 
         private static void OnQs3dRootLoaded(object sender, RoutedEventArgs e)
@@ -55,41 +41,63 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
             }
 
+            // A QS3D Window/UserControl can contain many nested QS3D UserControls.
+            // Only the outermost loaded QS3D root traverses its visual tree so each
+            // control is processed once and BricsCAD-owned visual trees stay untouched.
+            if (HasQs3dRootAncestor(root))
+            {
+                return;
+            }
+
+            ApplyDpiDefaults(root);
+            ApplyVirtualizationDefaults(root);
+        }
+
+        private static void ApplyDpiDefaults(FrameworkElement root)
+        {
             SetIfDefault(root, FrameworkElement.UseLayoutRoundingProperty, true);
             SetIfDefault(root, UIElement.SnapsToDevicePixelsProperty, true);
             SetIfDefault(root, TextOptions.TextFormattingModeProperty, TextFormattingMode.Display);
         }
 
-        private static void OnDataGridLoaded(object sender, RoutedEventArgs e)
+        private static void ApplyVirtualizationDefaults(DependencyObject root)
         {
-            if (!(sender is DataGrid grid) || !IsOwnedByQs3dRoot(grid))
-            {
-                return;
-            }
+            var pending = new Stack<DependencyObject>();
+            pending.Push(root);
 
-            SetIfDefault(grid, DataGrid.EnableRowVirtualizationProperty, true);
-            SetIfDefault(grid, DataGrid.EnableColumnVirtualizationProperty, true);
-            ApplyItemVirtualizationDefaults(grid, virtualizeWhenGrouping: true);
+            while (pending.Count > 0)
+            {
+                DependencyObject current = pending.Pop();
+                ApplyControlDefaults(current);
+
+                int childCount = VisualTreeHelper.GetChildrenCount(current);
+                for (int index = childCount - 1; index >= 0; index--)
+                {
+                    pending.Push(VisualTreeHelper.GetChild(current, index));
+                }
+            }
         }
 
-        private static void OnListBoxLoaded(object sender, RoutedEventArgs e)
+        private static void ApplyControlDefaults(DependencyObject current)
         {
-            if (!(sender is ListBox listBox) || !IsOwnedByQs3dRoot(listBox))
+            if (current is DataGrid grid)
             {
+                SetIfDefault(grid, DataGrid.EnableRowVirtualizationProperty, true);
+                SetIfDefault(grid, DataGrid.EnableColumnVirtualizationProperty, true);
+                ApplyItemVirtualizationDefaults(grid, virtualizeWhenGrouping: true);
                 return;
             }
 
-            ApplyItemVirtualizationDefaults(listBox, virtualizeWhenGrouping: true);
-        }
-
-        private static void OnTreeViewLoaded(object sender, RoutedEventArgs e)
-        {
-            if (!(sender is TreeView treeView) || !IsOwnedByQs3dRoot(treeView))
+            if (current is ListBox listBox)
             {
+                ApplyItemVirtualizationDefaults(listBox, virtualizeWhenGrouping: true);
                 return;
             }
 
-            ApplyItemVirtualizationDefaults(treeView, virtualizeWhenGrouping: false);
+            if (current is TreeView treeView)
+            {
+                ApplyItemVirtualizationDefaults(treeView, virtualizeWhenGrouping: false);
+            }
         }
 
         private static void ApplyItemVirtualizationDefaults(
@@ -118,10 +126,9 @@ namespace QS3D.BricsCAD.V25.UI
                 && element.GetType().Assembly == typeof(ProductionUiPolish).Assembly;
         }
 
-        private static bool IsOwnedByQs3dRoot(DependencyObject target)
+        private static bool HasQs3dRootAncestor(DependencyObject target)
         {
-            DependencyObject current = target;
-
+            DependencyObject current = GetParent(target);
             while (current != null)
             {
                 if (current is FrameworkElement element && IsQs3dRoot(element))
@@ -129,17 +136,20 @@ namespace QS3D.BricsCAD.V25.UI
                     return true;
                 }
 
-                if (current is Visual)
-                {
-                    current = VisualTreeHelper.GetParent(current);
-                }
-                else
-                {
-                    current = LogicalTreeHelper.GetParent(current);
-                }
+                current = GetParent(current);
             }
 
             return false;
+        }
+
+        private static DependencyObject GetParent(DependencyObject target)
+        {
+            if (target is Visual)
+            {
+                return VisualTreeHelper.GetParent(target);
+            }
+
+            return LogicalTreeHelper.GetParent(target);
         }
 
         private static void SetIfDefault(
@@ -153,7 +163,7 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
             }
 
-            if (!Equals(target.GetValue(property), value))
+            if (!object.Equals(target.GetValue(property), value))
             {
                 target.SetValue(property, value);
             }
