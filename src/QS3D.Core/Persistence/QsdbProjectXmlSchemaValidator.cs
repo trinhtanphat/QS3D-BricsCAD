@@ -202,7 +202,9 @@ namespace QS3D.Core.Persistence
 
         private static void ValidateElementReferences(XElement root)
         {
-            var familyIds = ReadCatalogIds(root.Element("families"), "family");
+            var families = root.Element("families") ?? throw new InvalidDataException("QSDB is missing the family catalog.");
+            var familyIds = ReadCatalogIds(families, "family");
+            var familyCategories = ReadFamilyCategories(families);
             var floorIds = ReadCatalogIds(root.Element("floors"), "floor");
             var zoneIds = ReadCatalogIds(root.Element("zones"), "zone");
             var elements = root.Element("elements") ?? throw new InvalidDataException("QSDB is missing the elements section.");
@@ -211,9 +213,46 @@ namespace QS3D.Core.Persistence
             {
                 var elementId = element.Attribute("id")?.Value ?? string.Empty;
                 ValidateOptionalReference(element, "familyId", familyIds, "family", elementId);
+                ValidateFamilyCategoryReference(element, familyCategories, elementId);
                 ValidateOptionalReference(element, "floorId", floorIds, "floor", elementId);
                 ValidateOptionalReference(element, "zoneId", zoneIds, "zone", elementId);
             }
+        }
+
+        private static Dictionary<string, ElementCategory> ReadFamilyCategories(XElement families)
+        {
+            var result = new Dictionary<string, ElementCategory>(StringComparer.OrdinalIgnoreCase);
+            foreach (var family in families.Elements("family"))
+            {
+                var id = family.Attribute("id")?.Value ?? string.Empty;
+                if (result.ContainsKey(id)) continue;
+                result.Add(id, ReadValidatedCategory(family, "family category"));
+            }
+            return result;
+        }
+
+        private static void ValidateFamilyCategoryReference(
+            XElement element,
+            IReadOnlyDictionary<string, ElementCategory> familyCategories,
+            string elementId)
+        {
+            var familyId = element.Attribute("familyId")?.Value;
+            if (familyId == null || familyId.Length == 0) return;
+            if (!familyCategories.TryGetValue(familyId, out var familyCategory)) return;
+
+            var elementCategory = ReadValidatedCategory(element, "element category");
+            if (familyCategory != elementCategory)
+                throw new InvalidDataException(
+                    "QSDB element " + elementId + " references Family " + familyId + " category " + familyCategory +
+                    " but the element category is " + elementCategory + ".");
+        }
+
+        private static ElementCategory ReadValidatedCategory(XElement element, string owner)
+        {
+            var token = element.Attribute("category")?.Value ?? string.Empty;
+            if (!Enum.TryParse(token, true, out ElementCategory category) || !Enum.IsDefined(typeof(ElementCategory), category))
+                throw new InvalidDataException("QSDB " + owner + " is invalid: " + token + ".");
+            return category;
         }
 
         private static HashSet<string> ReadCatalogIds(XElement container, string itemName)

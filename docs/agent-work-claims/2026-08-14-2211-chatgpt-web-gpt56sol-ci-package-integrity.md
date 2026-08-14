@@ -5,8 +5,12 @@
 - Registered: `2026-08-14T22:11:00+07:00`
 - Baseline main SHA: `3216207949b3d4c589c147d2c3a40fb90ba90043`
 - Claim commit: `53f0b93bc47bd65af785d1bb2c9decc0235faee0` (parent is the baseline above)
+- Claim metadata correction: `548e8ad7c57eb7c542611b3041cafb4eee4f7aa6`
 - Implementation branch: `agent/chatgpt-web-gpt56sol-ci-package-integrity/ci-package-integrity-20260814`
-- Integration batch: `integration/ci-package-integrity-20260814` or owner-selected batch
+- Implementation HEAD: `b386efcb273fb87228aed13556741bdc6a83b6c7`
+- Integration batch: `integration/ci-package-integrity-20260814`
+- Initial integration PR: `#1361`, merged to the integration branch only
+- Final integration PR: `#1370`, integration branch -> `main`, currently open and intentionally not merged while stale/blocking evidence is reconciled
 - Priority: owner requested CI + packaging + preview release hardening from 80% toward 100% evidence.
 
 ## Reserved scope
@@ -26,16 +30,38 @@ Harden the existing V25 packaging/release contract without changing public previ
 
 - Do not modify `.github/workflows/dispatch-v25-cloud-after-main-integration.yml`.
 - Do not modify `scripts/prepare-v25-cloud-release.ps1`, `scripts/validate-preview-release-sequence.ps1`, `scripts/preflight-release-preview-sequence.py`, preview-series ordinal/tag derivation, historical `v0.1.0-preview.10014` migration behavior, or any surface reserved by `2026-08-14-2053-gpt56sol-release-preview-sequence-migration.md`.
-- Do not weaken or bypass `All discovered feature source guards`; current V25 #192 fails before packaging, and that independent gate remains authoritative.
+- Do not weaken or bypass `All discovered feature source guards`; an independent source-guard failure before packaging remains authoritative until a fresh run proves it closed.
 - Do not enter BricsCAD licensed/native runtime, source-feature, installer-signing policy, or unrelated active claims.
-- No implementation source/script/workflow commit directly to `main`; implementation remains on the declared agent branch until integration.
+- No implementation source/script/workflow commit directly to `main`; implementation remains on the declared agent/integration branch until final integration.
+
+## Implementation evidence
+
+Implementation HEAD `b386efcb273fb87228aed13556741bdc6a83b6c7` is limited to four claimed surfaces:
+
+1. `scripts/verify-v25-package.ps1`
+2. `scripts/test-v25-package-verifier.ps1`
+3. `.github/workflows/ci.yml`
+4. `.github/workflows/release-v25-cloud.yml`
+
+The reusable verifier checks the external ZIP SHA-256 sidecar, rejects unsafe/traversal/rooted/ambiguous or case-colliding archive paths, requires one root `SHA256SUMS.txt`, requires exact manifest coverage, streams and re-hashes payload entries, and checks required package entries. Deterministic synthetic tests cover a valid package plus external checksum tamper, payload tamper, traversal and case-collision rejection.
+
+The release workflow invokes the same verifier before upload. After the draft release is created it requires exactly one non-empty copy of each expected asset, downloads the exact draft ZIP/checksum assets via the asset API, checks API size and byte SHA-256 equality against the local upload sources, re-runs the package verifier on the downloaded pair, and only then reaches the `draft=false` publication PATCH.
+
+PR `#1361` carried the implementation into the declared integration branch. PR `#1370` is the final integration PR but has become stale as `main` receives concurrent owner/agent landings; it must be refreshed/reviewed before any final landing rather than merged from an old base.
+
+## Current CI/release checkpoint
+
+- V25 runs `#192`, `#193`, `#195`, `#196` and `#198` failed before packaging at the discovered feature source-guard gate. Those are historical blocker evidence only and must not be reused as proof for a newer tree.
+- V25 `#199` failed earlier because the automatic request used malformed `v0.1.0-preview.0016`; that belongs to the separate ACTIVE preview-sequence claim and was not modified by this lane.
+- V25 `#200` (`31819018080`) is the current fresh run at this checkpoint, exact source commit `3a25e068804ef37587f32ff5f41a241278d0763c`. Its `Validate cloud prerelease request` and exact-source preparation steps have passed, showing the prior leading-zero request blocker is no longer reproducing on that runner. The run is still in progress and is not package-integrity success evidence yet.
+- No claim of local PowerShell execution is made: the available local container lacks PowerShell. Official Windows-runner evidence remains required.
 
 ## Validation plan
 
 - Positive synthetic package: external ZIP SHA-256 matches, archive contains one internal `SHA256SUMS.txt`, every listed entry exists exactly once and hashes correctly.
 - Negative tests: tampered external checksum, tampered archive payload/internal checksum mismatch, unsafe traversal entry and duplicate/case-colliding archive path fail closed.
 - Run PowerShell parser checks for all touched `.ps1` files and YAML/source guards already defined by CI.
-- In the release workflow, verify the package before upload; then download the draft release's ZIP/checksum assets to a clean directory and run the same verifier before `gh release edit --draft=false --prerelease`.
+- In the release workflow, verify the package before upload; then download the draft release's ZIP/checksum assets to a clean directory and run the same verifier before finalizing the prerelease.
 - Preserve existing exact-source, installer-pin/signature, naming, sequence and source-guard gates.
 - Re-read branch diff against refreshed `main`, publish exact implementation SHA, and hand it to the integration coordinator. End-to-end release success is reported only from a fresh exact-main workflow after final integration.
 

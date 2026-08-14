@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Xml;
 using QS3D.Core.Domain;
 using QS3D.Core.Formulas;
 
@@ -16,7 +17,7 @@ namespace QS3D.Core.Rules
                 throw new ArgumentOutOfRangeException(nameof(category), category, "Quantity rule category must be a defined ElementCategory.");
             Category = category;
             OutputName = RequiredToken(outputName, nameof(outputName));
-            Expression = Required(expression, nameof(expression));
+            Expression = RequiredXmlText(expression, nameof(expression));
             Version = RequiredToken(version, nameof(version));
         }
 
@@ -31,6 +32,20 @@ namespace QS3D.Core.Rules
             var normalized = Required(value, name);
             if (normalized.Any(char.IsControl)) throw new ArgumentException("Value cannot contain control characters.", name);
             return normalized;
+        }
+
+        private static string RequiredXmlText(string value, string name)
+        {
+            var normalized = Required(value, name);
+            try
+            {
+                XmlConvert.VerifyXmlChars(normalized);
+                return normalized;
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException("Value contains characters that are invalid in XML.", name, ex);
+            }
         }
 
         private static string Required(string value, string name) =>
