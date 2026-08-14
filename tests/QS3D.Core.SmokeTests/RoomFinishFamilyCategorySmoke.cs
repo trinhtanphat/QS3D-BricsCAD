@@ -11,7 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             MismatchedFamilyCategoryFailsClosed();
             MatchingFamilyCategoryPreservesInheritance();
-            MissingFamilyPreservesFallbackBehavior();
+            MissingFamilyFailsClosed();
         }
 
         private static void MismatchedFamilyCategoryFailsClosed()
@@ -52,18 +52,14 @@ namespace QS3D.Core.SmokeTests
             Equal("A1", row.SourceHandles.Single());
         }
 
-        private static void MissingFamilyPreservesFallbackBehavior()
+        private static void MissingFamilyFailsClosed()
         {
             var project = NewProject("finish-missing-family");
             var floorFinish = new ProjectElement("FF1", ElementCategory.FloorFinish, "MISSING", "F1", "Z1");
             floorFinish.Quantities["BottomAreaM2"] = 3d;
             project.Elements.Add(floorFinish);
 
-            var row = RoomFinishScheduleBuilder.Build(project).Single();
-            Equal("MISSING", row.FamilyName);
-            Equal(string.Empty, row.Material);
-            Equal("m²", row.UnitHint);
-            Near(3d, row.PrimaryQuantity);
+            Throws<InvalidOperationException>(() => RoomFinishScheduleBuilder.Build(project));
         }
 
         private static ProjectState NewProject(string id)
