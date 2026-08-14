@@ -19,6 +19,7 @@ The first LINE host phase still calls `WallSolidBuilder.BuildSelectedLineWalls` 
 - `src/QS3D.BricsCAD.V25/CurtainWallBuildCommands.cs`: pass UI suppression only for the two aggregate host calls; retain aggregate `FinalizeUi` after outer commit.
 - `scripts/preflight-curtain-aggregate-postcommit-ui.py`: focused static boundary contract.
 - `scripts/preflight-curtain-empty-partition-orchestration.py` and `scripts/preflight-curtain-orchestration-boundary.py`: exact-call token updates required by the optional arguments.
+- `scripts/preflight-native-builder-post-commit-ui.py`, `scripts/preflight-generated-replacement-atomicity.py`, and `scripts/preflight-geometry-completion.py`: signature-isolation/token updates only, after aggregate validation identified them as stale direct consumers of the same optional builder parameters.
 - this claim and the parent issue-1106 claim for ownership/closeout only.
 
 ## Coordination and invariants
