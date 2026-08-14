@@ -1,6 +1,7 @@
 # Work claim — #79 Grid V25 UI planner integration
 
-- Status: `SOURCE_FIXED / PENDING_FRESH_CI`
+- Status: `ACTIVE`
+- Phase: `SOURCE_FIXED / FRESH_CI_IN_PROGRESS`
 - Agent: `chatgpt-20260814-grid79-v25ui-56sol`
 - Registered: `2026-08-14T08:45:32Z`
 - Lease: `2h`
@@ -19,8 +20,9 @@
 
 - The adjacent #79 Grid reference Unicode lane is completed on `main`; its Core intersection-identity scope is excluded here.
 - The recent Project Tools Grid workflow-parity claim is completed; no current claim found in the refreshed claim history reserves `GridSystemCommands.cs`.
-- Claims added during the race cover Browser reference smoke and Quantity Insight BLT parity, not this V25 Grid command boundary.
+- Claims added during the source race covered Browser reference smoke and Quantity Insight BLT parity, not this V25 Grid command boundary.
 - Source commit was rebased through a non-fast-forward race without force-push; `main` accepted the exact fix by fast-forward at `cc4d5fe3ce9d008a1d4f40288f3109aa01c9fa82`.
+- Status is deliberately canonical `ACTIVE` while fresh CI is non-terminal so this lane remains visibly reserved under `docs/AGENT-WORK-REGISTRATION.md`.
 
 ## Source evidence
 
@@ -30,12 +32,17 @@
 - `scripts/preflight-grid-system-v25-ui-planner.py` guards both spatial-order calls, ordered-station consumption, system planning, intersection preview, and absence of the direct station-accumulation bypass.
 - Read-back of source SHA `cc4d5fe3ce9d008a1d4f40288f3109aa01c9fa82` confirms only the reserved source + regression guard changed.
 
+## Fresh CI evidence
+
+- Release workflow run `31790719812` / #165 was dispatched independently on descendant SHA `e58f0f24dfa5735ce3d40f932141aa9b7d3dcf50`, which contains source fix `cc4d5fe3ce9d008a1d4f40288f3109aa01c9fa82` in its ancestry.
+- On the latest read, `Generic source guard`, `All discovered feature source guards`, `Restore Core smoke projects`, and `Build Core Release` are `SUCCESS`.
+- The run is still non-terminal at `Build Core smoke harness`; therefore this claim is not yet marked `COMPLETED` and no full-CI PASS is inferred early.
+
 ## Validation boundary
 
-- Exact source SHA `cc4d5fe3ce9d008a1d4f40288f3109aa01c9fa82` currently has no GitHub status/check entries and no Actions run.
-- `.github/workflows/release-v25-cloud.yml` is `workflow_dispatch` only, so this source push does not automatically produce release CI evidence; no stale run was rerun and no release was dispatched from this lane.
 - Native Grid marker/materialization/runtime acceptance, licensed V25 save/reopen/Undo proof, curved/ARC ordering policy and other LOCAL_ONLY work remain explicitly outside this remote-safe claim.
+- No duplicate workflow is dispatched while #165 is active.
 
 ## Handoff
 
-Remote-safe #79 V25 Grid UI/planner integration source is fixed on `main`. Keep the issue open for its documented native/runtime/local-only work. Promote this claim to CI-validated only when a fresh workflow/check actually runs against a descendant that contains `cc4d5fe3ce9d008a1d4f40288f3109aa01c9fa82`; do not infer PASS from older releases.
+Remote-safe #79 V25 Grid UI/planner integration source is fixed on `main` and its discovered feature source guard has passed on a fresh descendant release run. Keep the issue open for its documented native/runtime/local-only work. Promote this claim to `COMPLETED` only after the active fresh run reaches a terminal result and the final integration review verifies source/closeout ancestry on refreshed `main`; do not infer PASS from stale releases.
