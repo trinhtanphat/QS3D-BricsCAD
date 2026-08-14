@@ -30,7 +30,7 @@ jobs:
     env:
       RELEASE_TAG: ${{ inputs.release_tag }}
       BRICSCAD_V25_MIRROR_MSI_URL: http://103.9.157.20/BricsCAD-V25.2.10-1-en_US%28x64%29.msi
-      BRICSCAD_V25_PUBLIC_MSI_URL: https://storage.googleapis.com/production-boa-storage/ftp/release/en_US/BricsCAD/Windows/25.2.10/BricsCAD-V25.2.10-1-en_US%28x64%29.msi
+      BRICSCAD_V25_PUBLIC_MSI_URL: https://storage.googleapis.com/production-boa-storage/ftp/release/en_US%28x64%29.msi
       BRICSCAD_V25_PINNED_MSI_SHA256: F44DF674C0E165D96BF579E243B20A8301E3F395F929779F47BF39A7D9DACDE1
       BRICSCAD_V25_MSI_URL: ${{ secrets.BRICSCAD_V25_MSI_URL }}
       BRICSCAD_V25_MSI_SHA256: ${{ vars.BRICSCAD_V25_MSI_SHA256 }}
@@ -150,7 +150,19 @@ jobs:
         run: dotnet build tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release --no-restore
 
       - name: Deterministic Core smoke tests
-        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release --no-build --no-restore
+        shell: powershell
+        run: |
+          $smokeOutput = @(& dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release --no-build --no-restore 2>&1)
+          $smokeExitCode = $LASTEXITCODE
+          foreach ($line in $smokeOutput) { Write-Host ([string]$line) }
+          if ($smokeExitCode -ne 0) {
+            $diagnostic = (($smokeOutput | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_.Length -gt 0 }) -join ' | ')
+            if ([string]::IsNullOrWhiteSpace($diagnostic)) { $diagnostic = "Core smoke process exited with code $smokeExitCode without captured output." }
+            if ($diagnostic.Length -gt 3500) { $diagnostic = $diagnostic.Substring(0, 3500) + '…' }
+            $diagnostic = $diagnostic.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=Deterministic Core smoke failure::$diagnostic"
+            exit $smokeExitCode
+          }
 
       - name: Restore BricsCAD V25 installer cache
         id: bricscad-msi-cache
@@ -229,8 +241,11 @@ jobs:
           }
 
           $signature = Get-AuthenticodeSignature -FilePath $msi
-          if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or -not $signature.SignerCertificate) {
+          if ($signature.Status -ne [System.Security.Cryptography.X509Certificates.X509ChainStatusFlags]::NoError -and $signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
             throw "BricsCAD V25 MSI Authenticode signature is not valid: $($signature.Status)."
+          }
+          if (-not $signature.SignerCertificate) {
+            throw "BricsCAD V25 MSI Authenticode signer certificate is missing."
           }
           $signerSubject = [string]$signature.SignerCertificate.Subject
           if ($signerSubject -notmatch '(^|,\s*)(CN|O)=Bricsys(,|$)') {
