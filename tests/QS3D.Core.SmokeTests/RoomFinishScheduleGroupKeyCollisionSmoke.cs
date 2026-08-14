@@ -9,7 +9,7 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
-            const string separator = "\u001f";
+            const string separator = "|";
             var project = new ProjectState("P-ROOM-FINISH-GROUP", "Room finish grouping");
             project.Floors.Add(new FloorDefinition("A" + separator + "B", "Floor AB", 0d));
             project.Floors.Add(new FloorDefinition("A", "Floor A", 3d));
@@ -21,6 +21,11 @@ namespace QS3D.Core.SmokeTests
             finishFamily.Properties["Material"] = "Paint";
             project.Families.Add(roomFamily);
             project.Families.Add(finishFamily);
+
+            Equal(
+                LegacyDelimitedKey(separator, "A" + separator + "B", "C", "WallFinish", "wf", "Paint", "m\u00b2"),
+                LegacyDelimitedKey(separator, "A", "B" + separator + "C", "WallFinish", "wf", "Paint", "m\u00b2"),
+                "fixture tuples collide under six-token delimiter-only grouping");
 
             var firstRoom = Room("C", roomFamily.Id, "A" + separator + "B", "Room C");
             var secondRoom = Room("B" + separator + "C", roomFamily.Id, "A", "Room BC");
@@ -88,6 +93,9 @@ namespace QS3D.Core.SmokeTests
             element.SourceHandles.Add(sourceHandle);
             return element;
         }
+
+        private static string LegacyDelimitedKey(string separator, params string[] tokens) =>
+            string.Join(separator, tokens);
 
         private static void Equal<T>(T expected, T actual, string label)
         {
