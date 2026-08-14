@@ -67,7 +67,7 @@ namespace QS3D.Core.Domain
 
         public ProjectFamily(string id, string name, ElementCategory category)
         {
-            Id = string.IsNullOrWhiteSpace(id) ? throw new ArgumentException("Family id is required.", nameof(id)) : id.Trim();
+            Id = RequireId(id);
             _name = RequireName(name);
             _category = RequireCategory(category);
             Properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -101,6 +101,13 @@ namespace QS3D.Core.Domain
         public IDictionary<string, string> Properties { get; }
 
         public event PropertyChangedEventHandler? PropertyChanged;
+        private static string RequireId(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Family id is required.", nameof(value));
+            var normalized = value.Trim();
+            if (normalized.Any(char.IsControl)) throw new ArgumentException("Family id cannot contain control characters.", nameof(value));
+            return normalized;
+        }
         private static string RequireName(string value) => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Family name is required.", nameof(value)) : value.Trim();
         private static ElementCategory RequireCategory(ElementCategory value)
         {
