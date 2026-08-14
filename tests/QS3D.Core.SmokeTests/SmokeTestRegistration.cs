@@ -6,6 +6,7 @@ namespace QS3D.Core.SmokeTests
         {
             ProjectQuantitySmoke.Run();
             QuantityReportFamilyCategorySmoke.Run();
+            MaterialUsageFamilyCategorySmoke.Run();
             MeasurementTraceContractSmoke.Run();
             TakeoffMeasurementTraceSmoke.Run();
             RateBookSmoke.Run();
