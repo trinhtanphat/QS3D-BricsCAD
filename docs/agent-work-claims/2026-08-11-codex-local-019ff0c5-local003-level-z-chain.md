@@ -725,6 +725,6 @@ This status-only reactivation must reach `origin/main` before qualification resu
 
 ## 2026-08-14 exact-current reactivation after source blockers cleared
 
-The local checkout is clean and synchronized with `origin/main@e17a203d287f81d2ddae7b750a972cfd6d8ed53f`. Issues `#990`, `#1092` and `#1101` are closed with their non-local corrections integrated, and the process audit again reports zero BricsCAD processes. Current ACTIVE/BLOCKED claim and open-PR review found no competing owner for Level placement, the Level runner or LOCAL-003 evidence.
+The local checkout is clean and synchronized with `origin/main@2b66e2e3da1180ba294106ba548f274d91183f2f`. Issues `#990`, `#1092` and `#1101` are closed with their non-local corrections integrated, and the process audit again reports zero BricsCAD processes. Current ACTIVE/BLOCKED claim and open-PR review found no competing owner for Level placement, the Level runner or LOCAL-003 evidence.
 
 This claim is reactivated before any renewed build or native launch. After this status-only commit is visible on `origin/main`, re-fetch the newest clean main, require full Core smoke, all focused Level/static gates, installed-reference V25 `Release|x64` build and matching plugin/Core `ProductVersion`, then execute one fresh disposable Level probe. A new CAD-independent failure returns to a non-local owner; a native failure is recorded only with sanitized evidence. No GitHub Actions are authorized.
