@@ -28,6 +28,7 @@ if XAML.is_file():
 
 if CODE.is_file():
     text = CODE.read_text(encoding="utf-8")
+    zoom_token = "global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(document)"
     required = (
         "private void OnQuantityTreeSelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)",
         "if (AutoRevealCheck?.IsChecked != true) return;",
@@ -43,7 +44,7 @@ if CODE.is_file():
         "var currentRows = BuildPreviewRows(project, out _);",
         "SourceHandleResolver.Resolve(project, currentRow.ElementIds)",
         "Cad.CadHandleService.Select(document, handles)",
-        'document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false)',
+        zoom_token,
     )
     for needle in required:
         if needle not in text:
@@ -72,20 +73,22 @@ if CODE.is_file():
     current_row = text.find("var currentRow = ResolveCurrentRow(item, project);", project_guard)
     handles = text.find("SourceHandleResolver.Resolve(project, currentRow.ElementIds)", current_row)
     select = text.find("Cad.CadHandleService.Select(document, handles)", handles)
-    zoom = text.find('document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false)', select)
-    if min(locate, document_guard, project_guard, current_row, handles, select, zoom) < 0 or not (
-        locate < document_guard < project_guard < current_row < handles < select < zoom
+    positive = text.find("if (count > 0)", select)
+    zoom = text.find(zoom_token, positive)
+    if min(locate, document_guard, project_guard, current_row, handles, select, positive, zoom) < 0 or not (
+        locate < document_guard < project_guard < current_row < handles < select < positive < zoom
     ):
-        errors.append("single-click reveal must reuse fail-closed current-row -> Handle -> native select -> zoom ordering")
+        errors.append("single-click reveal must reuse fail-closed current-row -> Handle -> native select -> positive-count -> direct zoom ordering")
 
     forbidden = (
         "ProjectContextCoordinator.GetOrCreate",
         "ExistingProjectMutationContext.Require",
         "SourceHandleResolver.Resolve(project, item.ElementIds)",
+        'SendStringToExecute("QS3DZOOMSELECTED ',
     )
     for needle in forbidden:
         if needle in text:
-            errors.append("click reveal must stay read-only and must not resolve stale item IDs directly: " + needle)
+            errors.append("click reveal must stay read-only, avoid stale item IDs, and avoid queued zoom re-entry: " + needle)
 
 print("QS3D Quantity Insight single-click reveal preflight")
 if errors:
@@ -94,4 +97,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Quantity leaf selection defaults to fail-closed native CAD reveal, floor/group clicks remain passive, and double-click remains a non-duplicating manual fallback when auto-reveal is disabled.")
+print("PASS: Quantity leaf selection defaults to fail-closed native CAD reveal with direct in-process zoom, floor/group clicks remain passive, and double-click remains a non-duplicating manual fallback when auto-reveal is disabled.")
