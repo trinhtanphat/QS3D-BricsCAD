@@ -12,7 +12,7 @@ $tag = $ReleaseTag.Trim()
 $dispatch = $DispatchSha.Trim().ToLowerInvariant()
 
 if ($tag -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)-preview\.(?:0|[1-9][0-9]*)$') {
-    throw "ReleaseTag must be an exact preview tag such as v0.1.0-preview.7. Got: $ReleaseTag"
+    throw "ReleaseTag must use the exact preview shape v<major>.<minor>.<patch>-preview.<n>. Got: $ReleaseTag"
 }
 if ($dispatch -notmatch '^[0-9a-f]{40}$') {
     throw "DispatchSha must be one exact 40-hex commit. Got: $DispatchSha"
