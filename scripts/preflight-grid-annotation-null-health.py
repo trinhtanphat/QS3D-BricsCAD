@@ -29,13 +29,14 @@ if not AGGREGATE.is_file():
 else:
     text = AGGREGATE.read_text(encoding="utf-8")
     required = (
-        'AddSafely(issues, seen, "GeneratedGridAnnotationHealthService", () => new GeneratedGridAnnotationHealthService().Inspect(project));',
+        'new DiagnosticProvider("GeneratedGridAnnotationHealthService", () => new GeneratedGridAnnotationHealthService().Inspect(project))',
         '"HEALTH_PROVIDER_FAILED"',
         "exception is InvalidOperationException",
+        "ExecuteProvider",
     )
     for token in required:
         if token not in text:
-            errors.append("missing aggregate grid-annotation fail-visible compatibility token: " + token)
+            errors.append("missing aggregate grid-annotation fail-visible provider token: " + token)
 
 print("QS3D grid-annotation standalone null-health preflight")
 if errors:
