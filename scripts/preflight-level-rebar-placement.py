@@ -50,6 +50,17 @@ for label, text, source_base, height_key, snapshot_prefix in (
 for label, text in (("beam longitudinal bars", beam), ("beam stirrups", stirrups)):
     require(text, "var centerZ = vertical.CenterDrawing;", label)
 
+for token in (
+    "var halfLength = length / 2d;",
+    "var centerX = CadGeometryGuard.Add(startX, CadGeometryGuard.Multiply(unit.X, halfLength",
+    "var centerY = CadGeometryGuard.Add(startY, CadGeometryGuard.Multiply(unit.Y, halfLength",
+    "var centerZ = CadGeometryGuard.Add(startZ, CadGeometryGuard.Multiply(unit.Z, halfLength",
+    "Matrix3d.Displacement(new Vector3d(centerX, centerY, centerZ))",
+):
+    require(stirrups, token, "beam stirrup native segment placement")
+if "Matrix3d.Displacement(new Vector3d(startX, startY, startZ))" in stirrups:
+    errors.append("beam stirrup must place each centered V25 frustum at the segment midpoint, not its start")
+
 require(column, "var height = vertical.HeightDrawing;", "column longitudinal bars")
 require(column, "var baseZ = vertical.BottomDrawing;", "column longitudinal bars")
 require(ties, "var heightM = vertical.HeightM;", "column ties")
