@@ -4,7 +4,10 @@
 - Date: 2026-08-14
 - Status: `ACTIVE`
 - Baseline main SHA: `c07293988e67204ce31e3ff4bfc61d94a3611712`
+- Claim commit: `b0197bcf43fdcafa256535647f6766a582641c04`
 - Implementation branch: `agent/chatgpt-web-gpt56sol/quantity-rule-expression-xml-persistability-20260814`
+- Source commit: `d12996bb5b0e6a1dec2dbc054ea7c9a96e7e761d`
+- Regression commit / implementation head: `b54ae5a3e232c50edae8e5ae1ad8ad0c62252784`
 - Planned integration branch: `integration/chatgpt-web-gpt56sol-quantity-rule-expression-xml-persistability-20260814`
 - Priority: Core P1 persistence integrity
 
@@ -31,6 +34,13 @@ This lane only requires formula text to be XML-representable after the existing 
 At baseline `c07293988e67204ce31e3ff4bfc61d94a3611712`, the public `QuantityRule` constructor uses `RequiredToken(...)` for `Id`, `OutputName`, and `Version`, but `Expression = Required(expression, nameof(expression))`. The previous completed `QuantityRule token persistability` claim explicitly kept Expression unchanged and excluded expression grammar/control-character policy from that lane. QSDB serializes rule `expression` as an XML attribute, so an expression containing `U+0001` can be constructed but cannot be serialized as canonical QSDB XML.
 
 No matching current commit/claim was found for QuantityRule expression XML persistability.
+
+## Implementation evidence before integration
+
+- Source commit `d12996bb5b0e6a1dec2dbc054ea7c9a96e7e761d` adds `RequiredXmlText`: it first applies the existing `Required(...)` trim/required semantics, then calls `XmlConvert.VerifyXmlChars`, converting XML-invalid formula text into `ArgumentException` at construction.
+- Regression commit `b54ae5a3e232c50edae8e5ae1ad8ad0c62252784` adds `QuantityRuleExpressionPersistabilitySmoke`, pinning `U+0001` rejection, unchanged padded-expression trim behavior, and valid expression QSDB SaveNew→Load round-trip.
+- Compare from claim commit to implementation head reports exactly two changed surfaces: `QuantityRuleEngine.cs` and the new focused smoke file.
+- Source/test were read back; the regression uses the C# `\u0001` runtime escape. No managed/cloud/native PASS is claimed from the agent branch and no manual Actions dispatch was performed.
 
 ## Validation plan
 
