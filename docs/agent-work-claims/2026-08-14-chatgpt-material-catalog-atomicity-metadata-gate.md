@@ -1,6 +1,6 @@
 # Work claim — Material Catalog atomicity metadata gate reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-14T16:06:00+07:00`
 - Baseline main SHA: `5b73758ad4a3a0ae3e50f8f782fd96a6ec3a03c1`
@@ -16,27 +16,31 @@ Current `ProjectStateSnapshot.CopyInto(...)` restores metadata through the canon
 - `targetMetadata.ReplacePersistenceState(source.Metadata);`
 - `target.RestorePersistenceState(source.UpdatedUtc, source.ChangeVersion);`
 
-The static gate still requires the superseded direct-clear token, so the gate is stale. Production metadata rollback remains present and should not be reverted to satisfy a source-text literal.
+The static gate still required the superseded direct-clear token, so the gate was stale. Production metadata rollback remains present and was not reverted to satisfy a source-text literal.
 
 ## Reserved scope
 
 - `scripts/preflight-material-catalog-atomicity.py`
 - this claim document only
 
-Replace only the stale snapshot metadata token contract with tokens that lock the current canonical metadata persistence restore. Preserve the existing Material Catalog Save/Delete/Apply atomicity, stale-row, whole-project rollback, post-commit UI isolation, AuditEvents and Elements restore checks.
+Reconciled only the stale snapshot metadata token contract with tokens that lock the current canonical metadata persistence restore. Preserved the existing Material Catalog Save/Delete/Apply atomicity, stale-row, whole-project rollback, post-commit UI isolation, AuditEvents and Elements restore checks.
 
 ## Explicit exclusions
 
 - no changes to `ProjectStateSnapshot`, `ProjectMetadataDictionary`, `ProjectMaterialCatalog`, Material Catalog UI production source, semantic-mutation fixture, QSDB, native BricsCAD, LOCAL runners/probes, workflows, release, private data, or GitHub Actions;
-- do not weaken the gate by deleting metadata restore coverage;
-- report any next independent failure without expanding this claim.
+- metadata restore coverage was not weakened;
+- next independent failures remain separate claims.
 
 ## Validation
 
-- exact diff/readback of the one-file script change;
-- `preflight-material-catalog-atomicity.py` should pass under the canonical `ReplacePersistenceState` implementation when run in an environment with Python;
-- no full-suite or BricsCAD PASS is inferred from this static reconciliation alone.
+- branch implementation commit `f85f48a60b63ab8d00ce19bc40e7d9e863f21139` changed exactly one file with +3/-1;
+- the stale `target.Metadata.Clear();` source-token requirement was replaced by locks for `target.Metadata as ProjectMetadataDictionary`, `targetMetadata.ReplacePersistenceState(source.Metadata);`, and `target.RestorePersistenceState(source.UpdatedUtc, source.ChangeVersion);`;
+- existing `target.AuditEvents.Clear();` and `target.Elements.Clear();` coverage remained unchanged;
+- no fresh local/full-suite/BricsCAD PASS is claimed by this closeout because this environment does not execute the repository's .NET suite.
 
 ## Completion record
 
-Pending implementation after this claim is merged to `main`.
+- Claim-only PR `#1258` merged at `59638193b02e71bbd5ff35103d3b7a1245c8c5cc` before implementation.
+- Implementation PR `#1263` merged to `main` at `544b0109a13825656c414931880d685799f5c008`.
+- Intervening commits between implementation baseline and PR base did not touch `scripts/preflight-material-catalog-atomicity.py`.
+- Production source was intentionally unchanged; the fix reconciles the static gate with the authoritative metadata rollback implementation already present in `ProjectStateSnapshot`.
