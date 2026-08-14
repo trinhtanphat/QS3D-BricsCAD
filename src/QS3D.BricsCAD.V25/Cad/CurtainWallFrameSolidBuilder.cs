@@ -159,7 +159,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
                         foreach (var frame in frames)
                         {
-                            Solid3d? solid = CreateFrame(document, line, frame, frameDepthM, baseZ, angle, ux, uy, element.Id);
+                            Solid3d? solid = CreateFrame(document, line, frame, frameDepthM, baseZ, verticalPlacement.UsesBottomLevel, angle, ux, uy, element.Id);
                             try
                             {
                                 solid.Layer = line.Layer;
@@ -291,7 +291,7 @@ namespace QS3D.BricsCAD.V25.Cad
             return result.AsReadOnly();
         }
 
-        private static Solid3d CreateFrame(Document document, Line line, CurtainWallRect frame, double depthM, double baseZ, double angle, double ux, double uy, string label)
+        private static Solid3d CreateFrame(Document document, Line line, CurtainWallRect frame, double depthM, double baseZ, bool usesLevelPlacement, double angle, double ux, double uy, string label)
         {
             var width = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, frame.WidthM, label + "/frame width"), label + "/frame width drawing");
             var depth = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, depthM, label + "/frame depth"), label + "/frame depth drawing");
@@ -308,7 +308,8 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 solid.SetDatabaseDefaults(document.Database);
                 solid.CreateBox(width, depth, height);
-                solid.TransformBy(Matrix3d.Displacement(new Vector3d(-width / 2d, -depth / 2d, -height / 2d)));
+                var originOffsetZ = usesLevelPlacement ? 0d : -height / 2d;
+                solid.TransformBy(Matrix3d.Displacement(new Vector3d(-width / 2d, -depth / 2d, originOffsetZ)));
                 solid.TransformBy(Matrix3d.Rotation(angle, Vector3d.ZAxis, Point3d.Origin));
                 solid.TransformBy(Matrix3d.Displacement(new Vector3d(centerX, centerY, centerZ)));
                 var complete = solid;
