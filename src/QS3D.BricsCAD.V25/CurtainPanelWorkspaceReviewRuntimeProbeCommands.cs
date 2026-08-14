@@ -40,8 +40,21 @@ namespace QS3D.BricsCAD.V25
         [CommandMethod("QS3DCURTAINP10PROGRESSDRAW", CommandFlags.Modal)]
         public void ProgressDirectDrawComplete() => WriteProgress("direct_draw_complete");
 
-        [CommandMethod("QS3DCURTAINP10PROGRESSPREPARE", CommandFlags.Modal)]
-        public void ProgressSelectionPrepared() => WriteProgress("source_selection_prepared");
+        [CommandMethod("QS3DCURTAINP10PROGRESSPREPARE", CommandFlags.Modal | CommandFlags.UsePickSet)]
+        public void ProgressSelectionPrepared()
+        {
+            var document = Application.DocumentManager.MdiActiveDocument
+                ?? throw new InvalidOperationException("Curtain P10 selection progress requires an active document.");
+            var preparedSelection = document.Editor.SelectImplied();
+            if (preparedSelection.Status != Bricscad.EditorInput.PromptStatus.OK || preparedSelection.Value == null)
+                throw new InvalidOperationException("Curtain P10 selection progress requires the prepared implied selection.");
+            var preparedIds = preparedSelection.Value.GetObjectIds();
+            if (preparedIds.Length == 0)
+                throw new InvalidOperationException("Curtain P10 selection progress requires a non-empty prepared selection.");
+
+            WriteProgress("source_selection_prepared");
+            document.Editor.SetImpliedSelection(preparedIds);
+        }
 
         [CommandMethod("QS3DCURTAINP10PROGRESSBUILD", CommandFlags.Modal)]
         public void ProgressCurtainBuilt() => WriteProgress("curtain_build_complete");
