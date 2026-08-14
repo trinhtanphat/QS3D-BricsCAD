@@ -7,6 +7,9 @@ using System.Text.RegularExpressions;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.Core.Domain;
+#if !BRICSCAD_V26
+using Teigha.BoundaryRepresentation;
+#endif
 using Teigha.DatabaseServices;
 using Teigha.Runtime;
 
@@ -73,6 +76,7 @@ namespace QS3D.BricsCAD.V25
                 var coreProductVersion = ProductVersionText(coreAssembly);
                 var brxVersion = VersionText(brxAssembly);
                 var tdVersion = VersionText(tdAssembly);
+                var brepVersion = NativeBrepVersion();
                 var pluginPath = pluginAssembly.Location ?? string.Empty;
                 var pluginDirectory = Path.GetDirectoryName(pluginPath) ?? string.Empty;
                 var pluginMvid = pluginAssembly.ManifestModule.ModuleVersionId.ToString("D");
@@ -84,7 +88,7 @@ namespace QS3D.BricsCAD.V25
                 var projectWasCached = ProjectContextCoordinator.TryGetCached(document, out _);
                 var hasProject = ProjectContextCoordinator.TryGetReadOnly(document, out var project);
 
-                var expectedRuntime = Major(brxAssembly) == ExpectedRuntimeMajor && Major(tdAssembly) == ExpectedRuntimeMajor;
+                var expectedRuntime = NativeRuntimeAssembliesMatch(brxAssembly, tdAssembly);
                 var x64Runtime = Environment.Is64BitProcess;
                 var diskVersionMatches =
                     diskIdentity.Exists &&
@@ -161,6 +165,11 @@ namespace QS3D.BricsCAD.V25
 
                 document.Editor.WriteMessage("\n  BrxMgd version: " + brxVersion);
                 document.Editor.WriteMessage("\n  TD_Mgd version: " + tdVersion);
+#if BRICSCAD_V26
+                document.Editor.WriteMessage("\n  TD_MgdBrep: not required by the V26 adapter");
+#else
+                document.Editor.WriteMessage("\n  TD_MgdBrep version: " + brepVersion);
+#endif
                 document.Editor.WriteMessage("\n  Runtime adapter: " + (expectedRuntime ? ExpectedRuntimeLabel : "NOT " + ExpectedRuntimeLabel));
                 document.Editor.WriteMessage("\n  Process architecture: " + (x64Runtime ? "x64" : "NOT x64"));
                 if (hasProject)
@@ -196,8 +205,8 @@ namespace QS3D.BricsCAD.V25
 
                 var ok = expectedRuntime && x64Runtime && packageVersionMatches && diskVersionMatches && diskFingerprintMatches;
                 var summary = ok
-                    ? "QS3DRUNTIMECHECK PASS: running product, loaded binary fingerprint, on-disk DLL, package identity, adapter runtime and architecture are consistent."
-                    : "QS3DRUNTIMECHECK FAIL: stale process or runtime/package identity mismatch detected. Close all BricsCAD processes before replacing QS3D binaries; do not qualify this installation for release.";
+                    ? "QS3DRUNTIMECHECK PASS: running product, loaded binary fingerprint, on-disk DLL, package identity, complete native dependency set, adapter runtime and architecture are consistent."
+                    : "QS3DRUNTIMECHECK FAIL: stale process or native runtime/package identity mismatch detected. Close all BricsCAD processes before replacing QS3D binaries; do not qualify this installation for release.";
                 document.Editor.WriteMessage("\n" + summary);
             }
             catch (System.Exception ex)
@@ -324,6 +333,26 @@ namespace QS3D.BricsCAD.V25
         {
             using (var process = Process.GetCurrentProcess())
                 return process.Id;
+        }
+
+        private static bool NativeRuntimeAssembliesMatch(Assembly brxAssembly, Assembly tdAssembly)
+        {
+            if (Major(brxAssembly) != ExpectedRuntimeMajor || Major(tdAssembly) != ExpectedRuntimeMajor)
+                return false;
+#if BRICSCAD_V26
+            return true;
+#else
+            return Major(typeof(Brep).Assembly) == ExpectedRuntimeMajor;
+#endif
+        }
+
+        private static string NativeBrepVersion()
+        {
+#if BRICSCAD_V26
+            return "not-required";
+#else
+            return VersionText(typeof(Brep).Assembly);
+#endif
         }
 
         private static int Major(Assembly assembly) => assembly.GetName().Version?.Major ?? -1;
