@@ -25,6 +25,37 @@ namespace QS3D.Core.SmokeTests
                     ["UnsafeValue"] = double.NaN
                 }));
 
+            var unusedPositiveInfinity = Capture<InvalidOperationException>(() => evaluator.Evaluate(
+                "1",
+                new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["UnusedPositiveInfinity"] = double.PositiveInfinity
+                }));
+            Contains("Variable 'UnusedPositiveInfinity' contains a non-finite value.", unusedPositiveInfinity.Message);
+
+            var unusedNegativeInfinity = Capture<InvalidOperationException>(() => evaluator.Evaluate(
+                "1",
+                new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["UnusedNegativeInfinity"] = double.NegativeInfinity
+                }));
+            Contains("Variable 'UnusedNegativeInfinity' contains a non-finite value.", unusedNegativeInfinity.Message);
+
+            var unusedNaN = Capture<InvalidOperationException>(() => evaluator.Evaluate(
+                "1",
+                new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["UnusedNaN"] = double.NaN
+                }));
+            Contains("Variable 'UnusedNaN' contains a non-finite value.", unusedNaN.Message);
+
+            Near(1d, evaluator.Evaluate(
+                "1",
+                new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["UnusedFinite"] = 42d
+                }), 0d);
+
             var multiplicationUnderflow = Capture<InvalidOperationException>(
                 () => evaluator.Evaluate("1e-300 * 1e-300"));
             Contains("Multiplication underflowed to zero.", multiplicationUnderflow.Message);
