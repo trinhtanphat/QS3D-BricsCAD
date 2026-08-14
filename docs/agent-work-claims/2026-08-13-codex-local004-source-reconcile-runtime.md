@@ -60,4 +60,11 @@ The claim is visible on `origin/main`; the guarded probe/runner/gate are merged;
 ## 2026-08-14 post-Undo marker discriminator split
 
 - After exact candidate `8a5fbb2ca6b406a5ad4776da1b110b4d863af37b` reached `native_undo / NATIVE_UNDO_SEMANTIC_DIVERGENCE` with `undo_coherent=false` and `redo_coherent=true`, `/root` explicitly delegated one narrow automation-only edit to `/root/fix_source_reconcile_desync` under claim `2026-08-14-gpt56sol-issue1005-post-undo-marker-discriminator.md`.
-- That successor owns only sanitized post-Undo/post-Redo marker classification in the existing probe, runner, and focused privacy gate. This claim retains exclusive ownership of licensed BricsCAD execution, the complete LOCAL-004 matrix, private/local evidence, cleanup, and result publication. Production Source Reconcile behavior remains outside both automation edits until the discriminator is rerun.
+- That successor owns only sanitized post-Undo/post-Redo marker classification in the probe/runner/focused privacy gate. This claim retains exclusive ownership of licensed BricsCAD execution, the complete LOCAL-004 matrix, private/local evidence, cleanup, and result publication. Production Source Reconcile behavior remains outside both automation edits until the discriminator is rerun.
+
+### Discriminator implementation handoff
+
+- The delegated lane implemented the discriminator as additive automation-only `SourceReconcilePostUndoMarkerProbeCommands.cs`, leaving production Undo/history/marker code and the existing main runtime probe behavior untouched.
+- The unchanged runner sequence now surrounds final reconcile and guarded native Undo/Redo with private snapshot captures, then publishes only four bounded fields into the existing session-one marker: `post_undo_marker_vs_pre_final_state`, `post_undo_marker_vs_post_final_state`, `post_redo_marker_vs_pre_final_state`, and `post_redo_marker_vs_post_final_state`.
+- Each field is allowlisted to `ADVANCED`, `UNCHANGED`, or `MISSING_OR_INVALID`; the runner keeps the sanitized session-one marker in local metadata so the local owner can hand the tuple back even when the unchanged cold-reopen acceptance still reports `NATIVE_UNDO_SEMANTIC_DIVERGENCE`.
+- No licensed BricsCAD execution or acceptance conclusion is transferred to the delegated lane. After merge, this root claim should rerun the unchanged exact-SHA matrix and publish the four-field discriminator tuple to issue `#1005`.

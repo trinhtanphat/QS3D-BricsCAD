@@ -8,19 +8,21 @@
 
 ## Reserved scope
 
-Add one automation-only, privacy-safe discriminator that classifies the Source Reconcile native revision marker after the guarded native Undo and Redo steps relative to the already captured pre-final and post-final opaque marker tokens. Publish only existing bounded classes such as `ADVANCED`, `UNCHANGED`, and `MISSING_OR_INVALID` through the LOCAL-004 result marker.
+Add one automation-only, privacy-safe discriminator that classifies the Source Reconcile native revision marker after the guarded native Undo and Redo steps relative to the already captured pre-final and post-final opaque marker tokens. Publish only existing bounded classes such as `ADVANCED`, `UNCHANGED`, and `MISSING_OR_INVALID` through the LOCAL-004 session-one result marker.
 
 ## Expected surfaces
 
-- `src/QS3D.BricsCAD.V25/SourceReconcileRuntimeProbeCommands.cs`
+- `src/QS3D.BricsCAD.V25/SourceReconcilePostUndoMarkerProbeCommands.cs`
 - `scripts/test-bricscad-v25-source-reconcile.ps1`
 - `scripts/preflight-source-reconcile-runtime-probe.py`
 - This claim file and the existing LOCAL-004 claim coordination note
 
+The discriminator is intentionally isolated in an additive automation-only command class rather than widening the existing large runtime probe. It consumes only `SourceReconcileUndoCoordinator.CaptureSanitizedState` and `SanitizedDiagnosticSnapshot.CompareMarkerTo`; the opaque native revision never leaves that production-owned snapshot type.
+
 ## Excluded scope
 
 - `SourceReconcileUndoCoordinator`, `SourceReconcileService`, native marker storage, history/observer behavior, or any other production source
-- LOCAL-004 workflow order, semantic/native acceptance criteria, drawing/private-data handling, or supporting LOCAL documentation
+- LOCAL-004 semantic/native acceptance criteria, drawing/private-data handling, or supporting LOCAL documentation
 - BricsCAD execution, private data, GitHub Actions, packaging, signing, or release
 
 ## Validation plan
@@ -32,8 +34,15 @@ Add one automation-only, privacy-safe discriminator that classifies the Source R
 
 ## Coordination
 
-The ACTIVE LOCAL-004 runtime claim owns the broader licensed matrix and originally created these surfaces. Its owner `/root` explicitly delegated this narrow automation-only discriminator to `/root/fix_source_reconcile_desync`; the matching split is recorded in that claim. The local owner retains all BricsCAD execution and result ownership. No open PR overlaps this edit. This continuation deliberately precedes any proposed production marker undo-recording change.
+The ACTIVE LOCAL-004 runtime claim owns the broader licensed matrix and originally created these surfaces. Its owner `/root` explicitly delegated this narrow automation-only discriminator to `/root/fix_source_reconcile_desync`; the matching split is recorded in that claim. The local owner retains all BricsCAD execution and result ownership. No open PR overlapped this edit when the claim was registered. This continuation deliberately precedes any proposed production marker undo-recording change.
+
+## Implementation checkpoint — 2026-08-14
+
+- A dedicated automation-only helper captures private pre-final/post-final `SanitizedDiagnosticSnapshot` instances in memory and classifies the current native marker after guarded Undo/Redo relative to both baselines.
+- Only four bounded fields are published: `post_undo_marker_vs_pre_final_state`, `post_undo_marker_vs_post_final_state`, `post_redo_marker_vs_pre_final_state`, and `post_redo_marker_vs_post_final_state`.
+- The helper atomically augments the existing session-one marker only after `QS3DSRTSESSION1` has published a valid PASS marker with the exact nonce/schema/boundary. The runner then validates all four fields against `ADVANCED / UNCHANGED / MISSING_OR_INVALID` and retains the sanitized `phase_marker` in local metadata for handoff even when cold reopen reproduces `NATIVE_UNDO_SEMANTIC_DIVERGENCE`.
+- Production Undo coordinator/service/history/marker behavior and LOCAL-004 acceptance criteria are unchanged.
 
 ## Completion condition
 
-The three-file probe/runner/gate change is merged to current `main`, this claim is marked `COMPLETED`, and the exact merge SHA is handed off for the licensed unchanged LOCAL-004 matrix. Issue #1005 remains open pending that runtime discriminator.
+The three-file helper/runner/gate change is merged to current `main`, this claim is marked `COMPLETED`, and the exact merge SHA is handed off for the licensed unchanged LOCAL-004 matrix. Issue #1005 remains open pending that runtime discriminator.
