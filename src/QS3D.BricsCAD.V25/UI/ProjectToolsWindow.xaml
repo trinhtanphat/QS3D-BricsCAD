@@ -195,6 +195,19 @@
                     </StackPanel>
                 </Border>
 
+                <Border Style="{StaticResource ProjectCard}">
+                    <StackPanel>
+                        <TextBlock Text="GRID / REFERENCE REVIEW" Style="{StaticResource PanelTitle}"/>
+                        <TextBlock Text="Review planner hình học từ semantic Grid đang chọn; các thao tác preview không tạo CAD entity mới."
+                                   Style="{StaticResource Caption}" Margin="0,0,0,5"/>
+                        <UniformGrid Columns="2">
+                            <Button Content="Grid Intersections" Tag="QS3DGRIDINTERSECTIONS" Style="{StaticResource ProjectCommand}" Click="OnCommandClick" ToolTip="Inspect finite Grid intersections qua GridIntersectionPlanner."/>
+                            <Button Content="Grid Auto Number" Tag="QS3DGRIDNUMBERAUTO" Style="{StaticResource ProjectCommand}" Click="OnCommandClick" ToolTip="Spatial ordering/auto-number qua GridSpatialOrderingPlanner."/>
+                            <Button Content="Grid System Preview" Tag="QS3DGRIDSYSTEMPREVIEW" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick" ToolTip="Preview rectangular Grid system qua GridSystemPlanner; read-only, không materialize CAD."/>
+                        </UniformGrid>
+                    </StackPanel>
+                </Border>
+
                 <Border Style="{StaticResource ProjectCard}" Margin="0">
                     <StackPanel>
                         <TextBlock Text="KIỂM TRA / BẢO TRÌ" Style="{StaticResource PanelTitle}"/>
