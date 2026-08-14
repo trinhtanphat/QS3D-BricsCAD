@@ -106,6 +106,13 @@ for token in (
     'QS3D_CURTAIN_P10_RESULT',
     'QS3D_CURTAIN_P10_NONCE',
     'QS3D_CURTAIN_P10_PROGRESS',
+    'QS3D_CURTAIN_PANEL_RESULT',
+    'QS3D_CURTAIN_PANEL_NONCE',
+    'curtain-panel-runtime-result.txt',
+    '$runPrivateFiles = @($privateFiles) + @($prepareResultPath)',
+    'foreach ($privateFile in $runPrivateFiles)',
+    'Restore-EnvironmentValue -Name "QS3D_CURTAIN_PANEL_RESULT" -Value $oldPrepareResult',
+    'Restore-EnvironmentValue -Name "QS3D_CURTAIN_PANEL_NONCE" -Value $oldPrepareNonce',
     'curtain-panel-workspace-review-progress.txt',
     'Read-Qs3dProgressPhase',
     'last_progress_phase',
@@ -129,6 +136,15 @@ for token in (
 ):
     if token not in runner:
         errors.append("Curtain P10 runner missing guard/evidence token: " + token)
+
+prepare_result_env = runner.find('$env:QS3D_CURTAIN_PANEL_RESULT = $prepareResultPath')
+prepare_nonce_env = runner.find('$env:QS3D_CURTAIN_PANEL_NONCE = $nonce')
+script_start = runner.find('$script = @(')
+prepare_command = runner.find('"QS3DCURTAINPANELPREPARE"', script_start)
+if min(prepare_result_env, prepare_nonce_env, script_start, prepare_command) < 0 or not (
+    prepare_result_env < script_start and prepare_nonce_env < script_start < prepare_command
+):
+    errors.append("Curtain P10 runner must bind the shared prepare environment before scripting QS3DCURTAINPANELPREPARE")
 
 ordered = (
     '"QS3DCURTAINP10PROGRESSLOAD"',
