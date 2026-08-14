@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
             SupportedRetainsTrustedProjectionAndRelations();
             UnmappedRetainsExternalEvidenceWithoutQs3dIdentity();
             LossyStateCannotMasqueradeAsLossless();
+            AmbiguousQuantityEvidenceCannotMasqueradeAsLossless();
             RejectsInvalidStateAndIdentityContracts();
             CanonicalizesResultSetOrderingAndCoalescesDuplicates();
         }
@@ -27,6 +28,7 @@ namespace QS3D.Core.SmokeTests
 
             Require(result.State == IfcRoundTripResultState.Supported, "Supported IFC result lost its state.");
             Require(result.HasTrustedQs3dIdentity, "Supported IFC result lost its trusted QS3D identity relation.");
+            Require(!result.HasAmbiguousQuantityEvidence, "Ordinary supported IFC result invented ambiguous quantity evidence.");
             Require(result.IsLosslessSupported, "Supported IFC result was not reported as lossless supported.");
             Require(ReferenceEquals(result.Projection, projection), "Supported IFC result replaced its canonical projection.");
             Require(result.ClassificationIdentity == "class:beam", "Supported IFC result lost classification identity.");
@@ -45,6 +47,8 @@ namespace QS3D.Core.SmokeTests
 
             Require(result.State == IfcRoundTripResultState.Unmapped, "Unknown external object did not remain explicitly unmapped.");
             Require(!result.HasTrustedQs3dIdentity, "Unmapped external object fabricated a trusted QS3D identity.");
+            Require(!result.HasAmbiguousQuantityEvidence, "Unmapped external object invented ambiguous quantity evidence.");
+            Require(!result.IsLosslessSupported, "Unmapped external object was reported as lossless supported.");
             Require(result.Projection == null, "Unmapped external object fabricated a canonical QS3D projection.");
             Require(result.ClassificationIdentity == "external:unknown-class", "Unmapped external object lost supported classification evidence.");
             Require(result.MappingRelationIdentity == null, "Unmapped external object invented a mapping relation.");
@@ -74,6 +78,46 @@ namespace QS3D.Core.SmokeTests
                 IfcRoundTripResultState.Supported,
                 projection,
                 stateDetail: "Unexpected loss detail"));
+        }
+
+        private static void AmbiguousQuantityEvidenceCannotMasqueradeAsLossless()
+        {
+            var projection = new IfcRoundTripProjection(
+                "BEAM-AMBIGUOUS",
+                "ifc-beam-ambiguous",
+                "IfcBeam",
+                new[] { new IfcRoundTripNumericProperty("Length", 5d, "m") },
+                5d,
+                "m",
+                new[] { "source:smoke" },
+                new[]
+                {
+                    new IfcRoundTripQuantityEvidence(
+                        "Length",
+                        5d,
+                        "m",
+                        "ifc-qto-length",
+                        "source:qto"),
+                    new IfcRoundTripQuantityEvidence(
+                        "Length",
+                        5.25d,
+                        "m",
+                        "ifc-qto-length",
+                        "source:qto")
+                });
+
+            var result = new IfcRoundTripExchangeResult(
+                "ifc-beam-ambiguous",
+                IfcRoundTripResultState.Supported,
+                projection);
+
+            Require(result.State == IfcRoundTripResultState.Supported, "Ambiguous quantity evidence unexpectedly changed the declared supported state.");
+            Require(result.HasTrustedQs3dIdentity, "Ambiguous quantity evidence removed the trusted QS3D identity relation.");
+            Require(result.HasAmbiguousQuantityEvidence, "IFC exchange result hid ambiguous quantity evidence.");
+            Require(!result.IsLosslessSupported, "Ambiguous IFC quantity evidence masqueraded as lossless supported.");
+            Require(ReferenceEquals(result.Projection, projection), "IFC exchange result replaced the ambiguous canonical projection.");
+            Require(result.Projection!.QuantityEvidence.Groups.Count == 1, "Ambiguous IFC quantity evidence lost its canonical group.");
+            Require(result.Projection.QuantityEvidence.Groups[0].Candidates.Count == 2, "Ambiguous IFC quantity evidence silently discarded a conflicting candidate.");
         }
 
         private static void RejectsInvalidStateAndIdentityContracts()
@@ -121,6 +165,7 @@ namespace QS3D.Core.SmokeTests
                 classificationIdentity: "external:IfcProxy");
             Require(unsupported.State == IfcRoundTripResultState.Unsupported, "Unsupported external object did not remain explicit.");
             Require(!unsupported.HasTrustedQs3dIdentity, "Unsupported external object fabricated QS3D identity.");
+            Require(!unsupported.IsLosslessSupported, "Unsupported external object was reported as lossless supported.");
 
             var invalid = new IfcRoundTripExchangeResult(
                 "ifc-ambiguous-01",
@@ -128,6 +173,7 @@ namespace QS3D.Core.SmokeTests
                 null,
                 stateDetail: "Duplicate external identity");
             Require(invalid.State == IfcRoundTripResultState.InvalidOrAmbiguous, "Ambiguous external identity did not remain explicit.");
+            Require(!invalid.IsLosslessSupported, "Invalid or ambiguous IFC result was reported as lossless supported.");
         }
 
         private static void CanonicalizesResultSetOrderingAndCoalescesDuplicates()
@@ -182,6 +228,7 @@ namespace QS3D.Core.SmokeTests
             Require(forwardAmbiguous.StateDetail == IfcRoundTripExchangeResultSet.DuplicateExternalIdentityDetail, "Duplicate ambiguity detail is not canonical.");
             Require(reverseAmbiguous.StateDetail == forwardAmbiguous.StateDetail, "Duplicate ambiguity detail changed with input order.");
             Require(!forwardAmbiguous.HasTrustedQs3dIdentity && forwardAmbiguous.Projection == null, "Ambiguous duplicate retained a trusted QS3D projection.");
+            Require(!forwardAmbiguous.IsLosslessSupported, "Ambiguous duplicate external identity was reported as lossless supported.");
             Require(forwardAmbiguous.ClassificationIdentity == null, "Ambiguous duplicate selected conflicting classification evidence.");
             Require(forwardAmbiguous.MappingRelationIdentity == null, "Ambiguous duplicate retained a mapping relation.");
             Require(forwardAmbiguous.CostItemRelationIdentity == null, "Ambiguous duplicate retained a cost relation.");
