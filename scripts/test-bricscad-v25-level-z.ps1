@@ -145,11 +145,13 @@ New-Item -ItemType Directory -Force -Path $ArtifactDir | Out-Null
 $resultPath = Join-Path $ArtifactDir "level-z-runtime-result.txt"
 $scriptPath = Join-Path $ArtifactDir "level-z-runtime.scr"
 $metadataPath = Join-Path $ArtifactDir "level-z-runtime-metadata.json"
-foreach ($output in @($resultPath, $scriptPath, $metadataPath)) {
+$drawingBackupPath = Join-Path $ArtifactDir "level-z-original.dwg"
+foreach ($output in @($resultPath, $scriptPath, $metadataPath, $drawingBackupPath)) {
     if (Test-Path -LiteralPath $output) { throw "Level Z runtime output must not already exist: $output" }
 }
 
 $drawingHashBefore = (Get-FileHash -LiteralPath $DrawingCopy -Algorithm SHA256).Hash.ToUpperInvariant()
+Copy-Item -LiteralPath $DrawingCopy -Destination $drawingBackupPath -ErrorAction Stop
 $pluginHash = (Get-FileHash -LiteralPath $PluginDll -Algorithm SHA256).Hash.ToUpperInvariant()
 $nonce = [Guid]::NewGuid().ToString("N")
 $oldResult = [Environment]::GetEnvironmentVariable("QS3D_LEVEL_Z_RESULT", "Process")
@@ -270,6 +272,20 @@ finally {
     Stop-Qs3dLevelProcess -Process $process
     if (Test-Path -LiteralPath $scriptPath -PathType Leaf) {
         Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue
+    }
+    foreach ($privatePath in @(
+        $projectSidecar,
+        ($projectSidecar + ".bak"),
+        [IO.Path]::ChangeExtension($DrawingCopy, ".dwl"),
+        [IO.Path]::ChangeExtension($DrawingCopy, ".dwl2")
+    )) {
+        if (Test-Path -LiteralPath $privatePath -PathType Leaf) {
+            Remove-Item -LiteralPath $privatePath -Force -ErrorAction SilentlyContinue
+        }
+    }
+    if (Test-Path -LiteralPath $drawingBackupPath -PathType Leaf) {
+        Copy-Item -LiteralPath $drawingBackupPath -Destination $DrawingCopy -Force -ErrorAction Stop
+        Remove-Item -LiteralPath $drawingBackupPath -Force -ErrorAction SilentlyContinue
     }
     Restore-EnvironmentValue -Name "QS3D_LEVEL_Z_RESULT" -Value $oldResult
     Restore-EnvironmentValue -Name "QS3D_LEVEL_Z_NONCE" -Value $oldNonce

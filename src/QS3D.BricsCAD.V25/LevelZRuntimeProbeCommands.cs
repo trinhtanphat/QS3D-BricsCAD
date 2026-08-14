@@ -67,6 +67,9 @@ namespace QS3D.BricsCAD.V25
 
             var failureCode = "LEVEL_Z_RUNTIME_CONTEXT_FAILED";
             ZRange? observedLegacyRange = null;
+            ZRange? observedGlassRange = null;
+            ZRange? observedFrameRange = null;
+            ZRange? observedPanelRange = null;
             try
             {
                 var nonce = Environment.GetEnvironmentVariable(NonceVariable) ?? string.Empty;
@@ -154,6 +157,7 @@ namespace QS3D.BricsCAD.V25
                 var boundedRange = ReadZRange(document, Handles(boundedWall, "GeneratedSolidHandle"), "bounded wall");
                 var beamRange = ReadZRange(document, Handles(beam, "GeneratedSolidHandle"), "Beam");
                 var glassRange = ReadZRange(document, Handles(glassWall, "GeneratedSolidHandle"), "GlassWall");
+                observedGlassRange = glassRange;
                 RequireNear(1.2d, legacyRange.MinimumM, "legacy wall bottom");
                 RequireNear(3.7d, legacyRange.MaximumM, "legacy wall top");
                 RequireNear(3.1d, boundedRange.MinimumM, "bounded wall bottom");
@@ -180,6 +184,8 @@ namespace QS3D.BricsCAD.V25
                 failureCode = "LEVEL_Z_RUNTIME_CURTAIN_RANGE_FAILED";
                 var frameRange = ReadZRange(document, Handles(glassWall, "GeneratedCurtainFrameHandles"), "Curtain frames");
                 var panelRange = ReadZRange(document, Handles(glassWall, "GeneratedCurtainPanelHandles"), "Curtain panels");
+                observedFrameRange = frameRange;
+                observedPanelRange = panelRange;
                 RequireContained(frameRange, glassRange, "Curtain frame Z");
                 RequireContained(panelRange, glassRange, "Curtain panel Z");
                 failureCode = "LEVEL_Z_RUNTIME_CURTAIN_MODE_FAILED";
@@ -265,7 +271,13 @@ namespace QS3D.BricsCAD.V25
             }
             catch (System.Exception)
             {
-                TryWriteFailure(requestedPath, failureCode, observedLegacyRange);
+                TryWriteFailure(
+                    requestedPath,
+                    failureCode,
+                    observedLegacyRange,
+                    observedGlassRange,
+                    observedFrameRange,
+                    observedPanelRange);
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
                     "\nQS3D Level Z runtime probe FAIL. See the local qualification marker.");
             }
@@ -477,7 +489,13 @@ namespace QS3D.BricsCAD.V25
             return fullPath;
         }
 
-        private static void TryWriteFailure(string? requestedPath, string failureCode, ZRange? observedLegacyRange)
+        private static void TryWriteFailure(
+            string? requestedPath,
+            string failureCode,
+            ZRange? observedLegacyRange,
+            ZRange? observedGlassRange,
+            ZRange? observedFrameRange,
+            ZRange? observedPanelRange)
         {
             try
             {
@@ -495,10 +513,20 @@ namespace QS3D.BricsCAD.V25
                         lines.Add("observed_legacy_min_z_m=" + Number(observedLegacyRange.MinimumM));
                         lines.Add("observed_legacy_max_z_m=" + Number(observedLegacyRange.MaximumM));
                     }
+                    AddObservedRange(lines, "glass", observedGlassRange);
+                    AddObservedRange(lines, "frame", observedFrameRange);
+                    AddObservedRange(lines, "panel", observedPanelRange);
                     WriteMarkerAtomic(normalized, lines);
                 }
             }
             catch { }
+        }
+
+        private static void AddObservedRange(List<string> lines, string prefix, ZRange? range)
+        {
+            if (range == null) return;
+            lines.Add("observed_" + prefix + "_min_z_m=" + Number(range.MinimumM));
+            lines.Add("observed_" + prefix + "_max_z_m=" + Number(range.MaximumM));
         }
 
         private static void WriteMarkerAtomic(string resultPath, IEnumerable<string> lines)
