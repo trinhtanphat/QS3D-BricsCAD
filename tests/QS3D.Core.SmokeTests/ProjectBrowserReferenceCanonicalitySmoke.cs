@@ -23,33 +23,31 @@ namespace QS3D.Core.SmokeTests
 
             element.FloorId = "f1";
             element.ZoneId = "z1";
-            ProjectBrowserPlanner.Build(project, ProjectBrowserGrouping.FloorThenCategory);
-            ProjectBrowserPlanner.Build(project, ProjectBrowserGrouping.ZoneThenCategory);
+            var caseFloorTree = ProjectBrowserPlanner.Build(project, ProjectBrowserGrouping.FloorThenCategory);
+            var caseZoneTree = ProjectBrowserPlanner.Build(project, ProjectBrowserGrouping.ZoneThenCategory);
+            Equal("Level 1", caseFloorTree.Children[0].DisplayName, "case-insensitive floor grouping");
+            Equal("Zone 1", caseZoneTree.Children[0].DisplayName, "case-insensitive zone grouping");
 
             element.FloorId = " F1 ";
             element.ZoneId = "Z1";
-            Throws<InvalidOperationException>(() => ProjectBrowserPlanner.Build(project, ProjectBrowserGrouping.FloorThenCategory), "padded floor reference");
+            Equal("F1", element.FloorId, "padded floor setter normalization");
+            Equal("Level 1", ProjectBrowserPlanner.Build(project, ProjectBrowserGrouping.FloorThenCategory).Children[0].DisplayName, "padded floor normalized grouping");
 
             element.FloorId = "F1";
             element.ZoneId = " Z1 ";
-            Throws<InvalidOperationException>(() => ProjectBrowserPlanner.Build(project, ProjectBrowserGrouping.ZoneThenCategory), "padded zone reference");
+            Equal("Z1", element.ZoneId, "padded zone setter normalization");
+            Equal("Zone 1", ProjectBrowserPlanner.Build(project, ProjectBrowserGrouping.ZoneThenCategory).Children[0].DisplayName, "padded zone normalized grouping");
 
             element.FloorId = "   ";
             element.ZoneId = "Z1";
-            Throws<InvalidOperationException>(() => ProjectBrowserPlanner.Build(project, ProjectBrowserGrouping.Category), "whitespace-only floor reference");
+            Equal(string.Empty, element.FloorId, "whitespace-only floor setter normalization");
+            Equal("(No Floor)", ProjectBrowserPlanner.Build(project, ProjectBrowserGrouping.FloorThenCategory).Children[0].DisplayName, "unassigned floor grouping");
         }
 
         private static void Equal<T>(T expected, T actual, string label)
         {
             if (!Equals(expected, actual))
                 throw new Exception("ProjectBrowserReferenceCanonicalitySmoke " + label + ": expected=" + expected + ", actual=" + actual + ".");
-        }
-
-        private static void Throws<TException>(Action action, string label) where TException : Exception
-        {
-            try { action(); }
-            catch (TException) { return; }
-            throw new Exception("ProjectBrowserReferenceCanonicalitySmoke " + label + ": expected " + typeof(TException).Name + ".");
         }
     }
 }
