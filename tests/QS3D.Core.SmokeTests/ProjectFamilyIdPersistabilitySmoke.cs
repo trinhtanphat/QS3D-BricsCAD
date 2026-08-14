@@ -16,17 +16,17 @@ namespace QS3D.Core.SmokeTests
 
         private static void CanonicalAndPaddedIdsRemainSupported()
         {
-            var canonical = new ProjectFamily("FAM-001", "Wall Type", ElementCategory.Wall);
+            var canonical = new ProjectFamily("FAM-001", "Wall Type", ElementCategory.ArchitecturalWall);
             Equal("FAM-001", canonical.Id);
 
-            var padded = new ProjectFamily("  FAM-002  ", "Wall Type", ElementCategory.Wall);
+            var padded = new ProjectFamily("  FAM-002  ", "Wall Type", ElementCategory.ArchitecturalWall);
             Equal("FAM-002", padded.Id);
         }
 
         private static void ControlCharacterIdsFailAtConstruction()
         {
             Throws<ArgumentException>(() =>
-                new ProjectFamily("FAM\u0001-003", "Wall Type", ElementCategory.Wall));
+                new ProjectFamily("FAM\u0001-003", "Wall Type", ElementCategory.ArchitecturalWall));
         }
 
         private static void Throws<T>(Action action) where T : Exception
