@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
@@ -179,6 +180,7 @@ namespace QS3D.Core.Persistence
                     {
                         ValidateElement(quantity, "q", new[] { "name", "value" }, Array.Empty<string>());
                         ValidateRequiredCanonicalAttribute(quantity, "name", "quantity name");
+                        ValidateNonNegativeQuantityValue(quantity, element.Attribute("id")?.Value ?? string.Empty);
                     }
                 }
             }
@@ -271,6 +273,17 @@ namespace QS3D.Core.Persistence
                 throw new InvalidDataException("QSDB " + owner + " must not be empty.");
             if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
                 throw new InvalidDataException("QSDB " + owner + " must not contain leading/trailing whitespace.");
+        }
+
+        private static void ValidateNonNegativeQuantityValue(XElement quantity, string elementId)
+        {
+            var raw = quantity.Attribute("value")?.Value;
+            if (raw == null || !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)) return;
+            if (value < 0d)
+            {
+                var quantityName = quantity.Attribute("name")?.Value ?? string.Empty;
+                throw new InvalidDataException("QSDB element quantity must not be negative: " + elementId + "/" + quantityName + ".");
+            }
         }
 
         private static void ValidateElement(

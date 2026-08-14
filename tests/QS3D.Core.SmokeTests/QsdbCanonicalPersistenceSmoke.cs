@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             PaddedMapKeyFailsOnLoad();
             PaddedQuantityNameFailsBeforePersistence();
             DuplicateQuantityNameFailsOnLoad();
+            NegativeQuantityFailsClosed();
             NonCanonicalHandleAndDependencyFailBeforePersistence();
             NullAuditEventFailsClosed();
             NonUtcTimestampFailsBeforePersistence();
@@ -106,6 +107,54 @@ namespace QS3D.Core.SmokeTests
                 try { store.Load(path); }
                 catch (InvalidDataException) { rejected = true; }
                 if (!rejected) throw new Exception("Duplicate persisted element quantity name was silently overwritten while loading QSDB: " + duplicateName);
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+                try { if (File.Exists(path + ".bak")) File.Delete(path + ".bak"); } catch { }
+            }
+        }
+
+        private static void NegativeQuantityFailsClosed()
+        {
+            var rejectedProject = NewProject("negative-quantity-save");
+            var rejectedElement = AddElement(rejectedProject);
+            rejectedElement.Quantities["AreaM2"] = -1d;
+            RejectSave(rejectedProject, "Negative element quantity was published through direct dictionary mutation.");
+
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-negative-quantity-fallback-" + Guid.NewGuid().ToString("N") + ".qsdb");
+            try
+            {
+                var project = NewProject("negative-quantity-fallback");
+                var element = AddElement(project);
+                element.SetQuantity("AreaM2", 0d);
+                var store = new QsdbProjectStore();
+                store.Save(project, path);
+
+                element.SetQuantity("AreaM2", 2d);
+                store.Save(project, path);
+                if (!File.Exists(path + ".bak"))
+                    throw new Exception("QSDB backup fixture was not created before negative-quantity tampering.");
+
+                var positive = store.Load(path);
+                if (positive.Elements.Count != 1 || positive.Elements[0].Quantities["AreaM2"] != 2d)
+                    throw new Exception("Positive element quantity did not roundtrip before negative-quantity tampering.");
+
+                var document = XDocument.Load(path, LoadOptions.None);
+                var persistedQuantity = document.Root?.Element("elements")?.Element("element")?.Element("quantities")?.Element("q")
+                    ?? throw new Exception("Serialized QSDB quantity fixture was not found for negative-value tampering.");
+                persistedQuantity.SetAttributeValue("value", "-1");
+                document.Save(path, SaveOptions.DisableFormatting);
+
+                var recovered = store.LoadWithBackupFallback(path);
+                if (!recovered.RecoveredFromBackup)
+                    throw new Exception("Negative persisted element quantity bypassed QSDB backup recovery.");
+                if (!string.Equals(recovered.SourcePath, Path.GetFullPath(path + ".bak"), StringComparison.OrdinalIgnoreCase))
+                    throw new Exception("Negative persisted element quantity recovered from an unexpected QSDB source.");
+                if (recovered.Project.Elements.Count != 1 || recovered.Project.Elements[0].Quantities["AreaM2"] != 0d)
+                    throw new Exception("Zero element quantity did not roundtrip from the validated QSDB backup.");
+                if (string.IsNullOrWhiteSpace(recovered.PrimaryFailureMessage))
+                    throw new Exception("QSDB backup recovery did not retain the primary negative-quantity validation failure.");
             }
             finally
             {
