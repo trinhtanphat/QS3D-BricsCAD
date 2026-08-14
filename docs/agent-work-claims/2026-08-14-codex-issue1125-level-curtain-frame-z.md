@@ -1,6 +1,7 @@
 # Work claim — Level-resolved Curtain frame Z placement
 
-- Status: `COMPLETED / SOURCE_FIXED / PENDING_LOCAL`
+- Status: `ACTIVE`
+- Phase: `REBAR_SOURCE_FIX`
 - Agent: `codex-issue1125-level-curtain-frame-z-20260814` (`/root/fix_level_curtain_frame_z`, remote-safe source lane delegated by `/root`)
 - Registered: `2026-08-14T12:17:22+07:00`
 - Baseline main SHA: `8480fdfb8bfb26bb5195a07e179579f3c6dbff52`
@@ -58,3 +59,34 @@ At candidate time the claim remained `ACTIVE / SOURCE_READY / PENDING_MERGE`. No
 - Focused Level/Curtain placement, opening, path, noninteractive, ownership, Health and native-panel gates passed; Core Release built with zero warnings/errors; Core smoke returned `ALL PASS`; installed-reference BricsCAD V25 `Release|x64` compiled with zero warnings/errors.
 - Aggregate preflight discovered 787 gates and retained four pre-existing frame/orchestration isolation failures caused by stale two-argument builder start tokens after issue `#1106`; this correction did not edit those unrelated gates.
 - GitHub Actions and BricsCAD runtime were not run. Issue `#1125` remains `OPEN / PENDING_LOCAL`, and the parent LOCAL-003 owner must rerun the guarded Level matrix on exact SHA `8676b6a8430062931356be7dca3bace268ca233d` before any `LOCAL_PASS` or issue closure.
+
+## Reactivation — Level-driven rebar placement
+
+- Reactivated: `2026-08-14T12:37:46+07:00`
+- Successor baseline main SHA: `97ba91295b1c5f4c61888b876502aaa878a3e536`
+- Trigger: the licensed LOCAL-003 rerun on exact source SHA `8676b6a8430062931356be7dca3bace268ca233d` verified legacy `1.2 m .. 3.7 m`, GlassWall host `3 m .. 7 m`, Curtain frames `3 m .. 7 m`, and Curtain panels `3.05 m .. 6.95 m`, then advanced to sanitized `LEVEL_Z_RUNTIME_REBAR_FAILED` with complete cleanup.
+
+### Reserved successor scope
+
+Diagnose and correct only the production generated-rebar/native-mesh vertical placement that diverges from the already-resolved Level host. Preserve legacy/no-Level placement, existing rebar/fabrication topology, counts, ownership, semantic snapshots, transactions and fail-closed invalid-Level behavior.
+
+Expected implementation surfaces, narrowed to the actually implicated builder(s) after post-claim source/probe audit:
+
+- `src/QS3D.BricsCAD.V25/Cad/BeamRebarSolidBuilder.cs`
+- `src/QS3D.BricsCAD.V25/Cad/ColumnRebarSolidBuilder.cs`
+- `src/QS3D.BricsCAD.V25/Cad/BeamStirrupSolidBuilder.cs`
+- `src/QS3D.BricsCAD.V25/Cad/ColumnTieSolidBuilder.cs`
+- `src/QS3D.BricsCAD.V25/Cad/SlabMeshSolidBuilder.cs`
+- `src/QS3D.BricsCAD.V25/Cad/FoundationMeshSolidBuilder.cs`
+- `src/QS3D.BricsCAD.V25/Cad/StructuralWallMeshSolidBuilder.cs`
+- `src/QS3D.BricsCAD.V25/Cad/ShapeRebarSolidBuilder.cs`
+- `scripts/preflight-level-rebar-placement.py` and focused CAD-independent smoke only if the existing gate cannot lock the corrected production handoff
+- this claim file for source completion and exact merged rerun SHA
+
+### Successor exclusions and validation
+
+Do not edit the Level runtime probe/runner/gate, LOCAL-003 execution docs/inbox, Curtain builders, host placement, Level resolver/UI, private data, GitHub Actions, V26, release or packaging. Run focused Level/Rebar gates, Core Release smoke and installed-reference V25 `Release|x64` compile without launching BricsCAD. Merge the smallest correction, record the exact production SHA on issue `#1125`, then return the licensed rerun to the parent LOCAL-003 owner. Source evidence cannot claim `LOCAL_PASS`.
+
+### Coordination
+
+Parent task `/root` explicitly delegated this CAD-independent successor to `/root/fix_level_curtain_frame_z`. The parent LOCAL-003 claim retains the runner/probe, exact-SHA licensed execution, cleanup and final status, and will not concurrently edit the reserved rebar placement surfaces while this reactivated claim is `ACTIVE`.
