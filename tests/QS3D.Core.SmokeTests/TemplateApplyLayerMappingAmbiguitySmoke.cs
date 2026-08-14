@@ -14,7 +14,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("P-TEMPLATE-MAPPING-AMBIGUITY", "Template mapping ambiguity");
             project.Metadata[TemplateProfileStore.LayerMappingPrefix + "A-WALL"] = ElementCategory.ArchitecturalWall.ToString();
-            project.Metadata[TemplateProfileStore.LayerMappingPrefix + " A-WALL "] = ElementCategory.ArchitecturalWall.ToString();
+            project.Metadata[TemplateProfileStore.LayerMappingPrefix + "A WALL"] = ElementCategory.ArchitecturalWall.ToString();
 
             var beforeVersion = project.ChangeVersion;
             var beforeAuditCount = project.AuditEvents.Count;
@@ -37,7 +37,7 @@ namespace QS3D.Core.SmokeTests
             if (project.AuditEvents.Count != beforeAuditCount)
                 throw new Exception("Template mapping ambiguity preflight must fail before audit history mutation.");
             if (!project.Metadata.ContainsKey(TemplateProfileStore.LayerMappingPrefix + "A-WALL") ||
-                !project.Metadata.ContainsKey(TemplateProfileStore.LayerMappingPrefix + " A-WALL "))
+                !project.Metadata.ContainsKey(TemplateProfileStore.LayerMappingPrefix + "A WALL"))
                 throw new Exception("Template mapping ambiguity preflight must not rewrite persisted project mappings.");
         }
     }
