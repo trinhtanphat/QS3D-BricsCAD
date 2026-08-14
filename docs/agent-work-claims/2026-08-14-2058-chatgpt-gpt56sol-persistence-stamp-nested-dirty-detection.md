@@ -5,7 +5,10 @@
 - Registered: `2026-08-14T20:58:00+07:00`
 - Baseline main SHA: `b7ca334e862d39f420496ffbab4a2a2279e493ab`
 - Implementation branch: `agent/chatgpt-gpt56sol/persistence-stamp-nested-dirty-detection`
+- Implementation commits: `2afa907cca0ebfd82cf5ae04d59df1dfb505781c`, `b27315960b3d538f6ad7edbbc2bef8a05201a0b6`, `2e0737e76b1bda67e174afd37d88528951af31fd`
 - Integration batch: `integration/20260814-core-persistence-data-model-100`
+- Integration commit: `cd598ca8b58e4b0b4019928e286274477c5a3aa5`
+- Integration PR: `#1344`
 - Priority: close a verified Core/persistence dirty-state correctness gap for the owner-requested Core / persistence / data-model hardening
 
 ## Reserved scope
@@ -38,6 +41,8 @@ Make `ProjectPersistenceStamp` detect direct mutations of persisted nested Core 
 ## Coordination
 
 At registration time, recent Core lanes for `ProjectElement` constructor relation canonicality and QSDB negative quantity persistence integrity had already landed/closed. This claim deliberately avoids their source ownership. A repository search at baseline found no existing claim or implementation lane owning `ProjectPersistenceStamp` nested dirty detection.
+
+Implementation branch was squash-integrated through PR #1344 as `cd598ca8b58e4b0b4019928e286274477c5a3aa5`. The claim remains `ACTIVE` until the refreshed integration candidate is validated and the final main landing is verified.
 
 ## Completion condition
 
