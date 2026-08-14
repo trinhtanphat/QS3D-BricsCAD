@@ -20,7 +20,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("P-TEMPLATE-EXPORT-AMBIGUITY", "Template export ambiguity");
             project.Metadata[TemplateProfileStore.LayerMappingPrefix + "A-WALL"] = ElementCategory.ArchitecturalWall.ToString();
-            project.Metadata[TemplateProfileStore.LayerMappingPrefix + " A-WALL "] = ElementCategory.ArchitecturalWall.ToString();
+            project.Metadata[TemplateProfileStore.LayerMappingPrefix + "A WALL"] = ElementCategory.ArchitecturalWall.ToString();
             var beforeVersion = project.ChangeVersion;
             var beforeAuditCount = project.AuditEvents.Count;
 
