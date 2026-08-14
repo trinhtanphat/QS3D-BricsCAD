@@ -4,6 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMAND = ROOT / "src/QS3D.BricsCAD.V25/SourceReconcileRuntimeProbeCommands.cs"
+MARKER_PROBE = ROOT / "src/QS3D.BricsCAD.V25/SourceReconcilePostUndoMarkerProbeCommands.cs"
 RUNNER = ROOT / "scripts/test-bricscad-v25-source-reconcile.ps1"
 HELPER = ROOT / "scripts/bricscad-runner-window-interop.ps1"
 SOURCE_COMMAND = ROOT / "src/QS3D.BricsCAD.V25/SourceReconcileCommands.cs"
@@ -11,9 +12,10 @@ SOURCE_SERVICE = ROOT / "src/QS3D.BricsCAD.V25/Services/SourceReconcileService.c
 RUNBOOK = ROOT / "docs/SOURCE-RECONCILE-GENERATED-OUTPUTS.md"
 INBOX = ROOT / "docs/LOCAL-AGENT-INBOX.md"
 CLAIM = ROOT / "docs/agent-work-claims/2026-08-13-codex-local004-source-reconcile-runtime.md"
+DISCRIMINATOR_CLAIM = ROOT / "docs/agent-work-claims/2026-08-14-gpt56sol-issue1005-post-undo-marker-discriminator.md"
 errors = []
 
-for path in (COMMAND, RUNNER, HELPER, SOURCE_COMMAND, SOURCE_SERVICE, RUNBOOK, INBOX, CLAIM):
+for path in (COMMAND, MARKER_PROBE, RUNNER, HELPER, SOURCE_COMMAND, SOURCE_SERVICE, RUNBOOK, INBOX, CLAIM, DISCRIMINATOR_CLAIM):
     if not path.is_file():
         errors.append("missing LOCAL-004 Source Reconcile file: " + str(path.relative_to(ROOT)))
 
@@ -96,6 +98,41 @@ if COMMAND.is_file():
         if forbidden in failure:
             errors.append("LOCAL-004 failure marker exposes exception detail: " + forbidden)
 
+if MARKER_PROBE.is_file():
+    text = MARKER_PROBE.read_text(encoding="utf-8")
+    required = (
+        'CommandMethod("QS3DSRTMARKERBEFOREFINAL", CommandFlags.Modal)',
+        'CommandMethod("QS3DSRTMARKERAFTERFINAL", CommandFlags.Modal)',
+        'CommandMethod("QS3DSRTMARKERAFTERUNDO", CommandFlags.Modal)',
+        'CommandMethod("QS3DSRTMARKERAFTERREDO", CommandFlags.Modal)',
+        'CommandMethod("QS3DSRTMARKERPUBLISH", CommandFlags.Modal)',
+        'SourceReconcileUndoCoordinator.CaptureSanitizedState(context.Document, context.Project)',
+        'current.CompareMarkerTo(state.PreFinal)',
+        'current.CompareMarkerTo(postFinal)',
+        '"post_undo_marker_vs_pre_final_state="',
+        '"post_undo_marker_vs_post_final_state="',
+        '"post_redo_marker_vs_pre_final_state="',
+        '"post_redo_marker_vs_post_final_state="',
+        '"ADVANCED"',
+        '"UNCHANGED"',
+        '"MISSING_OR_INVALID"',
+        'FileMode.CreateNew',
+        'File.Replace(temp, path, null)',
+        'QS3D_SOURCE_RECONCILE_PHASE_RESULT',
+        'QS3D_SOURCE_RECONCILE_NONCE',
+        'qualification_boundary=LOCAL_004_ONLY',
+    )
+    for token in required:
+        if token not in text:
+            errors.append("LOCAL-004 post-Undo marker discriminator missing contract token: " + token)
+    lower = text.lower()
+    for forbidden in (
+        'native_revision=', 'revision_token=', 'project_id=', 'drawing_path=', 'handle=',
+        '.message', '.stacktrace', '.innerexception', 'sourcereconcileundocoordinator.readrevision',
+    ):
+        if forbidden in lower:
+            errors.append("LOCAL-004 post-Undo marker discriminator leaks/bypasses private marker state: " + forbidden)
+
 if RUNNER.is_file():
     text = RUNNER.read_text(encoding="utf-8")
     required = (
@@ -124,17 +161,28 @@ if RUNNER.is_file():
         '"QS3DSRTPREPGENERATED", "QS3DSYNCSOURCE", "QS3DSRTCHECKGENERATED"',
         '"QS3DSRTPREPAMBIGUOUS", "QS3DSYNCSOURCE", "QS3DSRTCHECKAMBIGUOUS"',
         '"_.OPEN", (\'"\' + $drawingB + \'"\')',
-        '"_.UNDO", "1", "QS3DSRTCHECKUNDO", "_.REDO", "QS3DSRTCHECKREDO"',
+        '"QS3DSRTMARKERBEFOREFINAL"',
+        '"QS3DSRTMARKERAFTERFINAL"',
+        '"QS3DSRTMARKERAFTERUNDO"',
+        '"QS3DSRTMARKERAFTERREDO"',
+        '"QS3DSRTMARKERPUBLISH"',
+        '"_.UNDO", "1", "QS3DSRTCHECKUNDO", "QS3DSRTMARKERAFTERUNDO", "_.REDO", "QS3DSRTCHECKREDO", "QS3DSRTMARKERAFTERREDO"',
         '"QS3DSAVE", "_.QSAVE"',
         'QS3D_SOURCE_RECONCILE_RUNTIME_V1',
         'LOCAL_004_ONLY',
         'NATIVE_UNDO_SEMANTIC_DIVERGENCE',
         'Require-FinalReconcileDiagnostics',
+        'Require-PostUndoMarkerDiagnostics',
+        'post_undo_marker_vs_pre_final_state',
+        'post_undo_marker_vs_post_final_state',
+        'post_redo_marker_vs_pre_final_state',
+        'post_redo_marker_vs_post_final_state',
         '@("BOTH_SOURCES", "LINE_ONLY", "POLY_ONLY", "OTHER_OR_MISSING")',
         '@("REMOVED_ALL", "RETAINED_ALL", "PARTIAL")',
         '@("ADVANCED", "UNCHANGED", "MISSING_OR_INVALID")',
         '@("NONE", "SYNCED", "MARKER_MISMATCH", "DESYNCHRONIZED")',
         '@("ONE", "MULTIPLE")',
+        'phase_marker = $phaseMarker',
         'function Find-Qs3dHandoffProcess',
         'function Wait-Qs3dHandoffProcess',
         'function Stop-Qs3dLateHandoffProcesses',
@@ -160,9 +208,10 @@ if RUNNER.is_file():
         '"QS3DSRTPREPGENERATED"', '"QS3DSRTCHECKGENERATED"',
         '"QS3DSRTPREPAMBIGUOUS"', '"QS3DSRTCHECKAMBIGUOUS"',
         '"_.OPEN"', '"QS3DSRTSEEDB"', '"QS3DSRTCHECKB"',
-        '"QS3DSRTSELECTSOURCES"', '"QS3DSRTAFTERFINALSYNC"',
-        '"_.UNDO"', '"QS3DSRTCHECKUNDO"', '"_.REDO"', '"QS3DSRTCHECKREDO"',
-        '"QS3DSRTFINALREBUILD"', '"QS3DSRTSESSION1"', '"QS3DSAVE"', '"_.QSAVE"',
+        '"QS3DSRTMARKERBEFOREFINAL"', '"QS3DSRTSELECTSOURCES"', '"QS3DSRTAFTERFINALSYNC"', '"QS3DSRTMARKERAFTERFINAL"',
+        '"_.UNDO"', '"QS3DSRTCHECKUNDO"', '"QS3DSRTMARKERAFTERUNDO"',
+        '"_.REDO"', '"QS3DSRTCHECKREDO"', '"QS3DSRTMARKERAFTERREDO"',
+        '"QS3DSRTFINALREBUILD"', '"QS3DSRTSESSION1"', '"QS3DSRTMARKERPUBLISH"', '"QS3DSAVE"', '"_.QSAVE"',
     )
     positions = [text.find(token) for token in ordered]
     if any(position < 0 for position in positions) or positions != sorted(positions):
@@ -199,9 +248,15 @@ if SOURCE_COMMAND.is_file() and SOURCE_SERVICE.is_file():
 
 if CLAIM.is_file():
     text = CLAIM.read_text(encoding="utf-8")
-    for token in ('LOCAL-004', 'Status: `ACTIVE`', 'QS3DSYNCSOURCE', 'Undo/Redo', 'INSUNITS'):
+    for token in ('LOCAL-004', 'Status: `ACTIVE`', 'QS3DSYNCSOURCE', 'Undo/Redo', 'INSUNITS', 'post-Undo marker discriminator split'):
         if token not in text:
             errors.append("LOCAL-004 claim missing coordination token: " + token)
+
+if DISCRIMINATOR_CLAIM.is_file():
+    text = DISCRIMINATOR_CLAIM.read_text(encoding="utf-8")
+    for token in ('LOCAL-004', 'gpt56sol-source-reconcile-desync-agent', 'post-Undo marker discriminator'):
+        if token not in text:
+            errors.append("LOCAL-004 discriminator claim missing coordination token: " + token)
 
 print("QS3D LOCAL-004 Source Reconcile runtime-probe preflight")
 if errors:
@@ -210,4 +265,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: additive LOCAL-004 automation preserves production authoring/reconcile/rebuild/Undo/Save boundaries, covers success plus generated/ambiguous/multi-DWG refusal and post-invalidation unit-mismatch rollback, and enforces exact-SHA/privacy/cleanup without manufacturing licensed runtime evidence.")
+print("PASS: additive LOCAL-004 automation preserves production authoring/reconcile/rebuild/Undo/Save boundaries, captures only bounded post-Undo/post-Redo marker comparisons, covers success plus generated/ambiguous/multi-DWG refusal and post-invalidation unit-mismatch rollback, and enforces exact-SHA/privacy/cleanup without manufacturing licensed runtime evidence.")
