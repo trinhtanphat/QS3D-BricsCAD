@@ -32,6 +32,7 @@ Confirmed screenshot-facing gaps before this batch:
 - VẼ Ribbon did not expose `Theo nét CAD`, `Đường tròn`, `Biên dạng`, `Dốc sàn`, `Cắt sàn`, `Nối góc`, `Nối chữ T` or the four IFC buttons from the screenshots.
 - Existing Line/Rectangle buttons used raw native commands instead of the context-aware QS3D Line/Rectangle implementations.
 - The Workspace category tree had the main categories but not the screenshot's detailed child labels for grids, beams, slabs, canopies, foundations, earthwork and custom quantities.
+- The Workspace footer already showed the active Project / Zone / Floor but did not include the active floor elevation shown in the reference footer.
 
 ## Implementation in this batch
 
@@ -85,6 +86,17 @@ The follow-up fixes that integration boundary without touching `PluginEntry`, pa
 - `EnsureRegistered()` remains idempotent and continues to install a `WorkspacePanel.Loaded` class handler; it does not construct the palette or mutate ProjectState/CAD.
 - The focused preflight now fails if the augmenter becomes orphaned again or if registration drifts from type initialization into an instance/startup side effect.
 
+### Workspace footer elevation parity
+
+The reference footer exposes the active floor together with a meter elevation. QS3D already had a presentation-only live footer for Project / Zone / Floor, so this batch extends that existing surface rather than creating a new status system:
+
+- resolve the active `FloorDefinition` once from the current project context;
+- keep its existing floor name display;
+- read canonical `FloorDefinition.ElevationM` and append `CAO ĐỘ  <value> m`;
+- format with invariant `0.000` precision so output such as `0.000 m`, `3.600 m` or `-0.450 m` is deterministic;
+- render `—` rather than throwing for a missing/non-finite floor value;
+- preserve the existing presentation-only exception boundary and forbid Project/Floor mutation from the footer implementation.
+
 ## Validation strategy
 
 Remote/source-safe checks:
@@ -92,17 +104,18 @@ Remote/source-safe checks:
 1. Static guard asserts the screenshot-critical Home file/settings and VẼ/IFC labels/command mappings stay present.
 2. Static guard asserts native drawing save does not replace the existing `QS3DSAVE` semantic-project persistence path and that `Cài đặt` remains backed by `QS3DPROJECTTOOLS`.
 3. Static guard asserts the reference tree registration is reachable from `WorkspacePanel` type initialization.
-4. Source readback confirms the Ribbon augmenter remains additive and does not touch `RibbonInitializationCoordinator` or startup scheduling.
-5. Source readback confirms the Workspace tree augmenter only mutates visual `TreeViewItem` structure and registration does not construct a palette.
-6. `scripts/preflight-all.py` auto-discovers `preflight-blt-reference-ui-parity.py` through its `preflight-*.py` scan; no aggregator edit is required.
-7. GitHub Actions remain idle unless the owner separately requests CI, per `CI_POLICY.md`.
+4. Focused footer guard requires Project / Zone / Floor plus `FloorDefinition.ElevationM`, invariant `0.000 m` formatting and `CAO ĐỘ`, while rejecting semantic mutation calls/assignments.
+5. Source readback confirms the Ribbon augmenter remains additive and does not touch `RibbonInitializationCoordinator` or startup scheduling.
+6. Source readback confirms the Workspace tree augmenter only mutates visual `TreeViewItem` structure and registration does not construct a palette.
+7. `scripts/preflight-all.py` auto-discovers `preflight-blt-reference-ui-parity.py` and `preflight-workspace-footer-context.py` through its `preflight-*.py` scan; no aggregator edit is required.
+8. GitHub Actions remain idle unless the owner separately requests CI, per `CI_POLICY.md`.
 
 Native/local acceptance still required for a true host UI PASS:
 
 1. Build the exact V25 SHA against licensed BricsCAD V25.
 2. NETLOAD/open QS3D and confirm no regression in the existing-project startup-hang lane.
 3. Confirm KHỞI ĐẦU Open/Save/Save As/Settings and every VẼ/IFC button are visible, clickable, and launch the intended command under the installed BricsCAD edition/license.
-4. Confirm Workspace tree rows render correctly under Windows scaling/dark theme and selection routes to the intended canonical category.
+4. Confirm Workspace tree rows and footer floor/elevation context render correctly under Windows scaling/dark theme without destructive clipping, and selection routes to the intended canonical category.
 5. Confirm native undo/cancel behavior for 3DROTATE/SUBTRACT/FILLET/EXTEND/IMPORT/XREF/IFCEXPORT.
 
 ## Visual fidelity policy
