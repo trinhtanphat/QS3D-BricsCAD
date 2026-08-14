@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 UPDATES = ROOT / "src" / "QS3D.BricsCAD.V25" / "Updates"
 PLUGIN_ENTRY = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
+RUNTIME_DIAGNOSTICS = ROOT / "src" / "QS3D.BricsCAD.V25" / "RuntimeDiagnosticsCommands.cs"
 WORKFLOW = ROOT / ".github" / "workflows" / "release-v25.yml"
 PACKAGE = ROOT / "scripts" / "package-v25.ps1"
 
@@ -33,6 +34,7 @@ def main() -> int:
     commands = read(UPDATES / "UpdateCommands.cs")
     bootstrapper = read(UPDATES / "UpdateBootstrapper.cs")
     plugin_entry = read(PLUGIN_ENTRY)
+    runtime_diagnostics = read(RUNTIME_DIAGNOSTICS)
     workflow = read(WORKFLOW)
     package = read(PACKAGE)
 
@@ -88,11 +90,16 @@ def main() -> int:
         raise AssertionError("BricsCAD/current-process force termination is forbidden")
 
     require(commands, '[CommandMethod("QS3DUPDATE", CommandFlags.Modal)]', "QS3DUPDATE command")
-    require(commands, '[CommandMethod("QS3DVERSION", CommandFlags.Modal)]', "canonical QS3DVERSION command")
+    reject(commands, '[CommandMethod("QS3DVERSION", CommandFlags.Modal)]', "duplicate updater QS3DVERSION command")
     require(commands, '[CommandMethod("QS3DVER", CommandFlags.Modal)]', "QS3DVER compatibility alias")
     require(commands, '[CommandMethod("QSVER", CommandFlags.Modal)]', "QSVER compatibility alias")
-    require(commands, "Assembly ABI version:", "version output labels assembly identity as internal ABI")
-    require(commands, "ToDisplayVersion", "version output strips build metadata from user-facing version")
+    require(commands, "Assembly ABI version:", "version alias output labels assembly identity as internal ABI")
+    require(commands, "ToDisplayVersion", "version alias output strips build metadata from user-facing version")
+    require(runtime_diagnostics, '[CommandMethod("QS3DVERSION", CommandFlags.Modal)]', "canonical QS3DVERSION runtime command")
+    require(runtime_diagnostics, '[CommandMethod("QS3DRUNTIMECHECK", CommandFlags.Modal)]', "deep runtime diagnostic command")
+    require(runtime_diagnostics, "WriteVersionSummary();", "concise QS3DVERSION path")
+    require(runtime_diagnostics, "Run QS3DRUNTIMECHECK for full runtime/package verification.", "deep-check handoff hint")
+    reject(runtime_diagnostics, "public void VersionCheck()\n        {\n            RuntimeCheck();", "QS3DVERSION forwarding to full diagnostic")
 
     require(ui, 'MakeButton("Kiểm tra lại"', "manual refresh button")
     require(ui, 'MakeButton("Cập nhật ngay"', "one-click update button")
