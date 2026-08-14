@@ -89,9 +89,11 @@ def main() -> int:
         "internal static void EnsureRegistered()",
         "typeof(Window)",
         "typeof(UserControl)",
-        "typeof(DataGrid)",
-        "typeof(ListBox)",
-        "typeof(TreeView)",
+        "HasQs3dRootAncestor(root)",
+        "ApplyVirtualizationDefaults(root)",
+        "current is DataGrid",
+        "current is ListBox",
+        "current is TreeView",
         "DependencyPropertyHelper.GetValueSource",
         "BaseValueSource.Default",
         "FrameworkElement.UseLayoutRoundingProperty",
@@ -109,6 +111,13 @@ def main() -> int:
     for token in required_polish_tokens:
         if token not in polish:
             fail(f"ProductionUiPolish.cs: required production contract missing: {token}")
+
+    for forbidden_token in ("typeof(DataGrid),", "typeof(ListBox),", "typeof(TreeView),"):
+        if forbidden_token in polish:
+            fail(
+                "ProductionUiPolish.cs: item-control class handlers must not be registered "
+                f"globally against the BricsCAD AppDomain: {forbidden_token}"
+            )
 
     plugin_entry = read_text(PLUGIN_ENTRY)
     if "ProductionUiPolish.EnsureRegistered();" not in plugin_entry:
