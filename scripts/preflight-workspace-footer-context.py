@@ -17,7 +17,10 @@ else:
         "footer.Children.Add(context);",
         "ExistingProjectMutationContext.TryGet(document, out var project)",
         "project.FindZone(project.ActiveZoneId)?.Name",
-        "project.FindFloor(project.ActiveFloorId)?.Name",
+        "var floor = project.FindFloor(project.ActiveFloorId);",
+        "floorName = NormalizeFooterName(floor?.Name);",
+        "FormatFooterElevation(floor.ElevationM)",
+        'elevationM.ToString("0.000", CultureInfo.InvariantCulture) + " m"',
         "ZoneCombo.SelectionChanged",
         "FloorCombo.SelectionChanged",
         "DataContextChanged",
@@ -25,6 +28,7 @@ else:
         '"PROJECT  " + projectName',
         '"   •   ZONE  " + zoneName',
         '"   •   FLOOR  " + floorName',
+        '"   •   CAO ĐỘ  " + floorElevation',
     ):
         if token not in text:
             errors.append("Workspace footer missing live-context token: " + token)
@@ -32,10 +36,12 @@ else:
     for forbidden in (
         "ProjectZoneService.SetActiveZone",
         "ProjectFloorService.SetActiveFloor",
+        "ProjectFloorService.Update",
         ".Touch(",
         "ChangeVersion",
         ".ActiveZoneId =",
         ".ActiveFloorId =",
+        ".ElevationM =",
     ):
         if forbidden in text:
             errors.append("Workspace footer must remain read-only; found: " + forbidden)
@@ -46,4 +52,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Workspace footer resolves live Project / Zone / Floor from ExistingProjectMutationContext and active IDs without semantic mutation calls.")
+print("PASS: Workspace footer resolves live Project / Zone / Floor / Floor.ElevationM from ExistingProjectMutationContext, formats elevation as 0.000 m, and remains presentation-only.")
