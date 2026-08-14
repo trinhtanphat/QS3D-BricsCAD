@@ -51,7 +51,7 @@ function Replace-SingleProjectValue {
     return [regex]::Replace(
         $Text,
         $pattern,
-        ('$1' + $Value + '$2'),
+        ('${1}' + $Value + '${2}'),
         [Text.RegularExpressions.RegexOptions]::CultureInvariant)
 }
 
