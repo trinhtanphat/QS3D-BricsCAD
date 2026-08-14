@@ -1,35 +1,41 @@
 # Work claim — V25 preview.10 release-source preparation failure
 
-- Status: `ACTIVE`
+- Status: `BLOCKED`
 - Agent: `gpt56sol-v25-preview10-prepare-failure-20260814-1333`
 - Registered: `2026-08-14T13:33:00+07:00`
+- Blocked: `2026-08-14T13:36:00+07:00`
 - Baseline observed main SHA: `1edfd985b366b52992a3ac28ca3018f7ed569dd4`
+- Claim commit: `9f606c92c9b61933186ba15434b8a77e73da312f`
 - Failure run: `#150` / `31776510479`
 - Failure job: `94692954595`
 - Failure head SHA: `8bad1dc3430230279f54dd03d181b456789ab1a4`
 - Failing step: `Prepare exact release source commit`
 - Priority: `P0 / cloud release blocker`
 
-## Confirmed fresh evidence
+## Confirmed evidence
 
-Run #150 completed after the predecessor V25 release-order claim had already been closed. Request validation succeeded, then `Prepare exact release source commit` failed; setup, source guards, build, package and publish were skipped. This is therefore fresh post-closeout evidence and requires a new claim rather than reusing the completed lane.
+Run #150 completed after the predecessor V25 release-order claim had already been closed. Request validation succeeded, then `Prepare exact release source commit` failed; setup, source guards, build, package and publish were skipped.
 
-## Initial reserved scope
+Under this claim, the owned workflow step was read at failed head `8bad1dc3430230279f54dd03d181b456789ab1a4`. It invokes `scripts/prepare-v25-cloud-release.ps1` and validates the returned exact SHA/HEAD identity. The helper itself was **not read or edited**, because it was not yet included in the initial reservation.
 
-- `.github/workflows/release-v25-cloud.yml` — only the `Prepare exact release source commit` step and data/control flow directly required for that step.
-- this claim file.
+## Collision discovered after claim publication
 
-The exact helper script invoked by that step is intentionally not guessed. After reading the claimed workflow step, if a helper outside the current reservation must be inspected or changed, this claim will be amended in a claim-only commit **before** reading/editing that helper implementation.
+A concurrent CI lane modified the same workflow surface after this claim landed:
 
-## Intended diagnostic sequence
+- `f9466f3400e0c85b4702646ecf62b4d11d8f86fe` — changed the V25 release checkout to `fetch-depth: 1` plus `fetch-tags: true` to reduce the pre-lock race window;
+- a one-shot dispatcher launched run `#151` (`31776786359`) on head `06311079fd16a2ecefe5a7d52d911e02b7892404`;
+- run #151 again failed at `Prepare exact release source commit` after request validation succeeded;
+- subsequent concurrent commit `de2d032f62caacd9583fa4e61db7dcf2d39c5523` created another preview.10 dispatcher intended to remove a cleanup race.
 
-1. Read the current and failed-head version of the claimed preparation step.
-2. Identify the exact helper/command and inputs used by the step.
-3. Amend this claim before expanding into any helper/test surface.
-4. Reconstruct the deterministic failure from source/contracts; prefer a narrow regression/preflight guard over a broad workflow rewrite.
-5. Push only evidence-backed changes.
+Because the concurrent lane is actively modifying/dispatching the exact release-preparation workflow, this claim stops before any implementation/helper expansion. No overlapping patch is created.
 
-## Non-scope
+## Reserved scope status
+
+- `.github/workflows/release-v25-cloud.yml`: **released to active concurrent CI lane; no write performed by this claim**.
+- `scripts/prepare-v25-cloud-release.ps1`: **never claimed/read/edited by this claim**.
+- this claim file: coordination status only.
+
+## Non-scope preserved
 
 - no product Core/UI/native behavior changes;
 - no #1005/#1106/#1125/#79/#982 work;
@@ -39,8 +45,8 @@ The exact helper script invoked by that step is intentionally not guessed. After
 
 ## CI boundary
 
-This claim does not itself authorize a new manual workflow dispatch. Source repair and deterministic static/regression validation may be committed; a new Actions dispatch will only be performed if separately authorized by the user/policy in this session.
+No GitHub Actions were dispatched or rerun by this claim. Runs #151 and later dispatchers were created by the concurrent lane.
 
-## Completion condition
+## Unblock condition
 
-The exact post-#150 preparation defect is either fixed with a focused guard and remote readback, or the claim is closed `BLOCKED` with precise evidence showing why source-only diagnosis cannot safely proceed.
+This claim may only be reopened after the concurrent release-preparation lane stops/closes and a fresh failing run still proves the same step remains broken. At that point a new collision scan and claim amendment for the exact helper/test paths are required before implementation diagnosis.
