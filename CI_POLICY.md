@@ -1,150 +1,168 @@
 # GitHub Actions / CI Policy
 
-This file is the repository-level source of truth for when GitHub Actions may run.
+This file is the repository-level source of truth for when GitHub Actions may run and how multi-agent work is integrated before final CI.
 
-## Owner-controlled CI/CD only
+## Default policy: manual-only, with one owner-approved post-integration exception
 
-GitHub Actions are **manual-only** on `main`.
+GitHub Actions remain **manual-only by default**. The only automatic trigger approved by the repository owner is:
 
-- Every workflow under `.github/workflows/` must use `workflow_dispatch` as its **only** trigger.
-- Every executable job must hard-guard `github.event_name == 'workflow_dispatch'`.
-- Do **not** add `push`, `pull_request`, `pull_request_target`, `schedule`, `workflow_run`, `workflow_call`, `repository_dispatch`, release-event, deployment-event, or any other automatic/event-driven trigger unless the repository owner explicitly asks to change this policy.
-- Do **not** automatically run, re-run, or dispatch CI/CD after a commit, push, merge, review, refactor, fix, documentation update, handoff, or `continue all` request.
-- A GitHub Actions run is allowed only when the repository owner explicitly requests a CI/build/test/runtime/release run.
-- Merely preparing or editing a workflow does **not** authorize dispatching it.
+- `.github/workflows/dispatch-v25-cloud-after-main-integration.yml`
 
-The intended operating mode is: keep developing and committing normally with Actions idle; when the owner explicitly requests a build/release, dispatch the requested manual workflow for the chosen commit.
+That dispatcher may run on an integration-relevant `push` to `main` and may dispatch exactly:
+
+- `.github/workflows/release-v25-cloud.yml`
+
+All other workflows remain `workflow_dispatch`-only unless the owner explicitly changes this policy again.
+
+The automatic dispatcher is intentionally narrow. It exists to validate the single combined `main` landing after a multi-agent batch has been integrated. It is not permission for agents to run arbitrary CI, publish unrelated releases, or add more automatic triggers.
+
+## Canonical multi-agent landing model
+
+For implementation work, agents must **not independently land source/test/script changes directly onto `main`**.
+
+The canonical model is:
+
+1. publish the required claim-only Markdown reservation to `origin/main` so every agent can see lane ownership;
+2. create or use a dedicated implementation branch, normally `agent/<agent-id>/<scope>`;
+3. implement, test and commit the reserved source work on that branch;
+4. keep the claim `ACTIVE` while the implementation is not yet integrated;
+5. when the participating lanes are ready, merge/cherry-pick/rebase those implementation branches into one shared batch branch, normally `integration/<batch-id>`;
+6. resolve conflicts and run remote-safe preflights/tests against that **combined integration branch**, not only against each agent branch in isolation;
+7. perform one final integration review;
+8. merge the integration branch into `main` **once**;
+9. after that one integration-relevant landing reaches `main`, the automatic dispatcher starts the V25 cloud CI/release workflow for current `main`.
+
+Claim/status documentation commits may still be pushed directly to `main`; the automatic dispatcher ignores documentation-only landings by path filter. Release-preparation commits pushed by `github-actions[bot]` are also ignored so the release workflow cannot recursively trigger itself.
+
+This section supersedes older repository wording that told implementation agents to push their completed source batch directly to `main`. Claim publication still uses `main`; implementation landing now uses agent branches plus a single integration branch.
+
+## Why the integration branch exists
+
+Merging every agent PR separately into `main` would cause repeated final-CI runs and would test intermediate trees where only part of the owner request is integrated. The repository owner instead wants one combined landing.
+
+Therefore:
+
+- agent implementation branches are staging inputs, not final release candidates;
+- the integration branch is the combined candidate;
+- `main` receives one final integration landing for the batch;
+- the automatic V25 cloud CI is evidence for the combined landing, not for a partially merged sequence.
+
+If `main` changes again with integration-relevant source after that landing, the new current tree is a new candidate and another automatic run is expected. A green workflow for an older SHA does not prove a newer `main` SHA.
+
+## Definition of `ALL MERGED TO MAIN`
+
+For a specific owner request, agents may report **ALL MERGED TO MAIN** only when an integration reviewer has freshly verified all of the following:
+
+- every participating required claim is terminal or explicitly excluded from the batch;
+- every required implementation change is present in the integration result and then reachable from current `main`;
+- no required code exists only on an agent branch, local worktree, draft patch or unmerged PR;
+- the final combined tree has no unresolved merge markers, accidental reversions, duplicate competing implementations, or known semantic/API/test collisions;
+- remote-safe build/tests/smoke/preflights for the combined tree have passed, or any environment-gated evidence is explicitly handed off;
+- the exact current `main` SHA after the single integration landing is recorded.
+
+A branch existing or being deleted is not proof of integration. A PR showing `Merged` is not enough by itself. Commit/tree reachability and the combined current `main` tree are authoritative.
+
+## Automatic post-integration V25 cloud CI
+
+The owner-approved automatic dispatcher is `.github/workflows/dispatch-v25-cloud-after-main-integration.yml`.
+
+Its contract is:
+
+- automatic trigger: integration-relevant `push` to `main` only;
+- manual `workflow_dispatch` remains available for operator recovery/testing;
+- documentation-only claim/handoff updates do not trigger it;
+- `github-actions[bot]` pushes do not execute the dispatch job;
+- concurrent adjacent integration landings are debounced/cancelled so the newest batch wins before dispatch;
+- it dispatches only `release-v25-cloud.yml` from `main`;
+- it generates a preview tag in the reserved automatic range starting at `v0.1.0-preview.10001` and skips an already-existing tag;
+- it passes `confirm_release=RELEASE` because this automatic path is itself the repository owner's standing approval for the post-integration V25 cloud preview release;
+- `release-v25-cloud.yml` keeps its own exact-source, source-guard, Core smoke, BricsCAD V25 compile-reference, packaging and release-integrity gates.
+
+The automatic cloud run does **not** prove licensed local BricsCAD `NETLOAD`, native UI/runtime, private-DWG behavior, signing credentials, or other `LOCAL_ONLY` gates. Those evidence classes remain separate.
+
+## Manual workflows remain manual
+
+Except for the single dispatcher above, workflows under `.github/workflows/` remain owner-controlled `workflow_dispatch` lanes. In particular, the following release workflows remain manually invoked release tools:
+
+- `.github/workflows/release-v25.yml`;
+- `.github/workflows/release-v25-cloud.yml` itself;
+- `.github/workflows/release-v26.yml`.
+
+`release-v25-cloud.yml` is automatically started only **through the approved post-integration dispatcher**. It must retain explicit `confirm_release=RELEASE`, exact-source preparation and its release-integrity guards.
+
+Do not add `push`, `pull_request`, `pull_request_target`, `schedule`, `workflow_run`, `repository_dispatch`, release/deployment events, or other automatic triggers to any other workflow without another explicit owner policy change.
 
 ## Agent execution roles and CI authorization
 
-The repository owner expects the normal/default agent pool to concentrate on **finding and fixing bugs, updating source code, adding deterministic regressions/static guards, reviewing diffs, and committing/pushing coherent code changes**. Those agents must keep GitHub Actions idle unless the owner separately designates them for CI/runtime/release execution.
+Normal coding agents concentrate on finding/fixing bugs, updating source, adding deterministic regressions/static guards, reviewing diffs and committing coherent implementation work to their implementation branches.
 
-- A normal `continue all`, `fix bug`, `update code`, `commit`, `push`, `merge`, review, or handoff assignment means **source/code work only**; it is not permission to dispatch, re-run, cancel, or otherwise operate GitHub Actions.
-- The owner may explicitly designate one or more specific agents to operate GitHub CI/Actions, build, runtime, packaging, release, or related workflow tasks. Only those owner-designated agents may perform the CI operations covered by that designation.
-- CI authorization is **agent- and scope-specific**. Permission granted to one designated agent does not automatically transfer to other concurrent agents, and permission for one workflow/task does not authorize unrelated workflows or releases.
-- The two local-machine workers (`agent/local002`, `agent/local003`, and successor sessions acting in those roles) are **not CI-designated agents by default**. Their standing assignment is LOCAL_ONLY/local-agent-only work. They must not use CI failures as a backlog, must not fix unrelated failures merely because a workflow is red, and must not dispatch/re-run/cancel Actions unless the owner separately names that exact local worker and exact CI operation or defect.
-- If an agent cannot establish that it is the owner-designated CI agent for the requested operation, it must behave as a normal coding agent: continue source-safe work and leave Actions undispatched.
-- A designated CI agent must still follow every manual-only, exact-SHA, runner, release-confirmation, and safety requirement in this file. Designation does not permit automatic triggers or bypass repository guards.
-- Coding agents and CI-designated agents may work concurrently. Coding agents should not stop bug-fix/source work merely because another explicitly designated agent is handling CI.
+- Claim publication to `main` does not authorize arbitrary Actions operations.
+- A normal `continue all`, `fix bug`, `update code`, `commit`, review or handoff assignment does not authorize manually dispatching/re-running/cancelling unrelated workflows.
+- The automatic post-integration dispatcher requires no per-run agent approval after a valid integration landing; it is standing owner policy.
+- Manual CI operations outside that automatic path still require explicit owner authorization and remain agent/scope-specific.
+- The local workers (`agent/local002`, `agent/local003`, and successor sessions acting in those roles) remain LOCAL_ONLY by default and must not treat GitHub Actions failures as their general coding backlog unless the owner separately assigns that exact work.
 
-This role split is intentional: most agents maximize progress by fixing/updating code, while a smaller owner-selected set may spend CI minutes or operate specialized runners when explicitly assigned.
+Coding agents and CI-designated agents may work concurrently. A red cloud workflow should be diagnosed/fixed by the appropriate remote/source agent unless the failure genuinely requires a LOCAL_ONLY environment.
 
-## Changes that do not need GitHub CI
+## Integration freeze before the single main landing
 
-The following changes do not require a GitHub Actions run and must not trigger one automatically:
+Before merging `integration/<batch-id>` into `main`, the integration reviewer must establish a final integration freeze:
 
-- documentation-only changes;
-- `*.md`, `README*`, and `docs/**` changes;
-- `docs:` commits;
-- `chore:` / housekeeping commits;
-- comments, formatting, metadata, planning, research notes, and non-runtime documentation assets;
-- CI-policy/workflow/documentation edits;
-- normal source commits, fixes, reviews, refactors, and multi-agent integration work unless the owner separately requests validation.
+1. identify the owner request/batch and the participating claims;
+2. stop participating agents from adding more source changes to that batch candidate;
+3. verify all required agent branches/PRs are integrated into the integration branch or explicitly excluded/superseded;
+4. verify every required implementation commit is represented in the combined integration tree;
+5. run the relevant remote-safe preflights/tests on that combined tree;
+6. inspect the combined diff for semantic conflicts, duplicate implementations and accidental reversions;
+7. record the integration branch candidate SHA;
+8. merge the integration branch to `main` once;
+9. refresh `main` and record the resulting exact final SHA;
+10. let the automatic dispatcher run `release-v25-cloud.yml` for the current integrated tree.
 
-Even source-code changes do **not** imply permission to run GitHub Actions. Source changes remain manual-CI until the owner explicitly requests a run.
+Canonical state progression:
 
-## What counts as explicit approval
+```text
+AGENTS_WORKING
+    -> AGENT_BRANCHES_READY
+    -> INTEGRATION_BRANCH
+    -> INTEGRATION_REVIEW
+    -> ONE_FINAL_MERGE_TO_MAIN
+    -> ALL_MERGED_TO_MAIN
+    -> AUTO_V25_CLOUD_CI
+    -> CI_GREEN
+    -> ALL_DONE
+```
 
-Examples of explicit approval:
+If integration-relevant `main` changes after CI starts, the old run remains evidence only for its own source/release commit. The newest current tree requires new current-head evidence.
 
-- "run GitHub CI"
-- "run Actions"
-- "run the Core CI"
-- "run the BricsCAD V25 workflow"
-- "run the BricsCAD V26 workflow"
-- "build/test this commit on GitHub Actions"
-- "build bản release"
-- "build và release app"
-- "release bản này"
+## Manual build/release sequence outside the automatic path
 
-The following are **not** approval to run CI/CD by themselves:
+When the owner explicitly requests another manual release lane:
 
-- "review all"
-- "fix/update code"
-- "commit/push main"
-- "merge"
-- "continue all"
-- "update README/docs"
-
-When wording is ambiguous, do not spend Actions minutes and do not publish a release; leave Actions undispatched.
-
-## Manual workflows
-
-Current workflows are expected to remain manual-only. This inventory is not exhaustive; `scripts/preflight-ci-manual-only.py` scans every workflow file regardless of whether it is listed here.
-
-Core and host integration:
-
-- `.github/workflows/ci.yml` — Core/static validation on a hosted Windows runner.
-- `.github/workflows/bricscad-v25.yml` — V25 build/runtime integration on the licensed self-hosted runner.
-- `.github/workflows/bricscad-v26.yml` — V26 .NET 8 build/runtime integration on the licensed self-hosted runner.
-
-Representative focused gates include:
-
-- `.github/workflows/curved-opening.yml`;
-- `.github/workflows/geometry-extensions.yml`;
-- `.github/workflows/project-data-gate.yml`;
-- `.github/workflows/schedule-gate.yml`.
-
-Release tools:
-
-- `.github/workflows/release-v25.yml` — owner-approved V25 **build + package + GitHub Release** flow.
-- `.github/workflows/release-v25-cloud.yml` — owner-approved V25 cloud release helper where applicable.
-- `.github/workflows/release-v26.yml` — owner-approved V26 **build + package + signed update manifest + GitHub Release** flow.
-
-Every focused workflow must run `scripts/preflight-ci-manual-only.py` as part of its source gate so policy drift is detected inside an explicitly requested run as well.
-
-All release workflows are manual release tools, not continuous-deployment pipelines. Publishing requires an explicit `workflow_dispatch` plus `confirm_release=RELEASE`. They must not be dispatched until the owner requests the release.
-
-## Manual build/release sequence
-
-When the owner explicitly requests a release, the preferred sequence is:
-
-1. resolve the exact `main` commit/tag to release;
-2. choose the requested host-major workflow (`release-v25.yml` or `release-v26.yml`);
-3. dispatch it manually with an explicit release tag and `confirm_release=RELEASE`;
+1. resolve the exact candidate commit/tag;
+2. choose the requested host-major workflow;
+3. dispatch manually with the required inputs/confirmation;
 4. run repository preflights and deterministic Core smoke tests;
-5. compile the matching host adapter against the licensed BricsCAD installation;
-6. run the required host-major runtime/signing gates for the requested release type;
-7. package only the matching host-major ZIP/checksum/update-manifest assets;
-8. publish the GitHub Release only after the workflow's release-integrity checks succeed.
+5. compile the matching host adapter against the required BricsCAD environment/references;
+6. run the host-major runtime/signing gates required by that release type;
+7. package only the matching host-major assets;
+8. publish only after release-integrity checks succeed.
 
-See `docs/MANUAL-BUILD-RELEASE.md` for V25 and `docs/MANUAL-BUILD-RELEASE-V26.md` for V26 operator details.
-
-## Multi-agent repository rule
-
-This repository may be changed by multiple agents at the same time. Before editing shared files and again immediately before creating/pushing a commit, refresh/sync the latest `main` and inspect what changed. Never assume the branch head is still the same as when the task started.
-
-Do not overwrite, revert, squash away, or silently replace another agent's newer work. Rebase/reapply/merge the intended patch onto the latest `main` when necessary. Prefer small, focused commits so concurrent work can be reconciled safely.
-
-Detailed agent coordination rules live in `AGENTS.md` at the repository root.
-
-## BricsCAD host workflows
-
-V25:
-
-- `.github/workflows/bricscad-v25.yml` and `.github/workflows/release-v25.yml` require a licensed Windows x64 self-hosted runner labeled `bricscad-v25` with `BRICSCAD_V25_DIR`.
-- Managed adapter target: `net48`.
-
-V26:
-
-- `.github/workflows/bricscad-v26.yml` and `.github/workflows/release-v26.yml` require a licensed Windows x64 self-hosted runner labeled `bricscad-v26` with `BRICSCAD_V26_DIR`.
-- `bricscad.exe` must identify major 26 and the runner requires .NET 8 Windows Desktop support.
-- Managed adapter target: `net8.0-windows`.
-
-These workflows must never be dispatched automatically. Runtime/NETLOAD/UI validation and release publication run only after an explicit owner request and when the required runner is available.
+See `docs/MANUAL-BUILD-RELEASE.md` and `docs/MANUAL-BUILD-RELEASE-V26.md` for operator details.
 
 ## Local/static validation
 
-Repository-local or static checks may be used during review without starting GitHub Actions. Passing static review is not the same as a successful GitHub CI or licensed BricsCAD runtime test; do not claim CI/runtime verification unless that run actually completed.
+Repository-local/static validation may be run before integration without starting GitHub Actions. Passing static review is not equivalent to licensed BricsCAD runtime evidence.
 
-V25 and V26 runtime proof are independent. Source sharing between host adapters does not allow a V25 runtime PASS to be reported as V26 evidence or vice versa.
+V25 and V26 runtime proof are independent. A V25 PASS cannot be reported as V26 evidence, and vice versa.
 
 ## Enforcement
 
-- `scripts/preflight.py` retains the manual-CI trigger guard and private/reference artifact policy.
-- `scripts/preflight-ci-manual-only.py` is the strict policy gate: every workflow must expose `workflow_dispatch` only, **every executable job** must hard-guard the manual event, and release workflows must retain explicit `RELEASE` confirmation.
-- `scripts/preflight-all.py` auto-discovers the strict CI policy gate along with the other feature preflights.
+- `scripts/preflight.py` retains the broad repository/source policy and legacy workflow safety checks.
+- `scripts/preflight-ci-manual-only.py` is the strict Actions-policy gate. Despite its historical filename, it now enforces **manual-only by default plus exactly one approved automatic post-integration dispatcher**.
+- That strict gate must reject any second automatic workflow, any broadened automatic event, any automatic dispatcher that can target a workflow other than `release-v25-cloud.yml`, and any release workflow that loses explicit `RELEASE` confirmation.
+- `scripts/preflight-all.py` auto-discovers the strict CI policy gate with the other feature preflights.
 
-Keep these guards in place unless the repository owner explicitly changes this policy.
+Keep these guards in place unless the repository owner explicitly changes the policy again.
 
-Related documentation: `AGENTS.md`, `README.md`, `docs/CI.md`, `docs/CI-READINESS.md`, `docs/MANUAL-BUILD-RELEASE.md`, `docs/MANUAL-BUILD-RELEASE-V26.md`, `docs/LOCAL-V25-QUALIFICATION.md`, `docs/LOCAL-V26-QUALIFICATION.md`.
+Related documentation: `AGENTS.md`, `docs/AGENT-WORK-REGISTRATION.md`, `README.md`, `docs/CI.md`, `docs/CI-READINESS.md`, `docs/MANUAL-BUILD-RELEASE.md`, `docs/MANUAL-BUILD-RELEASE-V26.md`, `docs/LOCAL-V25-QUALIFICATION.md`, `docs/LOCAL-V26-QUALIFICATION.md`.
