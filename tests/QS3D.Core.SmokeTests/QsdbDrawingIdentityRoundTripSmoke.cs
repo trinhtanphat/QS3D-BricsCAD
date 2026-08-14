@@ -39,6 +39,26 @@ namespace QS3D.Core.SmokeTests
                 };
                 project.Elements.Add(element);
 
+                var versionBeforeRejectedPath = project.ChangeVersion;
+                var updatedBeforeRejectedPath = project.UpdatedUtc;
+                var rejectedPath = false;
+                try
+                {
+                    project.DrawingPath = "drawing\u0001path.dwg";
+                }
+                catch (ArgumentException)
+                {
+                    rejectedPath = true;
+                }
+
+                if (!rejectedPath)
+                    throw new InvalidOperationException("Project DrawingPath accepted an XML-illegal control character.");
+                Equal(drawingPath, project.DrawingPath, "Rejected Project drawing path assignment");
+                if (project.ChangeVersion != versionBeforeRejectedPath)
+                    throw new InvalidOperationException("Rejected Project DrawingPath assignment changed ChangeVersion.");
+                if (project.UpdatedUtc != updatedBeforeRejectedPath)
+                    throw new InvalidOperationException("Rejected Project DrawingPath assignment changed UpdatedUtc.");
+
                 var store = new QsdbProjectStore();
                 store.Save(project, path);
                 var roundTrip = store.Load(path);

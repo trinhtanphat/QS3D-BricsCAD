@@ -179,7 +179,13 @@ namespace QS3D.Core.Domain
         public string DrawingPath
         {
             get => _drawingPath;
-            set => SetPersistedScalar(ref _drawingPath, value);
+            set
+            {
+                var rawValue = value ?? string.Empty;
+                if (rawValue.Any(char.IsControl))
+                    throw new ArgumentException("Drawing path cannot contain control characters.", nameof(value));
+                SetPersistedScalar(ref _drawingPath, rawValue);
+            }
         }
         public string DrawingFingerprint
         {
