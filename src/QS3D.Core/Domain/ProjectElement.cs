@@ -148,6 +148,7 @@ namespace QS3D.Core.Domain
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value));
             value = value == 0d ? 0d : value;
             var key = name.Trim();
+            if (key.Any(char.IsControl)) throw new ArgumentException("Quantity name cannot contain control characters.", nameof(name));
             if (Quantities.TryGetValue(key, out var existing) && existing.Equals(value)) return;
             Quantities[key] = value;
             MarkDirtyCore(ElementDirtyFlags.Quantity, false);
