@@ -78,6 +78,18 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
             }
 
+            var concreteEquation = new TextBlock
+            {
+                Text = "Bê tông: " + FormatGeometryValue(geometry.GrossVolume) + " - " +
+                       FormatGeometryValue(geometry.DeductionVolume) + " = " +
+                       FormatGeometryValue(geometry.NetVolume) + " m³",
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0d, 3d, 0d, 2d),
+                TextWrapping = TextWrapping.Wrap
+            };
+            concreteEquation.SetResourceReference(TextBlock.ForegroundProperty, "SuccessBrush");
+            _quantityGeometryPanel.Children.Add(concreteEquation);
+
             if (geometry.IsDirty)
             {
                 var stale = CaptionText(true);
@@ -85,13 +97,13 @@ namespace QS3D.BricsCAD.V25.UI
                 _quantityGeometryPanel.Children.Add(stale);
             }
 
-            AddQuantityGeometryHeading("THỂ TÍCH");
+            AddQuantityGeometryHeading("THỂ TÍCH • GỘP - TRỪ = CÒN");
             AddQuantityGeometryValue("V gộp", geometry.GrossVolume, "m³", true);
             foreach (var deduction in geometry.VolumeDeductions)
                 AddQuantityGeometryDeductionButton("Trừ giao", deduction, deduction.Volume, "m³");
             AddQuantityGeometryValue("V còn", geometry.NetVolume, "m³", true);
 
-            AddQuantityGeometryHeading("VÁN KHUÔN THEO MẶT");
+            AddQuantityGeometryHeading("VÁN KHUÔN THEO MẶT • GỘP - TRỪ = CÒN");
             foreach (var face in geometry.FormworkFaces
                 .OrderBy(x => FaceSort(x.FaceType))
                 .ThenBy(x => x.FaceId, StringComparer.OrdinalIgnoreCase))
@@ -112,8 +124,8 @@ namespace QS3D.BricsCAD.V25.UI
             }
 
             var totals = CaptionText(true);
-            totals.Text = "Ván khuôn: S gộp " + FormatGeometryValue(geometry.GrossFormworkArea) + " m² • trừ " +
-                          FormatGeometryValue(geometry.DeductionFormworkArea) + " m² • S còn " +
+            totals.Text = "Ván khuôn: S gộp " + FormatGeometryValue(geometry.GrossFormworkArea) + " m² - " +
+                          FormatGeometryValue(geometry.DeductionFormworkArea) + " m² = S còn " +
                           FormatGeometryValue(geometry.NetFormworkArea) + " m²";
             totals.Margin = new Thickness(0d, 6d, 0d, 0d);
             _quantityGeometryPanel.Children.Add(totals);
@@ -138,12 +150,11 @@ namespace QS3D.BricsCAD.V25.UI
             _quantityGeometryScroll = new ScrollViewer
             {
                 Content = _quantityGeometryPanel,
-                MaxHeight = 220d,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
                 Margin = new Thickness(0d, 6d, 0d, 0d)
             };
-            var insertAt = Math.Min(3, _quantityDetailBody.Children.Count);
+            var insertAt = Math.Min(2, _quantityDetailBody.Children.Count);
             _quantityDetailBody.Children.Insert(insertAt, _quantityGeometryScroll);
         }
 
@@ -244,8 +255,13 @@ namespace QS3D.BricsCAD.V25.UI
                     return;
                 }
 
+                if (!global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(document))
+                {
+                    _viewModel.Status = "Đã chọn cấu kiện đích + nguyên nhân nhưng chưa thể zoom • " + deduction.RegionKey;
+                    return;
+                }
+
                 _viewModel.Status = "Đã chọn/zoom cấu kiện đích + nguyên nhân • " + deduction.RegionKey;
-                document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
             }
             catch (Exception ex)
             {
