@@ -46,13 +46,17 @@ Fresh `main` and open-PR checks at registration found no FieldMerge/`ProjectInte
 
 Scope amendment on 2026-08-14 after source integration: the canonical coordinator documentation was found stale because it still listed only the four pre-FieldMerge modes. This claim is amended on `main` before editing that added documentation surface, per the scope-expansion rule. The amendment does not expand into other issue #84 features.
 
+Current validation dependency on 2026-08-14: V25 cloud run #202 (`31819991099`) still fails the aggregate `All discovered feature source guards` gate before Core build/smoke. A separate active claim, `2026-08-14-2349-chatgpt-web-gpt56sol-v25-source-guard-reconciliation.md`, owns the 23 exact stale/defect guard failures, including the dedicated FieldMerge guard scripts. This lane will not duplicate or overwrite that work. The coordinator claim remains `ACTIVE` until a qualifying descendant run supplies actual Core build/smoke evidence.
+
 ## Handoff evidence
 
 - Claim-only main commit: `58420f009381a4d38ca8bb5ae9e7e7743c8ed8d8`.
 - Atomic implementation commit: `458d88165fdf7ef1018792953b6e774e7e4e7479` on `agent/chatgpt-gpt56sol/business-fieldmerge-coordinator`.
 - Agent PR: `#1360`, squash-integrated into `integration/20260814-business-functions` as `9729a408f69e6cd17abc8764f0b48054226dcbc6`.
 - Final source integration PR: `#1363`; main landing SHA: `cf786992754c2d8c7cc0d8a471280a6ac9d539e1`.
-- Automatic post-integration dispatcher run: `31816166954` for the integrated main tree; exact-main V25 cloud result remains pending while this documentation parity addendum is prepared.
+- Canonical coordinator documentation landed on `main` as `210617cf8bf3948a54544023e7aca4399e25b077`.
+- Automatic post-integration dispatcher run: `31816166954` completed successfully and dispatched V25 cloud automatically; no manual rerun was used.
+- V25 cloud #194 (`31816269438`) and newer #202 (`31819991099`, exact head `33ae9caae33ae8cd3c695c45b59cf3caa561e039`) both stop at the aggregate feature-guard gate; Core build/smoke and V25 compile are skipped, so those runs are not treated as FieldMerge compile failures or as PASS evidence.
 - Repository Core CI is `workflow_dispatch`-only, so the earlier PR/agent head had no automatic build/smoke status; empty status was not treated as PASS.
 - Container cloning in this session is unavailable because outbound DNS to GitHub is disabled; no local `dotnet` PASS is claimed.
 

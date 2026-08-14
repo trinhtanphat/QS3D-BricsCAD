@@ -26,7 +26,7 @@ if sign.is_file():
     if not re.search(r"ValidatePattern\('\^https://", text):
         errors.append("sign-v25.ps1 must require an HTTPS timestamp server")
     if re.search(r"(?i)\b(pfx|pfxpassword|password|securestring)\b", text):
-        errors.append("sign-v25.ps1 must not accept PFX/private-key passwords; use the Windows certificate store")
+        errors.append("sign-v25.ps1 must not accept PFX/private-key passwords; ephemeral PFX import belongs to the dedicated import helper")
     if re.search(r"(?i)SECURELOAD\s*[=:]|setvar[^\n]*SECURELOAD", text):
         errors.append("sign-v25.ps1 must not lower BricsCAD SECURELOAD")
 
@@ -52,92 +52,82 @@ if finalize.is_file():
 if release.is_file():
     text = release.read_text(encoding="utf-8")
     required = (
-        "sign_package:",
+        "name: QS3D Manual V25 Commercial Release",
+        "confirm_release:",
+        "run_runtime:",
+        "prerelease:",
+        "environment: commercial-release",
         "QS3D_SIGNING_CERT_THUMBPRINT: ${{ vars.QS3D_SIGNING_CERT_THUMBPRINT }}",
         "QS3D_TIMESTAMP_SERVER: ${{ vars.QS3D_TIMESTAMP_SERVER }}",
         "RELEASE_RUN_RUNTIME: ${{ inputs.run_runtime }}",
-        "RELEASE_SIGN_PACKAGE: ${{ inputs.sign_package }}",
         "if ($env:GITHUB_REF -ne 'refs/heads/main')",
-        "V25 releases must be dispatched from refs/heads/main",
-        "Stable release requires run_runtime=true.",
-        "Stable release requires sign_package=true.",
-        "prerelease input must match the release_tag suffix",
-        "Release tag $env:RELEASE_TAG does not match plugin package version $packageVersion. Refusing relabelled release.",
+        "Commercial V25 releases must be dispatched from refs/heads/main",
+        "Stable commercial releases require run_runtime=true.",
+        "prerelease input must match whether release_tag contains a SemVer prerelease suffix.",
+        "QS3D_SIGNING_CERT_PFX_BASE64: ${{ secrets.QS3D_SIGNING_CERT_PFX_BASE64 }}",
+        "QS3D_SIGNING_CERT_PASSWORD: ${{ secrets.QS3D_SIGNING_CERT_PASSWORD }}",
+        "import-v25-signing-certificate.ps1",
         "scripts\\sign-v25.ps1",
         "scripts\\verify-v25-signatures.ps1",
         "scripts\\finalize-v25-signed-package.ps1",
-        "-CertificateThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT",
+        "-CertificateThumbprint $env:SIGNING_THUMBPRINT",
         "-TimestampServer $env:QS3D_TIMESTAMP_SERVER",
-        "-ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT",
-        "-ExpectedSignerThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT",
-        "draft = $true",
-        "Expected exactly one uploaded release asset named",
-        "$publishBody = @{ draft = $false }",
-        "-Method Patch",
-        "GitHub release remained a draft after publish request.",
-        "Real V25 runtime validation for unsigned preview payload",
-        "if: ${{ inputs.run_runtime && !inputs.sign_package }}",
-        "artifacts\\bricscad-v25-runtime-unsigned",
-        "Real V25 runtime validation for signed release payload",
-        "if: ${{ inputs.run_runtime && inputs.sign_package }}",
+        "-ExpectedThumbprint $env:SIGNING_THUMBPRINT",
+        "-ExpectedSignerThumbprint $env:SIGNING_THUMBPRINT",
+        "Remove ephemeral signing certificate and private key",
+        "Remove-Item -Path $certificatePath -DeleteKey -Force",
+        "Verify finalized package after private-key cleanup",
+        "Licensed V25 runtime validation for exact signed payload",
+        "if: ${{ inputs.run_runtime }}",
         "dist\\QS3D-BricsCAD-V25\\QS3D.BricsCAD.V25.dll",
-        "artifacts\\bricscad-v25-runtime-signed",
-        "passed required V25 runtime gate on the exact signed release plugin payload",
+        "Create signed auto-update manifest",
+        "Create commercial checksum and provenance",
+        "Upload signed commercial candidate",
+        "Verify candidate after job boundary",
+        "Commercial candidate provenance does not exactly bind tag, product, source, signer and ZIP digest.",
+        "Create draft, verify uploaded bytes, then publish",
+        "--target', $env:GITHUB_SHA",
+        "--draft",
+        "Release tag does not target exact qualified workflow SHA; release remains a draft.",
+        "gh release download $env:RELEASE_TAG",
+        "Draft release asset SHA-256 mismatch for $name; release remains a draft.",
+        "verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT",
+        "gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --draft=false",
+        "GitHub release remained a draft after publication request.",
     )
     for needle in required:
         if needle not in text:
-            errors.append("release-v25.yml missing stable release signing/runtime contract: " + needle)
+            errors.append("release-v25.yml missing signed-only commercial release contract: " + needle)
 
-    unsigned_runtime_index = text.find("- name: Real V25 runtime validation for unsigned preview payload")
+    if "sign_package:" in text or "inputs.sign_package" in text:
+        errors.append("commercial release workflow must remain signed-only; obsolete optional sign_package branching reappeared")
+
     package_index = text.find("- name: Build V25 release package")
-    version_index = text.find("- name: Validate release tag and package version binding")
-    sign_index = text.find("- name: Authenticode-sign V25 executable payload")
-    verify_index = text.find("- name: Verify Authenticode publisher and timestamp")
+    bind_index = text.find("- name: Validate exact release tag, product version and source binding")
+    import_index = text.find("- name: Import ephemeral code-signing certificate")
+    sign_index = text.find("- name: Authenticode-sign commercial V25 payload")
+    verify_index = text.find("- name: Verify Authenticode publisher and trusted timestamp")
     finalize_index = text.find("- name: Finalize signed V25 package")
-    signed_runtime_index = text.find("- name: Real V25 runtime validation for signed release payload")
-    checksum_index = text.find("- name: Create package checksum")
-    publish_index = text.find("- name: Publish GitHub Release")
-    ordered = (
-        unsigned_runtime_index,
-        package_index,
-        version_index,
-        sign_index,
-        verify_index,
-        finalize_index,
-        signed_runtime_index,
-        checksum_index,
-        publish_index,
-    )
+    cleanup_index = text.find("- name: Remove ephemeral signing certificate and private key")
+    reverify_index = text.find("- name: Verify finalized package after private-key cleanup")
+    runtime_index = text.find("- name: Licensed V25 runtime validation for exact signed payload")
+    manifest_index = text.find("- name: Create signed auto-update manifest")
+    provenance_index = text.find("- name: Create commercial checksum and provenance")
+    upload_index = text.find("- name: Upload signed commercial candidate")
+    ordered = (package_index, bind_index, import_index, sign_index, verify_index, finalize_index, cleanup_index, reverify_index, runtime_index, manifest_index, provenance_index, upload_index)
     if any(index < 0 for index in ordered) or list(ordered) != sorted(ordered):
-        errors.append(
-            "release-v25.yml must unsigned-runtime -> package -> version-bind -> sign -> verify -> finalize -> signed-runtime -> checksum -> publish in that order"
-        )
+        errors.append("commercial release must package -> bind exact source/product -> import -> sign -> verify -> finalize -> remove key -> reverify -> optional runtime -> manifest/provenance -> artifact handoff")
 
-    if "if: ${{ inputs.sign_package }}" not in text:
-        errors.append("release-v25.yml signing steps must be explicitly controlled by sign_package")
-    if "if: ${{ inputs.run_runtime && !inputs.sign_package }}" not in text:
-        errors.append("unsigned release runtime validation must require run_runtime and sign_package=false")
-    if "if: ${{ inputs.run_runtime && inputs.sign_package }}" not in text:
-        errors.append("signed release runtime validation must require run_runtime and sign_package=true")
-    if "prerelease=true for an explicitly unqualified preview" not in text or "prerelease=true for an explicitly unsigned preview" not in text:
-        errors.append("release-v25.yml must distinguish explicit prerelease exceptions from stable release requirements")
-    if "(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?" not in text:
-        errors.append("release-v25.yml release tag validation must support separate prerelease/build-metadata components")
-
-    signed_runtime_block = text[signed_runtime_index:checksum_index] if 0 <= signed_runtime_index < checksum_index else ""
-    if "dist\\QS3D-BricsCAD-V25\\QS3D.BricsCAD.V25.dll" not in signed_runtime_block:
-        errors.append("signed runtime gate must NETLOAD the exact finalized dist plugin payload")
-    if "src\\QS3D.BricsCAD.V25\\bin" in signed_runtime_block:
-        errors.append("signed runtime gate must not fall back to the pre-sign build output")
-
-    draft_index = text.find("draft = $true")
-    upload_index = text.find("$uploadBase = $release.upload_url")
-    verify_assets_index = text.find("Expected exactly one uploaded release asset named")
-    publish_draft_index = text.find("$publishBody = @{ draft = $false }")
-    if any(index < 0 for index in (draft_index, upload_index, verify_assets_index, publish_draft_index)) or not (
-        draft_index < upload_index < verify_assets_index < publish_draft_index
-    ):
-        errors.append("release-v25.yml must create a draft, upload and verify all assets, then publish the release")
+    publish_index = text.find("- name: Create draft, verify uploaded bytes, then publish")
+    draft_index = text.find("'--draft'", publish_index)
+    tag_verify_index = text.find("Release tag does not target exact qualified workflow SHA; release remains a draft.", publish_index)
+    download_index = text.find("gh release download $env:RELEASE_TAG", publish_index)
+    hash_index = text.find("Draft release asset SHA-256 mismatch for $name; release remains a draft.", publish_index)
+    signature_index = text.find("verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT", publish_index)
+    publish_draft_index = text.find("gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --draft=false", publish_index)
+    publish_order = (publish_index, draft_index, tag_verify_index, download_index, hash_index, signature_index, publish_draft_index)
+    if any(index < 0 for index in publish_order) or list(publish_order) != sorted(publish_order):
+        errors.append("commercial publication must remain draft-gated until exact tag target, downloaded bytes, hashes and signatures are verified")
 
 for path in ROOT.rglob("*.pfx"):
     errors.append("private signing certificate must not be committed: " + str(path.relative_to(ROOT)))
@@ -150,6 +140,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print(
-    "PASS: Authenticode uses the Windows certificate store/SHA-256/HTTPS timestamping; stable signed releases runtime-test the exact finalized plugin payload before publication; unsigned preview runtime remains isolated; uploaded assets are unique/size/hash verified; and release publication stays draft-gated."
-)
+print("PASS: the commercial V25 workflow is signed-only, exact-source/product bound, ephemeral-key isolated, Authenticode/timestamp verified before and after finalization, runtime-gated for stable releases, provenance-bound across the job boundary, and draft-byte verified before publication.")

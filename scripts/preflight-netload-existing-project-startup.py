@@ -90,7 +90,7 @@ for token in (
     "public static void RefreshAll() { RefreshProject(); RefreshCad(); }",
 ):
     require(palette, token, "PaletteCoordinator")
-require(entry, "PaletteCoordinator.Dispose();", "PluginEntry.Terminate")
+require(entry, "TryCleanup(PaletteCoordinator.Dispose);", "PluginEntry contained teardown")
 
 for label, block, refresh in (
     ("WorkspacePanel", workspace_initial, "RefreshProject();"),
@@ -182,4 +182,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: V25 NETLOAD keeps critical save/Undo hooks immediate, defers project/selection UI reconciliation and ribbon work to application idle, preserves synchronous teardown, makes Workspace/RightPanel initial refresh one-shot, and avoids duplicate first-show full refresh.")
+print("PASS: V25 NETLOAD keeps critical save/Undo hooks immediate, defers project/selection UI reconciliation and ribbon work to application idle, preserves contained synchronous teardown, makes Workspace/RightPanel initial refresh one-shot, and avoids duplicate first-show full refresh.")

@@ -7,11 +7,11 @@ ROOT = Path(__file__).resolve().parents[1]
 FILES = {
     "preview release preparation": (
         ROOT / "scripts/prepare-v25-cloud-release.ps1",
-        "-preview\\.(?:0|[1-9][0-9]*)$",
+        "-preview\\.[1-9][0-9]*$",
     ),
     "preview version synchronization": (
         ROOT / "scripts/sync-preview-release-version.ps1",
-        "-preview\\.(?<preview>0|[1-9][0-9]*)$",
+        "-preview\\.(?<preview>[1-9][0-9]*)$",
     ),
 }
 SHAPE = "v<major>.<minor>.<patch>-preview.<n>"
@@ -29,11 +29,9 @@ for label, (path, regex_marker) in FILES.items():
         errors.append(f"{label} must describe the accepted preview tag with the version-neutral shape {SHAPE}")
     concrete = sorted(set(CONCRETE_PRODUCT_TAG.findall(text)))
     if concrete:
-        errors.append(
-            f"{label} contains historical concrete preview tag diagnostic(s): " + ", ".join(concrete)
-        )
+        errors.append(f"{label} contains historical concrete preview tag diagnostic(s): " + ", ".join(concrete))
     if regex_marker not in text:
-        errors.append(f"{label} no longer contains its bounded preview-number regex contract")
+        errors.append(f"{label} no longer contains its bounded positive preview-number regex contract")
     if "Got: $ReleaseTag" not in text:
         errors.append(f"{label} must retain the rejected caller value in its validation diagnostic")
 
@@ -43,7 +41,4 @@ if errors:
         print(f" - {error}")
     sys.exit(1)
 
-print(
-    "Preview release diagnostic preflight PASS: executable helpers retain their exact preview regex "
-    "while using version-neutral operator diagnostics instead of already-published product tags."
-)
+print("Preview release diagnostic preflight PASS: executable helpers retain their exact positive preview-ordinal regex while using version-neutral operator diagnostics instead of already-published product tags.")
