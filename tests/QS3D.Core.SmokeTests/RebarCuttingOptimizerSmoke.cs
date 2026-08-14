@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             RequirementOrderDoesNotChangePlan();
             OversizedExpandedDemandFailsBeforePlanning();
             PieceThatCannotFitFailsClosed();
+            SubToleranceStockOverrunFailsClosed();
         }
 
         private static void BestFitDecreasingUsesDeterministicTwoBarPlan()
@@ -25,7 +26,7 @@ namespace QS3D.Core.SmokeTests
                 new RebarCutRequirement("B", 4d, 2));
 
             var result = RebarCuttingOptimizer.Plan(demand);
-            Equal(RebarCuttingOptimizationResult.AlgorithmId, "BestFitDecreasingV1");
+            Equal("BestFitDecreasingV1", RebarCuttingOptimizationResult.AlgorithmId);
             Equal(2, result.StockBars.Count);
             Equal(2, result.ProcurementQuantities.StockBarCount);
             Near(20d, result.ProcurementQuantities.ProcurementLengthM);
@@ -99,6 +100,12 @@ namespace QS3D.Core.SmokeTests
                 10d,
                 new[] { new RebarCutRequirement("A", 10d, 1) },
                 new RebarCutAllowancePolicy(0d, 0.01d));
+            Throws<InvalidOperationException>(() => RebarCuttingOptimizer.Plan(demand));
+        }
+
+        private static void SubToleranceStockOverrunFailsClosed()
+        {
+            var demand = Demand(10d, 0d, new RebarCutRequirement("A", 10d + 5e-13d, 1));
             Throws<InvalidOperationException>(() => RebarCuttingOptimizer.Plan(demand));
         }
 
