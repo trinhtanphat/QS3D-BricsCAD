@@ -40,22 +40,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: "8.0.x"
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v5
-        with:
-          path: ${{ env.NUGET_PACKAGES }}
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', 'nuget.config') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-
-
       - name: Validate cloud prerelease request
         shell: powershell
         run: |
@@ -129,6 +113,22 @@ jobs:
           }
           "RELEASE_COMMIT_SHA=$releaseCommit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "Exact release source commit: $releaseCommit"
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', 'nuget.config') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
 
       - name: Manual-only CI policy gate
         run: python scripts/preflight-ci-manual-only.py
