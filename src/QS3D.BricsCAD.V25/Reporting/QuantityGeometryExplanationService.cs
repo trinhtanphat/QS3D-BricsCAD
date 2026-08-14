@@ -399,7 +399,11 @@ namespace QS3D.BricsCAD.V25.Reporting
             var ln = left.Normal.GetNormal();
             var rn = right.Normal.GetNormal();
             if (Math.Abs(ln.DotProduct(rn)) < 1d - 1e-7) return false;
-            return Math.Abs((right.PointOnPlane - left.PointOnPlane).DotProduct(ln)) <= toleranceCad;
+            // Plane identity must be materially stricter than the contact-probe offset.
+            // Otherwise the probe's inward cut face can be mistaken for the original
+            // target face and the contact deduction collapses back to zero.
+            var planeToleranceCad = Math.Max(toleranceCad * 1e-3d, 1e-12d);
+            return Math.Abs((right.PointOnPlane - left.PointOnPlane).DotProduct(ln)) <= planeToleranceCad;
         }
 
         private static int DominantHorizontalAxis(Solid3d solid)
