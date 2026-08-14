@@ -14,7 +14,7 @@
 ## Reserved scope
 
 - `src/QS3D.Core/Export/RebarCsvExporter.cs`
-- `tests/QS3D.Core.SmokeTests/BbsRegressionSmoke.cs`
+- new `tests/QS3D.Core.SmokeTests/BbsCsvResourceBoundSmoke.cs`
 - `docs/agent-work-claims/2026-08-14-1244-gpt56sol-bbs-csv-resource-bound.md`
 
 ## Intended change
@@ -23,7 +23,7 @@ Add a finite BBS CSV row ceiling at the public renderer boundary, rejecting the 
 
 ## Regression plan
 
-Extend the focused BBS smoke to prove the configured maximum is accepted, the next row throws `ArgumentOutOfRangeException`, and lazy enumeration is stopped at a bounded number of `MoveNext` calls. Keep the fixture domain-valid and do not mutate an existing destination on preflight failure.
+Add a focused self-registering BBS CSV smoke to prove the configured maximum is accepted, the next row throws `ArgumentOutOfRangeException`, and lazy enumeration is stopped at a bounded number of `MoveNext` calls. Keep the fixture domain-valid. A new focused file is reserved instead of touching the broad shared `BbsRegressionSmoke.cs`, reducing collision with concurrent work.
 
 ## Excluded scope
 
