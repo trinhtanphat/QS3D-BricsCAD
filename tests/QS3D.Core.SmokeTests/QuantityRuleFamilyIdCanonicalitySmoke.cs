@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Rules;
@@ -22,7 +23,12 @@ namespace QS3D.Core.SmokeTests
             project.Families.Add(family);
 
             var element = new ProjectElement("B1", ElementCategory.Beam, family.Id, string.Empty, string.Empty);
-            element.FamilyId = " FAM-1 ";
+            Equal(family.Id, element.FamilyId);
+            var paddedFamilyId = " FAM-1 ";
+            var familyIdField = typeof(ProjectElement).GetField("_familyId", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (familyIdField == null) throw new InvalidOperationException("Quantity Rule FamilyId reflection boundary was not found.");
+            familyIdField.SetValue(element, paddedFamilyId);
+            Equal(paddedFamilyId, element.FamilyId);
             element.Quantities["OldManaged"] = 7d;
             element.Properties["Rule:OldManaged"] = "old@1";
             project.Elements.Add(element);
