@@ -1,6 +1,6 @@
 # Work claim — LOCAL-003 shared native Level Z-chain
 
-- Status: `ACTIVE`
+- Status: `BLOCKED`
 - Agent: `codex-local-019ff0c5` (`/root`, local Windows + licensed BricsCAD V25 agent)
 - Registered: `2026-08-11T19:43:12+07:00`
 - Baseline main SHA: `c7dd212d36677a1d2e005becf8709768fe98d6a1`
@@ -692,6 +692,12 @@ Exact synchronized candidate `f38cc3464a11c62df31d50c186012a654b192e1f` passed t
 The already reserved Level qualification harness is expanded narrowly to diagnose and correct launcher-to-host process ownership in `scripts/test-bricscad-v25-level-z.ps1`, with a focused Level runner static guard only if needed. `scripts/bricscad-runner-window-interop.ps1` may be read and consumed as the existing shared helper, but is explicitly read-only in this expansion. No Curtain P10/P11 runner, LOCAL-004 runner, shared helper, product/Core source, GitHub Actions or unrelated qualification lane is reserved. If a shared-helper edit proves necessary, stop and publish a separate collision-checked claim amendment before that edit.
 
 Acceptance requires the Level runner to bind only to a test-owned BricsCAD host created after a zero-process preflight, distinguish launcher exit/handoff from host exit, execute the existing private script, emit the existing sanitized exact-SHA marker, and clean only test-owned processes/files/state on PASS, FAIL or timeout. Do not attach to, close or modify any pre-existing/operator-owned BricsCAD process or drawing. A changed harness must pass its deterministic guard and then a fresh disposable exact-current-SHA licensed run; an unchanged blind retry is not sufficient.
+
+## 2026-08-14 native startup blocker confirmed below the Level harness
+
+The `NO_RESULT` is not a launcher-to-host tracking defect. Four zero-process diagnostic launches covered hidden and visible `/P QS3D-V25-TEST`, the installed BricsCAD working directory, and the official no-argument BricsCAD shortcut. Every launch created exactly one responsive `bricscad.exe`, no child/host handoff and no main window for 30 seconds; CPU settled near one second. A separate 12-second snapshot of the official shortcut launch found 256 loaded modules and 22 threads but only invisible Qt screen-observer and IME top-level windows. FlexNet Licensing Service was running, no recent BricsCAD WER/crash record existed, and each exact test-owned PID was removed after the zero-process preflight with zero BricsCAD processes remaining.
+
+This is `BLOCKED_LOCAL_ENVIRONMENT / NO_RESULT`, not a Level product PASS or FAIL. No runner/helper/product change is justified by the evidence, so this worker did not edit them. Resume only after an operator Windows sign-out/restart or BricsCAD/license repair makes the official shortcut create a visible responsive main window again. Then reactivate and push this claim first, synchronize the newest `main`, rebuild all exact-SHA gates and rerun the fresh disposable Level probe. Do not close or modify an operator-owned BricsCAD session or drawing.
 
 ## 2026-08-14 resumed after operator session closed
 
