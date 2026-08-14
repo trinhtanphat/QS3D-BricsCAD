@@ -415,7 +415,7 @@ namespace QS3D.Core.Templates
         private static string RequiredCanonicalLayerMappingPattern(XElement element)
         {
             var raw = element.Attribute("pattern")?.Value;
-            if (string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+            if (raw == null || string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
                 throw new InvalidDataException("Template layer mapping pattern is empty or non-canonical.");
             return raw;
         }
