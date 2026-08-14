@@ -507,7 +507,8 @@ namespace QS3D.BricsCAD.V25
             Document document,
             Transaction transaction,
             ProjectState project,
-            ProjectStateSnapshot beforeSnapshot)
+            ProjectStateSnapshot beforeSnapshot,
+            ProjectRevisionStamp beforeStamp)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (transaction == null) throw new ArgumentNullException(nameof(transaction));
@@ -525,7 +526,7 @@ namespace QS3D.BricsCAD.V25
             var registeredHistory = false;
             lock (Gate)
             {
-                beforeEntry = new HistoryEntry(beforeSnapshot, ProjectRevisionStamp.Capture(project));
+                beforeEntry = new HistoryEntry(beforeSnapshot, beforeStamp);
                 if (!Histories.TryGetValue(document, out history))
                 {
                     history = new DocumentHistory(project, previousRevision);
