@@ -121,7 +121,7 @@ jobs:
         shell: powershell
         run: |
           if (-not $env:BRICSCAD_V25_DIR) { throw "BRICSCAD_V25_DIR repository variable is not set." }
-          foreach ($name in @('bricscad.exe', 'BrxMgd.dll', 'TD_Mgd.dll')) {
+          foreach ($name in @('bricscad.exe', 'BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')) {
             if (-not (Test-Path (Join-Path $env:BRICSCAD_V25_DIR $name))) {
               throw "Required BricsCAD V25 runtime file is missing: $name"
             }
