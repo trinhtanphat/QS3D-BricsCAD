@@ -102,6 +102,12 @@ namespace QS3D.BricsCAD.V25
                     "PICKFIRST phải trỏ tới đúng một source của semantic Slab; tìm được " + hostMatches.Count + ".");
             var host = hostMatches[0];
 
+            // Direct Draw promises first-use auto subtraction. If this Slab has never had native 3D,
+            // materialize exactly the selected host before taking the opening rollback snapshot. A later
+            // opening failure may then roll back only the opening operation without orphaning that committed
+            // host Solid3d. Existing/stale generated hosts remain fail-closed in SlabOpeningBooleanService.
+            EnsureFirstUseHostSolid(document, project, host, selectedHostHandle);
+
             var rollback = ProjectStateSnapshot.Capture(project);
             var sourceId = ObjectId.Null;
             var booleanCommitted = false;
@@ -156,6 +162,35 @@ namespace QS3D.BricsCAD.V25
                 }
                 throw;
             }
+        }
+
+        private static void EnsureFirstUseHostSolid(
+            Document document,
+            ProjectState project,
+            ProjectElement host,
+            string selectedHostHandle)
+        {
+            if (host.Properties.TryGetValue("GeneratedSolidHandle", out var existingHandle) &&
+                !string.IsNullOrWhiteSpace(existingHandle))
+                return;
+
+            var hostSourceIds = CadHandleService.Resolve(document, new[] { selectedHostHandle }).Distinct().ToArray();
+            if (hostSourceIds.Length != 1)
+                throw new InvalidOperationException(
+                    "slabOpen không thể tự dựng host Slab lần đầu: source handle " + selectedHostHandle +
+                    " resolve thành " + hostSourceIds.Length + " CAD entity.");
+
+            document.Editor.SetImpliedSelection(hostSourceIds);
+            var built = StructuralSolidBuilder.BuildSelected(document, project, ElementCategory.Slab);
+            if (built != 1)
+                throw new InvalidOperationException(
+                    "slabOpen không thể tự dựng đúng một host Slab lần đầu; đã dựng " + built + ".");
+
+            if (!host.Properties.TryGetValue("GeneratedSolidHandle", out var generatedHandle) ||
+                string.IsNullOrWhiteSpace(generatedHandle))
+                throw new InvalidOperationException("slabOpen auto-build không tạo GeneratedSolidHandle cho host Slab " + host.Id + ".");
+            if (host.IsGeneratedSolidStale())
+                throw new InvalidOperationException("slabOpen auto-build tạo host Slab nhưng geometry vẫn stale: " + host.Id + ".");
         }
 
         private static IReadOnlyList<Point3d>? AcquirePath(Document document, string label)

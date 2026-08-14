@@ -45,6 +45,8 @@ def main():
             ROOT / "src/QS3D.BricsCAD.V25/Cad/SlabOpeningBooleanService.cs",
             (
                 "SlabOpeningContract.IsSlabOpening",
+                "host.IsGeneratedSolidStale()",
+                "Build 3D again before slabOpen subtraction.",
                 "SlabOpeningCutPlanner.Plan",
                 "plan.ExtrusionZM",
                 "extrusionDrawing < 0d",
@@ -60,6 +62,10 @@ def main():
                 'CommandMethod("QS3DDRAWSLABOPENADV"',
                 "CadSelectionGuard.ReadImpliedSelection",
                 "ElementCategory.Slab",
+                "EnsureFirstUseHostSolid(document, project, host, selectedHostHandle);",
+                'host.Properties.TryGetValue("GeneratedSolidHandle", out var existingHandle)',
+                "StructuralSolidBuilder.BuildSelected(document, project, ElementCategory.Slab)",
+                'host.Properties.TryGetValue("GeneratedSolidHandle", out var generatedHandle)',
                 "SlabOpeningContract.Bind",
                 "SlabOpeningBooleanService.CutLinkedOpening",
             ),
@@ -114,9 +120,18 @@ def main():
     if "Finite(cutterHeight" in planner or "ExtrusionZM = cutterHeight" in planner:
         return fail("slabOpen planner must not regress to positive-Z extrusion")
 
+    auto_build = direct.find("EnsureFirstUseHostSolid(document, project, host, selectedHostHandle);")
+    rollback = direct.find("var rollback = ProjectStateSnapshot.Capture(project);")
+    if auto_build < 0 or rollback < 0 or auto_build > rollback:
+        return fail("slabOpen first-use host auto-build must happen before the opening rollback snapshot")
+    existing_guard = direct.find('host.Properties.TryGetValue("GeneratedSolidHandle", out var existingHandle)')
+    builder = direct.find("StructuralSolidBuilder.BuildSelected(document, project, ElementCategory.Slab)")
+    if existing_guard < 0 or builder < 0 or existing_guard > builder:
+        return fail("slabOpen must preserve an existing generated host and auto-build only the first-use missing-solid case")
+
     print(
-        "PASS: slabOpen exact-family routing, HostSlabId semantics, negative-Z cutter, "
-        "automatic BoolSubtract, and ordinary wall-host preservation are pinned. "
+        "PASS: slabOpen exact-family routing, first-use host auto-build, HostSlabId semantics, negative-Z cutter, "
+        "automatic BoolSubtract, stale-existing-host fail-closed behavior, and ordinary wall-host preservation are pinned. "
         "NATIVE_RUNTIME=LOCAL_ONLY"
     )
     return 0
