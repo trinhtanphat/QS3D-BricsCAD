@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ribbon = (ROOT / "src/QS3D.BricsCAD.V25/Ribbon/QuickWorkflowRibbonAugmenter.cs").read_text(encoding="utf-8")
 commands = (ROOT / "src/QS3D.BricsCAD.V25/ReferenceUiCommands.cs").read_text(encoding="utf-8")
 tree = (ROOT / "src/QS3D.BricsCAD.V25/UI/ReferenceWorkspaceTreeAugmenter.cs").read_text(encoding="utf-8")
+registration = (ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.ReferenceTreeRegistration.cs").read_text(encoding="utf-8")
 
 required_ribbon = {
     "Theo nét CAD": "QS3DDRAWBYCAD",
@@ -37,6 +38,13 @@ for label in [
 ]:
     if label not in tree:
         errors.append(f"missing Workspace tree label: {label}")
+
+if "ReferenceWorkspaceTreeAugmenter.EnsureRegistered()" not in registration:
+    errors.append("Workspace reference tree augmenter is orphaned: no WorkspacePanel type-initialization registration call")
+if "static readonly bool ReferenceWorkspaceTreeRegistrationReady" not in registration:
+    errors.append("Workspace reference tree registration must remain a type initializer, not an instance/load side effect")
+if "EventManager.RegisterClassHandler" not in tree or "typeof(WorkspacePanel)" not in tree:
+    errors.append("Workspace reference tree augmenter must remain a WorkspacePanel Loaded class handler")
 
 for forbidden in ["RibbonInitializationCoordinator.cs", "PaletteCoordinator.cs"]:
     if forbidden in ribbon:

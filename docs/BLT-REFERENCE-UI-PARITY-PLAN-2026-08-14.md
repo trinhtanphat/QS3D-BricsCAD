@@ -60,14 +60,27 @@ Added/ensured labels include:
 - KL Tùy chỉnh → chiều dài/diện tích/thể tích/biên dạng/mặt phẳng.
 - Modeling top-level entry.
 
+### Follow-up integration audit
+
+A post-implementation whole-session review found that the original tree augmenter defined `EnsureRegistered()` but had no source caller. That made the detailed screenshot tree a dead-code risk even though the labels and handler were implemented correctly.
+
+The follow-up fixes that integration boundary without touching `PluginEntry`, palette creation, document lifecycle or the active NETLOAD/startup lane:
+
+- `WorkspacePanel.ReferenceTreeRegistration.cs` adds a presentation-only static field initializer on the existing `WorkspacePanel` partial type.
+- The initializer calls `ReferenceWorkspaceTreeAugmenter.EnsureRegistered()` exactly once as part of `WorkspacePanel` type initialization, before the first panel instance is constructed.
+- `EnsureRegistered()` remains idempotent and continues to install a `WorkspacePanel.Loaded` class handler; it does not construct the palette or mutate ProjectState/CAD.
+- The focused preflight now fails if the augmenter becomes orphaned again or if registration drifts from type initialization into an instance/startup side effect.
+
 ## Validation strategy
 
 Remote/source-safe checks:
 
 1. Static guard asserts the screenshot-critical labels and command mappings stay present.
-2. Source readback confirms the VẼ augmenter remains additive and does not touch `RibbonInitializationCoordinator` or startup scheduling.
-3. Source readback confirms the Workspace tree augmenter registers without constructing the palette and only mutates visual `TreeViewItem` structure.
-4. GitHub Actions remain idle unless the owner separately requests CI, per `CI_POLICY.md`.
+2. Static guard asserts the reference tree registration is reachable from `WorkspacePanel` type initialization.
+3. Source readback confirms the VẼ augmenter remains additive and does not touch `RibbonInitializationCoordinator` or startup scheduling.
+4. Source readback confirms the Workspace tree augmenter only mutates visual `TreeViewItem` structure and registration does not construct a palette.
+5. `scripts/preflight-all.py` auto-discovers `preflight-blt-reference-ui-parity.py` through its `preflight-*.py` scan; no aggregator edit is required.
+6. GitHub Actions remain idle unless the owner separately requests CI, per `CI_POLICY.md`.
 
 Native/local acceptance still required for a true host UI PASS:
 
