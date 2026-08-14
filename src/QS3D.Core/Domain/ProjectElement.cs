@@ -91,9 +91,9 @@ namespace QS3D.Core.Domain
                 MarkDirtyCore(ElementDirtyFlags.All, true);
             }
         }
-        public string FamilyId { get => _familyId; set => _familyId = value ?? string.Empty; }
-        public string FloorId { get => _floorId; set => _floorId = value ?? string.Empty; }
-        public string ZoneId { get => _zoneId; set => _zoneId = value ?? string.Empty; }
+        public string FamilyId { get => _familyId; set => _familyId = NormalizeOptionalRelationId(value); }
+        public string FloorId { get => _floorId; set => _floorId = NormalizeOptionalRelationId(value); }
+        public string ZoneId { get => _zoneId; set => _zoneId = NormalizeOptionalRelationId(value); }
         public string DrawingFingerprint { get => _drawingFingerprint; set => _drawingFingerprint = value ?? string.Empty; }
         public IList<string> SourceHandles { get; }
         public IList<string> DependsOn { get; }
@@ -283,6 +283,13 @@ namespace QS3D.Core.Domain
                 MarkGeneratedGeometryStale("Semantic/source state changed.");
             Dirty |= flags;
             UpdatedUtc = DateTime.UtcNow;
+        }
+
+        private static string NormalizeOptionalRelationId(string? value)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            if (normalized.Any(char.IsControl)) throw new ArgumentException("Element relation id cannot contain control characters.", nameof(value));
+            return normalized;
         }
 
         private static string RequireId(string id)
