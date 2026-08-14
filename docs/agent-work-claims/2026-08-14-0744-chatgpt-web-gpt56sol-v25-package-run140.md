@@ -5,6 +5,7 @@
 - Registered: `2026-08-14T07:44:00+07:00`
 - Baseline main SHA: `ebf41473af72970d7911b3b7ad5e3b9297b604ff`
 - Source fix: `dddfd34e0fd190abf347ec3c59a4818e80450ebb` (`fix(release): align source version with preview.6`)
+- Scope extended: `2026-08-14T08:01:00+07:00` from refreshed `main` baseline `66adbfbe38ab6850d674195656ba737d2f523d3a`
 - Priority: fresh V25 workflow run #140 passed deterministic Core smoke and plugin build, then failed at `Build V25 preview package`.
 
 ## Reserved scope
@@ -28,6 +29,7 @@ Commit `dddfd34e0fd190abf347ec3c59a4818e80450ebb` advances all runtime-product i
 - GitHub Actions run #140 packaging-step evidence
 - `.github/workflows/release-v25-cloud.yml` — automate source identity synchronization, exact release-commit provenance, and safe push behavior while remaining `workflow_dispatch` only
 - `scripts/sync-preview-release-version.ps1` — new fail-closed helper that validates one `vX.Y.Z-preview.N` input and synchronizes V25/V26/Core `Version`, `FileVersion`, and `InformationalVersion`
+- `scripts/preflight-v25-preview-release-sync.py` — focused static regression guard for helper wiring, fail-closed remote-main checks, release commit provenance, and no stale `GITHUB_SHA` publication target
 - `scripts/package-v25.ps1` — read/diagnose only; preserve its exact source/tag version guard
 - `src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj` — aligned preview product identity
 - `src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj` — aligned preview product identity required by runtime-version guard
@@ -57,7 +59,8 @@ Commit `dddfd34e0fd190abf347ec3c59a4818e80450ebb` advances all runtime-product i
 - run #140 evidence: Core guards/build/smoke and V25 plugin build passed before packaging
 - source/package identity mismatch: fixed in `dddfd34e0fd190abf347ec3c59a4818e80450ebb`
 - package strict guard: preserved
-- automation hardening: in progress
+- helper implementation: `9a668d33ba9cc74d1511390fd1dfffa6e595a9c7`
+- workflow wiring + focused static regression guard: in progress
 - fresh exact-SHA V25 workflow run with `release_tag=v0.1.0-preview.6`: still required before claiming end-to-end success
 - do not rerun #140 for acceptance because GitHub reruns use its original SHA `337e97d32b6642b3a3d013596ffa1545df168999`
 
@@ -67,4 +70,4 @@ Recheck current `main` and exact-path claims immediately before every further wr
 
 ## Completion condition
 
-A fresh V25 workflow run using the hardened automation and containing the release identity fix (or a descendant with equivalent aligned identity) passes the package/release gates, after which this claim may become `COMPLETED`.
+The hardened workflow and focused regression guard are pushed to `main`, and a fresh V25 workflow run using the hardened automation and containing the release identity fix (or a descendant with equivalent aligned identity) passes the package/release gates, after which this claim may become `COMPLETED`.
