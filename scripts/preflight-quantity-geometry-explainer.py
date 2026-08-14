@@ -49,7 +49,7 @@ REQUIRED = {
         "S gộp",
         "S còn",
         "OnQuantityGeometryDeductionClick",
-        "QS3DZOOMSELECTED",
+        "ViewportCommands.TryZoomSelection(document)",
         "GeometryFingerprint",
     ],
     "render": [
@@ -95,6 +95,10 @@ def main():
         if "toleranceCad * 1e-3d" not in service:
             failures.append("face-plane identity tolerance must be stricter than contact-probe offset")
 
+    ui = texts.get("ui", "")
+    if 'SendStringToExecute("QS3DZOOMSELECTED ' in ui or 'SendStringToExecute("QS3DZOOMEXTENTS ' in ui:
+        failures.append("geometry deduction locate must use direct in-process zoom, not queued command re-entry")
+
     if failures:
         print("Quantity geometry explainer preflight FAILED")
         for failure in failures:
@@ -106,7 +110,7 @@ def main():
     print(" - Residual subtraction prevents double volume deduction")
     print(" - Multi-Solid3d face identities are component-scoped")
     print(" - Contact-probe cut planes cannot masquerade as original target faces")
-    print(" - Per-face formwork/contact explanation and clickable CAD locate UI")
+    print(" - Per-face formwork/contact explanation and direct clickable CAD locate/zoom UI")
     print(" - BREP compile reference and SI unit normalization")
     return 0
 
