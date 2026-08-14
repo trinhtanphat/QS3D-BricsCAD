@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Revisions;
@@ -25,7 +26,14 @@ namespace QS3D.Core.SmokeTests
         {
             var service = new RevisionService();
 
-            Throws<InvalidOperationException>(() => service.Capture(ProjectWithElement(new ProjectElement("E-\u0001-1", ElementCategory.ArchitecturalWall)), "REV-XML"));
+            var invalidIdElement = new ProjectElement("E-1", ElementCategory.ArchitecturalWall);
+            Equal("E-1", invalidIdElement.Id);
+            var idField = typeof(ProjectElement).GetField("<Id>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectElement Id backing field was not found.");
+            idField.SetValue(invalidIdElement, "E-\u0001-1");
+            Equal("E-\u0001-1", invalidIdElement.Id);
+
+            Throws<InvalidOperationException>(() => service.Capture(ProjectWithElement(invalidIdElement), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.FamilyId = "F-\u0001-1"), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.FloorId = "L-\u0001-1"), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.ZoneId = "Z-\u0001-1"), "REV-XML"));
