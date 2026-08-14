@@ -8,9 +8,20 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
+            ReferenceCurveFactoriesRejectMalformedIdentityText();
             MalformedIdentityTextIsRejected();
             AssignRejectsMalformedIdentityText();
             ValidSupplementaryUnicodeRemainsDeterministic();
+        }
+
+        private static void ReferenceCurveFactoriesRejectMalformedIdentityText()
+        {
+            var start = new Point2(0d, 0d);
+            var end = new Point2(1d, 0d);
+            Throws<ArgumentException>(() => GridReferenceCurve.Line("GRID-\uD800", start, end));
+            Throws<ArgumentException>(() => GridReferenceCurve.Line("GRID-\uDC00", start, end));
+            Throws<ArgumentException>(() => GridReferenceCurve.Arc("GRID-\uD801", start, 1d, 0d, Math.PI));
+            Throws<ArgumentException>(() => GridReferenceCurve.Arc("GRID-\uDC01", start, 1d, 0d, Math.PI));
         }
 
         private static void MalformedIdentityTextIsRejected()
@@ -42,12 +53,23 @@ namespace QS3D.Core.SmokeTests
             if (!direct.StartsWith("GIP1:", StringComparison.Ordinal) || direct.Length != "GIP1:".Length + 64)
                 throw new InvalidOperationException("Valid Grid identity pair-token format changed unexpectedly.");
 
-            var identities = GridIntersectionIdentityPlanner.Assign(new[]
-            {
-                new GridIntersection(first, second, new Point2(1d, 2d))
-            });
+            var firstCurve = GridReferenceCurve.Line(
+                " " + first + " ",
+                new Point2(-1d, 0d),
+                new Point2(1d, 0d));
+            var secondCurve = GridReferenceCurve.Line(
+                second,
+                new Point2(0d, -1d),
+                new Point2(0d, 1d));
+            if (!string.Equals(firstCurve.ElementId, first, StringComparison.Ordinal))
+                throw new InvalidOperationException("Valid supplementary Grid identity text lost its existing trim-only normalization.");
+
+            var intersections = GridIntersectionPlanner.FindIntersections(new[] { firstCurve, secondCurve });
+            if (intersections.Count != 1)
+                throw new InvalidOperationException("Valid supplementary Grid identity curves must produce one deterministic intersection.");
+            var identities = GridIntersectionIdentityPlanner.Assign(intersections);
             if (identities.Count != 1 || !string.Equals(identities[0].PairToken, direct, StringComparison.Ordinal))
-                throw new InvalidOperationException("Valid supplementary Grid identity text did not retain deterministic assignment.");
+                throw new InvalidOperationException("Valid supplementary Grid identity text did not flow through intersection and deterministic assignment.");
         }
 
         private static TException Throws<TException>(Action action) where TException : Exception

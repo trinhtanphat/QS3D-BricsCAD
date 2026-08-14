@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 namespace QS3D.Core.Geometry
 {
@@ -13,6 +14,7 @@ namespace QS3D.Core.Geometry
     public sealed class GridReferenceCurve
     {
         private const int MaxElementIdLength = 128;
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         private GridReferenceCurve(
             string elementId,
@@ -71,6 +73,14 @@ namespace QS3D.Core.Geometry
             var normalized = elementId.Trim();
             if (normalized.Length > MaxElementIdLength)
                 throw new ArgumentException("Grid element id exceeds " + MaxElementIdLength + " characters.", nameof(elementId));
+            try
+            {
+                StrictUtf8.GetByteCount(normalized);
+            }
+            catch (EncoderFallbackException)
+            {
+                throw new ArgumentException("Grid element id must contain well-formed Unicode text.", nameof(elementId));
+            }
             return normalized;
         }
     }
