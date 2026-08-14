@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Rules;
@@ -23,6 +24,9 @@ namespace QS3D.Core.SmokeTests
 
             var element = new ProjectElement("B1", ElementCategory.Beam, family.Id, string.Empty, string.Empty);
             element.FamilyId = " FAM-1 ";
+            Equal("FAM-1", element.FamilyId);
+            SetRawFamilyId(element, " FAM-1 ");
+            Equal(" FAM-1 ", element.FamilyId);
             element.Quantities["OldManaged"] = 7d;
             element.Properties["Rule:OldManaged"] = "old@1";
             project.Elements.Add(element);
@@ -67,6 +71,14 @@ namespace QS3D.Core.SmokeTests
             Equal(1, applied);
             Near(4d, element.Quantities["Computed"]);
             Equal("beam-factor@1", element.Properties["Rule:Computed"]);
+        }
+
+        private static void SetRawFamilyId(ProjectElement element, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_familyId", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null || field.FieldType != typeof(string))
+                throw new InvalidOperationException("QuantityRuleFamilyIdCanonicalitySmoke could not resolve raw FamilyId backing field.");
+            field.SetValue(element, value);
         }
 
         private static void ThrowsNonCanonicalFamily(Action action)
