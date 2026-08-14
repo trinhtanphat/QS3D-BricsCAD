@@ -304,7 +304,10 @@ registration = registration_path.read_text(encoding="utf-8") if registration_pat
 for token in (
     "agent/<agent-id>/<scope>",
     "integration/<batch-id>",
-    "one final merge",
+    "`origin/main` as read-only",
+    "dedicated issue/branch/PR",
+    "Only an agent/session explicitly authorized by the repository owner as an integration/merge coordinator may change `main`.",
+    "merge to `main` only within the owner's explicit authorization",
     "ALL MERGED TO MAIN",
     AUTO_DISPATCHER,
 ):
