@@ -53,7 +53,7 @@ namespace QS3D.Core.SmokeTests
 
             Equal(beforeVersion, project.ChangeVersion);
             Same(floor, project.FindFloor(floor.Id));
-            Equal("  fLOOR-a  ", project.ActiveFloorId);
+            Equal("fLOOR-a", project.ActiveFloorId);
         }
 
         private static void ZoneReferenceIdentityIsCanonical()
@@ -93,7 +93,7 @@ namespace QS3D.Core.SmokeTests
 
             Equal(beforeVersion, project.ChangeVersion);
             Same(zone, project.FindZone(zone.Id));
-            Equal("  zONE-a  ", project.ActiveZoneId);
+            Equal("zONE-a", project.ActiveZoneId);
         }
 
         private static void ThrowsReferencedFloor(Action action)
