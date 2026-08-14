@@ -135,11 +135,22 @@ namespace QS3D.Core.Export
                 issues.Error("JSON_EMPTY", "Semantic snapshot JSON is empty.", "$.");
                 return Result(null, issues);
             }
-            if (Encoding.UTF8.GetByteCount(json) > MaxFileBytes)
+            int utf8ByteCount;
+            try
+            {
+                utf8ByteCount = StrictUtf8.GetByteCount(json);
+            }
+            catch (EncoderFallbackException ex)
+            {
+                issues.Error("JSON_UTF16", "Semantic snapshot JSON string contains invalid UTF-16: " + ex.Message, "$.");
+                return Result(null, issues);
+            }
+            if (utf8ByteCount > MaxFileBytes)
             {
                 issues.Error("JSON_TOO_LARGE", "Semantic snapshot exceeds the guarded size limit.", "$.");
                 return Result(null, issues);
             }
+            var utf8 = StrictUtf8.GetBytes(json);
 
             SnapshotContract? snapshot;
             try
@@ -149,7 +160,7 @@ namespace QS3D.Core.Export
                     MaxItemsInObjectGraph = 1000000,
                     UseSimpleDictionaryFormat = true
                 });
-                using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(json), false))
+                using (var stream = new MemoryStream(utf8, false))
                     snapshot = serializer.ReadObject(stream) as SnapshotContract;
             }
             catch (Exception ex) when (ex is SerializationException || ex is FormatException || ex is InvalidCastException)
