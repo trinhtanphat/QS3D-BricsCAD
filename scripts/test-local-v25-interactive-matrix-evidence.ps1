@@ -115,11 +115,14 @@ foreach ($name in $requiredScenarios) {
     }
 }
 
-$knownBlockers = Require-Property -Object $evidence -Name "knownBlockers" -Context "evidence"
-if ($null -eq $knownBlockers) {
+$blockersProperty = $evidence.PSObject.Properties["knownBlockers"]
+if ($null -eq $blockersProperty -or $null -eq $blockersProperty.Value) {
     throw "knownBlockers must be an empty JSON array for full qualification."
 }
-$blockerCount = @($knownBlockers).Count
+if ($blockersProperty.Value -isnot [System.Array]) {
+    throw "knownBlockers must be a JSON array."
+}
+$blockerCount = $blockersProperty.Value.Count
 if ($blockerCount -ne 0) {
     throw "Full licensed V25 qualification cannot pass while knownBlockers contains $blockerCount item(s)."
 }
