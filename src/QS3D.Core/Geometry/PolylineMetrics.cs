@@ -29,22 +29,29 @@ namespace QS3D.Core.Geometry
                 return 0d;
             }
 
+            EnsureFinite(points);
+            try
+            {
+                return SignedAreaDirect(points);
+            }
+            catch (OverflowException)
+            {
+                return SignedAreaScaled(points);
+            }
+        }
+
+        public static double Area(IReadOnlyList<Point2> points) => Math.Abs(SignedArea(points));
+
+        private static double SignedAreaDirect(IReadOnlyList<Point2> points)
+        {
             var origin = points[0];
-            EnsureFinite(origin);
             double sum = 0d;
             double compensation = 0d;
 
             for (var i = 1; i < points.Count - 1; i++)
             {
-                EnsureFinite(points[i]);
-                EnsureFinite(points[i + 1]);
                 var cross = TranslatedCrossFinite(origin, points[i], points[i + 1]);
-
-                var corrected = cross - compensation;
-                var next = sum + corrected;
-                if (!Finite(next)) throw new OverflowException("Polyline area exceeds the supported numeric range.");
-                compensation = (next - sum) - corrected;
-                sum = next;
+                AddCompensated(ref sum, ref compensation, cross);
             }
 
             var area = sum * 0.5d;
@@ -52,7 +59,83 @@ namespace QS3D.Core.Geometry
             return area;
         }
 
-        public static double Area(IReadOnlyList<Point2> points) => Math.Abs(SignedArea(points));
+        private static double SignedAreaScaled(IReadOnlyList<Point2> points)
+        {
+            var origin = points[0];
+            var translated = true;
+            double scaleX = 0d;
+            double scaleY = 0d;
+
+            for (var i = 1; i < points.Count; i++)
+            {
+                var dx = points[i].X - origin.X;
+                var dy = points[i].Y - origin.Y;
+                if (!Finite(dx) || !Finite(dy))
+                {
+                    translated = false;
+                    break;
+                }
+
+                scaleX = Math.Max(scaleX, Math.Abs(dx));
+                scaleY = Math.Max(scaleY, Math.Abs(dy));
+            }
+
+            if (!translated)
+            {
+                scaleX = 0d;
+                scaleY = 0d;
+                for (var i = 0; i < points.Count; i++)
+                {
+                    scaleX = Math.Max(scaleX, Math.Abs(points[i].X));
+                    scaleY = Math.Max(scaleY, Math.Abs(points[i].Y));
+                }
+            }
+
+            if (!Finite(scaleX) || !Finite(scaleY))
+                throw new OverflowException("Polyline area input exceeds the supported numeric range.");
+            if (scaleX == 0d || scaleY == 0d) return 0d;
+
+            double sum = 0d;
+            double compensation = 0d;
+            for (var i = 1; i < points.Count - 1; i++)
+            {
+                double ax;
+                double ay;
+                double bx;
+                double by;
+                if (translated)
+                {
+                    ax = (points[i].X - origin.X) / scaleX;
+                    ay = (points[i].Y - origin.Y) / scaleY;
+                    bx = (points[i + 1].X - origin.X) / scaleX;
+                    by = (points[i + 1].Y - origin.Y) / scaleY;
+                }
+                else
+                {
+                    ax = points[i].X / scaleX - origin.X / scaleX;
+                    ay = points[i].Y / scaleY - origin.Y / scaleY;
+                    bx = points[i + 1].X / scaleX - origin.X / scaleX;
+                    by = points[i + 1].Y / scaleY - origin.Y / scaleY;
+                }
+
+                var cross = ax * by - ay * bx;
+                if (!Finite(cross)) throw new OverflowException("Polyline normalized area exceeds the supported numeric range.");
+                AddCompensated(ref sum, ref compensation, cross);
+            }
+
+            var normalizedArea = sum * 0.5d;
+            if (!Finite(normalizedArea)) throw new OverflowException("Polyline normalized area exceeds the supported numeric range.");
+            return RestoreScaledAreaFinite(normalizedArea, scaleX, scaleY);
+        }
+
+        private static void AddCompensated(ref double sum, ref double compensation, double value)
+        {
+            var corrected = value - compensation;
+            var next = sum + corrected;
+            if (!Finite(next)) throw new OverflowException("Polyline area exceeds the supported numeric range.");
+            compensation = (next - sum) - corrected;
+            sum = next;
+        }
 
         private static void EnsureFinite(IReadOnlyList<Point2> points)
         {
@@ -108,6 +191,21 @@ namespace QS3D.Core.Geometry
             var value = scaled * secondScale;
             if (!Finite(value)) throw new OverflowException("Polyline area exceeds the supported numeric range.");
             return value;
+        }
+
+        private static double RestoreScaledAreaFinite(double normalizedArea, double scaleX, double scaleY)
+        {
+            if (normalizedArea == 0d) return 0d;
+
+            var smaller = Math.Min(scaleX, scaleY);
+            var larger = Math.Max(scaleX, scaleY);
+            var firstScale = Math.Abs(normalizedArea) <= 1d ? larger : smaller;
+            var secondScale = Math.Abs(normalizedArea) <= 1d ? smaller : larger;
+            var scaled = normalizedArea * firstScale;
+            if (!Finite(scaled)) throw new OverflowException("Polyline area exceeds the supported numeric range.");
+            var area = scaled * secondScale;
+            if (!Finite(area)) throw new OverflowException("Polyline area exceeds the supported numeric range.");
+            return area;
         }
 
         private static double CrossFinite(double ax, double ay, double bx, double by)
