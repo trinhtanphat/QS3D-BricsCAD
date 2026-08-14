@@ -38,6 +38,7 @@ for token in (
     'CommandMethod("QS3DCURTAINP10PROGRESSBUILD", CommandFlags.Modal)',
     'CommandMethod("QS3DCURTAINP10PROGRESSSELECT", CommandFlags.Modal)',
     'CommandMethod("QS3DCURTAINP10PROGRESSWORKSPACE", CommandFlags.Modal)',
+    'CommandMethod("QS3DCURTAINP10RESELECT", CommandFlags.Modal)',
     'CommandMethod("QS3DCURTAINP10PROGRESSINSPECT", CommandFlags.Modal)',
     'CommandMethod("QS3DCURTAINP10PROGRESSREVIEW", CommandFlags.Modal)',
     'CommandMethod("QS3DCURTAINP10PROGRESSHEALTH", CommandFlags.Modal)',
@@ -96,6 +97,32 @@ if min(selection_progress, selection_capture, selection_marker, selection_restor
 ):
     errors.append("Curtain P10 prepared-selection checkpoint must capture implied IDs, publish only its sanitized phase, then restore the identical IDs before returning")
 
+reselection_command = probe.find('public void ReselectGeneratedPanel()')
+reselection_state = probe.find('var state = RequiredState();', reselection_command)
+reselection_affinity = probe.find('state.RequireCurrentAndUnchanged();', reselection_state)
+reselection_resolve = probe.find('CadHandleService.Resolve(state.Document, new[] { state.PanelHandle })', reselection_affinity)
+reselection_cardinality = probe.find('if (selectedIds.Count != 1)', reselection_resolve)
+reselection_apply = probe.find('state.Document.Editor.SetImpliedSelection(selectedIds.ToArray());', reselection_cardinality)
+reselection_end = probe.find('[CommandMethod("QS3DCURTAINP10PROGRESSINSPECT"', reselection_apply)
+if min(
+    reselection_command,
+    reselection_state,
+    reselection_affinity,
+    reselection_resolve,
+    reselection_cardinality,
+    reselection_apply,
+    reselection_end,
+) < 0 or not (
+    reselection_command
+    < reselection_state
+    < reselection_affinity
+    < reselection_resolve
+    < reselection_cardinality
+    < reselection_apply
+    < reselection_end
+):
+    errors.append("Curtain P10 inspect reseed must validate the existing state, resolve exactly its stored panel Handle, and apply only that ObjectId immediately before inspection")
+
 if 'SemanticHandleOwnershipResolver.Resolve(project, rawHandles)' not in workspace:
     errors.append("production Workspace must retain canonical generated-owner resolution")
 
@@ -134,6 +161,7 @@ for token in (
     'QS3DCURTAINPANELPREPARE',
     'QS3DCURTAIN3D',
     'QS3DCURTAINP10SELECT',
+    'QS3DCURTAINP10RESELECT',
     'QS3DINSPECT',
     'QS3DHEALTHALL',
     'QS3DRELEASECHECK',
@@ -171,6 +199,7 @@ ordered = (
     '"QS3DCURTAINP10PROGRESSSELECT"',
     '"QS3D"',
     '"QS3DCURTAINP10PROGRESSWORKSPACE"',
+    '"QS3DCURTAINP10RESELECT"',
     '"QS3DINSPECT"',
     '"QS3DCURTAINP10PROGRESSINSPECT"',
     '"QS3DCURTAINP10CHECKWORKSPACE"',
@@ -186,6 +215,13 @@ ordered = (
 positions = [runner.find(token, runner.find("$script = @(")) for token in ordered]
 if any(pos < 0 for pos in positions) or positions != sorted(positions) or len(set(positions)) != len(positions):
     errors.append("Curtain P10 runner must preserve panel -> Workspace -> Health All -> Release Check order")
+workspace_progress = runner.find('"QS3DCURTAINP10PROGRESSWORKSPACE"', runner.find("$script = @("))
+inspect_reseed = runner.find('"QS3DCURTAINP10RESELECT"', workspace_progress)
+inspect_command = runner.find('"QS3DINSPECT"', inspect_reseed)
+if min(workspace_progress, inspect_reseed, inspect_command) < 0 or not (
+    workspace_progress < inspect_reseed < inspect_command
+):
+    errors.append("Curtain P10 runner must reseed the exact stored panel immediately after Workspace progress and before production QS3DINSPECT")
 if '"QS3DCURTAIN3D", "P", ""' in runner:
     errors.append("Curtain P10 runner must not depend on an interactive Previous-selection response after its selection-transparent progress checkpoint")
 
