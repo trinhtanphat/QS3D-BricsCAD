@@ -8,7 +8,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $tag = $ReleaseTag.Trim()
 $match = [regex]::Match(
     $tag,
-    '^v(?<major>0|[1-9][0-9]*)\.(?<minor>0|[1-9][0-9]*)\.(?<patch>0|[1-9][0-9]*)-preview\.(?<preview>0|[1-9][0-9]*)$',
+    '^v(?<major>0|[1-9][0-9]*)\.(?<minor>0|[1-9][0-9]*)\.(?<patch>0|[1-9][0-9]*)-preview\.(?<preview>[1-9][0-9]*)$',
     [Text.RegularExpressions.RegexOptions]::CultureInvariant)
 
 if (-not $match.Success) {
