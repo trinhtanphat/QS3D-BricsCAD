@@ -9,12 +9,17 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
-            const string separator = "\u001f";
+            const string separator = "|";
             var project = new ProjectState("P-CURTAIN-GROUP", "Curtain grouping");
             project.Floors.Add(new FloorDefinition("A" + separator + "B", "A" + separator + "B", 0d));
             project.Floors.Add(new FloorDefinition("A", "A", 3d));
             project.Families.Add(new ProjectFamily("C", "C", ElementCategory.GlassWall));
             project.Families.Add(new ProjectFamily("B" + separator + "C", "B" + separator + "C", ElementCategory.GlassWall));
+
+            Equal(
+                LegacyDelimitedKey("A" + separator + "B", "C", separator),
+                LegacyDelimitedKey("A", "B" + separator + "C", separator),
+                "fixture tuples collide under delimiter-only grouping");
 
             var first = Wall("E1", "A" + separator + "B", "C", 2d);
             var identical = Wall("E2", "A" + separator + "B", "C", 3d);
@@ -43,6 +48,9 @@ namespace QS3D.Core.SmokeTests
             element.SetQuantity("LengthM", lengthM);
             return element;
         }
+
+        private static string LegacyDelimitedKey(string floorId, string familyId, string separator) =>
+            floorId + separator + familyId;
 
         private static void Equal<T>(T expected, T actual, string label)
         {
