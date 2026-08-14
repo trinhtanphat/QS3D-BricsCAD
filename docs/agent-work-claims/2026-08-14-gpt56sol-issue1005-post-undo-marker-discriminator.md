@@ -1,9 +1,12 @@
 # Work claim — LOCAL-004 post-Undo marker discriminator
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `gpt56sol-source-reconcile-desync-agent`
 - Registered: `2026-08-14T16:51:35+07:00`
+- Completed: `2026-08-14T18:50:37+07:00`
 - Baseline main SHA: `5f13d2fd6d02db7b3989f4ea097e00c55805606a`
+- Implementation merge SHA: `c43b71c3e454b0e19698ec2ab8538214e365048a`
+- Implementation PR: `#1315`
 - Priority: `LOCAL-004 / issue #1005 — distinguish native marker rollback before another production change`
 
 ## Reserved scope
@@ -36,13 +39,15 @@ The discriminator is intentionally isolated in an additive automation-only comma
 
 The ACTIVE LOCAL-004 runtime claim owns the broader licensed matrix and originally created these surfaces. Its owner `/root` explicitly delegated this narrow automation-only discriminator to `/root/fix_source_reconcile_desync`; the matching split is recorded in that claim. The local owner retains all BricsCAD execution and result ownership. No open PR overlapped this edit when the claim was registered. This continuation deliberately precedes any proposed production marker undo-recording change.
 
-## Implementation checkpoint — 2026-08-14
+## Implementation — merged 2026-08-14
 
+- PR `#1315` merged the implementation to `main` at exact SHA `c43b71c3e454b0e19698ec2ab8538214e365048a`.
 - A dedicated automation-only helper captures private pre-final/post-final `SanitizedDiagnosticSnapshot` instances in memory and classifies the current native marker after guarded Undo/Redo relative to both baselines.
 - Only four bounded fields are published: `post_undo_marker_vs_pre_final_state`, `post_undo_marker_vs_post_final_state`, `post_redo_marker_vs_pre_final_state`, and `post_redo_marker_vs_post_final_state`.
-- The helper atomically augments the existing session-one marker only after `QS3DSRTSESSION1` has published a valid PASS marker with the exact nonce/schema/boundary. The runner then validates all four fields against `ADVANCED / UNCHANGED / MISSING_OR_INVALID` and retains the sanitized `phase_marker` in local metadata for handoff even when cold reopen reproduces `NATIVE_UNDO_SEMANTIC_DIVERGENCE`.
-- Production Undo coordinator/service/history/marker behavior and LOCAL-004 acceptance criteria are unchanged.
+- The helper atomically augments the existing session-one marker only after `QS3DSRTSESSION1` has published a valid PASS marker with the exact nonce/schema/boundary. The runner validates all four fields against `ADVANCED / UNCHANGED / MISSING_OR_INVALID` and retains the sanitized `phase_marker` in local metadata for handoff even when cold reopen reproduces `NATIVE_UNDO_SEMANTIC_DIVERGENCE`.
+- Production Undo coordinator/service/history/marker behavior and LOCAL-004 acceptance criteria were not changed by this lane.
+- Static PR patch audit found no production-boundary bypass or raw revision/project/path/handle emission. No commit-status checks were reported for the exact candidate; this delegated lane did not dispatch GitHub Actions or execute licensed BricsCAD because both are explicitly owned by the root LOCAL-004 claim.
 
-## Completion condition
+## Handoff / remaining acceptance
 
-The three-file helper/runner/gate change is merged to current `main`, this claim is marked `COMPLETED`, and the exact merge SHA is handed off for the licensed unchanged LOCAL-004 matrix. Issue #1005 remains open pending that runtime discriminator.
+The delegated source-safe discriminator work is complete. The root LOCAL-004 owner must build and rerun the licensed BricsCAD V25 matrix from an exact clean SHA containing `c43b71c3e454b0e19698ec2ab8538214e365048a`, then publish the four-field discriminator tuple to issue `#1005`. Issue `#1005` remains open until that receipt proves the correct production fix or full Undo/Redo coherence.
