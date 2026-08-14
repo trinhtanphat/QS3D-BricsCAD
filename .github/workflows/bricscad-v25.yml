@@ -65,6 +65,7 @@ jobs:
           if (-not (Test-Path "$env:BRICSCAD_V25_DIR\bricscad.exe")) { throw "bricscad.exe missing." }
           if (-not (Test-Path "$env:BRICSCAD_V25_DIR\BrxMgd.dll")) { throw "BrxMgd.dll missing." }
           if (-not (Test-Path "$env:BRICSCAD_V25_DIR\TD_Mgd.dll")) { throw "TD_Mgd.dll missing." }
+          if (-not (Test-Path "$env:BRICSCAD_V25_DIR\TD_MgdBrep.dll")) { throw "TD_MgdBrep.dll missing." }
       - name: Build V25 plugin
         run: dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64
       - name: Build V25 release package
