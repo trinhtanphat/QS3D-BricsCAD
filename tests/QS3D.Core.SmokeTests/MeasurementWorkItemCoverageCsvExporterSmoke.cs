@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
 using QS3D.Core.Mapping;
@@ -9,6 +10,9 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class MeasurementWorkItemCoverageCsvExporterSmoke
     {
+        [ModuleInitializer]
+        internal static void Initialize() => Run();
+
         internal static void Run()
         {
             ProjectionPreservesMatrixTruthAndEscapesText();
