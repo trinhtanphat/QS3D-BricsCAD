@@ -11,18 +11,25 @@ namespace QS3D.Core.SmokeTests
         [ModuleInitializer]
         internal static void Initialize()
         {
-            PaddedActiveFloorFailsVisible();
+            PaddedActiveFloorNormalizesBeforeHealth();
             CaseVariantActiveZoneFailsVisible();
             CanonicalActiveIdsDoNotEmitCanonicalityErrors();
             MissingActiveIdsKeepInvalidDiagnostics();
             DuplicateActiveTargetsKeepAmbiguityDiagnostics();
         }
 
-        private static void PaddedActiveFloorFailsVisible()
+        private static void PaddedActiveFloorNormalizesBeforeHealth()
         {
             var project = ProjectWithFloorAndZone("FLOOR-PAD");
             project.ActiveFloorId = " Floor-A ";
-            RequireIssue(project, "ACTIVE_FLOOR_NON_CANONICAL", HealthSeverity.Error);
+            if (!string.Equals(project.ActiveFloorId, "Floor-A", StringComparison.Ordinal))
+                throw new InvalidOperationException("Padded ActiveFloorId must normalize before health inspection.");
+            var issues = new ModelHealthService().Inspect(project);
+            if (issues.Any(x =>
+                string.Equals(x.Code, "ACTIVE_FLOOR_NON_CANONICAL", StringComparison.Ordinal) ||
+                string.Equals(x.Code, "INVALID_ACTIVE_FLOOR", StringComparison.Ordinal) ||
+                string.Equals(x.Code, "AMBIGUOUS_ACTIVE_FLOOR", StringComparison.Ordinal)))
+                throw new InvalidOperationException("Normalized ActiveFloorId must remain a healthy canonical reference.");
         }
 
         private static void CaseVariantActiveZoneFailsVisible()
