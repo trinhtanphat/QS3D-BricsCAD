@@ -152,8 +152,11 @@ jobs:
       - name: Deterministic Core smoke tests
         shell: powershell
         run: |
+          $previousErrorActionPreference = $ErrorActionPreference
+          $ErrorActionPreference = 'Continue'
           $smokeOutput = @(& dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release --no-build --no-restore 2>&1)
           $smokeExitCode = $LASTEXITCODE
+          $ErrorActionPreference = $previousErrorActionPreference
           foreach ($line in $smokeOutput) { Write-Host ([string]$line) }
           if ($smokeExitCode -ne 0) {
             $diagnostic = (($smokeOutput | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_.Length -gt 0 }) -join ' | ')
