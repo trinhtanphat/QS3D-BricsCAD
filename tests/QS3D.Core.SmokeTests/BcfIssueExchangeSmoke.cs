@@ -5,10 +5,19 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class BcfIssueExchangeSmoke
     {
+        private const string TopicA = "11111111-1111-1111-1111-111111111111";
+        private const string TopicB = "22222222-2222-2222-2222-222222222222";
+        private const string Viewpoint = "33333333-3333-3333-3333-333333333333";
+        private const string Comment1 = "44444444-4444-4444-4444-444444444444";
+        private const string Comment2 = "55555555-5555-5555-5555-555555555555";
+        private const string IfcA = "2MF28NhmDBiRVyFakgdbCT";
+        private const string IfcB = "3$cshxZO9AJBebsni$z9Yk";
+
         public static void Run()
         {
             SerializationIsDeterministicAcrossInputOrdering();
             RoundTripPreservesTopicCommentViewpointAndIfcIdentity();
+            BuildingSmartIdentityShapesFailClosed();
             DanglingAndDuplicateReferencesFailClosed();
             MalformedPayloadFailsClosed();
         }
@@ -21,7 +30,7 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("BCF issue serialization must be deterministic for semantically equivalent input ordering.");
             Require(forward, "schemaVersion=\"3.0\"");
             Require(forward, "qs3dElementId=\"E-A\"");
-            Require(forward, "ifcGlobalId=\"IFC-A\"");
+            Require(forward, "ifcGlobalId=\"" + IfcA + "\"");
         }
 
         private static void RoundTripPreservesTopicCommentViewpointAndIfcIdentity()
@@ -34,42 +43,60 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("BCF issue payload did not round-trip deterministically.");
 
             if (roundTrip.Topics.Count != 2) throw new Exception("BCF topic count changed during round-trip.");
-            if (!string.Equals(roundTrip.Topics[0].Id, "TOPIC-A", StringComparison.Ordinal))
+            if (!string.Equals(roundTrip.Topics[0].Id, TopicA, StringComparison.Ordinal))
                 throw new Exception("BCF topics were not canonicalized by stable identity.");
 
             var topic = roundTrip.Topics[1];
-            if (!string.Equals(topic.Id, "TOPIC-B", StringComparison.Ordinal)) throw new Exception("BCF topic identity was not preserved.");
+            if (!string.Equals(topic.Id, TopicB, StringComparison.Ordinal)) throw new Exception("BCF topic identity was not preserved.");
             if (topic.Viewpoints.Count != 1 || topic.Comments.Count != 2) throw new Exception("BCF viewpoint/comment payload changed during round-trip.");
-            if (!string.Equals(topic.Comments[0].Id, "COMMENT-1", StringComparison.Ordinal)) throw new Exception("BCF comments were not canonicalized deterministically.");
-            if (!string.Equals(topic.Comments[0].ViewpointId, "VP-1", StringComparison.Ordinal)) throw new Exception("BCF comment viewpoint reference was not preserved.");
+            if (!string.Equals(topic.Comments[0].Id, Comment1, StringComparison.Ordinal)) throw new Exception("BCF comments were not canonicalized deterministically.");
+            if (!string.Equals(topic.Comments[0].ViewpointId, Viewpoint, StringComparison.Ordinal)) throw new Exception("BCF comment viewpoint reference was not preserved.");
 
             var components = topic.Viewpoints[0].Components;
             if (components.Count != 2) throw new Exception("BCF component references changed during round-trip.");
             if (!string.Equals(components[0].Qs3dElementId, "E-A", StringComparison.Ordinal) ||
-                !string.Equals(components[0].IfcGlobalId, "IFC-A", StringComparison.Ordinal))
+                !string.Equals(components[0].IfcGlobalId, IfcA, StringComparison.Ordinal))
                 throw new Exception("BCF component identity bridge did not preserve QS3D and IFC identities together.");
+        }
+
+        private static void BuildingSmartIdentityShapesFailClosed()
+        {
+            ThrowsArgument(
+                () => new BcfViewpoint("VP-NOT-A-GUID", Array.Empty<BcfComponentReference>()),
+                "BCF topic/comment/viewpoint identifiers must use buildingSMART canonical GUID form.");
+            ThrowsArgument(
+                () => new BcfComponentReference("E-X", "IFC-NOT-COMPRESSED"),
+                "BCF component IFC identities must use the 22-character buildingSMART IfcGuid shape.");
         }
 
         private static void DanglingAndDuplicateReferencesFailClosed()
         {
             ThrowsArgument(
                 () => new BcfTopic(
-                    "TOPIC-X",
+                    "66666666-6666-6666-6666-666666666666",
                     "Broken topic",
                     "Open",
                     "Error",
                     string.Empty,
-                    new[] { new BcfComment("COMMENT-X", "qa@qs3d", Utc(10), "Dangling", "VP-MISSING") },
+                    new[]
+                    {
+                        new BcfComment(
+                            "77777777-7777-7777-7777-777777777777",
+                            "qa@qs3d",
+                            Utc(10),
+                            "Dangling",
+                            "88888888-8888-8888-8888-888888888888")
+                    },
                     Array.Empty<BcfViewpoint>()),
                 "Dangling BCF comment viewpoint references must fail closed.");
 
             ThrowsArgument(
                 () => new BcfViewpoint(
-                    "VP-X",
+                    "99999999-9999-9999-9999-999999999999",
                     new[]
                     {
-                        new BcfComponentReference("E-DUP", "IFC-1"),
-                        new BcfComponentReference("e-dup", "IFC-2")
+                        new BcfComponentReference("E-DUP", "0AAAAAAAAAAAAAAAAAAAAA"),
+                        new BcfComponentReference("e-dup", "1BBBBBBBBBBBBBBBBBBBBB")
                     }),
                 "Case-insensitive duplicate QS3D component identities must fail closed.");
         }
@@ -86,16 +113,16 @@ namespace QS3D.Core.SmokeTests
 
         private static BcfIssueExchange BuildFixture(bool reverse)
         {
-            var componentA = BcfComponentReference.FromIfcProjection(BuildProjection("E-A", "IFC-A"));
-            var componentB = BcfComponentReference.FromIfcProjection(BuildProjection("E-B", "IFC-B"));
+            var componentA = BcfComponentReference.FromIfcProjection(BuildProjection("E-A", IfcA));
+            var componentB = BcfComponentReference.FromIfcProjection(BuildProjection("E-B", IfcB));
             var viewpoint = new BcfViewpoint(
-                "VP-1",
+                Viewpoint,
                 reverse ? new[] { componentB, componentA } : new[] { componentA, componentB });
 
-            var comment1 = new BcfComment("COMMENT-1", "qa@qs3d", Utc(10), "Check element identity.", "VP-1");
-            var comment2 = new BcfComment("COMMENT-2", "review@qs3d", Utc(11), "Identity confirmed.", null);
+            var comment1 = new BcfComment(Comment1, "qa@qs3d", Utc(10), "Check element identity.", Viewpoint);
+            var comment2 = new BcfComment(Comment2, "review@qs3d", Utc(11), "Identity confirmed.", null);
             var topicB = new BcfTopic(
-                "TOPIC-B",
+                TopicB,
                 "BCF identity bridge",
                 "Open",
                 "Coordination",
@@ -103,7 +130,7 @@ namespace QS3D.Core.SmokeTests
                 reverse ? new[] { comment2, comment1 } : new[] { comment1, comment2 },
                 new[] { viewpoint });
             var topicA = new BcfTopic(
-                "TOPIC-A",
+                TopicA,
                 "Canonical ordering",
                 "Closed",
                 "Information",
