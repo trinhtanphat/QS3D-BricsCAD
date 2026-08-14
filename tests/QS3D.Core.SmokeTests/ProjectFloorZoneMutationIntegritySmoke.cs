@@ -68,7 +68,7 @@ namespace QS3D.Core.SmokeTests
 
             Equal(0, changed);
             Equal(beforeVersion, project.ChangeVersion);
-            Equal("  f-01  ", element.FloorId);
+            Equal("f-01", element.FloorId);
             Equal(ElementDirtyFlags.None, element.Dirty);
             Equal(beforeUpdatedUtc, element.UpdatedUtc);
             Same(floor, project.FindFloor(floor.Id));
@@ -91,7 +91,7 @@ namespace QS3D.Core.SmokeTests
 
             Equal(0, changed);
             Equal(beforeVersion, project.ChangeVersion);
-            Equal("  z-01  ", element.ZoneId);
+            Equal("z-01", element.ZoneId);
             Equal(ElementDirtyFlags.None, element.Dirty);
             Equal(beforeUpdatedUtc, element.UpdatedUtc);
             Same(zone, project.FindZone(zone.Id));
