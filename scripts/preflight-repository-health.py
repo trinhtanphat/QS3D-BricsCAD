@@ -17,10 +17,10 @@ def require(condition, message):
 
 
 def mandatory_handoff_markdown_paths(source):
-    header = "## Mandatory handoff reading order"
+    header = "## Mandatory reading order"
     start = source.find(header)
     if start < 0:
-        errors.append("AGENTS.md is missing the mandatory handoff reading-order section")
+        errors.append("AGENTS.md is missing the mandatory reading-order section")
         return []
 
     end = source.find("\n## ", start + len(header))
@@ -32,7 +32,7 @@ def mandatory_handoff_markdown_paths(source):
         if normalized not in seen:
             seen.add(normalized)
             paths.append(normalized)
-    require(bool(paths), "AGENTS.md mandatory handoff reading order contains no Markdown paths")
+    require(bool(paths), "AGENTS.md mandatory reading order contains no Markdown paths")
     return paths
 
 
@@ -80,13 +80,13 @@ if AGENTS.is_file():
             path = Path(relative)
             require(
                 not path.is_absolute() and ".." not in path.parts,
-                f"AGENTS.md mandatory handoff path must stay repository-relative: {relative}",
+                f"AGENTS.md mandatory reading-order path must stay repository-relative: {relative}",
             )
             if path.is_absolute() or ".." in path.parts:
                 continue
             require(
                 (ROOT / path).is_file(),
-                f"AGENTS.md mandatory handoff path does not exist: {relative}",
+                f"AGENTS.md mandatory reading-order path does not exist: {relative}",
             )
 
 if errors:
