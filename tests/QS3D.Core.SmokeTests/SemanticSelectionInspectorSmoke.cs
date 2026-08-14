@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             CommonAndMixedValuesAreStable();
             QuantitySignedZeroProjectionIsCanonical();
+            QuantityKeysMustBeCanonical();
             ReferencePresenceCountsActualAssignments();
             FamilyDefaultsParticipateInEffectiveValues();
             InternalOwnershipPropertiesStayHidden();
@@ -81,6 +82,34 @@ namespace QS3D.Core.SmokeTests
             Equal(long.MinValue, BitConverter.DoubleToInt64Bits(negativeElement.Quantities["LengthM"]));
             Equal(0L, BitConverter.DoubleToInt64Bits(positiveElement.Quantities["LengthM"]));
             Equal(version, project.ChangeVersion);
+        }
+
+        private static void QuantityKeysMustBeCanonical()
+        {
+            var blankProject = BuildProject();
+            var blankElement = blankProject.FindElement("B-001")!;
+            blankElement.Quantities["   "] = 1d;
+            var blankVersion = blankProject.ChangeVersion;
+            MustFail(
+                () => SemanticSelectionInspector.Inspect(blankProject, new[] { blankElement.Id }),
+                "Whitespace-only quantity names must fail closed at the semantic selection boundary.");
+            Equal(true, blankElement.Quantities.ContainsKey("   "));
+            Equal(blankVersion, blankProject.ChangeVersion);
+
+            var paddedProject = BuildProject();
+            var paddedElement = paddedProject.FindElement("B-001")!;
+            paddedElement.Quantities[" LengthM "] = 9d;
+            var paddedVersion = paddedProject.ChangeVersion;
+            MustFail(
+                () => SemanticSelectionInspector.Inspect(paddedProject, new[] { paddedElement.Id }),
+                "Padded quantity names must fail closed at the semantic selection boundary.");
+            Equal(true, paddedElement.Quantities.ContainsKey(" LengthM "));
+            Equal(paddedVersion, paddedProject.ChangeVersion);
+
+            var canonical = SemanticSelectionInspector.Inspect(BuildProject(), new[] { "B-001" })
+                .Quantities.Single(x => x.Name == "LengthM");
+            Equal("LengthM", canonical.Name);
+            Equal(1, canonical.PresentCount);
         }
 
         private static void ReferencePresenceCountsActualAssignments()
