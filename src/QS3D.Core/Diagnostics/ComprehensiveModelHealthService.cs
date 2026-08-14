@@ -47,7 +47,8 @@ namespace QS3D.Core.Diagnostics
             var issues = new List<ModelHealthIssue>();
             var seen = new HashSet<string>(StringComparer.Ordinal);
 
-            AddSafely(issues, seen, "ModelHealthService", () => new ModelHealthService().Inspect(project, normalizedLiveSourceHandles, modelHealthLiveGeneratedSolidHandles));
+            AddSafely(issues, seen, "ModelHealthService", () => new ModelHealthService().Inspect(project, null, modelHealthLiveGeneratedSolidHandles));
+            AddTextualSourceLivenessIssues(issues, seen, project, normalizedLiveSourceHandles);
             AddSafely(issues, seen, "RoomFinishHealthService", () => new RoomFinishHealthService().Inspect(project));
             AddSafely(issues, seen, "SemanticScheduleHealthService", () => new SemanticScheduleHealthService().Inspect(project));
             AddSafely(issues, seen, "DependencyHealthService", () => new DependencyHealthService().Inspect(project));
@@ -124,6 +125,44 @@ namespace QS3D.Core.Diagnostics
                 if (persistedHandle.Length > 0 && liveHandles.Contains(persistedHandle)) expanded.Add(persistedHandle);
             }
             return expanded;
+        }
+
+        private static void AddTextualSourceLivenessIssues(
+            ICollection<ModelHealthIssue> target,
+            ISet<string> seen,
+            ProjectState project,
+            ISet<string>? liveSourceHandles)
+        {
+            if (liveSourceHandles == null) return;
+
+            foreach (var element in project.Elements)
+            {
+                if (element == null) continue;
+
+                var hasSourceHandle = false;
+                var hasLiveSourceHandle = false;
+                foreach (var raw in element.SourceHandles)
+                {
+                    var handle = (raw ?? string.Empty).Trim();
+                    if (handle.Length == 0) continue;
+                    hasSourceHandle = true;
+                    if (!liveSourceHandles.Contains(handle)) continue;
+                    hasLiveSourceHandle = true;
+                    break;
+                }
+
+                if (hasSourceHandle && !hasLiveSourceHandle)
+                {
+                    Add(target, seen, new[]
+                    {
+                        new ModelHealthIssue(
+                            "ORPHAN_HANDLE",
+                            HealthSeverity.Error,
+                            "Không còn tìm thấy đối tượng CAD nguồn.",
+                            element.Id)
+                    });
+                }
+            }
         }
 
         private static void AddSafely(
