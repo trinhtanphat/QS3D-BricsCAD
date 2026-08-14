@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using QS3D.Core.Domain;
 using QS3D.Core.Selection;
 
@@ -12,6 +13,8 @@ namespace QS3D.Core.SmokeTests
             PropertyDirtyFlagsStayPrecise();
             SameInheritedValueMaterializesInstanceOverride();
             NumericMultiplyPreflightsBeforeMutation();
+            NumericMultiplyUnderflowIsAtomic();
+            NumericMultiplyPreservesLegitimateZeroAndSubnormal();
             FamilyAssignmentIsAllOrNothingAcrossCategories();
             DuplicateSelectionFailsBeforeMutation();
         }
@@ -86,6 +89,69 @@ namespace QS3D.Core.SmokeTests
             Equal("0.2", project.Elements[0].Properties["WidthM"]);
             Equal("bad", project.Elements[1].Properties["WidthM"]);
             Equal(version, project.ChangeVersion);
+        }
+
+        private static void NumericMultiplyUnderflowIsAtomic()
+        {
+            var service = new SemanticSelectionBulkEditService();
+
+            var parseProject = BuildProject();
+            parseProject.Elements[0].SetProperty("WidthM", "0.2");
+            parseProject.Elements[1].SetProperty("WidthM", "1e-4000");
+            foreach (var element in parseProject.Elements) element.MarkClean(ElementDirtyFlags.All);
+            var parseVersion = parseProject.ChangeVersion;
+
+            MustFail(() => service.MultiplyNumericProperty(parseProject, new[] { "B-1", "B-2" }, "WidthM", 2d));
+            Equal("0.2", parseProject.Elements[0].Properties["WidthM"]);
+            Equal("1e-4000", parseProject.Elements[1].Properties["WidthM"]);
+            Equal(parseVersion, parseProject.ChangeVersion);
+            Equal(ElementDirtyFlags.None, parseProject.Elements[0].Dirty);
+            Equal(ElementDirtyFlags.None, parseProject.Elements[1].Dirty);
+
+            var productProject = BuildProject();
+            var epsilonText = double.Epsilon.ToString("R", CultureInfo.InvariantCulture);
+            productProject.Elements[0].SetProperty("WidthM", "0.2");
+            productProject.Elements[1].SetProperty("WidthM", epsilonText);
+            foreach (var element in productProject.Elements) element.MarkClean(ElementDirtyFlags.All);
+            var productVersion = productProject.ChangeVersion;
+
+            MustFail(() => service.MultiplyNumericProperty(productProject, new[] { "B-1", "B-2" }, "WidthM", 0.5d));
+            Equal("0.2", productProject.Elements[0].Properties["WidthM"]);
+            Equal(epsilonText, productProject.Elements[1].Properties["WidthM"]);
+            Equal(productVersion, productProject.ChangeVersion);
+            Equal(ElementDirtyFlags.None, productProject.Elements[0].Dirty);
+            Equal(ElementDirtyFlags.None, productProject.Elements[1].Dirty);
+        }
+
+        private static void NumericMultiplyPreservesLegitimateZeroAndSubnormal()
+        {
+            var service = new SemanticSelectionBulkEditService();
+
+            var zeroProject = BuildProject();
+            zeroProject.Elements[0].SetProperty("WidthM", "0e-4000");
+            zeroProject.Elements[0].MarkClean(ElementDirtyFlags.All);
+            var zeroVersion = zeroProject.ChangeVersion;
+            var zero = service.MultiplyNumericProperty(zeroProject, new[] { "B-1" }, "WidthM", 2d);
+            Equal(0, zero.ChangedCount);
+            Equal("0e-4000", zeroProject.Elements[0].Properties["WidthM"]);
+            Equal(zeroVersion, zeroProject.ChangeVersion);
+            Equal(ElementDirtyFlags.None, zeroProject.Elements[0].Dirty);
+
+            var subnormalProject = BuildProject();
+            var epsilonText = double.Epsilon.ToString("R", CultureInfo.InvariantCulture);
+            var expected = (double.Epsilon * 2d).ToString("R", CultureInfo.InvariantCulture);
+            subnormalProject.Elements[0].SetProperty("WidthM", epsilonText);
+            subnormalProject.Elements[0].MarkClean(ElementDirtyFlags.All);
+            var subnormal = service.MultiplyNumericProperty(subnormalProject, new[] { "B-1" }, "WidthM", 2d);
+            Equal(1, subnormal.ChangedCount);
+            Equal(expected, subnormalProject.Elements[0].Properties["WidthM"]);
+
+            var zeroFactorProject = BuildProject();
+            zeroFactorProject.Elements[0].SetProperty("WidthM", "2");
+            zeroFactorProject.Elements[0].MarkClean(ElementDirtyFlags.All);
+            var zeroFactor = service.MultiplyNumericProperty(zeroFactorProject, new[] { "B-1" }, "WidthM", 0d);
+            Equal(1, zeroFactor.ChangedCount);
+            Equal("0", zeroFactorProject.Elements[0].Properties["WidthM"]);
         }
 
         private static void FamilyAssignmentIsAllOrNothingAcrossCategories()
