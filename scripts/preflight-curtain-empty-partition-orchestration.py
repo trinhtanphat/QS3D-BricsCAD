@@ -27,48 +27,48 @@ phases = (
     (
         "LINE host replacement",
         "LineSourceIds",
-        "lineHostSolids = WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.GlassWall);",
+        r'lineHostSolids\s*=\s*WallSolidBuilder\.BuildSelectedLineWalls\(\s*document,\s*project,\s*ElementCategory\.GlassWall\s*\);',
         "CurtainWallBuildFailureInjection.LineHost",
     ),
     (
         "open-POLYLINE host replacement",
         "PathSourceIds",
-        "pathHostSolids = PolylineWallSolidBuilder.BuildSelected(document, project, ElementCategory.GlassWall);",
+        r'pathHostSolids\s*=\s*PolylineWallSolidBuilder\.BuildSelected\(\s*document,\s*project,\s*ElementCategory\.GlassWall\s*\);',
         "CurtainWallBuildFailureInjection.PathHost",
     ),
     (
         "LINE frame replacement",
         "LineSourceIds",
-        "lineFrames = CurtainWallFrameSolidBuilder.BuildSelectedLineWalls(document, project);",
+        r'lineFrames\s*=\s*CurtainWallFrameSolidBuilder\.BuildSelectedLineWalls\(\s*document,\s*project,\s*allowInteractiveSelection:\s*false\s*\);',
         "CurtainWallBuildFailureInjection.LineFrame",
     ),
     (
         "open/bulged path frame replacement",
         "PathSourceIds",
-        "pathFrames = CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines(document, project);",
+        r'pathFrames\s*=\s*CurtainWallPathFrameSolidBuilder\.BuildSelectedOpenPolylines\(\s*document,\s*project,\s*allowInteractiveSelection:\s*false\s*\);',
         "CurtainWallBuildFailureInjection.PathFrame",
     ),
     (
         "LINE panel replacement",
         "LineSourceIds",
-        "linePanels = CurtainWallPanelSolidBuilder.BuildSelectedLineWalls(document, project);",
+        r'linePanels\s*=\s*CurtainWallPanelSolidBuilder\.BuildSelectedLineWalls\(\s*document,\s*project\s*\);',
         "CurtainWallBuildFailureInjection.LinePanel",
     ),
     (
         "open/bulged path panel replacement",
         "PathSourceIds",
-        "pathPanels = CurtainWallPathPanelSolidBuilder.BuildSelectedOpenPolylines(document, project);",
+        r'pathPanels\s*=\s*CurtainWallPathPanelSolidBuilder\.BuildSelectedOpenPolylines\(\s*document,\s*project\s*\);',
         "CurtainWallBuildFailureInjection.PathPanel",
     ),
 )
 
 cursor = 0
-for phase, partition, call, hook in phases:
+for phase, partition, call_pattern, hook in phases:
     pattern = re.compile(
         rf'phase = "{re.escape(phase)}";\s*'
         rf'if \(validatedSelection\.{partition}\.Count > 0\)\s*\{{\s*'
         rf'ApplySelection\(document, validatedSelection\.{partition}\);\s*'
-        rf'{re.escape(call)}\s*\}}\s*'
+        rf'{call_pattern}\s*\}}\s*'
         rf'CurtainWallBuildFailureInjection\.ThrowIfArmed\({re.escape(hook)}\);',
         re.DOTALL,
     )
@@ -77,6 +77,11 @@ for phase, partition, call, hook in phases:
         errors.append("Missing guarded Curtain phase or adjacent failure hook: " + phase)
     else:
         cursor = match.end()
+
+if body.count('allowInteractiveSelection: false') != 2:
+    errors.append("QS3DCURTAIN3D must force both LINE/path frame builders into non-interactive mode")
+if 'allowInteractiveSelection: true' in body:
+    errors.append("QS3DCURTAIN3D canonical-prevalidated frame phases must never re-enable interactive selection")
 
 for token in (
     'CurtainWallBuildSelectionGuard.Validate(document, project)',
@@ -105,5 +110,5 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: QS3DCURTAIN3D skips absent LINE/path host, frame and panel builders after canonical partitioning while preserving six-phase order, failure hooks, outer transaction, Curtain Undo registration, full-selection restore and post-commit stamping/UI boundaries."
+    "PASS: QS3DCURTAIN3D skips absent LINE/path host, frame and panel builders after canonical partitioning, forces canonical-prevalidated frame phases non-interactive, and preserves six-phase order, failure hooks, outer transaction, Curtain Undo registration, full-selection restore and post-commit stamping/UI boundaries."
 )
