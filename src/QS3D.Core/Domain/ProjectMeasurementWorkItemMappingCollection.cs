@@ -8,13 +8,8 @@ namespace QS3D.Core.Domain
 {
     internal sealed class ProjectMeasurementWorkItemMappingCollection : ICollection<MeasurementWorkItemMapping>
     {
-        private readonly ProjectState? _project;
+        private readonly ProjectState _project;
         private readonly IDictionary<string, string> _metadata;
-
-        internal ProjectMeasurementWorkItemMappingCollection(IDictionary<string, string> metadata)
-        {
-            _metadata = metadata ?? throw new ArgumentNullException(nameof(metadata));
-        }
 
         internal ProjectMeasurementWorkItemMappingCollection(ProjectState project, IDictionary<string, string> metadata)
         {
@@ -34,7 +29,7 @@ namespace QS3D.Core.Domain
             var key = ProjectMeasurementWorkItemMappingCodec.Key(item);
             var value = ProjectMeasurementWorkItemMappingCodec.Value(item);
             if (_metadata.ContainsKey(key)) throw new ArgumentException("Duplicate measurement/work-item mapping id: " + item.MappingId + ".", nameof(item));
-            TouchProject();
+            _project.Touch();
             _metadata.Add(key, value);
         }
 
@@ -43,7 +38,7 @@ namespace QS3D.Core.Domain
             var keys = _metadata.Keys.Where(ProjectMeasurementWorkItemMappingCodec.IsReservedKey).ToArray();
             if (keys.Length == 0) return;
             Snapshot();
-            TouchProject();
+            _project.Touch();
             foreach (var key in keys) _metadata.Remove(key);
         }
 
@@ -56,7 +51,7 @@ namespace QS3D.Core.Domain
             var match = Snapshot().FirstOrDefault(x => Same(x, item));
             if (match == null) return false;
             var key = ProjectMeasurementWorkItemMappingCodec.Key(match);
-            TouchProject();
+            _project.Touch();
             if (!_metadata.Remove(key))
                 throw new InvalidOperationException("Project measurement/work-item mapping disappeared during removal: " + match.MappingId + ".");
             return true;
@@ -65,7 +60,6 @@ namespace QS3D.Core.Domain
         public IEnumerator<MeasurementWorkItemMapping> GetEnumerator() { return Snapshot().GetEnumerator(); }
         IEnumerator IEnumerable.GetEnumerator() { return GetEnumerator(); }
         private List<MeasurementWorkItemMapping> Snapshot() { return ProjectMeasurementWorkItemMappingCodec.Read(_metadata).ToList(); }
-        private void TouchProject() { _project?.Touch(); }
 
         private static bool Same(MeasurementWorkItemMapping a, MeasurementWorkItemMapping b)
         {
