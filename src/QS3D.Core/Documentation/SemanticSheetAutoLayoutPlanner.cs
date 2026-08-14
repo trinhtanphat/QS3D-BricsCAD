@@ -249,6 +249,44 @@ namespace QS3D.Core.Documentation
             return edge;
         }
 
+        private static bool FitsWithin(double start, double extent, double limit)
+        {
+            if (double.IsNaN(start) || double.IsInfinity(start) || start > limit) return false;
+            return extent <= limit - start;
+        }
+
+        private static double AdvanceEdge(double start, double extent, string label)
+        {
+            var edge = start + extent;
+            if (double.IsInfinity(edge)) return double.PositiveInfinity;
+            if (double.IsNaN(edge)) throw new InvalidOperationException(label + " produced an invalid coordinate.");
+            if (extent > 0d && !(edge > start))
+                throw new InvalidOperationException(label + " lost positive extent to floating-point precision.");
+            return edge;
+        }
+
+        private static double AdvanceGap(double edge, double gap, string label)
+        {
+            if (gap == 0d) return edge;
+            var advanced = edge + gap;
+            if (double.IsInfinity(advanced)) return double.PositiveInfinity;
+            if (double.IsNaN(advanced)) throw new InvalidOperationException(label + " produced an invalid gap coordinate.");
+            if (!(advanced > edge))
+                throw new InvalidOperationException(label + " lost a positive gap to floating-point precision.");
+            return advanced;
+        }
+
+        private static double TranslateCoordinate(double origin, double offset, string label)
+        {
+            if (offset == 0d) return origin;
+            var translated = origin + offset;
+            if (double.IsNaN(translated) || double.IsInfinity(translated))
+                throw new InvalidOperationException(label + " produced a non-finite placement coordinate.");
+            if (!(translated > origin))
+                throw new InvalidOperationException(label + " lost a positive placement offset to floating-point precision.");
+            return translated;
+        }
+
         private sealed class PageState
         {
             private double _cursorX;
@@ -266,26 +304,36 @@ namespace QS3D.Core.Documentation
             {
                 if (Placements.Count >= SemanticSheetPlanner.MaxPlacements) return false;
 
-                var localX = _started ? _cursorX : 0d;
+                var localX = 0d;
                 var localY = _started ? _cursorY : 0d;
                 var rowHeight = _started ? _rowHeight : 0d;
 
-                if (_started && localX + item.WidthMm > usableWidth)
+                if (_started)
                 {
-                    localX = 0d;
-                    localY += rowHeight + options.VerticalGapMm;
-                    rowHeight = 0d;
+                    if (FitsWithin(_cursorX, item.WidthMm, usableWidth))
+                    {
+                        localX = AdvanceGap(_cursorX, options.HorizontalGapMm, "automatic sheet horizontal gap");
+                    }
+
+                    if (!FitsWithin(localX, item.WidthMm, usableWidth))
+                    {
+                        var rowBottom = AdvanceEdge(_cursorY, rowHeight, "automatic sheet row height");
+                        if (!FitsWithin(rowBottom, item.HeightMm, usableHeight)) return false;
+                        localX = 0d;
+                        localY = AdvanceGap(rowBottom, options.VerticalGapMm, "automatic sheet vertical gap");
+                        rowHeight = 0d;
+                    }
                 }
 
-                if (localY + item.HeightMm > usableHeight) return false;
+                if (!FitsWithin(localY, item.HeightMm, usableHeight)) return false;
 
                 Placements.Add(new SemanticSheetPlacementDefinition(
                     item.ViewId,
-                    options.MarginLeftMm + localX,
-                    options.MarginTopMm + localY,
+                    TranslateCoordinate(options.MarginLeftMm, localX, "automatic sheet horizontal placement origin"),
+                    TranslateCoordinate(options.MarginTopMm, localY, "automatic sheet vertical placement origin"),
                     item.WidthMm,
                     item.HeightMm));
-                _cursorX = localX + item.WidthMm + options.HorizontalGapMm;
+                _cursorX = AdvanceEdge(localX, item.WidthMm, "automatic sheet horizontal item edge");
                 _cursorY = localY;
                 _rowHeight = Math.Max(rowHeight, item.HeightMm);
                 _started = true;
