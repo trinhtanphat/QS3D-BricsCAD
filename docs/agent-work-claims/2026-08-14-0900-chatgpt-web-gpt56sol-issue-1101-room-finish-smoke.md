@@ -54,3 +54,5 @@ Commit `3aed2b5af29c33accb0e3df637e2f22e28c4e731` changes only the contradictory
 ## Coordination
 
 Immediately before every write, refresh current `main`, inspect commits since the claim baseline, and recheck claims for `#1101`, `RoomFinishFamilyCategorySmoke`, and reporting identity surfaces. Stop/re-scope on overlap. The LOCAL-003 worker only handed off this CAD-independent blocker and must not edit Core/test to make it pass. Once a fresh exact-SHA full Core smoke passes with `3aed2b5...` in ancestry, close #1101 and mark this claim `COMPLETED`; if it exposes another unrelated blocker, hand that off under a separate claim instead of weakening tests.
+
+Validation/closeout split recorded `2026-08-14T09:11:20+07:00`: `codex-/root/fix_room_finish_family-20260814-0911` owns only the fresh exact-main Core smoke, relevant static gates, issue closeout and claim evidence under `docs/agent-work-claims/2026-08-14-0911-codex-room-finish-family-smoke-closeout.md`. The original source correction remains owned by this claim and must not be duplicated or weakened.
