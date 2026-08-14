@@ -13,10 +13,10 @@ Harden the V25 release-package/manual-NETLOAD path against Windows Mark-of-the-W
 ## Expected surfaces
 
 - `scripts/package-v25.ps1`
+- `scripts/install-v25-autoload.ps1` — reuse its existing fail-closed SHA256/package-identity verification for an explicit package-only unblock mode before any payload Mark-of-the-Web removal
 - `scripts/INSTALL-QS3D.cmd` only if needed to keep launcher/signature behavior consistent
 - `scripts/UNBLOCK-QS3D.cmd` (new)
-- `scripts/unblock-v25-netload.ps1` (new)
-- `scripts/preflight-v25-netload-motw-package.py` (new focused source/package guard, or the narrowest existing installer/package preflight if it already owns this exact contract)
+- `scripts/preflight-update-install-ux.py` — extend the existing installer/MOTW source guard rather than adding a duplicate preflight
 - `README.md`
 - generated V25 `README.txt` text embedded in `scripts/package-v25.ps1`
 - this claim file for close-out
@@ -34,9 +34,9 @@ Harden the V25 release-package/manual-NETLOAD path against Windows Mark-of-the-W
 ## Validation plan
 
 - preserve `RemoteSigned`; do not introduce `ExecutionPolicy Bypass`
-- verify the helper validates the package checksum manifest before removing Mark-of-the-Web from payload files
-- verify `package-v25.ps1` includes the helper/launcher before `SHA256SUMS.txt` generation
-- add/run the focused deterministic source guard where execution is available; otherwise perform exact-source readback and report the execution limitation without fabricating a PASS
+- make package-only unblock reuse `Assert-PackageIntegrity` and `Assert-PackageIdentity` before recursively removing Mark-of-the-Web
+- verify `package-v25.ps1` includes the helper launcher before `SHA256SUMS.txt` generation
+- extend/run the focused deterministic `preflight-update-install-ux.py` guard where execution is available; otherwise perform exact-source readback and report the execution limitation without fabricating a PASS
 - re-fetch `main` and recheck same-path claims immediately before implementation push
 
 ## Coordination
