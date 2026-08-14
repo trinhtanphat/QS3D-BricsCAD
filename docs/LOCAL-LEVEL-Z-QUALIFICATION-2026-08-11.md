@@ -1,6 +1,6 @@
 # QS3D LOCAL-003 — exact-SHA Level Z-chain qualification
 
-Updated: 2026-08-13 (UTC+7)
+Updated: 2026-08-14 (UTC+7)
 
 This is the focused local runbook for the shared native Level vertical-placement chain. It supplements `docs/LOCAL-V25-QUALIFICATION.md`; it does not create a second live queue. Current priority and status remain in `docs/LOCAL-AGENT-INBOX.md` under `LOCAL-003`.
 
@@ -70,6 +70,14 @@ The nonce-bound `QS3DLEVELZPROBE` must report:
 - exact source SHA/64-bit BricsCAD marker, unchanged disposable-DWG SHA-256 and no sidecar after the process exits.
 
 The runner writes sanitized marker/metadata only under the chosen artifact directory. Keep those files local unless a bounded sanitized summary is useful in Git.
+
+## Exact representative probe result
+
+`AUTOMATED_RUNTIME_PROBE_PASS` was recorded on clean exact SHA `2a1967d66f005cbdef20bb024a7b92a7f44077cc` with matching plugin/Core ProductVersion, BricsCAD V25.2.10 x64 and plugin SHA-256 `86D3938C89BB42BBE4F4854F7C8C027736426B5B20648363798ED634D811516F`. Full Core smoke, all focused Level gates and the installed-reference V25 `Release|x64` build passed before launch.
+
+The sanitized marker verified legacy wall `1.2..3.7 m`, Bottom+Top wall `3.1..6.8 m`, Bottom-only Beam `3.25..3.85 m`, physical-opening reduction, 16 Curtain frames, 14 Curtain panels, four longitudinal bars, six stirrups, zero pre-edit Level health issues, seven stale outputs after the Level edit, Level-edit invalidation and Top-only fail-closed behavior. The host exited gracefully; process, generated script and private drawing state were absent; the disposable drawing was restored exactly to SHA-256 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`.
+
+This is state 2 only. The follow-on matrix below remains `PENDING_LOCAL`; LOCAL-003 stays `IN_PROGRESS` and customer-release qualification remains false.
 
 ## Required follow-on interactive matrix
 

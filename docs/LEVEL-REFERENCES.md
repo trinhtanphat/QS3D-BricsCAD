@@ -41,6 +41,8 @@ The source-integrated chain now includes:
 
 `QS3DLEVELZPROBE` and `scripts/test-bricscad-v25-level-z.ps1` provide a focused exact-SHA automated V25 probe for representative legacy, Bottom-only, Bottom+Top, Top-only refusal, opening, Curtain, Beam rebar/stirrup, quantity, snapshot and Level-edit invalidation paths. The wider mm/m, full-category, Undo, save/reopen, multi-DWG and representative private-DWG matrix remains `LOCAL-003 / PENDING_LOCAL` until it is executed against the same exact SHA and DLL.
 
+The representative probe is `AUTOMATED_RUNTIME_PROBE_PASS` on exact clean SHA `2a1967d66f005cbdef20bb024a7b92a7f44077cc` with BricsCAD V25.2.10 x64 and plugin SHA-256 `86D3938C89BB42BBE4F4854F7C8C027736426B5B20648363798ED634D811516F`. It verified the complete focused marker plus graceful host exit, zero process/private-state residue and exact disposable-DWG restoration. This scoped result does not supersede the wider matrix named above and does not make the product customer-release qualified.
+
 ## Source enablement and runtime qualification policy
 
 `LevelReferenceNativeIntegrationPolicy` is the explicit source gate for categories whose complete native/dependent vertical-placement chain is present. In this class, `IsQualified(...)` means **qualified to leave the source fail-closed gate**; it does not mean `LOCAL_PASS`, customer-release qualification or completion of the full native matrix.
