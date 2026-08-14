@@ -30,7 +30,7 @@ jobs:
     env:
       RELEASE_TAG: ${{ inputs.release_tag }}
       BRICSCAD_V25_MIRROR_MSI_URL: http://103.9.157.20/BricsCAD-V25.2.10-1-en_US%28x64%29.msi
-      BRICSCAD_V25_PUBLIC_MSI_URL: https://storage.googleapis.com/production-boa-storage/ftp/release/en_US%28x64%29.msi
+      BRICSCAD_V25_PUBLIC_MSI_URL: https://storage.googleapis.com/production-boa-storage/ftp/release/en_US/BricsCAD/Windows/25.2.10/BricsCAD-V25.2.10-1-en_US%28x64%29.msi
       BRICSCAD_V25_PINNED_MSI_SHA256: F44DF674C0E165D96BF579E243B20A8301E3F395F929779F47BF39A7D9DACDE1
       BRICSCAD_V25_MSI_URL: ${{ secrets.BRICSCAD_V25_MSI_URL }}
       BRICSCAD_V25_MSI_SHA256: ${{ vars.BRICSCAD_V25_MSI_SHA256 }}
@@ -241,11 +241,8 @@ jobs:
           }
 
           $signature = Get-AuthenticodeSignature -FilePath $msi
-          if ($signature.Status -ne [System.Security.Cryptography.X509Certificates.X509ChainStatusFlags]::NoError -and $signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+          if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or -not $signature.SignerCertificate) {
             throw "BricsCAD V25 MSI Authenticode signature is not valid: $($signature.Status)."
-          }
-          if (-not $signature.SignerCertificate) {
-            throw "BricsCAD V25 MSI Authenticode signer certificate is missing."
           }
           $signerSubject = [string]$signature.SignerCertificate.Subject
           if ($signerSubject -notmatch '(^|,\s*)(CN|O)=Bricsys(,|$)') {
