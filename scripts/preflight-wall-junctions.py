@@ -66,7 +66,10 @@ if command.is_file():
         "project = previewProject;",
         "project == null ? 0.005d",
         "project == null ? 0.002d",
-        "ReadSelection(document, selectedIds, sagitta, planarityTolerance)",
+        "ReadSelection(document, selectedIds, sagitta, planarityTolerance, out var skippedClosedCount)",
+        "if (polyline.Closed)",
+        "skippedClosedCount++",
+        "closed POLYLINE",
         "new WallJunctionAdjustmentPlanner().Plan",
         'MetadataNumber(project, "WallJunctionToleranceM", 0.005d',
         'MetadataNumber(project, "WallArcSagittaM", 0.002d',
@@ -95,7 +98,7 @@ if command.is_file():
         method.find("ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject)"),
         method.find("project = previewProject;"),
         method.find("var tolerance = project == null ? 0.005d"),
-        method.find("ReadSelection(document, selectedIds, sagitta, planarityTolerance)"),
+        method.find("ReadSelection(document, selectedIds, sagitta, planarityTolerance, out var skippedClosedCount)"),
         method.find("new WallJunctionAdjustmentPlanner().Plan"),
     )
     if min(lifecycle) < 0:
@@ -180,4 +183,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: deterministic wall-junction topology, non-creating selection-first read-only analysis, review-gated endpoint snap apply, spatial indexing, finite-safe/coplanar CAD analysis, command/UI wiring and regression coverage are present.")
+print("PASS: deterministic wall-junction topology, non-creating selection-first read-only analysis, closed-POLYLINE refusal, review-gated endpoint snap apply, spatial indexing, finite-safe/coplanar CAD analysis, command/UI wiring and regression coverage are present.")
