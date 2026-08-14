@@ -175,6 +175,18 @@
                                 <Button Content="Xóa Door/Opening DWG Table" Tag="QS3DDOOROPENINGTABLEREMOVE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
                             </StackPanel>
                         </Border>
+                        <Border Style="{StaticResource ScheduleCard}">
+                            <StackPanel>
+                                <TextBlock Text="SEMANTIC TAG / ANNOTATION" Style="{StaticResource PanelTitle}"/>
+                                <Button Content="Đặt / Cập nhật Semantic Tag" Tag="QS3DTAG" Style="{StaticResource ScheduleAccentCommand}" Click="OnCommandClick"
+                                        ToolTip="PICKFIRST hoặc chọn authoritative CAD source rồi đặt owned Semantic MText tag."/>
+                                <Button Content="Refresh Semantic Tag" Tag="QS3DTAGREFRESH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"/>
+                                <Button Content="Kiểm tra Semantic Tag Health" Tag="QS3DTAGHEALTH" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"
+                                        ToolTip="Read-only: kiểm tra persisted/live Semantic Tag health và locate issue nếu có."/>
+                                <Button Content="Xóa Semantic Tag" Tag="QS3DTAGREMOVE" Style="{StaticResource ScheduleCommand}" Click="OnCommandClick"
+                                        ToolTip="Xóa exact owned Semantic Tag của tag/source đã chọn; command fail-closed nếu ownership không hợp lệ."/>
+                            </StackPanel>
+                        </Border>
                         <Border Style="{StaticResource ScheduleCard}" Margin="0">
                             <StackPanel>
                                 <TextBlock Text="CỐT THÉP" Style="{StaticResource PanelTitle}"/>
