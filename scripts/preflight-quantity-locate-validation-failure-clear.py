@@ -125,10 +125,11 @@ for needle in (
     if needle not in insight_xaml:
         errors.append("Insight XAML locate wiring changed: " + needle)
 
-for name, source, method, zoom in (
+locate_contracts = (
     ("Summary", summary_code, "private void LocateCurrent()", '_document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);'),
-    ("Insight", insight_code, "private void LocateSelected()", 'document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);'),
-):
+    ("Insight", insight_code, "private void LocateSelected()", "global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(document)"),
+)
+for name, source, method, zoom in locate_contracts:
     start = source.find(method)
     if start < 0:
         errors.append(name + " canonical locate method missing")
@@ -139,7 +140,7 @@ for name, source, method, zoom in (
     if "Cad.CadHandleService.Select" not in block:
         errors.append(name + " canonical locate must still select validated targets")
     if zoom not in block:
-        errors.append(name + " canonical locate zoom dispatch missing")
+        errors.append(name + " canonical locate zoom contract missing")
     if name == "Summary":
         select_pos = block.find("Cad.CadHandleService.Select")
         zero_pos = block.find("if (selectedCount <= 0)")
@@ -147,11 +148,13 @@ for name, source, method, zoom in (
         if not (0 <= select_pos < zero_pos < zoom_pos):
             errors.append("Summary normal locate must keep zero guard before zoom")
     else:
+        if 'SendStringToExecute("QS3DZOOMSELECTED ' in block:
+            errors.append("Insight canonical locate must not queue QS3DZOOMSELECTED command re-entry")
         select_pos = block.rfind("Cad.CadHandleService.Select")
         positive_pos = block.find("if (count > 0)", select_pos)
-        zoom_pos = block.find(zoom, select_pos)
-        if not (0 <= select_pos < positive_pos <= zoom_pos):
-            errors.append("Insight normal locate must keep positive-count-only zoom")
+        zoom_pos = block.find(zoom, positive_pos)
+        if not (0 <= select_pos < positive_pos < zoom_pos):
+            errors.append("Insight normal locate must keep positive-count-only direct zoom")
 
 if errors:
     for error in errors:
@@ -161,5 +164,5 @@ if errors:
 print(
     "PASS: quantity locate triggers explicitly clear only the same active DWG before validation, "
     "Summary Follow3D parity covers both Summary/Detail modes, wrong-DWG behavior remains non-clearing, "
-    "and canonical locate selection/zoom contracts remain intact."
+    "and canonical locate selection/zoom contracts remain intact with direct in-process Insight zoom."
 )
