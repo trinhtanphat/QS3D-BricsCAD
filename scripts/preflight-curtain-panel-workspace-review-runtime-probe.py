@@ -32,6 +32,17 @@ inbox = read(INBOX)
 claim = read(CLAIM)
 
 for token in (
+    'CommandMethod("QS3DCURTAINP10PROGRESSLOAD", CommandFlags.Modal)',
+    'CommandMethod("QS3DCURTAINP10PROGRESSDRAW", CommandFlags.Modal)',
+    'CommandMethod("QS3DCURTAINP10PROGRESSPREPARE", CommandFlags.Modal)',
+    'CommandMethod("QS3DCURTAINP10PROGRESSBUILD", CommandFlags.Modal)',
+    'CommandMethod("QS3DCURTAINP10PROGRESSSELECT", CommandFlags.Modal)',
+    'CommandMethod("QS3DCURTAINP10PROGRESSWORKSPACE", CommandFlags.Modal)',
+    'CommandMethod("QS3DCURTAINP10PROGRESSINSPECT", CommandFlags.Modal)',
+    'CommandMethod("QS3DCURTAINP10PROGRESSREVIEW", CommandFlags.Modal)',
+    'CommandMethod("QS3DCURTAINP10PROGRESSHEALTH", CommandFlags.Modal)',
+    'CommandMethod("QS3DCURTAINP10PROGRESSHEALTHCHECK", CommandFlags.Modal)',
+    'CommandMethod("QS3DCURTAINP10PROGRESSRELEASE", CommandFlags.Modal)',
     'CommandMethod("QS3DCURTAINP10SELECT", CommandFlags.Modal)',
     'CommandMethod("QS3DCURTAINP10CHECKWORKSPACE", CommandFlags.Modal)',
     'CommandMethod("QS3DCURTAINP10CHECKHEALTH", CommandFlags.Modal)',
@@ -53,6 +64,10 @@ for token in (
     'p10_qualified=true',
     'failure_phase=',
     'failure_code=',
+    'QS3D_CURTAIN_P10_PROGRESS',
+    'curtain-panel-workspace-review-progress.txt',
+    'writer.WriteLine("phase=" + phase)',
+    'File.Replace(tempPath, fullPath, null)',
 ):
     if token not in probe:
         errors.append("Curtain P10 probe missing production-review token: " + token)
@@ -90,6 +105,11 @@ for token in (
     'Close existing BricsCAD processes before isolated Curtain P10 qualification.',
     'QS3D_CURTAIN_P10_RESULT',
     'QS3D_CURTAIN_P10_NONCE',
+    'QS3D_CURTAIN_P10_PROGRESS',
+    'curtain-panel-workspace-review-progress.txt',
+    'Read-Qs3dProgressPhase',
+    'last_progress_phase',
+    '"plugin_loaded", "direct_draw_complete", "source_selection_prepared", "curtain_build_complete"',
     'QS3DDRAWGLASSWALL',
     'QS3DCURTAINPANELPREPARE',
     'QS3DCURTAIN3D',
@@ -111,13 +131,27 @@ for token in (
         errors.append("Curtain P10 runner missing guard/evidence token: " + token)
 
 ordered = (
+    '"QS3DCURTAINP10PROGRESSLOAD"',
+    '"QS3DDRAWGLASSWALL"',
+    '"QS3DCURTAINP10PROGRESSDRAW"',
+    '"QS3DCURTAINPANELPREPARE"',
+    '"QS3DCURTAINP10PROGRESSPREPARE"',
+    '"QS3DCURTAIN3D"',
+    '"QS3DCURTAINP10PROGRESSBUILD"',
     '"QS3DCURTAINP10SELECT"',
+    '"QS3DCURTAINP10PROGRESSSELECT"',
     '"QS3D"',
+    '"QS3DCURTAINP10PROGRESSWORKSPACE"',
     '"QS3DINSPECT"',
+    '"QS3DCURTAINP10PROGRESSINSPECT"',
     '"QS3DCURTAINP10CHECKWORKSPACE"',
+    '"QS3DCURTAINP10PROGRESSREVIEW"',
     '"QS3DHEALTHALL"',
+    '"QS3DCURTAINP10PROGRESSHEALTH"',
     '"QS3DCURTAINP10CHECKHEALTH"',
+    '"QS3DCURTAINP10PROGRESSHEALTHCHECK"',
     '"QS3DRELEASECHECK"',
+    '"QS3DCURTAINP10PROGRESSRELEASE"',
     '"QS3DCURTAINP10COMPLETE"',
 )
 positions = [runner.find(token, runner.find("$script = @(")) for token in ordered]
