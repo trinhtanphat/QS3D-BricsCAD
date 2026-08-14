@@ -131,7 +131,7 @@ namespace QS3D.Core.Domain
             Elements = new List<ProjectElement>();
             QuantityRules = new List<QuantityRule>();
             Metadata = new ProjectMetadataDictionary();
-            MeasurementWorkItemMappings = new ProjectMeasurementWorkItemMappingCollection(Metadata);
+            MeasurementWorkItemMappings = new ProjectMeasurementWorkItemMappingCollection(this, Metadata);
             AuditEvents = new List<AuditEvent>();
         }
 
