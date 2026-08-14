@@ -2,7 +2,8 @@
 
 - **Agent:** `chatgpt-web-gpt56sol`
 - **Date (Asia/Ho_Chi_Minh):** 2026-08-14
-- **Status:** `ACTIVE`
+- **Status:** `COMPLETED`
+- **Completed (Asia/Ho_Chi_Minh):** 2026-08-14 08:12
 - **Workstream:** `IFC-02` — Round-trip preservation mapping
 - **Slice:** `IFC-02C` — duplicate external identity becomes explicit ambiguity
 - **Priority:** P1
@@ -11,34 +12,55 @@
 
 ## Confirmed contract gap
 
-IFC-01 test-matrix row 2 requires duplicate external identity to be reported as ambiguous. IFC-02B introduced an explicit `InvalidOrAmbiguous` result state, but `IfcRoundTripExchangeResultSet.Create()` currently throws on duplicate external identities instead of producing a canonical ambiguous result. This leaves callers responsible for reimplementing the ambiguity transition and can yield inconsistent boundary behavior.
+IFC-01 test-matrix row 2 requires duplicate external identity to be reported as ambiguous. IFC-02B introduced an explicit `InvalidOrAmbiguous` result state, but the prior `IfcRoundTripExchangeResultSet.Create()` threw on duplicate external identities instead of producing a canonical ambiguous result. That left callers responsible for reimplementing the ambiguity transition and could yield inconsistent boundary behavior.
 
-## Reserved scope
+## Implemented scope
 
 - `src/QS3D.Core/Export/IfcRoundTripExchangeResult.cs`
+  - `IfcRoundTripExchangeResultSet.Create()` now groups results by canonical external identity.
+  - The first unique result is preserved unchanged.
+  - Any duplicate identity is collapsed to exactly one `InvalidOrAmbiguous` result with canonical detail `Duplicate external object identity`.
+  - Ambiguous duplicate groups retain only the external identity and ambiguity detail; trusted QS3D projection, classification identity, mapping relation identity, and cost relation identity are intentionally discarded rather than selecting one conflicting candidate.
+  - Final results retain deterministic canonical ordering.
+  - Null collection entries remain fail-closed.
 - `tests/QS3D.Core.SmokeTests/IfcRoundTripExchangeResultSmoke.cs`
+  - covers supported-vs-unmapped duplicate candidates;
+  - covers forward and reverse duplicate input order;
+  - verifies collapse count and canonical ambiguity detail;
+  - verifies no trusted projection/classification/mapping/cost evidence leaks from conflicting candidates;
+  - verifies a separate unique result is preserved unchanged;
+  - preserves existing null-entry failure coverage.
 
-The existing registration file remains unchanged.
+The existing registration file was intentionally unchanged.
 
-## Acceptance
+## IFC-02 acceptance coverage
 
-1. Duplicate canonical external identities are coalesced into exactly one `InvalidOrAmbiguous` result rather than first-wins, double-counting, or generic throw behavior.
-2. The coalesced ambiguous result retains only the external identity plus an explicit canonical ambiguity detail; it must not select a trusted QS3D projection, mapping relation, cost relation, or conflicting classification evidence from either duplicate candidate.
-3. Unique records retain existing IFC-02B semantics unchanged.
-4. Output remains deterministic regardless of input order.
-5. Null collection entries and malformed individual records remain fail-closed.
-6. Focused regression proves supported-vs-unmapped duplicate, duplicate order reversal, duplicate collapse count, no fabricated trusted identity/relation, and preservation of unique records.
+- **Row 2:** duplicate external identity is now reported as one explicit ambiguous result instead of generic failure or first-wins behavior.
+- **Row 15 / determinism:** reversing duplicate candidate order produces the same canonical ambiguous projection for that external identity and preserves deterministic set ordering.
 
-## IFC-02 boundary
+This remains schema-neutral CAD-independent Core behavior. No IFC schema/runtime/library selection, native import/export, unit/measurement calculation, mapping/cost business rule, persistence, geometry, Rebar, release automation, LOCAL qualification, or BricsCAD source change was made.
 
-This remains schema-neutral CAD-independent Core behavior. No IFC schema/runtime/library selection, native import/export, unit/measurement calculation, mapping/cost business rule, persistence, geometry, Rebar, release automation, LOCAL qualification, or BricsCAD source change is in scope.
+## Coordination and publication
 
-**IFC-02 test matrix covered:** row 2 plus deterministic collection behavior relevant to row 15.
+- Claim-first commit on `main`: `41d1bbde4b8f5d2cc2eecc62ce2cb36063a17756`.
+- Implementation branch: `agent/ifc02c-duplicate-external-identity`.
+- Source fix commit: `e768d1db84769692d4beb34426aa073d69886fc5`.
+- Focused regression commit / branch head: `5214128c24e5003705bb28577c4e6ba5416cb0cb`.
+- Pull request: `#1096` — `fix(ifc): coalesce duplicate external identity as ambiguous`.
+- Raw GitHub PR metadata before merge reported `mergeable=true`, `rebaseable=true`, `mergeable_state=clean`, two changed files, 63 additions and 26 deletions.
+- Squash merge on `main`: `eeec7895f8bae3dcbbabe85588f4ee697f903f10`.
+- Merge used expected head SHA `5214128c24e5003705bb28577c4e6ba5416cb0cb`, so an unexpected branch-head change would have been rejected.
+- Concurrent agent commits were preserved through GitHub's clean merge; no force-push or history rewrite was used.
 
-## Validation policy
+## Validation actually executed
 
-Refresh current `main` before source write and before publication. Use focused managed validation only if an executable .NET compiler is available; otherwise source/read-back verification only, with no runtime PASS claim and no GitHub Actions dispatch.
+- Refreshed live `main` before claim, after claim, before source work, before PR publication, and after merge.
+- GitHub compare before publication showed exactly the two claimed IFC-02C files and no unrelated changes.
+- Read raw PR metadata confirming the branch was cleanly mergeable before merge.
+- Read back the merged source and focused smoke directly from `main` after merge; blob SHAs matched the implementation branch versions.
+- The available execution environment has no `dotnet`, `csc`, or `mcs`, so no managed build/smoke/runtime PASS is claimed.
+- No GitHub Actions workflow was dispatched for this lane.
 
-## Completion record
+## Completion condition
 
-Pending implementation, regression, merge, remote verification and claim close.
+Satisfied for this bounded Core slice: duplicate external identity is now represented explicitly and deterministically as ambiguity, conflicting trusted evidence is not selected, focused regression covers order-independence and evidence stripping, changes are on remote `main`, and unavailable managed/native execution gates remain explicitly unclaimed.
