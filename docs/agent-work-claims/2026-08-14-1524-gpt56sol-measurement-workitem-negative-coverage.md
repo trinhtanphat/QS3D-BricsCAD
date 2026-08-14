@@ -1,6 +1,6 @@
 # Work claim — Measurement work-item coverage rejects negative physical quantities
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `gpt56sol-measurement-workitem-negative-coverage-20260814-1524`
 - Registered: `2026-08-14T15:24:00+07:00`
 - Workstream: `Measurement / work-item coverage integrity`
@@ -8,10 +8,13 @@
 - Baseline observed main SHA: `f3bd1d722d7242d427f0d69c751bc21452697607`
 - Pre-write source blob: `b1e9954493993daef6d9f18c8589b3a743c050ca`
 - Pre-write smoke blob: `0062b795e8c9dc2451e7c17fba43ac73a9a6555e`
+- Claim commit: `1839e5ccca8cf32897e83286970ce6896932cf96`
+- Source fix commit: `e966417f6882713c5c92d0198e025c4bf3510f76`
+- Regression commit: `d5cbb5a6ae0913c98133e5535742b659f2e68912`
 
 ## Confirmed defect
 
-`MeasurementWorkItemCoverageEvaluator.SnapshotQuantities()` fails closed for non-finite quantity corruption and canonicalizes signed zero, but it accepts finite negative values from the public `ProjectElement.Quantities` dictionary as normal coverage input.
+`MeasurementWorkItemCoverageEvaluator.SnapshotQuantities()` failed closed for non-finite quantity corruption and canonicalized signed zero, but accepted finite negative values from the public `ProjectElement.Quantities` dictionary as normal coverage input.
 
 QS3D's established physical-measurement contract is finite and non-negative; signed values are reserved for revision/delta mathematics. Because the project quantity dictionary remains publicly mutable and persisted/legacy/corrupt state can bypass `SetQuantity()`, coverage must independently reject negative physical payloads instead of reporting them as ready/mapped quantities.
 
@@ -21,16 +24,16 @@ QS3D's established physical-measurement contract is finite and non-negative; sig
 - `tests/QS3D.Core.SmokeTests/MeasurementWorkItemCoverageSmoke.cs` — focused negative-corruption regression only.
 - this claim file.
 
-## Intended change
+## Implemented change
 
-- Reject finite `item.Value < 0d` in the coverage snapshot with `InvalidOperationException`.
-- Preserve existing non-finite rejection.
-- Preserve `-0d` acceptance and canonicalization to positive zero (`-0d < 0d` is false).
-- Preserve detached findings, ordering, mapping resolution, and stale/unmapped issue semantics.
+- `SnapshotQuantities()` now rejects finite `item.Value < 0d` with `InvalidOperationException`.
+- Existing non-finite rejection is unchanged.
+- Existing `-0d` acceptance/canonicalization remains unchanged because negative zero does not satisfy `< 0d`.
+- Detached findings, ordering, mapping resolution, and stale/unmapped issue semantics remain unchanged.
 
-## Regression plan
+## Regression
 
-Extend the existing corruption smoke by directly injecting a small finite negative value into `ProjectElement.Quantities` and proving `MeasurementWorkItemCoverageEvaluator.Evaluate()` fails closed. Keep the existing signed-zero regression unchanged to prove zero semantics remain accepted.
+`MeasurementWorkItemCoverageSmoke.CorruptProjectStateFailsClosed()` now directly injects `-double.Epsilon` into `ProjectElement.Quantities` and proves evaluation fails closed. The existing signed-zero regression remains intact and continues to specify accepted zero semantics.
 
 ## Explicit non-scope
 
@@ -38,9 +41,12 @@ Extend the existing corruption smoke by directly injecting a small finite negati
 - no revision/delta math changes;
 - no mapping-catalog identity changes;
 - no persistence/schema migration;
-- no UI/native work;
-- no GitHub Actions dispatch or licensed BricsCAD qualification.
+- no UI/native work.
 
-## Validation boundary
+## Validation performed
 
-Remote GitHub diff/readback and ancestry verification only unless an executable .NET toolchain is independently available. No GitHub Actions will be dispatched, and no fresh managed/native PASS will be claimed without execution evidence.
+- GitHub remote readback on current `main` confirmed the negative guard in `MeasurementWorkItemCoverage.cs` and the `-double.Epsilon` regression in `MeasurementWorkItemCoverageSmoke.cs`.
+- Ancestry/readback after the regression confirmed later concurrent commits did not touch either reserved source/test path.
+- Local managed build/smoke was **not executed**: this environment has no `dotnet`, `csc`, `mcs`, `msbuild`, `xbuild`, or `mono` executable.
+- No GitHub Actions were dispatched.
+- No licensed BricsCAD/native validation was performed or claimed for this managed-only lane.
