@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml;
 
 namespace QS3D.Core.Domain
 {
@@ -123,7 +124,7 @@ namespace QS3D.Core.Domain
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Property name is required.", nameof(name));
             var key = name.Trim();
             if (key.Any(char.IsControl)) throw new ArgumentException("Property name cannot contain control characters.", nameof(name));
-            var normalized = value ?? string.Empty;
+            var normalized = RequireXmlText(value ?? string.Empty, nameof(value), "Property value");
             if (Properties.TryGetValue(key, out var existing) && string.Equals(existing, normalized, StringComparison.Ordinal)) return;
             Properties[key] = normalized;
             var affectsGeneratedGeometry = ElementGeometryPolicy.AffectsGeneratedGeometry(Category, key);
@@ -160,6 +161,7 @@ namespace QS3D.Core.Domain
 
         public void MarkGeneratedGeometryStale(string reason)
         {
+            var normalizedReason = NormalizeStaleReason(reason);
             var changed = false;
             var hasOutput = false;
             bool outputPresent;
@@ -174,27 +176,29 @@ namespace QS3D.Core.Domain
             changed |= MarkGeneratedOutputStale(GeneratedCurtainFrameHandlesKey, GeneratedCurtainFrameStateKey, GeneratedCurtainFrameStaleSnapshotKey, out outputPresent); hasOutput |= outputPresent;
             changed |= MarkGeneratedCurtainPanelOutputStale(out outputPresent); hasOutput |= outputPresent;
             if (!hasOutput) return;
-            changed |= SetAggregateStaleReason(reason);
+            changed |= SetAggregateStaleReason(normalizedReason);
             if (changed) UpdatedUtc = DateTime.UtcNow;
         }
 
         public void MarkGeneratedCurtainFrameStale(string reason)
         {
+            var normalizedReason = NormalizeStaleReason(reason);
             var changed = MarkGeneratedOutputStale(
                 GeneratedCurtainFrameHandlesKey,
                 GeneratedCurtainFrameStateKey,
                 GeneratedCurtainFrameStaleSnapshotKey,
                 out var hasOutput);
             if (!hasOutput) return;
-            changed |= SetAggregateStaleReason(reason);
+            changed |= SetAggregateStaleReason(normalizedReason);
             if (changed) UpdatedUtc = DateTime.UtcNow;
         }
 
         public void MarkGeneratedCurtainPanelStale(string reason)
         {
+            var normalizedReason = NormalizeStaleReason(reason);
             var changed = MarkGeneratedCurtainPanelOutputStale(out var hasOutput);
             if (!hasOutput) return;
-            changed |= SetAggregateStaleReason(reason);
+            changed |= SetAggregateStaleReason(normalizedReason);
             if (changed) UpdatedUtc = DateTime.UtcNow;
         }
 
@@ -305,6 +309,25 @@ namespace QS3D.Core.Domain
             var normalized = id.Trim();
             if (normalized.Any(char.IsControl)) throw new ArgumentException("Element id cannot contain control characters.", nameof(id));
             return normalized;
+        }
+
+        private static string RequireXmlText(string value, string parameterName, string label)
+        {
+            try
+            {
+                XmlConvert.VerifyXmlChars(value);
+                return value;
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException(label + " contains characters that are invalid in XML.", parameterName, ex);
+            }
+        }
+
+        private static string NormalizeStaleReason(string? reason)
+        {
+            var normalized = string.IsNullOrWhiteSpace(reason) ? "Semantic/source state changed." : reason.Trim();
+            return RequireXmlText(normalized, nameof(reason), "Generated geometry stale reason");
         }
 
         private static ElementCategory RequireCategory(ElementCategory value)
