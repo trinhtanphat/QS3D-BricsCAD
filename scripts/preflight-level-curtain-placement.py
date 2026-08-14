@@ -51,6 +51,14 @@ for label, text, source_base, snapshot_prefix in (
     if resolve < 0 or destructive < 0 or resolve >= destructive:
         errors.append(label + " must resolve Level placement before native replacement/erase")
 
+for label, text in (("LINE curtain frame", line_frame), ("path curtain frame", path_frame)):
+    require(text, "verticalPlacement.UsesBottomLevel", label + " native Z placement")
+    require(text, "bool usesLevelPlacement", label + " native Z placement")
+    require(text, "var originOffsetZ = usesLevelPlacement ? 0d : -height / 2d;", label + " native Z placement")
+    require(text, "new Vector3d(-width / 2d, -depth / 2d, originOffsetZ)", label + " native Z placement")
+    if "new Vector3d(-width / 2d, -depth / 2d, -height / 2d)" in text:
+        errors.append(label + " must not shift a Level-resolved centered V25 box down by half its height")
+
 for label, text in (("LINE frame openings", line_frame), ("path frame openings", path_frame)):
     require(text, "CadHostedOpeningVerticalPlacement.Resolve(", label)
     require(text, "HostHeightM = hostHeightM", label)
