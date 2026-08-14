@@ -8,16 +8,20 @@ using Bricscad.ApplicationServices;
 namespace QS3D.BricsCAD.V25.Ribbon
 {
     /// <summary>
-    /// Adds BLT-style quick workflow entry points to the existing TẠO MỚI tab without
-    /// duplicating the tab itself. Quick actions live in one exact dedicated panel so later
-    /// Ribbon information-architecture regrouping cannot silently append them to an unrelated panel.
+    /// Keeps the existing quick-authoring panel and reconciles the clean-room BLT-reference
+    /// VẼ/IFC entry points onto the canonical QS3D Ribbon. This class augments existing tabs;
+    /// it never creates a duplicate top-level tab or changes Ribbon startup scheduling.
     /// </summary>
     internal static class QuickWorkflowRibbonAugmenter
     {
         private const string AssemblyName = "BrxMgd";
-        private const string TabId = "QS3D_AUTHOR";
-        private const string PanelSourceId = "QS3D_AUTHOR_QUICK_PANEL_SOURCE";
-        private const string PanelTitle = "Tác vụ nhanh";
+        private const string AuthorTabId = "QS3D_AUTHOR";
+        private const string DrawTabId = "QS3D_DRAW";
+        private const string AuthorPanelSourceId = "QS3D_AUTHOR_QUICK_PANEL_SOURCE";
+        private const string DrawPrimitivesPanelSourceId = "QS3D_DRAW_PRIMITIVES_PANEL_SOURCE";
+        private const string DrawTransformPanelSourceId = "QS3D_DRAW_TRANSFORM_PANEL_SOURCE";
+        private const string DrawEditPanelSourceId = "QS3D_DRAW_EDIT_PANEL_SOURCE";
+        private const string DrawIfcPanelSourceId = "QS3D_DRAW_IFC_PANEL_SOURCE";
         private static bool _initialized;
 
         private sealed class ButtonSpec
@@ -34,7 +38,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             public string Command { get; }
         }
 
-        private static readonly ButtonSpec[] Buttons =
+        private static readonly ButtonSpec[] AuthorButtons =
         {
             new ButtonSpec("QS3D_AUTHOR_DRAW_ACTIVE", "Vẽ Nhanh", "QS3DDRAWACTIVE"),
             new ButtonSpec("QS3D_AUTHOR_CREATE_SIMILAR", "Vẽ Tương Tự", "QS3DCREATESIMILAR"),
@@ -43,9 +47,41 @@ namespace QS3D.BricsCAD.V25.Ribbon
             new ButtonSpec("QS3D_AUTHOR_MATERIALS", "Vật liệu", "QS3DMATERIALS")
         };
 
+        private static readonly ButtonSpec[] DrawPrimitiveButtons =
+        {
+            new ButtonSpec("QS3D_DRAW_REF_LINE", "Đường thẳng", "QS3DDRAWLINE"),
+            new ButtonSpec("QS3D_DRAW_REF_BY_CAD", "Theo nét CAD", "QS3DDRAWBYCAD"),
+            new ButtonSpec("QS3D_DRAW_REF_RECT", "Chữ nhật", "QS3DDRAWRECT"),
+            new ButtonSpec("QS3D_DRAW_REF_CIRCLE", "Đường tròn", "QS3DDRAWCIRCLE"),
+            new ButtonSpec("QS3D_DRAW_REF_PROFILE", "Biên dạng", "QS3DDRAWPROFILE")
+        };
+
+        private static readonly ButtonSpec[] DrawTransformButtons =
+        {
+            new ButtonSpec("QS3D_DRAW_REF_SLAB_SLOPE", "Dốc sàn", "QS3DFLOORSLOPE"),
+            new ButtonSpec("QS3D_DRAW_REF_SLAB_CUT", "Cắt sàn", "QS3DSLABCUT")
+        };
+
+        private static readonly ButtonSpec[] DrawEditButtons =
+        {
+            new ButtonSpec("QS3D_DRAW_REF_CORNER", "Nối góc", "QS3DJOINCORNER"),
+            new ButtonSpec("QS3D_DRAW_REF_TEE", "Nối chữ T", "QS3DJOINTEE")
+        };
+
+        private static readonly ButtonSpec[] IfcButtons =
+        {
+            new ButtonSpec("QS3D_DRAW_IFC_IMPORT", "Nhập IFC", "QS3DIFCIMPORT"),
+            new ButtonSpec("QS3D_DRAW_IFC_IMPORT_LIGHT", "Nhập IFC (nhẹ)", "QS3DIFCIMPORTLIGHT"),
+            new ButtonSpec("QS3D_DRAW_IFC_REMOVE", "Xóa IFC", "QS3DIFCREMOVE"),
+            new ButtonSpec("QS3D_DRAW_IFC_EXPORT", "Xuất IFC", "QS3DIFCEXPORT")
+        };
+
         public static bool TryInitialize()
         {
             if (_initialized) return true;
+
+            QS3D.BricsCAD.V25.UI.ReferenceWorkspaceTreeAugmenter.EnsureRegistered();
+
             try
             {
                 var control = FindRibbonControl();
@@ -53,41 +89,39 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 var tabs = GetProperty(control, "Tabs");
                 if (!(tabs is IEnumerable tabItems)) return false;
 
-                object? authorTab = null;
-                foreach (var item in tabItems)
-                {
-                    if (item == null) continue;
-                    if (string.Equals(GetProperty(item, "Id") as string, TabId, StringComparison.OrdinalIgnoreCase))
-                    {
-                        authorTab = item;
-                        break;
-                    }
-                }
-                if (authorTab == null) return false;
+                var authorTab = FindById(tabItems, AuthorTabId);
+                var drawTab = FindById(tabItems, DrawTabId);
+                if (authorTab == null || drawTab == null) return false;
 
-                var panels = GetProperty(authorTab, "Panels");
-                if (!(panels is IEnumerable panelItems)) return false;
-                var source = FindPanelSource(panelItems, PanelSourceId) ?? CreateQuickPanel(panels);
+                var authorPanels = GetProperty(authorTab, "Panels");
+                var drawPanels = GetProperty(drawTab, "Panels");
+                if (!(authorPanels is IEnumerable authorPanelItems) || !(drawPanels is IEnumerable drawPanelItems))
+                    return false;
 
-                var items = GetProperty(source, "Items");
-                if (items == null) return false;
-                foreach (var spec in Buttons)
-                {
-                    var button = FindById(items, spec.Id);
-                    if (button == null)
-                    {
-                        button = Create("Bricscad.Windows.RibbonButton");
-                        SetProperty(button, "Id", spec.Id);
-                        Add(items, button);
-                    }
+                var authorSource = FindPanelSource(authorPanelItems, AuthorPanelSourceId)
+                                   ?? CreatePanel(authorPanels, AuthorPanelSourceId, "Tác vụ nhanh");
+                EnsureButtons(authorSource, AuthorButtons);
 
-                    SetProperty(button, "Name", spec.Text);
-                    SetProperty(button, "Text", spec.Text);
-                    SetProperty(button, "ShowText", true);
-                    SetProperty(button, "ShowImage", false);
-                    SetProperty(button, "CommandParameter", spec.Command);
-                    SetProperty(button, "CommandHandler", new CommandHandler());
-                }
+                var primitives = FindPanelSource(drawPanelItems, DrawPrimitivesPanelSourceId);
+                var transform = FindPanelSource(drawPanelItems, DrawTransformPanelSourceId);
+                var edit = FindPanelSource(drawPanelItems, DrawEditPanelSourceId);
+                if (primitives == null || transform == null || edit == null) return false;
+
+                SetProperty(primitives, "Name", "Vẽ");
+                SetProperty(primitives, "Title", "Vẽ");
+                EnsureButtons(primitives, DrawPrimitiveButtons);
+
+                SetProperty(transform, "Name", "Công cụ");
+                SetProperty(transform, "Title", "Công cụ");
+                EnsureButtons(transform, DrawTransformButtons);
+
+                SetProperty(edit, "Name", "Kết nối & đo");
+                SetProperty(edit, "Title", "Kết nối & đo");
+                EnsureButtons(edit, DrawEditButtons);
+
+                var ifcSource = FindPanelSource(drawPanelItems, DrawIfcPanelSourceId)
+                                ?? CreatePanel(drawPanels, DrawIfcPanelSourceId, "IFC");
+                EnsureButtons(ifcSource, IfcButtons);
 
                 _initialized = true;
                 return true;
@@ -99,6 +133,30 @@ namespace QS3D.BricsCAD.V25.Ribbon
         }
 
         public static void Reset() => _initialized = false;
+
+        private static void EnsureButtons(object source, ButtonSpec[] specs)
+        {
+            var items = GetProperty(source, "Items")
+                        ?? throw new InvalidOperationException("RibbonPanelSource.Items was not available.");
+
+            foreach (var spec in specs)
+            {
+                var button = FindById(items as IEnumerable, spec.Id) ?? FindByText(items, spec.Text);
+                if (button == null)
+                {
+                    button = Create("Bricscad.Windows.RibbonButton");
+                    SetProperty(button, "Id", spec.Id);
+                    Add(items, button);
+                }
+
+                SetProperty(button, "Name", spec.Text);
+                SetProperty(button, "Text", spec.Text);
+                SetProperty(button, "ShowText", true);
+                SetProperty(button, "ShowImage", false);
+                SetProperty(button, "CommandParameter", spec.Command);
+                SetProperty(button, "CommandHandler", new CommandHandler());
+            }
+        }
 
         private static object? FindPanelSource(IEnumerable panels, string sourceId)
         {
@@ -113,12 +171,12 @@ namespace QS3D.BricsCAD.V25.Ribbon
             return null;
         }
 
-        private static object CreateQuickPanel(object panels)
+        private static object CreatePanel(object panels, string sourceId, string title)
         {
             var source = Create("Bricscad.Windows.RibbonPanelSource");
-            SetProperty(source, "Id", PanelSourceId);
-            SetProperty(source, "Name", PanelTitle);
-            SetProperty(source, "Title", PanelTitle);
+            SetProperty(source, "Id", sourceId);
+            SetProperty(source, "Name", title);
+            SetProperty(source, "Title", title);
 
             var panel = Create("Bricscad.Windows.RibbonPanel");
             SetProperty(panel, "Source", source);
@@ -168,13 +226,27 @@ namespace QS3D.BricsCAD.V25.Ribbon
             method.Invoke(collection, new[] { item });
         }
 
-        private static object? FindById(object collection, string id)
+        private static object? FindById(IEnumerable? collection, string id)
+        {
+            if (collection == null) return null;
+            foreach (var item in collection)
+            {
+                if (item == null) continue;
+                if (string.Equals(GetProperty(item, "Id") as string, id, StringComparison.OrdinalIgnoreCase))
+                    return item;
+            }
+            return null;
+        }
+
+        private static object? FindByText(object collection, string text)
         {
             if (!(collection is IEnumerable enumerable)) return null;
             foreach (var item in enumerable)
             {
                 if (item == null) continue;
-                if (string.Equals(GetProperty(item, "Id") as string, id, StringComparison.OrdinalIgnoreCase)) return item;
+                if (string.Equals(GetProperty(item, "Text") as string, text, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(GetProperty(item, "Name") as string, text, StringComparison.OrdinalIgnoreCase))
+                    return item;
             }
             return null;
         }
