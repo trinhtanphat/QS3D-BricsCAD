@@ -128,7 +128,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static bool HasQs3dRootAncestor(DependencyObject target)
         {
-            DependencyObject current = GetParent(target);
+            DependencyObject? current = GetParent(target);
             while (current != null)
             {
                 if (current is FrameworkElement element && IsQs3dRoot(element))
@@ -142,7 +142,7 @@ namespace QS3D.BricsCAD.V25.UI
             return false;
         }
 
-        private static DependencyObject GetParent(DependencyObject target)
+        private static DependencyObject? GetParent(DependencyObject target)
         {
             if (target is Visual)
             {
