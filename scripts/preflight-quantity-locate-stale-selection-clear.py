@@ -115,12 +115,13 @@ if summary_locate:
 
 insight_select = "Cad.CadHandleService.Select(document, handles)"
 insight_clear = "Cad.CadHandleService.ClearSelection(document)"
+insight_zoom = "global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(document)"
 for needle in (
     "if (handles.Count == 0)",
     insight_clear,
     insight_select,
     "if (count > 0)",
-    'document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);',
+    insight_zoom,
 ):
     if needle not in insight_locate:
         errors.append("QuantityInsight locate missing contract: " + needle)
@@ -130,6 +131,8 @@ if insight_locate:
         errors.append("QuantityInsight must use normal Select only for the positive-candidate locate attempt")
     if insight_locate.count(insight_clear) < 2:
         errors.append("QuantityInsight must explicitly clear both zero-candidate and zero-resolved stale selection paths")
+    if 'SendStringToExecute("QS3DZOOMSELECTED ' in insight_locate:
+        errors.append("QuantityInsight must use direct in-process zoom rather than queued command re-entry")
     zero_candidate_guard_pos = insight_locate.find("if (handles.Count == 0)")
     zero_candidate_clear_pos = insight_locate.find(insight_clear, zero_candidate_guard_pos)
     zero_candidate_status_pos = insight_locate.find(
@@ -138,15 +141,12 @@ if insight_locate:
     )
     normal_select_pos = insight_locate.find(insight_select, zero_candidate_status_pos)
     positive_guard_pos = insight_locate.find("if (count > 0)", normal_select_pos)
-    zoom_pos = insight_locate.find(
-        'document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);',
-        positive_guard_pos,
-    )
+    zoom_pos = insight_locate.find(insight_zoom, positive_guard_pos)
     zero_resolved_clear_pos = insight_locate.find(insight_clear, zoom_pos)
     if not (
         0 <= zero_candidate_guard_pos < zero_candidate_clear_pos < zero_candidate_status_pos < normal_select_pos < positive_guard_pos < zoom_pos < zero_resolved_clear_pos
     ):
-        errors.append("QuantityInsight must clear zero-candidate selection before return, zoom only after positive selection, and clear zero-resolved selection afterwards")
+        errors.append("QuantityInsight must clear zero-candidate selection before return, direct-zoom only after positive selection, and clear zero-resolved selection afterwards")
 
 for locate_name, source in (("QuantitySummary", summary_locate), ("QuantityInsight", insight_locate)):
     for forbidden in (
@@ -165,5 +165,5 @@ if errors:
 
 print(
     "PASS: normal CAD Select preserves implied selection when no handle resolves, explicit ClearSelection removes stale PICKFIRST on failed quantity locate paths, "
-    "and both quantity surfaces keep multi-object resolution with zoom gated on a positive live selection."
+    "and both quantity surfaces keep multi-object resolution with zoom gated on a positive live selection; Insight uses direct in-process zoom."
 )
