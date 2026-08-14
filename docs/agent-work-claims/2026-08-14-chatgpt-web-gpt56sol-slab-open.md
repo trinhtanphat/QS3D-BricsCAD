@@ -3,7 +3,9 @@
 - Status: ACTIVE
 - Agent: `chatgpt-web-gpt56sol`
 - Claimed at: `2026-08-14T19:14:17+07:00`
+- Expanded at: `2026-08-14T20:25:00+07:00`
 - Baseline `main`: `9d19f0fcfbedfa08cb0373c6ac93e34c2c12bce0`
+- Expansion baseline `main`: `41a75331ced7a0fe62adb34b83ffa705fb4080d9`
 - Implementation branch: `agent/chatgpt-web-gpt56sol/slab-open`
 - Integration batch: `TBD`
 - Priority: user-requested correctness/feature gap
@@ -20,6 +22,10 @@ Expected source surfaces:
 - `src/QS3D.BricsCAD.V25/DirectDrawSlabOpeningCommands.cs` (new)
 - `src/QS3D.BricsCAD.V25/ActiveFamilyQuickDrawCommands.cs`
 - `scripts/preflight-slab-open-negative-z-boolean.py` (new)
+- `src/QS3D.Core/Diagnostics/ModelHealthService.cs`
+- `src/QS3D.Core/Diagnostics/QsHostOpeningIntegrityRuleFamily.cs`
+
+The two diagnostics surfaces are reserved narrowly for host semantics only: the exact `slabOpen` contract may use `HostSlabId -> Slab`; ordinary Door/WallOpening behavior must continue to require `HostWallId -> Wall`. Do not weaken canonicality, orphan detection, or existing wall-opening integrity checks.
 
 ## Exclusions / collision boundaries
 
@@ -27,12 +33,13 @@ Expected source surfaces:
 - Do not modify Quantity Insight / quantity-explanation surfaces.
 - Do not change the existing wall `OpeningBooleanService` semantics except through the narrow Active Family routing boundary if required.
 - Do not modify unrelated Family Manager lifecycle behavior.
+- Do not broaden diagnostics beyond the exact `slabOpen` host-contract distinction; existing Door/WallOpening `HostWallId -> Wall` behavior remains unchanged.
 - Native BricsCAD `Solid3d.BooleanOperation` runtime evidence remains `LOCAL_ONLY` unless exercised on a licensed BricsCAD runtime.
 
 ## Validation plan
 
 - Compile-time-safe Core planner/contract with finite/positive geometry guards.
-- Static preflight pins exact `slabOpen` routing, negative-Z extrusion, `BoolSubtract`, semantic `HostSlabId`, and automatic subtraction from the Direct Draw path.
+- Static preflight pins exact `slabOpen` routing, negative-Z extrusion, `BoolSubtract`, semantic `HostSlabId`, automatic subtraction from the Direct Draw path, and health semantics that preserve ordinary wall-opening host validation.
 - Re-read changed files and branch commit after write.
 - Integration follows the repository integration/freeze protocol; final source landing to `main` relies on the standing automatic post-integration V25 workflow rather than manual CI dispatch.
 - Licensed native BricsCAD acceptance remains explicitly `LOCAL_ONLY` until runtime evidence exists.
@@ -40,6 +47,8 @@ Expected source surfaces:
 ## Coordination
 
 Targeted recent-history checks found no current `slabOpen` claim/branch. Historical Slab Mesh claims and the historical opening-boolean claim were already completed; this claim intentionally reserves a separate slab-opening lane and avoids their surfaces.
+
+Before the diagnostics expansion, recent claim/commit audit found the QSC-02 host-opening integrity lane completed and today's relation/active-context health-smoke reconciliation lanes closed. The active P11 undo-boundary diagnostics claim explicitly excludes production Health/Core. The diagnostics expansion therefore reserves only the two exact host-integrity surfaces above and does not enter an active implementation scope found in that audit.
 
 ## Completion condition
 
