@@ -30,9 +30,9 @@ The local agent correctly did not edit CAD-independent Core/tests and handed the
 An older cloud V25 run is also useful historical evidence but must not be treated as current-HEAD proof:
 
 - workflow: `.github/workflows/release-v25-cloud.yml`
-- run `#473`, run id `31755659447`
+- workflow run number `#138`, run id `31755659447`
 - job `94630732537`
-- SHA `93a5547da20df6d727c271a3ed85c17d2ff225fd`
+- SHA `93a5547224a5248ae741ccd8dd4368bac27b6b00`
 - failed at `Run deterministic Core smoke`
 
 Current source-level blocker evidence comes from the newer `2dc87bf...` local exact-SHA run above, not from assuming the stale cloud run still represents `main`.
