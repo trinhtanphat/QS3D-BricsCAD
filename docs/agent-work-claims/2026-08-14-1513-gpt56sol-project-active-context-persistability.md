@@ -5,7 +5,8 @@
 - Registered: `2026-08-14T15:13:00+07:00`
 - Workstream: `CORE / persistence-integrity`
 - Priority: `P1`
-- Baseline observed main SHA: `427d029ad834197a43ddfa302e36128334af5ae4`
+- Baseline main SHA: `79a9706c49ef84beea8efb5d1bf5fe09472713b9`
+- Claim commit: `c1413daca35dfd611d1ba4d24b015fa4b68bc5c3`
 - Pre-write source blob: `0332848f6afc48871c95fbec962fe1129aa4ec27`
 
 ## Confirmed defect
