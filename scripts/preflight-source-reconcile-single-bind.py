@@ -55,18 +55,16 @@ else:
         if "project.Touch();" in command:
             errors.append("Source Reconcile must retain AuditTrail-owned revision without standalone project.Touch")
 
-    resolve_end = text.find("private static Dictionary<string, List<ProjectElement>> BuildSourceOwnerIndex", resolve_start)
+    resolve_end = text.find("private static IReadOnlyList<ProjectElement> ExpandInvalidationTargets", resolve_start)
     if resolve_start < 0 or resolve_end <= resolve_start:
         errors.append("cannot isolate Source Reconcile target resolver")
     else:
         resolver = text[resolve_start:resolve_end]
         required = (
             "GeneratedHandleOwnershipIndex.Build(project)",
-            "BuildSourceOwnerIndex(project)",
             "foreach (var snapshot in snapshots)",
             "generatedOwners.TryFindOwner(snapshot.Handle",
-            "sourceOwners.TryGetValue(snapshot.Handle, out var matches)",
-            "matches.Count > 1",
+            "SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, snapshot.Handle)",
             "element.SourceHandles.Count != 1",
             "seenElements.Add(element.Id)",
             "targets.Add(new Target { Snapshot = snapshot, Element = element });",
@@ -75,6 +73,10 @@ else:
         for token in required:
             if token not in resolver:
                 errors.append("Source Reconcile read-only resolver missing token: " + token)
+        generated_lookup = resolver.find("generatedOwners.TryFindOwner(snapshot.Handle")
+        source_lookup = resolver.find("SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, snapshot.Handle)")
+        if generated_lookup < 0 or source_lookup < 0 or generated_lookup > source_lookup:
+            errors.append("Source Reconcile must reject generated output before canonical source-owner resolution")
         for forbidden in (
             "ExistingProjectMutationContext",
             "ProjectContextCoordinator.GetOrCreate",
@@ -82,6 +84,9 @@ else:
             "project.Touch();",
             "MarkDirty(",
             "SetProperty(",
+            "BuildSourceOwnerIndex",
+            "sourceOwners.TryGetValue",
+            "new Dictionary<string, List<ProjectElement>>",
         ):
             if forbidden in resolver:
                 errors.append("Source Reconcile ownership resolver must remain read-only: " + forbidden)

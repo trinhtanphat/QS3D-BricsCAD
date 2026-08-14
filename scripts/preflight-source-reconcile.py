@@ -12,8 +12,11 @@ ribbon = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/ProjectRibbonAugmenter.cs"
 engine = ROOT / "src/QS3D.Core/Services/RegenerationEngine.cs"
 dependency_graph = ROOT / "src/QS3D.Core/Services/DependencyGraph.cs"
 ownership_index = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipIndex.cs"
+source_ownership_resolver = ROOT / "src/QS3D.Core/Services/SemanticHandleOwnershipResolver.cs"
 regen_smoke = ROOT / "tests/QS3D.Core.SmokeTests/RegenerationSubsetSmoke.cs"
 ownership_smoke = ROOT / "tests/QS3D.Core.SmokeTests/GeneratedHandleOwnershipIndexSmoke.cs"
+source_ownership_smoke = ROOT / "tests/QS3D.Core.SmokeTests/SemanticHandleOwnershipDuplicateSourceSmoke.cs"
+source_canonical_smoke = ROOT / "tests/QS3D.Core.SmokeTests/SemanticHandleOwnershipCanonicalSourceSmoke.cs"
 direct_dependency_smoke = ROOT / "tests/QS3D.Core.SmokeTests/DependencyGraphDirectDependentsSmoke.cs"
 registration = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 doc = ROOT / "docs/SOURCE-EDIT-WORKFLOW.md"
@@ -30,11 +33,8 @@ checks = {
         "project.ChangeVersion != expectedChangeVersion",
         "expectedTargetIds.SetEquals(targets.Select(x => x.Element.Id))",
         "var generatedOwners = GeneratedHandleOwnershipIndex.Build(project);",
-        "var sourceOwners = BuildSourceOwnerIndex(project);",
         "generatedOwners.TryFindOwner(snapshot.Handle, out var generatedOwner, out var generatedSlot)",
-        "sourceOwners.TryGetValue(snapshot.Handle, out var matches)",
-        "BuildSourceOwnerIndex(ProjectState project)",
-        "new Dictionary<string, List<ProjectElement>>(StringComparer.OrdinalIgnoreCase)",
+        "SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, snapshot.Handle)",
         "is QS3D-generated output owned by",
         "Select the authoritative source CAD instead.",
         "Source reconcile P0 requires exactly one authoritative source handle per semantic element",
@@ -126,6 +126,13 @@ checks = {
         "public bool TryFindOwner(string handle, out ProjectElement? owner, out string propertyKey)",
         "if (entry.Ambiguity != null) throw new InvalidOperationException(entry.Ambiguity);",
     ],
+    source_ownership_resolver: [
+        "public static ProjectElement? ResolveUniqueSourceOwner(ProjectState project, string sourceHandle)",
+        "GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(sourceHandle)",
+        "GetCanonicalUniqueStoredSourceHandles(element)",
+        "contains duplicate SourceHandles identity",
+        "is claimed by multiple semantic elements",
+    ],
     regen_smoke: [
         "RegeneratesOnlyRequestedElements",
         "RejectsMalformedRequestedIds",
@@ -148,6 +155,17 @@ checks = {
         "DifferentOwnersFailClosed",
         "DifferentLogicalSlotsOnSameOwnerFailClosed",
         "BuiltIndexIsMembershipSnapshot",
+    ],
+    source_ownership_smoke: [
+        "NumericAliasDuplicateFailsAcrossOwnershipEntryPoints",
+        "NumericAliasCrossOwnerAmbiguityFailsAcrossOwnershipEntryPoints",
+        "NumericAliasCaptureReusesExistingOwner",
+        "NumericAliasSourceGeneratedCollisionFailsClosed",
+    ],
+    source_canonical_smoke: [
+        "CanonicalStoredHandleResolvesInBothPaths",
+        "PaddedStoredHandleFailsClosedInBothPaths",
+        "BlankStoredHandleFailsClosedInBothPaths",
     ],
     direct_dependency_smoke: [
         "DirectLookupIsDeterministicAndNonTransitive",
@@ -213,13 +231,18 @@ if service.is_file():
         errors.append("Source reconcile revision must remain AuditTrail-owned; standalone project.Touch is redundant")
 
     resolve_start = text.find("private static List<Target> ResolveTargets")
-    resolve_end = text.find("private static Dictionary<string, List<ProjectElement>> BuildSourceOwnerIndex", resolve_start)
+    resolve_end = text.find("private static IReadOnlyList<ProjectElement> ExpandInvalidationTargets", resolve_start)
     resolve = text[resolve_start:resolve_end] if resolve_start >= 0 and resolve_end > resolve_start else ""
     generated_build = resolve.find("GeneratedHandleOwnershipIndex.Build(project)")
-    source_build = resolve.find("BuildSourceOwnerIndex(project)")
     selection_loop = resolve.find("foreach (var snapshot in snapshots)")
-    if min(generated_build, source_build, selection_loop) < 0 or not (generated_build < selection_loop and source_build < selection_loop):
-        errors.append("Source reconcile ownership indexes must be built once per validation phase before the selected-snapshot loop")
+    generated_lookup = resolve.find("generatedOwners.TryFindOwner(snapshot.Handle", selection_loop)
+    source_lookup = resolve.find("SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, snapshot.Handle)", generated_lookup)
+    if min(generated_build, selection_loop, generated_lookup, source_lookup) < 0 or not (
+        generated_build < selection_loop < generated_lookup < source_lookup
+    ):
+        errors.append("Source reconcile must reject generated output before resolving each selected source through the canonical Core ownership policy")
+    if "BuildSourceOwnerIndex" in text or "sourceOwners.TryGetValue" in text:
+        errors.append("Source reconcile must not retain a competing raw SourceHandles ownership index")
     if "GeneratedHandleOwnershipPolicy.TryFindOwner(project, snapshot.Handle" in resolve:
         errors.append("Source reconcile must not rescan the whole project for generated ownership on every selected handle")
     if ".Where(x => x.SourceHandles.Any" in resolve:
