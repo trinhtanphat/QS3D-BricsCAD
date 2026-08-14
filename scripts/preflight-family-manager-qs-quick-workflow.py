@@ -40,6 +40,7 @@ def main() -> None:
         require(token in xaml, f"missing {label}: {token}")
 
     code_contracts = {
+        "canonical CAD project-context namespace": 'using QS3D.BricsCAD.V25.Cad;',
         "late selection event hookup": 'FamilyList.SelectionChanged += OnQuickFamilySelectionChanged;',
         "new-mode race repair": '_creatingNew = FamilyList.SelectedItem == null;',
         "category-aware key set": 'private static HashSet<string> QuickKeys(ElementCategory category)',
