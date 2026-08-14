@@ -5,6 +5,8 @@
 - Registered: `2026-08-14T22:14:00+07:00`
 - Baseline main SHA: `548e8ad7c57eb7c542611b3041cafb4eee4f7aa6`
 - Implementation branch: `agent/chatgpt-gpt56sol/business-fieldmerge-coordinator`
+- Implementation commit SHA: `458d88165fdf7ef1018792953b6e774e7e4e7479`
+- Pull request: `#1360`
 - Integration batch: `integration/20260814-business-functions`
 - Priority: owner requested business-function completeness from the current ~80% assessment toward 100% remote-safe coverage; issue #84 records the unified Project Interchange FieldMerge exposure gap.
 
@@ -39,6 +41,14 @@ Expose the existing dedicated FieldMerge planner/importer through the generic `P
 ## Coordination
 
 Fresh `main` and open-PR checks at registration found no FieldMerge/`ProjectInterchangeImportCoordinator` implementation PR. The newest active claims reserve `ComprehensiveModelHealthService` multicore diagnostics and CI/package integrity surfaces, which do not overlap this lane. If a concurrent claim begins reserving one of the three expected write surfaces above, this lane stops and reconciles before further writes.
+
+## Handoff evidence
+
+- Claim-only main commit: `58420f009381a4d38ca8bb5ae9e7e7743c8ed8d8`.
+- Atomic implementation commit: `458d88165fdf7ef1018792953b6e774e7e4e7479` on `agent/chatgpt-gpt56sol/business-fieldmerge-coordinator`.
+- PR: `#1360`.
+- Repository Core CI is `workflow_dispatch`-only, so the PR/agent head does not automatically receive build/smoke status; exact compile/smoke evidence must come from the combined integration candidate/manual CI rather than being inferred from an empty status set.
+- Container cloning in this session was unavailable because outbound DNS to GitHub is disabled; no local `dotnet` PASS is claimed.
 
 ## Completion condition
 
