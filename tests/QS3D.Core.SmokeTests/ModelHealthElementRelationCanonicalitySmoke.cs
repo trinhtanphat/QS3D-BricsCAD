@@ -11,50 +11,64 @@ namespace QS3D.Core.SmokeTests
         [ModuleInitializer]
         internal static void Initialize()
         {
-            PaddedFamilyFailsVisible();
-            PaddedFloorFailsVisible();
-            PaddedZoneFailsVisible();
-            WhitespaceOnlyRelationFailsVisible();
+            PaddedFamilyNormalizesBeforeHealth();
+            PaddedFloorNormalizesBeforeHealth();
+            PaddedZoneNormalizesBeforeHealth();
+            WhitespaceOnlyFamilyBecomesMissing();
             CanonicalRelationsDoNotEmitCanonicalityErrors();
         }
 
-        private static void PaddedFamilyFailsVisible()
+        private static void PaddedFamilyNormalizesBeforeHealth()
         {
             var setup = Create("FAMILY-PAD");
             setup.Element.FamilyId = " F1 ";
-            RequireIssue(setup.Project, setup.Element.Id, "FAMILY_REFERENCE_NON_CANONICAL");
+            Equal("F1", setup.Element.FamilyId);
+            EnsureNoRelationCanonicality(new ModelHealthService().Inspect(setup.Project), "Padded FamilyId setter input");
         }
 
-        private static void PaddedFloorFailsVisible()
+        private static void PaddedFloorNormalizesBeforeHealth()
         {
             var setup = Create("FLOOR-PAD");
             setup.Element.FloorId = " L1 ";
-            RequireIssue(setup.Project, setup.Element.Id, "FLOOR_REFERENCE_NON_CANONICAL");
+            Equal("L1", setup.Element.FloorId);
+            EnsureNoRelationCanonicality(new ModelHealthService().Inspect(setup.Project), "Padded FloorId setter input");
         }
 
-        private static void PaddedZoneFailsVisible()
+        private static void PaddedZoneNormalizesBeforeHealth()
         {
             var setup = Create("ZONE-PAD");
             setup.Element.ZoneId = " Z1 ";
-            RequireIssue(setup.Project, setup.Element.Id, "ZONE_REFERENCE_NON_CANONICAL");
+            Equal("Z1", setup.Element.ZoneId);
+            EnsureNoRelationCanonicality(new ModelHealthService().Inspect(setup.Project), "Padded ZoneId setter input");
         }
 
-        private static void WhitespaceOnlyRelationFailsVisible()
+        private static void WhitespaceOnlyFamilyBecomesMissing()
         {
             var setup = Create("FAMILY-BLANK");
             setup.Element.FamilyId = "   ";
-            RequireIssue(setup.Project, setup.Element.Id, "FAMILY_REFERENCE_NON_CANONICAL");
+            Equal(string.Empty, setup.Element.FamilyId);
+            var issues = new ModelHealthService().Inspect(setup.Project);
+            RequireIssue(issues, setup.Element.Id, "MISSING_FAMILY");
+            EnsureNoRelationCanonicality(issues, "Whitespace-only FamilyId setter input");
         }
 
         private static void CanonicalRelationsDoNotEmitCanonicalityErrors()
         {
             var setup = Create("CANONICAL");
-            var issues = new ModelHealthService().Inspect(setup.Project);
+            EnsureNoRelationCanonicality(
+                new ModelHealthService().Inspect(setup.Project),
+                "Canonical element relations");
+        }
+
+        private static void EnsureNoRelationCanonicality(
+            System.Collections.Generic.IReadOnlyList<ModelHealthIssue> issues,
+            string label)
+        {
             if (issues.Any(x =>
                 string.Equals(x.Code, "FAMILY_REFERENCE_NON_CANONICAL", StringComparison.Ordinal) ||
                 string.Equals(x.Code, "FLOOR_REFERENCE_NON_CANONICAL", StringComparison.Ordinal) ||
                 string.Equals(x.Code, "ZONE_REFERENCE_NON_CANONICAL", StringComparison.Ordinal)))
-                throw new InvalidOperationException("Canonical element relations must not produce relation canonicality errors.");
+                throw new InvalidOperationException(label + " must not produce relation canonicality errors.");
         }
 
         private static Setup Create(string suffix)
@@ -68,15 +82,23 @@ namespace QS3D.Core.SmokeTests
             return new Setup(project, element);
         }
 
-        private static void RequireIssue(ProjectState project, string elementId, string code)
+        private static void RequireIssue(
+            System.Collections.Generic.IReadOnlyList<ModelHealthIssue> issues,
+            string elementId,
+            string code)
         {
-            var issues = new ModelHealthService().Inspect(project);
             if (issues.Any(x =>
                 string.Equals(x.Code, code, StringComparison.Ordinal) &&
                 x.Severity == HealthSeverity.Error &&
                 string.Equals(x.ElementId, elementId, StringComparison.Ordinal)))
                 return;
-            throw new InvalidOperationException("Expected Model Health relation canonicality error was not reported: " + code + ".");
+            throw new InvalidOperationException("Expected Model Health relation issue was not reported: " + code + ".");
+        }
+
+        private static void Equal(string expected, string actual)
+        {
+            if (!string.Equals(expected, actual, StringComparison.Ordinal))
+                throw new InvalidOperationException("Expected stored relation " + expected + " but got " + actual + ".");
         }
 
         private sealed class Setup
