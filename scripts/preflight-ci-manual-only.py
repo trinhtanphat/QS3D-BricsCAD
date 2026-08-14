@@ -304,12 +304,15 @@ registration = registration_path.read_text(encoding="utf-8") if registration_pat
 for token in (
     "agent/<agent-id>/<scope>",
     "integration/<batch-id>",
-    "one final merge",
+    "Stop before merge unless",
+    "No implicit `main` authorization",
+    "never update the `main` ref directly",
+    "There is no docs-only exception",
     "ALL MERGED TO MAIN",
     AUTO_DISPATCHER,
 ):
     if token not in registration:
-        errors.append("AGENT-WORK-REGISTRATION.md missing batch-integration token: " + token)
+        errors.append("AGENT-WORK-REGISTRATION.md missing work-registration/main-authorization token: " + token)
 
 print("QS3D GitHub Actions policy preflight")
 if errors:
