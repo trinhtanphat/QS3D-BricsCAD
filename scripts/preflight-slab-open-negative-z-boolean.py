@@ -36,8 +36,9 @@ def main():
             (
                 "CutterTopM",
                 "CutterBottomM",
-                "ExtrusionZM = -cutterHeightM",
-                "input.HostBottomM - input.ClearanceM",
+                'Add(bottom, -clearance, "cutter bottom")',
+                'Finite(-cutterHeight, "negative-Z extrusion")',
+                "ExtrusionZM = extrusionZ",
             ),
         )
         boolean = require(
@@ -82,12 +83,13 @@ def main():
                 "else if (!IsWall(host.Category))",
             ),
         )
-        rules = require(
+        require(
             ROOT / "src/QS3D.Core/Diagnostics/QsHostOpeningIntegrityRuleFamily.cs",
             (
                 '"MISSING_HOST"',
                 '"INVALID_HOST"',
                 '"INVALID_HOST_CATEGORY"',
+                "semantic contract",
             ),
         )
         wall_boolean = require(
@@ -109,7 +111,7 @@ def main():
         return fail("ordinary Door/WallOpening HostWallId health path must remain present")
     if "SlabOpening" in wall_boolean or "HostSlabId" in wall_boolean:
         return fail("existing wall OpeningBooleanService must remain slabOpen-independent")
-    if "ExtrusionZM = cutterHeightM" in planner:
+    if "Finite(cutterHeight" in planner or "ExtrusionZM = cutterHeight" in planner:
         return fail("slabOpen planner must not regress to positive-Z extrusion")
 
     print(
