@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -48,7 +49,7 @@ namespace QS3D.BricsCAD.V25.UI
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 Margin = new Thickness(12, 0, 12, 0),
                 MinWidth = 0,
-                ToolTip = "Project / Zone / Floor hiện hành"
+                ToolTip = "Project / Zone / Floor / Cao độ hiện hành"
             };
             if (TryFindResource("Caption") is Style captionStyle)
                 context.Style = captionStyle;
@@ -73,6 +74,7 @@ namespace QS3D.BricsCAD.V25.UI
             var projectName = "—";
             var zoneName = "—";
             var floorName = "—";
+            var floorElevation = "—";
 
             try
             {
@@ -81,7 +83,9 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     projectName = NormalizeFooterName(project.Name);
                     zoneName = NormalizeFooterName(project.FindZone(project.ActiveZoneId)?.Name);
-                    floorName = NormalizeFooterName(project.FindFloor(project.ActiveFloorId)?.Name);
+                    var floor = project.FindFloor(project.ActiveFloorId);
+                    floorName = NormalizeFooterName(floor?.Name);
+                    floorElevation = floor == null ? "—" : FormatFooterElevation(floor.ElevationM);
                 }
             }
             catch
@@ -92,13 +96,22 @@ namespace QS3D.BricsCAD.V25.UI
             _footerContextText.Text =
                 "PROJECT  " + projectName +
                 "   •   ZONE  " + zoneName +
-                "   •   FLOOR  " + floorName;
+                "   •   FLOOR  " + floorName +
+                "   •   CAO ĐỘ  " + floorElevation;
         }
 
         private static string NormalizeFooterName(string? value)
         {
             var normalized = value ?? string.Empty;
             return string.IsNullOrWhiteSpace(normalized) ? "—" : normalized.Trim();
+        }
+
+        private static string FormatFooterElevation(double elevationM)
+        {
+            if (double.IsNaN(elevationM) || double.IsInfinity(elevationM))
+                return "—";
+
+            return elevationM.ToString("0.000", CultureInfo.InvariantCulture) + " m";
         }
     }
 }
