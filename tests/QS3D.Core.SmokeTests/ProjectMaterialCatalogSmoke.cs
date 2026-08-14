@@ -140,7 +140,7 @@ namespace QS3D.Core.SmokeTests
             if (!inherited.IsGeneratedSolidStale()) throw new Exception("Padded but semantically identical FamilyId must still stale inherited material consumers.");
             if ((inherited.Dirty & (ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity)) != (ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity))
                 throw new Exception("Padded FamilyId inherited consumer must be dirtied for Properties and Quantity.");
-            if (inherited.FamilyId != "  " + family.Id + "  ") throw new Exception("Material rename must not rewrite the stored FamilyId while canonicalizing lookup identity.");
+            if (inherited.FamilyId != family.Id) throw new Exception("Material rename must preserve the canonical stored FamilyId.");
         }
 
         private static void RenameRejectsCorruptReferenceGraphBeforeMutation()
