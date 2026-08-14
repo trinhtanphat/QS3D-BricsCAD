@@ -28,6 +28,7 @@ namespace QS3D.Core.Domain
         {
             var text = (value ?? string.Empty).Trim();
             if (text.Length == 0 || text.Length > max) throw new ArgumentException(name + " must contain 1.." + max + " characters.", name);
+            if (text.Any(char.IsControl)) throw new ArgumentException(name + " cannot contain control characters.", name);
             RequireWellFormedUnicode(text, name);
             return text;
         }

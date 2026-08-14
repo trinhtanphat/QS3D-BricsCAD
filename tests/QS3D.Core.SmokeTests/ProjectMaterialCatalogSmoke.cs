@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             CustomRoundTripAndUpdate();
+            RejectsControlCharactersBeforeMutation();
             RenamePreservesReferences();
             ReferencedMaterialsAreDiscovered();
             RenamePropagatesReferencesAndStaleState();
@@ -52,6 +53,24 @@ namespace QS3D.Core.SmokeTests
             if (!ProjectMaterialCatalog.DeleteCustom(project, "mat-stone")) throw new Exception("Custom material delete failed.");
             if (ProjectMaterialCatalog.GetCustom(project).Count != 0) throw new Exception("Custom material was not deleted.");
             if (project.Metadata.ContainsKey(ProjectMaterialCatalog.MetadataKey)) throw new Exception("Empty custom catalog metadata should be removed.");
+        }
+
+        private static void RejectsControlCharactersBeforeMutation()
+        {
+            var project = new ProjectState("p-control", "Material control persistability");
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdatedUtc = project.UpdatedUtc;
+            var beforeMetadataCount = project.Metadata.Count;
+
+            Throws<ArgumentException>(() => ProjectMaterialCatalog.UpsertCustom(project, "mat-\u0001-bad", "Vật liệu hợp lệ", "m²", ""));
+            if (project.ChangeVersion != beforeVersion || project.UpdatedUtc != beforeUpdatedUtc || project.Metadata.Count != beforeMetadataCount)
+                throw new Exception("Rejected control-character material Id must not mutate project persistence state.");
+
+            Throws<ArgumentException>(() => ProjectMaterialCatalog.UpsertCustom(project, "mat-control", "Vật liệu \u0001 lỗi", "m²", ""));
+            if (project.ChangeVersion != beforeVersion || project.UpdatedUtc != beforeUpdatedUtc || project.Metadata.Count != beforeMetadataCount)
+                throw new Exception("Rejected control-character material Name must not mutate project persistence state.");
+            if (ProjectMaterialCatalog.GetCustom(project).Count != 0)
+                throw new Exception("Rejected control-character material identity must not create catalog entries.");
         }
 
         private static void ReferencedMaterialsAreDiscovered()
