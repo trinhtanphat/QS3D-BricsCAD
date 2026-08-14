@@ -11,7 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             MismatchedFamilyCategoryFailsClosed();
             MatchingFamilyCategoryPreservesProjection();
-            MissingFamilyPreservesFallbackBehavior();
+            MissingFamilyFailsClosed();
         }
 
         private static void MismatchedFamilyCategoryFailsClosed()
@@ -45,14 +45,12 @@ namespace QS3D.Core.SmokeTests
             Equal("C1", row.SourceHandles.Single());
         }
 
-        private static void MissingFamilyPreservesFallbackBehavior()
+        private static void MissingFamilyFailsClosed()
         {
             var project = NewProject("curtain-missing-family");
             project.Elements.Add(new ProjectElement("CW1", ElementCategory.GlassWall, "MISSING", "F1", "Z1"));
 
-            var row = CurtainWallScheduleBuilder.Build(project).Single();
-            Equal("MISSING", row.FamilyName);
-            Equal(1, row.WallCount);
+            Throws<InvalidOperationException>(() => CurtainWallScheduleBuilder.Build(project));
         }
 
         private static ProjectState NewProject(string id)
