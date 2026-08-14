@@ -25,16 +25,17 @@ namespace QS3D.Core.Diagnostics
         {
             if (string.IsNullOrWhiteSpace(value))
                 throw new ArgumentException("QS rule/profile identity is required.", parameterName);
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("QS rule/profile identity must be canonical without surrounding whitespace.", parameterName);
 
-            var normalized = value.Trim();
-            foreach (var ch in normalized)
+            foreach (var ch in value)
             {
                 if (char.IsControl(ch) || char.IsWhiteSpace(ch) ||
                     !(char.IsLetterOrDigit(ch) || ch == '.' || ch == '-' || ch == '_' || ch == ':'))
                     throw new ArgumentException("QS rule/profile identity contains unsupported characters.", parameterName);
             }
 
-            return normalized;
+            return value;
         }
 
         internal static string RequireProfileId(string value) => RequireIdentity(value, nameof(value));
