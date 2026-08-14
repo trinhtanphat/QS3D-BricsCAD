@@ -1,6 +1,6 @@
 # Agent work claim — advanced geometry representable-area overflow
 
-- Status: `ACTIVE`
+- Status: `RELEASED`
 - Agent: `chatgpt-web-gpt56sol-advanced-geometry-representable-area`
 - Registered: `2026-08-14T23:42:00+07:00`
 - Baseline main SHA: `daf6b9485c72ce315fcaa15d10f4e60ebbee8cef`
@@ -34,10 +34,10 @@ Harden finite 2D polygon signed-area and simple-polygon/orientation validation f
 - Preserve failure for genuinely non-representable final area and existing normal geometry behavior.
 - Publish implementation only on the dedicated agent branch, reconcile against fresh `main`, integrate through the named integration branch, then record actual exact-SHA/CI evidence without manufacturing PASS.
 
-## Coordination
+## Coordination / release reason
 
-Previously completed geometry claims include finite tolerance fail-closed and extreme bulge overflow hardening. This claim does not reopen those lanes. At the registration baseline, no observed current geometry claim reserves the signed-area / determinant representability behavior described above; any newly published overlapping claim discovered after registration wins coordination review before implementation proceeds.
+`RELEASED` because this reservation duplicated the earlier canonical ACTIVE claim `docs/agent-work-claims/2026-08-14-2326-chatgpt-web-gpt56sol-advanced-geometry-representable-area-overflow.md`, whose implementation branch already contains the source and focused regression commits. The 23:26 claim remains authoritative; this duplicate must not reserve a second lane or trigger duplicate implementation.
 
 ## Completion condition
 
-The claim is visible on current `main`; source and focused regression are committed on the isolated agent branch; the lane is represented in the reviewed integration candidate and final `main`; remote-safe validation evidence is recorded; then this claim is marked `COMPLETED`. Licensed BricsCAD runtime evidence, if any broader product gate still requires it, remains separate `LOCAL_ONLY` evidence.
+No implementation is owned by this duplicate reservation. Completion/closeout belongs exclusively to the canonical 23:26 claim after its integration is reviewed and landed under the repository policy.
