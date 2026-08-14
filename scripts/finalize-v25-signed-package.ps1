@@ -16,7 +16,8 @@ $SignedPayloadNames = @(
     'QS3D.Core.dll',
     'install-v25-autoload.ps1',
     'uninstall-v25-autoload.ps1',
-    'update-v25.ps1'
+    'update-v25.ps1',
+    'unblock-v25-netload.ps1'
 )
 
 function Normalize-Thumbprint {
