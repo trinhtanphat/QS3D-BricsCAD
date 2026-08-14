@@ -30,25 +30,29 @@ namespace QS3D.BricsCAD.V25
         private sealed class ObserverRegistration
         {
             public ObserverRegistration(
+                Document subscribedDocument,
                 CommandEventHandler commandWillStart,
                 CommandEventHandler commandEnded,
                 CommandEventHandler commandCancelled,
                 CommandEventHandler commandFailed)
             {
+                SubscribedDocument = subscribedDocument ?? throw new ArgumentNullException(nameof(subscribedDocument));
                 CommandWillStart = commandWillStart;
                 CommandEnded = commandEnded;
                 CommandCancelled = commandCancelled;
                 CommandFailed = commandFailed;
             }
 
+            public Document SubscribedDocument { get; }
             public CommandEventHandler CommandWillStart { get; }
             public CommandEventHandler CommandEnded { get; }
             public CommandEventHandler CommandCancelled { get; }
             public CommandEventHandler CommandFailed { get; }
             public string? PendingCommand { get; set; }
 
-            public void Subscribe(Document document)
+            public void Subscribe()
             {
+                var document = SubscribedDocument;
                 var willStartSubscribed = false;
                 var endedSubscribed = false;
                 var cancelledSubscribed = false;
@@ -83,8 +87,9 @@ namespace QS3D.BricsCAD.V25
                 }
             }
 
-            public void Unsubscribe(Document document)
+            public void Unsubscribe()
             {
+                var document = SubscribedDocument;
                 try { document.CommandWillStart -= CommandWillStart; }
                 catch { }
                 try { document.CommandEnded -= CommandEnded; }
@@ -429,14 +434,28 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             lock (Gate)
             {
-                if (ObserverRegistrations.ContainsKey(document)) return;
+                if (ObserverRegistrations.TryGetValue(document, out var existing))
+                {
+                    if (ReferenceEquals(existing.SubscribedDocument, document)) return;
+
+                    // Dictionary<Document, ...> affinity can deliberately match a
+                    // replacement managed wrapper for the same drawing. Event
+                    // subscriptions are instance-bound, however. Rebind before a
+                    // new transition so command boundaries on the current wrapper
+                    // cannot be lost while the shared semantic history is retained.
+                    existing.PendingCommand = null;
+                    existing.Unsubscribe();
+                    ObserverRegistrations.Remove(document);
+                }
+
                 var registration = new ObserverRegistration(
+                    document,
                     (sender, args) => OnCommandWillStart(document, args),
                     (sender, args) => OnCommandEnded(document, args),
                     (sender, args) => OnCommandAborted(document),
                     (sender, args) => OnCommandAborted(document));
                 ObserverRegistrations.Add(document, registration);
-                try { registration.Subscribe(document); }
+                try { registration.Subscribe(); }
                 catch
                 {
                     ObserverRegistrations.Remove(document);
@@ -458,13 +477,18 @@ namespace QS3D.BricsCAD.V25
                 }
                 Histories.Remove(document);
             }
-            registration?.Unsubscribe(document);
+            registration?.Unsubscribe();
         }
 
         public static void Stop()
         {
             Document[] documents;
-            lock (Gate) documents = new List<Document>(ObserverRegistrations.Keys).ToArray();
+            lock (Gate)
+            {
+                documents = new List<ObserverRegistration>(ObserverRegistrations.Values)
+                    .ConvertAll(x => x.SubscribedDocument)
+                    .ToArray();
+            }
             foreach (var document in documents) Detach(document);
         }
 
