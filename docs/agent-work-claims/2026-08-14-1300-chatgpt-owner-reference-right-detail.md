@@ -4,7 +4,8 @@
 - Agent: `chatgpt-web-gpt56sol-owner-reference-followup`
 - Registered: `2026-08-14T13:00:00+07:00`
 - Baseline main SHA: `4da4caa528f9fb8614bd180a9e824612920699e2`
-- Priority: follow the newly integrated `docs/OWNER-REFERENCE-COMPLETION-PLAN-2026-08-14.md` Phase 1 item for richer right-detail inspection while continuing the owner's full-session/project review.
+- Scope amended: `2026-08-14T13:02:00+07:00` from refreshed `main` `babe450f826d74922239dd15c44306d9a0af6067` after read-only inspection of the existing RightPanel XAML, view model, code-behind and compact-shell initializer.
+- Priority: follow the integrated `docs/OWNER-REFERENCE-COMPLETION-PLAN-2026-08-14.md` Phase 1 item for richer right-detail inspection while continuing the owner's full-session/project review.
 
 ## Reserved scope
 
@@ -14,14 +15,16 @@ Add compact selected-Xref/drawing and selected-layer detail cards so operators c
 
 ## Expected surfaces
 
-- `src/QS3D.BricsCAD.V25/UI/RightPanel.xaml`
-- a focused `scripts/preflight-owner-reference-right-detail.py`
+- `src/QS3D.BricsCAD.V25/UI/RightPanel.ReferenceDetail.cs` — new presentation-only partial that registers a second idempotent `RightPanel.Loaded` class handler through a static field initializer, then adds compact cards bound to existing list selection
+- `scripts/preflight-owner-reference-right-detail.py`
 - `docs/OWNER-REFERENCE-COMPLETION-PLAN-2026-08-14.md`
 - this claim file for close-out
 
+`RightPanel.xaml`, `RightPanel.xaml.cs`, `RightPanel.CompactShell.cs` and `RightPanelViewModel.cs` were inspected read-only to confirm available bindings and lifecycle boundaries; they are not implementation write surfaces in this lane. The new partial avoids editing active startup/lifecycle code or the existing compact-shell implementation.
+
 ## Excluded scope
 
-- No edits to `RightPanel.xaml.cs`, `RightPanel.CompactShell.cs`, `PluginEntry.cs`, `PaletteCoordinator.cs`, `DocumentLifecycleCoordinator.cs`, or `RibbonInitializationCoordinator.cs`; the active NETLOAD/startup lifecycle lane remains untouched.
+- No edits to `RightPanel.xaml`, `RightPanel.xaml.cs`, `RightPanel.CompactShell.cs`, `RightPanelViewModel.cs`, `PluginEntry.cs`, `PaletteCoordinator.cs`, `DocumentLifecycleCoordinator.cs`, or `RibbonInitializationCoordinator.cs`; the active NETLOAD/startup lifecycle lane remains untouched.
 - No new CAD mutation, semantic mutation, Xref/layer service behavior, context-menu command, or native API assumption.
 - No `#73` physical junction, `#80` native grip/edit sync, Semantic Tag/Table/Sheet/Revision Cloud runtime work, Source Reconcile, Curtain, Model Health, release/signing, or LOCAL_ONLY qualification.
 - No proprietary BLT assets/icons/code.
@@ -30,14 +33,14 @@ Add compact selected-Xref/drawing and selected-layer detail cards so operators c
 ## Validation plan
 
 - Re-fetch `main` before implementation and verify no concurrent RightPanel detail claim/change landed.
-- Bind the detail cards only to existing `DrawingList.SelectedItem` / `LayerList.SelectedItem` properties; no code-behind or mutation path is introduced.
+- Bind the detail cards only to existing `DrawingList.SelectedItem` / `LayerList.SelectedItem` properties; no command/event mutation path is introduced.
 - Keep layouts compact, truncation-safe and useful at the current RightPanel minimum width.
-- Add a deterministic static guard for selected-item bindings, labels and the no-new-code-behind boundary.
+- Add a deterministic static guard for selected-item bindings, labels, idempotent Loaded registration and the no-new-code-behind/no-native-mutation boundary.
 - Read back the merged source; native Windows DPI/docking visual acceptance remains licensed V25/local evidence.
 
 ## Coordination
 
-The active NETLOAD claim owns `RightPanel.xaml.cs` startup/Loaded behavior. This lane intentionally changes only XAML presentation and a new standalone preflight/doc status. Recent quantity/ribbon-static claims are non-overlapping.
+The active NETLOAD claim owns `RightPanel.xaml.cs` startup/Loaded behavior. This lane uses only a new presentation partial and a new standalone preflight/doc status. Recent quantity/ribbon-static/Source-Reconcile claims are non-overlapping, and comparison through `babe450f...` shows no intervening RightPanel surface change after this claim was registered.
 
 ## Completion condition
 
