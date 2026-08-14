@@ -124,8 +124,8 @@ if not entry.is_file():
     errors.append("missing PluginEntry.cs")
 else:
     text = entry.read_text(encoding="utf-8")
-    if "DocumentLifecycleCoordinator.Start();" not in text or "DocumentLifecycleCoordinator.Stop();" not in text:
-        errors.append("PluginEntry must start and stop document lifecycle coordination")
+    if "DocumentLifecycleCoordinator.Start();" not in text or "TryCleanup(DocumentLifecycleCoordinator.Stop);" not in text:
+        errors.append("PluginEntry must start document lifecycle coordination and include its stop operation in contained host teardown")
 
 print("QS3D document lifecycle preflight")
 if errors:
@@ -133,4 +133,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: lifecycle startup owns critical native hooks before NETLOAD returns, defers project/selection/UI work to ApplicationIdle, rolls back partial startup, and tears down exact-document ownership synchronously.")
+print("PASS: lifecycle startup owns critical native hooks before NETLOAD returns, defers project/selection/UI work to ApplicationIdle, rolls back partial startup, and tears down exact-document ownership synchronously through contained host teardown.")
