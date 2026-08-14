@@ -55,6 +55,10 @@ namespace QS3D.Core.Domain
         private const string GeneratedCurtainPanelBuildCompleteValue = "Complete";
 
         private ElementCategory _category;
+        private string _familyId = string.Empty;
+        private string _floorId = string.Empty;
+        private string _zoneId = string.Empty;
+        private string _drawingFingerprint = string.Empty;
 
         public ProjectElement(string id, ElementCategory category)
             : this(id, category, string.Empty, string.Empty, string.Empty)
@@ -87,10 +91,10 @@ namespace QS3D.Core.Domain
                 MarkDirtyCore(ElementDirtyFlags.All, true);
             }
         }
-        public string FamilyId { get; set; }
-        public string FloorId { get; set; }
-        public string ZoneId { get; set; }
-        public string DrawingFingerprint { get; set; } = string.Empty;
+        public string FamilyId { get => _familyId; set => _familyId = value ?? string.Empty; }
+        public string FloorId { get => _floorId; set => _floorId = value ?? string.Empty; }
+        public string ZoneId { get => _zoneId; set => _zoneId = value ?? string.Empty; }
+        public string DrawingFingerprint { get => _drawingFingerprint; set => _drawingFingerprint = value ?? string.Empty; }
         public IList<string> SourceHandles { get; }
         public IList<string> DependsOn { get; }
         public IDictionary<string, string> Properties { get; }
