@@ -1,8 +1,9 @@
 # Work claim — QSDB raw relation validation fixture boundary
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-qsdb-relation-reflection-fixture-20260814` (`/root/fix_level_curtain_frame_z`)
 - Registered: `2026-08-14T16:10:00+07:00`
+- Completed: `2026-08-14T16:15:00+07:00`
 - Baseline main SHA: `5f64b21ed23429001d5f1f6e6abe213593b0b857`
 - Priority: next deterministic full Core smoke blocker after supported relation writers became canonical
 
@@ -37,4 +38,11 @@ Construct canonical valid objects, assert them, then use test-local reflection t
 
 ## Completion record
 
-Pending implementation and validation after this claim is merged to `main`.
+- Claim PR `#1267` merged as `99ad2f8a63e84405ad61c4460cbbeafb8a20b9b0`.
+- Test/gate commit `fb57ba38c97573cd5a3237056c89f5a7108323f8` merged through PR `#1269` as `e367f9193322c35819fcf44a4ce3dd66bfe49d97`.
+- The smoke now starts from canonical empty relations, injects all six padded/whitespace raw project and element fields through test-local reflection, asserts every public getter sees the injection, then retains `InvalidDataException`, exact raw no-mutation and timestamp assertions. The supported empty optional-relation Save/Load round-trip remains unchanged.
+- The focused relation-identity gate now pins the six reflection cases and reached-getter assertions while retaining every production `ValidateOptionalCanonicalValue` and RawValue hydration check.
+- Core Release build PASS with `0 warnings / 0 errors`. Relation-identity, canonical-identities, schema, free-text round-trip and map-integrity QSDB gates all PASS.
+- Full Core smoke advances beyond this fixture and stops at the next independent blocker: `QuantityRuleFamilyIdCanonicalitySmoke.PaddedFamilyIdFailsBeforeStaleCleanup` expects padded `FamilyId` to survive the authoritative public relation setter.
+- A later duplicate claim PR `#1270` was published after this claim and implementation chronology; parent `/root` directed that duplicate lane to release without implementation.
+- No production, other gate, LOCAL runner/probe, BricsCAD/native/private data, GitHub Actions, release or packaging surface changed.
