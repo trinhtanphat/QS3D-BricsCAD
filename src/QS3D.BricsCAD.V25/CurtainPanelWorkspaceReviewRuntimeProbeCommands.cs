@@ -31,6 +31,21 @@ namespace QS3D.BricsCAD.V25
         private const string ResultFileName = "curtain-panel-workspace-review-result.txt";
         private const string ProgressFileName = "curtain-panel-workspace-review-progress.txt";
         private const string Schema = "QS3D_CURTAIN_PANEL_WORKSPACE_REVIEW_RUNTIME_V1";
+        private const string ProjectStateRejectedCode = "PROJECT_STATE_REJECTED";
+        private const string PrerequisitesRejectedCode = "PREREQUISITES_REJECTED";
+        private const string ReleaseStatusNotReadyCode = "RELEASE_STATUS_NOT_READY";
+        private const string SourcePanelLiveRejectedCode = "SOURCE_PANEL_LIVE_REJECTED";
+        private const string PanelSelectionNotCurrentCode = "PANEL_SELECTION_NOT_CURRENT";
+        private const string CurtainPanelHealthRejectedCode = "CURTAIN_PANEL_HEALTH_REJECTED";
+        private static readonly ISet<string> CompletionFailureCodes = new HashSet<string>(StringComparer.Ordinal)
+        {
+            ProjectStateRejectedCode,
+            PrerequisitesRejectedCode,
+            ReleaseStatusNotReadyCode,
+            SourcePanelLiveRejectedCode,
+            PanelSelectionNotCurrentCode,
+            CurtainPanelHealthRejectedCode
+        };
         private static readonly object Gate = new object();
         private static ProbeState? _state;
 
@@ -156,33 +171,44 @@ namespace QS3D.BricsCAD.V25
             state.HealthAllVerified = true;
         });
 
-        [CommandMethod("QS3DCURTAINP10COMPLETE", CommandFlags.Modal)]
-        public void Complete() => RunPhase("release_check", "RELEASE_CHECK_REVIEW_REJECTED", () =>
+        [CommandMethod("QS3DCURTAINP10COMPLETE", CommandFlags.Modal | CommandFlags.UsePickSet)]
+        public void Complete() => RunPhase("release_check", ProjectStateRejectedCode, () =>
         {
             var context = RequiredContext();
             var state = RequiredState();
             state.RequireCurrentAndUnchanged();
-            if (!state.WorkspaceReviewVerified || !state.HealthAllVerified)
-                throw new InvalidOperationException("P10 prerequisite review phases are incomplete.");
-            if (!WorkspacePanelFromProductionPalette().HasCurtainP10ReleaseReadyStatus())
-                throw new InvalidOperationException("P10 Release Check did not report READY.");
+            RequireCompletion(state.WorkspaceReviewVerified && state.HealthAllVerified, PrerequisitesRejectedCode);
+            RequireCompletion(
+                ClassifyCompletion(
+                    () => WorkspacePanelFromProductionPalette().HasCurtainP10ReleaseReadyStatus(),
+                    ReleaseStatusNotReadyCode),
+                ReleaseStatusNotReadyCode);
 
-            if (CadHandleService.GetLiveSolidHandles(state.Document, new[] { state.PanelHandle }).Count != 1 ||
-                CadHandleService.GetLiveHandles(state.Document, state.SourceHandles).Count != state.SourceHandles.Count)
-                throw new InvalidOperationException("P10 source/panel geometry changed during review.");
-            var selectedOwners = SemanticSelectionResolver.ResolveImplied(state.Document, state.Project);
-            if (selectedOwners.Count != 1 || !ReferenceEquals(selectedOwners[0], state.Owner))
-                throw new InvalidOperationException("P10 selected panel no longer resolves to the canonical owner.");
+            RequireCompletion(
+                ClassifyCompletion(
+                    () => CadHandleService.GetLiveSolidHandles(state.Document, new[] { state.PanelHandle }).Count == 1 &&
+                          CadHandleService.GetLiveHandles(state.Document, state.SourceHandles).Count == state.SourceHandles.Count,
+                    SourcePanelLiveRejectedCode),
+                SourcePanelLiveRejectedCode);
 
-            var livePanels = CadHandleService.GetLiveSolidHandles(
-                state.Document,
-                CanonicalHandles(PropertyValues(state.Owner, GeneratedCurtainPanelHealthService.HandlesKey)));
-            var blockingIssues = new GeneratedCurtainPanelHealthService().Inspect(state.Project, livePanels)
-                .Concat(CurtainWallPanelLiveStateService.Inspect(state.Document, state.Project))
-                .Concat(GeneratedCurtainPanelRuntimeHealthService.Inspect(state.Document, state.Project))
-                .Count(issue => issue.Severity != HealthSeverity.Info);
-            if (blockingIssues != 0)
-                throw new InvalidOperationException("P10 final Curtain panel health is not clean.");
+            var selectedOwners = ClassifyCompletion(
+                () => SemanticSelectionResolver.ResolveImplied(state.Document, state.Project),
+                PanelSelectionNotCurrentCode);
+            RequireCompletion(
+                selectedOwners.Count == 1 && ReferenceEquals(selectedOwners[0], state.Owner),
+                PanelSelectionNotCurrentCode);
+
+            var blockingIssues = ClassifyCompletion(() =>
+            {
+                var livePanels = CadHandleService.GetLiveSolidHandles(
+                    state.Document,
+                    CanonicalHandles(PropertyValues(state.Owner, GeneratedCurtainPanelHealthService.HandlesKey)));
+                return new GeneratedCurtainPanelHealthService().Inspect(state.Project, livePanels)
+                    .Concat(CurtainWallPanelLiveStateService.Inspect(state.Document, state.Project))
+                    .Concat(GeneratedCurtainPanelRuntimeHealthService.Inspect(state.Document, state.Project))
+                    .Count(issue => issue.Severity != HealthSeverity.Info);
+            }, CurtainPanelHealthRejectedCode);
+            RequireCompletion(blockingIssues == 0, CurtainPanelHealthRejectedCode);
 
             WriteMarkerAtomic(context.ResultPath, new[]
             {
@@ -217,14 +243,43 @@ namespace QS3D.BricsCAD.V25
             {
                 action();
             }
-            catch (System.Exception)
+            catch (ProbeFailure failure)
             {
-                TryWriteFailure(requestedPath, phase, failureCode);
-                lock (Gate) _state = null;
-                Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
-                    "\nQS3D Curtain P10 runtime probe FAIL. See the sanitized local qualification result.");
+                ReportPhaseFailure(requestedPath, phase, failure.Code);
                 throw;
             }
+            catch (System.Exception)
+            {
+                ReportPhaseFailure(requestedPath, phase, failureCode);
+                throw;
+            }
+        }
+
+        private static ProbeFailure CompletionFailure(string code)
+        {
+            if (!CompletionFailureCodes.Contains(code))
+                throw new InvalidOperationException("Curtain P10 completion failure code is not allowlisted.");
+            return new ProbeFailure(code);
+        }
+
+        private static void RequireCompletion(bool condition, string code)
+        {
+            if (!condition) throw CompletionFailure(code);
+        }
+
+        private static T ClassifyCompletion<T>(Func<T> action, string code)
+        {
+            try { return action(); }
+            catch (ProbeFailure) { throw; }
+            catch { throw CompletionFailure(code); }
+        }
+
+        private static void ReportPhaseFailure(string? requestedPath, string phase, string failureCode)
+        {
+            TryWriteFailure(requestedPath, phase, failureCode);
+            lock (Gate) _state = null;
+            Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
+                "\nQS3D Curtain P10 runtime probe FAIL. See the sanitized local qualification result.");
         }
 
         private static ProbeContext RequiredContext()
@@ -369,6 +424,17 @@ namespace QS3D.BricsCAD.V25
 
         private static string OneLine(string value) =>
             (value ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ');
+
+        private sealed class ProbeFailure : Exception
+        {
+            public ProbeFailure(string code)
+                : base("Curtain P10 classified failure.")
+            {
+                Code = code;
+            }
+
+            public string Code { get; }
+        }
 
         private sealed class ProbeContext
         {
