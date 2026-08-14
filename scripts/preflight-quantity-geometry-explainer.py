@@ -38,6 +38,7 @@ REQUIRED = {
         "INSUNITS=Undefined",
         "RegionKey",
         'return "End"',
+        "planeToleranceCad = Math.Max(toleranceCad * 1e-3d, 1e-12d)",
     ],
     "ui": [
         "DIỄN GIẢI HÌNH HỌC",
@@ -91,6 +92,8 @@ def main():
             failures.append("formwork residual Solid3d clones must be disposed")
         if "grossVolumeCad - netVolumeCad" not in service:
             failures.append("net-volume deduction must use residual/union semantics, not summed causes")
+        if "toleranceCad * 1e-3d" not in service:
+            failures.append("face-plane identity tolerance must be stricter than contact-probe offset")
 
     if failures:
         print("Quantity geometry explainer preflight FAILED")
@@ -102,6 +105,7 @@ def main():
     print(" - Bounding-box pruning + exact Solid3d boolean intersection")
     print(" - Residual subtraction prevents double volume deduction")
     print(" - Multi-Solid3d face identities are component-scoped")
+    print(" - Contact-probe cut planes cannot masquerade as original target faces")
     print(" - Per-face formwork/contact explanation and clickable CAD locate UI")
     print(" - BREP compile reference and SI unit normalization")
     return 0
