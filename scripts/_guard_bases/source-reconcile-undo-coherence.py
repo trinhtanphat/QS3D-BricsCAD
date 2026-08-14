@@ -44,10 +44,6 @@ for token in (
     "OnCommandAborted(document)",
     "TryConsumeMatchingCommand(document, args?.GlobalCommandName)",
     "NormalizeNativeUndoRedo(args?.GlobalCommandName)",
-    "registration.ActiveCommandDepth++",
-    "registration.ActiveCommandDepth--",
-    "HasActiveCommand()",
-    "_suppressUndoUntilStableCommand",
     "IsActiveDocument(document)",
     "IsCurrentHistory(document, history)",
     "EqualityComparer<Document>.Default.Equals(left, right)",
@@ -100,6 +96,9 @@ for forbidden in (
     "public Document Document { get; }",
     "public Database Database { get; }",
     "IsSameNativeDrawing(",
+    "ActiveCommandDepth",
+    "HasActiveCommand()",
+    "_suppressUndoUntilStableCommand",
 ):
     if forbidden in coordinator:
         errors.append("Undo observer must not load/create/switch/drive a project or command: " + forbidden)
@@ -226,15 +225,11 @@ else:
         errors.append("single-letter U is ambiguous in BricsCAD V25 and must not drive semantic Undo observation")
 
     if (
-        "if (registration.PendingCommand != null)" not in will_body
-        or "registration.PendingCommand = null;" not in will_body
-        or "var nested = HasActiveCommand();" not in will_body
-        or "var topLevel = !_suppressUndoUntilStableCommand && !nested;" not in will_body
-        or "registration.ActiveCommandDepth++;" not in will_body
-        or "normalized == null || !topLevel || !IsActiveDocument(document)" not in will_body
+        "registration.PendingCommand = null;" not in will_body
+        or "normalized == null || !IsActiveDocument(document)" not in will_body
         or "registration.PendingCommand = normalized;" not in will_body
     ):
-        errors.append("Undo observer must arm one globally top-level active-document native command token and invalidate nested starts")
+        errors.append("Undo observer must replace stale intent with one latest active-document native command token")
     consume_gate = ended_body.find("if (!TryConsumeMatchingCommand(document, args?.GlobalCommandName)) return;")
     marker_read_start = ended_body.find("try { nativeRevision = ReadRevision(document); }")
     if consume_gate < 0 or marker_read_start < 0 or consume_gate > marker_read_start:
@@ -242,8 +237,6 @@ else:
     if (
         "var pendingCommand = registration.PendingCommand;" not in consume_body
         or "registration.PendingCommand = null;" not in consume_body
-        or "if (registration.ActiveCommandDepth <= 0) return false;" not in consume_body
-        or "registration.ActiveCommandDepth--;" not in consume_body
         or "string.Equals(normalized, pendingCommand, StringComparison.Ordinal)" not in consume_body
         or "IsActiveDocument(document)" not in consume_body
     ):
@@ -266,11 +259,8 @@ else:
         or ".Name" in same_document_body
     ):
         errors.append("active-document affinity must match Dictionary<Document, ...> default-comparer semantics")
-    if (
-        "registration.PendingCommand = null;" not in aborted_body
-        or "registration.ActiveCommandDepth--;" not in aborted_body
-    ):
-        errors.append("cancelled and failed commands must clear pending Undo intent and close command depth")
+    if "registration.PendingCommand = null;" not in aborted_body:
+        errors.append("cancelled and failed commands must clear pending Undo intent")
 
     target_start = ended_body.find("HistoryEntry targetEntry;", marker_read_start)
     stamp_start = ended_body.find("if (!currentEntry.Stamp.Matches(project))", target_start)
@@ -370,29 +360,17 @@ if not is_current_history(histories, document_a_first_wrapper, replacement_histo
 class CommandRegistration:
     def __init__(self):
         self.pending = None
-        self.depth = 0
 
 
 class CommandIntent:
     def __init__(self, *documents):
         self.registrations = {document: CommandRegistration() for document in documents}
-        self.suppress_until_stable = False
-
-    def has_active_command(self):
-        return any(registration.depth > 0 for registration in self.registrations.values())
 
     def will_start(self, document, name, active, history_current=True):
         registration = self.registrations[document]
         normalized = normalize_command(name)
-        nested = self.has_active_command()
-        if self.suppress_until_stable and normalized is None and not nested and active:
-            self.suppress_until_stable = False
-        top_level = not self.suppress_until_stable and not nested
-        registration.depth += 1
-        if registration.pending is not None:
-            registration.pending = None
-            return
-        if normalized is not None and top_level and active and history_current:
+        registration.pending = None
+        if normalized is not None and active and history_current:
             registration.pending = normalized
 
     def ended(self, document, name, active):
@@ -400,21 +378,14 @@ class CommandIntent:
         normalized = normalize_command(name)
         pending = registration.pending
         registration.pending = None
-        if registration.depth <= 0:
-            return False
-        registration.depth -= 1
         return normalized is not None and normalized == pending and active
 
     def aborted(self, document):
         registration = self.registrations[document]
         registration.pending = None
-        if registration.depth > 0:
-            registration.depth -= 1
 
     def detach(self, document):
-        registration = self.registrations.pop(document)
-        if registration.depth > 0:
-            self.suppress_until_stable = True
+        self.registrations.pop(document)
 
 
 intent = CommandIntent("A", "B")
@@ -435,9 +406,8 @@ if intent.ended("A", "REDO", True):
     errors.append("a mismatched terminal event consumed Undo intent")
 intent.will_start("A", "UNDO", True)
 intent.will_start("A", "UNDO", True)
-if intent.ended("A", "UNDO", True):
-    errors.append("ambiguous duplicate starts retained native Undo intent")
-intent.ended("A", "UNDO", True)
+if not intent.ended("A", "UNDO", True):
+    errors.append("a stale same-document Undo start suppressed the latest explicit pair")
 intent.will_start("A", "_UNDO", True)
 if not intent.ended("A", ".UNDO", True):
     errors.append("a matched active-document native Undo did not reach history")
@@ -448,24 +418,19 @@ intent.will_start("A", "U", True)
 if intent.ended("A", "U", True):
     errors.append("single-letter U armed semantic Undo history")
 
-# A modal command in B can activate A and close B. Any complete native Undo
-# pair emitted for A while B's command is live is internal host work, not user
-# Undo authority. If B is detached before its terminal event, suppression must
-# survive that missing callback until A reaches an ordinary stable boundary.
+# V25 can omit the terminal callback when a modal command closes its own
+# document. That unrelated, unbalanced event must not globally latch out the
+# next deliberate paired Undo for A. A same-revision paired event remains a
+# no-op in production; a changed marker is verified against exact history.
 intent = CommandIntent("A", "B")
 intent.will_start("B", "QS3DSRTCHECKB", True)
-intent.will_start("A", "UNDO", True)
-if intent.ended("A", "UNDO", True):
-    errors.append("cross-document nested Undo reached Source Reconcile history")
 intent.detach("B")
-intent.will_start("A", "REDO", True)
-if intent.ended("A", "REDO", True):
-    errors.append("post-detach internal Redo escaped incomplete-command suppression")
-intent.will_start("A", "QS3DSRTSELECTSOURCES", True)
-intent.ended("A", "QS3DSRTSELECTSOURCES", True)
 intent.will_start("A", "UNDO", True)
 if not intent.ended("A", "UNDO", True):
-    errors.append("stable ordinary command boundary did not re-enable deliberate top-level Undo")
+    errors.append("an unbalanced command in a detached document suppressed deliberate Undo")
+intent.will_start("A", "REDO", True)
+if not intent.ended("A", "REDO", True):
+    errors.append("an unbalanced command in a detached document suppressed deliberate Redo")
 
 # State classification is independent of command provenance. Internal BricsCAD
 # work can emit a complete native command pair, so read-only refusal must rely

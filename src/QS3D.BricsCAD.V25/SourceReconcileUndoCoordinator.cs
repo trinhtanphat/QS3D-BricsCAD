@@ -26,7 +26,6 @@ namespace QS3D.BricsCAD.V25
             new Dictionary<Document, ObserverRegistration>();
         private static readonly Dictionary<Document, DocumentHistory> Histories =
             new Dictionary<Document, DocumentHistory>();
-        private static bool _suppressUndoUntilStableCommand;
 
         private sealed class ObserverRegistration
         {
@@ -47,7 +46,6 @@ namespace QS3D.BricsCAD.V25
             public CommandEventHandler CommandCancelled { get; }
             public CommandEventHandler CommandFailed { get; }
             public string? PendingCommand { get; set; }
-            public int ActiveCommandDepth { get; set; }
 
             public void Subscribe(Document document)
             {
@@ -455,10 +453,7 @@ namespace QS3D.BricsCAD.V25
             {
                 if (ObserverRegistrations.TryGetValue(document, out registration))
                 {
-                    if (registration.ActiveCommandDepth > 0)
-                        _suppressUndoUntilStableCommand = true;
                     registration.PendingCommand = null;
-                    registration.ActiveCommandDepth = 0;
                     ObserverRegistrations.Remove(document);
                 }
                 Histories.Remove(document);
@@ -471,7 +466,6 @@ namespace QS3D.BricsCAD.V25
             Document[] documents;
             lock (Gate) documents = new List<Document>(ObserverRegistrations.Keys).ToArray();
             foreach (var document in documents) Detach(document);
-            lock (Gate) _suppressUndoUntilStableCommand = false;
         }
 
         public static void Forget(Document? document)
@@ -555,33 +549,11 @@ namespace QS3D.BricsCAD.V25
             lock (Gate)
             {
                 if (!ObserverRegistrations.TryGetValue(document, out var registration)) return;
-
-                var nested = HasActiveCommand();
-                if (_suppressUndoUntilStableCommand &&
-                    normalized == null &&
-                    !nested &&
-                    IsActiveDocument(document))
-                {
-                    // A document can be detached while its outer command is
-                    // still executing (for example CloseAndDiscard from a
-                    // command in that document). Its terminal callback is then
-                    // intentionally unavailable. The next ordinary top-level
-                    // command is the first stable boundary at which a later
-                    // user Undo may be armed safely.
-                    _suppressUndoUntilStableCommand = false;
-                }
-                var topLevel = !_suppressUndoUntilStableCommand && !nested;
-                registration.ActiveCommandDepth++;
-
-                // A second start before the first command reaches a terminal
-                // event makes the event stream ambiguous. Invalidate the token
-                // rather than allowing a nested/internal completion to consume it.
-                if (registration.PendingCommand != null)
-                {
-                    registration.PendingCommand = null;
-                    return;
-                }
-                if (normalized == null || !topLevel || !IsActiveDocument(document)) return;
+                // V25 can omit a terminal callback during document teardown.
+                // Clear any stale token on every new start, then let the latest
+                // eligible active-document Undo/Redo own the single token.
+                registration.PendingCommand = null;
+                if (normalized == null || !IsActiveDocument(document)) return;
                 if (!Histories.TryGetValue(document, out var history) || history.Desynchronized) return;
                 registration.PendingCommand = normalized;
             }
@@ -701,11 +673,7 @@ namespace QS3D.BricsCAD.V25
             lock (Gate)
             {
                 if (ObserverRegistrations.TryGetValue(document, out var registration))
-                {
                     registration.PendingCommand = null;
-                    if (registration.ActiveCommandDepth > 0)
-                        registration.ActiveCommandDepth--;
-                }
             }
         }
 
@@ -717,22 +685,11 @@ namespace QS3D.BricsCAD.V25
                 if (!ObserverRegistrations.TryGetValue(document, out var registration)) return false;
                 var pendingCommand = registration.PendingCommand;
                 registration.PendingCommand = null;
-                if (registration.ActiveCommandDepth <= 0) return false;
-                registration.ActiveCommandDepth--;
                 return normalized != null &&
                     pendingCommand != null &&
                     string.Equals(normalized, pendingCommand, StringComparison.Ordinal) &&
                     IsActiveDocument(document);
             }
-        }
-
-        private static bool HasActiveCommand()
-        {
-            foreach (var registration in ObserverRegistrations.Values)
-            {
-                if (registration.ActiveCommandDepth > 0) return true;
-            }
-            return false;
         }
 
         private static bool IsActiveDocument(Document document)
