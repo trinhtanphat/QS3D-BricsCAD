@@ -34,7 +34,7 @@ claim = read(CLAIM)
 for token in (
     'CommandMethod("QS3DCURTAINP10PROGRESSLOAD", CommandFlags.Modal)',
     'CommandMethod("QS3DCURTAINP10PROGRESSDRAW", CommandFlags.Modal)',
-    'CommandMethod("QS3DCURTAINP10PROGRESSPREPARE", CommandFlags.Modal)',
+    'CommandMethod("QS3DCURTAINP10PROGRESSPREPARE", CommandFlags.Modal | CommandFlags.UsePickSet)',
     'CommandMethod("QS3DCURTAINP10PROGRESSBUILD", CommandFlags.Modal)',
     'CommandMethod("QS3DCURTAINP10PROGRESSSELECT", CommandFlags.Modal)',
     'CommandMethod("QS3DCURTAINP10PROGRESSWORKSPACE", CommandFlags.Modal)',
@@ -68,6 +68,9 @@ for token in (
     'curtain-panel-workspace-review-progress.txt',
     'writer.WriteLine("phase=" + phase)',
     'File.Replace(tempPath, fullPath, null)',
+    'var preparedSelection = document.Editor.SelectImplied();',
+    'var preparedIds = preparedSelection.Value.GetObjectIds();',
+    'document.Editor.SetImpliedSelection(preparedIds);',
 ):
     if token not in probe:
         errors.append("Curtain P10 probe missing production-review token: " + token)
@@ -82,6 +85,16 @@ for forbidden in (
 ):
     if forbidden in probe:
         errors.append("Curtain P10 probe must not bypass/mutate production behavior: " + forbidden)
+
+selection_progress = probe.find('public void ProgressSelectionPrepared()')
+selection_capture = probe.find('var preparedSelection = document.Editor.SelectImplied();', selection_progress)
+selection_marker = probe.find('WriteProgress("source_selection_prepared");', selection_capture)
+selection_restore = probe.find('document.Editor.SetImpliedSelection(preparedIds);', selection_marker)
+selection_progress_end = probe.find('[CommandMethod("QS3DCURTAINP10PROGRESSBUILD"', selection_restore)
+if min(selection_progress, selection_capture, selection_marker, selection_restore, selection_progress_end) < 0 or not (
+    selection_progress < selection_capture < selection_marker < selection_restore < selection_progress_end
+):
+    errors.append("Curtain P10 prepared-selection checkpoint must capture implied IDs, publish only its sanitized phase, then restore the identical IDs before returning")
 
 if 'SemanticHandleOwnershipResolver.Resolve(project, rawHandles)' not in workspace:
     errors.append("production Workspace must retain canonical generated-owner resolution")
@@ -173,6 +186,8 @@ ordered = (
 positions = [runner.find(token, runner.find("$script = @(")) for token in ordered]
 if any(pos < 0 for pos in positions) or positions != sorted(positions) or len(set(positions)) != len(positions):
     errors.append("Curtain P10 runner must preserve panel -> Workspace -> Health All -> Release Check order")
+if '"QS3DCURTAIN3D", "P", ""' in runner:
+    errors.append("Curtain P10 runner must not depend on an interactive Previous-selection response after its selection-transparent progress checkpoint")
 
 for forbidden in ("workflow run", "gh run", "customer", "private.dwg\" /P"):
     if forbidden.lower() in runner.lower():
