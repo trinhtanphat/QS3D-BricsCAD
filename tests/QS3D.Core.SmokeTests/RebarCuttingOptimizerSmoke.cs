@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             OversizedExpandedDemandFailsBeforePlanning();
             PieceThatCannotFitFailsClosed();
             SubToleranceStockOverrunFailsClosed();
+            RebarProcurementReportSmoke.Run();
         }
 
         private static void BestFitDecreasingUsesDeterministicTwoBarPlan()
