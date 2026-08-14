@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +17,19 @@ required_home = {
     "Lưu thành…": "_.SAVEAS",
     "Cài đặt": "QS3DPROJECTTOOLS",
 }
+
+required_primary_tabs = [
+    ("QS3D_HOME", "KHỞI ĐẦU"),
+    ("QS3D_PROJECT", "THIẾT LẬP DỰ ÁN"),
+    ("QS3D_BIM", "MÔ HÌNH BIM"),
+    ("QS3D_RECOGNIZE", "NHẬN DẠNG"),
+    ("QS3D_DRAW", "VẼ"),
+    ("QS3D_TOOL", "TOOL"),
+    ("QS3D_MODELING", "MODELING"),
+    ("QS3D_VIEW", "XEM"),
+    ("QS3D_QTY", "ĐỊNH LƯỢNG"),
+    ("QS3D_REV", "BẢN SỬA ĐỔI"),
+]
 
 required_ribbon = {
     "Theo nét CAD": "QS3DDRAWBYCAD",
@@ -35,6 +49,14 @@ errors = []
 for label, command in required_home.items():
     if label not in ribbon or command not in ribbon:
         errors.append(f"missing Home Ribbon mapping: {label} -> {command}")
+
+for tab_id, title in required_primary_tabs:
+    pattern = rf'new\s+RibbonTabSpec\(\s*"{re.escape(tab_id)}"\s*,\s*"{re.escape(title)}"\s*,'
+    matches = re.findall(pattern, bootstrap)
+    if len(matches) != 1:
+        errors.append(
+            f"BLT primary Ribbon tab must exist exactly once with stable id/title: {tab_id} -> {title} (found {len(matches)})"
+        )
 
 for token in [
     'private const string HomeTabId = "QS3D_HOME";',
