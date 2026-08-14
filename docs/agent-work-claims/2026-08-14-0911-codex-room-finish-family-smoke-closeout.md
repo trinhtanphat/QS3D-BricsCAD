@@ -1,6 +1,6 @@
 # Work claim — Issue #1101 Room Finish smoke validation and closeout
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-/root/fix_room_finish_family-20260814-0911`
 - Registered: `2026-08-14T09:11:20+07:00`
 - Baseline main SHA: `608d66195a2a532b73e5a85f326a876bd52ca1d6`
@@ -37,3 +37,16 @@ This claim is an explicit validation-only successor to the active issue `#1101` 
 ## Completion condition
 
 A fresh exact-main full Core smoke proves the missing-Family case follows the canonical fail-closed identity contract, any newly exposed unrelated blocker is separately handed off, issue `#1101` is closed, and both issue claims record the exact passing SHA/commands as `COMPLETED` on current `main`.
+
+## Completion evidence
+
+- Claim registration commit: `01b57bbc44ba76ee7a7445e5634c6b7184567257`, verified as an ancestor of current `origin/main` before validation began.
+- Exact tested main SHA: `f11488e81f73ac4454b637e2fa4bd5660e90d85e`; Room Finish correction `3aed2b5af29c33accb0e3df637e2f22e28c4e731` is in ancestry.
+- `dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release --nologo`: PASS, `0 warnings / 0 errors`, using .NET SDK `10.0.302`.
+- `dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release`: advanced past `RoomFinishFamilyCategorySmoke`, then stopped at the next unrelated `CurtainWallScheduleFamilyCategorySmoke.MissingFamilyPreservesFallbackBehavior` stale fixture. That follow-on is isolated in issue `#1105`; no Curtain source/test was edited here.
+- `py -3 scripts/preflight-family-relation-assignment-integrity.py`: PASS.
+- `py -3 scripts/preflight-family-category-integrity.py`: PASS.
+- `py -3 scripts/preflight-all.py`: 781 gates discovered; four unrelated failures on the tested SHA (`preflight-product-boundary.py`, `preflight-research-implementation-status.py`, `preflight-v25-netload-update-ux.py`, `preflight-wall-junctions.py`).
+- GitHub issue `#1101`: closed as completed after publishing this exact evidence. GitHub issue `#1105`: opened for the next non-overlapping blocker.
+- Source decision: stale Room Finish fixture, already corrected by `3aed2b5...`; no production source change was justified or made in this successor lane.
+- No GitHub Actions, BricsCAD runtime, private data, Curtain/P10 file, or LOCAL_ONLY probe was touched.
