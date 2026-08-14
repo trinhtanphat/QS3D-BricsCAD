@@ -10,6 +10,8 @@ namespace QS3D.Core.Export
 {
     public static class RebarCsvExporter
     {
+        private const int MaxRowCount = 10000;
+
         public static void Export(string path, IEnumerable<RebarScheduleRow> rows)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Path is required.", nameof(path));
@@ -40,8 +42,12 @@ namespace QS3D.Core.Export
             if (rows == null) throw new ArgumentNullException(nameof(rows));
             var sb = new StringBuilder();
             sb.AppendLine("ElementId,BarMark,ShapeCode,Notation,DiameterMm,Quantity,CuttingLengthM,TotalLengthM,UnitWeightKgM,NetWeightKg,WastePercent,TotalWeightKg,FabricationStatus,FabricationStandardCode,FabricationDetailingRevision");
+            var rowCount = 0;
             foreach (var row in rows)
             {
+                if (rowCount >= MaxRowCount)
+                    throw new ArgumentOutOfRangeException(nameof(rows), "BBS CSV exceeds the supported row bound of " + MaxRowCount + ".");
+                rowCount++;
                 ValidateRow(row ?? throw new ArgumentException("BBS row cannot be null.", nameof(rows)));
                 sb.Append(Q(row.ElementId)).Append(',')
                     .Append(Q(row.BarMark)).Append(',')
