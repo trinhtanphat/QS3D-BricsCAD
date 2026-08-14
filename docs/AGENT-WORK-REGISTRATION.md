@@ -119,13 +119,26 @@ Do not take over an `ACTIVE` or `BLOCKED` claim merely because it has not moved 
 
 If work expands beyond the published reservation:
 
-1. stop before editing the added surface;
-2. fetch latest `main` and recheck claims;
-3. update the existing claim with the expanded scope;
-4. commit and push that claim update alone;
-5. verify it is present on current `origin/main` before continuing.
+1. stop **before reading implementation code, diagnosing that implementation, editing, or testing** the added surface;
+2. fetch latest `main` and recheck `ACTIVE`/`BLOCKED` claims, including exact expected path/symbol/test names;
+3. update the existing claim with the exact expanded paths/symbols/scenario and why they are required;
+4. commit and push that claim update **alone** — do not bundle source/test changes in a claim amendment;
+5. fetch again, verify the amendment is an ancestor of current `origin/main`, and recheck for a concurrent overlapping claim;
+6. only then read/diagnose/edit/test the newly reserved surface.
 
 If another agent should continue a lane, the current owner records the exact completed state, remaining work and intended successor boundary, then marks the old claim `RELEASED` or keeps it `BLOCKED` until the coordinated successor claim is visible.
+
+## Just-in-time collision check before every write
+
+A visible claim reserves a lane but does not freeze `main`. Immediately before every source/test/script write or PR merge:
+
+1. refresh `origin/main`;
+2. inspect commits added since the last collision check;
+3. re-scan `ACTIVE`/`BLOCKED` claims for the exact file/path/symbol/test/runtime surface being written;
+4. if another agent has written the same lane after your claim, **do not stack a duplicate patch**. Stop, compare the concurrent change against the required contract, close/release redundant work, and record the collision/handoff in Markdown;
+5. if another agent claims the same lane, stop until ownership is explicitly split or transferred in both claims.
+
+An implementation commit does **not** retroactively count as registration. Every agent must publish and verify the claim commit before beginning the work it reserves, including follow-up work discovered during an existing task.
 
 ## Closing a claim
 
