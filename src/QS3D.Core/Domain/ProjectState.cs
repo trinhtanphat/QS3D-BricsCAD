@@ -189,12 +189,12 @@ namespace QS3D.Core.Domain
         public string ActiveZoneId
         {
             get => _activeZoneId;
-            set => SetPersistedScalar(ref _activeZoneId, value);
+            set => SetActiveContextId(ref _activeZoneId, value);
         }
         public string ActiveFloorId
         {
             get => _activeFloorId;
-            set => SetPersistedScalar(ref _activeFloorId, value);
+            set => SetActiveContextId(ref _activeFloorId, value);
         }
         public DateTime UpdatedUtc
         {
@@ -231,6 +231,14 @@ namespace QS3D.Core.Domain
                 throw new ArgumentOutOfRangeException(nameof(changeVersion), "Project change version cannot be negative.");
             _updatedUtc = restoredUpdatedUtc;
             ChangeVersion = changeVersion;
+        }
+
+        private void SetActiveContextId(ref string field, string? value)
+        {
+            var normalizedValue = (value ?? string.Empty).Trim();
+            if (normalizedValue.Any(char.IsControl))
+                throw new ArgumentException("Active context id cannot contain control characters.", nameof(value));
+            SetPersistedScalar(ref field, normalizedValue);
         }
 
         private void SetPersistedScalar(ref string field, string value)
