@@ -31,6 +31,7 @@ for token in (
     'MarkerVersion = "1"',
     "Dictionary<Document, ObserverRegistration>",
     "Dictionary<Document, DocumentHistory>",
+    "public Database Database { get; }",
     "document.CommandWillStart += CommandWillStart",
     "document.CommandEnded += CommandEnded",
     "document.CommandCancelled += CommandCancelled",
@@ -49,6 +50,9 @@ for token in (
     "HasActiveCommand()",
     "_suppressUndoUntilStableCommand",
     "IsActiveDocument(document)",
+    "IsSameNativeDrawing(history, document)",
+    "ReferenceEquals(history.Database, document.Database)",
+    "active != null && IsSameNativeDrawing(active, document)",
     "registration.PendingCommand = null",
     "ObserverRegistrations.TryGetValue(document, out var registration)",
     'string.Equals(normalized, "UNDO", StringComparison.OrdinalIgnoreCase)',
@@ -156,6 +160,8 @@ else:
             errors.append("sanitized diagnostic accessor exposes raw state or mutates coordination: " + forbidden)
     if diagnostic.count("ProjectSanitizedHistoryState(history.Cause)") != 2:
         errors.append("persistent history cause must be projected consistently before and after cache validation")
+    if diagnostic.count("!IsSameNativeDrawing(history, document)") != 2:
+        errors.append("sanitized history affinity must use exact native Database identity across managed Document wrappers")
     if '"NONE", entryClass, "HISTORY_AFFINITY_MISMATCH"' not in diagnostic:
         errors.append("history affinity mismatch must project to existing NONE state without hiding its private sanitized cause")
     if '"NONE", entryClass, "CACHE_PROJECT_MISMATCH"' not in diagnostic:
@@ -178,6 +184,8 @@ ended_start = coordinator.find("private static void OnCommandEnded(", will_start
 aborted_start = coordinator.find("private static void OnCommandAborted(", ended_start)
 consume_start = coordinator.find("private static bool TryConsumeMatchingCommand(", aborted_start)
 active_start = coordinator.find("private static bool IsActiveDocument(", consume_start)
+same_history_start = coordinator.find("private static bool IsSameNativeDrawing(DocumentHistory history", active_start)
+same_documents_start = coordinator.find("private static bool IsSameNativeDrawing(Document left", same_history_start)
 normalize_start = coordinator.find("private static string? NormalizeNativeUndoRedo(", active_start)
 mark_start = coordinator.find("private static InvalidOperationException MarkDesynchronized(", normalize_start)
 stage_body = coordinator[stage_start:confirm_start]
@@ -190,7 +198,8 @@ consume_body = coordinator[consume_start:active_start]
 filter_body = coordinator[normalize_start:mark_start]
 if min(
     stage_start, confirm_start, dispose_start, begin_start, will_start,
-    ended_start, aborted_start, consume_start, active_start, normalize_start, mark_start,
+    ended_start, aborted_start, consume_start, active_start, same_history_start,
+    same_documents_start, normalize_start, mark_start,
 ) < 0:
     errors.append("Undo coordinator transition method boundaries are missing")
 else:
@@ -233,6 +242,23 @@ else:
         or "IsActiveDocument(document)" not in consume_body
     ):
         errors.append("Undo completion must clear intent and match command plus active document exactly")
+    active_body = coordinator[active_start:same_history_start]
+    same_history_body = coordinator[same_history_start:same_documents_start]
+    same_documents_body = coordinator[same_documents_start:normalize_start]
+    if "active != null && IsSameNativeDrawing(active, document)" not in active_body:
+        errors.append("active-document Undo authority must accept only the same native drawing across managed wrappers")
+    if (
+        "ReferenceEquals(history.Document, document)" not in same_history_body
+        or "ReferenceEquals(history.Database, document.Database)" not in same_history_body
+        or ".Name" in same_history_body
+    ):
+        errors.append("history affinity must use wrapper-or-exact-Database identity, never drawing name/path")
+    if (
+        "ReferenceEquals(left, right)" not in same_documents_body
+        or "ReferenceEquals(left.Database, right.Database)" not in same_documents_body
+        or ".Name" in same_documents_body
+    ):
+        errors.append("document affinity must use wrapper-or-exact-Database identity, never drawing name/path")
     if (
         "registration.PendingCommand = null;" not in aborted_body
         or "registration.ActiveCommandDepth--;" not in aborted_body
@@ -278,6 +304,16 @@ else:
         mark_body = coordinator[mark_start:coordinator.find("private static void RequireCurrentHistory(", mark_start)]
         if "history.MarkDesynchronized(DesynchronizationCause.RestoreRecoveryFailed);" not in mark_body:
             errors.append("live sticky history must carry the RESTORE_RECOVERY_FAILED sanitized cause")
+        require_start = coordinator.find("private static void RequireCurrentHistory(", mark_start)
+        require_end = coordinator.find("private static string ReadRevision(Document document)", require_start)
+        require_body = coordinator[require_start:require_end]
+        if (
+            "!IsSameNativeDrawing(history, document)" not in require_body
+            or "!ReferenceEquals(history.Project, project)" not in require_body
+            or "!string.Equals(history.ProjectId, project.ProjectId" not in require_body
+            or "!string.Equals(history.CurrentRevision, nativeRevision" not in require_body
+        ):
+            errors.append("transition affinity must normalize only Document wrappers while retaining project/revision fail-closed guards")
         if "CurrentRevision =" in ended_body[target_start:advance_start]:
             errors.append("all observer refusals and recovered restore failures must leave CurrentRevision unchanged")
 
@@ -289,6 +325,26 @@ else:
 def normalize_command(name):
     normalized = (name or "").strip().lstrip("_.").upper()
     return normalized if normalized in ("UNDO", "REDO", "MREDO") else None
+
+
+class ManagedDocument:
+    def __init__(self, database):
+        self.database = database
+
+
+def same_native_drawing(left, right):
+    return left is right or left.database is right.database
+
+
+database_a = object()
+database_b = object()
+document_a_first_wrapper = ManagedDocument(database_a)
+document_a_after_mdi_switch = ManagedDocument(database_a)
+document_b = ManagedDocument(database_b)
+if not same_native_drawing(document_a_first_wrapper, document_a_after_mdi_switch):
+    errors.append("same native drawing was rejected after managed Document wrapper replacement")
+if same_native_drawing(document_a_first_wrapper, document_b):
+    errors.append("different native Database objects crossed document affinity")
 
 
 class CommandRegistration:
