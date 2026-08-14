@@ -1,0 +1,30 @@
+name: Dispatch preview.11 retry 3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/dispatch-preview11-retry3.yml
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove one-shot dispatcher and start release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          path='.github/workflows/dispatch-preview11-retry3.yml'
+          sha="$(gh api --repo "${GITHUB_REPOSITORY}" "repos/${GITHUB_REPOSITORY}/contents/${path}?ref=main" --jq .sha)"
+          gh api --repo "${GITHUB_REPOSITORY}" --method DELETE "repos/${GITHUB_REPOSITORY}/contents/${path}" \
+            -f message='ci: remove preview.11 retry dispatcher' \
+            -f sha="$sha" \
+            -f branch='main'
+          gh workflow run release-v25-cloud.yml --repo "${GITHUB_REPOSITORY}" --ref main \
+            -f release_tag='v0.1.0-preview.11' \
+            -f confirm_release='RELEASE'
