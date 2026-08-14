@@ -74,7 +74,8 @@ def main() -> int:
     require(index, "dated advisory queue", "archive/advisory queue distinction")
     require(index, "live list of missing code", "archive/live-backlog concept")
     require(research, "retained as provenance and idea-generation material", "research provenance boundary")
-    require(research, "not a live list of missing QS3D code", "research/live-backlog distinction")
+    research_without_emphasis = research.replace("**", "").replace("__", "")
+    require(research_without_emphasis, "not a live list of missing QS3D code", "research/live-backlog distinction")
     require(workstream, "Advisory implementation queue", "dated workstream advisory status")
     require(workstream, "This file does not reserve any implementation scope.", "claim ownership boundary")
 
