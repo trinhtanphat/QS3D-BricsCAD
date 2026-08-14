@@ -72,7 +72,11 @@ namespace QS3D.BricsCAD.V25
                     if (validatedSelection.LineSourceIds.Count > 0)
                     {
                         ApplySelection(document, validatedSelection.LineSourceIds);
-                        lineHostSolids = WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.GlassWall);
+                        lineHostSolids = WallSolidBuilder.BuildSelectedLineWalls(
+                            document,
+                            project,
+                            ElementCategory.GlassWall,
+                            allowPostCommitUi: false);
                     }
                     CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection.LineHost);
 
@@ -80,7 +84,11 @@ namespace QS3D.BricsCAD.V25
                     if (validatedSelection.PathSourceIds.Count > 0)
                     {
                         ApplySelection(document, validatedSelection.PathSourceIds);
-                        pathHostSolids = PolylineWallSolidBuilder.BuildSelected(document, project, ElementCategory.GlassWall);
+                        pathHostSolids = PolylineWallSolidBuilder.BuildSelected(
+                            document,
+                            project,
+                            ElementCategory.GlassWall,
+                            allowPostCommitUi: false);
                     }
                     CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection.PathHost);
 

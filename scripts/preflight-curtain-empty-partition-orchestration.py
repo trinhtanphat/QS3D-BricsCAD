@@ -27,13 +27,13 @@ phases = (
     (
         "LINE host replacement",
         "LineSourceIds",
-        r'lineHostSolids\s*=\s*WallSolidBuilder\.BuildSelectedLineWalls\(\s*document,\s*project,\s*ElementCategory\.GlassWall\s*\);',
+        r'lineHostSolids\s*=\s*WallSolidBuilder\.BuildSelectedLineWalls\(\s*document,\s*project,\s*ElementCategory\.GlassWall,\s*allowPostCommitUi:\s*false\s*\);',
         "CurtainWallBuildFailureInjection.LineHost",
     ),
     (
         "open-POLYLINE host replacement",
         "PathSourceIds",
-        r'pathHostSolids\s*=\s*PolylineWallSolidBuilder\.BuildSelected\(\s*document,\s*project,\s*ElementCategory\.GlassWall\s*\);',
+        r'pathHostSolids\s*=\s*PolylineWallSolidBuilder\.BuildSelected\(\s*document,\s*project,\s*ElementCategory\.GlassWall,\s*allowPostCommitUi:\s*false\s*\);',
         "CurtainWallBuildFailureInjection.PathHost",
     ),
     (
@@ -82,6 +82,8 @@ if body.count('allowInteractiveSelection: false') != 2:
     errors.append("QS3DCURTAIN3D must force both LINE/path frame builders into non-interactive mode")
 if 'allowInteractiveSelection: true' in body:
     errors.append("QS3DCURTAIN3D canonical-prevalidated frame phases must never re-enable interactive selection")
+if body.count('allowPostCommitUi: false') != 2:
+    errors.append("QS3DCURTAIN3D must suppress both host-builder UI refreshes until after the outer commit")
 
 for token in (
     'CurtainWallBuildSelectionGuard.Validate(document, project)',
