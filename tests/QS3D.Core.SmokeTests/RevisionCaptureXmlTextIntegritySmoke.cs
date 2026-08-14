@@ -33,10 +33,25 @@ namespace QS3D.Core.SmokeTests
             idField.SetValue(invalidIdElement, "E-\u0001-1");
             Equal("E-\u0001-1", invalidIdElement.Id);
 
+            var invalidFamilyElement = new ProjectElement("E-1", ElementCategory.ArchitecturalWall) { FamilyId = "F-1" };
+            Equal("F-1", invalidFamilyElement.FamilyId);
+            SetRawRelation(invalidFamilyElement, "_familyId", "F-\u0001-1");
+            Equal("F-\u0001-1", invalidFamilyElement.FamilyId);
+
+            var invalidFloorElement = new ProjectElement("E-1", ElementCategory.ArchitecturalWall) { FloorId = "L-1" };
+            Equal("L-1", invalidFloorElement.FloorId);
+            SetRawRelation(invalidFloorElement, "_floorId", "L-\u0001-1");
+            Equal("L-\u0001-1", invalidFloorElement.FloorId);
+
+            var invalidZoneElement = new ProjectElement("E-1", ElementCategory.ArchitecturalWall) { ZoneId = "Z-1" };
+            Equal("Z-1", invalidZoneElement.ZoneId);
+            SetRawRelation(invalidZoneElement, "_zoneId", "Z-\u0001-1");
+            Equal("Z-\u0001-1", invalidZoneElement.ZoneId);
+
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithElement(invalidIdElement), "REV-XML"));
-            Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.FamilyId = "F-\u0001-1"), "REV-XML"));
-            Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.FloorId = "L-\u0001-1"), "REV-XML"));
-            Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.ZoneId = "Z-\u0001-1"), "REV-XML"));
+            Throws<InvalidOperationException>(() => service.Capture(ProjectWithElement(invalidFamilyElement), "REV-XML"));
+            Throws<InvalidOperationException>(() => service.Capture(ProjectWithElement(invalidFloorElement), "REV-XML"));
+            Throws<InvalidOperationException>(() => service.Capture(ProjectWithElement(invalidZoneElement), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.Properties["P-\u0001-1"] = "ok"), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.SetProperty("Note", "bad-\u0001-value")), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.Quantities["Q-\u0001-1"] = 1d), "REV-XML"));
@@ -70,6 +85,14 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("revision-xml-integrity", "Revision XML Integrity");
             project.Elements.Add(element);
             return project;
+        }
+
+        private static void SetRawRelation(ProjectElement element, string fieldName, string value)
+        {
+            var field = typeof(ProjectElement).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectElement relation field " + fieldName + " was not found.");
+            Equal(typeof(string), field.FieldType);
+            field.SetValue(element, value);
         }
 
         private static void Throws<T>(Action action) where T : Exception
