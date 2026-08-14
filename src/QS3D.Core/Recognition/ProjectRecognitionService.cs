@@ -38,28 +38,21 @@ namespace QS3D.Core.Recognition
         internal static void ValidateLayerMappings(IEnumerable<KeyValuePair<string, string>> mappings, string label)
         {
             if (mappings == null) throw new ArgumentNullException(nameof(mappings));
-            var materialized = mappings.ToList();
             var normalized = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in materialized)
+            foreach (var item in mappings)
             {
                 var pattern = item.Key ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(pattern)) throw new InvalidOperationException(label + " contains an empty layer mapping pattern.");
                 var canonicalPattern = pattern.Trim();
+                if (!string.Equals(pattern, canonicalPattern, StringComparison.Ordinal))
+                    throw new InvalidOperationException(label + " contains a non-canonical layer mapping pattern with leading/trailing whitespace: " + pattern);
                 var key = RecognitionText.Normalize(canonicalPattern);
                 if (key.Length == 0) throw new InvalidOperationException(label + " contains a layer mapping pattern that normalizes to empty: " + canonicalPattern);
+                if (!TryParseNamedCategory(item.Value, out _))
+                    throw new InvalidOperationException(label + " contains an invalid layer mapping category for " + canonicalPattern + ": " + item.Value);
                 if (normalized.TryGetValue(key, out var previous))
                     throw new InvalidOperationException(label + " contains ambiguous normalized layer mappings: " + previous + " and " + canonicalPattern + ".");
                 normalized.Add(key, canonicalPattern);
-            }
-
-            foreach (var item in materialized)
-            {
-                var pattern = item.Key ?? string.Empty;
-                var canonicalPattern = pattern.Trim();
-                if (!string.Equals(pattern, canonicalPattern, StringComparison.Ordinal))
-                    throw new InvalidOperationException(label + " contains a non-canonical layer mapping pattern with leading/trailing whitespace: " + pattern);
-                if (!TryParseNamedCategory(item.Value, out _))
-                    throw new InvalidOperationException(label + " contains an invalid layer mapping category for " + canonicalPattern + ": " + item.Value);
             }
         }
 
