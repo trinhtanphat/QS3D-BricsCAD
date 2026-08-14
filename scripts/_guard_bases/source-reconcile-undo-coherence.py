@@ -77,6 +77,7 @@ for token in (
     "public string HistoryState { get; }",
     "public string EntryClass { get; }",
     "public string DesynchronizationCause { get; }",
+    "ProjectSanitizedHistoryState(history.Cause)",
     "public string CompareMarkerTo(SanitizedDiagnosticSnapshot before)",
     'return "MISSING_OR_INVALID";',
     '? "UNCHANGED"',
@@ -153,6 +154,20 @@ else:
     ):
         if forbidden in diagnostic:
             errors.append("sanitized diagnostic accessor exposes raw state or mutates coordination: " + forbidden)
+    if diagnostic.count("ProjectSanitizedHistoryState(history.Cause)") != 2:
+        errors.append("persistent history cause must be projected consistently before and after cache validation")
+    if '"NONE", entryClass, "HISTORY_AFFINITY_MISMATCH"' not in diagnostic:
+        errors.append("history affinity mismatch must project to existing NONE state without hiding its private sanitized cause")
+    if '"NONE", entryClass, "CACHE_PROJECT_MISMATCH"' not in diagnostic:
+        errors.append("cache project mismatch must project to existing NONE state without hiding its private sanitized cause")
+    projection_start = diagnostic.find("private static string ProjectSanitizedHistoryState(")
+    projection_body = diagnostic[projection_start:] if projection_start >= 0 else ""
+    if (
+        "cause == DesynchronizationCause.RestoreRecoveryFailed" not in projection_body
+        or '? "DESYNCHRONIZED"' not in projection_body
+        or ': "NONE";' not in projection_body
+    ):
+        errors.append("DESYNCHRONIZED projection must uniquely identify live restore/recovery failure")
 
 stage_start = coordinator.find("public void StageAfter(")
 confirm_start = coordinator.find("public void ConfirmCommitted()", stage_start)
@@ -379,6 +394,17 @@ if not intent.ended("A", "UNDO", True):
 # State classification is independent of command provenance. Internal BricsCAD
 # work can emit a complete native command pair, so read-only refusal must rely
 # on marker mismatch for fail-closed behavior instead of poisoning history.
+def project_sanitized_history_state(cause):
+    return "DESYNCHRONIZED" if cause == "RESTORE_RECOVERY_FAILED" else "NONE"
+
+
+for cause in ("COMMIT_HISTORY_LOST", "HISTORY_AFFINITY_MISMATCH", "CACHE_PROJECT_MISMATCH", "NONE"):
+    if project_sanitized_history_state(cause) != "NONE":
+        errors.append("non-live desync cause escaped existing NONE projection: " + cause)
+if project_sanitized_history_state("RESTORE_RECOVERY_FAILED") != "DESYNCHRONIZED":
+    errors.append("live restore/recovery failure lost its DESYNCHRONIZED projection")
+
+
 class ObserverState:
     def __init__(self):
         self.project = "canonical-before"

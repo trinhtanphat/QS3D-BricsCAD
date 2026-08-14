@@ -366,7 +366,7 @@ namespace QS3D.BricsCAD.V25
                 entryClass = history.Entries.Count > 1 ? "MULTIPLE" : "ONE";
                 if (history.Desynchronized)
                     return new SanitizedDiagnosticSnapshot(
-                        "DESYNCHRONIZED",
+                        ProjectSanitizedHistoryState(history.Cause),
                         entryClass,
                         ClassifyDesynchronizationCause(history.Cause),
                         nativeRevision,
@@ -375,12 +375,12 @@ namespace QS3D.BricsCAD.V25
                     !ReferenceEquals(history.Project, project) ||
                     !string.Equals(history.ProjectId, project.ProjectId, StringComparison.Ordinal))
                     return new SanitizedDiagnosticSnapshot(
-                        "DESYNCHRONIZED", entryClass, "HISTORY_AFFINITY_MISMATCH", nativeRevision, markerValid);
+                        "NONE", entryClass, "HISTORY_AFFINITY_MISMATCH", nativeRevision, markerValid);
             }
 
             if (!ProjectContextCoordinator.TryGetCached(document, out var cached) || !ReferenceEquals(cached, project))
                 return new SanitizedDiagnosticSnapshot(
-                    "DESYNCHRONIZED", entryClass, "CACHE_PROJECT_MISMATCH", nativeRevision, markerValid);
+                    "NONE", entryClass, "CACHE_PROJECT_MISMATCH", nativeRevision, markerValid);
 
             lock (Gate)
             {
@@ -390,7 +390,7 @@ namespace QS3D.BricsCAD.V25
                 entryClass = history.Entries.Count > 1 ? "MULTIPLE" : "ONE";
                 if (history.Desynchronized)
                     return new SanitizedDiagnosticSnapshot(
-                        "DESYNCHRONIZED",
+                        ProjectSanitizedHistoryState(history.Cause),
                         entryClass,
                         ClassifyDesynchronizationCause(history.Cause),
                         nativeRevision,
@@ -399,7 +399,7 @@ namespace QS3D.BricsCAD.V25
                     !ReferenceEquals(history.Project, project) ||
                     !string.Equals(history.ProjectId, project.ProjectId, StringComparison.Ordinal))
                     return new SanitizedDiagnosticSnapshot(
-                        "DESYNCHRONIZED", entryClass, "HISTORY_AFFINITY_MISMATCH", nativeRevision, markerValid);
+                        "NONE", entryClass, "HISTORY_AFFINITY_MISMATCH", nativeRevision, markerValid);
 
                 if (!markerValid || !string.Equals(nativeRevision, history.CurrentRevision, StringComparison.Ordinal))
                     return new SanitizedDiagnosticSnapshot(
@@ -414,6 +414,20 @@ namespace QS3D.BricsCAD.V25
             if (cause == DesynchronizationCause.CommitHistoryLost) return "COMMIT_HISTORY_LOST";
             if (cause == DesynchronizationCause.RestoreRecoveryFailed) return "RESTORE_RECOVERY_FAILED";
             return "NONE";
+        }
+
+        private static string ProjectSanitizedHistoryState(DesynchronizationCause cause)
+        {
+            // The unchanged LOCAL-004 runner already allowlists the coarse
+            // history states but cannot consume a new output field. Reserve
+            // DESYNCHRONIZED for the only cause that can poison the live
+            // dictionary history. Every other cause means there is no usable
+            // history for the observed document/project pair and projects to
+            // the existing NONE classification. The private cause remains
+            // available to source/static diagnostics without exposing values.
+            return cause == DesynchronizationCause.RestoreRecoveryFailed
+                ? "DESYNCHRONIZED"
+                : "NONE";
         }
 
         public static void Attach(Document? document)
