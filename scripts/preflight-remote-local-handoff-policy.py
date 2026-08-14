@@ -8,7 +8,7 @@ required = {
     "AGENTS.md": [
         "docs/REMOTE-AGENT-SCOPE.md",
         "docs/LOCAL-AGENT-INBOX.md",
-        "Do not repeatedly re-audit an already parked LOCAL_ONLY gate",
+        "Remote agents must skip execution gates already classified `LOCAL_ONLY` rather than repeatedly rechecking them.",
     ],
     "docs/REMOTE-AGENT-SCOPE.md": [
         "## Mandatory remote inability handoff",
