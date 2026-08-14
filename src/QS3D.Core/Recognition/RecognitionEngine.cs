@@ -35,6 +35,7 @@ namespace QS3D.Core.Recognition
         public RecognitionRule(string id, ElementCategory category, IEnumerable<string>? layerTerms = null, IEnumerable<string>? textTerms = null, IEnumerable<string>? entityTypes = null)
         {
             Id = string.IsNullOrWhiteSpace(id) ? throw new ArgumentException("Rule id is required.", nameof(id)) : id.Trim();
+            if (Id.Any(char.IsControl)) throw new ArgumentException("Rule id must not contain control characters.", nameof(id));
             if (!Enum.IsDefined(typeof(ElementCategory), category)) throw new ArgumentOutOfRangeException(nameof(category), "Recognition rule category must be defined.");
             Category = category;
             LayerTerms = NormalizeTerms(layerTerms);
@@ -185,6 +186,8 @@ namespace QS3D.Core.Recognition
                     throw new ArgumentException("Recognition candidate rule id is required.", nameof(candidates));
                 if (!string.Equals(candidate.RuleId, candidate.RuleId.Trim(), StringComparison.Ordinal))
                     throw new ArgumentException("Recognition candidate rule id must be canonical.", nameof(candidates));
+                if (candidate.RuleId.Any(char.IsControl))
+                    throw new ArgumentException("Recognition candidate rule id must not contain control characters.", nameof(candidates));
                 if (!seenRuleIds.Add(candidate.RuleId))
                     throw new ArgumentException("Duplicate recognition candidate rule id: " + candidate.RuleId, nameof(candidates));
                 if (!Enum.IsDefined(typeof(ElementCategory), candidate.Category))
