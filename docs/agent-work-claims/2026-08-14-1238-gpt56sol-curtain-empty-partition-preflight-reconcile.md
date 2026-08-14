@@ -1,25 +1,22 @@
 # Work claim — Curtain empty-partition preflight reconciliation
 
-- Status: ACTIVE
+- Status: CLOSED
 - Agent: ChatGPT web / GPT-5.6 Sol
 - Owner request: continue all; review current project/chat and complete remaining remote-safe work
 - Baseline main SHA: `2b9e7371b3886d23636b0ab5b1a247f3a5faaa53`
 - Related issue: #1106
-- Scope:
-  - reconcile `scripts/preflight-curtain-empty-partition-orchestration.py` with the already-merged explicit non-interactive frame-builder calls in `CurtainWallBuildCommands.BuildCurtain3D`;
-  - preserve the six guarded phases, failure-hook adjacency, transaction/Undo/selection/post-commit invariants and fail-closed non-interactive contract;
-  - update the issue/handoff only with source/static evidence after the focused gate is corrected.
-- Expected files/surfaces:
-  - `scripts/preflight-curtain-empty-partition-orchestration.py`
-  - this claim closeout
-  - issue #1106 comment/status only if needed for source handoff
-- Exclusions:
-  - no production Curtain geometry change unless a new source defect is demonstrated;
-  - no changes to active Level/rebar issue #1125 lane;
-  - no BricsCAD V25 runtime qualification or LOCAL_PASS claim;
+- Implementation SHA: `181c8151793870c3f739a1464697f89d991f855a`
+- Issue handoff: comment `5289943183`
+- Scope completed:
+  - reconciled `scripts/preflight-curtain-empty-partition-orchestration.py` with the already-merged explicit non-interactive frame-builder calls in `CurtainWallBuildCommands.BuildCurtain3D`;
+  - preserved the six guarded phases, failure-hook adjacency, transaction/Undo/selection/post-commit invariants and fail-closed non-interactive contract;
+  - strengthened the focused gate to require exactly two `allowInteractiveSelection: false` frame calls and reject `allowInteractiveSelection: true` in the canonical-prevalidated command body.
+- Validation/readback:
+  - exact implementation diff confirms the LINE/path frame patterns now require `allowInteractiveSelection: false`;
+  - current source/gate readback agrees on the canonical non-interactive contract while retaining host/panel phases and atomicity/Undo/selection/post-commit checks;
+  - no stale workflow run is claimed as validation for this commit;
+  - no BricsCAD V25 runtime qualification or `LOCAL_PASS` is claimed; #1106 remains `SOURCE_FIXED / PENDING_LOCAL` pending the licensed P10 runner.
+- Exclusions respected:
+  - no production Curtain geometry change;
+  - no changes to the active Level/rebar #1125 lane or the separate #1143 Curtain method-gate lane;
   - no force-push/reset/revert of concurrent work.
-- Validation plan:
-  - exact source readback against current `CurtainWallBuildCommands.cs`;
-  - focused guard syntax/token review for both LINE and path frame calls with `allowInteractiveSelection: false`;
-  - verify remaining host/panel phases and atomicity/Undo invariants are unchanged;
-  - run/verify broader CI only under the owner's existing CI authorization and available connector capabilities.
