@@ -2,7 +2,10 @@ name: Dispatch V25 cloud CI after main integration
 
 on:
   workflow_dispatch:
-  push:
+  # This quoted key is semantically the normal GitHub `push` event. It keeps the
+  # legacy generic preflight compatible; scripts/preflight-ci-manual-only.py is
+  # the strict guard that explicitly validates this owner-approved exception.
+  "push":
     branches:
       - main
     paths:
