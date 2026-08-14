@@ -1,6 +1,6 @@
 # Work claim — QSDB RawValue gate reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-qsdb-relation-identity-gate-reconcile-20260814` (`/root/fix_source_reconcile_desync`)
 - Registered: `2026-08-14T15:49:00+07:00`
 - Baseline main SHA: `c8302de334d08957588ea27c5938cd304d98c5f7`
@@ -32,3 +32,13 @@ Replace each obsolete literal check with a method-bounded contract requiring raw
 - related QSDB canonical-identities and schema gates;
 - Core Release build and full deterministic Core smoke;
 - generic and manual-only policy gates.
+
+## Completion
+
+- Source PR: `#1245`, merge commit `bd07f5222c5c432b7aa29625b8aef4f015dd5871`.
+- All nine `preflight-qsdb-*.py` gates: `PASS`.
+- `preflight-ci-manual-only.py`: `PASS`.
+- `QS3D.Core` Release build: `0` warnings, `0` errors.
+- `QS3D.Core.SmokeTests` Release build: `0` warnings, `0` errors.
+- Full deterministic Core smoke advanced past the prior Floor/Zone fixture and stopped only at the unrelated, separately claimed `ProjectMaterialCatalogSmoke.RenameStalesInheritedConsumerWithPaddedFamilyId` (`#1243`).
+- Final implementation diff remained limited to the three reserved gate scripts; no production, smoke, LOCAL, runtime or workflow surface changed.
