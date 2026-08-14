@@ -35,6 +35,11 @@ jobs:
         if: ${{ github.event_name == 'push' }}
         run: sleep 60
 
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          fetch-tags: true
+
       - name: Dispatch current main to V25 cloud CI
         env:
           GH_TOKEN: ${{ github.token }}
@@ -44,18 +49,42 @@ jobs:
           current_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
           echo "Current main for integrated CI: ${current_main}"
 
-          preview=$((10000 + GITHUB_RUN_NUMBER))
-          while true; do
-            if (( preview > 65535 )); then
+          git fetch --force --tags origin
+          series_prefix="v0.1.0-preview."
+          max_preview=0
+          found_preview=0
+          while IFS= read -r existing_tag; do
+            [[ -n "${existing_tag}" ]] || continue
+            if [[ ! "${existing_tag}" =~ ^v0\.1\.0-preview\.([1-9][0-9]*)$ ]]; then
+              echo "Matching-series tag is non-canonical and blocks automatic preview derivation: ${existing_tag}" >&2
+              exit 1
+            fi
+            ordinal_text="${BASH_REMATCH[1]}"
+            if (( ${#ordinal_text} > 5 )); then
+              echo "Published preview ordinal exceeds the FileVersion 0..65535 range: ${existing_tag}" >&2
+              exit 1
+            fi
+            ordinal=$((10#${ordinal_text}))
+            if (( ordinal > 65535 )); then
+              echo "Published preview ordinal exceeds the FileVersion 0..65535 range: ${existing_tag}" >&2
+              exit 1
+            fi
+            found_preview=1
+            if (( ordinal > max_preview )); then
+              max_preview=${ordinal}
+            fi
+          done < <(git tag --list "${series_prefix}*")
+
+          if (( found_preview == 0 )); then
+            preview=1
+          else
+            if (( max_preview >= 65535 )); then
               echo "No automatic preview number remains inside the FileVersion 0..65535 range." >&2
               exit 1
             fi
-            tag="v0.1.0-preview.${preview}"
-            if ! gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" >/dev/null 2>&1; then
-              break
-            fi
-            preview=$((preview + 1))
-          done
+            preview=$((max_preview + 1))
+          fi
+          tag="${series_prefix}${preview}"
 
           echo "Dispatching release-v25-cloud.yml from current main as ${tag}"
           gh workflow run release-v25-cloud.yml \
