@@ -29,32 +29,29 @@ namespace QS3D.Core.SmokeTests
             element.FamilyId = " FAM1 ";
             element.FloorId = "L1";
             element.ZoneId = "Z1";
-            Throws<InvalidOperationException>(() => ProjectBrowserQueryPlanner.Build(project, ProjectBrowserGrouping.Category, filtered), "padded family reference");
+            Equal("FAM1", element.FamilyId, "padded family setter normalization");
+            Equal(1, ProjectBrowserQueryPlanner.Build(project, ProjectBrowserGrouping.Category, filtered).MatchedCount, "padded family normalized filtered match");
 
             element.FamilyId = "FAM1";
             element.FloorId = " L1 ";
-            Throws<InvalidOperationException>(() => ProjectBrowserQueryPlanner.Build(project, ProjectBrowserGrouping.Category, filtered), "padded floor reference");
+            Equal("L1", element.FloorId, "padded floor setter normalization");
+            Equal(1, ProjectBrowserQueryPlanner.Build(project, ProjectBrowserGrouping.Category, filtered).MatchedCount, "padded floor normalized filtered match");
 
             element.FloorId = "L1";
             element.ZoneId = " Z1 ";
-            Throws<InvalidOperationException>(() => ProjectBrowserQueryPlanner.Build(project, ProjectBrowserGrouping.Category, filtered), "padded zone reference");
+            Equal("Z1", element.ZoneId, "padded zone setter normalization");
+            Equal(1, ProjectBrowserQueryPlanner.Build(project, ProjectBrowserGrouping.Category, filtered).MatchedCount, "padded zone normalized filtered match");
 
             element.ZoneId = "Z1";
             element.FamilyId = "   ";
-            Throws<InvalidOperationException>(() => ProjectBrowserQueryPlanner.Build(project, ProjectBrowserGrouping.Category, filtered), "whitespace-only family reference");
+            Equal(string.Empty, element.FamilyId, "whitespace-only family setter normalization");
+            Equal(1, ProjectBrowserQueryPlanner.Build(project, ProjectBrowserGrouping.Category, filtered).MatchedCount, "unassigned family filtered match");
         }
 
         private static void Equal<T>(T expected, T actual, string label)
         {
             if (!Equals(expected, actual))
                 throw new Exception("ProjectBrowserQueryReferenceCanonicalitySmoke " + label + ": expected=" + expected + ", actual=" + actual + ".");
-        }
-
-        private static void Throws<TException>(Action action, string label) where TException : Exception
-        {
-            try { action(); }
-            catch (TException) { return; }
-            throw new Exception("ProjectBrowserQueryReferenceCanonicalitySmoke " + label + ": expected " + typeof(TException).Name + ".");
         }
     }
 }
