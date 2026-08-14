@@ -275,9 +275,26 @@ namespace QS3D.Core.Diagnostics
         private static void ValidateHost(DiagnosticIdentityIndex identity, ProjectElement element, ICollection<ModelHealthIssue> issues)
         {
             if (element.Category != ElementCategory.WallOpening && element.Category != ElementCategory.Door) return;
-            if (!element.Properties.TryGetValue("HostWallId", out var hostId) || string.IsNullOrWhiteSpace(hostId))
+
+            var slabOpening = false;
+            if (element.Category == ElementCategory.WallOpening)
             {
-                issues.Add(new ModelHealthIssue("MISSING_HOST", HealthSeverity.Error, "Cửa/lỗ mở chưa có Host Wall.", element.Id));
+                var familyId = (element.FamilyId ?? string.Empty).Trim();
+                if (familyId.Length > 0 &&
+                    !identity.DuplicateFamilyIds.Contains(familyId) &&
+                    identity.Families.TryGetValue(familyId, out var family))
+                    slabOpening = SlabOpeningContract.IsSlabOpenFamily(family);
+            }
+
+            var hostKey = slabOpening ? SlabOpeningContract.HostSlabIdKey : "HostWallId";
+            var hostLabel = slabOpening ? "Host Slab" : "Host Wall";
+            if (!element.Properties.TryGetValue(hostKey, out var hostId) || string.IsNullOrWhiteSpace(hostId))
+            {
+                issues.Add(new ModelHealthIssue(
+                    "MISSING_HOST",
+                    HealthSeverity.Error,
+                    slabOpening ? "slabOpen chưa có Host Slab." : "Cửa/lỗ mở chưa có Host Wall.",
+                    element.Id));
                 return;
             }
 
@@ -285,17 +302,30 @@ namespace QS3D.Core.Diagnostics
             var normalized = rawHostId.Trim();
             if (identity.DuplicateElementIds.Contains(normalized))
             {
-                issues.Add(new ModelHealthIssue("AMBIGUOUS_HOST", HealthSeverity.Error, "Host Wall trỏ tới mã semantic element bị trùng: " + normalized + ".", element.Id));
+                issues.Add(new ModelHealthIssue("AMBIGUOUS_HOST", HealthSeverity.Error, hostLabel + " trỏ tới mã semantic element bị trùng: " + normalized + ".", element.Id));
                 return;
             }
             if (!identity.Elements.TryGetValue(normalized, out var host))
             {
-                issues.Add(new ModelHealthIssue("INVALID_HOST", HealthSeverity.Error, "Host Wall không tồn tại trong project.", element.Id));
+                issues.Add(new ModelHealthIssue("INVALID_HOST", HealthSeverity.Error, hostLabel + " không tồn tại trong project.", element.Id));
                 return;
             }
             if (!string.Equals(rawHostId, host.Id, StringComparison.Ordinal))
-                issues.Add(new ModelHealthIssue("HOST_REFERENCE_NON_CANONICAL", HealthSeverity.Error, "HostWallId phải khớp chính xác mã Host Wall canonical: " + host.Id + ".", element.Id));
-            if (!IsWall(host.Category)) issues.Add(new ModelHealthIssue("INVALID_HOST_CATEGORY", HealthSeverity.Error, "Host của cửa/lỗ mở không phải cấu kiện tường.", element.Id));
+                issues.Add(new ModelHealthIssue(
+                    "HOST_REFERENCE_NON_CANONICAL",
+                    HealthSeverity.Error,
+                    hostKey + " phải khớp chính xác mã " + hostLabel + " canonical: " + host.Id + ".",
+                    element.Id));
+
+            if (slabOpening)
+            {
+                if (host.Category != ElementCategory.Slab)
+                    issues.Add(new ModelHealthIssue("INVALID_HOST_CATEGORY", HealthSeverity.Error, "Host của slabOpen phải là cấu kiện Slab.", element.Id));
+            }
+            else if (!IsWall(host.Category))
+            {
+                issues.Add(new ModelHealthIssue("INVALID_HOST_CATEGORY", HealthSeverity.Error, "Host của cửa/lỗ mở không phải cấu kiện tường.", element.Id));
+            }
         }
 
         private static void ValidateDependencies(DiagnosticIdentityIndex identity, ProjectElement element, ICollection<ModelHealthIssue> issues)

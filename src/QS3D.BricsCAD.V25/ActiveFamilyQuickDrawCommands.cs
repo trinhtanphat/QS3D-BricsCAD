@@ -15,15 +15,16 @@ namespace QS3D.BricsCAD.V25
     /// </summary>
     public sealed class ActiveFamilyQuickDrawCommands
     {
-        [CommandMethod("QS3DDRAWACTIVE", CommandFlags.Modal)]
+        [CommandMethod("QS3DDRAWACTIVE", CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void DrawActiveFamily() => DrawActiveFamilyCore(advanced: false, operation: "QS3DDRAWACTIVE");
 
-        [CommandMethod("QS3DDRAWACTIVEADV", CommandFlags.Modal)]
+        [CommandMethod("QS3DDRAWACTIVEADV", CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void DrawActiveFamilyAdvanced() => DrawActiveFamilyCore(advanced: true, operation: "QS3DDRAWACTIVEADV");
 
         internal static bool SupportsFamily(ProjectFamily family)
         {
             if (family == null) return false;
+            if (SlabOpeningContract.IsSlabOpenFamily(family)) return true;
             switch (family.Category)
             {
                 case ElementCategory.ArchitecturalWall:
@@ -62,14 +63,12 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                // Capture immutable routing values now. When TryGetReadOnly returns the canonical cached
-                // ProjectState, later semantic edits mutate that same object; retaining only object references
-                // would make a freshness comparison observe the new values on both sides and miss the change.
                 var expectedProjectId = project.ProjectId;
                 var expectedChangeVersion = project.ChangeVersion;
                 var expectedFamilyId = family.Id;
                 var expectedCategory = family.Category;
                 var expectedWindowRouting = family.Category == ElementCategory.WallOpening && IsWindowFamily(family);
+                var expectedSlabOpenRouting = SlabOpeningContract.IsSlabOpenFamily(family);
 
                 var dispatchFamily = RequireCurrentDispatchSnapshot(
                     document,
@@ -78,11 +77,9 @@ namespace QS3D.BricsCAD.V25
                     expectedFamilyId,
                     expectedCategory,
                     expectedWindowRouting,
+                    expectedSlabOpenRouting,
                     operation);
 
-                // Dispatch calls the category-specific target synchronously. Arm one immutable preview
-                // before that target starts acquiring geometry so any modeless Family/project/unit/UCS
-                // change during point-picking is rejected by the target's ResolveForMutation boundary.
                 using (DirectDrawProjectPreviewContext.BeginDispatchScope(document))
                     Dispatch(document, dispatchFamily, advanced, operation);
             }
@@ -99,6 +96,7 @@ namespace QS3D.BricsCAD.V25
             string expectedFamilyId,
             ElementCategory expectedCategory,
             bool expectedWindowRouting,
+            bool expectedSlabOpenRouting,
             string operation)
         {
             if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
@@ -120,10 +118,12 @@ namespace QS3D.BricsCAD.V25
                     operation + ": Active Family đã bị xóa/bỏ chọn trước khi dispatch. Hãy chọn lại Family/Type.");
 
             var currentWindowRouting = currentFamily.Category == ElementCategory.WallOpening && IsWindowFamily(currentFamily);
+            var currentSlabOpenRouting = SlabOpeningContract.IsSlabOpenFamily(currentFamily);
             var routingChanged =
                 !string.Equals(currentFamily.Id, expectedFamilyId, StringComparison.OrdinalIgnoreCase) ||
                 currentFamily.Category != expectedCategory ||
-                currentWindowRouting != expectedWindowRouting;
+                currentWindowRouting != expectedWindowRouting ||
+                currentSlabOpenRouting != expectedSlabOpenRouting;
             if (routingChanged)
                 throw new InvalidOperationException(
                     operation + ": Active Family/routing đã thay đổi trước khi dispatch. Hãy chạy lại lệnh.");
@@ -142,6 +142,13 @@ namespace QS3D.BricsCAD.V25
                     operation + ": Family '" + family.Name + "' thuộc " + family.Category +
                     " chưa có Direct Draw " + (advanced ? "Advanced" : "Quick") +
                     " an toàn. Dùng workflow chuyên biệt hiện có cho category này.");
+                return;
+            }
+
+            if (SlabOpeningContract.IsSlabOpenFamily(family))
+            {
+                if (advanced) new DirectDrawSlabOpeningCommands().DrawSlabOpeningAdvanced();
+                else new DirectDrawSlabOpeningCommands().DrawSlabOpening();
                 return;
             }
 
@@ -203,9 +210,6 @@ namespace QS3D.BricsCAD.V25
             if (family.Properties.TryGetValue("OpeningUsage", out var usage) && !string.IsNullOrWhiteSpace(usage))
                 return string.Equals(usage.Trim(), "Window", StringComparison.OrdinalIgnoreCase);
 
-            // Window uses WallOpening as the canonical semantic category. These dedicated Family
-            // keys are therefore a deterministic compatibility signal when legacy Family data does
-            // not yet carry OpeningUsage=Window explicitly.
             return family.Properties.ContainsKey("WindowHeightM") ||
                    family.Properties.ContainsKey("WindowSillHeightM");
         }
