@@ -19,12 +19,6 @@ namespace QS3D.BricsCAD.V25.Updates
             ShowUpdateCenterCore("QSUPDATE");
         }
 
-        [CommandMethod("QS3DVERSION", CommandFlags.Modal)]
-        public void ShowVersion()
-        {
-            WriteVersionCore("QS3DVERSION");
-        }
-
         [CommandMethod("QS3DVER", CommandFlags.Modal)]
         public void ShowVersionShortAlias()
         {

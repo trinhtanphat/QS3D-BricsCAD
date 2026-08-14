@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +22,12 @@ def require(text: str, needle: str, label: str) -> None:
 def reject(text: str, needle: str, label: str) -> None:
     if needle in text:
         raise AssertionError(f"forbidden {label}: {needle}")
+
+
+def console_safe(value: object) -> str:
+    text = str(value)
+    encoding = sys.stdout.encoding or "utf-8"
+    return text.encode(encoding, errors="backslashreplace").decode(encoding)
 
 
 def main() -> int:
@@ -56,11 +63,11 @@ def main() -> int:
     require(coordinator, "await _manifestProbe.ValidateAsync(latest, signerThumbprint)", "pre-close manifest validation")
     require(coordinator, "if (!manifestProbe.IsEligible)", "manifest rejection branch")
     require(coordinator, "UpdateState.ManualInstallRequired", "manual fallback state")
-    require(coordinator, "Signed update manifest đã được xác minh trước khi đóng BricsCAD", "eligible pre-close state detail")
+    require(coordinator, "Gói cập nhật ký số đã được xác minh trước khi đóng BricsCAD", "eligible pre-close state detail")
 
     signer_pos = coordinator.find("TryGetCurrentSignerThumbprint(out var signerThumbprint")
     probe_pos = coordinator.find("await _manifestProbe.ValidateAsync(latest, signerThumbprint)")
-    available_detail_pos = coordinator.find("Signed update manifest đã được xác minh trước khi đóng BricsCAD")
+    available_detail_pos = coordinator.find("Gói cập nhật ký số đã được xác minh trước khi đóng BricsCAD")
     if signer_pos < 0 or probe_pos < 0 or available_detail_pos < 0 or not (signer_pos < probe_pos < available_detail_pos):
         raise AssertionError("running signer verification -> manifest probe -> UpdateAvailable path must be ordered before one-click eligibility")
 
@@ -79,5 +86,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except AssertionError as exc:
-        print("FAIL:", exc)
+        print("FAIL:", console_safe(exc))
         raise SystemExit(1)

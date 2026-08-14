@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +17,12 @@ def require(text: str, token: str, label: str) -> None:
         raise AssertionError(f"{label}: missing {token!r}")
 
 
+def console_safe(value: object) -> str:
+    text = str(value)
+    encoding = sys.stdout.encoding or "utf-8"
+    return text.encode(encoding, errors="backslashreplace").decode(encoding)
+
+
 def main() -> int:
     try:
         client = read("src/QS3D.BricsCAD.V25/Updates/GitHubReleaseClient.cs")
@@ -28,10 +35,10 @@ def main() -> int:
 
         require(coordinator, "else if (!latest.HasSignedUpdateManifest)", "manual-only update state")
         require(coordinator, "UpdateState.ManualInstallRequired", "manual-only update state")
-        require(coordinator, "release này không có signed update manifest", "manual-only update message")
-        require(coordinator, "One-click update bị khóa để không hạ chuẩn bảo mật", "manual-only security boundary")
+        require(coordinator, "nhưng đây là bản preview chưa có gói cập nhật ký số.", "manual-only update message")
+        require(coordinator, "QS3D không hạ kiểm tra bảo mật để tự động thay DLL chưa ký.", "manual-only security boundary")
     except (OSError, UnicodeError, AssertionError) as exc:
-        print("ERROR:", exc)
+        print("ERROR:", console_safe(exc))
         return 1
 
     print("PASS: V25 package-only previews remain visible for manual update while one-click stays signed-manifest-only and the shared V26 channel gate remains compatible.")
