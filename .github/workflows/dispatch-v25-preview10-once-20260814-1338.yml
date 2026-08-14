@@ -1,0 +1,28 @@
+name: Dispatch V25 Preview 10 Once
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/dispatch-v25-preview10-once-20260814-1338.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for dispatcher cleanup
+        run: sleep 10
+      - name: Dispatch V25 preview 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run release-v25-cloud.yml \
+            --repo "${{ github.repository }}" \
+            --ref main \
+            -f release_tag=v0.1.0-preview.10 \
+            -f confirm_release=RELEASE
