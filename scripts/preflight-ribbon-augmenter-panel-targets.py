@@ -123,12 +123,17 @@ if min(project_loop, project_find, project_create, project_name, project_command
     errors.append("Project Tools must find-or-create each stable ID before reconciling current presentation/command state")
 
 for token in (
-    'private const string PanelSourceId = "QS3D_AUTHOR_QUICK_PANEL_SOURCE";',
-    'private const string PanelTitle = "Tác vụ nhanh";',
-    "FindPanelSource(panelItems, PanelSourceId) ?? CreateQuickPanel(panels)",
+    'private const string AuthorPanelSourceId = "QS3D_AUTHOR_QUICK_PANEL_SOURCE";',
+    'FindPanelSource(authorPanelItems, AuthorPanelSourceId)',
+    'CreatePanel(authorPanels, AuthorPanelSourceId, "Tác vụ nhanh")',
+    "private static object? FindPanelSource(IEnumerable panels, string sourceId)",
+    "private static object CreatePanel(object panels, string sourceId, string title)",
+    'SetProperty(source, "Id", sourceId);',
+    'SetProperty(source, "Title", title);',
+    'var button = FindById(items as IEnumerable, spec.Id) ?? FindByText(items, spec.Text);',
 ):
     if token not in quick:
-        errors.append("Quick Workflow dedicated-panel contract missing: " + token)
+        errors.append("Quick Workflow grouped Author-panel contract missing: " + token)
 
 for name, text in (("ReferenceWallRibbonAugmenter", reference), ("ProjectRibbonAugmenter", project), ("QuickWorkflowRibbonAugmenter", quick)):
     for forbidden in (
@@ -138,6 +143,10 @@ for name, text in (("ReferenceWallRibbonAugmenter", reference), ("ProjectRibbonA
     ):
         if forbidden in text:
             errors.append(name + " still relies on removed flat-panel/fallback routing: " + forbidden)
+
+for forbidden in ("CreateQuickPanel(", 'private const string PanelTitle = "Tác vụ nhanh";'):
+    if forbidden in quick:
+        errors.append("QuickWorkflowRibbonAugmenter still exposes the pre-grouped dedicated-panel helper contract: " + forbidden)
 
 bootstrap_call = coordinator.find("RibbonBootstrapper.TryInitialize()")
 reference_call = coordinator.find("ReferenceWallRibbonAugmenter.TryInitialize()")
@@ -156,5 +165,5 @@ if errors:
 
 print(
     "Ribbon augmenter grouped-panel preflight PASS: Reference Wall and Project Tools reconcile stable existing button state, "
-    "all grouped/dedicated augmenters target deterministic panel sources through the bounded Ribbon coordinator without first-panel fallback, and command dispatch remains click-time active-document routed."
+    "Quick Workflow targets the grouped Author quick panel plus current shared panel helper, all augmenters use deterministic panel identities through the bounded Ribbon coordinator, and command dispatch remains click-time active-document routed."
 )
