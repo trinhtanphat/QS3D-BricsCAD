@@ -326,7 +326,7 @@ namespace QS3D.Core.Domain
 
         private static string NormalizeStaleReason(string? reason)
         {
-            var normalized = string.IsNullOrWhiteSpace(reason) ? "Semantic/source state changed." : reason.Trim();
+            var normalized = string.IsNullOrWhiteSpace(reason) ? "Semantic/source state changed." : reason!.Trim();
             return RequireXmlText(normalized, nameof(reason), "Generated geometry stale reason");
         }
 
