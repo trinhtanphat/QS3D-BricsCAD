@@ -1,6 +1,6 @@
 # Work claim — Semantic Selection raw relation canonicality fixture
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `chatgpt-web-gpt56sol`
 - Registered: `2026-08-14T16:48:00+07:00`
 - Baseline main SHA: `a902bb5e54347e7ff17a0ba72594b1eb3e801efa`
@@ -33,4 +33,8 @@ For each Family/Floor/Zone padded case, keep a supported public write and assert
 
 ## Completion record
 
-Pending implementation after this claim is merged to `main`.
+- Claim PR #1293 merged as `ba719557f7cf37290c6f2508946f569440b6948d` (claim head `d394c15ca1c2884147faee30cc5f1787e77623e2`).
+- Implementation commit `a8c190e16d3003e1e5f5e91daf718733c980a594` merged through PR #1296 as `6b35e633c0091e67468c1ef93b545eed1476e57f`.
+- The implementation changes exactly one smoke file, +25/-0: each padded public relation write is first proven canonical, then the matching private raw relation field is injected and proven visible before the existing fail-closed inspection assertion. Canonical resets and the whitespace-only blank control remain.
+- Production `SemanticSelectionInspector`, domain setters, focused gates, native/LOCAL surfaces, workflows and release files are unchanged.
+- No fresh full registered Core smoke, BricsCAD runtime, or GitHub Actions PASS is claimed by this closeout. The next blocker must come from fresh validation on a descendant of the merged implementation.
