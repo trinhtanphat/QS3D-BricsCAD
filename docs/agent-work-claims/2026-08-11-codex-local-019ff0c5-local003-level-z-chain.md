@@ -329,6 +329,8 @@ Completed through PR `#1179` at `e23c7473a3783407a4ebc4d2db38a4848e1f644e`. The 
 
 Parent task `/root` explicitly delegates only `tests/QS3D.Core.SmokeTests/ProjectQuantityReportGroupKeySmoke.cs` to `/root/fix_level_curtain_frame_z` under `2026-08-14-codex-project-quantity-valid-collision-fixture.md`: replace unreachable U+001F Family identity data with valid printable-delimiter values, add an explicit test-local six-token legacy delimiter-collision assertion, and preserve row separation and legitimate aggregation semantics. The parent retains LOCAL-003 probe/runner ownership and will not edit this smoke while the child claim is `ACTIVE`.
 
+Completed through PR `#1182` at `d17c7c0691ce2cb4b60f94c6bfff5aab52be9fbf`. The registered smoke now advances past the Project Quantity collision fixture and reaches the separate stale `ProjectStateSnapshotNullFidelitySmoke` null-backing expectation; no Level or production surface changed.
+
 ## 2026-08-12 base schedule reference-integrity fixture reconciliation expansion
 
 Baseline audited after a clean fetch and fast-forward: `origin/main@f74dbc55d5c141b78d7f20d0a65bac26b901126f`.
