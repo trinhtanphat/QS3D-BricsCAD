@@ -45,6 +45,8 @@ namespace QS3D.Core.Formulas
                 var normalizedName = pair.Key.Trim();
                 if (normalized.ContainsKey(normalizedName))
                     throw new InvalidOperationException($"Variable name '{pair.Key}' conflicts with another variable after trimming whitespace and ignoring casing.");
+                if (double.IsNaN(pair.Value) || double.IsInfinity(pair.Value))
+                    throw new InvalidOperationException($"Variable '{normalizedName}' contains a non-finite value.");
                 normalized.Add(normalizedName, pair.Value);
             }
 
