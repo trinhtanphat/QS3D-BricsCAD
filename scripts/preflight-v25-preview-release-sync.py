@@ -61,13 +61,24 @@ def main():
         require_tokens(
             prepare,
             [
+                "Get-ReleaseStatusEntries",
+                "git status --porcelain=v1 --untracked-files=all",
+                "Test-IsExpectedNuGetCachePath",
+                ".nuget/packages/",
+                "Release preparation must start from a clean checkout/index",
                 "sync-preview-release-version.ps1",
                 "preflight-runtime-product-version-identity.py",
-                "git diff --name-only --",
+                "Preview synchronization produced an unexpected Git status",
                 "git diff --check",
                 "git fetch --no-tags origin main",
                 "main moved after this workflow was dispatched",
+                "git add -- @allowed",
+                "git diff --cached --name-only --",
+                "Staged release-preparation file set does not exactly match the validated source changes",
+                "Release-preparation working tree changed after staging",
+                "git diff --cached --check",
                 "git commit -m \"chore(release): prepare $tag\"",
+                "Release-preparation working tree is not clean after commit",
                 "git push origin 'HEAD:refs/heads/main'",
                 "Could not fast-forward main with the release-preparation commit",
                 "Release-preparation push was not read back exactly",
@@ -76,6 +87,51 @@ def main():
         )
         if "--force" in prepare or "git push -f" in prepare:
             raise ValueError("V25 release preparation helper must never force-push main")
+        if "git add -A" in prepare or "git add ." in prepare:
+            raise ValueError("V25 release preparation helper must stage only its explicit allowlist")
+
+        initial_status_pos = prepare.find("$initialStatus = @(Get-ReleaseStatusEntries)")
+        sync_pos = prepare.find("sync-preview-release-version.ps1")
+        post_sync_status_pos = prepare.find("$status = @(Get-ReleaseStatusEntries)", sync_pos)
+        add_pos = prepare.find("git add -- @allowed")
+        post_stage_status_pos = prepare.find("$postStageStatus = @(Get-ReleaseStatusEntries)")
+        commit_pos = prepare.find('git commit -m "chore(release): prepare $tag"')
+        post_commit_status_pos = prepare.find("$postCommitStatus = @(Get-ReleaseStatusEntries)")
+        push_pos = prepare.find("git push origin 'HEAD:refs/heads/main'")
+        if min(
+            initial_status_pos,
+            sync_pos,
+            post_sync_status_pos,
+            add_pos,
+            post_stage_status_pos,
+            commit_pos,
+            post_commit_status_pos,
+            push_pos,
+        ) < 0:
+            raise ValueError("V25 release preparation helper lost dirty-tree safety stage anchors")
+        if not (
+            initial_status_pos
+            < sync_pos
+            < post_sync_status_pos
+            < add_pos
+            < post_stage_status_pos
+            < commit_pos
+            < post_commit_status_pos
+            < push_pos
+        ):
+            raise ValueError("V25 release preparation dirty-tree safety checks are in the wrong order")
+
+        require_tokens(
+            prepare,
+            [
+                "if ($entry.State -ne ' M')",
+                "if ($entry.Path -notin $allowed)",
+                "$missingStaged = @($changed | Where-Object { $_ -notin $staged })",
+                "$unexpectedStaged = @($staged | Where-Object { $_ -notin $changed })",
+                "if ($entry.State -ne 'M ' -or $entry.Path -notin $staged)",
+            ],
+            "V25 release preparation dirty-tree contract",
+        )
 
         expected_projects = [
             "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj",
@@ -113,7 +169,10 @@ def main():
     except ValueError as exc:
         return fail(str(exc))
 
-    print("PASS: V25 preview release input automatically synchronizes exact source identity with fail-closed provenance guards")
+    print(
+        "PASS: V25 preview release sync rejects dirty/staged provenance, "
+        "stages only validated product-version changes, and publishes exact release-commit provenance"
+    )
     return 0
 
 
