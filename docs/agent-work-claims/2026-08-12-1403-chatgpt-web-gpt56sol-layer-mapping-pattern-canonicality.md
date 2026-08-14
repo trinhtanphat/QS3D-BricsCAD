@@ -27,3 +27,7 @@ Layer-mapping category canonicality, mapping prefix casing, template collection 
 ## Completion condition
 
 Narrow source fix and focused regression are integrated on current `main`, same-file concurrent edits are reconciled, and this claim is closed with exact source/regression SHAs and remote validation boundaries. No GitHub Actions/full build/licensed BricsCAD runtime PASS is implied by this claim.
+
+## 2026-08-14 nullable compile follow-up
+
+The source/smoke contract is integrated at `a2850033a65fe7fe18c6681a596e33b3331dcc05`, but the target nullable compiler reports `CS8602` at the new `raw.Trim()` guard. Parent `/root` delegated only the behavior-preserving explicit-null compile correction to `/root/fix_curtain_method_gates` under claim `2026-08-14-codex-template-layer-pattern-nullable.md`. This original claim retains its canonicality scope; the follow-up will not change accepted/rejected values or recognition behavior.
