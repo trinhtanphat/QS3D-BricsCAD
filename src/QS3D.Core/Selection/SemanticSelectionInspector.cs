@@ -279,12 +279,27 @@ namespace QS3D.Core.Selection
             if (familyId.Length > 0 && familyIndex.TryGetValue(familyId, out var family))
             {
                 foreach (var property in family.Properties)
+                {
+                    RequireCanonicalPropertyKey(property.Key, "Family " + family.Id);
                     if (!IsInternalOwnershipProperty(property.Key)) result[property.Key] = property.Value ?? string.Empty;
+                }
             }
 
             foreach (var property in element.Properties)
+            {
+                RequireCanonicalPropertyKey(property.Key, "element " + element.Id);
                 if (!IsInternalOwnershipProperty(property.Key)) result[property.Key] = property.Value ?? string.Empty;
+            }
             return result;
+        }
+
+        private static void RequireCanonicalPropertyKey(string key, string owner)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+                throw new InvalidOperationException("Selected " + owner + " contains an empty property key.");
+            var canonicalKey = key.Trim();
+            if (!string.Equals(key, canonicalKey, StringComparison.Ordinal))
+                throw new InvalidOperationException("Selected " + owner + " contains a non-canonical property key: " + key + ".");
         }
 
         private static IReadOnlyList<SemanticSelectionQuantityValue> InspectQuantities(IReadOnlyList<ProjectElement> selected)
