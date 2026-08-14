@@ -4,7 +4,11 @@
 - Date: 2026-08-14
 - Status: `ACTIVE`
 - Baseline main SHA: `ae61c986850d599bba92acd4b1e190c669b5f551`
+- Claim commit: `bda67a271f5622696f0d072200bb233bd21e4329`
 - Implementation branch: `agent/chatgpt-web-gpt56sol/generated-stale-reason-xml-persistability-20260814`
+- Source commit: `710f64b81858c6eab37ed2d2d0c7048c60fed4ff`
+- Initial regression commit: `e06c07fe21b7bec4b067dc7055d2ff373cf49a87`
+- Corrected regression / implementation head: `9ee9a0824f48799daefe26f1f91bc42679e22bd3`
 - Planned integration branch: `integration/chatgpt-web-gpt56sol-generated-stale-reason-xml-persistability-20260814`
 - Priority: Core P1 persistence integrity / mutation atomicity
 
@@ -32,6 +36,14 @@ This lane only validates the normalized reason before any stale-state mutation a
 At baseline `ae61c986850d599bba92acd4b1e190c669b5f551`, each public generated-stale entry point first calls `MarkGeneratedOutputStale(...)` / `MarkGeneratedCurtainPanelOutputStale(...)`, which can mutate persisted state and stale-snapshot properties, and only afterwards calls `SetAggregateStaleReason(reason)`. `SetAggregateStaleReason` trims/defaults the reason and writes it directly to `Properties[GeneratedGeometryStaleReasonKey]` with no XML validation. Thus an XML-illegal reason can both create non-persistable state and make a future validation fix non-atomic if applied only inside the final setter.
 
 No matching current claim/commit was found for generated stale-reason XML persistability.
+
+## Implementation evidence
+
+- `710f64b81858c6eab37ed2d2d0c7048c60fed4ff` introduces `NormalizeStaleReason(...)`, preserves the existing blank-default/trim semantics, verifies XML characters through the existing `RequireXmlText(...)` helper, and performs this preflight before output-state/snapshot mutation in all three public stale entry points.
+- `e06c07fe21b7bec4b067dc7055d2ff373cf49a87` added the initial focused smoke; readback caught an invalid fixture enum (`CurtainWall`) before integration.
+- `9ee9a0824f48799daefe26f1f91bc42679e22bd3` corrects that fixture to the current `GlassWall` enum. The smoke proves invalid `U+0001` reason leaves the complete property map, Dirty and UpdatedUtc unchanged, then verifies a valid normalized reason and XML-valid newline/tab text round-trip through QSDB SaveNew/Load.
+- Agent-branch compare from the claim commit reports only the reserved source file and the new focused smoke.
+- No executable .NET/native PASS is claimed in this connector-only environment.
 
 ## Validation plan
 
