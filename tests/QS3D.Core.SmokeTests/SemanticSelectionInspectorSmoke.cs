@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             CommonAndMixedValuesAreStable();
             QuantitySignedZeroProjectionIsCanonical();
             QuantityKeysMustBeCanonical();
+            PropertyKeysMustBeCanonical();
             ReferencePresenceCountsActualAssignments();
             FamilyDefaultsParticipateInEffectiveValues();
             InternalOwnershipPropertiesStayHidden();
@@ -110,6 +111,53 @@ namespace QS3D.Core.SmokeTests
                 .Quantities.Single(x => x.Name == "LengthM");
             Equal("LengthM", canonical.Name);
             Equal(1, canonical.PresentCount);
+        }
+
+        private static void PropertyKeysMustBeCanonical()
+        {
+            var blankElementProject = BuildProject();
+            var blankElement = blankElementProject.FindElement("B-001")!;
+            blankElement.Properties["   "] = "legacy";
+            var blankElementVersion = blankElementProject.ChangeVersion;
+            MustFail(
+                () => SemanticSelectionInspector.Inspect(blankElementProject, new[] { blankElement.Id }),
+                "Whitespace-only element property keys must fail closed at the semantic selection boundary.");
+            Equal(true, blankElement.Properties.ContainsKey("   "));
+            Equal(blankElementVersion, blankElementProject.ChangeVersion);
+
+            var paddedElementProject = BuildProject();
+            var paddedElement = paddedElementProject.FindElement("B-001")!;
+            paddedElement.Properties[" Mark "] = "legacy";
+            var paddedElementVersion = paddedElementProject.ChangeVersion;
+            MustFail(
+                () => SemanticSelectionInspector.Inspect(paddedElementProject, new[] { paddedElement.Id }),
+                "Padded element property keys must fail closed at the semantic selection boundary.");
+            Equal(true, paddedElement.Properties.ContainsKey(" Mark "));
+            Equal(paddedElementVersion, paddedElementProject.ChangeVersion);
+
+            var blankFamilyProject = BuildProject();
+            var blankFamily = blankFamilyProject.FindFamily("FAM-B")!;
+            blankFamily.Properties["   "] = "legacy";
+            var blankFamilyVersion = blankFamilyProject.ChangeVersion;
+            MustFail(
+                () => SemanticSelectionInspector.Inspect(blankFamilyProject, new[] { "B-001" }),
+                "Whitespace-only Family property keys must fail closed before inherited property projection.");
+            Equal(true, blankFamily.Properties.ContainsKey("   "));
+            Equal(blankFamilyVersion, blankFamilyProject.ChangeVersion);
+
+            var paddedFamilyProject = BuildProject();
+            var paddedFamily = paddedFamilyProject.FindFamily("FAM-B")!;
+            paddedFamily.Properties[" FireRating "] = "R90";
+            var paddedFamilyVersion = paddedFamilyProject.ChangeVersion;
+            MustFail(
+                () => SemanticSelectionInspector.Inspect(paddedFamilyProject, new[] { "B-001" }),
+                "Padded Family property keys must fail closed before inherited property projection.");
+            Equal(true, paddedFamily.Properties.ContainsKey(" FireRating "));
+            Equal(paddedFamilyVersion, paddedFamilyProject.ChangeVersion);
+
+            var canonical = SemanticSelectionInspector.Inspect(BuildProject(), new[] { "B-001" });
+            Equal("R60", canonical.Properties.Single(x => x.Name == "FireRating").Value);
+            Equal("B1", canonical.Properties.Single(x => x.Name == "Mark").Value);
         }
 
         private static void ReferencePresenceCountsActualAssignments()
