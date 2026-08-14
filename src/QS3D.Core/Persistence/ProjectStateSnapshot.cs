@@ -228,8 +228,9 @@ namespace QS3D.Core.Persistence
                 });
             }
 
-            target.Metadata.Clear();
-            foreach (var item in source.Metadata) target.Metadata[item.Key] = item.Value;
+            var targetMetadata = target.Metadata as ProjectMetadataDictionary
+                ?? throw new InvalidOperationException("Project snapshot target does not expose the canonical project metadata store.");
+            targetMetadata.ReplacePersistenceState(source.Metadata);
             target.RestorePersistenceState(source.UpdatedUtc, source.ChangeVersion);
         }
 
