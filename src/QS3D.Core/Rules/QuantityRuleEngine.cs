@@ -11,13 +11,13 @@ namespace QS3D.Core.Rules
     {
         public QuantityRule(string id, ElementCategory category, string outputName, string expression, string version)
         {
-            Id = Required(id, nameof(id));
+            Id = RequiredToken(id, nameof(id));
             if (!Enum.IsDefined(typeof(ElementCategory), category))
                 throw new ArgumentOutOfRangeException(nameof(category), category, "Quantity rule category must be a defined ElementCategory.");
             Category = category;
-            OutputName = Required(outputName, nameof(outputName));
+            OutputName = RequiredToken(outputName, nameof(outputName));
             Expression = Required(expression, nameof(expression));
-            Version = Required(version, nameof(version));
+            Version = RequiredToken(version, nameof(version));
         }
 
         public string Id { get; }
@@ -25,6 +25,13 @@ namespace QS3D.Core.Rules
         public string OutputName { get; }
         public string Expression { get; }
         public string Version { get; }
+
+        private static string RequiredToken(string value, string name)
+        {
+            var normalized = Required(value, name);
+            if (normalized.Any(char.IsControl)) throw new ArgumentException("Value cannot contain control characters.", name);
+            return normalized;
+        }
 
         private static string Required(string value, string name) =>
             string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Value is required.", name) : value.Trim();
