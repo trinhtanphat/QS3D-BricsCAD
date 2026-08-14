@@ -265,13 +265,16 @@ for text, label in ((doc, "Curtain doc"), (inbox, "local inbox")):
             errors.append(label + " missing bounded P10 status token: " + token)
 
 for token in (
-    '- Status: `ACTIVE`',
+    '- Status: `COMPLETED`',
     'LOCAL-002 / P0 / P10',
     'Production Workspace/Curtain ownership behavior remains read-only',
     'or GitHub Actions',
+    '## 2026-08-14 licensed PASS and closeout',
+    'P10 is `LOCAL_PASS` and this bounded claim is `COMPLETED`.',
+    'Overall LOCAL-002 remains `PENDING_LOCAL`',
 ):
     if token not in claim:
-        errors.append("Curtain P10 claim missing ownership boundary: " + token)
+        errors.append("Curtain P10 claim missing completed ownership/evidence boundary: " + token)
 
 print("QS3D Curtain P10 Workspace review runtime preflight")
 if errors:
