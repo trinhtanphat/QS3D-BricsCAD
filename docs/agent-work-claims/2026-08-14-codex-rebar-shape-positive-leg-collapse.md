@@ -1,6 +1,6 @@
 # Work claim — Rebar shape positive-leg collapse
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `/root/fix_curtain_method_gates`
 - Registered: `2026-08-14T15:45:00+07:00`
 - Baseline main SHA: `71dcb3b4cd2b06c8510bf60a6b1e1851a0f7f55e`
@@ -26,3 +26,12 @@ No open PR or active exact claim owns positive-leg endpoint representability. Pr
 - Validate focused advanced-geometry, geometry-completion, and rebar numeric gates, Core `Release` build, and full Core smoke; report any independent blocker without expanding.
 
 Completion means the bounded source/smoke fix is merged through normal PR, this claim is closed, and the exact merged-main SHA is returned to `/root`.
+
+## Outcome
+
+- Merged source/smoke fix: PR `#1235`, main SHA `f43876207c6960372d10d853df29655047575334`.
+- The concrete `1e16;1` positive-leg path now fails closed instead of publishing a duplicate endpoint; direct Core invocation also confirmed an ordinary L path remains unchanged.
+- Core and smoke-project `Release` builds passed with 0 warnings and 0 errors.
+- Rebar numeric-safety, advanced-geometry, and geometry-completion preflights passed.
+- Post-merge full Core smoke advanced to the independent `ProjectFloorZoneMutationIntegritySmoke.FloorAssignmentCanonicalIdentityIsNoOp` stale padded-reference expectation, which remains under LOCAL-003 ownership; no scope expansion was made.
+- No fabrication standard, BBS formula, native geometry/UI, LOCAL automation, Browser fixture, BricsCAD/private data, release/signing, or Actions surface changed.
