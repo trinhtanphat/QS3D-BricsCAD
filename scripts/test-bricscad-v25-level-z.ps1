@@ -276,6 +276,7 @@ finally {
     foreach ($privatePath in @(
         $projectSidecar,
         ($projectSidecar + ".bak"),
+        [IO.Path]::ChangeExtension($DrawingCopy, ".bak"),
         [IO.Path]::ChangeExtension($DrawingCopy, ".dwl"),
         [IO.Path]::ChangeExtension($DrawingCopy, ".dwl2")
     )) {
