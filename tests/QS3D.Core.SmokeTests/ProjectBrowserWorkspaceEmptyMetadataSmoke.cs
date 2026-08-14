@@ -54,6 +54,10 @@ namespace QS3D.Core.SmokeTests
         {
             var project = NewProject(label);
             project.Metadata[ProjectBrowserWorkspaceStateStore.MetadataKey] = serialized!;
+            if (!project.Metadata.TryGetValue(ProjectBrowserWorkspaceStateStore.MetadataKey, out var storedBeforeLoad))
+                throw new Exception("Requested " + label + " workspace metadata did not remain present before Load.");
+            if (serialized == null && storedBeforeLoad.Length != 0)
+                throw new Exception("Null workspace metadata was not canonicalized to empty text before Load.");
             var beforeUpdatedUtc = project.UpdatedUtc;
             var beforeVersion = project.ChangeVersion;
 
@@ -70,7 +74,7 @@ namespace QS3D.Core.SmokeTests
             if (!rejected)
                 throw new Exception("Present " + label + " workspace metadata was silently treated as missing state.");
             if (!project.Metadata.TryGetValue(ProjectBrowserWorkspaceStateStore.MetadataKey, out var after) ||
-                !string.Equals(serialized, after, StringComparison.Ordinal))
+                !string.Equals(storedBeforeLoad, after, StringComparison.Ordinal))
                 throw new Exception("Failed " + label + " workspace load mutated the persisted metadata value.");
             AssertFreshnessUnchanged(project, beforeUpdatedUtc, beforeVersion, label + " metadata failure");
         }
