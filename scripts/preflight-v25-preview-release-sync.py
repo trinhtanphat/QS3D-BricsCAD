@@ -62,9 +62,7 @@ def main():
             prepare,
             [
                 "Get-ReleaseStatusEntries",
-                "git status --porcelain=v1 --untracked-files=all",
-                "Test-IsExpectedNuGetCachePath",
-                ".nuget/packages/",
+                "git status --porcelain=v1 --untracked-files=all -- . ':(exclude).nuget/packages/**'",
                 "Release preparation must start from a clean checkout/index",
                 "sync-preview-release-version.ps1",
                 "preflight-runtime-product-version-identity.py",
@@ -85,6 +83,8 @@ def main():
             ],
             "V25 release preparation helper",
         )
+        if "Test-IsExpectedNuGetCachePath" in prepare:
+            raise ValueError("V25 release preparation must exclude NuGet cache before status parsing")
         if "--force" in prepare or "git push -f" in prepare:
             raise ValueError("V25 release preparation helper must never force-push main")
         if "git add -A" in prepare or "git add ." in prepare:
@@ -170,7 +170,7 @@ def main():
         return fail(str(exc))
 
     print(
-        "PASS: V25 preview release sync rejects dirty/staged provenance, "
+        "PASS: V25 preview release sync excludes the NuGet cache before status parsing, rejects all other dirty/staged provenance, "
         "stages only validated product-version changes, and publishes exact release-commit provenance"
     )
     return 0
