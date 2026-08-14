@@ -158,6 +158,7 @@ namespace QS3D.Core.Domain
             }
 
             if (pending.Count == 0) return 0;
+            ValidateMemberPropertyKeysForMutation(pending.Select(x => x.Element).ToList(), "assigning a Family");
             project.Touch();
             foreach (var item in pending)
             {
