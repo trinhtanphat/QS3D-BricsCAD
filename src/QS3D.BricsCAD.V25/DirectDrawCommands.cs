@@ -719,8 +719,6 @@ namespace QS3D.BricsCAD.V25
                 document.Editor.Regen();
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status);
-                if (element.Category != ElementCategory.Beam)
-                    document.SendStringToExecute("QS3DVIEW3D ", true, false, false);
             }
             catch (Exception ex)
             {
