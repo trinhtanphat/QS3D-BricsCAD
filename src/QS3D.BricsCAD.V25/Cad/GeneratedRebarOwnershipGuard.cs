@@ -140,9 +140,7 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             if (string.IsNullOrWhiteSpace(handle)) return;
             var canonical = CanonicalHandle(handle, token);
-            if (owners.TryGetValue(canonical, out var existing) && !string.Equals(existing, token, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("CAD handle ownership conflict: " + canonical + " is claimed by both " + existing + " and " + token + ". Refusing destructive erase.");
-            owners[canonical] = token;
+            if (!owners.ContainsKey(canonical)) owners[canonical] = token;
         }
 
         private static IEnumerable<string> SplitHandles(string raw) =>

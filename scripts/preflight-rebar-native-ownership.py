@@ -123,6 +123,28 @@ check_exact_set_guard(
     "_validatedLiveSets.Add(expectedOwner);",
     "Refusing destructive replacement before any rebar is erased.",
 )
+
+if OWNERSHIP_GUARD.is_file():
+    text = OWNERSHIP_GUARD.read_text(encoding="utf-8")
+    protected = private_static_method(text, "private static void AddProtected(string? handle, string token, Dictionary<string, string> owners)")
+    for token in (
+        "var canonical = CanonicalHandle(handle, token);",
+        "if (!owners.ContainsKey(canonical)) owners[canonical] = token;",
+    ):
+        if token not in protected:
+            errors.append("shared rebar protected-handle collection missing token: " + token)
+    if "throw new InvalidOperationException" in protected:
+        errors.append("shared rebar protected-handle collection must coalesce repeated protected references instead of treating them as destructive owners")
+
+    owned = private_static_method(text, "private static void Add(ProjectElement element, string propertyKey, Dictionary<string, string> owners)")
+    for token in (
+        "owners.TryGetValue(canonical, out var existing)",
+        "Generated rebar handle ownership conflict:",
+        "owners[canonical] = token;",
+    ):
+        if token not in owned:
+            errors.append("shared rebar owned-handle collection must retain protected/rebar and rebar/rebar conflict token: " + token)
+
 check_exact_set_guard(
     TIE_OWNERSHIP_GUARD,
     "column tie",
