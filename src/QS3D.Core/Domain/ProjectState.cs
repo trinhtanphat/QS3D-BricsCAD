@@ -108,7 +108,13 @@ namespace QS3D.Core.Domain
             if (normalized.Any(char.IsControl)) throw new ArgumentException("Family id cannot contain control characters.", nameof(value));
             return normalized;
         }
-        private static string RequireName(string value) => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Family name is required.", nameof(value)) : value.Trim();
+        private static string RequireName(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Family name is required.", nameof(value));
+            var normalized = value.Trim();
+            if (normalized.Any(char.IsControl)) throw new ArgumentException("Family name cannot contain control characters.", nameof(value));
+            return normalized;
+        }
         private static ElementCategory RequireCategory(ElementCategory value)
         {
             if (!Enum.IsDefined(typeof(ElementCategory), value))
