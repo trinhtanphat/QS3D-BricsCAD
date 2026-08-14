@@ -44,7 +44,8 @@ namespace QS3D.Core.Export
         public string? CostItemRelationIdentity { get; }
 
         public bool HasTrustedQs3dIdentity => Projection != null;
-        public bool IsLosslessSupported => State == IfcRoundTripResultState.Supported;
+        public bool HasAmbiguousQuantityEvidence => Projection?.QuantityEvidence.HasAmbiguity == true;
+        public bool IsLosslessSupported => State == IfcRoundTripResultState.Supported && !HasAmbiguousQuantityEvidence;
 
         private void ValidateStateContract()
         {
