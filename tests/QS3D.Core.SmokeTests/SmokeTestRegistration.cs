@@ -9,6 +9,7 @@ namespace QS3D.Core.SmokeTests
             MaterialUsageFamilyCategorySmoke.Run();
             DoorOpeningFamilyCategorySmoke.Run();
             RoomFinishFamilyCategorySmoke.Run();
+            CurtainWallScheduleFamilyCategorySmoke.Run();
             MeasurementTraceContractSmoke.Run();
             TakeoffMeasurementTraceSmoke.Run();
             RateBookSmoke.Run();
