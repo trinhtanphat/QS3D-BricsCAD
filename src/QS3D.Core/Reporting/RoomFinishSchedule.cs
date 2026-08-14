@@ -57,6 +57,8 @@ namespace QS3D.Core.Reporting
                 var floorId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FloorId);
                 var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
                 families.TryGetValue(familyId, out var family);
+                if (family != null && family.Category != element.Category)
+                    throw new InvalidOperationException("Room finish schedule element " + element.Id + " category " + element.Category + " does not match Family " + family.Id + " category " + family.Category + ". Repair the Family relation before reporting.");
                 var material = Effective(element, family, "Material");
                 var roomId = AutoRoomLifecycle.ResolveRoomReferenceId(project, element);
                 var roomLabel = RoomLabel(roomId, rooms);
