@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Revisions;
 
@@ -62,17 +63,20 @@ namespace QS3D.Core.SmokeTests
         private static void CaptureRejectsPaddedReferenceIds()
         {
             var familyProject = NewProject();
-            var familyElement = new ProjectElement("E-FAMILY", ElementCategory.Beam, string.Empty, "f", "z") { FamilyId = " F1 " };
+            var familyElement = new ProjectElement("E-FAMILY", ElementCategory.Beam, "F1", "f", "z");
+            SetRawRelation(familyElement, "_familyId", " F1 ");
             familyProject.Elements.Add(familyElement);
             Throws<InvalidOperationException>(() => new RevisionService().Capture(familyProject, "padded-family"));
 
             var floorProject = NewProject();
-            var floorElement = new ProjectElement("E-FLOOR", ElementCategory.Beam, string.Empty, "f", "z") { FloorId = " f " };
+            var floorElement = new ProjectElement("E-FLOOR", ElementCategory.Beam, string.Empty, "f", "z");
+            SetRawRelation(floorElement, "_floorId", " f ");
             floorProject.Elements.Add(floorElement);
             Throws<InvalidOperationException>(() => new RevisionService().Capture(floorProject, "padded-floor"));
 
             var zoneProject = NewProject();
-            var zoneElement = new ProjectElement("E-ZONE", ElementCategory.Beam, string.Empty, "f", "z") { ZoneId = " z " };
+            var zoneElement = new ProjectElement("E-ZONE", ElementCategory.Beam, string.Empty, "f", "z");
+            SetRawRelation(zoneElement, "_zoneId", " z ");
             zoneProject.Elements.Add(zoneElement);
             Throws<InvalidOperationException>(() => new RevisionService().Capture(zoneProject, "padded-zone"));
         }
@@ -223,6 +227,15 @@ namespace QS3D.Core.SmokeTests
             project.ActiveZoneId = "z";
             project.ActiveFloorId = "f";
             return project;
+        }
+
+        private static void SetRawRelation(ProjectElement element, string fieldName, string value)
+        {
+            var field = typeof(ProjectElement).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectElement relation field " + fieldName + " was not found.");
+            if (field.FieldType != typeof(string))
+                throw new Exception("ProjectElement relation field " + fieldName + " must remain a string.");
+            field.SetValue(element, value);
         }
 
         private static void PositiveZero(double value)
