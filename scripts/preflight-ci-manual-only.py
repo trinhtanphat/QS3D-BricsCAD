@@ -234,6 +234,8 @@ else:
                 "github.actor != 'github-actions[bot]'",
                 "gh workflow run release-v25-cloud.yml",
                 "--ref main",
+                'source_sha="${GITHUB_SHA,,}"',
+                '-f source_sha="${source_sha}"',
                 "confirm_release=RELEASE",
                 "git fetch --force --tags origin",
                 'series_prefix="v0.1.0-preview."',
@@ -244,10 +246,14 @@ else:
             ):
                 if token not in text:
                     errors.append(f"{path.name}: approved dispatcher contract missing token: {token}")
-            for forbidden_token in ("GITHUB_RUN_NUMBER", "10000 +"):
+            for forbidden_token in (
+                "GITHUB_RUN_NUMBER",
+                "10000 +",
+                '-f source_sha="${current_main}"',
+            ):
                 if forbidden_token in text:
                     errors.append(
-                        f"{path.name}: dispatcher must not derive public preview ordinals from Actions run numbering: {forbidden_token}"
+                        f"{path.name}: dispatcher contains a forbidden non-deterministic source/preview contract token: {forbidden_token}"
                     )
             if "contents: write" in text:
                 errors.append(f"{path.name}: dispatcher must not have contents: write")
@@ -286,6 +292,19 @@ else:
                     f"{path.name}/release: publish job must hard-require workflow_dispatch + RELEASE confirmation"
                 )
 
+        if path.name == "release-v25-cloud.yml":
+            for token in (
+                "source_sha:",
+                "SOURCE_SHA: ${{ inputs.source_sha || github.sha }}",
+                "ref: ${{ inputs.source_sha || github.sha }}",
+                "git merge-base --is-ancestor $sourceSha origin/main",
+                "-DispatchSha $env:SOURCE_SHA",
+            ):
+                if token not in text:
+                    errors.append(f"{path.name}: exact source-SHA contract missing token: {token}")
+            if "-DispatchSha $env:GITHUB_SHA" in text:
+                errors.append(f"{path.name}: release preparation must not bind source identity to workflow-dispatch GITHUB_SHA")
+
 policy_path = ROOT / "CI_POLICY.md"
 policy = policy_path.read_text(encoding="utf-8") if policy_path.is_file() else ""
 for token in (
@@ -304,12 +323,13 @@ registration = registration_path.read_text(encoding="utf-8") if registration_pat
 for token in (
     "agent/<agent-id>/<scope>",
     "integration/<batch-id>",
-    "one final merge",
+    "Stop before merge",
+    "never update the `main` ref directly",
     "ALL MERGED TO MAIN",
     AUTO_DISPATCHER,
 ):
     if token not in registration:
-        errors.append("AGENT-WORK-REGISTRATION.md missing batch-integration token: " + token)
+        errors.append("AGENT-WORK-REGISTRATION.md missing current integration-governance token: " + token)
 
 print("QS3D GitHub Actions policy preflight")
 if errors:
@@ -320,5 +340,5 @@ if errors:
 
 print(
     "PASS: Actions are manual-only by default, exactly one owner-approved post-integration main dispatcher is allowed, "
-    "that dispatcher can target only release-v25-cloud.yml, and release workflows retain explicit RELEASE confirmation."
+    "that dispatcher pins the triggering exact source SHA, can target only release-v25-cloud.yml, and release workflows retain explicit RELEASE confirmation."
 )
