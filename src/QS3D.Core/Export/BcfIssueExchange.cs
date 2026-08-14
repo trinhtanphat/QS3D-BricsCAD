@@ -9,7 +9,7 @@ namespace QS3D.Core.Export
         public BcfComponentReference(string qs3dElementId, string ifcGlobalId)
         {
             Qs3dElementId = IfcRoundTripProjectionContract.RequireCanonicalToken(qs3dElementId, nameof(qs3dElementId));
-            IfcGlobalId = IfcRoundTripProjectionContract.RequireCanonicalToken(ifcGlobalId, nameof(ifcGlobalId));
+            IfcGlobalId = BcfIssueExchangeContract.RequireIfcGuid(ifcGlobalId, nameof(ifcGlobalId));
         }
 
         public string Qs3dElementId { get; }
@@ -26,7 +26,7 @@ namespace QS3D.Core.Export
     {
         public BcfViewpoint(string id, IEnumerable<BcfComponentReference> components)
         {
-            Id = IfcRoundTripProjectionContract.RequireCanonicalToken(id, nameof(id));
+            Id = BcfIssueExchangeContract.RequireBcfGuid(id, nameof(id));
             Components = CanonicalizeComponents(components);
         }
 
@@ -55,12 +55,12 @@ namespace QS3D.Core.Export
     {
         public BcfComment(string id, string author, DateTime createdUtc, string text, string? viewpointId)
         {
-            Id = IfcRoundTripProjectionContract.RequireCanonicalToken(id, nameof(id));
+            Id = BcfIssueExchangeContract.RequireBcfGuid(id, nameof(id));
             Author = BcfIssueExchangeContract.RequireText(author, nameof(author), false);
             if (createdUtc.Kind != DateTimeKind.Utc) throw new ArgumentException("BCF comment timestamps must be UTC.", nameof(createdUtc));
             CreatedUtc = createdUtc;
             Text = BcfIssueExchangeContract.RequireText(text, nameof(text), false);
-            ViewpointId = viewpointId == null ? null : IfcRoundTripProjectionContract.RequireCanonicalToken(viewpointId, nameof(viewpointId));
+            ViewpointId = viewpointId == null ? null : BcfIssueExchangeContract.RequireBcfGuid(viewpointId, nameof(viewpointId));
         }
 
         public string Id { get; }
@@ -81,7 +81,7 @@ namespace QS3D.Core.Export
             IEnumerable<BcfComment> comments,
             IEnumerable<BcfViewpoint> viewpoints)
         {
-            Id = IfcRoundTripProjectionContract.RequireCanonicalToken(id, nameof(id));
+            Id = BcfIssueExchangeContract.RequireBcfGuid(id, nameof(id));
             Title = BcfIssueExchangeContract.RequireText(title, nameof(title), false);
             Status = IfcRoundTripProjectionContract.RequireCanonicalToken(status, nameof(status));
             Type = IfcRoundTripProjectionContract.RequireCanonicalToken(type, nameof(type));
@@ -102,7 +102,7 @@ namespace QS3D.Core.Export
         {
             if (viewpoints == null) throw new ArgumentNullException(nameof(viewpoints));
             var items = viewpoints.ToList();
-            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var ids = new HashSet<string>(StringComparer.Ordinal);
             for (var index = 0; index < items.Count; index++)
             {
                 var item = items[index];
@@ -117,8 +117,8 @@ namespace QS3D.Core.Export
         {
             if (comments == null) throw new ArgumentNullException(nameof(comments));
             var items = comments.ToList();
-            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var viewpointIds = new HashSet<string>(viewpoints.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            var viewpointIds = new HashSet<string>(viewpoints.Select(x => x.Id), StringComparer.Ordinal);
             for (var index = 0; index < items.Count; index++)
             {
                 var item = items[index];
@@ -148,7 +148,7 @@ namespace QS3D.Core.Export
             if (topics == null) throw new ArgumentNullException(nameof(topics));
             var items = topics.ToList();
             if (items.Count == 0) throw new ArgumentException("At least one BCF topic is required.", nameof(topics));
-            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var ids = new HashSet<string>(StringComparer.Ordinal);
             for (var index = 0; index < items.Count; index++)
             {
                 var item = items[index];
@@ -162,6 +162,31 @@ namespace QS3D.Core.Export
 
     internal static class BcfIssueExchangeContract
     {
+        internal static string RequireBcfGuid(string value, string parameterName)
+        {
+            var token = IfcRoundTripProjectionContract.RequireCanonicalToken(value, parameterName);
+            if (!Guid.TryParseExact(token, "D", out var parsed) || !string.Equals(token, parsed.ToString("D"), StringComparison.Ordinal))
+                throw new ArgumentException("BCF GUIDs must use canonical lowercase 8-4-4-4-12 form.", parameterName);
+            return token;
+        }
+
+        internal static string RequireIfcGuid(string value, string parameterName)
+        {
+            var token = IfcRoundTripProjectionContract.RequireCanonicalToken(value, parameterName);
+            if (token.Length != 22) throw new ArgumentException("BCF IFC GUIDs must contain exactly 22 characters.", parameterName);
+            for (var index = 0; index < token.Length; index++)
+            {
+                var character = token[index];
+                if ((character >= '0' && character <= '9') ||
+                    (character >= 'A' && character <= 'Z') ||
+                    (character >= 'a' && character <= 'z') ||
+                    character == '_' || character == '$')
+                    continue;
+                throw new ArgumentException("BCF IFC GUIDs contain only alphanumeric, underscore, or dollar characters.", parameterName);
+            }
+            return token;
+        }
+
         internal static string RequireText(string value, string parameterName, bool allowEmpty)
         {
             if (value == null) throw new ArgumentNullException(parameterName);
@@ -199,16 +224,7 @@ namespace QS3D.Core.Export
     {
         internal static readonly BcfViewpointComparer Instance = new BcfViewpointComparer();
         private BcfViewpointComparer() { }
-        public int Compare(BcfViewpoint? x, BcfViewpoint? y) => CompareIds(x?.Id, y?.Id);
-
-        private static int CompareIds(string? x, string? y)
-        {
-            if (ReferenceEquals(x, y)) return 0;
-            if (x == null) return -1;
-            if (y == null) return 1;
-            var ignoreCase = StringComparer.OrdinalIgnoreCase.Compare(x, y);
-            return ignoreCase != 0 ? ignoreCase : StringComparer.Ordinal.Compare(x, y);
-        }
+        public int Compare(BcfViewpoint? x, BcfViewpoint? y) => StringComparer.Ordinal.Compare(x?.Id, y?.Id);
     }
 
     internal sealed class BcfCommentComparer : IComparer<BcfComment>
@@ -222,9 +238,7 @@ namespace QS3D.Core.Export
             if (x == null) return -1;
             if (y == null) return 1;
             var byTime = x.CreatedUtc.CompareTo(y.CreatedUtc);
-            if (byTime != 0) return byTime;
-            var ignoreCase = StringComparer.OrdinalIgnoreCase.Compare(x.Id, y.Id);
-            return ignoreCase != 0 ? ignoreCase : StringComparer.Ordinal.Compare(x.Id, y.Id);
+            return byTime != 0 ? byTime : StringComparer.Ordinal.Compare(x.Id, y.Id);
         }
     }
 
@@ -232,14 +246,6 @@ namespace QS3D.Core.Export
     {
         internal static readonly BcfTopicComparer Instance = new BcfTopicComparer();
         private BcfTopicComparer() { }
-
-        public int Compare(BcfTopic? x, BcfTopic? y)
-        {
-            if (ReferenceEquals(x, y)) return 0;
-            if (x == null) return -1;
-            if (y == null) return 1;
-            var ignoreCase = StringComparer.OrdinalIgnoreCase.Compare(x.Id, y.Id);
-            return ignoreCase != 0 ? ignoreCase : StringComparer.Ordinal.Compare(x.Id, y.Id);
-        }
+        public int Compare(BcfTopic? x, BcfTopic? y) => StringComparer.Ordinal.Compare(x?.Id, y?.Id);
     }
 }
