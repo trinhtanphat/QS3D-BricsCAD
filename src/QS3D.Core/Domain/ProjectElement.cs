@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml;
 
 namespace QS3D.Core.Domain
 {
@@ -123,7 +124,7 @@ namespace QS3D.Core.Domain
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Property name is required.", nameof(name));
             var key = name.Trim();
             if (key.Any(char.IsControl)) throw new ArgumentException("Property name cannot contain control characters.", nameof(name));
-            var normalized = value ?? string.Empty;
+            var normalized = RequireXmlText(value ?? string.Empty, nameof(value), "Property value");
             if (Properties.TryGetValue(key, out var existing) && string.Equals(existing, normalized, StringComparison.Ordinal)) return;
             Properties[key] = normalized;
             var affectsGeneratedGeometry = ElementGeometryPolicy.AffectsGeneratedGeometry(Category, key);
@@ -305,6 +306,19 @@ namespace QS3D.Core.Domain
             var normalized = id.Trim();
             if (normalized.Any(char.IsControl)) throw new ArgumentException("Element id cannot contain control characters.", nameof(id));
             return normalized;
+        }
+
+        private static string RequireXmlText(string value, string parameterName, string label)
+        {
+            try
+            {
+                XmlConvert.VerifyXmlChars(value);
+                return value;
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException(label + " contains characters that are invalid in XML.", parameterName, ex);
+            }
         }
 
         private static ElementCategory RequireCategory(ElementCategory value)
