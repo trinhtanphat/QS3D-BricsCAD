@@ -75,8 +75,10 @@ if SNAPSHOT.is_file():
     text = SNAPSHOT.read_text(encoding="utf-8")
     for token in (
         "target.AuditEvents.Clear();",
-        "target.Metadata.Clear();",
         "target.Elements.Clear();",
+        "target.Metadata as ProjectMetadataDictionary",
+        "targetMetadata.ReplacePersistenceState(source.Metadata);",
+        "target.RestorePersistenceState(source.UpdatedUtc, source.ChangeVersion);",
     ):
         if token not in text:
             errors.append("ProjectStateSnapshot must restore Material Catalog state: " + token)
