@@ -40,6 +40,7 @@ namespace QS3D.Core.Services
             }
 
             if (updates.Count == 0) return Array.Empty<string>();
+            ValidatePendingPropertyMapsForMutation(updates, "bulk setting a property");
             return ProjectSemanticMutationExecutor.Execute(project, "bulk.set-property", () =>
             {
                 var changed = new List<string>(updates.Count);
@@ -82,6 +83,7 @@ namespace QS3D.Core.Services
             }
 
             if (updates.Count == 0) return Array.Empty<string>();
+            ValidatePendingPropertyMapsForMutation(updates, "bulk multiplying a numeric property");
             return ProjectSemanticMutationExecutor.Execute(project, "bulk.multiply-numeric-property", () =>
             {
                 var changed = new List<string>(updates.Count);
@@ -320,6 +322,25 @@ namespace QS3D.Core.Services
                     throw new InvalidOperationException("Project family collection contains a blank or non-canonical family id.");
                 if (!seen.Add(id))
                     throw new InvalidOperationException("Project contains duplicate family id: " + id + ".");
+            }
+        }
+
+        private static void ValidatePendingPropertyMapsForMutation(IReadOnlyList<PendingPropertyUpdate> updates, string repairOperation)
+        {
+            foreach (var update in updates)
+            {
+                var element = update.Element;
+                var canonicalKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var pair in element.Properties)
+                {
+                    if (string.IsNullOrWhiteSpace(pair.Key))
+                        throw new InvalidOperationException("Bulk edit target '" + element.Id + "' contains an empty property key. Repair the element before " + repairOperation + ".");
+                    var normalizedKey = pair.Key.Trim();
+                    if (!string.Equals(normalizedKey, pair.Key, StringComparison.Ordinal))
+                        throw new InvalidOperationException("Bulk edit target '" + element.Id + "' contains a non-canonical property key: '" + pair.Key + "'. Repair the element before " + repairOperation + ".");
+                    if (!canonicalKeys.Add(normalizedKey))
+                        throw new InvalidOperationException("Bulk edit target '" + element.Id + "' contains duplicate canonical property key: " + normalizedKey + ".");
+                }
             }
         }
 
