@@ -41,6 +41,7 @@ for token in (
     "document.CommandFailed -= CommandFailed",
     "OnCommandWillStart(document, args)",
     "OnCommandEnded(document, args)",
+    "SynchronizeToNativeRevision(document)",
     "OnCommandAborted(document)",
     "TryConsumeMatchingCommand(document, args?.GlobalCommandName)",
     "NormalizeNativeUndoRedo(args?.GlobalCommandName)",
@@ -186,7 +187,8 @@ dispose_start = coordinator.find("public void Dispose()", confirm_start)
 begin_start = coordinator.find("public static PendingTransition BeginTransition(")
 will_start = coordinator.find("private static void OnCommandWillStart(", begin_start)
 ended_start = coordinator.find("private static void OnCommandEnded(", will_start)
-aborted_start = coordinator.find("private static void OnCommandAborted(", ended_start)
+sync_start = coordinator.find("private static void SynchronizeToNativeRevision(", ended_start)
+aborted_start = coordinator.find("private static void OnCommandAborted(", sync_start)
 consume_start = coordinator.find("private static bool TryConsumeMatchingCommand(", aborted_start)
 active_start = coordinator.find("private static bool IsActiveDocument(", consume_start)
 current_history_start = coordinator.find("private static bool IsCurrentHistory(", active_start)
@@ -197,13 +199,14 @@ stage_body = coordinator[stage_start:confirm_start]
 confirm_body = coordinator[confirm_start:dispose_start]
 begin_body = coordinator[begin_start:will_start]
 will_body = coordinator[will_start:ended_start]
-ended_body = coordinator[ended_start:aborted_start]
+ended_body = coordinator[ended_start:sync_start]
+sync_body = coordinator[sync_start:aborted_start]
 aborted_body = coordinator[aborted_start:consume_start]
 consume_body = coordinator[consume_start:active_start]
 filter_body = coordinator[normalize_start:mark_start]
 if min(
     stage_start, confirm_start, dispose_start, begin_start, will_start,
-    ended_start, aborted_start, consume_start, active_start, current_history_start,
+    ended_start, sync_start, aborted_start, consume_start, active_start, current_history_start,
     same_document_start, normalize_start, mark_start,
 ) < 0:
     errors.append("Undo coordinator transition method boundaries are missing")
@@ -230,10 +233,15 @@ else:
         or "registration.PendingCommand = normalized;" not in will_body
     ):
         errors.append("Undo observer must replace stale intent with one latest active-document native command token")
+    fallback_gate = will_body.find("if (IsActiveDocument(document)) SynchronizeToNativeRevision(document);")
+    normalize_intent = will_body.find("var normalized = NormalizeNativeUndoRedo(args?.GlobalCommandName);")
+    if fallback_gate < 0 or normalize_intent < 0 or fallback_gate > normalize_intent:
+        errors.append("next active-document command must reconcile the committed native marker before its body or intent handling")
     consume_gate = ended_body.find("if (!TryConsumeMatchingCommand(document, args?.GlobalCommandName)) return;")
-    marker_read_start = ended_body.find("try { nativeRevision = ReadRevision(document); }")
-    if consume_gate < 0 or marker_read_start < 0 or consume_gate > marker_read_start:
-        errors.append("CommandEnded must consume a matching start token before inspecting or poisoning native history")
+    ended_sync = ended_body.find("SynchronizeToNativeRevision(document);", consume_gate)
+    if consume_gate < 0 or ended_sync < 0 or consume_gate > ended_sync:
+        errors.append("CommandEnded must consume a matching start token before shared native-marker reconciliation")
+    marker_read_start = sync_body.find("try { nativeRevision = ReadRevision(document); }")
     if (
         "var pendingCommand = registration.PendingCommand;" not in consume_body
         or "registration.PendingCommand = null;" not in consume_body
@@ -262,40 +270,40 @@ else:
     if "registration.PendingCommand = null;" not in aborted_body:
         errors.append("cancelled and failed commands must clear pending Undo intent")
 
-    target_start = ended_body.find("HistoryEntry targetEntry;", marker_read_start)
-    stamp_start = ended_body.find("if (!currentEntry.Stamp.Matches(project))", target_start)
-    restore_start = ended_body.find("var restoreRollback = ProjectStateSnapshot.Capture(project);", stamp_start)
-    rollback_failure_start = ended_body.find("catch (Exception rollbackError)", restore_start)
-    recovered_restore_start = ended_body.find(
+    target_start = sync_body.find("HistoryEntry targetEntry;", marker_read_start)
+    stamp_start = sync_body.find("if (!currentEntry.Stamp.Matches(project))", target_start)
+    restore_start = sync_body.find("var restoreRollback = ProjectStateSnapshot.Capture(project);", stamp_start)
+    rollback_failure_start = sync_body.find("catch (Exception rollbackError)", restore_start)
+    recovered_restore_start = sync_body.find(
         '"Source Reconcile semantic Undo restore failed and was recovered.',
         rollback_failure_start,
     )
-    advance_start = ended_body.find("history.CurrentRevision = nativeRevision;", recovered_restore_start)
+    advance_start = sync_body.find("history.CurrentRevision = nativeRevision;", recovered_restore_start)
     if min(
         marker_read_start, target_start, stamp_start, restore_start,
         rollback_failure_start, recovered_restore_start, advance_start,
     ) < 0:
         errors.append("Undo observer marker/stamp refusal boundaries are missing")
     else:
-        if "MarkDesynchronized(" in ended_body[marker_read_start:target_start]:
-            errors.append("a transient command-end marker read failure must not permanently poison history")
-        if "MarkDesynchronized(" in ended_body[stamp_start:restore_start]:
+        if "MarkDesynchronized(" in sync_body[marker_read_start:target_start]:
+            errors.append("a transient command-boundary marker read failure must not permanently poison history")
+        if "MarkDesynchronized(" in sync_body[stamp_start:restore_start]:
             errors.append("semantic-only drift refusal must remain recoverable when the native marker returns current")
-        read_only_refusals = ended_body[target_start:restore_start]
+        read_only_refusals = sync_body[target_start:restore_start]
         if "MarkDesynchronized(" in read_only_refusals or "history.Desynchronized = true" in read_only_refusals:
             errors.append("read-only unknown-revision/project/backing-store refusals must not permanently poison history")
-        if "MarkDesynchronized(" in ended_body[recovered_restore_start:advance_start]:
+        if "MarkDesynchronized(" in sync_body[recovered_restore_start:advance_start]:
             errors.append("a failed semantic restore followed by successful exact rollback must remain recoverable")
-        recovery_body = ended_body[restore_start:rollback_failure_start]
+        recovery_body = sync_body[restore_start:rollback_failure_start]
         if (
             "restoreRollback.Restore(project);" not in recovery_body
             or "if (!currentEntry.Stamp.Matches(project))" not in recovery_body
             or '"Recovered Source Reconcile semantic state does not match its current revision."' not in recovery_body
         ):
             errors.append("restore recovery must verify the canonical project returned to its current revision before remaining nonsticky")
-        if ended_body.count("MarkDesynchronized(") != 1:
-            errors.append("command-end observation may become sticky only when semantic restore and recovery both fail")
-        double_failure = ended_body[rollback_failure_start:recovered_restore_start]
+        if sync_body.count("MarkDesynchronized(") != 1:
+            errors.append("native-marker reconciliation may become sticky only when semantic restore and recovery both fail")
+        double_failure = sync_body[rollback_failure_start:recovered_restore_start]
         if "MarkDesynchronized(history," not in double_failure or "new AggregateException(restoreError, rollbackError)" not in double_failure:
             errors.append("sticky desync must remain bound to combined semantic restore and recovery failure")
         mark_body = coordinator[mark_start:coordinator.find("private static void RequireCurrentHistory(", mark_start)]
@@ -311,7 +319,7 @@ else:
             or "!string.Equals(history.CurrentRevision, nativeRevision" not in require_body
         ):
             errors.append("transition affinity must require current dictionary membership while retaining project/revision fail-closed guards")
-        if "CurrentRevision =" in ended_body[target_start:advance_start]:
+        if "CurrentRevision =" in sync_body[target_start:advance_start]:
             errors.append("all observer refusals and recovered restore failures must leave CurrentRevision unchanged")
 
 # Deterministic model of the production shadow-publication and event-intent
@@ -431,6 +439,47 @@ if not intent.ended("A", "UNDO", True):
 intent.will_start("A", "REDO", True)
 if not intent.ended("A", "REDO", True):
     errors.append("an unbalanced command in a detached document suppressed deliberate Redo")
+
+# A usable Undo terminal callback is an optimization, not the sole coherence
+# boundary. If V25 omits it, the next active-document command must reconcile
+# the already-committed marker before its command body observes ProjectState.
+class CommandBoundaryReconciliation:
+    def __init__(self):
+        self.current_revision = "final"
+        self.native_revision = "final"
+        self.semantic_state = "final"
+        self.entries = {"before": "before", "final": "final"}
+
+    def synchronize(self, active=True, current_history=True, exact_project=True):
+        if not active or not current_history or not exact_project:
+            return False
+        if self.native_revision == self.current_revision:
+            return False
+        if self.native_revision not in self.entries:
+            return False
+        self.semantic_state = self.entries[self.native_revision]
+        self.current_revision = self.native_revision
+        return True
+
+
+boundary = CommandBoundaryReconciliation()
+boundary.native_revision = "before"  # native Undo completed; terminal callback was missed
+if boundary.synchronize(active=False) or boundary.semantic_state != "final":
+    errors.append("inactive-document command start crossed marker/history affinity")
+if not boundary.synchronize() or boundary.semantic_state != "before" or boundary.current_revision != "before":
+    errors.append("next active-document command did not recover a missed native Undo before its body")
+if boundary.synchronize() or boundary.semantic_state != "before":
+    errors.append("same-marker command start was not an observational no-op")
+boundary.native_revision = "unknown"
+if boundary.synchronize() or boundary.semantic_state != "before" or boundary.current_revision != "before":
+    errors.append("unknown native revision mutated semantic state at command start")
+boundary.native_revision = "final"
+if boundary.synchronize(current_history=False) or boundary.semantic_state != "before":
+    errors.append("stale/replaced history restored semantic state at command start")
+if boundary.synchronize(exact_project=False) or boundary.semantic_state != "before":
+    errors.append("replaced canonical project restored semantic state at command start")
+if not boundary.synchronize() or boundary.semantic_state != "final" or boundary.current_revision != "final":
+    errors.append("next active-document command did not recover a missed native Redo before its body")
 
 # State classification is independent of command provenance. Internal BricsCAD
 # work can emit a complete native command pair, so read-only refusal must rely
