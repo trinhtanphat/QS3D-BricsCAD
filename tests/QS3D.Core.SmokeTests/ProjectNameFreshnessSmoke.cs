@@ -13,6 +13,10 @@ namespace QS3D.Core.SmokeTests
         [ModuleInitializer]
         internal static void Initialize()
         {
+            var fallback = new ProjectState("P-NAME-FALLBACK", "   ");
+            Equal("QS3D Project", fallback.Name, "blank constructor fallback");
+            Throws<ArgumentException>(() => new ProjectState("P-NAME-CONTROL", "Broken\u0001Project"));
+
             var project = new ProjectState("P-NAME-FRESH", "Original Project");
             var stamp = new ProjectPersistenceStamp(project);
             False(stamp.RequiresSave(project), "fresh baseline save state");
@@ -38,6 +42,12 @@ namespace QS3D.Core.SmokeTests
             Equal(savedVersion, project.ChangeVersion, "invalid rename preserves revision");
             Equal(savedUpdated, project.UpdatedUtc, "invalid rename preserves timestamp");
             False(stamp.RequiresSave(project), "invalid rename preserves save state");
+
+            Throws<ArgumentException>(() => project.Name = "Broken\u0001Project");
+            Equal("Renamed Project", project.Name, "control-character rename preserves value");
+            Equal(savedVersion, project.ChangeVersion, "control-character rename preserves revision");
+            Equal(savedUpdated, project.UpdatedUtc, "control-character rename preserves timestamp");
+            False(stamp.RequiresSave(project), "control-character rename preserves save state");
 
             var snapshot = ProjectStateSnapshot.Capture(project);
             project.Name = "Temporary Name";
