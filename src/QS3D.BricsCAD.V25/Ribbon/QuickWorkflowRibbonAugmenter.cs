@@ -9,14 +9,16 @@ namespace QS3D.BricsCAD.V25.Ribbon
 {
     /// <summary>
     /// Keeps the existing quick-authoring panel and reconciles the clean-room BLT-reference
-    /// VẼ/IFC entry points onto the canonical QS3D Ribbon. This class augments existing tabs;
-    /// it never creates a duplicate top-level tab or changes Ribbon startup scheduling.
+    /// Home file/settings plus VẼ/IFC entry points onto the canonical QS3D Ribbon. This class
+    /// augments existing tabs; it never creates a duplicate top-level tab or changes Ribbon startup scheduling.
     /// </summary>
     internal static class QuickWorkflowRibbonAugmenter
     {
         private const string AssemblyName = "BrxMgd";
+        private const string HomeTabId = "QS3D_HOME";
         private const string AuthorTabId = "QS3D_AUTHOR";
         private const string DrawTabId = "QS3D_DRAW";
+        private const string HomeFilePanelSourceId = "QS3D_HOME_FILE_PANEL_SOURCE";
         private const string AuthorPanelSourceId = "QS3D_AUTHOR_QUICK_PANEL_SOURCE";
         private const string DrawPrimitivesPanelSourceId = "QS3D_DRAW_PRIMITIVES_PANEL_SOURCE";
         private const string DrawTransformPanelSourceId = "QS3D_DRAW_TRANSFORM_PANEL_SOURCE";
@@ -37,6 +39,14 @@ namespace QS3D.BricsCAD.V25.Ribbon
             public string Text { get; }
             public string Command { get; }
         }
+
+        private static readonly ButtonSpec[] HomeFileButtons =
+        {
+            new ButtonSpec("QS3D_HOME_FILE_OPEN", "Mở…", "_.OPEN"),
+            new ButtonSpec("QS3D_HOME_FILE_SAVE", "Lưu bản vẽ", "_.QSAVE"),
+            new ButtonSpec("QS3D_HOME_FILE_SAVE_AS", "Lưu thành…", "_.SAVEAS"),
+            new ButtonSpec("QS3D_HOME_FILE_SETTINGS", "Cài đặt", "QS3DPROJECTTOOLS")
+        };
 
         private static readonly ButtonSpec[] AuthorButtons =
         {
@@ -89,14 +99,22 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 var tabs = GetProperty(control, "Tabs");
                 if (!(tabs is IEnumerable tabItems)) return false;
 
+                var homeTab = FindById(tabItems, HomeTabId);
                 var authorTab = FindById(tabItems, AuthorTabId);
                 var drawTab = FindById(tabItems, DrawTabId);
-                if (authorTab == null || drawTab == null) return false;
+                if (homeTab == null || authorTab == null || drawTab == null) return false;
 
+                var homePanels = GetProperty(homeTab, "Panels");
                 var authorPanels = GetProperty(authorTab, "Panels");
                 var drawPanels = GetProperty(drawTab, "Panels");
-                if (!(authorPanels is IEnumerable authorPanelItems) || !(drawPanels is IEnumerable drawPanelItems))
+                if (!(homePanels is IEnumerable homePanelItems) ||
+                    !(authorPanels is IEnumerable authorPanelItems) ||
+                    !(drawPanels is IEnumerable drawPanelItems))
                     return false;
+
+                var homeFileSource = FindPanelSource(homePanelItems, HomeFilePanelSourceId)
+                                     ?? CreatePanel(homePanels, HomeFilePanelSourceId, "Tệp");
+                EnsureButtons(homeFileSource, HomeFileButtons);
 
                 var authorSource = FindPanelSource(authorPanelItems, AuthorPanelSourceId)
                                    ?? CreatePanel(authorPanels, AuthorPanelSourceId, "Tác vụ nhanh");
