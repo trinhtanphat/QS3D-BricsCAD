@@ -31,14 +31,14 @@ namespace QS3D.Core.Rebar
 
     public sealed class RebarCutAllowancePolicy
     {
-        public RebarCutAllowancePolicy(double kerfPerCutM = 0d, double allowancePerCutM = 0d)
+        public RebarCutAllowancePolicy(double kerfPerCutM = 0d, double allowancePerRequiredCutM = 0d)
         {
             KerfPerCutM = RebarMath.NonNegative(kerfPerCutM, nameof(kerfPerCutM));
-            AllowancePerCutM = RebarMath.NonNegative(allowancePerCutM, nameof(allowancePerCutM));
+            AllowancePerRequiredCutM = RebarMath.NonNegative(allowancePerRequiredCutM, nameof(allowancePerRequiredCutM));
         }
 
         public double KerfPerCutM { get; }
-        public double AllowancePerCutM { get; }
+        public double AllowancePerRequiredCutM { get; }
     }
 
     public sealed class RebarStockDemand
@@ -69,7 +69,6 @@ namespace QS3D.Core.Rebar
             long cutCount = 0L;
             var requiredLengthM = 0d;
             var allowanceLengthM = 0d;
-            var kerfLengthM = 0d;
 
             foreach (var cut in requiredCuts)
             {
@@ -87,12 +86,8 @@ namespace QS3D.Core.Rebar
                     "total required rebar cut length");
                 allowanceLengthM = RebarMath.Add(
                     allowanceLengthM,
-                    RebarMath.Multiply(allowancePolicy.AllowancePerCutM, cut.Quantity, "rebar cut allowance"),
-                    "total rebar cut allowance");
-                kerfLengthM = RebarMath.Add(
-                    kerfLengthM,
-                    RebarMath.Multiply(allowancePolicy.KerfPerCutM, cut.Quantity, "rebar cutting kerf"),
-                    "total rebar cutting kerf");
+                    RebarMath.Multiply(allowancePolicy.AllowancePerRequiredCutM, cut.Quantity, "required rebar cut allowance"),
+                    "total required rebar cut allowance");
             }
 
             RequiredCuts = cuts.AsReadOnly();
@@ -100,11 +95,10 @@ namespace QS3D.Core.Rebar
             RequiredCutCount = cutCount;
             RequiredCutLengthM = requiredLengthM;
             AllowanceLengthM = allowanceLengthM;
-            KerfLengthM = kerfLengthM;
-            FabricationDemandLengthM = RebarMath.Add(
-                RebarMath.Add(requiredLengthM, allowanceLengthM, "required rebar length plus allowance"),
-                kerfLengthM,
-                "total rebar fabrication demand");
+            DemandLengthBeforeKerfM = RebarMath.Add(
+                requiredLengthM,
+                allowanceLengthM,
+                "rebar demand length before cutting kerf");
         }
 
         public string GroupId { get; }
@@ -116,8 +110,7 @@ namespace QS3D.Core.Rebar
         public long RequiredCutCount { get; }
         public double RequiredCutLengthM { get; }
         public double AllowanceLengthM { get; }
-        public double KerfLengthM { get; }
-        public double FabricationDemandLengthM { get; }
+        public double DemandLengthBeforeKerfM { get; }
 
         private static string RequireCanonicalText(string value, string parameterName)
         {
@@ -132,21 +125,24 @@ namespace QS3D.Core.Rebar
 
     public sealed class RebarStockProcurementQuantities
     {
-        public RebarStockProcurementQuantities(double stockLengthM, int stockBarCount, double offCutLengthM)
+        public RebarStockProcurementQuantities(double stockLengthM, int stockBarCount, double kerfLengthM, double offCutLengthM)
         {
             StockLengthM = RebarMath.Positive(stockLengthM, nameof(stockLengthM));
             if (stockBarCount < 0)
                 throw new ArgumentOutOfRangeException(nameof(stockBarCount), "Procurement stock-bar count must be non-negative.");
             StockBarCount = stockBarCount;
+            KerfLengthM = RebarMath.NonNegative(kerfLengthM, nameof(kerfLengthM));
             OffCutLengthM = RebarMath.NonNegative(offCutLengthM, nameof(offCutLengthM));
             ProcurementLengthM = RebarMath.Multiply(StockLengthM, StockBarCount, "rebar procurement length");
-            if (OffCutLengthM > ProcurementLengthM)
-                throw new ArgumentOutOfRangeException(nameof(offCutLengthM), "Off-cut length cannot exceed procured stock length.");
+            var wasteLengthM = RebarMath.Add(KerfLengthM, OffCutLengthM, "rebar procurement waste length");
+            if (wasteLengthM > ProcurementLengthM)
+                throw new ArgumentOutOfRangeException(nameof(offCutLengthM), "Kerf plus off-cut length cannot exceed procured stock length.");
         }
 
         public double StockLengthM { get; }
         public int StockBarCount { get; }
         public double ProcurementLengthM { get; }
+        public double KerfLengthM { get; }
         public double OffCutLengthM { get; }
     }
 }
