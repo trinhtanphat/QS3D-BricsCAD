@@ -4,7 +4,10 @@
 - Date: 2026-08-14
 - Status: `ACTIVE`
 - Baseline main SHA: `5f78adec71f292bf04014283bcb5b7825ef3bbae`
+- Claim commit: `81403a9adb71c9f75bf4aee1496d4f98c54b35cc`
 - Implementation branch: `agent/chatgpt-web-gpt56sol/generic-metadata-xml-persistability-20260814`
+- Source commit: `5b74f81e6b5f9e7404f54f217cdae2d051626347`
+- Regression commit / implementation head: `7c688954dc570b735c63fd8403532a3a700a4320`
 - Planned integration branch: `integration/chatgpt-web-gpt56sol-generic-metadata-xml-persistability-20260814`
 - Priority: Core P1 persistence integrity
 
@@ -33,6 +36,14 @@ This lane adds fail-before-write validation only to public Add/indexer Set mutat
 At baseline `5f78adec71f292bf04014283bcb5b7825ef3bbae`, public `ProjectMetadataDictionary.Add` and indexer Set delegate to `Set(...)`, which checks only null key / duplicate-add and normalizes null value to empty. `QsdbProjectStore.Map(...)` serializes keys and values directly as XML attributes. `QsdbProjectXmlSchemaValidator.ValidateMap(...)` requires each map key to be non-empty and equal to its trimmed form, while serialized XML text validation rejects XML-illegal characters. Thus public metadata such as key `" padded "`, blank key, or value containing `U+0001` can create in-memory state that canonical persistence rejects.
 
 The earlier null-metadata-value fix only canonicalized null values, and the completed reserved mapping metadata integrity lane explicitly kept generic metadata revision semantics unchanged; neither lane reserved this public key/XML persistability contract.
+
+## Implementation evidence before integration
+
+- Source commit `5b74f81e6b5f9e7404f54f217cdae2d051626347` routes only public indexer/Add writes through a validation layer that requires canonical non-empty keys and XML-representable key/value text. Accepted generic values are preserved exactly, including XML-valid whitespace/newline text.
+- Regression commit `7c688954dc570b735c63fd8403532a3a700a4320` adds `ProjectMetadataPersistabilitySmoke` covering valid revision-neutral metadata, blank/padded/XML-illegal key rejection, XML-illegal replacement-value rejection, failure atomicity, and QSDB SaveNew→Load exact value round-trip.
+- Compare from claim commit to implementation head reports exactly two changed surfaces: `ProjectMetadataDictionary.cs` and the new focused smoke file.
+- Source/test were read back from the agent branch. Internal `AddOwned`, `SetPersistenceValue`, and `ReplacePersistenceState` hydration/owned-write paths are unchanged; reserved mapping revision ownership remains in the existing `Set(..., touchReserved)` path.
+- No managed/cloud/native PASS is claimed from the agent branch; no manual Actions dispatch was performed.
 
 ## Validation plan
 
