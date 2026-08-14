@@ -8,7 +8,7 @@ required = {
     "AGENTS.md": [
         "docs/REMOTE-AGENT-SCOPE.md",
         "docs/LOCAL-AGENT-INBOX.md",
-        "Remote agents must skip execution gates already classified `LOCAL_ONLY` rather than repeatedly rechecking them.",
+        "Remote agents must skip execution gates already classified LOCAL_ONLY rather than repeatedly rechecking them.",
     ],
     "docs/REMOTE-AGENT-SCOPE.md": [
         "## Mandatory remote inability handoff",
