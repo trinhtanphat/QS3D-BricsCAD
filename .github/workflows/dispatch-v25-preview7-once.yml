@@ -13,7 +13,6 @@ permissions:
 
 jobs:
   dispatch:
-    if: github.event.head_commit.message == 'ci: dispatch V25 preview.7 release once'
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch release-v25-cloud
