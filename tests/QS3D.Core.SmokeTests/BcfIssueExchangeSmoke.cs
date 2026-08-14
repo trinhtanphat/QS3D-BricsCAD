@@ -16,8 +16,8 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             SerializationIsDeterministicAcrossInputOrdering();
-            RoundTripPreservesTopicCommentViewpointAndIfcIdentity();
-            BuildingSmartIdentityShapesFailClosed();
+            RoundTripPreservesTopicCommentViewpointCameraAndIfcIdentity();
+            BuildingSmartIdentityAndCameraShapesFailClosed();
             DanglingAndDuplicateReferencesFailClosed();
             MalformedPayloadFailsClosed();
         }
@@ -29,11 +29,12 @@ namespace QS3D.Core.SmokeTests
             if (!string.Equals(forward, reversed, StringComparison.Ordinal))
                 throw new Exception("BCF issue serialization must be deterministic for semantically equivalent input ordering.");
             Require(forward, "schemaVersion=\"3.0\"");
+            Require(forward, "creationAuthor=\"qa@qs3d\"");
             Require(forward, "qs3dElementId=\"E-A\"");
             Require(forward, "ifcGlobalId=\"" + IfcA + "\"");
         }
 
-        private static void RoundTripPreservesTopicCommentViewpointAndIfcIdentity()
+        private static void RoundTripPreservesTopicCommentViewpointCameraAndIfcIdentity()
         {
             var original = BuildFixture(true);
             var serialized = BcfIssueExchangeSerializer.Serialize(original);
@@ -43,30 +44,29 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("BCF issue payload did not round-trip deterministically.");
 
             if (roundTrip.Topics.Count != 2) throw new Exception("BCF topic count changed during round-trip.");
-            if (!string.Equals(roundTrip.Topics[0].Id, TopicA, StringComparison.Ordinal))
-                throw new Exception("BCF topics were not canonicalized by stable identity.");
-
+            if (!string.Equals(roundTrip.Topics[0].Id, TopicA, StringComparison.Ordinal)) throw new Exception("BCF topics were not canonicalized by stable identity.");
             var topic = roundTrip.Topics[1];
-            if (!string.Equals(topic.Id, TopicB, StringComparison.Ordinal)) throw new Exception("BCF topic identity was not preserved.");
+            if (!string.Equals(topic.CreationAuthor, "qa@qs3d", StringComparison.Ordinal) || topic.CreationDateUtc != Utc(9))
+                throw new Exception("BCF required topic creation metadata was not preserved.");
             if (topic.Viewpoints.Count != 1 || topic.Comments.Count != 2) throw new Exception("BCF viewpoint/comment payload changed during round-trip.");
             if (!string.Equals(topic.Comments[0].Id, Comment1, StringComparison.Ordinal)) throw new Exception("BCF comments were not canonicalized deterministically.");
             if (!string.Equals(topic.Comments[0].ViewpointId, Viewpoint, StringComparison.Ordinal)) throw new Exception("BCF comment viewpoint reference was not preserved.");
 
+            var camera = topic.Viewpoints[0].Camera;
+            if (camera.ViewPoint.X != 10d || camera.ViewPoint.Y != 20d || camera.ViewPoint.Z != 30d || camera.ViewToWorldScale != 25d || camera.AspectRatio != 1.5d)
+                throw new Exception("BCF camera values were not preserved.");
             var components = topic.Viewpoints[0].Components;
             if (components.Count != 2) throw new Exception("BCF component references changed during round-trip.");
-            if (!string.Equals(components[0].Qs3dElementId, "E-A", StringComparison.Ordinal) ||
-                !string.Equals(components[0].IfcGlobalId, IfcA, StringComparison.Ordinal))
+            if (!string.Equals(components[0].Qs3dElementId, "E-A", StringComparison.Ordinal) || !string.Equals(components[0].IfcGlobalId, IfcA, StringComparison.Ordinal))
                 throw new Exception("BCF component identity bridge did not preserve QS3D and IFC identities together.");
         }
 
-        private static void BuildingSmartIdentityShapesFailClosed()
+        private static void BuildingSmartIdentityAndCameraShapesFailClosed()
         {
-            ThrowsArgument(
-                () => new BcfViewpoint("VP-NOT-A-GUID", Array.Empty<BcfComponentReference>()),
-                "BCF topic/comment/viewpoint identifiers must use buildingSMART canonical GUID form.");
-            ThrowsArgument(
-                () => new BcfComponentReference("E-X", "IFC-NOT-COMPRESSED"),
-                "BCF component IFC identities must use the 22-character buildingSMART IfcGuid shape.");
+            ThrowsArgument(() => new BcfViewpoint("VP-NOT-A-GUID", Camera(), Array.Empty<BcfComponentReference>()), "BCF topic/comment/viewpoint identifiers must use buildingSMART canonical GUID form.");
+            ThrowsArgument(() => new BcfComponentReference("E-X", "IFC-NOT-COMPRESSED"), "BCF component IFC identities must use the 22-character buildingSMART IfcGuid shape.");
+            ThrowsArgument(() => new BcfOrthogonalCamera(new BcfPoint3(0d, 0d, 0d), new BcfPoint3(0d, 0d, 0d), new BcfPoint3(0d, 1d, 0d), 1d, 1d), "BCF camera direction must be explicit and non-zero.");
+            ThrowsArgument(() => new BcfTopic(TopicA, "Bad UTC", "Open", "Error", string.Empty, "qa@qs3d", DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Local), Array.Empty<BcfComment>(), Array.Empty<BcfViewpoint>()), "BCF topic creation timestamps must be UTC.");
         }
 
         private static void DanglingAndDuplicateReferencesFailClosed()
@@ -78,47 +78,31 @@ namespace QS3D.Core.SmokeTests
                     "Open",
                     "Error",
                     string.Empty,
-                    new[]
-                    {
-                        new BcfComment(
-                            "77777777-7777-7777-7777-777777777777",
-                            "qa@qs3d",
-                            Utc(10),
-                            "Dangling",
-                            "88888888-8888-8888-8888-888888888888")
-                    },
+                    "qa@qs3d",
+                    Utc(9),
+                    new[] { new BcfComment("77777777-7777-7777-7777-777777777777", "qa@qs3d", Utc(10), "Dangling", "88888888-8888-8888-8888-888888888888") },
                     Array.Empty<BcfViewpoint>()),
                 "Dangling BCF comment viewpoint references must fail closed.");
 
             ThrowsArgument(
                 () => new BcfViewpoint(
                     "99999999-9999-9999-9999-999999999999",
-                    new[]
-                    {
-                        new BcfComponentReference("E-DUP", "0AAAAAAAAAAAAAAAAAAAAA"),
-                        new BcfComponentReference("e-dup", "1BBBBBBBBBBBBBBBBBBBBB")
-                    }),
+                    Camera(),
+                    new[] { new BcfComponentReference("E-DUP", "0AAAAAAAAAAAAAAAAAAAAA"), new BcfComponentReference("e-dup", "1BBBBBBBBBBBBBBBBBBBBB") }),
                 "Case-insensitive duplicate QS3D component identities must fail closed.");
         }
 
         private static void MalformedPayloadFailsClosed()
         {
-            ThrowsInvalidData(
-                () => BcfIssueExchangeSerializer.Deserialize("<BcfIssueExchange schemaVersion=\"2.1\"></BcfIssueExchange>"),
-                "Unsupported BCF schema versions must fail closed.");
-            ThrowsInvalidData(
-                () => BcfIssueExchangeSerializer.Deserialize("<broken"),
-                "Malformed BCF XML must fail closed.");
+            ThrowsInvalidData(() => BcfIssueExchangeSerializer.Deserialize("<BcfIssueExchange schemaVersion=\"2.1\"></BcfIssueExchange>"), "Unsupported BCF schema versions must fail closed.");
+            ThrowsInvalidData(() => BcfIssueExchangeSerializer.Deserialize("<broken"), "Malformed BCF XML must fail closed.");
         }
 
         private static BcfIssueExchange BuildFixture(bool reverse)
         {
             var componentA = BcfComponentReference.FromIfcProjection(BuildProjection("E-A", IfcA));
             var componentB = BcfComponentReference.FromIfcProjection(BuildProjection("E-B", IfcB));
-            var viewpoint = new BcfViewpoint(
-                Viewpoint,
-                reverse ? new[] { componentB, componentA } : new[] { componentA, componentB });
-
+            var viewpoint = new BcfViewpoint(Viewpoint, Camera(), reverse ? new[] { componentB, componentA } : new[] { componentA, componentB });
             var comment1 = new BcfComment(Comment1, "qa@qs3d", Utc(10), "Check element identity.", Viewpoint);
             var comment2 = new BcfComment(Comment2, "review@qs3d", Utc(11), "Identity confirmed.", null);
             var topicB = new BcfTopic(
@@ -127,36 +111,25 @@ namespace QS3D.Core.SmokeTests
                 "Open",
                 "Coordination",
                 "QS3D and IFC identities must survive BCF issue exchange.",
+                "qa@qs3d",
+                Utc(9),
                 reverse ? new[] { comment2, comment1 } : new[] { comment1, comment2 },
                 new[] { viewpoint });
-            var topicA = new BcfTopic(
-                TopicA,
-                "Canonical ordering",
-                "Closed",
-                "Information",
-                string.Empty,
-                Array.Empty<BcfComment>(),
-                Array.Empty<BcfViewpoint>());
-
+            var topicA = new BcfTopic(TopicA, "Canonical ordering", "Closed", "Information", string.Empty, "qa@qs3d", Utc(8), Array.Empty<BcfComment>(), Array.Empty<BcfViewpoint>());
             return BcfIssueExchange.Create(reverse ? new[] { topicB, topicA } : new[] { topicA, topicB });
+        }
+
+        private static BcfOrthogonalCamera Camera()
+        {
+            return new BcfOrthogonalCamera(new BcfPoint3(10d, 20d, 30d), new BcfPoint3(0d, 0d, -1d), new BcfPoint3(0d, 1d, 0d), 25d, 1.5d);
         }
 
         private static IfcRoundTripProjection BuildProjection(string qs3dElementId, string ifcGlobalId)
         {
-            return new IfcRoundTripProjection(
-                qs3dElementId,
-                ifcGlobalId,
-                "Beam",
-                Array.Empty<IfcRoundTripNumericProperty>(),
-                1d,
-                "m3",
-                new[] { "source:bcf-smoke" });
+            return new IfcRoundTripProjection(qs3dElementId, ifcGlobalId, "Beam", Array.Empty<IfcRoundTripNumericProperty>(), 1d, "m3", new[] { "source:bcf-smoke" });
         }
 
-        private static DateTime Utc(int hour)
-        {
-            return new DateTime(2026, 8, 14, hour, 0, 0, DateTimeKind.Utc);
-        }
+        private static DateTime Utc(int hour) => new DateTime(2026, 8, 14, hour, 0, 0, DateTimeKind.Utc);
 
         private static void ThrowsArgument(Action action, string message)
         {

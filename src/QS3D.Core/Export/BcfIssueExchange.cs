@@ -22,21 +22,66 @@ namespace QS3D.Core.Export
         }
     }
 
+    public sealed class BcfPoint3
+    {
+        public BcfPoint3(double x, double y, double z)
+        {
+            X = IfcRoundTripProjectionContract.RequireFinite(x, nameof(x));
+            Y = IfcRoundTripProjectionContract.RequireFinite(y, nameof(y));
+            Z = IfcRoundTripProjectionContract.RequireFinite(z, nameof(z));
+        }
+
+        public double X { get; }
+        public double Y { get; }
+        public double Z { get; }
+
+        internal bool IsZero => X == 0d && Y == 0d && Z == 0d;
+    }
+
+    public sealed class BcfOrthogonalCamera
+    {
+        public BcfOrthogonalCamera(
+            BcfPoint3 viewPoint,
+            BcfPoint3 direction,
+            BcfPoint3 upVector,
+            double viewToWorldScale,
+            double aspectRatio)
+        {
+            ViewPoint = viewPoint ?? throw new ArgumentNullException(nameof(viewPoint));
+            Direction = direction ?? throw new ArgumentNullException(nameof(direction));
+            UpVector = upVector ?? throw new ArgumentNullException(nameof(upVector));
+            if (Direction.IsZero) throw new ArgumentException("BCF camera direction must be non-zero.", nameof(direction));
+            if (UpVector.IsZero) throw new ArgumentException("BCF camera up vector must be non-zero.", nameof(upVector));
+            ViewToWorldScale = BcfIssueExchangeContract.RequirePositiveFinite(viewToWorldScale, nameof(viewToWorldScale));
+            AspectRatio = BcfIssueExchangeContract.RequirePositiveFinite(aspectRatio, nameof(aspectRatio));
+        }
+
+        public BcfPoint3 ViewPoint { get; }
+        public BcfPoint3 Direction { get; }
+        public BcfPoint3 UpVector { get; }
+        public double ViewToWorldScale { get; }
+        public double AspectRatio { get; }
+    }
+
     public sealed class BcfViewpoint
     {
-        public BcfViewpoint(string id, IEnumerable<BcfComponentReference> components)
+        public BcfViewpoint(string id, BcfOrthogonalCamera camera, IEnumerable<BcfComponentReference> components)
         {
             Id = BcfIssueExchangeContract.RequireBcfGuid(id, nameof(id));
+            Camera = camera ?? throw new ArgumentNullException(nameof(camera));
             Components = CanonicalizeComponents(components);
         }
 
         public string Id { get; }
+        public BcfOrthogonalCamera Camera { get; }
         public IReadOnlyList<BcfComponentReference> Components { get; }
 
         private static IReadOnlyList<BcfComponentReference> CanonicalizeComponents(IEnumerable<BcfComponentReference> components)
         {
             if (components == null) throw new ArgumentNullException(nameof(components));
             var items = components.ToList();
+            if (items.Count > BcfIssueExchangeContract.MaxComponentsPerViewpoint)
+                throw new ArgumentException("BCF viewpoint component count exceeds the bounded package contract.", nameof(components));
             var qs3dIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var ifcIds = new HashSet<string>(StringComparer.Ordinal);
             for (var index = 0; index < items.Count; index++)
@@ -57,8 +102,7 @@ namespace QS3D.Core.Export
         {
             Id = BcfIssueExchangeContract.RequireBcfGuid(id, nameof(id));
             Author = BcfIssueExchangeContract.RequireText(author, nameof(author), false);
-            if (createdUtc.Kind != DateTimeKind.Utc) throw new ArgumentException("BCF comment timestamps must be UTC.", nameof(createdUtc));
-            CreatedUtc = createdUtc;
+            CreatedUtc = BcfIssueExchangeContract.RequireUtc(createdUtc, nameof(createdUtc));
             Text = BcfIssueExchangeContract.RequireText(text, nameof(text), false);
             ViewpointId = viewpointId == null ? null : BcfIssueExchangeContract.RequireBcfGuid(viewpointId, nameof(viewpointId));
         }
@@ -78,6 +122,8 @@ namespace QS3D.Core.Export
             string status,
             string type,
             string description,
+            string creationAuthor,
+            DateTime creationDateUtc,
             IEnumerable<BcfComment> comments,
             IEnumerable<BcfViewpoint> viewpoints)
         {
@@ -86,6 +132,8 @@ namespace QS3D.Core.Export
             Status = IfcRoundTripProjectionContract.RequireCanonicalToken(status, nameof(status));
             Type = IfcRoundTripProjectionContract.RequireCanonicalToken(type, nameof(type));
             Description = BcfIssueExchangeContract.RequireText(description, nameof(description), true);
+            CreationAuthor = BcfIssueExchangeContract.RequireText(creationAuthor, nameof(creationAuthor), false);
+            CreationDateUtc = BcfIssueExchangeContract.RequireUtc(creationDateUtc, nameof(creationDateUtc));
             Viewpoints = CanonicalizeViewpoints(viewpoints);
             Comments = CanonicalizeComments(comments, Viewpoints);
         }
@@ -95,6 +143,8 @@ namespace QS3D.Core.Export
         public string Status { get; }
         public string Type { get; }
         public string Description { get; }
+        public string CreationAuthor { get; }
+        public DateTime CreationDateUtc { get; }
         public IReadOnlyList<BcfComment> Comments { get; }
         public IReadOnlyList<BcfViewpoint> Viewpoints { get; }
 
@@ -102,6 +152,8 @@ namespace QS3D.Core.Export
         {
             if (viewpoints == null) throw new ArgumentNullException(nameof(viewpoints));
             var items = viewpoints.ToList();
+            if (items.Count > BcfIssueExchangeContract.MaxViewpointsPerTopic)
+                throw new ArgumentException("BCF viewpoint count exceeds the bounded package contract.", nameof(viewpoints));
             var ids = new HashSet<string>(StringComparer.Ordinal);
             for (var index = 0; index < items.Count; index++)
             {
@@ -117,6 +169,8 @@ namespace QS3D.Core.Export
         {
             if (comments == null) throw new ArgumentNullException(nameof(comments));
             var items = comments.ToList();
+            if (items.Count > BcfIssueExchangeContract.MaxCommentsPerTopic)
+                throw new ArgumentException("BCF comment count exceeds the bounded package contract.", nameof(comments));
             var ids = new HashSet<string>(StringComparer.Ordinal);
             var viewpointIds = new HashSet<string>(viewpoints.Select(x => x.Id), StringComparer.Ordinal);
             for (var index = 0; index < items.Count; index++)
@@ -148,6 +202,8 @@ namespace QS3D.Core.Export
             if (topics == null) throw new ArgumentNullException(nameof(topics));
             var items = topics.ToList();
             if (items.Count == 0) throw new ArgumentException("At least one BCF topic is required.", nameof(topics));
+            if (items.Count > BcfIssueExchangeContract.MaxTopics)
+                throw new ArgumentException("BCF topic count exceeds the bounded package contract.", nameof(topics));
             var ids = new HashSet<string>(StringComparer.Ordinal);
             for (var index = 0; index < items.Count; index++)
             {
@@ -162,6 +218,11 @@ namespace QS3D.Core.Export
 
     internal static class BcfIssueExchangeContract
     {
+        internal const int MaxTopics = 256;
+        internal const int MaxViewpointsPerTopic = 256;
+        internal const int MaxCommentsPerTopic = 1024;
+        internal const int MaxComponentsPerViewpoint = 1000;
+
         internal static string RequireBcfGuid(string value, string parameterName)
         {
             var token = IfcRoundTripProjectionContract.RequireCanonicalToken(value, parameterName);
@@ -185,6 +246,19 @@ namespace QS3D.Core.Export
                 throw new ArgumentException("BCF IFC GUIDs contain only alphanumeric, underscore, or dollar characters.", parameterName);
             }
             return token;
+        }
+
+        internal static DateTime RequireUtc(DateTime value, string parameterName)
+        {
+            if (value.Kind != DateTimeKind.Utc) throw new ArgumentException("BCF timestamps must be UTC.", parameterName);
+            return value;
+        }
+
+        internal static double RequirePositiveFinite(double value, string parameterName)
+        {
+            value = IfcRoundTripProjectionContract.RequireFinite(value, parameterName);
+            if (value <= 0d) throw new ArgumentOutOfRangeException(parameterName, "Value must be positive.");
+            return value;
         }
 
         internal static string RequireText(string value, string parameterName, bool allowEmpty)
