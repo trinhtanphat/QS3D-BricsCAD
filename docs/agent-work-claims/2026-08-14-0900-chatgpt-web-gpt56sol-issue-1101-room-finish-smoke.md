@@ -1,7 +1,7 @@
 # Work claim — Issue #1101 Room Finish missing-Family smoke contract
 
-- Status: `ACTIVE`
-- Phase: `SOURCE_FIXED / PENDING_FRESH_SMOKE`
+- Status: `COMPLETED`
+- Phase: `SOURCE_FIXED / EXACT_MAIN_VALIDATED / ISSUE_CLOSED`
 - Agent: `chatgpt-web-gpt56sol-issue1101-20260814-0900`
 - Registered: `2026-08-14T09:00:00+07:00`
 - Baseline main SHA: `00d6e68c9492a0c9dbcb04215bab7ecbb9c1a006`
@@ -50,6 +50,15 @@ Commit `3aed2b5af29c33accb0e3df637e2f22e28c4e731` changes only the contradictory
 - GitHub commit statuses on `3aed2b5...`: none published at the time of this update.
 - Cloud run #144 is stale and not qualifying evidence.
 - This execution environment has no `dotnet` executable, so no local full-smoke PASS is claimed.
+
+Successor closeout on `2026-08-14`:
+
+- Final exact tested main SHA: `e98c30fb79abe41e0f9df6b5cd1d175152453675`; source correction `3aed2b5af29c33accb0e3df637e2f22e28c4e731` is in ancestry.
+- Local .NET SDK `10.0.302`; Core Release build PASS with `0 warnings / 0 errors`.
+- Complete Core smoke: `ALL PASS`. An earlier exact `f11488e81f73ac4454b637e2fa4bd5660e90d85e` run advanced past the corrected Room Finish case and exposed the separate stale Curtain schedule fixture; it was handed off as issue `#1105`, fixed independently by `8637605f4`, and the final rerun passed without weakening either report contract.
+- `preflight-family-relation-assignment-integrity.py` and `preflight-family-category-integrity.py`: PASS.
+- Aggregate preflight discovered 781 gates and reported four unrelated failures on final exact SHA `e98c30fb...`: product-boundary, research-implementation-status, V25 NETLOAD/update UX and wall-junctions. None is part of issue `#1101`.
+- Issue `#1101` was closed as completed with the exact evidence above. No GitHub Actions or BricsCAD runtime was used.
 
 ## Coordination
 
