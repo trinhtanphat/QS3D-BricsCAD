@@ -22,7 +22,7 @@ The important qualification boundary is:
 
 Static preflights and deterministic Core smoke tests can prove repository contracts and many regressions without proprietary SDK files. They cannot replace an exact-SHA build and runtime pass on the licensed BricsCAD major being released.
 
-The repository is also under active concurrent development. `main` can move frequently, so contributors and release operators must follow the claim/synchronization rules in [`AGENTS.md`](AGENTS.md) and [`docs/AGENT-WORK-REGISTRATION.md`](docs/AGENT-WORK-REGISTRATION.md).
+The repository is also under active concurrent development. `main` can move frequently. Normal AI agents/chat sessions must treat `main` as read-only unless the repository owner explicitly authorizes that session to merge/integrate a named PR or batch. Follow [`docs/MAIN-WRITE-AUTHORIZATION.md`](docs/MAIN-WRITE-AUTHORIZATION.md), [`AGENTS.md`](AGENTS.md) and [`docs/AGENT-WORK-REGISTRATION.md`](docs/AGENT-WORK-REGISTRATION.md).
 
 ## Product capabilities represented in the codebase
 
@@ -128,9 +128,25 @@ cd QS3D-BricsCAD
 
 Before substantive edits, read:
 
-- [`AGENTS.md`](AGENTS.md) — concurrent-editing rules;
-- [`CI_POLICY.md`](CI_POLICY.md) — manual-only GitHub Actions policy;
-- [`docs/AGENT-WORK-REGISTRATION.md`](docs/AGENT-WORK-REGISTRATION.md) — ACTIVE/BLOCKED claim protocol.
+- [`docs/MAIN-WRITE-AUTHORIZATION.md`](docs/MAIN-WRITE-AUTHORIZATION.md) — canonical `main` write/merge authorization rule;
+- [`AGENTS.md`](AGENTS.md) — concurrent-editing and execution-scope rules;
+- [`CI_POLICY.md`](CI_POLICY.md) — manual-by-default Actions policy plus the single approved automatic post-integration V25 dispatcher;
+- [`docs/AGENT-WORK-REGISTRATION.md`](docs/AGENT-WORK-REGISTRATION.md) — Issue/branch/PR reservation and integration protocol.
+
+For a normal AI agent/chat session, the default workflow is:
+
+```text
+read latest main
+  -> check/create Issue
+  -> create agent/<agent-id>/<scope>
+  -> edit source/tests/scripts/workflows/docs/Markdown/chore on that branch
+  -> validate
+  -> commit + push branch
+  -> open/update PR
+  -> STOP BEFORE MERGE
+```
+
+Requests such as `fix bug`, `update code`, `implement all`, `continue all`, `commit push git`, `update docs`, `chore`, `run CI` or `fix CI` do **not** grant permission to push or merge `main`. Only an explicit owner instruction authorizing the named merge/integration does so.
 
 ### 2. Run repository preflights
 
@@ -204,9 +220,11 @@ Use [`docs/LOCAL-V25-QUALIFICATION.md`](docs/LOCAL-V25-QUALIFICATION.md) and [`d
 
 ## CI and release policy
 
-GitHub Actions are **manual-only** unless the repository owner explicitly changes [`CI_POLICY.md`](CI_POLICY.md).
+GitHub Actions are **manual-only by default**. The sole owner-approved automatic exception is `.github/workflows/dispatch-v25-cloud-after-main-integration.yml`, which may react only to an integration-relevant authorized `main` landing and dispatch only `release-v25-cloud.yml`.
 
-Normal commits, reviews, documentation updates, fixes and `continue all` requests do not authorize an Actions dispatch. The Core, V25, V26, focused-gate and release workflows remain owner-controlled `workflow_dispatch` lanes.
+Normal commits, reviews, documentation updates, fixes and `continue all` requests do not authorize a manual Actions dispatch. Manual CI permission does not imply `main` merge permission, and `main` merge permission does not imply unrelated manual CI/release permission.
+
+Ordinary docs/Markdown-only landings outside the dispatcher's watched paths do not trigger V25 cloud release CI. Changed paths are authoritative: a `chore:` commit that changes `src/**`, `tests/**`, `scripts/**`, build/solution files or watched workflows is still integration-relevant.
 
 Release workflows require explicit release intent and their configured `RELEASE` confirmation. A production release should be tied to one exact candidate SHA and the matching host-major qualification evidence.
 
@@ -215,9 +233,12 @@ Representative workflows:
 - `.github/workflows/ci.yml` — Core/static validation;
 - `.github/workflows/bricscad-v25.yml` — licensed V25 integration/runtime lane;
 - `.github/workflows/bricscad-v26.yml` — licensed V26 integration/runtime lane;
-- `.github/workflows/release-v25.yml` — V25 package/release lane;
-- `.github/workflows/release-v25-cloud.yml` — V25 cloud release helper;
+- `.github/workflows/release-v25.yml` — manual V25 package/release lane;
+- `.github/workflows/release-v25-cloud.yml` — V25 cloud release workflow, manual directly or via the single approved dispatcher;
+- `.github/workflows/dispatch-v25-cloud-after-main-integration.yml` — sole automatic post-integration dispatcher;
 - `.github/workflows/release-v26.yml` — V26 package/signed-manifest/release lane.
+
+The automatic cloud run is not licensed local BricsCAD runtime proof. NETLOAD/native UI/private-DWG/signing/performance gates remain separate evidence.
 
 ## Engineering constraints worth knowing
 
@@ -227,7 +248,7 @@ A repository-wide source review shows several deliberate trade-offs that future 
 - **Large host lifecycle surface:** drawing ownership, modeless windows, project save/recovery and generated CAD ownership interact heavily; regression tests should accompany lifecycle changes.
 - **Persistence is correctness-critical:** canonical IDs, dirty/freshness state, atomic publication and stale-session detection are part of the product contract, not implementation details.
 - **Many focused preflights:** they provide strong regression fences, but source-shape gates should stay aligned with intended behavior so they do not become accidental architecture locks.
-- **Manual CI by policy:** no automatic workflow run will save a release operator from forgetting host qualification; release discipline is therefore an explicit part of product safety.
+- **Manual-by-default CI:** most workflows require deliberate owner dispatch; the single automatic V25 cloud dispatcher is deliberately narrow and still does not replace host qualification discipline.
 - **Static review has a ceiling:** absence of obvious placeholders or a passing Core/preflight suite does not prove native CAD geometry, WPF lifecycle or updater behavior in a licensed host.
 
 These are not blockers; they are the areas where changes have the highest cross-cutting risk.
@@ -236,6 +257,7 @@ These are not blockers; they are the areas where changes have the highest cross-
 
 Start with [`docs/README.md`](docs/README.md). Durable references include:
 
+- [`docs/MAIN-WRITE-AUTHORIZATION.md`](docs/MAIN-WRITE-AUTHORIZATION.md) — canonical `main` write/merge authorization;
 - [`docs/PRODUCT-BOUNDARY.md`](docs/PRODUCT-BOUNDARY.md) — product/hosting boundary;
 - [`docs/QS3D-PLATFORM-MIGRATION.md`](docs/QS3D-PLATFORM-MIGRATION.md) — sibling Platform/CAD ownership and incremental Core migration plan;
 - [`docs/SOURCE-OF-TRUTH.md`](docs/SOURCE-OF-TRUTH.md) — canonical project/source rules;
