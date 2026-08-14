@@ -77,18 +77,27 @@ namespace QS3D.Core.SmokeTests
             var familyProject = BaseScheduleProject("schedule-reference-family", ElementCategory.Slab, out var family);
             var familyElement = new ProjectElement("REF-FAMILY", ElementCategory.Slab, family.Id, "floor", "zone");
             familyElement.FamilyId = " FAMILY ";
+            if (familyElement.FamilyId != "FAMILY")
+                throw new Exception("ProjectElement.FamilyId setter must canonicalize surrounding whitespace.");
+            SetRawRelationId(familyElement, "_familyId", " FAMILY ");
             familyProject.Elements.Add(familyElement);
             AssertAllProjectReportBuildersReject(familyProject, "noncanonical family reference id");
 
             var floorProject = BaseScheduleProject("schedule-reference-floor", ElementCategory.Slab, out family);
             var floorElement = new ProjectElement("REF-FLOOR", ElementCategory.Slab, family.Id, "floor", "zone");
             floorElement.FloorId = " floor ";
+            if (floorElement.FloorId != "floor")
+                throw new Exception("ProjectElement.FloorId setter must canonicalize surrounding whitespace.");
+            SetRawRelationId(floorElement, "_floorId", " floor ");
             floorProject.Elements.Add(floorElement);
             AssertAllProjectReportBuildersReject(floorProject, "noncanonical floor reference id");
 
             var zoneProject = BaseScheduleProject("schedule-reference-zone", ElementCategory.Slab, out family);
             var zoneElement = new ProjectElement("REF-ZONE", ElementCategory.Slab, family.Id, "floor", "zone");
             zoneElement.ZoneId = " ZONE ";
+            if (zoneElement.ZoneId != "ZONE")
+                throw new Exception("ProjectElement.ZoneId setter must canonicalize surrounding whitespace.");
+            SetRawRelationId(zoneElement, "_zoneId", " ZONE ");
             zoneProject.Elements.Add(zoneElement);
             AssertAllProjectReportBuildersReject(zoneProject, "noncanonical zone reference id");
         }
@@ -235,6 +244,15 @@ namespace QS3D.Core.SmokeTests
         {
             element.SourceHandles.Add("AA");
             element.SourceHandles.Add("Bb");
+        }
+
+        private static void SetRawRelationId(ProjectElement element, string fieldName, string value)
+        {
+            var field = typeof(ProjectElement).GetField(
+                fieldName,
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new Exception("Missing ProjectElement backing field '" + fieldName + "'.");
+            field.SetValue(element, value);
         }
 
         private static void AssertProvenance(ProjectState project, string projectId, string drawingFingerprint, IList<string> handles)
