@@ -18,11 +18,50 @@ if ($dispatch -notmatch '^[0-9a-f]{40}$') {
     throw "DispatchSha must be one exact 40-hex commit. Got: $DispatchSha"
 }
 
+function Get-ReleaseStatusEntries {
+    $lines = @(& git status --porcelain=v1 --untracked-files=all)
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Could not inspect release-preparation Git status.'
+    }
+
+    $entries = @()
+    foreach ($rawLine in $lines) {
+        $line = [string]$rawLine
+        if ($line.Length -lt 4) {
+            throw "Could not parse release-preparation Git status: $line"
+        }
+        $state = $line.Substring(0, 2)
+        $path = $line.Substring(3).Trim().Replace('\', '/')
+        if ([string]::IsNullOrWhiteSpace($path) -or $path.StartsWith('"')) {
+            throw "Release-preparation Git status contains an unsupported path representation: $line"
+        }
+        $entries += [pscustomobject]@{
+            State = $state
+            Path = $path
+        }
+    }
+    return @($entries)
+}
+
+function Test-IsExpectedNuGetCachePath {
+    param([string]$Path)
+    return [string]::Equals($Path, '.nuget/packages', [StringComparison]::OrdinalIgnoreCase) -or
+        $Path.StartsWith('.nuget/packages/', [StringComparison]::OrdinalIgnoreCase)
+}
+
 Push-Location $root
 try {
     $head = ([string](& git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
     if ($LASTEXITCODE -ne 0 -or $head -ne $dispatch) {
         throw "Release preparation must start from the dispatched commit. Expected $dispatch, got $head."
+    }
+
+    $initialStatus = @(Get-ReleaseStatusEntries)
+    foreach ($entry in $initialStatus) {
+        if ($entry.State -eq '??' -and (Test-IsExpectedNuGetCachePath -Path $entry.Path)) {
+            continue
+        }
+        throw "Release preparation must start from a clean checkout/index. Unexpected status '$($entry.State)' at $($entry.Path)."
     }
 
     & (Join-Path $PSScriptRoot 'sync-preview-release-version.ps1') -ReleaseTag $tag
@@ -40,16 +79,21 @@ try {
         'src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj',
         'src/QS3D.Core/QS3D.Core.csproj'
     )
-    $changed = @(& git diff --name-only --)
-    if ($LASTEXITCODE -ne 0) {
-        throw 'Could not inspect release-preparation source changes.'
-    }
-    $changed = @($changed | ForEach-Object { ([string]$_).Trim().Replace('\', '/') } | Where-Object { $_ })
-    foreach ($path in $changed) {
-        if ($path -notin $allowed) {
-            throw "Release preparation touched an unexpected path: $path"
+    $status = @(Get-ReleaseStatusEntries)
+    $changed = @()
+    foreach ($entry in $status) {
+        if ($entry.State -eq '??' -and (Test-IsExpectedNuGetCachePath -Path $entry.Path)) {
+            continue
         }
+        if ($entry.State -ne ' M') {
+            throw "Preview synchronization produced an unexpected Git status '$($entry.State)' at $($entry.Path)."
+        }
+        if ($entry.Path -notin $allowed) {
+            throw "Release preparation touched an unexpected path: $($entry.Path)"
+        }
+        $changed += $entry.Path
     }
+    $changed = @($changed | Sort-Object -Unique)
 
     & git diff --check
     if ($LASTEXITCODE -ne 0) {
@@ -87,14 +131,30 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw 'Could not inspect staged release-preparation files.'
     }
-    $staged = @($staged | ForEach-Object { ([string]$_).Trim().Replace('\', '/') } | Where-Object { $_ })
-    if ($staged.Count -ne $changed.Count) {
-        throw 'Staged release-preparation file set does not match the validated source changes.'
+    $staged = @($staged | ForEach-Object { ([string]$_).Trim().Replace('\', '/') } | Where-Object { $_ } | Sort-Object -Unique)
+    $missingStaged = @($changed | Where-Object { $_ -notin $staged })
+    $unexpectedStaged = @($staged | Where-Object { $_ -notin $changed })
+    if ($missingStaged.Count -ne 0 -or $unexpectedStaged.Count -ne 0) {
+        throw 'Staged release-preparation file set does not exactly match the validated source changes.'
     }
     foreach ($path in $staged) {
         if ($path -notin $allowed) {
             throw "Unexpected staged release-preparation path: $path"
         }
+    }
+
+    $postStageStatus = @(Get-ReleaseStatusEntries)
+    foreach ($entry in $postStageStatus) {
+        if ($entry.State -eq '??' -and (Test-IsExpectedNuGetCachePath -Path $entry.Path)) {
+            continue
+        }
+        if ($entry.State -ne 'M ' -or $entry.Path -notin $staged) {
+            throw "Release-preparation working tree changed after staging: '$($entry.State)' at $($entry.Path)."
+        }
+    }
+    & git diff --cached --check
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Staged release-preparation diff failed git diff --cached --check.'
     }
 
     & git commit -m "chore(release): prepare $tag"
@@ -104,6 +164,14 @@ try {
     $releaseCommit = ([string](& git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
     if ($LASTEXITCODE -ne 0 -or $releaseCommit -notmatch '^[0-9a-f]{40}$' -or $releaseCommit -eq $dispatch) {
         throw 'Could not resolve the newly created release-preparation commit.'
+    }
+
+    $postCommitStatus = @(Get-ReleaseStatusEntries)
+    foreach ($entry in $postCommitStatus) {
+        if ($entry.State -eq '??' -and (Test-IsExpectedNuGetCachePath -Path $entry.Path)) {
+            continue
+        }
+        throw "Release-preparation working tree is not clean after commit: '$($entry.State)' at $($entry.Path)."
     }
 
     & git push origin 'HEAD:refs/heads/main'
