@@ -116,8 +116,9 @@ namespace QS3D.Core.SmokeTests
             Require(result.HasAmbiguousQuantityEvidence, "IFC exchange result hid ambiguous quantity evidence.");
             Require(!result.IsLosslessSupported, "Ambiguous IFC quantity evidence masqueraded as lossless supported.");
             Require(ReferenceEquals(result.Projection, projection), "IFC exchange result replaced the ambiguous canonical projection.");
-            Require(result.Projection!.QuantityEvidence.Groups.Count == 1, "Ambiguous IFC quantity evidence lost its canonical group.");
-            Require(result.Projection.QuantityEvidence.Groups[0].Candidates.Count == 2, "Ambiguous IFC quantity evidence silently discarded a conflicting candidate.");
+            var retainedProjection = result.Projection ?? throw new InvalidOperationException("Supported IFC result lost its canonical projection.");
+            Require(retainedProjection.QuantityEvidence.Groups.Count == 1, "Ambiguous IFC quantity evidence lost its canonical group.");
+            Require(retainedProjection.QuantityEvidence.Groups[0].Candidates.Count == 2, "Ambiguous IFC quantity evidence silently discarded a conflicting candidate.");
         }
 
         private static void RejectsInvalidStateAndIdentityContracts()
