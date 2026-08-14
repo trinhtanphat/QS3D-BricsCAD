@@ -47,7 +47,7 @@ for token in (
     'CommandMethod("QS3DCURTAINP10SELECT", CommandFlags.Modal)',
     'CommandMethod("QS3DCURTAINP10CHECKWORKSPACE", CommandFlags.Modal)',
     'CommandMethod("QS3DCURTAINP10CHECKHEALTH", CommandFlags.Modal)',
-    'CommandMethod("QS3DCURTAINP10COMPLETE", CommandFlags.Modal)',
+    'CommandMethod("QS3DCURTAINP10COMPLETE", CommandFlags.Modal | CommandFlags.UsePickSet)',
     'ProjectContextCoordinator.TryGetReadOnly(document, out var project)',
     'GeneratedCurtainPanelHealthService.BuildCompleteValue',
     'CadHandleService.GetLiveSolidHandles(document, panelHandles)',
@@ -122,6 +122,26 @@ if min(
     < reselection_end
 ):
     errors.append("Curtain P10 inspect reseed must validate the existing state, resolve exactly its stored panel Handle, and apply only that ObjectId immediately before inspection")
+
+completion_start = probe.find('public void Complete()')
+completion_end = probe.find('private static void RunPhase(', completion_start)
+completion = probe[completion_start:completion_end] if min(completion_start, completion_end) >= 0 else ""
+completion_codes = (
+    ('PROJECT_STATE_REJECTED', 'ProjectStateRejectedCode'),
+    ('PREREQUISITES_REJECTED', 'PrerequisitesRejectedCode'),
+    ('RELEASE_STATUS_NOT_READY', 'ReleaseStatusNotReadyCode'),
+    ('SOURCE_PANEL_LIVE_REJECTED', 'SourcePanelLiveRejectedCode'),
+    ('PANEL_SELECTION_NOT_CURRENT', 'PanelSelectionNotCurrentCode'),
+    ('CURTAIN_PANEL_HEALTH_REJECTED', 'CurtainPanelHealthRejectedCode'),
+)
+for code, identifier in completion_codes:
+    if probe.count('"' + code + '"') != 1 or identifier not in completion:
+        errors.append("Curtain P10 completion must expose exactly one allowlisted sanitized failure code: " + code)
+if 'RELEASE_CHECK_REVIEW_REJECTED' in probe:
+    errors.append("Curtain P10 completion must not collapse classified failures into RELEASE_CHECK_REVIEW_REJECTED")
+for forbidden in ('status_detail=', 'failure_message=', 'failure_count=', 'failure_id=', 'failure_path=', 'exception='):
+    if forbidden in probe:
+        errors.append("Curtain P10 classified failure marker must not expose raw status/text/count/ID/path/exception payload: " + forbidden)
 
 if 'SemanticHandleOwnershipResolver.Resolve(project, rawHandles)' not in workspace:
     errors.append("production Workspace must retain canonical generated-owner resolution")
@@ -222,6 +242,16 @@ if min(workspace_progress, inspect_reseed, inspect_command) < 0 or not (
     workspace_progress < inspect_reseed < inspect_command
 ):
     errors.append("Curtain P10 runner must reseed the exact stored panel immediately after Workspace progress and before production QS3DINSPECT")
+release_progress = runner.find('"QS3DCURTAINP10PROGRESSRELEASE"', runner.find("$script = @("))
+final_reseed = runner.find('"QS3DCURTAINP10RESELECT"', release_progress)
+complete_command = runner.find('"QS3DCURTAINP10COMPLETE"', final_reseed)
+if (
+    min(release_progress, final_reseed, complete_command) < 0
+    or not (release_progress < final_reseed < complete_command)
+    or runner.count('"QS3DCURTAINP10RESELECT"') != 2
+    or '"QS3DCURTAINP10PROGRESSRELEASE","QS3DCURTAINP10RESELECT","QS3DCURTAINP10COMPLETE"' not in ''.join(runner.split())
+):
+    errors.append("Curtain P10 runner must reuse the exact stored-panel reseed once before inspection and once immediately after Release progress before completion")
 if '"QS3DCURTAIN3D", "P", ""' in runner:
     errors.append("Curtain P10 runner must not depend on an interactive Previous-selection response after its selection-transparent progress checkpoint")
 
