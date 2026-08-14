@@ -30,6 +30,7 @@ namespace QS3D.Core.SmokeTests
             FabricationProvenanceFlowsToExports();
             CsvPreservesNonzeroSubSixDecimalValues();
             CsvRejectsInvalidRowsBeforeReplace();
+            CsvAndXlsxRejectZeroPositivePhysicalFields();
             XlsxPreservesNonzeroSubEightDecimalValues();
             XlsxRejectsWorksheetOverflowBeforeMutation();
         }
@@ -271,6 +272,66 @@ namespace QS3D.Core.SmokeTests
             {
                 try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
             }
+        }
+
+        private static void CsvAndXlsxRejectZeroPositivePhysicalFields()
+        {
+            AssertZeroPositiveFieldRejected("CuttingLengthM", row => row.CuttingLengthM = 0d);
+            AssertZeroPositiveFieldRejected("TotalLengthM", row => row.TotalLengthM = 0d);
+            AssertZeroPositiveFieldRejected("UnitWeightKgM", row => row.UnitWeightKgM = 0d);
+        }
+
+        private static void AssertZeroPositiveFieldRejected(string fieldName, Action<RebarScheduleRow> applyZero)
+        {
+            var row = ValidExportRow();
+            applyZero(row);
+            Throws<ArgumentOutOfRangeException>(() => RebarCsvExporter.ToCsv(new[] { row }));
+
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-bbs-parity-" + fieldName + "-" + Guid.NewGuid().ToString("N"));
+            var path = Path.Combine(directory, "bbs.xlsx");
+            try
+            {
+                try
+                {
+                    XlsxRebarScheduleExporter.Export(path, new[] { row });
+                }
+                catch (ArgumentOutOfRangeException ex)
+                {
+                    if (!string.Equals(ex.ParamName, "rows", StringComparison.Ordinal))
+                        throw new InvalidOperationException("BBS XLSX zero-boundary validation must identify the rows argument for " + fieldName + ".", ex);
+                    if (ex.Message.IndexOf(fieldName, StringComparison.Ordinal) < 0 ||
+                        ex.Message.IndexOf("greater than zero", StringComparison.OrdinalIgnoreCase) < 0)
+                        throw new InvalidOperationException("BBS XLSX zero-boundary validation lost strict-positive diagnostics for " + fieldName + ".", ex);
+                    if (Directory.Exists(directory))
+                        throw new InvalidOperationException("BBS XLSX zero-boundary validation touched the filesystem before rejecting " + fieldName + ".");
+                    return;
+                }
+
+                throw new InvalidOperationException("BBS XLSX accepted zero " + fieldName + " while CSV rejected it.");
+            }
+            finally
+            {
+                try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
+            }
+        }
+
+        private static RebarScheduleRow ValidExportRow()
+        {
+            return new RebarScheduleRow
+            {
+                ElementId = "E-PARITY",
+                BarMark = "B-PARITY",
+                ShapeCode = "00",
+                Notation = "1D16",
+                DiameterMm = 16d,
+                Quantity = 1,
+                CuttingLengthM = 2d,
+                TotalLengthM = 2d,
+                UnitWeightKgM = RebarWeight.KilogramsPerMeter(16d),
+                NetWeightKg = 3.16d,
+                WastePercent = 0d,
+                TotalWeightKg = 3.16d
+            };
         }
 
         private static void XlsxPreservesNonzeroSubEightDecimalValues()
