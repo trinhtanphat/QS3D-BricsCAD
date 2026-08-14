@@ -66,6 +66,7 @@ namespace QS3D.BricsCAD.V25.Services
             var annotatedGridTargets = invalidationTargets.Where(HasGridAnnotationIntent).ToList();
             var sourceTargetIds = new HashSet<string>(targets.Select(x => x.Element.Id), StringComparer.OrdinalIgnoreCase);
             var rollback = ProjectStateSnapshot.Capture(project);
+            var rollbackStamp = SourceReconcileUndoCoordinator.ProjectRevisionStamp.Capture(project);
             var cadCommitted = false;
             var regenerated = 0;
 
@@ -106,7 +107,8 @@ namespace QS3D.BricsCAD.V25.Services
                         document,
                         transaction,
                         project,
-                        rollback))
+                        rollback,
+                        rollbackStamp))
                     {
                         undoTransition.StageAfter(project, afterSnapshot);
                         transaction.Commit();
