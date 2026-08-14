@@ -17,7 +17,7 @@ required = {
     "data": ["ProjectQuantityReportBuilder.Detail", "ProjectStateSnapshot.CreateDetachedCopy", "RegenerateDirty"],
     "render": ["GrossConcreteM3", "DeductionM3", "NetConcreteM3", "FormworkM2", "OuterPerimeterM", "DoorAreaM2", "DensityKgM3", "MassKg"],
     "metrics": ["Bê tông gộp", "Trừ giao cắt", "Chu vi ngoài", "Diện tích cửa", "Khối lượng riêng"],
-    "locate": ["SameRow", "SameElementIdentity", "SourceHandleResolver.Resolve", "CadHandleService.Select", "QS3DZOOMSELECTED"],
+    "locate": ["SameRow", "SameElementIdentity", "SourceHandleResolver.Resolve", "CadHandleService.Select", "ViewportCommands.TryZoomSelection(document)"],
 }
 
 failures = []
@@ -30,6 +30,8 @@ joined = "\n".join(text.values())
 for forbidden in ["ProjectContextCoordinator.Edit", "SaveProject(", "ProjectStateStore.Save"]:
     if forbidden in joined:
         failures.append(f"detail explainer must remain read-only: found {forbidden!r}")
+if 'SendStringToExecute("QS3DZOOMSELECTED ' in text["locate"]:
+    failures.append("detail locate must use direct in-process zoom instead of queued command re-entry")
 
 if failures:
     print("Quantity Insight detail preflight FAILED:")
