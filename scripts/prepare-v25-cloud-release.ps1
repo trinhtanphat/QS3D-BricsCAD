@@ -11,7 +11,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $tag = $ReleaseTag.Trim()
 $dispatch = $DispatchSha.Trim().ToLowerInvariant()
 
-if ($tag -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)-preview\.(?:0|[1-9][0-9]*)$') {
+if ($tag -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)-preview\.[1-9][0-9]*$') {
     throw "ReleaseTag must use the exact preview shape v<major>.<minor>.<patch>-preview.<n>. Got: $ReleaseTag"
 }
 if ($dispatch -notmatch '^[0-9a-f]{40}$') {

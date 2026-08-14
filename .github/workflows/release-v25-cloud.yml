@@ -47,7 +47,7 @@ jobs:
           if ($env:GITHUB_REF -ne 'refs/heads/main') {
             throw "Cloud V25 preview releases must be dispatched from refs/heads/main. Current ref: $env:GITHUB_REF"
           }
-          if ($env:RELEASE_TAG -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)-preview\.(?:0|[1-9][0-9]*)$') {
+          if ($env:RELEASE_TAG -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)-preview\.[1-9][0-9]*$') {
             throw "Cloud release accepts exact preview tags only, such as v0.1.0-preview.7."
           }
           git rev-parse --verify HEAD | Out-Null
