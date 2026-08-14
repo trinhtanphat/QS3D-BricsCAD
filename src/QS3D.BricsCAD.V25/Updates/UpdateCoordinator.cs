@@ -184,8 +184,8 @@ namespace QS3D.BricsCAD.V25.Updates
                         UpdateState.ManualInstallRequired,
                         current,
                         latest,
-                        "Có bản QS3D mới " + latest.Tag + ", nhưng release này không có signed update manifest.",
-                        "Bạn có thể mở trang release để cài thủ công. One-click update bị khóa để không hạ chuẩn bảo mật.");
+                        "Có bản QS3D mới " + latest.Tag + ", nhưng đây là bản preview chưa có gói cập nhật ký số.",
+                        "QS3D không hạ kiểm tra bảo mật để tự động thay DLL chưa ký. Chọn “Cài thủ công” hoặc “Mở trang release” để tải bản preview mới từ GitHub.");
                 }
                 else if (!SecureUpdateLauncher.TryGetCurrentSignerThumbprint(out var signerThumbprint, out var signerReason))
                 {
@@ -193,8 +193,8 @@ namespace QS3D.BricsCAD.V25.Updates
                         UpdateState.ManualInstallRequired,
                         current,
                         latest,
-                        "Có bản QS3D mới " + latest.Tag + ", nhưng bản đang chạy chưa có trust anchor cho one-click update.",
-                        signerReason);
+                        "Có bản QS3D mới " + latest.Tag + ", nhưng bản đang chạy chưa có chữ ký tin cậy cho cập nhật tự động.",
+                        signerReason + " Bạn vẫn có thể chọn “Cài thủ công” để mở GitHub Release.");
                 }
                 else
                 {
@@ -205,8 +205,8 @@ namespace QS3D.BricsCAD.V25.Updates
                             UpdateState.ManualInstallRequired,
                             current,
                             latest,
-                            "Có bản QS3D mới " + latest.Tag + ", nhưng update manifest chưa vượt qua kiểm tra trước khi đóng BricsCAD.",
-                            manifestProbe.Detail + " Bạn vẫn có thể mở trang release để kiểm tra/cài thủ công.");
+                            "Có bản QS3D mới " + latest.Tag + ", nhưng gói cập nhật chưa vượt qua kiểm tra an toàn.",
+                            manifestProbe.Detail + " Bạn vẫn có thể chọn “Cài thủ công” để mở GitHub Release.");
                     }
                     else
                     {
@@ -215,7 +215,7 @@ namespace QS3D.BricsCAD.V25.Updates
                             current,
                             latest,
                             "Có bản QS3D mới " + latest.Tag + ".",
-                            "Signed update manifest đã được xác minh trước khi đóng BricsCAD; package/chữ ký/hashes sẽ được xác minh lại bởi updater sau khi host thoát.");
+                            "Gói cập nhật ký số đã được xác minh trước khi đóng BricsCAD; package, chữ ký và hash sẽ được xác minh lại sau khi BricsCAD thoát.");
                     }
                 }
 
