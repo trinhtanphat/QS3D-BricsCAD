@@ -149,7 +149,7 @@ namespace QS3D.Core.Domain
         public void SetQuantity(string name, double value)
         {
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Quantity name is required.", nameof(name));
-            if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value));
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d) throw new ArgumentOutOfRangeException(nameof(value));
             value = value == 0d ? 0d : value;
             var key = name.Trim();
             if (key.Any(char.IsControl)) throw new ArgumentException("Quantity name cannot contain control characters.", nameof(name));
