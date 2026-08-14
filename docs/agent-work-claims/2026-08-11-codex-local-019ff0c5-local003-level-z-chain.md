@@ -1,6 +1,6 @@
 # Work claim — LOCAL-003 shared native Level Z-chain
 
-- Status: `BLOCKED`
+- Status: `ACTIVE`
 - Agent: `codex-local-019ff0c5` (`/root`, local Windows + licensed BricsCAD V25 agent)
 - Registered: `2026-08-11T19:43:12+07:00`
 - Baseline main SHA: `c7dd212d36677a1d2e005becf8709768fe98d6a1`
@@ -704,6 +704,12 @@ This is `BLOCKED_LOCAL_ENVIRONMENT / NO_RESULT`, not a Level product PASS or FAI
 A newly user-started, no-argument BricsCAD V25 process created a visible responsive `BricsCAD Ultimate` main window and opened an operator-owned drawing. This proves the earlier native startup-without-window blocker has cleared without a repository or runner change. The process and drawing are strictly out of scope and this worker did not close, modify or interact with either.
 
 Keep this claim `BLOCKED` only while the operator-owned session remains active, because the isolated Level runner requires zero pre-existing BricsCAD processes. After the operator saves and closes every BricsCAD session, re-fetch current `main`, reactivate and push this claim before any renewed qualification, rebuild the newest exact SHA and rerun the fresh disposable Level probe. Do not run the probe concurrently with the operator session.
+
+## 2026-08-14 operator session closed; qualification resumes
+
+The operator-owned BricsCAD session closed normally and a fresh process audit found zero BricsCAD processes. The checkout is clean and synchronized with `origin/main@b0c4122575b2c29a49a381591252c9c669734fbf`; current ACTIVE/BLOCKED claims do not reserve Level placement, the Level runner or LOCAL-003 evidence.
+
+This reactivation-only status must be visible on `origin/main` before qualification restarts. After publication, fetch and audit again, require a newest clean exact SHA, run full Core Release/smoke, all nine focused Level/static gates and the installed-reference V25 `Release|x64` build, verify matching plugin/Core `ProductVersion`, then run a fresh disposable Level probe. Do not run concurrently with any newly opened operator BricsCAD session, absorb unrelated source defects or dispatch GitHub Actions.
 
 ## 2026-08-14 resumed after operator session closed
 
