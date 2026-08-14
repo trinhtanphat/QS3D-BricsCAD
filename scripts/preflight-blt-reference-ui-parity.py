@@ -3,10 +3,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ribbon = (ROOT / "src/QS3D.BricsCAD.V25/Ribbon/QuickWorkflowRibbonAugmenter.cs").read_text(encoding="utf-8")
+bootstrap = (ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs").read_text(encoding="utf-8")
 commands = (ROOT / "src/QS3D.BricsCAD.V25/ReferenceUiCommands.cs").read_text(encoding="utf-8")
+project_tools = (ROOT / "src/QS3D.BricsCAD.V25/ProjectToolsCommands.cs").read_text(encoding="utf-8")
 tree = (ROOT / "src/QS3D.BricsCAD.V25/UI/ReferenceWorkspaceTreeAugmenter.cs").read_text(encoding="utf-8")
 registration = (ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.ReferenceTreeRegistration.cs").read_text(encoding="utf-8")
 command_doc = (ROOT / "docs/COMMANDS.md").read_text(encoding="utf-8")
+
+required_home = {
+    "Mở…": "_.OPEN",
+    "Lưu bản vẽ": "_.QSAVE",
+    "Lưu thành…": "_.SAVEAS",
+    "Cài đặt": "QS3DPROJECTTOOLS",
+}
 
 required_ribbon = {
     "Theo nét CAD": "QS3DDRAWBYCAD",
@@ -23,6 +32,24 @@ required_ribbon = {
 }
 
 errors = []
+for label, command in required_home.items():
+    if label not in ribbon or command not in ribbon:
+        errors.append(f"missing Home Ribbon mapping: {label} -> {command}")
+
+for token in [
+    'private const string HomeTabId = "QS3D_HOME";',
+    'private const string HomeFilePanelSourceId = "QS3D_HOME_FILE_PANEL_SOURCE";',
+    'var homeTab = FindById(tabItems, HomeTabId);',
+    'CreatePanel(homePanels, HomeFilePanelSourceId, "Tệp")',
+]:
+    if token not in ribbon:
+        errors.append("Home file/settings parity must augment the existing QS3D Home tab idempotently: " + token)
+
+if "QS3DSAVE" not in bootstrap:
+    errors.append("native drawing Save parity must not replace existing QS3DSAVE semantic-project persistence")
+if '[CommandMethod("QS3DPROJECTTOOLS", CommandFlags.Modal)]' not in project_tools:
+    errors.append("Home Cài đặt must remain backed by the existing QS3DPROJECTTOOLS configuration surface")
+
 for label, command in required_ribbon.items():
     if label not in ribbon or command not in ribbon:
         errors.append(f"missing Ribbon mapping: {label} -> {command}")
