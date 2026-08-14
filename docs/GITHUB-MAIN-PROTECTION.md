@@ -1,20 +1,34 @@
 # GitHub main protection and CI-recovery addendum
 
-This addendum records the GitHub-settings side of the canonical multi-agent protocol in `AGENTS.md`, `docs/AGENT-WORK-REGISTRATION.md` and `CI_POLICY.md`.
+This addendum records the GitHub-settings side of the canonical multi-agent protocol in `AGENTS.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, `docs/AGENT-WORK-REGISTRATION.md` and `CI_POLICY.md`.
 
-## No CI direct-main exception
+## Zero direct-main exception for normal agents
 
-Being the agent/chat session assigned to dispatch, monitor, diagnose, or repair `release-v25-cloud.yml` does **not** authorize implementation directly on `main`.
+Being the agent/chat session assigned to implement, document, claim, hand off, dispatch, monitor, diagnose, or repair work does **not** authorize any direct write or merge to `main`.
+
+This applies equally to:
+
+- source/tests/scripts/workflows;
+- docs and Markdown;
+- claim/handoff/status files;
+- README/policy changes;
+- chores;
+- CI-recovery patches.
+
+Normal agents must use an Issue plus a dedicated branch/PR and stop before merge. Only an explicitly owner-authorized integration/merge coordinator may change `main`, and only for the named PR/batch/task.
+
+## CI recovery remains branch-first
 
 When V25 cloud CI is red, use this path:
 
 ```text
 exact failing run/SHA
-  -> reserve non-overlapping repair lane
+  -> verify failure against newest relevant main
+  -> register non-overlapping repair lane
   -> recovery/<agent>/<scope> or agent/<agent>/<scope>
   -> deterministic regression/guard
-  -> integration/<batch-id> or dedicated recovery integration
-  -> reviewed final landing to main
+  -> PR / integration/<batch-id>
+  -> owner-authorized final landing to main
   -> fresh current-main V25 cloud CI
   -> repeat from newest relevant failure until green
 ```
@@ -23,50 +37,71 @@ Do not change a fixture/expectation merely to match an unexpected production res
 
 ## Latest-main / latest-CI recovery loop
 
-Treat V25 recovery as a monotonic loop that always converges on the newest `main`, not on a historical failed SHA.
+Treat V25 recovery as a monotonic loop that converges on the newest authorized `main`, not on a historical failed SHA.
 
-1. After any human/agent merge, integration landing, source update, test update, script update, workflow update, packaging update or other repository update reaches `main`, refresh the current `main` HEAD and require a fresh `release-v25-cloud.yml` qualification for that newest state.
-2. Read the newest V25 cloud run together with the newest `main` commit. The newest run is diagnostic evidence; it is final release evidence only when it qualifies the newest relevant `main` state/release tree.
-3. If the newest run failed on an older dispatch SHA because `main` moved, keep the stale-dispatch/concurrency guard intact. Do not weaken or bypass the guard. Start a fresh run from the newest `main` instead.
-4. If the newest run exposes a real source/test/preflight/build/package failure, reproduce or verify that failure against the newest `main` before patching. If it is still present, reserve the repair lane, fix it branch-first, verify it, integrate it, land it to `main`, then start the next fresh V25 run.
-5. Repeat `latest main -> latest V25 run -> diagnose -> fix/integrate -> fresh run` until the newest relevant V25 run is green and no newer implementation landing has invalidated it.
-6. Never create a no-op implementation commit merely to obtain a new SHA. A real landing/update already creates the next qualification point.
+1. After an authorized integration-relevant update reaches `main`, refresh current `main` HEAD and require fresh `release-v25-cloud.yml` qualification for that newest state.
+2. Read the newest V25 cloud run together with the newest relevant `main` commit. The run is final release evidence only when it qualifies the newest relevant release tree.
+3. If a run is stale because `main` moved, keep stale-dispatch/concurrency guards intact. Do not weaken or bypass them.
+4. If the newest run exposes a real source/test/preflight/build/package failure, reproduce or verify it against the newest relevant `main`. If still present, register a repair lane, fix branch-first, validate, open/update PR, integrate only with explicit owner authorization, then qualify the new current state.
+5. Repeat until the newest relevant V25 run is green and no newer integration-relevant landing has invalidated it.
+6. Never create a no-op implementation commit merely to obtain a new SHA.
 
-In compact form:
+Compact form:
 
 ```text
 latest main HEAD
   -> latest relevant V25 run
   -> SUCCESS on current release tree? -> done
-  -> stale because main moved? -> dispatch current HEAD
+  -> stale because main moved? -> qualify current HEAD
   -> real failure? -> diagnose on current HEAD
-  -> claim -> agent/recovery branch -> verify -> integration -> main
+  -> issue -> agent/recovery branch -> verify -> PR/integration
+  -> owner-authorized main landing
   -> fresh V25 run
   -> repeat until green
 ```
 
-A release workflow may create its own `chore(release): prepare ...` commit as part of preparing the exact release source. That workflow-owned release-preparation commit is part of the same qualification transaction and must not recursively dispatch an infinite chain of release runs by itself. Any independent human/agent landing that advances `main` during the run still invalidates the stale dispatch and requires a fresh run from the newest HEAD.
-
-This rule intentionally prefers a new current-HEAD run over re-running an old failed SHA. Old runs remain useful for diagnosis, but current `main` plus the newest relevant V25 run are the source of truth for recovery.
+A release workflow may create its own workflow-owned `chore(release): prepare ...` commit as part of the release transaction if that behavior is explicitly defined by the release workflow. That bot-owned transaction is not standing permission for human/AI agents to push chores directly to `main`, and it must not recursively create an infinite dispatch chain.
 
 ## Main branch protection target
 
-Repository policy should be backed by GitHub branch protection/rulesets so accidental direct implementation pushes cannot bypass the integration protocol. The intended protection is:
+Repository policy should be backed by GitHub branch protection/rulesets. The intended target is:
 
 - protect `main` from force-push and deletion;
-- require the intended PR/integration path for normal implementation landings;
-- require appropriate status checks when stable check names are available;
+- require PR-based changes for normal writers;
+- block normal direct pushes, including docs/Markdown/chore/claim-only pushes;
+- require appropriate stable status checks when available;
 - keep administrator/owner bypass narrow and deliberate;
-- do not treat bypass as permission for ordinary agents to land implementation directly.
+- do not treat bypass as permission for ordinary agents.
 
-The repository files cannot configure GitHub account/repository rulesets by themselves. Until hard protection is enabled, agents must follow the repository policy contract voluntarily and preflight guards must remain fail-closed.
+The repository files cannot configure GitHub account/repository rulesets by themselves. Until hard protection is enabled, agents must still follow the repository policy contract.
 
-## Claim publication under hard protection
+## Issue/claim publication under hard protection
 
-The current canonical protocol intentionally permits a claim-only Markdown reservation to become visible on `main` before implementation. If GitHub is configured to require PRs for every update to `main`, publish the claim through a tiny `claim/<agent>/<scope>` PR instead. The visibility requirement remains the same: implementation must not begin until the claim is actually reachable from current `main`.
+Use a GitHub Issue as the immediately visible reservation whenever practical. If a Markdown claim is useful for repository history, create/update it on the same task branch/PR.
 
-This is a coordination exception only; source, tests, scripts, workflows, packaging and release implementation remain branch-first.
+**Do not publish claim-only Markdown directly to `main`.** There is no coordination exception to the normal-agent read-only-main rule.
+
+Implementation may begin once the lane is visibly registered (for example by the Issue) and the non-overlapping task branch has been created from the latest valid baseline; the Markdown claim itself does not need to be reachable from `main` first.
+
+## Documentation-only changes and CI
+
+Documentation/Markdown/chore work still uses branch/PR and owner-authorized merge rules.
+
+The V25 automatic dispatcher is separately path-filtered. An authorized merge that changes only ordinary documentation paths outside the watched set must not trigger V25 cloud release CI.
+
+Changed paths are authoritative. A commit labelled `docs:` or `chore:` that also changes watched source/tests/scripts/build/workflow paths is integration-relevant despite its prefix.
+
+## Verification checklist for hard protection
+
+Close the repository governance issue only after GitHub read-back proves:
+
+- `main` is protected or ruleset-enforced;
+- force-push and deletion are blocked;
+- normal direct pushes are rejected;
+- the intended PR requirement is active;
+- owner/admin bypass is narrow and deliberate;
+- docs-only PR merges outside watched paths do not trigger the V25 automatic release dispatcher.
 
 ## Final-state rule
 
-`ALL MERGED TO MAIN` means the current combined tree has been freshly reviewed for claim completion, commit/tree reachability, missing off-main work, accidental reversions, duplicate implementations and semantic/API/test conflicts. Only then should final exact-tree CI be treated as release evidence.
+`ALL MERGED TO MAIN` means an authorized integration reviewer has freshly verified the current combined tree for task completion, commit/tree reachability, missing off-main work, accidental reversions, duplicate implementations and semantic/API/test conflicts, and has recorded the exact current `main` SHA.
