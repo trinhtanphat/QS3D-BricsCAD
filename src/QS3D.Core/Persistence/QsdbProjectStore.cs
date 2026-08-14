@@ -434,7 +434,11 @@ namespace QS3D.Core.Persistence
             {
                 var key = Required(item, "name");
                 if (target.ContainsKey(key)) throw new InvalidDataException("Duplicate QSDB map key: " + key);
-                target[key] = RawValue(item, "value");
+                var value = RawValue(item, "value");
+                if (target is ProjectMetadataDictionary projectMetadata)
+                    projectMetadata.SetPersistenceValue(key, value);
+                else
+                    target[key] = value;
             }
         }
         private static string RequiredCanonical(XElement element, string attribute)
