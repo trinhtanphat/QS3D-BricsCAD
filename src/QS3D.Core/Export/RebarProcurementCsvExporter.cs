@@ -10,6 +10,8 @@ namespace QS3D.Core.Export
 {
     public static class RebarProcurementCsvExporter
     {
+        private const int MaxRowCount = 10000;
+
         public static void Export(string path, IEnumerable<RebarProcurementSummary> rows)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Path is required.", nameof(path));
@@ -40,8 +42,12 @@ namespace QS3D.Core.Export
             if (rows == null) throw new ArgumentNullException(nameof(rows));
             var sb = new StringBuilder();
             sb.AppendLine("AlgorithmId,GroupId,Grade,DiameterMm,StockLengthM,RequiredCutCount,RequiredLengthM,AllowanceLengthM,DemandBeforeKerfM,StockBarCount,KerfLengthM,OffCutLengthM,WasteLengthM,ProcurementLengthM,UnitWeightKgM,DemandWeightKg,ProcurementWeightKg,WasteWeightKg,WastePercent");
+            var rowCount = 0;
             foreach (var row in rows)
             {
+                if (rowCount >= MaxRowCount)
+                    throw new ArgumentOutOfRangeException(nameof(rows), "Rebar procurement CSV exceeds the supported row bound of " + MaxRowCount + ".");
+                rowCount++;
                 if (row == null) throw new ArgumentException("Rebar procurement CSV cannot contain a null row.", nameof(rows));
                 sb.Append(Q(row.AlgorithmId)).Append(',')
                     .Append(Q(row.GroupId)).Append(',')
