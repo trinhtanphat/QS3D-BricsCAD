@@ -46,8 +46,16 @@ if RUNTIME_DIAGNOSTICS.is_file():
     text = RUNTIME_DIAGNOSTICS.read_text(encoding="utf-8")
     if text.count(version_registration) != 1:
         errors.append("RuntimeDiagnosticsCommands.cs must own exactly one canonical QS3DVERSION registration")
-    if "public void VersionCheck()" not in text or "RuntimeCheck();" not in text:
-        errors.append("RuntimeDiagnosticsCommands.cs missing canonical loaded-binary QS3DVERSION diagnostics path")
+    for token in (
+        "public void VersionCheck()",
+        "WriteVersionSummary();",
+        '[CommandMethod("QS3DRUNTIMECHECK", CommandFlags.Modal)]',
+        "Run QS3DRUNTIMECHECK for full runtime/package verification.",
+    ):
+        if token not in text:
+            errors.append("RuntimeDiagnosticsCommands.cs missing canonical concise QS3DVERSION contract: " + token)
+    if "public void VersionCheck()\n        {\n            RuntimeCheck();" in text:
+        errors.append("RuntimeDiagnosticsCommands.cs must keep full runtime/package verification behind QS3DRUNTIMECHECK")
 
 if UPDATE_CENTER.is_file():
     text = UPDATE_CENTER.read_text(encoding="utf-8")
@@ -58,7 +66,11 @@ if UPDATE_CENTER.is_file():
         '_versions.Text = "Phiên bản hiện tại: " + currentDisplay',
         'var assembly = Assembly.GetExecutingAssembly();',
         'var loadedPath = string.IsNullOrWhiteSpace(assembly.Location)',
-        '_runtimeIdentity.Text = "DLL đang chạy: " + loadedPath;',
+        'var buildIdentity = GetBuildIdentity(currentOriginal);',
+        '_runtimeIdentity.Text = string.IsNullOrWhiteSpace(buildIdentity)',
+        '? "DLL đang chạy: " + loadedPath',
+        ': "Build: " + buildIdentity + "    •    DLL đang chạy: " + loadedPath;',
+        '_runtimeIdentity.ToolTip = "Product version đầy đủ: " + currentOriginal + "\\n" + loadedPath;',
     ):
         if token not in text:
             errors.append("UpdateCenterWindow.cs missing visible runtime-version identity: " + token)
