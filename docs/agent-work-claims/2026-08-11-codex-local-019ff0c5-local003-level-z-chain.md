@@ -1,6 +1,6 @@
 # Work claim — LOCAL-003 shared native Level Z-chain
 
-- Status: `BLOCKED`
+- Status: `ACTIVE`
 - Agent: `codex-local-019ff0c5` (`/root`, local Windows + licensed BricsCAD V25 agent)
 - Registered: `2026-08-11T19:43:12+07:00`
 - Baseline main SHA: `c7dd212d36677a1d2e005becf8709768fe98d6a1`
@@ -684,3 +684,9 @@ The mandatory full Core smoke then failed in the CAD-independent `ModelHealthSou
 Issue `#1092` is `CLOSED / COMPLETED`; fixes `d03edf8e4c476ee929d731a2c0c7400a8b8d14e4` and `337e97d32b6642b3a3d013596ffa1545df168999` have fresh deterministic Core smoke evidence on exact SHA `337e97d32b6642b3a3d013596ffa1545df168999`. The local checkout synchronized through `origin/main@e2171f4cf63d5502fb31e8a30644d6c9739100e3` and the overlapping Core-smoke claim is completed.
 
 The remaining immediate blocker is environmental: a responsive operator-owned BricsCAD V25 session is open on `MB MONG.dwg`. This worker did not start, close, or modify that session. Keep the claim `BLOCKED`; after the operator saves and closes every BricsCAD process, fetch newest `main`, reactivate/push this claim and the inbox status, then rerun full smoke, focused gates, exact installed-reference build and a fresh disposable Level probe. No GitHub Actions are authorized.
+
+## 2026-08-14 resumed after operator session closed
+
+The local checkout is synchronized with `origin/main@604b8662be656e5a87fd8b43769526b1debec7b5`, issue `#1092` remains closed with fresh deterministic smoke evidence, and a new process audit found no running BricsCAD process. Newly added active claims were read and do not reserve Level placement, the Level runner, or LOCAL-003 evidence.
+
+This status-only reactivation must reach `origin/main` before qualification resumes. After publication, re-fetch and require a clean newest exact SHA, full Core smoke, all focused Level/static gates, the installed-reference V25 `Release|x64` build and matching plugin/Core `ProductVersion`; only then create a fresh disposable `*.level-z-probe-copy.dwg` and execute `scripts/test-bricscad-v25-level-z.ps1`. No GitHub Actions are authorized.
