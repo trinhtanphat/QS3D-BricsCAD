@@ -58,12 +58,12 @@ def main() -> int:
 
     if "single live queue for LOCAL_ONLY work" not in inbox:
         errors.append("inbox must declare itself as the single live LOCAL_ONLY queue")
-    if "LOCAL_ONLY" not in agents or "## Handoff rule" not in agents:
+    if "LOCAL_ONLY" not in agents or "## Unavailable-work handoff" not in agents:
         errors.append("AGENTS.md lost the LOCAL_ONLY handoff contract")
     if INBOX_REF not in agents:
         errors.append("AGENTS.md must route local work through docs/LOCAL-AGENT-INBOX.md")
-    if "same source/docs batch" not in agents:
-        errors.append("AGENTS.md must require same-batch registration of new/changed LOCAL_ONLY scenarios")
+    if "same task branch/PR" not in agents:
+        errors.append("AGENTS.md must require same-branch registration of new/changed LOCAL_ONLY scenarios")
     if "LOCAL_ONLY" not in remote_scope or "LOCAL_PASS" not in remote_scope:
         errors.append("REMOTE-AGENT-SCOPE.md lost LOCAL_ONLY/LOCAL_PASS vocabulary")
     if INBOX_REF not in remote_scope:
@@ -123,7 +123,7 @@ def main() -> int:
 
     print(
         f"[PASS] local-agent-handoff: {len(matches)} structured LOCAL_ONLY items; "
-        "canonical inbox routing + same-batch priority/status/evidence contract valid"
+        "canonical inbox routing + same-branch priority/status/evidence contract valid"
     )
     return 0
 
