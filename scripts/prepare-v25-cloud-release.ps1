@@ -1,0 +1,128 @@
+param(
+    [Parameter(Mandatory = $true)]
+    [string]$ReleaseTag,
+
+    [Parameter(Mandatory = $true)]
+    [string]$DispatchSha
+)
+
+$ErrorActionPreference = 'Stop'
+$root = Split-Path -Parent $PSScriptRoot
+$tag = $ReleaseTag.Trim()
+$dispatch = $DispatchSha.Trim().ToLowerInvariant()
+
+if ($tag -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)-preview\.(?:0|[1-9][0-9]*)$') {
+    throw "ReleaseTag must be an exact preview tag such as v0.1.0-preview.7. Got: $ReleaseTag"
+}
+if ($dispatch -notmatch '^[0-9a-f]{40}$') {
+    throw "DispatchSha must be one exact 40-hex commit. Got: $DispatchSha"
+}
+
+Push-Location $root
+try {
+    $head = ([string](& git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
+    if ($LASTEXITCODE -ne 0 -or $head -ne $dispatch) {
+        throw "Release preparation must start from the dispatched commit. Expected $dispatch, got $head."
+    }
+
+    & (Join-Path $PSScriptRoot 'sync-preview-release-version.ps1') -ReleaseTag $tag
+    if ($LASTEXITCODE -ne 0) {
+        throw "Preview source identity synchronization failed for $tag."
+    }
+
+    & python (Join-Path $PSScriptRoot 'preflight-runtime-product-version-identity.py')
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Runtime product-version identity preflight failed after synchronization.'
+    }
+
+    $allowed = @(
+        'src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj',
+        'src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj',
+        'src/QS3D.Core/QS3D.Core.csproj'
+    )
+    $changed = @(& git diff --name-only --)
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Could not inspect release-preparation source changes.'
+    }
+    $changed = @($changed | ForEach-Object { ([string]$_).Trim().Replace('\', '/') } | Where-Object { $_ })
+    foreach ($path in $changed) {
+        if ($path -notin $allowed) {
+            throw "Release preparation touched an unexpected path: $path"
+        }
+    }
+
+    & git diff --check
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Release-preparation diff failed git diff --check.'
+    }
+
+    & git fetch --no-tags origin main
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Could not refresh origin/main before release preparation.'
+    }
+    $remoteMain = ([string](& git rev-parse --verify origin/main)).Trim().ToLowerInvariant()
+    if ($LASTEXITCODE -ne 0 -or $remoteMain -notmatch '^[0-9a-f]{40}$') {
+        throw 'Could not resolve origin/main before release preparation.'
+    }
+    if ($remoteMain -ne $dispatch) {
+        throw "main moved after this workflow was dispatched. Dispatched=$dispatch current-origin/main=$remoteMain. Start a fresh release run instead of overwriting concurrent work."
+    }
+
+    if ($changed.Count -eq 0) {
+        Write-Host "Source identity already matches $tag; release commit remains $dispatch."
+        Write-Output $dispatch
+        return
+    }
+
+    & git config user.name 'github-actions[bot]'
+    if ($LASTEXITCODE -ne 0) { throw 'Could not configure release commit author name.' }
+    & git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+    if ($LASTEXITCODE -ne 0) { throw 'Could not configure release commit author email.' }
+
+    & git add -- @allowed
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Could not stage synchronized release identity files.'
+    }
+    $staged = @(& git diff --cached --name-only --)
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Could not inspect staged release-preparation files.'
+    }
+    $staged = @($staged | ForEach-Object { ([string]$_).Trim().Replace('\', '/') } | Where-Object { $_ })
+    if ($staged.Count -ne $changed.Count) {
+        throw 'Staged release-preparation file set does not match the validated source changes.'
+    }
+    foreach ($path in $staged) {
+        if ($path -notin $allowed) {
+            throw "Unexpected staged release-preparation path: $path"
+        }
+    }
+
+    & git commit -m "chore(release): prepare $tag"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not create the release-preparation commit for $tag."
+    }
+    $releaseCommit = ([string](& git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
+    if ($LASTEXITCODE -ne 0 -or $releaseCommit -notmatch '^[0-9a-f]{40}$' -or $releaseCommit -eq $dispatch) {
+        throw 'Could not resolve the newly created release-preparation commit.'
+    }
+
+    & git push origin 'HEAD:refs/heads/main'
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Could not fast-forward main with the release-preparation commit. Concurrent work may have landed; start a fresh release run.'
+    }
+
+    & git fetch --no-tags origin main
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Could not verify origin/main after release-preparation push.'
+    }
+    $pushedMain = ([string](& git rev-parse --verify origin/main)).Trim().ToLowerInvariant()
+    if ($pushedMain -ne $releaseCommit) {
+        throw "Release-preparation push was not read back exactly. Expected $releaseCommit, got $pushedMain."
+    }
+
+    Write-Host "Prepared exact release source commit $releaseCommit for $tag."
+    Write-Output $releaseCommit
+}
+finally {
+    Pop-Location
+}
