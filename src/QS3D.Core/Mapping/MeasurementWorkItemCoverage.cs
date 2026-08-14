@@ -134,6 +134,8 @@ namespace QS3D.Core.Mapping
                 var key = RequireCanonicalIdentity(item.Key, "quantity key for element " + element.Id);
                 if (double.IsNaN(item.Value) || double.IsInfinity(item.Value))
                     throw new InvalidOperationException("Quantity coverage found a non-finite quantity: " + element.Id + "/" + key + ".");
+                if (item.Value < 0d)
+                    throw new InvalidOperationException("Quantity coverage found a negative physical quantity: " + element.Id + "/" + key + ".");
                 var value = item.Value == 0d ? 0d : item.Value;
                 quantities.Add(new QuantityCoverageSnapshot(key, value));
             }
