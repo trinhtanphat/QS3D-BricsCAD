@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="QS3D • Family Manager" Width="920" Height="740"
         MinWidth="760" MinHeight="600"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        ContentRendered="OnQuickWorkflowContentRendered">
     <Window.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -140,6 +141,73 @@
                                 <Button Content="Duplicate" Click="OnDuplicateClick"/>
                                 <Button Content="Lưu tên" Style="{StaticResource AccentButton}" Click="OnRenameClick"/>
                                 <Button Content="Xóa" Style="{StaticResource DangerButton}" Click="OnDeleteClick"/>
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border x:Name="QsQuickWorkflowCard" Style="{StaticResource ManagerCard}" Margin="0,0,0,10">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="QS FORM • QUICK FAMILY" Style="{StaticResource PanelTitle}"/>
+                                <Border Grid.Column="1" Background="{StaticResource AccentSoftBrush}"
+                                        BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1"
+                                        CornerRadius="7" Padding="6,1">
+                                    <TextBlock Text="DIRECT DRAW" Foreground="{StaticResource LuxuryBrush}"
+                                               FontSize="9" FontWeight="SemiBold"/>
+                                </Border>
+                            </Grid>
+                            <TextBlock x:Name="QuickCategoryHintText"
+                                       Text="Chọn Family hoặc Category; chỉ tham số phù hợp category mới được lưu. Đơn vị: mét."
+                                       Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,8"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,6,7">
+                                    <TextBlock Text="Rộng • WidthM (m)" Style="{StaticResource Caption}"/>
+                                    <TextBox x:Name="QuickWidthBox" ToolTip="WidthM • mét"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="0" Grid.Column="1" Margin="6,0,6,7">
+                                    <TextBlock Text="Sâu • DepthM (m)" Style="{StaticResource Caption}"/>
+                                    <TextBox x:Name="QuickDepthBox" ToolTip="DepthM • mét"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="0" Grid.Column="2" Margin="6,0,0,7">
+                                    <TextBlock Text="Cao • HeightM (m)" Style="{StaticResource Caption}"/>
+                                    <TextBox x:Name="QuickHeightBox" ToolTip="HeightM • mét"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,6,0">
+                                    <TextBlock Text="Dày • ThicknessM (m)" Style="{StaticResource Caption}"/>
+                                    <TextBox x:Name="QuickThicknessBox" ToolTip="ThicknessM • mét"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Margin="6,0,6,0">
+                                    <TextBlock Text="Offset đáy • BottomOffsetM (m)" Style="{StaticResource Caption}"/>
+                                    <TextBox x:Name="QuickBottomOffsetBox" ToolTip="BottomOffsetM • mét; có thể âm"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="2" Margin="6,0,0,0">
+                                    <TextBlock Text="Workflow" Style="{StaticResource Caption}"/>
+                                    <TextBlock Text="Auto → Tạo &amp; sử dụng / Lưu &amp; Vẽ"
+                                               Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <WrapPanel Margin="0,9,0,0">
+                                <Button Content="Auto Family" Click="OnAutoFamilyClick"/>
+                                <Button Content="Tạo &amp; sử dụng" Style="{StaticResource AccentButton}"
+                                        Click="OnCreateAndUseClick"/>
+                                <Button Content="Lưu &amp; Vẽ" Style="{StaticResource AccentButton}"
+                                        Click="OnSaveAndDrawClick"/>
                             </WrapPanel>
                         </StackPanel>
                     </Border>
