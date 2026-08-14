@@ -6,6 +6,7 @@ This index separates durable product/runtime contracts from feature notes, plans
 
 | Need | Canonical reference |
 | --- | --- |
+| Main write / merge authorization | [`MAIN-WRITE-AUTHORIZATION.md`](MAIN-WRITE-AUTHORIZATION.md), [`../AGENTS.md`](../AGENTS.md) |
 | Product/hosting boundary | [`PRODUCT-BOUNDARY.md`](PRODUCT-BOUNDARY.md) |
 | Data/source authority | [`SOURCE-OF-TRUTH.md`](SOURCE-OF-TRUTH.md) |
 | Architecture | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
@@ -20,6 +21,8 @@ This index separates durable product/runtime contracts from feature notes, plans
 | V26 release operation | [`MANUAL-BUILD-RELEASE-V26.md`](MANUAL-BUILD-RELEASE-V26.md) |
 | Multi-agent registration | [`AGENT-WORK-REGISTRATION.md`](AGENT-WORK-REGISTRATION.md), [`../AGENTS.md`](../AGENTS.md) |
 | Implementation snapshot | [`IMPLEMENTATION-STATUS.md`](IMPLEMENTATION-STATUS.md) |
+
+For normal AI agents/chat sessions, `main` is read-only unless the repository owner explicitly grants merge/integration authorization for the named PR/batch/task. Source, tests, scripts, workflows, docs, Markdown, claims, handoffs and chores use a dedicated Issue/branch/PR path; ordinary task wording such as `continue all`, `fix bug`, `commit push git`, docs work or CI work does not grant `main` write permission.
 
 ## Host support matrix
 
@@ -44,6 +47,7 @@ The two host majors share Core and most adapter source but require independent r
 3. **Separate source truth from runtime proof.** Source/static coverage must not be described as BricsCAD V25/V26 qualification unless the exact candidate SHA has licensed-host evidence for that major.
 4. **Prefer links over duplicated inventories.** Command, CI, qualification and agent rules should each have one maintained source.
 5. **Do not delete historical handoffs merely to reduce file count.** They may be required for provenance or agent coordination; archive/consolidate only when their references and purpose have been checked.
+6. **Do not let historical Git/CI wording override current policy.** `MAIN-WRITE-AUTHORIZATION.md`, `AGENTS.md` and `CI_POLICY.md` win over stale direct-to-main or fully-manual-only statements in dated material.
 
 ## Historical and dated material
 

@@ -2,17 +2,36 @@
 
 ## Repository policy
 
-The repository-wide source of truth is `CI_POLICY.md`. GitHub Actions on `main` are owner-controlled and **manual-only**:
+The repository-wide source of truth is `CI_POLICY.md`.
 
-- every workflow must use `workflow_dispatch` as its only trigger;
-- every executable job must hard-guard `github.event_name == 'workflow_dispatch'`;
-- commits, pushes, merges, fixes, reviews, documentation changes and `continue all` do not authorize an Actions run;
-- preparing or editing a workflow is not permission to dispatch it;
-- release workflows additionally require explicit `confirm_release=RELEASE`.
+GitHub Actions are **manual-only by default**, with exactly one owner-approved automatic exception:
 
-`scripts/preflight-ci-manual-only.py` enforces these rules across all workflow YAML files and is auto-discovered by `scripts/preflight-all.py`.
+- `.github/workflows/dispatch-v25-cloud-after-main-integration.yml` may react to an integration-relevant `push` to `main` and dispatch only `.github/workflows/release-v25-cloud.yml`.
 
-Because multiple agents may write concurrently, refresh current `main` before shared-file writes and never overwrite another lane.
+All other workflows remain owner-controlled `workflow_dispatch` lanes unless the repository owner explicitly changes policy again.
+
+Important boundaries:
+
+- ordinary agent work does not authorize manual Actions dispatch/re-run/cancel;
+- `fix bug`, `update code`, `continue all`, `commit push git`, docs/chore work, review or handoff do not grant `main` merge permission;
+- manual CI permission and `main` merge permission are independent;
+- normal agents put source/tests/scripts/workflows/docs/Markdown/chores on a dedicated branch and PR and stop before merge;
+- only an owner-authorized integration coordinator may merge the named PR/batch into `main`;
+- release workflows retain explicit `confirm_release=RELEASE` where configured.
+
+`scripts/preflight-ci-manual-only.py` enforces **manual-only by default plus the single approved post-integration dispatcher** and is auto-discovered by `scripts/preflight-all.py`.
+
+## Automatic post-integration V25 cloud lane
+
+The sole automatic exception is `.github/workflows/dispatch-v25-cloud-after-main-integration.yml`.
+
+It is intentionally path-filtered to integration-relevant surfaces such as source, tests, scripts, build/solution files and the V25 cloud workflow/dispatcher. Ordinary `docs/**` and generic Markdown-only landings are outside that watched path set.
+
+Changed paths are authoritative. A commit message such as `docs:` or `chore:` does not by itself suppress CI if the commit actually changes a watched source/script/workflow/build path.
+
+After an authorized integration-relevant landing, the dispatcher resolves current `main` and starts `release-v25-cloud.yml`. A green run for an older tree does not qualify a newer integration-relevant `main` tree.
+
+This cloud lane is not licensed local BricsCAD runtime evidence. Native NETLOAD/UI/private-DWG/signing/performance gates remain separate.
 
 ## Manual workflows
 
@@ -47,7 +66,7 @@ Because multiple agents may write concurrently, refresh current `main` before sh
 
 ### Focused source gates
 
-Focused workflows such as curved-opening, geometry, project-data and schedule gates remain manual-only and also execute the strict manual-CI policy preflight.
+Focused workflows such as curved-opening, geometry, project-data and schedule gates remain manual-only and also execute the strict CI policy preflight.
 
 ## Manual release workflows
 
@@ -60,6 +79,8 @@ Focused workflows such as curved-opening, geometry, project-data and schedule ga
 - builds Core + V25, packages V25 assets, applies signing/runtime gates according to release type and publishes only after its release-integrity checks pass.
 
 See `docs/MANUAL-BUILD-RELEASE.md`.
+
+`release-v25-cloud.yml` remains manually invokable, but it may also be started only through the single approved post-integration dispatcher described above.
 
 ### V26
 
@@ -117,7 +138,7 @@ Only report those results after the corresponding exact candidate payload was ac
 
 ## Owner-approved release gate
 
-When the owner explicitly asks for a release:
+When the owner explicitly asks for a manual release lane:
 
 1. resolve the exact commit/tag;
 2. choose the host-major release workflow (`release-v25.yml` or `release-v26.yml`);
