@@ -107,6 +107,16 @@ V25 and V26 package/update identities are kept separate. A V25 package or update
 
 The in-plugin V26 update lane remains subject to V26-specific qualification; do not treat source presence alone as proof that one-click V26 updating is production-ready.
 
+## V25 manual NETLOAD / Mark-of-the-Web recovery
+
+If BricsCAD V25 reports `Could not load file or assembly ... Operation is not supported` (commonly .NET Framework HRESULT `0x80131515`) while `NETLOAD` is pointed at `QS3D.BricsCAD.V25.dll` in an extracted browser-downloaded package, Windows may still have Mark-of-the-Web (`Zone.Identifier`) on the plugin or one of its dependencies. That rejection occurs before QS3D startup code can run.
+
+The recommended path is to run `INSTALL-QS3D.cmd` from the extracted V25 package and then start BricsCAD normally; the installer verifies package integrity and removes Mark-of-the-Web from the installed payload before DemandLoad uses it.
+
+If direct `NETLOAD` is intentionally required for troubleshooting, run `UNBLOCK-QS3D.cmd` in the **same extracted V25 package** first. The launcher verifies the recovery helper hash before bootstrap, and the helper verifies complete `SHA256SUMS.txt` coverage plus the expected V25 package identity files before unblocking the whole package. It does not relax BricsCAD security/trusted-path settings and does not use `ExecutionPolicy Bypass`.
+
+For a newly downloaded ZIP, another safe option is to right-click the ZIP in Windows Explorer, choose **Properties → Unblock**, apply it, and only then extract the package. Do not unblock only `QS3D.BricsCAD.V25.dll`; a dependency that remains blocked can produce the same loader failure.
+
 ## Quick start for contributors
 
 ### 1. Clone and inspect repository policy
