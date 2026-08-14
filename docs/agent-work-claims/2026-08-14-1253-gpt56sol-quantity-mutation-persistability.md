@@ -5,7 +5,9 @@
 - Registered: `2026-08-14T12:53:00+07:00`
 - Workstream: `CORE / persistence-integrity`
 - Priority: `P1`
-- Baseline: `ffec032a79c1b7533043ec3c1043153505a5016f`
+- Baseline: `b0fa998d78b8399bfbbf9561f405e90e3fc40052`
+- Claim commit: `8ae774f229197539c283bf0f8446cfdc7ed15635`
+- Pre-write source blob: `49c228384f4b87b91451e1db4ddaba9b4c870790`
 
 ## Confirmed defect
 
