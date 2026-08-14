@@ -62,8 +62,9 @@ if SNAPSHOT.is_file():
     text = SNAPSHOT.read_text(encoding="utf-8")
     for token in (
         "target.AuditEvents.Clear();",
-        "target.Metadata.Clear();",
+        "targetMetadata.ReplacePersistenceState(source.Metadata)",
         "target.Elements.Clear();",
+        "target.RestorePersistenceState(source.UpdatedUtc, source.ChangeVersion);",
         "target.RestorePersistenceState(source.Dirty, source.UpdatedUtc);",
     ):
         if token not in text:
