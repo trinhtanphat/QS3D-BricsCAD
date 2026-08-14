@@ -272,8 +272,13 @@ namespace QS3D.BricsCAD.V25.UI
                 var count = Cad.CadHandleService.Select(document, handles);
                 if (count > 0)
                 {
-                    _viewModel.Status = "Định vị: đã chọn " + count.ToString("N0") + " đối tượng CAD.";
-                    document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
+                    if (!global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(document))
+                    {
+                        _viewModel.Status = "Định vị: đã chọn " + count.ToString("N0") + " đối tượng CAD nhưng chưa thể zoom vùng chọn hiện hành.";
+                        return;
+                    }
+
+                    _viewModel.Status = "Định vị: đã chọn/zoom " + count.ToString("N0") + " đối tượng CAD.";
                     return;
                 }
 
