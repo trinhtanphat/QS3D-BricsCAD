@@ -3,7 +3,8 @@
 - Agent: `chatgpt-web-gpt56sol-advanced-geometry-overflow`
 - Date: `2026-08-14`
 - Status: `ACTIVE`
-- Baseline main SHA: `6fce7f627104233f4860d5c734485abe7b363031`
+- Baseline main SHA: `86c7ac72ad976807a5081977453940d10311aa8b`
+- Claim publication SHA: `1d264de37aad4a0540a586a7dd62bbbbbd413299`
 - Implementation branch: `agent/chatgpt-web-gpt56sol/advanced-geometry-representable-area-20260814`
 - Planned integration branch: `integration/chatgpt-web-gpt56sol-advanced-geometry-representable-area-20260814`
 - Priority: Core advanced geometry / numerical edge cases
