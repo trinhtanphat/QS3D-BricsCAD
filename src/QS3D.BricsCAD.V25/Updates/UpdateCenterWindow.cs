@@ -95,6 +95,7 @@ namespace QS3D.BricsCAD.V25.Updates
             {
                 IsReadOnly = true,
                 TextWrapping = TextWrapping.Wrap,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 Background = new SolidColorBrush(Color.FromRgb(19, 23, 30)),
                 Foreground = new SolidColorBrush(Color.FromRgb(220, 225, 234)),
@@ -111,7 +112,7 @@ namespace QS3D.BricsCAD.V25.Updates
             _refreshButton = MakeButton("Kiểm tra lại", false);
             _refreshButton.Click += async (_, __) => await UpdateCoordinator.Instance.RefreshAsync();
             _updateButton = MakeButton("Cập nhật ngay", true);
-            _updateButton.Click += async (_, __) => await ScheduleUpdateAsync();
+            _updateButton.Click += async (_, __) => await HandlePrimaryActionAsync();
             actions.Children.Add(_releaseButton);
             actions.Children.Add(_refreshButton);
             actions.Children.Add(_updateButton);
@@ -132,24 +133,43 @@ namespace QS3D.BricsCAD.V25.Updates
             _status.Text = result.Message;
             _detail.Text = result.Detail;
 
-            var current = result.CurrentVersion?.Original ?? "unknown";
-            var currentDisplay = current.StartsWith("v", StringComparison.OrdinalIgnoreCase) ? current : "v" + current;
+            var currentOriginal = result.CurrentVersion?.Original ?? "unknown";
+            var currentDisplay = ToDisplayVersion(currentOriginal);
             var latest = result.Release?.Tag ?? "—";
             var assembly = Assembly.GetExecutingAssembly();
             var loadedPath = string.IsNullOrWhiteSpace(assembly.Location) ? "<unknown>" : assembly.Location;
+            var buildIdentity = GetBuildIdentity(currentOriginal);
 
             Title = "QS3D Update Center — " + currentDisplay;
             _title.Text = "Cập nhật QS3D " + currentDisplay;
             _versions.Text = "Phiên bản hiện tại: " + currentDisplay + "    •    GitHub mới nhất: " + latest;
-            _runtimeIdentity.Text = "DLL đang chạy: " + loadedPath;
-            _runtimeIdentity.ToolTip = loadedPath;
+            _runtimeIdentity.Text = string.IsNullOrWhiteSpace(buildIdentity)
+                ? "DLL đang chạy: " + loadedPath
+                : "Build: " + buildIdentity + "    •    DLL đang chạy: " + loadedPath;
+            _runtimeIdentity.ToolTip = "Product version đầy đủ: " + currentOriginal + "\n" + loadedPath;
             _notes.Text = result.Release?.Notes ?? "Ghi chú release sẽ hiển thị ở đây khi có dữ liệu.";
 
             var checking = result.State == UpdateState.Checking;
+            var hasManualRelease = result.State == UpdateState.ManualInstallRequired && result.Release?.PageUri != null;
             _refreshButton.IsEnabled = !checking && result.State != UpdateState.Scheduled;
-            _updateButton.IsEnabled = result.CanAutoInstall;
+            _updateButton.IsEnabled = result.CanAutoInstall || hasManualRelease;
             _releaseButton.IsEnabled = result.Release?.PageUri != null;
-            _updateButton.Content = result.State == UpdateState.Scheduled ? "Đã lên lịch" : "Cập nhật ngay";
+
+            if (result.State == UpdateState.Scheduled)
+            {
+                _updateButton.Content = "Đã lên lịch";
+                _updateButton.ToolTip = "Cập nhật đã được lên lịch và đang chờ BricsCAD đóng an toàn.";
+            }
+            else if (hasManualRelease)
+            {
+                _updateButton.Content = "Cài thủ công";
+                _updateButton.ToolTip = "Mở GitHub Release để tải bản mới. Bản preview chưa đủ điều kiện cập nhật tự động ký số.";
+            }
+            else
+            {
+                _updateButton.Content = "Cập nhật ngay";
+                _updateButton.ToolTip = result.CanAutoInstall ? "Xác minh và lên lịch cập nhật an toàn." : "Chưa có bản cập nhật tự động hợp lệ.";
+            }
         }
 
         internal void DetachCoordinator()
@@ -157,6 +177,18 @@ namespace QS3D.BricsCAD.V25.Updates
             if (!_coordinatorAttached) return;
             UpdateCoordinator.Instance.StateChanged -= OnStateChanged;
             _coordinatorAttached = false;
+        }
+
+        private async System.Threading.Tasks.Task HandlePrimaryActionAsync()
+        {
+            var current = _result;
+            if (current?.State == UpdateState.ManualInstallRequired && current.Release?.PageUri != null)
+            {
+                OpenReleasePage();
+                return;
+            }
+
+            await ScheduleUpdateAsync();
         }
 
         private async System.Threading.Tasks.Task ScheduleUpdateAsync()
@@ -195,6 +227,23 @@ namespace QS3D.BricsCAD.V25.Updates
         {
             if (Dispatcher.CheckAccess()) Apply(result);
             else Dispatcher.BeginInvoke(new Action(() => Apply(result)));
+        }
+
+        private static string ToDisplayVersion(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "unknown";
+            var trimmed = value.Trim();
+            var metadataIndex = trimmed.IndexOf('+');
+            if (metadataIndex >= 0) trimmed = trimmed.Substring(0, metadataIndex);
+            return trimmed.StartsWith("v", StringComparison.OrdinalIgnoreCase) ? trimmed : "v" + trimmed;
+        }
+
+        private static string GetBuildIdentity(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+            var metadataIndex = value.IndexOf('+');
+            if (metadataIndex < 0 || metadataIndex + 1 >= value.Length) return string.Empty;
+            return value.Substring(metadataIndex + 1).Trim();
         }
 
         private static Button MakeButton(string text, bool primary)
