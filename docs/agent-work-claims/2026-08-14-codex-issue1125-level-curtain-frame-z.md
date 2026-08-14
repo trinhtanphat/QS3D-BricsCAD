@@ -1,7 +1,7 @@
 # Work claim — Level-resolved Curtain frame Z placement
 
-- Status: `ACTIVE`
-- Phase: `REBAR_SOURCE_FIX`
+- Status: `COMPLETED`
+- Phase: `REBAR_SOURCE_COMPLETE / PENDING_LOCAL`
 - Agent: `codex-issue1125-level-curtain-frame-z-20260814` (`/root/fix_level_curtain_frame_z`, remote-safe source lane delegated by `/root`)
 - Registered: `2026-08-14T12:17:22+07:00`
 - Baseline main SHA: `8480fdfb8bfb26bb5195a07e179579f3c6dbff52`
@@ -90,3 +90,12 @@ Do not edit the Level runtime probe/runner/gate, LOCAL-003 execution docs/inbox,
 ### Coordination
 
 Parent task `/root` explicitly delegated this CAD-independent successor to `/root/fix_level_curtain_frame_z`. The parent LOCAL-003 claim retains the runner/probe, exact-SHA licensed execution, cleanup and final status, and will not concurrently edit the reserved rebar placement surfaces while this reactivated claim is `ACTIVE`.
+
+## Rebar successor completion record
+
+- Claim-only PR `#1141` merged as `2b9e7371b3886d23636b0ab5b1a247f3a5faaa53` before the rebar implementation began.
+- The post-claim audit narrowed the failing runtime path to `BeamRebarSolidBuilder.BuildSelected(...)` followed by `BeamStirrupSolidBuilder.BuildSelected(...)`. Longitudinal bar Z centers already consume `CadElementVerticalPlacement.CenterDrawing` and stay inside the host envelope; no longitudinal or non-beam builder was changed.
+- BricsCAD V25 `Solid3d.CreateFrustum` is centered at the world origin, but the beam-stirrup cylinder helper translated each centered native segment to its validated start endpoint. Vertical legs therefore extended about half a leg beyond the intended section. The correction translates each frustum to `start + unit * length / 2`, preserving the planner path, overlap, topology, ownership, transactions, metadata and vertical snapshots.
+- Implementation source commit `31e31e42fdd3e5f1a43a591278f2d0fe84c4d940` merged through PR `#1144` as exact production SHA `5972a5bfda3a20df549e75364b40b0824286f162`.
+- Focused Level/Rebar placement, Beam stirrup/rebar lifecycle, bend/hook and single-bind gates passed. Core Release built with zero warnings/errors; complete Core smoke returned `ALL PASS`; installed-reference BricsCAD V25 `Release|x64` compiled with zero warnings/errors.
+- GitHub Actions and BricsCAD runtime were not run. Issue `#1125` remains `OPEN / PENDING_LOCAL`, and the parent LOCAL-003 owner must rerun the guarded Level matrix on exact SHA `5972a5bfda3a20df549e75364b40b0824286f162` before any `LOCAL_PASS` or issue closure.
