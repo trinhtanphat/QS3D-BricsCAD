@@ -93,9 +93,9 @@ namespace QS3D.Core.Export
                 ValidateCellText(row.FabricationDetailingRevision, index, "Detailing Revision");
                 ValidatePositive(row.DiameterMm, index, "DiameterMm");
                 ValidatePositive(row.Quantity, index, "Quantity");
-                ValidateNonNegative(row.CuttingLengthM, index, "CuttingLengthM");
-                ValidateNonNegative(row.TotalLengthM, index, "TotalLengthM");
-                ValidateNonNegative(row.UnitWeightKgM, index, "UnitWeightKgM");
+                ValidatePositive(row.CuttingLengthM, index, "CuttingLengthM");
+                ValidatePositive(row.TotalLengthM, index, "TotalLengthM");
+                ValidatePositive(row.UnitWeightKgM, index, "UnitWeightKgM");
                 ValidateNonNegative(row.NetWeightKg, index, "NetWeightKg");
                 ValidateNonNegative(row.WastePercent, index, "WastePercent");
                 ValidateNonNegative(row.TotalWeightKg, index, "TotalWeightKg");
