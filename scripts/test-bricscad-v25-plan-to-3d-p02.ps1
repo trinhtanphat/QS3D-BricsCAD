@@ -211,9 +211,7 @@ try {
     Stop-Qs3dLaunchedProcess -Process $process
     if (Test-Path -LiteralPath $scriptPath) { Remove-Item -LiteralPath $scriptPath -Force -ErrorAction Stop }
     if (Test-Path -LiteralPath $scriptPath) { throw "Plan-to-3D P02 runtime script cleanup failed." }
-    foreach ($privateOutput in $privateDrawingArtifacts) {
-        if (Test-Path -LiteralPath $privateOutput) { throw "Plan-to-3D P02 unexpectedly created private drawing state." }
-    }
+    Remove-Qs3dPrivateArtifacts -Paths $privateDrawingArtifacts
     $drawingHashAfter = (Get-FileHash -LiteralPath $DrawingCopy -Algorithm SHA256).Hash.ToUpperInvariant()
     if (-not [string]::Equals($drawingHashBefore, $drawingHashAfter, [StringComparison]::Ordinal)) {
         throw "The disposable Plan-to-3D P02 drawing was written unexpectedly."
