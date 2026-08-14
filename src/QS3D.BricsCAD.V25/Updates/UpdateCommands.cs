@@ -19,14 +19,20 @@ namespace QS3D.BricsCAD.V25.Updates
             ShowUpdateCenterCore("QSUPDATE");
         }
 
-        [CommandMethod("QS3DVER", CommandFlags.Modal)]
+        [CommandMethod("QS3DVERSION", CommandFlags.Modal)]
         public void ShowVersion()
+        {
+            WriteVersionCore("QS3DVERSION");
+        }
+
+        [CommandMethod("QS3DVER", CommandFlags.Modal)]
+        public void ShowVersionShortAlias()
         {
             WriteVersionCore("QS3DVER");
         }
 
         [CommandMethod("QSVER", CommandFlags.Modal)]
-        public void ShowVersionAlias()
+        public void ShowVersionLegacyAlias()
         {
             WriteVersionCore("QSVER");
         }
@@ -57,7 +63,9 @@ namespace QS3D.BricsCAD.V25.Updates
                     "\nAssembly version: " + assembly.GetName().Version +
                     "\nLoaded DLL: " + path +
                     "\nUpdate status: " + result.Message +
-                    "\nRun QSUPDATE or QS3DUPDATE to check GitHub Releases.");
+                    "\nRun QS3DUPDATE to check GitHub Releases." +
+                    "\nVersion command: QS3DVERSION (aliases: QS3DVER, QSVER)." +
+                    "\nUpdate command: QS3DUPDATE (alias: QSUPDATE). ");
             }
             catch (Exception ex)
             {
