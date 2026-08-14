@@ -1,0 +1,64 @@
+name: Fix V25 release ordering once
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/fix-v25-release-order-once-20260814.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Move release preparation before toolchain setup
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('.github/workflows/release-v25-cloud.yml')
+          s = p.read_text(encoding='utf-8')
+          setup = '''      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', 'nuget.config') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+'''
+          anchor = '''          Write-Host "Exact release source commit: $releaseCommit"
+
+'''
+          if s.count(setup) != 1:
+              raise SystemExit('Expected exactly one toolchain setup block')
+          if s.count(anchor) != 1:
+              raise SystemExit('Expected exactly one release preparation anchor')
+          s = s.replace(setup, '', 1)
+          s = s.replace(anchor, anchor + setup, 1)
+          p.write_text(s, encoding='utf-8')
+      - name: Commit ordering fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/release-v25-cloud.yml
+          git diff --cached --check
+          git diff --cached --quiet && { echo "No ordering change produced"; exit 1; }
+          git commit -m "fix(ci): prepare V25 release source before toolchain setup"
+          git pull --rebase origin main
+          git push origin HEAD:main
