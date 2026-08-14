@@ -67,8 +67,15 @@ if SMOKE.is_file():
         "RejectsPaddedProjectRelations();",
         "RejectsPaddedElementRelations();",
         "AllowsEmptyOptionalRelations();",
-        'project.ActiveFloorId = " F1 "',
-        'element.FamilyId = " FAM "',
+        'InjectRawRelation(project, "_activeFloorId", " F1 ")',
+        'InjectRawRelation(project, "_activeZoneId", " Z1 ")',
+        'InjectRawRelation(project, "_activeFloorId", "   ")',
+        'InjectRawRelation(element, "_familyId", " FAM ")',
+        'InjectRawRelation(element, "_floorId", " F1 ")',
+        'InjectRawRelation(element, "_zoneId", " Z1 ")',
+        "BindingFlags.Instance | BindingFlags.NonPublic",
+        "raw project relation injection did not reach the public getter",
+        "raw element relation injection did not reach the public getter",
         "Throws<InvalidDataException>",
     ):
         if token not in text:
