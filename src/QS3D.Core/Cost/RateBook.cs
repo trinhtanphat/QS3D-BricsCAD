@@ -176,7 +176,7 @@ namespace QS3D.Core.Cost
 
             return match == null
                 ? RateBookResolution.Unmatched(costCode, canonicalUnit, canonicalCurrency, canonicalAsOf)
-                : RateBookResolution.Matched(costCode, canonicalUnit, canonicalCurrency, canonicalAsOf, match);
+                : RateBookResolution.Matched(match.CostCode, canonicalUnit, canonicalCurrency, canonicalAsOf, match);
         }
 
         private static int CompareEffectiveItems(RateItem left, RateItem right)
