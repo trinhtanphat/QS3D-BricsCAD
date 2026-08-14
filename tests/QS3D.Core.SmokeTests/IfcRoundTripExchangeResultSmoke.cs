@@ -11,7 +11,7 @@ namespace QS3D.Core.SmokeTests
             UnmappedRetainsExternalEvidenceWithoutQs3dIdentity();
             LossyStateCannotMasqueradeAsLossless();
             RejectsInvalidStateAndIdentityContracts();
-            CanonicalizesResultSetOrderingAndRejectsDuplicates();
+            CanonicalizesResultSetOrderingAndCoalescesDuplicates();
         }
 
         private static void SupportedRetainsTrustedProjectionAndRelations()
@@ -130,7 +130,7 @@ namespace QS3D.Core.SmokeTests
             Require(invalid.State == IfcRoundTripResultState.InvalidOrAmbiguous, "Ambiguous external identity did not remain explicit.");
         }
 
-        private static void CanonicalizesResultSetOrderingAndRejectsDuplicates()
+        private static void CanonicalizesResultSetOrderingAndCoalescesDuplicates()
         {
             var supported = new IfcRoundTripExchangeResult(
                 "ifc-z-supported",
@@ -142,24 +142,51 @@ namespace QS3D.Core.SmokeTests
                 null,
                 stateDetail: "No trusted identity");
 
-            var set = IfcRoundTripExchangeResultSet.Create(new[] { supported, unmapped });
-            Require(set.Items.Count == 2, "IFC exchange result set lost items.");
-            Require(set.Items[0].ExternalObjectId == "ifc-a-unmapped", "IFC exchange result set ordering is not deterministic.");
-            Require(set.Items[1].ExternalObjectId == "ifc-z-supported", "IFC exchange result set ordering is not deterministic.");
+            var ordered = IfcRoundTripExchangeResultSet.Create(new[] { supported, unmapped });
+            Require(ordered.Items.Count == 2, "IFC exchange result set lost unique items.");
+            Require(ordered.Items[0].ExternalObjectId == "ifc-a-unmapped", "IFC exchange result set ordering is not deterministic.");
+            Require(ordered.Items[1].ExternalObjectId == "ifc-z-supported", "IFC exchange result set ordering is not deterministic.");
 
-            Throws<InvalidOperationException>(() => IfcRoundTripExchangeResultSet.Create(new[]
-            {
-                new IfcRoundTripExchangeResult(
-                    "ifc-duplicate",
-                    IfcRoundTripResultState.Unmapped,
-                    null,
-                    stateDetail: "No identity"),
-                new IfcRoundTripExchangeResult(
-                    "ifc-duplicate",
-                    IfcRoundTripResultState.InvalidOrAmbiguous,
-                    null,
-                    stateDetail: "Duplicate identity")
-            }));
+            var duplicateSupported = new IfcRoundTripExchangeResult(
+                "ifc-m-duplicate",
+                IfcRoundTripResultState.Supported,
+                CreateProjection("BEAM-DUP", "ifc-m-duplicate", "IfcBeam"),
+                classificationIdentity: "class:beam",
+                mappingRelationIdentity: "mapping:beam-dup",
+                costItemRelationIdentity: "cost:beam-dup");
+            var duplicateUnmapped = new IfcRoundTripExchangeResult(
+                "ifc-m-duplicate",
+                IfcRoundTripResultState.Unmapped,
+                null,
+                stateDetail: "No trusted identity",
+                classificationIdentity: "external:conflicting-class");
+            var unique = new IfcRoundTripExchangeResult(
+                "ifc-z-unique",
+                IfcRoundTripResultState.Unsupported,
+                null,
+                stateDetail: "Unsupported external class",
+                classificationIdentity: "external:IfcProxy");
+
+            var forward = IfcRoundTripExchangeResultSet.Create(new[] { duplicateSupported, unique, duplicateUnmapped });
+            var reverse = IfcRoundTripExchangeResultSet.Create(new[] { duplicateUnmapped, unique, duplicateSupported });
+
+            Require(forward.Items.Count == 2, "Duplicate external identity was not collapsed to one canonical result.");
+            Require(reverse.Items.Count == 2, "Duplicate external identity collapse changed with input order.");
+
+            var forwardAmbiguous = forward.Items[0];
+            var reverseAmbiguous = reverse.Items[0];
+            Require(forwardAmbiguous.ExternalObjectId == "ifc-m-duplicate", "Duplicate collapse lost external identity.");
+            Require(reverseAmbiguous.ExternalObjectId == forwardAmbiguous.ExternalObjectId, "Duplicate collapse identity changed with input order.");
+            Require(forwardAmbiguous.State == IfcRoundTripResultState.InvalidOrAmbiguous, "Duplicate external identity was not reported as ambiguous.");
+            Require(reverseAmbiguous.State == IfcRoundTripResultState.InvalidOrAmbiguous, "Reverse duplicate order was not reported as ambiguous.");
+            Require(forwardAmbiguous.StateDetail == IfcRoundTripExchangeResultSet.DuplicateExternalIdentityDetail, "Duplicate ambiguity detail is not canonical.");
+            Require(reverseAmbiguous.StateDetail == forwardAmbiguous.StateDetail, "Duplicate ambiguity detail changed with input order.");
+            Require(!forwardAmbiguous.HasTrustedQs3dIdentity && forwardAmbiguous.Projection == null, "Ambiguous duplicate retained a trusted QS3D projection.");
+            Require(forwardAmbiguous.ClassificationIdentity == null, "Ambiguous duplicate selected conflicting classification evidence.");
+            Require(forwardAmbiguous.MappingRelationIdentity == null, "Ambiguous duplicate retained a mapping relation.");
+            Require(forwardAmbiguous.CostItemRelationIdentity == null, "Ambiguous duplicate retained a cost relation.");
+            Require(ReferenceEquals(forward.Items[1], unique), "Unique IFC result was replaced while coalescing a different duplicate identity.");
+            Require(ReferenceEquals(reverse.Items[1], unique), "Unique IFC result preservation changed with input order.");
 
             Throws<ArgumentException>(() => IfcRoundTripExchangeResultSet.Create(new IfcRoundTripExchangeResult[] { null! }));
         }

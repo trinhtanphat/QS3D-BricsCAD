@@ -96,6 +96,8 @@ namespace QS3D.Core.Export
 
     public sealed class IfcRoundTripExchangeResultSet
     {
+        public const string DuplicateExternalIdentityDetail = "Duplicate external object identity";
+
         private IfcRoundTripExchangeResultSet(IReadOnlyList<IfcRoundTripExchangeResult> items)
         {
             Items = items;
@@ -107,18 +109,26 @@ namespace QS3D.Core.Export
         {
             if (results == null) throw new ArgumentNullException(nameof(results));
 
-            var items = results.ToList();
-            var externalIds = new HashSet<string>(StringComparer.Ordinal);
-            for (var index = 0; index < items.Count; index++)
+            var byExternalIdentity = new Dictionary<string, IfcRoundTripExchangeResult>(StringComparer.Ordinal);
+            foreach (var item in results)
             {
-                var item = items[index];
                 if (item == null)
                     throw new ArgumentException("IFC exchange result collection cannot contain null entries.", nameof(results));
-                if (!externalIds.Add(item.ExternalObjectId))
-                    throw new InvalidOperationException(
-                        "Duplicate external object identity must be represented as a single InvalidOrAmbiguous result: " + item.ExternalObjectId);
+
+                if (!byExternalIdentity.ContainsKey(item.ExternalObjectId))
+                {
+                    byExternalIdentity.Add(item.ExternalObjectId, item);
+                    continue;
+                }
+
+                byExternalIdentity[item.ExternalObjectId] = new IfcRoundTripExchangeResult(
+                    item.ExternalObjectId,
+                    IfcRoundTripResultState.InvalidOrAmbiguous,
+                    null,
+                    stateDetail: DuplicateExternalIdentityDetail);
             }
 
+            var items = byExternalIdentity.Values.ToList();
             items.Sort(IfcRoundTripExchangeResultComparer.Instance);
             return new IfcRoundTripExchangeResultSet(Array.AsReadOnly(items.ToArray()));
         }
