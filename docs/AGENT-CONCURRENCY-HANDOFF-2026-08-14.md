@@ -20,19 +20,23 @@ The canonical detailed protocol is `docs/AGENT-WORK-REGISTRATION.md`.
 
 The former deterministic Core smoke blocker in issue `#1092` is resolved. Do **not** reopen or reimplement that lane from the historical LOCAL-003 failure in this document.
 
-The strongest completed remote evidence at this checkpoint is V25 cloud release run `#146`:
+The strongest completed remote evidence at this checkpoint is V25 cloud release run `#147`:
 
 - workflow: `.github/workflows/release-v25-cloud.yml`
-- run id: `31770525546`
+- run id: `31770836729`
+- workflow head SHA: `f29e6bc8206aa7599c43aa6d2ab4d624079e4411`
 - conclusion: `success`
 - source guards, Core Release build, deterministic Core smoke, BricsCAD V25 reference acquisition/validation, V25 plugin build, packaging, version binding, checksum, artifact upload and prerelease publication all completed successfully
-- published prerelease: `v0.1.0-preview.8`
-- release target: `80ba5ce2cc28cbfadbec6bb70c7a43e1ad5c8fa6`
-- package digest: `sha256:b506d20c2f1f93a5cf3fedfb3f4cc1e51e7772eaacf0a200284327cdd5e4b05d`
+- published prerelease: `v0.1.0-preview.9`
+- exact release source / release target: `5f4ab940649cf1ae7b16bfe653b30ae49572f78b`
+- package: `QS3D-BricsCAD-V25.zip`
+- package digest: `sha256:299fd26e914f889276bde4d589e196438904384e41518520165a14d0762ca288`
 
-That successful run is completed evidence for its exact release source only; it is not proof for commits that landed afterward.
+That successful run is completed evidence for its exact release source only. `main` continued to advance while/after the run, so #147 must not be described as runtime or current-HEAD qualification for later commits.
 
-At the time of this refresh, V25 cloud run `#147` (run id `31770836729`) was in progress from `f29e6bc8206aa7599c43aa6d2ab4d624079e4411`. `main` had already advanced beyond that run to newer concurrent work, so agents must inspect the final #147 conclusion and its exact source before using it as evidence. Do not manually rerun/dispatch merely because this handoff records an in-progress run.
+The immediately preceding completed release was `v0.1.0-preview.8`, target `80ba5ce2cc28cbfadbec6bb70c7a43e1ad5c8fa6`, with package digest `sha256:b506d20c0b77d57e90d66270f4427c97fcfa86de4c5a36b4e6db3b7abe2e0167`.
+
+Neither cloud release executes real BricsCAD NETLOAD/runtime acceptance.
 
 ## Resolved #1092 history
 
