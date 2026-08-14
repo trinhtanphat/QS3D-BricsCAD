@@ -66,9 +66,13 @@ namespace QS3D.Core.Selection
                     throw new InvalidOperationException("Selected element is missing numeric property " + key + ": " + element.Id + ".");
                 if (!double.TryParse(current, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) || double.IsNaN(number) || double.IsInfinity(number))
                     throw new FormatException("Invalid numeric property " + key + " on " + element.Id + ": " + current);
+                if (number == 0d && HasNonZeroSignificand(current))
+                    throw new InvalidOperationException("Semantic selection numeric property underflow for " + element.Id + "/" + key + ": " + current);
                 var next = number * factor;
                 if (double.IsNaN(next) || double.IsInfinity(next))
                     throw new OverflowException("Bulk property multiplication overflow for " + element.Id + "/" + key + ".");
+                if (next == 0d && number != 0d && factor != 0d)
+                    throw new InvalidOperationException("Semantic selection property multiplication underflow for " + element.Id + "/" + key + ".");
                 if (next.Equals(number)) continue;
                 var formatted = next.ToString("R", CultureInfo.InvariantCulture);
                 updates.Add(new PendingValue(element, formatted));
@@ -144,6 +148,17 @@ namespace QS3D.Core.Selection
 
             present = false;
             return string.Empty;
+        }
+
+        private static bool HasNonZeroSignificand(string value)
+        {
+            for (var i = 0; i < value.Length; i++)
+            {
+                var character = value[i];
+                if (character == 'e' || character == 'E') break;
+                if (character >= '1' && character <= '9') return true;
+            }
+            return false;
         }
 
         private static SemanticSelectionBulkEditResult Result(string operation, string target, int selectedCount, IEnumerable<ProjectElement> changed)
