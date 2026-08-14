@@ -173,8 +173,8 @@ if agents.is_file():
     text = agents.read_text(encoding="utf-8")
     if "docs/LOCAL-V25-QUALIFICATION.md" not in text:
         errors.append("AGENTS.md must route local-capable agents to LOCAL-V25-QUALIFICATION.md")
-    if "scripts/run-local-v25-qualification.ps1" not in text:
-        errors.append("AGENTS.md must name the canonical local V25 runner")
+    if "Start permitted local passes from" not in text or "follow the linked exact runbook" not in text:
+        errors.append("AGENTS.md must route local passes through the canonical inbox and linked exact runbook")
 
 if gitignore.is_file():
     ignored = {line.strip() for line in gitignore.read_text(encoding="utf-8").splitlines() if line.strip() and not line.lstrip().startswith("#")}
