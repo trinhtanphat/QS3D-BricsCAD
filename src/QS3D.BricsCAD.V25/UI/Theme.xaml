@@ -754,6 +754,7 @@
         <Style.Triggers>
             <Trigger Property="IsSelected" Value="True">
                 <Setter Property="Background" Value="{StaticResource BgSelectedBrush}"/>
+                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
             </Trigger>
             <Trigger Property="IsMouseOver" Value="True">
                 <Setter Property="Background" Value="{StaticResource BgHoverBrush}"/>
