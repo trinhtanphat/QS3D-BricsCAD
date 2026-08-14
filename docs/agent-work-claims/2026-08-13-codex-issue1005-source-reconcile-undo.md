@@ -106,3 +106,10 @@ The corrected production fix and regressions are merged to current `main`, the e
 - Baseline `main` for this continuation is `8480fdfb8bfb26bb5195a07e179579f3c6dbff52`. It reserves only `SourceReconcileUndoCoordinator.cs`, the Source Reconcile coherence guard base, and this claim. Production reconcile/restore behavior and every LOCAL-004 probe/runner/gate/qualification surface remain unchanged.
 - The source-only sanitized snapshot will project persistent cause-bearing history as `DESYNCHRONIZED`, while document/project affinity or cache mismatch is projected as `NONE` because no matching history exists for the supplied canonical pair. Both values already belong to the unchanged runner allowlist. This makes the next exact run distinguish a true sticky setter from an observational affinity mismatch without exposing or adding IDs, revisions, marker values, paths, handles, entry counts or semantic values.
 - This pass is diagnostic only. It must not clear sticky history, rebind project/document identity, weaken unknown-marker/revision refusal, or infer runtime correctness. Issue `#1005` remains open pending the new exact evidence.
+
+## Sanitized-cause projection candidate
+
+- Diagnostic source commit `07669e9a38c35e04951daa878d60582f828c45e3` merged through PR `#1130` as exact rerun candidate `1c90ddd7ba2cfe2cd56279b09f8feb2365e24ea7`.
+- On that candidate, `DESYNCHRONIZED` uniquely projects the live `RESTORE_RECOVERY_FAILED` cause. `NONE` with the unchanged actual entry class projects commit-history loss or document/project affinity/cache mismatch, proving that the live restore/recovery setter did not cause the observed coarse failure.
+- Focused Source Reconcile gates, strict manual-CI and generic preflight PASS; Core smoke `ALL PASS`; installed-reference V25 `Release|x64` build PASS with `0 warnings / 0 errors`.
+- Exact rerun request and interpretation are recorded in issue comment `#issuecomment-5289798352`. Issue `#1005` and this claim remain `OPEN` / `ACTIVE` / `PENDING_LOCAL`; no runtime result is inferred.
