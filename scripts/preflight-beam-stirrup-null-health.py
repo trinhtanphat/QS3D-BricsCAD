@@ -29,13 +29,14 @@ if not AGGREGATE.is_file():
 else:
     text = AGGREGATE.read_text(encoding="utf-8")
     required = (
-        'AddSafely(issues, seen, "GeneratedBeamStirrupHealthService", () => new GeneratedBeamStirrupHealthService().Inspect(project, normalizedLiveGeneratedSolidHandles));',
+        'new DiagnosticProvider("GeneratedBeamStirrupHealthService", () => new GeneratedBeamStirrupHealthService().Inspect(project, normalizedLiveGeneratedSolidHandles))',
         '"HEALTH_PROVIDER_FAILED"',
         "exception is InvalidOperationException",
+        "ExecuteProvider",
     )
     for token in required:
         if token not in text:
-            errors.append("missing aggregate beam-stirrup fail-visible compatibility token: " + token)
+            errors.append("missing aggregate beam-stirrup fail-visible provider token: " + token)
 
 print("QS3D beam-stirrup standalone null-health preflight")
 if errors:
