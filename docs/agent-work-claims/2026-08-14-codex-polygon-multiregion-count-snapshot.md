@@ -1,6 +1,6 @@
 # Work claim — Polygon multi-region Count snapshot
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `/root/fix_source_reconcile_desync`
 - Registered: `2026-08-14T16:14:35+07:00`
 - Baseline main SHA: `552aa7433ab6fe438076337bc9ba7c86cb9c1cbe`
@@ -28,3 +28,12 @@
 - existing polygon multi-region mesh/topology and polygon region gates;
 - `QS3D.Core` and `QS3D.Core.SmokeTests` Release builds;
 - full deterministic Core smoke, reporting the first unrelated blocker without expanding scope.
+
+## Completion
+
+- Claim PR `#1271` merged as `564c3237194601053fd0d536577f993d6cfe8e27` before implementation began.
+- Source PR `#1275` merged as `f77ab1d3e6b89891efe5f18defdc0160414c57ce`.
+- Existing polygon multi-region mesh, topology, and polygon-region-hole gates: `PASS` on the exact merged source.
+- `QS3D.Core` and `QS3D.Core.SmokeTests` Release builds: `0` warnings, `0` errors.
+- Full deterministic Core smoke advanced through the polygon initializer and stopped at the unrelated `QuantityRuleFamilyIdCanonicalitySmoke.PaddedFamilyIdFailsBeforeStaleCleanup` fixture, whose public setter setup no longer creates padded raw state. This lane did not expand into that fixture.
+- Final implementation changed only the planner Count snapshot and its existing bounded smoke; no gate update was required and no topology/native/runtime/LOCAL/Actions surface changed.
