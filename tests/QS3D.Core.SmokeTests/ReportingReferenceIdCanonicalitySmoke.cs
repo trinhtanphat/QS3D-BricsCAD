@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Reporting;
@@ -31,31 +32,60 @@ namespace QS3D.Core.SmokeTests
         private static void PaddedFloorReferenceFailsClosed()
         {
             var project = CreateProject();
-            project.Elements[0].FloorId = " F1 ";
+            var element = project.Elements[0];
+            element.FloorId = " F1 ";
+            AssertEqual("F1", element.FloorId, "Floor relation setter did not canonicalize its value.");
+            InjectRawRelation(element, "_floorId", " F1 ");
+            AssertEqual(" F1 ", element.FloorId, "Raw padded Floor relation was not injected.");
             Throws<InvalidOperationException>(() => DoorOpeningScheduleBuilder.Build(project));
         }
 
         private static void PaddedFamilyReferenceFailsClosed()
         {
             var project = CreateProject();
-            project.Elements[0].FamilyId = " FAM1 ";
+            var element = project.Elements[0];
+            element.FamilyId = " FAM1 ";
+            AssertEqual("FAM1", element.FamilyId, "Family relation setter did not canonicalize its value.");
+            InjectRawRelation(element, "_familyId", " FAM1 ");
+            AssertEqual(" FAM1 ", element.FamilyId, "Raw padded Family relation was not injected.");
             Throws<InvalidOperationException>(() => DoorOpeningScheduleBuilder.Build(project));
         }
 
         private static void PaddedZoneReferenceFailsClosed()
         {
             var project = CreateProject();
-            project.Elements[0].ZoneId = " Z1 ";
+            var element = project.Elements[0];
+            element.ZoneId = " Z1 ";
+            AssertEqual("Z1", element.ZoneId, "Zone relation setter did not canonicalize its value.");
+            InjectRawRelation(element, "_zoneId", " Z1 ");
+            AssertEqual(" Z1 ", element.ZoneId, "Raw padded Zone relation was not injected.");
             Throws<InvalidOperationException>(() => DoorOpeningScheduleBuilder.Build(project));
         }
 
         private static void BlankReferencesRemainAllowed()
         {
             var project = CreateProject();
-            project.Elements[0].FamilyId = string.Empty;
-            project.Elements[0].FloorId = "   ";
-            project.Elements[0].ZoneId = string.Empty;
+            var element = project.Elements[0];
+            element.FamilyId = string.Empty;
+            element.FloorId = "   ";
+            element.ZoneId = string.Empty;
+            AssertEqual(string.Empty, element.FloorId, "Whitespace Floor relation did not normalize to unbound.");
+            InjectRawRelation(element, "_floorId", "   ");
+            AssertEqual("   ", element.FloorId, "Raw whitespace Floor relation was not injected.");
             _ = DoorOpeningScheduleBuilder.Build(project);
+        }
+
+        private static void InjectRawRelation(ProjectElement element, string fieldName, string rawValue)
+        {
+            var field = typeof(ProjectElement).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null || field.FieldType != typeof(string))
+                throw new InvalidOperationException("ReportingReferenceIdCanonicalitySmoke cannot inject raw relation field " + fieldName + ".");
+            field.SetValue(element, rawValue);
+        }
+
+        private static void AssertEqual(string expected, string actual, string message)
+        {
+            if (!string.Equals(expected, actual, StringComparison.Ordinal)) throw new Exception(message);
         }
 
         private static ProjectState CreateProject()
