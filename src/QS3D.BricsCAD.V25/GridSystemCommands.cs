@@ -142,8 +142,8 @@ namespace QS3D.BricsCAD.V25
 
             var vAxis = lines[0].Direction;
             var uAxis = new Point2(-vAxis.Y, vAxis.X);
-            var uStations = new List<GridLinearStation>();
-            var vStations = new List<GridLinearStation>();
+            var uLines = new List<LineSample>();
+            var vLines = new List<LineSample>();
 
             var uMin = double.PositiveInfinity;
             var uMax = double.NegativeInfinity;
@@ -159,18 +159,15 @@ namespace QS3D.BricsCAD.V25
                 if (!Finite(dot))
                     throw new InvalidOperationException("Grid direction dot product không hữu hạn: " + line.ElementId + ".");
                 var absoluteDot = Math.Abs(dot);
-                var midpoint = new Point2(
-                    0.5d * line.Start.X + 0.5d * line.End.X,
-                    0.5d * line.Start.Y + 0.5d * line.End.Y);
 
                 if (1d - absoluteDot <= DirectionTolerance)
                 {
-                    uStations.Add(new GridLinearStation(line.ElementId, Dot(midpoint, uAxis)));
+                    uLines.Add(line);
                     continue;
                 }
                 if (absoluteDot <= DirectionTolerance)
                 {
-                    vStations.Add(new GridLinearStation(line.ElementId, Dot(midpoint, vAxis)));
+                    vLines.Add(line);
                     continue;
                 }
 
@@ -179,10 +176,29 @@ namespace QS3D.BricsCAD.V25
                     DirectionTolerance.ToString("G17", CultureInfo.InvariantCulture) + ".");
             }
 
-            if (uStations.Count == 0 || vStations.Count == 0)
+            if (uLines.Count == 0 || vLines.Count == 0)
                 throw new InvalidOperationException("Selection phải chứa Grid LINE ở cả hai phương rectangular vuông góc.");
             if (!Finite(uMin) || !Finite(uMax) || !Finite(vMin) || !Finite(vMax))
                 throw new InvalidOperationException("Grid system extent không hữu hạn.");
+
+            var orderedU = GridSpatialOrderingPlanner.OrderParallelLines(
+                uLines.Select(ToReferenceCurve),
+                uAxis,
+                false,
+                DirectionTolerance,
+                CoordinateTolerance);
+            var orderedV = GridSpatialOrderingPlanner.OrderParallelLines(
+                vLines.Select(ToReferenceCurve),
+                vAxis,
+                false,
+                DirectionTolerance,
+                CoordinateTolerance);
+            var uStations = orderedU
+                .Select(x => new GridLinearStation(x.ElementId, x.Coordinate))
+                .ToList();
+            var vStations = orderedV
+                .Select(x => new GridLinearStation(x.ElementId, x.Coordinate))
+                .ToList();
 
             var input = new RectangularGridSystemInput
             {
@@ -197,6 +213,12 @@ namespace QS3D.BricsCAD.V25
                 VMaxM = vMax
             };
             return new PreviewResult(input, uStations.Count, vStations.Count);
+        }
+
+        private static GridReferenceCurve ToReferenceCurve(LineSample line)
+        {
+            if (line == null) throw new ArgumentNullException(nameof(line));
+            return GridReferenceCurve.Line(line.ElementId, line.Start, line.End);
         }
 
         private static void AccumulateExtent(
