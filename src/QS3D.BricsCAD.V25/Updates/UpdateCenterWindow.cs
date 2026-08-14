@@ -199,6 +199,10 @@ namespace QS3D.BricsCAD.V25.Updates
 
         private static Button MakeButton(string text, bool primary)
         {
+            var normal = primary
+                ? new SolidColorBrush(Color.FromRgb(56, 116, 255))
+                : new SolidColorBrush(Color.FromRgb(47, 55, 68));
+
             return new Button
             {
                 Content = text,
@@ -206,10 +210,52 @@ namespace QS3D.BricsCAD.V25.Updates
                 Height = 36,
                 Margin = new Thickness(8, 0, 0, 0),
                 Padding = new Thickness(14, 0, 14, 0),
-                Background = primary ? new SolidColorBrush(Color.FromRgb(56, 116, 255)) : new SolidColorBrush(Color.FromRgb(47, 55, 68)),
+                Background = normal,
                 Foreground = Brushes.White,
-                BorderThickness = new Thickness(0)
+                BorderThickness = new Thickness(0),
+                FocusVisualStyle = null,
+                Template = CreateButtonTemplate(primary, normal)
             };
+        }
+
+        private static ControlTemplate CreateButtonTemplate(bool primary, Brush normal)
+        {
+            var hover = primary
+                ? new SolidColorBrush(Color.FromRgb(75, 130, 255))
+                : new SolidColorBrush(Color.FromRgb(59, 70, 86));
+            var pressed = primary
+                ? new SolidColorBrush(Color.FromRgb(47, 98, 214))
+                : new SolidColorBrush(Color.FromRgb(39, 48, 60));
+            var disabled = new SolidColorBrush(Color.FromRgb(45, 52, 64));
+
+            var chrome = new FrameworkElementFactory(typeof(Border), "Chrome");
+            chrome.SetValue(Border.BackgroundProperty, normal);
+            chrome.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
+            chrome.SetValue(Border.PaddingProperty, new Thickness(14, 0, 14, 0));
+            chrome.SetValue(UIElement.SnapsToDevicePixelsProperty, true);
+
+            var content = new FrameworkElementFactory(typeof(ContentPresenter));
+            content.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            content.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+            content.SetValue(ContentPresenter.RecognizesAccessKeyProperty, true);
+            chrome.AppendChild(content);
+
+            var template = new ControlTemplate(typeof(Button)) { VisualTree = chrome };
+
+            var hoverTrigger = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
+            hoverTrigger.Setters.Add(new Setter(Border.BackgroundProperty, hover, "Chrome"));
+            template.Triggers.Add(hoverTrigger);
+
+            var pressedTrigger = new Trigger { Property = Button.IsPressedProperty, Value = true };
+            pressedTrigger.Setters.Add(new Setter(Border.BackgroundProperty, pressed, "Chrome"));
+            template.Triggers.Add(pressedTrigger);
+
+            var disabledTrigger = new Trigger { Property = UIElement.IsEnabledProperty, Value = false };
+            disabledTrigger.Setters.Add(new Setter(Border.BackgroundProperty, disabled, "Chrome"));
+            disabledTrigger.Setters.Add(new Setter(UIElement.OpacityProperty, 0.62, "Chrome"));
+            template.Triggers.Add(disabledTrigger);
+
+            return template;
         }
     }
 
