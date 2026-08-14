@@ -49,6 +49,11 @@ REQUIRED = {
         "S gộp",
         "S còn",
         "OnQuantityGeometryDeductionClick",
+        "ProjectStateSnapshot.CreateDetachedCopy(project)",
+        "RegenerateDirty(preview)",
+        "ProjectQuantityReportBuilder.Detail(preview, ids)",
+        "SameRow(option.Row, matches[0])",
+        "SourceHandleResolver.Resolve(project, semanticIds)",
         "ViewportCommands.TryZoomSelection(document)",
         "GeometryFingerprint",
     ],
@@ -98,6 +103,8 @@ def main():
     ui = texts.get("ui", "")
     if 'SendStringToExecute("QS3DZOOMSELECTED ' in ui or 'SendStringToExecute("QS3DZOOMEXTENTS ' in ui:
         failures.append("geometry deduction locate must use direct in-process zoom, not queued command re-entry")
+    if "ProjectQuantityReportBuilder.Detail(project, option.Row.ElementIds)" in ui:
+        failures.append("geometry deduction locate must validate against regenerated detached preview, not dirty live semantic detail")
 
     if failures:
         print("Quantity geometry explainer preflight FAILED")
@@ -110,6 +117,7 @@ def main():
     print(" - Residual subtraction prevents double volume deduction")
     print(" - Multi-Solid3d face identities are component-scoped")
     print(" - Contact-probe cut planes cannot masquerade as original target faces")
+    print(" - Deduction locate validates regenerated preview provenance and resolves live CAD handles")
     print(" - Per-face formwork/contact explanation and direct clickable CAD locate/zoom UI")
     print(" - BREP compile reference and SI unit normalization")
     return 0
