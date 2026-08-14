@@ -27,8 +27,6 @@ if direct:
         errors.append("STT2: cannot isolate Direct Draw FinalizeUi")
     else:
         finalize = direct[finalize_start:finalize_end]
-        category_guard = finalize.find("if (element.Category != ElementCategory.Beam)")
-        view_command = finalize.find('document.SendStringToExecute("QS3DVIEW3D ", true, false, false);')
         for token in (
             "PaletteCoordinator.RefreshProject();",
             "document.Editor.Regen();",
@@ -36,8 +34,8 @@ if direct:
         ):
             if token not in finalize:
                 errors.append("STT2: FinalizeUi lost post-commit UI token: " + token)
-        if category_guard < 0 or view_command < 0 or category_guard > view_command:
-            errors.append("STT2: Beam must skip QS3DVIEW3D while other Direct Draw categories may still queue it")
+        if "QS3DVIEW3D" in finalize or "SendStringToExecute" in finalize:
+            errors.append("STT2: Direct Draw FinalizeUi must preserve the user's current viewport and must not queue an automatic view-switch command")
 
 family = texts.get("family", "")
 if family:
@@ -108,4 +106,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: live-sheet STT2-STT5 source regressions remain guarded (Beam viewport, optional Family custom key/copy, safe quantity-detail selection, and QS3DSETUP theme construction).")
+print("PASS: live-sheet STT2-STT5 source regressions remain guarded (Direct Draw preserves viewport, Family custom key/copy stays safe, quantity-detail selection stays bounded, and QS3DSETUP theme construction stays valid).")
