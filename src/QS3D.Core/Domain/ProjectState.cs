@@ -124,7 +124,7 @@ namespace QS3D.Core.Domain
         public ProjectState(string projectId, string name)
         {
             ProjectId = string.IsNullOrWhiteSpace(projectId) ? throw new ArgumentException("Project id is required.", nameof(projectId)) : projectId.Trim();
-            _name = string.IsNullOrWhiteSpace(name) ? "QS3D Project" : name.Trim();
+            _name = string.IsNullOrWhiteSpace(name) ? "QS3D Project" : RequireProjectName(name);
             Zones = new List<ZoneDefinition>();
             Floors = new List<FloorDefinition>();
             Families = new List<ProjectFamily>();
@@ -225,7 +225,16 @@ namespace QS3D.Core.Domain
             return value;
         }
 
-        private static string RequireProjectName(string value) => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Project name is required.", nameof(value)) : value.Trim();
+        private static string RequireProjectName(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException("Project name is required.", nameof(value));
+            var normalized = value.Trim();
+            if (normalized.Any(char.IsControl))
+                throw new ArgumentException("Project name cannot contain control characters.", nameof(value));
+            return normalized;
+        }
+
         private static string NormalizeLookupId(string id) => (id ?? string.Empty).Trim();
 
         private static T? FindUnique<T>(IEnumerable<T> items, string normalizedId, Func<T, string> idSelector, string label) where T : class
