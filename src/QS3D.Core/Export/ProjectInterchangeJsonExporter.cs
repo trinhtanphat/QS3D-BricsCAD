@@ -19,6 +19,7 @@ namespace QS3D.Core.Export
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             ValidateProjectIdentity(project);
+            ValidateExportCollectionBounds(project);
             ProjectInterchangeSemanticReferenceValidator.Validate(project);
             ValidateSemanticCollections(project);
 
@@ -225,6 +226,21 @@ namespace QS3D.Core.Export
         {
             if (string.IsNullOrWhiteSpace(project.ProjectId)) throw new InvalidDataException("Interchange export requires a project id.");
             if (project.SchemaVersion <= 0) throw new InvalidDataException("Interchange export requires a positive project schema version.");
+        }
+
+        private static void ValidateExportCollectionBounds(ProjectState project)
+        {
+            var total = (long)project.Zones.Count + project.Floors.Count + project.Families.Count + project.Elements.Count;
+            if (total > ProjectInterchangeJsonValidator.MaxCollectionItems)
+                throw new InvalidDataException(
+                    "Interchange export collection count exceeds the guarded " +
+                    ProjectInterchangeJsonValidator.MaxCollectionItems.ToString(CultureInfo.InvariantCulture) +
+                    "-item limit.");
+            if (project.Elements.Count > ProjectInterchangeJsonValidator.MaxElements)
+                throw new InvalidDataException(
+                    "Interchange export contains more than " +
+                    ProjectInterchangeJsonValidator.MaxElements.ToString(CultureInfo.InvariantCulture) +
+                    " elements.");
         }
 
         private static void ValidateSemanticCollections(ProjectState project)
