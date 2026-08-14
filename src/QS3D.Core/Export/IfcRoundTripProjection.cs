@@ -28,6 +28,27 @@ namespace QS3D.Core.Export
             double primaryQuantity,
             string primaryQuantityUnit,
             IEnumerable<string> provenance)
+            : this(
+                qs3dElementId,
+                ifcGlobalId,
+                semanticClassification,
+                dimensions,
+                primaryQuantity,
+                primaryQuantityUnit,
+                provenance,
+                Array.Empty<IfcRoundTripQuantityEvidence>())
+        {
+        }
+
+        public IfcRoundTripProjection(
+            string qs3dElementId,
+            string ifcGlobalId,
+            string semanticClassification,
+            IEnumerable<IfcRoundTripNumericProperty> dimensions,
+            double primaryQuantity,
+            string primaryQuantityUnit,
+            IEnumerable<string> provenance,
+            IEnumerable<IfcRoundTripQuantityEvidence> quantityEvidence)
         {
             Qs3dElementId = IfcRoundTripProjectionContract.RequireCanonicalToken(qs3dElementId, nameof(qs3dElementId));
             IfcGlobalId = IfcRoundTripProjectionContract.RequireCanonicalToken(ifcGlobalId, nameof(ifcGlobalId));
@@ -36,6 +57,7 @@ namespace QS3D.Core.Export
             PrimaryQuantity = IfcRoundTripProjectionContract.RequireFinite(primaryQuantity, nameof(primaryQuantity));
             PrimaryQuantityUnit = IfcRoundTripProjectionContract.RequireCanonicalToken(primaryQuantityUnit, nameof(primaryQuantityUnit));
             Provenance = CanonicalizeProvenance(provenance);
+            QuantityEvidence = IfcRoundTripQuantityEvidenceSet.Create(quantityEvidence);
         }
 
         public string Qs3dElementId { get; }
@@ -45,6 +67,7 @@ namespace QS3D.Core.Export
         public double PrimaryQuantity { get; }
         public string PrimaryQuantityUnit { get; }
         public IReadOnlyList<string> Provenance { get; }
+        public IfcRoundTripQuantityEvidenceSet QuantityEvidence { get; }
 
         private static IReadOnlyList<IfcRoundTripNumericProperty> CanonicalizeDimensions(IEnumerable<IfcRoundTripNumericProperty> dimensions)
         {
@@ -128,6 +151,7 @@ namespace QS3D.Core.Export
             if (expected.Provenance.Count != actual.Provenance.Count) return false;
             for (var index = 0; index < expected.Provenance.Count; index++)
                 if (!string.Equals(expected.Provenance[index], actual.Provenance[index], StringComparison.Ordinal)) return false;
+            if (!IfcRoundTripQuantityEvidenceSetComparer.AreEquivalent(expected.QuantityEvidence, actual.QuantityEvidence, absoluteTolerance)) return false;
             return true;
         }
 
