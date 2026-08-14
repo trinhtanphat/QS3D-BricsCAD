@@ -23,32 +23,24 @@ jobs:
           from pathlib import Path
           p = Path('.github/workflows/release-v25-cloud.yml')
           s = p.read_text(encoding='utf-8')
-          setup = "\n".join([
-              "      - uses: actions/setup-python@v7",
-              "        with:",
-              "          python-version: \"3.12\"",
-              "",
-              "      - uses: actions/setup-dotnet@v6",
-              "        with:",
-              "          dotnet-version: \"8.0.x\"",
-              "",
-              "      - name: Cache NuGet packages",
-              "        uses: actions/cache@v5",
-              "        with:",
-              "          path: ${{ env.NUGET_PACKAGES }}",
-              "          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', 'nuget.config') }}",
-              "          restore-keys: |",
-              "            nuget-${{ runner.os }}-",
-              "",
-              "",
-          ])
+          start_marker = '      - uses: actions/setup-python@v7\n'
+          validate_marker = '      - name: Validate cloud prerelease request\n'
           anchor = '          Write-Host "Exact release source commit: $releaseCommit"\n\n'
-          if s.count(setup) != 1:
-              raise SystemExit(f'Expected exactly one toolchain setup block, got {s.count(setup)}')
+          if s.count(start_marker) != 1:
+              raise SystemExit(f'Expected one setup-python marker, got {s.count(start_marker)}')
+          if s.count(validate_marker) != 1:
+              raise SystemExit(f'Expected one validate marker, got {s.count(validate_marker)}')
           if s.count(anchor) != 1:
-              raise SystemExit(f'Expected exactly one release preparation anchor, got {s.count(anchor)}')
-          s = s.replace(setup, '', 1)
-          s = s.replace(anchor, anchor + setup, 1)
+              raise SystemExit(f'Expected one release preparation anchor, got {s.count(anchor)}')
+          start = s.index(start_marker)
+          end = s.index(validate_marker, start)
+          setup = s[start:end]
+          for required in ('actions/setup-python@v7', 'actions/setup-dotnet@v6', 'Cache NuGet packages'):
+              if required not in setup:
+                  raise SystemExit(f'Missing expected setup marker: {required}')
+          s = s[:start] + s[end:]
+          insert_at = s.index(anchor) + len(anchor)
+          s = s[:insert_at] + setup + s[insert_at:]
           p.write_text(s, encoding='utf-8')
       - name: Commit ordering fix
         shell: bash
