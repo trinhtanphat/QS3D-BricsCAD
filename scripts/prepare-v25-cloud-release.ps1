@@ -55,6 +55,8 @@ try {
         throw "Release preparation must start from a clean checkout/index. Unexpected status '$($entry.State)' at $($entry.Path)."
     }
 
+    & (Join-Path $PSScriptRoot 'validate-preview-release-sequence.ps1') -ReleaseTag $tag
+
     & (Join-Path $PSScriptRoot 'sync-preview-release-version.ps1') -ReleaseTag $tag
     if ($LASTEXITCODE -ne 0) {
         throw "Preview source identity synchronization failed for $tag."
