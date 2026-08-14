@@ -51,10 +51,21 @@ namespace QS3D.Core.SmokeTests
         private static void XmlValidWhitespaceRoundTripsExactly()
         {
             const string name = "Review\tName";
-            const string ruleId = "cost\tline";
-            var snapshot = new PreviewReviewSnapshotService().Create(
-                name,
-                new QuantityRulePreviewService().PreviewProject(CreateProject(ruleId, "1")));
+            const string ruleId = "cost-line";
+            const string provenanceWithTab = "cost-line@1\tstage";
+            var preview = new QuantityRulePreviewService().PreviewProject(CreateProject(ruleId, "1"));
+            if (preview.Elements.Count != 1 || preview.Elements[0].Changes.Count != 1 ||
+                !string.Equals(preview.Elements[0].Changes[0].AfterProvenance, ruleId + "@1", StringComparison.Ordinal))
+                throw new InvalidOperationException("Expected canonical Quantity Rule provenance before XML-valid whitespace injection.");
+
+            var change = preview.Elements[0].Changes[0];
+            var provenanceField = typeof(QuantityRulePreviewChange).GetField("<AfterProvenance>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("QuantityRulePreviewChange AfterProvenance backing field changed; update XML whitespace regression intentionally.");
+            provenanceField.SetValue(change, provenanceWithTab);
+            if (!string.Equals(change.AfterProvenance, provenanceWithTab, StringComparison.Ordinal))
+                throw new InvalidOperationException("Expected XML-valid tab content to reach Preview Review provenance input.");
+
+            var snapshot = new PreviewReviewSnapshotService().Create(name, preview);
             var path = TempPath();
             try
             {
@@ -64,7 +75,7 @@ namespace QS3D.Core.SmokeTests
                 if (!string.Equals(loaded.Name, name, StringComparison.Ordinal))
                     throw new InvalidOperationException("Preview Review changed XML-valid tab content in the review name.");
                 if (loaded.Entries.Count != 1 ||
-                    !string.Equals(loaded.Entries[0].AfterProvenance, ruleId + "@1", StringComparison.Ordinal))
+                    !string.Equals(loaded.Entries[0].AfterProvenance, provenanceWithTab, StringComparison.Ordinal))
                     throw new InvalidOperationException("Preview Review changed XML-valid tab content in rule provenance.");
             }
             finally
