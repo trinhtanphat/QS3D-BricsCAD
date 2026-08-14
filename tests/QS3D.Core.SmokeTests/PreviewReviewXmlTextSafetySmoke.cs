@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Review;
@@ -29,7 +30,15 @@ namespace QS3D.Core.SmokeTests
 
         private static void InvalidRuleProvenanceFailsBeforeSnapshot()
         {
-            var preview = new QuantityRulePreviewService().PreviewProject(CreateProject("cost\u0001rule", "1"));
+            var preview = new QuantityRulePreviewService().PreviewProject(CreateProject("cost-rule", "1"));
+            if (preview.Elements.Count != 1 || preview.Elements[0].Changes.Count != 1 ||
+                !string.Equals(preview.Elements[0].Changes[0].AfterProvenance, "cost-rule@1", StringComparison.Ordinal))
+                throw new InvalidOperationException("Expected real Quantity Rule provenance before corruption.");
+
+            var change = preview.Elements[0].Changes[0];
+            var provenanceField = typeof(QuantityRulePreviewChange).GetField("<AfterProvenance>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("QuantityRulePreviewChange AfterProvenance backing field changed; update corruption regression intentionally.");
+            provenanceField.SetValue(change, "cost\u0001rule@1");
             if (preview.Elements.Count != 1 || preview.Elements[0].Changes.Count != 1 ||
                 preview.Elements[0].Changes[0].AfterProvenance.IndexOf('\u0001') < 0)
                 throw new InvalidOperationException("Expected invalid XML character to reach Preview Review provenance input.");
