@@ -65,6 +65,17 @@ namespace QS3D.BricsCAD.V25
         [CommandMethod("QS3DCURTAINP10PROGRESSWORKSPACE", CommandFlags.Modal)]
         public void ProgressWorkspaceOpened() => WriteProgress("workspace_opened");
 
+        [CommandMethod("QS3DCURTAINP10RESELECT", CommandFlags.Modal)]
+        public void ReselectGeneratedPanel() => RunPhase("reselect_panel", "PANEL_RESELECTION_REJECTED", () =>
+        {
+            var state = RequiredState();
+            state.RequireCurrentAndUnchanged();
+            var selectedIds = CadHandleService.Resolve(state.Document, new[] { state.PanelHandle });
+            if (selectedIds.Count != 1)
+                throw new InvalidOperationException("P10 panel reselection could not be resolved.");
+            state.Document.Editor.SetImpliedSelection(selectedIds.ToArray());
+        });
+
         [CommandMethod("QS3DCURTAINP10PROGRESSINSPECT", CommandFlags.Modal)]
         public void ProgressWorkspaceInspected() => WriteProgress("workspace_inspected");
 
