@@ -1,6 +1,6 @@
 # Work claim — LOCAL-003 shared native Level Z-chain
 
-- Status: `ACTIVE`
+- Status: `BLOCKED`
 - Agent: `codex-local-019ff0c5` (`/root`, local Windows + licensed BricsCAD V25 agent)
 - Registered: `2026-08-11T19:43:12+07:00`
 - Baseline main SHA: `c7dd212d36677a1d2e005becf8709768fe98d6a1`
@@ -672,3 +672,9 @@ Across three consecutive goal turns, issue `#990` remained open without an assig
 The lane resumes from synchronized `origin/main@93a5547224a5248ae741ccd8dd4368bac27b6b00`. Issue `#990` is `CLOSED / COMPLETED`; current `MeasurementTraceContractSmoke` uses the corrected null-safe equality assertion. A fresh process audit found no running BricsCAD process, so the earlier operator-session exclusion is also clear without the agent closing or modifying the user's drawing.
 
 This status-only reactivation must be visible on current `origin/main` before renewed qualification. After publication, fetch again, re-audit concurrent claims, build Core and the V25 adapter from the newest exact SHA, require the complete smoke and focused Level/static gates to pass, verify matching plugin/Core `ProductVersion`, create a new disposable `*.level-z-probe-copy.dwg` and fresh artifact directory, then execute `scripts/test-bricscad-v25-level-z.ps1`. Any new CAD-independent defect is handed to a non-local owner; no GitHub Actions are authorized.
+
+## 2026-08-14 current-main smoke blocker handoff
+
+Qualification on clean exact SHA `2dc87bf0985c5967f9ca45f09aac22ba85e2e0cd` passed the Core Release build with `0 warnings / 0 errors` and all nine focused Level/static gates. The installed-reference BricsCAD V25 `Release|x64` build also passed with `0 warnings / 0 errors`; plugin SHA-256 `CCC99A7BF822BB1FF41C60CBC074C444178C8E1C144ABD68967C8D5549088968` and Core SHA-256 `722F6B3518C3A7545C260170E0011FD9252CA83487EF49D3683E4B4485C2D4C6` both report `ProductVersion 0.1.0-preview.5+2dc87bf0985c5967f9ca45f09aac22ba85e2e0cd`.
+
+The mandatory full Core smoke then failed in the CAD-independent `ModelHealthSourceHandleSmoke.NumericAliasesShareIdentity` assertion: numeric aliases `A` / `00a` produced zero `DUPLICATE_SOURCE_HANDLE` issues instead of one. Current `ModelHealthService` trims stored SourceHandles instead of applying the shared numeric handle normalization expected by the registered smoke. The sanitized handoff is GitHub issue `#1092`; this local worker did not edit Core or the test fixture. The native Level probe was not run because full smoke is a prerequisite. This claim remains reserved but `BLOCKED` until a non-local fix makes the complete smoke pass on current `main`; afterward reactivate/push before rebuilding and running a fresh disposable exact-SHA probe. No GitHub Actions were dispatched.
