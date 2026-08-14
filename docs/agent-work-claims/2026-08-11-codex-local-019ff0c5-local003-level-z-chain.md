@@ -313,6 +313,10 @@ Parent task `/root` explicitly delegates only `tests/QS3D.Core.SmokeTests/Materi
 
 Completed through PR `#1173` at `0ca306c1eced3f199e98fcbeaa21794d3ce460a0`. The registered smoke now advances past the MaterialUsage collision fixture and reaches the separate stale `MeasurementWorkItemCoverageSmoke.CorruptProjectStateFailsClosed` Element-ID fixture; no Level or production surface changed.
 
+### 2026-08-14 Preview Review XML rule-provenance fixture delegation
+
+After the independent Measurement fixture owner landed its correction, the full smoke reached `PreviewReviewXmlTextSafetySmoke.InvalidRuleProvenanceFailsBeforeSnapshot`. Parent task `/root` explicitly delegates only that smoke file to `/root/fix_level_curtain_frame_z` under `2026-08-14-codex-preview-review-xml-rule-provenance-fixture.md`: construct a valid rule, then use test-local reflection to inject the unreachable control-character rule ID while retaining the real provenance and Preview Review invalid-XML assertions. The parent retains LOCAL-003 probe/runner ownership and will not edit this smoke while the child claim is `ACTIVE`.
+
 ## 2026-08-12 base schedule reference-integrity fixture reconciliation expansion
 
 Baseline audited after a clean fetch and fast-forward: `origin/main@f74dbc55d5c141b78d7f20d0a65bac26b901126f`.
