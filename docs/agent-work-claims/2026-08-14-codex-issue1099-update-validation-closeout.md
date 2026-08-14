@@ -1,8 +1,9 @@
 # Work claim — Issue #1099 Update/version validation close-out
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-fix-updater-version-gates-20260814` (`/root/fix_updater_version_gates`)
 - Registered: `2026-08-14T09:13:34+07:00`
+- Completed: `2026-08-14T10:02:00+07:00`
 - Baseline main SHA: `608d66195a2a532b73e5a85f326a876bd52ca1d6`
 - Priority: close GitHub issue `#1099` with fresh full-checkout evidence after its source fix landed
 
@@ -57,4 +58,18 @@ Fresh full-checkout validation found one issue-scoped stale gate and no remainin
 - explicit `PYTHONIOENCODING=cp1252` probes for all three affected `console_safe(...)` helpers emitted escaped Vietnamese assertion text and exited normally, with no `UnicodeEncodeError`;
 - aggregate `scripts/preflight-all.py`: executed, 781 gates discovered, but not yet green because three unrelated current-main gates fail on research-document wording and Wall Junction signature drift (`preflight-product-boundary.py`, `preflight-research-implementation-status.py`, `preflight-wall-junctions.py`). Those surfaces are outside this reservation and were not edited.
 
-The #1099 gate correction may be published while this claim remains `ACTIVE`; final close-out and issue closure wait for a fresh aggregate result on a current-main descendant. No GitHub Actions operation was performed.
+At this checkpoint the #1099 gate correction was ready to publish, while final close-out and issue closure still waited for a fresh green aggregate result on a current-main descendant. No GitHub Actions operation was performed.
+
+## Final close-out — exact main `907a2e9fa2c0c1282c8361ee8f02b49e7b2687ae`
+
+- Claim-only commit `74d339a31d9d61f62afa73d5ae8c7412ef1be22e` merged through PR #1104 at `77ebd673a9f81ca3628e75328319427fa298a33f`.
+- The original #1099 source/gate repair is `d92c7eb404b4c5dfeb8aee039905f83ad30bbce5`; later owner refinements `b4059961315ba7e6b5455ea8d41af65fe3c23227` and `f3b9bf99bbcfd566586dcbfa496fede3346816ee` preserve one concise canonical `QS3DVERSION` and the separate deep `QS3DRUNTIMECHECK` path.
+- Focused gate correction `e7c8416e6de2248f85bdbf836447252b1cbc94e8` merged through PR #1110 at `a33240db617541f425163936095d8b136d3b6ad2`.
+- Installed-reference V25 `Release|x64` build: PASS, 0 warnings / 0 errors; exact product version `0.1.0-preview.7+907a2e9fa2c0c1282c8361ee8f02b49e7b2687ae`; DLL SHA-256 `A5768B3FB01316FBFE3D0D97459BC737886AB31045418D5BFA406B9011B824B4`.
+- Five duplicate-command gates, the three issue-named Update gates, and broader `preflight-auto-update.py`: all PASS.
+- Explicit cp1252 probes for `preflight-v25-netload-update-ux.py`, `preflight-update-manifest-preclose.py`, and `preflight-update-manual-preview-channel.py`: PASS; Vietnamese assertion text was escaped and no `UnicodeEncodeError` occurred.
+- Aggregate `scripts/preflight-all.py`: PASS, all 783 discovered feature gates passed.
+- Production source retains exactly one canonical `QS3DVERSION` registration in `RuntimeDiagnosticsCommands`; `UpdateCommands` retains `QS3DVER` / `QSVER` through `WriteVersionCore` without re-registering the canonical command. The signed-manifest, manual-preview and updater security boundaries remain intact.
+- No BricsCAD interactive/private-data operation and no GitHub Actions operation was performed.
+
+This completion record is the close-out commit for the reserved lane. GitHub issue #1099 may be closed after this commit is merged to `main` and read back there.
