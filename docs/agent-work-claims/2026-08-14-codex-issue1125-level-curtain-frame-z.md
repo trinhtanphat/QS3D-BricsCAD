@@ -42,3 +42,11 @@ The ACTIVE Curtain Undo/P10/empty-partition claims own different transaction, se
 ## Completion condition
 
 The bounded production fix and deterministic regressions are merged to current `main`; source/static/Core smoke and installed-reference V25 compile pass; issue `#1125` records the exact merged rerun SHA; this claim is `COMPLETED`; and licensed Level runtime evidence remains with the parent LOCAL-003 owner.
+
+## Implementation candidate — 2026-08-14
+
+On synchronized baseline `d321660c632b2c66cf0cefe78c9c0ecea93bb198`, both native frame builders now preserve the historical legacy/no-Level box-origin translation but omit the duplicate `-height/2` Z translation when `CadElementVerticalPlacement.UsesBottomLevel` is true. BricsCAD V25 `Solid3d.CreateBox` is centered, so the Level branch now places each frame piece around the already-computed `resolved bottom + piece Z + piece height/2` center instead of lowering it by another half piece height. LINE and path placement use the same bounded correction.
+
+The focused Level/Curtain placement, opening, path, noninteractive, ownership, health and native-panel gates pass. Core Release builds with zero warnings/errors, the complete Core smoke reports `ALL PASS`, and the installed-reference BricsCAD V25 `Release|x64` adapter builds with zero warnings/errors. Aggregate discovery ran all 787 gates and found four pre-existing frame/orchestration isolation failures whose start tokens still require the old two-argument public builder signatures; current `origin/main` already exposes the newer optional `allowInteractiveSelection` parameter from issue `#1106`. This lane did not edit those unrelated gates or weaken their contracts.
+
+The claim remains `ACTIVE / SOURCE_READY / PENDING_MERGE`. No BricsCAD runtime or GitHub Actions were run. After the source PR merges, record the exact merged `main` SHA here and on issue `#1125`, then hand that SHA to the LOCAL-003 owner.
