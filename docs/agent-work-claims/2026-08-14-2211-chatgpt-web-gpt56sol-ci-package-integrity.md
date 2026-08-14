@@ -3,7 +3,8 @@
 - Status: `ACTIVE`
 - Agent: `chatgpt-web-gpt56sol-ci-package-integrity`
 - Registered: `2026-08-14T22:11:00+07:00`
-- Baseline main SHA: `2f3e60cefabf05e9e8cb63ffacb0e6359d3a35df`
+- Baseline main SHA: `3216207949b3d4c589c147d2c3a40fb90ba90043`
+- Claim commit: `53f0b93bc47bd65af785d1bb2c9decc0235faee0` (parent is the baseline above)
 - Implementation branch: `agent/chatgpt-web-gpt56sol-ci-package-integrity/ci-package-integrity-20260814`
 - Integration batch: `integration/ci-package-integrity-20260814` or owner-selected batch
 - Priority: owner requested CI + packaging + preview release hardening from 80% toward 100% evidence.
