@@ -1,6 +1,6 @@
 # Work claim — Active Floor/Zone health smoke reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `/root/fix_curtain_method_gates`
 - Registered: `2026-08-14T15:20:10+07:00`
 - Baseline main SHA: `a9d7c4438b5bee468261006989ec12cc30199e5e`
@@ -25,3 +25,11 @@ The fixture's case-variant Zone input remains non-canonical because setters do n
 - No production/Core source edit; no P10, #1005, #77, LOCAL automation, native behavior, private data, release/signing or GitHub Actions.
 
 Completion means the test-only reconciliation is merged through a normal PR, this claim is closed, and an exact merged-main SHA is returned to `/root`.
+
+## Outcome
+
+- Merged test-only reconciliation: PR `#1207`, main SHA `8cd9cc5c08c3fc040f7a52c5c07b3b63417eefc7`.
+- Core `Release` build passed with 0 warnings and 0 errors.
+- The full Core smoke advanced beyond this reconciled fixture. On the final merged-base validation it stopped at the independent `ModelHealthElementRelationCanonicalitySmoke.PaddedFamilyFailsVisible` stale expectation introduced by concurrent relation-setter normalization work.
+- Relevant Floor/Zone name, editor atomicity, assign no-op audit, active no-op audit, and canonical-reference preflights passed. The mutation-integrity preflight remained independently stale against the `0a06` canonicalizing setters and was not changed under this exact claim.
+- Missing/invalid, ambiguous, and case-sensitive non-canonical Active Floor/Zone health coverage remains intact. No production, P10, #1005, #77, native, private-data, or Actions changes were made.
