@@ -133,6 +133,12 @@ namespace QS3D.Core.SmokeTests
             nonFinite.Elements.Add(nan);
             ExpectThrows<InvalidOperationException>(() => MeasurementWorkItemCoverageEvaluator.Evaluate(nonFinite, catalog));
 
+            var finiteNegative = new ProjectState("negative", "Negative");
+            var negative = CleanQuantityElement("Negative", ElementCategory.Slab, "NetVolumeM3", 1d);
+            negative.Quantities["NetVolumeM3"] = -double.Epsilon;
+            finiteNegative.Elements.Add(negative);
+            ExpectThrows<InvalidOperationException>(() => MeasurementWorkItemCoverageEvaluator.Evaluate(finiteNegative, catalog));
+
             var paddedQuantity = new ProjectState("padded", "Padded");
             var padded = new ProjectElement("Padded", ElementCategory.Slab);
             padded.Quantities[" NetVolumeM3"] = 1d;
