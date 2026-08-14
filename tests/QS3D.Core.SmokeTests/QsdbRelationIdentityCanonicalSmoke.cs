@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
@@ -18,16 +19,16 @@ namespace QS3D.Core.SmokeTests
 
         private static void RejectsPaddedProjectRelations()
         {
-            RejectsWithoutMutation(project => project.ActiveFloorId = " F1 ", project => project.ActiveFloorId, " F1 ");
-            RejectsWithoutMutation(project => project.ActiveZoneId = " Z1 ", project => project.ActiveZoneId, " Z1 ");
-            RejectsWithoutMutation(project => project.ActiveFloorId = "   ", project => project.ActiveFloorId, "   ");
+            RejectsWithoutMutation(project => project.ActiveFloorId = " F1 ", project => project.ActiveFloorId, "_activeFloorId", " F1 ", "F1");
+            RejectsWithoutMutation(project => project.ActiveZoneId = " Z1 ", project => project.ActiveZoneId, "_activeZoneId", " Z1 ", "Z1");
+            RejectsWithoutMutation(project => project.ActiveFloorId = "   ", project => project.ActiveFloorId, "_activeFloorId", "   ", string.Empty);
         }
 
         private static void RejectsPaddedElementRelations()
         {
-            RejectsElementWithoutMutation(element => element.FamilyId = " FAM ", element => element.FamilyId, " FAM ");
-            RejectsElementWithoutMutation(element => element.FloorId = " F1 ", element => element.FloorId, " F1 ");
-            RejectsElementWithoutMutation(element => element.ZoneId = " Z1 ", element => element.ZoneId, " Z1 ");
+            RejectsElementWithoutMutation(element => element.FamilyId = " FAM ", element => element.FamilyId, "_familyId", " FAM ", "FAM");
+            RejectsElementWithoutMutation(element => element.FloorId = " F1 ", element => element.FloorId, "_floorId", " F1 ", "F1");
+            RejectsElementWithoutMutation(element => element.ZoneId = " Z1 ", element => element.ZoneId, "_zoneId", " Z1 ", "Z1");
         }
 
         private static void AllowsEmptyOptionalRelations()
@@ -52,33 +53,57 @@ namespace QS3D.Core.SmokeTests
             });
         }
 
-        private static void RejectsWithoutMutation(Action<ProjectState> mutate, Func<ProjectState, string> read, string expected)
+        private static void RejectsWithoutMutation(
+            Action<ProjectState> mutate,
+            Func<ProjectState, string> read,
+            string backingField,
+            string rawValue,
+            string expectedCanonical)
         {
             WithPath(path =>
             {
                 var project = NewProject();
                 mutate(project);
+                Require(string.Equals(read(project), expectedCanonical, StringComparison.Ordinal), "public project relation setter did not canonicalize before raw boundary injection");
+                SetRawRelation(project, backingField, rawValue);
+                Require(string.Equals(read(project), rawValue, StringComparison.Ordinal), "raw project relation boundary injection did not reach state");
                 var beforeUpdated = project.UpdatedUtc;
                 Throws<InvalidDataException>(() => new QsdbProjectStore().Save(project, path));
-                Require(string.Equals(read(project), expected, StringComparison.Ordinal), "failed Save normalized a project relation in memory");
+                Require(string.Equals(read(project), rawValue, StringComparison.Ordinal), "failed Save normalized a project relation in memory");
                 Require(project.UpdatedUtc == beforeUpdated, "failed validation touched project timestamp");
             });
         }
 
-        private static void RejectsElementWithoutMutation(Action<ProjectElement> mutate, Func<ProjectElement, string> read, string expected)
+        private static void RejectsElementWithoutMutation(
+            Action<ProjectElement> mutate,
+            Func<ProjectElement, string> read,
+            string backingField,
+            string rawValue,
+            string expectedCanonical)
         {
             WithPath(path =>
             {
                 var project = NewProject();
                 var element = project.Elements[0];
                 mutate(element);
+                Require(string.Equals(read(element), expectedCanonical, StringComparison.Ordinal), "public element relation setter did not canonicalize before raw boundary injection");
+                SetRawRelation(element, backingField, rawValue);
+                Require(string.Equals(read(element), rawValue, StringComparison.Ordinal), "raw element relation boundary injection did not reach state");
                 var beforeProjectUpdated = project.UpdatedUtc;
                 var beforeElementUpdated = element.UpdatedUtc;
                 Throws<InvalidDataException>(() => new QsdbProjectStore().Save(project, path));
-                Require(string.Equals(read(element), expected, StringComparison.Ordinal), "failed Save normalized an element relation in memory");
+                Require(string.Equals(read(element), rawValue, StringComparison.Ordinal), "failed Save normalized an element relation in memory");
                 Require(project.UpdatedUtc == beforeProjectUpdated, "failed validation touched project timestamp");
                 Require(element.UpdatedUtc == beforeElementUpdated, "failed validation touched element timestamp");
             });
+        }
+
+        private static void SetRawRelation(object target, string backingField, string value)
+        {
+            var field = target.GetType().GetField(backingField, BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null || field.FieldType != typeof(string))
+                throw new InvalidOperationException("QsdbRelationIdentityCanonicalSmoke could not resolve raw relation backing field: " + backingField + ".");
+            field.SetValue(target, value);
         }
 
         private static ProjectState NewProject()
