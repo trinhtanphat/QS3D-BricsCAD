@@ -82,7 +82,7 @@ quick = coordinator.find("QuickWorkflowRibbonAugmenter.TryInitialize()")
 quantity = coordinator.find("QuantityReferenceRibbonAugmenter.TryInitialize()")
 if min(bootstrap, project_ribbon, quick, quantity) < 0 or not bootstrap < project_ribbon < quick < quantity:
     errors.append("QuickWorkflowRibbonAugmenter must initialize through RibbonInitializationCoordinator after base/project and before quantity augmentation")
-for token in ("RibbonInitializationCoordinator.Start();", "QuickWorkflowRibbonAugmenter.Reset();"):
+for token in ("RibbonInitializationCoordinator.Start();", "TryCleanup(QuickWorkflowRibbonAugmenter.Reset);"):
     if token not in plugin:
         errors.append("PluginEntry missing coordinated quick-workflow lifecycle token: " + token)
 
@@ -138,4 +138,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: quick 2D->3D workflow is discoverable in the grouped Author Ribbon, Window authoring reuses guarded WallOpening+AutoHost semantics with rollback, Ribbon initialization follows the bounded coordinator, schedules preserve a Window usage group, and local-runtime qualification remains pending until exact evidence exists.")
+print("PASS: quick 2D->3D workflow is discoverable in the grouped Author Ribbon, Window authoring reuses guarded WallOpening+AutoHost semantics with rollback, Ribbon initialization follows the bounded coordinator and contained teardown, schedules preserve a Window usage group, and local-runtime qualification remains pending until exact evidence exists.")

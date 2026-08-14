@@ -51,11 +51,8 @@ elif "TryInitializeAll()" in start_body:
 elif "StartTimedRetry();" not in start_body:
     errors.append("RibbonInitializationCoordinator.Start must schedule the bounded retry path")
 
-for token in (
-    "RibbonInitializationCoordinator.Start();",
-    "RibbonInitializationCoordinator.Stop();",
-):
-    require(entry, token, "PluginEntry")
+require(entry, "RibbonInitializationCoordinator.Start();", "PluginEntry")
+require(entry, "TryCleanup(RibbonInitializationCoordinator.Stop);", "PluginEntry contained teardown")
 
 for stale in (
     "RibbonBootstrapper.TryInitialize();\n            ReferenceWallRibbonAugmenter.TryInitialize();",
@@ -70,4 +67,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: ribbon bootstrap and all augmenters reconcile through a bounded ApplicationIdle retry path and document availability without synchronous NETLOAD work, with clean event/timer teardown.")
+print("PASS: ribbon bootstrap and all augmenters reconcile through a bounded ApplicationIdle retry path and document availability without synchronous NETLOAD work, with contained event/timer teardown.")
