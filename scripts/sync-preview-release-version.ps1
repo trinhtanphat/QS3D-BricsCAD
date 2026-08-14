@@ -12,7 +12,7 @@ $match = [regex]::Match(
     [Text.RegularExpressions.RegexOptions]::CultureInvariant)
 
 if (-not $match.Success) {
-    throw "ReleaseTag must be an exact preview tag such as v0.1.0-preview.6. Got: $ReleaseTag"
+    throw "ReleaseTag must use the exact preview shape v<major>.<minor>.<patch>-preview.<n>. Got: $ReleaseTag"
 }
 
 $parts = @(
