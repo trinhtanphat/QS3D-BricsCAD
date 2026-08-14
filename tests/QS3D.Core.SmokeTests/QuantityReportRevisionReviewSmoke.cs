@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             AddedRemovedChangedRowsUseStableElementKeys();
+            FamilyIdentityCasingUsesSemanticIdentity();
             CaptureAndCompareDoNotMutateLiveProjects();
             ProjectAndSnapshotIdentityFailClosed();
             NonFiniteAndInvalidMagnitudeFailClosed();
@@ -44,6 +45,24 @@ namespace QS3D.Core.SmokeTests
 
             True(before.Rows.Select(x => x.StableKey).SequenceEqual(new[] { "E-CHG", "E-REM" }));
             True(after.Rows.Select(x => x.StableKey).SequenceEqual(new[] { "E-ADD", "E-CHG" }));
+        }
+
+        private static void FamilyIdentityCasingUsesSemanticIdentity()
+        {
+            var service = new QuantityReportRevisionService();
+            var baseline = service.Capture(ProjectWithFamilyId("family-identity-review", "family", ("E1", 2d)), "R1");
+            var caseOnly = service.Capture(ProjectWithFamilyId("family-identity-review", "FAMILY", ("E1", 2d)), "R2");
+            var caseOnlyDiff = service.Compare(baseline, caseOnly);
+
+            Equal(0, caseOnlyDiff.SemanticDeltaCount);
+            Equal(0, caseOnlyDiff.Changes.Count);
+
+            var differentFamily = service.Capture(ProjectWithFamilyId("family-identity-review", "other-family", ("E1", 2d)), "R3");
+            var differentFamilyDiff = service.Compare(baseline, differentFamily);
+
+            Equal(1, differentFamilyDiff.SemanticDeltaCount);
+            Equal(1, differentFamilyDiff.ChangedCount);
+            True(differentFamilyDiff.Changes.Single().ChangedFields.SequenceEqual(new[] { "FamilyId" }));
         }
 
         private static void CaptureAndCompareDoNotMutateLiveProjects()
@@ -82,15 +101,18 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => service.Capture(Project("negative", ("E1", -double.MaxValue)), "R2"));
         }
 
-        private static ProjectState Project(string id, params (string Id, double LengthM)[] elements)
+        private static ProjectState Project(string id, params (string Id, double LengthM)[] elements) =>
+            ProjectWithFamilyId(id, "family", elements);
+
+        private static ProjectState ProjectWithFamilyId(string id, string familyId, params (string Id, double LengthM)[] elements)
         {
             var project = new ProjectState(id, id);
             project.Floors.Add(new FloorDefinition("floor", "Floor", 0d));
             project.Zones.Add(new ZoneDefinition("zone", "Zone"));
-            project.Families.Add(new ProjectFamily("family", "Family", ElementCategory.Beam));
+            project.Families.Add(new ProjectFamily(familyId, "Family", ElementCategory.Beam));
             foreach (var value in elements)
             {
-                var element = new ProjectElement(value.Id, ElementCategory.Beam, "family", "floor", "zone");
+                var element = new ProjectElement(value.Id, ElementCategory.Beam, familyId, "floor", "zone");
                 element.Quantities["LengthM"] = value.LengthM;
                 element.SourceHandles.Add("H-" + value.Id);
                 project.Elements.Add(element);
