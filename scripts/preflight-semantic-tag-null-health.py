@@ -29,13 +29,14 @@ if not AGGREGATE.is_file():
 else:
     text = AGGREGATE.read_text(encoding="utf-8")
     required = (
-        'AddSafely(issues, seen, "GeneratedSemanticTagHealthService", () => new GeneratedSemanticTagHealthService().Inspect(project));',
+        'new DiagnosticProvider("GeneratedSemanticTagHealthService", () => new GeneratedSemanticTagHealthService().Inspect(project))',
         '"HEALTH_PROVIDER_FAILED"',
         "exception is InvalidOperationException",
+        "ExecuteProvider",
     )
     for token in required:
         if token not in text:
-            errors.append("missing aggregate fail-visible compatibility token: " + token)
+            errors.append("missing aggregate fail-visible provider token: " + token)
 
 print("QS3D semantic-tag standalone null-health preflight")
 if errors:

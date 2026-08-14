@@ -31,7 +31,7 @@ if theme.is_file():
         'Property="TextOptions.TextFormattingMode" Value="Display"',
         'Property="IsKeyboardFocused" Value="True"',
         'Property="IsKeyboardFocusWithin" Value="True"',
-        'VirtualizingStackPanel.VirtualizationMode" Value="Recycling"',
+        'VirtualizingPanel.VirtualizationMode" Value="Recycling"',
         'Property="EnableRowVirtualization" Value="True"',
         'Property="EnableColumnVirtualization" Value="True"',
         'Property="ScrollViewer.CanContentScroll" Value="True"',

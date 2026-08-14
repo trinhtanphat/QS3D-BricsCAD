@@ -29,13 +29,14 @@ if not AGGREGATE.is_file():
 else:
     text = AGGREGATE.read_text(encoding="utf-8")
     required = (
-        'AddSafely(issues, seen, "GeneratedWallMeshHealthService", () => new GeneratedWallMeshHealthService().Inspect(project, normalizedLiveGeneratedSolidHandles));',
+        'new DiagnosticProvider("GeneratedWallMeshHealthService", () => new GeneratedWallMeshHealthService().Inspect(project, normalizedLiveGeneratedSolidHandles))',
         '"HEALTH_PROVIDER_FAILED"',
         "exception is InvalidOperationException",
+        "ExecuteProvider",
     )
     for token in required:
         if token not in text:
-            errors.append("missing aggregate wall-mesh fail-visible compatibility token: " + token)
+            errors.append("missing aggregate wall-mesh fail-visible provider token: " + token)
 
 print("QS3D wall-mesh standalone null-health preflight")
 if errors:

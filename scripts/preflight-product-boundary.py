@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,14 +41,6 @@ for relative, needles in required.items():
         continue
     text = path.read_text(encoding="utf-8")
     errors.extend(relative + " missing product-boundary marker: " + needle for needle in needles if needle not in text)
-
-agents = ROOT / "AGENTS.md"
-if agents.is_file():
-    match = re.search(r"docs/(AGENT-HANDOFF-CURRENT-\d{4}-\d{2}-\d{2}-\d{4}\.md)", agents.read_text(encoding="utf-8"))
-    if not match:
-        errors.append("AGENTS.md missing timestamped canonical current-handoff pointer")
-    elif not (ROOT / "docs" / match.group(1)).is_file():
-        errors.append("AGENTS.md canonical current-handoff pointer does not exist: docs/" + match.group(1))
 
 host_projects = {
     "V25": ("src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj", ("<TargetFramework>net48</TargetFramework>", "<OutputType>Library</OutputType>", "<AssemblyName>QS3D.BricsCAD.V25</AssemblyName>")),

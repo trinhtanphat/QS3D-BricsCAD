@@ -29,7 +29,7 @@ def main():
         return fail(str(exc))
 
     try:
-        require_tokens(workflow, ["workflow_dispatch:", "Prepare exact release source commit", ".\\scripts\\prepare-v25-cloud-release.ps1", "-ReleaseTag $env:RELEASE_TAG -DispatchSha $env:GITHUB_SHA", '"RELEASE_COMMIT_SHA=$releaseCommit"', "Package source HEAD must equal RELEASE_COMMIT_SHA", "PACKAGE-METADATA gitCommit must match exact release source commit", "target_commitish = $env:RELEASE_COMMIT_SHA", "Publish source HEAD must equal RELEASE_COMMIT_SHA", "Draft prerelease target commit mismatch"], "V25 cloud workflow")
+        require_tokens(workflow, ["workflow_dispatch:", "Prepare exact release source commit", ".\\scripts\\prepare-v25-cloud-release.ps1", "-ReleaseTag $env:RELEASE_TAG -DispatchSha $env:SOURCE_SHA", '"RELEASE_COMMIT_SHA=$releaseCommit"', "Package source HEAD must equal RELEASE_COMMIT_SHA", "PACKAGE-METADATA gitCommit must match exact release source commit", "target_commitish = $env:RELEASE_COMMIT_SHA", "Publish source HEAD must equal RELEASE_COMMIT_SHA", "Draft prerelease target commit mismatch"], "V25 cloud workflow")
         if "target_commitish = $env:GITHUB_SHA" in workflow:
             raise ValueError("V25 cloud workflow regressed to publishing the stale dispatch SHA")
         validate_pos = workflow.find("- name: Validate cloud prerelease request")

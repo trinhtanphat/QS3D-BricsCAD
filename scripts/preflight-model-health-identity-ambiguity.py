@@ -49,11 +49,13 @@ if HEALTH.is_file():
 if COMPREHENSIVE.is_file():
     text = COMPREHENSIVE.read_text(encoding="utf-8")
     for token in (
-        "AddSafely(issues, seen, \"ModelHealthService\"",
-        "AddSafely(issues, seen, \"RoomFinishHealthService\"",
-        "AddSafely(issues, seen, \"DependencyHealthService\"",
+        'new DiagnosticProvider("ModelHealthService",',
+        'new DiagnosticProvider("RoomFinishHealthService",',
+        'new DiagnosticProvider("DependencyHealthService",',
         '"HEALTH_PROVIDER_FAILED"',
         "IsDiagnosticDataFailure",
+        "ExecuteProvider",
+        "CatchDiagnosticDataFailures",
     ):
         if token not in text:
             errors.append("ComprehensiveModelHealthService.cs missing provider-isolation token: " + token)

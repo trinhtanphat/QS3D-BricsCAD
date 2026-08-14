@@ -35,13 +35,14 @@ if not AGGREGATE.is_file():
 else:
     text = AGGREGATE.read_text(encoding="utf-8")
     required = (
-        'AddSafely(issues, seen, "GeneratedRebarHealthService", () => new GeneratedRebarHealthService().InspectAll(project, normalizedLiveGeneratedSolidHandles, normalizedLiveGeneratedSolidHandles));',
+        'new DiagnosticProvider("GeneratedRebarHealthService", () => new GeneratedRebarHealthService().InspectAll(project, normalizedLiveGeneratedSolidHandles, normalizedLiveGeneratedSolidHandles))',
         '"HEALTH_PROVIDER_FAILED"',
         "exception is InvalidOperationException",
+        "ExecuteProvider",
     )
     for token in required:
         if token not in text:
-            errors.append("missing aggregate Generated Rebar fail-visible compatibility token: " + token)
+            errors.append("missing aggregate Generated Rebar fail-visible provider token: " + token)
 
 print("QS3D Generated Rebar standalone null-health preflight")
 if errors:

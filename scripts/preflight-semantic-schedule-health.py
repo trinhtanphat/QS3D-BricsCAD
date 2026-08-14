@@ -52,8 +52,13 @@ for forbidden in (
     if forbidden in health:
         errors.append("semantic schedule health must remain read-only: " + forbidden)
 
-if 'AddSafely(issues, seen, "SemanticScheduleHealthService", () => new SemanticScheduleHealthService().Inspect(project))' not in comprehensive:
-    errors.append("ComprehensiveModelHealthService does not include fail-isolated SemanticScheduleHealthService")
+for token in (
+    'new DiagnosticProvider("SemanticScheduleHealthService", () => new SemanticScheduleHealthService().Inspect(project))',
+    '"HEALTH_PROVIDER_FAILED"',
+    "ExecuteProvider",
+):
+    if token not in comprehensive:
+        errors.append("ComprehensiveModelHealthService does not include fail-isolated SemanticScheduleHealthService token: " + token)
 
 for token in (
     "ValidAndZeroMatchSchedulesAreHealthy",
