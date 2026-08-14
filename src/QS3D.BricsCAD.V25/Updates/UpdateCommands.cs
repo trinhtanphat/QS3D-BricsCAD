@@ -48,9 +48,8 @@ namespace QS3D.BricsCAD.V25.Updates
         {
             try
             {
-                var assembly = Assembly.GetExecutingAssembly();
-                var result = UpdateCoordinator.Instance.LastResult;
-                var originalVersion = result.CurrentVersion?.Original ?? "unknown";
+                var assembly = typeof(global::QS3D.BricsCAD.V25.RuntimeDiagnosticsCommands).Assembly;
+                var originalVersion = ProductVersionText(assembly);
                 var displayVersion = ToDisplayVersion(originalVersion);
                 var buildIdentity = GetBuildIdentity(originalVersion);
                 var path = string.IsNullOrWhiteSpace(assembly.Location) ? "<unknown>" : assembly.Location;
@@ -64,7 +63,7 @@ namespace QS3D.BricsCAD.V25.Updates
                     buildLine +
                     "\nAssembly ABI version: " + assembly.GetName().Version + " (internal compatibility version)" +
                     "\nLoaded DLL: " + path +
-                    "\nUpdate status: " + result.Message +
+                    "\nVersion source: loaded QS3D assembly (not updater cache or GitHub metadata)." +
                     "\nVersion command: QS3DVERSION (aliases: QS3DVER, QSVER)." +
                     "\nUpdate command: QS3DUPDATE (alias: QSUPDATE)." +
                     "\nRun QS3DUPDATE to check GitHub Releases.");
@@ -74,6 +73,18 @@ namespace QS3D.BricsCAD.V25.Updates
                 var document = Application.DocumentManager.MdiActiveDocument;
                 document?.Editor.WriteMessage("\n" + commandName + " error: " + ex.Message);
             }
+        }
+
+        private static string ProductVersionText(Assembly assembly)
+        {
+            foreach (var attribute in assembly.GetCustomAttributes(typeof(AssemblyInformationalVersionAttribute), false))
+            {
+                var informational = attribute as AssemblyInformationalVersionAttribute;
+                if (informational != null && !string.IsNullOrWhiteSpace(informational.InformationalVersion))
+                    return informational.InformationalVersion.Trim();
+            }
+
+            return assembly.GetName().Version?.ToString() ?? "unknown";
         }
 
         private static string ToDisplayVersion(string value)
