@@ -26,7 +26,13 @@ namespace QS3D.Core.Domain
             set => _name = Require(value, nameof(value));
         }
 
-        private static string Require(string value, string name) => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Value is required.", name) : value.Trim();
+        private static string Require(string value, string name)
+        {
+            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Value is required.", name);
+            var normalized = value.Trim();
+            if (normalized.Any(char.IsControl)) throw new ArgumentException("Value cannot contain control characters.", name);
+            return normalized;
+        }
     }
 
     public sealed class FloorDefinition
