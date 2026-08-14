@@ -41,8 +41,9 @@ namespace QS3D.BricsCAD.V25.UI
                 var count = Cad.CadHandleService.Select(document, handles);
                 if (count <= 0)
                 { Cad.CadHandleService.ClearSelection(document); _viewModel.Status = "Không còn đối tượng CAD hợp lệ để chọn."; return; }
-                _viewModel.Status = "Định vị chi tiết: đã chọn " + count.ToString("N0") + " đối tượng CAD.";
-                document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
+                if (!global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(document))
+                { _viewModel.Status = "Đã chọn " + count.ToString("N0") + " đối tượng CAD nhưng chưa thể zoom cấu kiện hiện hành."; return; }
+                _viewModel.Status = "Định vị chi tiết: đã chọn/zoom " + count.ToString("N0") + " đối tượng CAD.";
             }
             catch (Exception ex)
             { _viewModel.Status = "Không thể định vị chi tiết: " + ex.Message; }
