@@ -66,7 +66,14 @@ def main() -> int:
     require(index, overlay_name, "research archive implementation overlay link")
     require(research, overlay_name, "public research implementation overlay link")
 
-    require(index, "not a live list of missing code", "archive/live-backlog distinction")
+    # Guard the semantic boundary without freezing one editorial sentence. The index
+    # currently expresses this as preventing the dated advisory queue from being
+    # mistaken for a live list; equivalent wording should not break a source-shape gate.
+    require(index, "Advisory research/archive index", "archive advisory classification")
+    require(index, "not canonical QS3D product truth", "archive non-canonical boundary")
+    require(index, "dated advisory queue", "archive/advisory queue distinction")
+    require(index, "live list of missing code", "archive/live-backlog concept")
+    require(research, "retained as provenance and idea-generation material", "research provenance boundary")
     require(research, "not a live list of missing QS3D code", "research/live-backlog distinction")
     require(workstream, "Advisory implementation queue", "dated workstream advisory status")
     require(workstream, "This file does not reserve any implementation scope.", "claim ownership boundary")
