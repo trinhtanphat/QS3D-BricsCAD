@@ -76,15 +76,17 @@ foreach ($name in $required) {
     Copy-Item $path (Join-Path $dist $name)
 }
 
-foreach ($script in @('install-v25-autoload.ps1', 'uninstall-v25-autoload.ps1', 'update-v25.ps1')) {
+foreach ($script in @('install-v25-autoload.ps1', 'uninstall-v25-autoload.ps1', 'update-v25.ps1', 'unblock-v25-netload.ps1')) {
     $scriptPath = Join-Path $PSScriptRoot $script
     if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) { throw "Missing release script: $scriptPath" }
     Copy-Item -LiteralPath $scriptPath -Destination (Join-Path $dist $script)
 }
 
-$installLauncher = Join-Path $PSScriptRoot 'INSTALL-QS3D.cmd'
-if (-not (Test-Path -LiteralPath $installLauncher -PathType Leaf)) { throw "Missing one-click installer launcher: $installLauncher" }
-Copy-Item -LiteralPath $installLauncher -Destination (Join-Path $dist 'INSTALL-QS3D.cmd')
+foreach ($launcherName in @('INSTALL-QS3D.cmd', 'UNBLOCK-QS3D.cmd')) {
+    $launcherPath = Join-Path $PSScriptRoot $launcherName
+    if (-not (Test-Path -LiteralPath $launcherPath -PathType Leaf)) { throw "Missing one-click package launcher: $launcherPath" }
+    Copy-Item -LiteralPath $launcherPath -Destination (Join-Path $dist $launcherName)
+}
 
 if (-not (Test-Path -LiteralPath $sampleSource -PathType Container)) { throw "Synthetic sample folder was not found: $sampleSource" }
 $sampleDestination = Join-Path $dist 'Samples'
@@ -134,12 +136,19 @@ Source commit: $gitCommit
 
 Recommended install (avoids .NET 0x80131515 / Mark-of-the-Web NETLOAD failures):
 1. Close BricsCAD.
-2. Extract the complete ZIP to a normal local folder.
+2. Before extracting a browser-downloaded ZIP, you may right-click the ZIP > Properties > Unblock, then extract the complete package to a normal local folder.
 3. Double-click INSTALL-QS3D.cmd. Signed installers must have valid Authenticode; invalid/untrusted signatures are rejected. Unsigned cloud previews are explicitly warned, then only the bootstrap installer script is unblocked so it can run under RemoteSigned.
 4. The installer verifies SHA256SUMS.txt/signatures where required, copies QS3D to the per-user install directory and removes Mark-of-the-Web from installed payloads.
 5. Start BricsCAD V25 and run QS3D or QS3DDOMAIN. DemandLoad handles the installed DLL; do not NETLOAD the DLL directly from Downloads.
 6. Run QS3DRUNTIMECHECK to confirm V25/x64/package consistency on the customer machine.
 7. For an intentional upgrade over an existing QS3D registration, use the built-in QS3D Update Center or rerun install-v25-autoload.ps1 with -Force.
+
+Manual NETLOAD recovery for an extracted package:
+- If BricsCAD reports "Could not load file or assembly" with "Operation is not supported" or HRESULT 0x80131515 while loading QS3D.BricsCAD.V25.dll from the extracted package, Windows may have propagated Mark-of-the-Web to the DLL or one of its dependencies.
+- Preferred fix: use INSTALL-QS3D.cmd and load the installed copy through DemandLoad.
+- If direct NETLOAD is intentionally required for troubleshooting, close any load attempt and double-click UNBLOCK-QS3D.cmd in this package first.
+- UNBLOCK-QS3D.cmd verifies the recovery helper hash before bootstrap. The helper then verifies complete SHA256SUMS.txt coverage plus V25 package identity files before removing Mark-of-the-Web from the whole package. It never changes BricsCAD trusted-path/security settings or PowerShell execution policy.
+- After the recovery reports success, NETLOAD the QS3D.BricsCAD.V25.dll in this same package folder. Do not unblock only one DLL because a blocked dependency can produce the same .NET loader error.
 
 Built-in update:
 - QS3D checks GitHub Releases on startup.
@@ -150,13 +159,15 @@ Built-in update:
 Manual/developer fallback:
 - Prefer installing first and NETLOAD only the DLL from the installed QS3D directory if debugging requires NETLOAD.
 - Never NETLOAD QS3D.BricsCAD.V25.dll directly from a downloaded ZIP/Downloads folder. Windows may attach Zone.Identifier and .NET Framework can reject it with HRESULT 0x80131515.
+- For an extracted release package use UNBLOCK-QS3D.cmd so the complete package is verified before Mark-of-the-Web is removed.
 - If you intentionally test an unpackaged development copy, remove Mark-of-the-Web from the complete dependency folder before NETLOAD rather than unblocking only one DLL.
 
 Security:
-- INSTALL-QS3D.cmd uses RemoteSigned and never uses ExecutionPolicy Bypass.
-- Valid Authenticode installers report their signer; invalid/untrusted signatures fail. Unsigned preview bootstrap is visibly warned and only install-v25-autoload.ps1 is unblocked before execution.
+- INSTALL-QS3D.cmd and UNBLOCK-QS3D.cmd use RemoteSigned and never use ExecutionPolicy Bypass.
+- Valid Authenticode helpers report their signer; invalid/untrusted signatures fail. Unsigned preview bootstrap is visibly warned only after the helper hash is verified.
 - The installer verifies SHA256SUMS.txt before copying files and removes Mark-of-the-Web only from the verified installed payload.
-- It does not disable or weaken BricsCAD security settings.
+- The manual recovery helper verifies every hashed package file and manifest coverage before unblocking the package DLLs/dependencies.
+- Neither path disables or weakens BricsCAD security settings.
 - This package intentionally excludes BricsCAD runtime assemblies.
 - Samples/ contains only repository-owned synthetic DXF/DWG/QSDB/XLSX/template fixtures.
 
