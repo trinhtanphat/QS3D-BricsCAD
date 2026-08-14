@@ -4,7 +4,10 @@
 - Date: 2026-08-14
 - Status: `ACTIVE`
 - Baseline main SHA: `92b21ccff6600ab07c9b23d3029275aa74decda9`
+- Claim commit: `daf6b9485c72ce315fcaa15d10f4e60ebbee8cef`
 - Implementation branch: `agent/chatgpt-web-gpt56sol/projectelement-property-value-xml-persistability-20260814`
+- Source commit: `f3501927642c2bb1b6fab0ad63335d7de1c1ca53`
+- Regression commit / implementation head: `38113becd5451259d7aab91b9acbdee8f12e178b`
 - Planned integration branch: `integration/chatgpt-web-gpt56sol-projectelement-property-value-xml-persistability-20260814`
 - Priority: Core P1 persistence integrity
 
@@ -30,6 +33,13 @@ This lane only requires public `SetProperty` values to be XML-representable befo
 At baseline `92b21ccff6600ab07c9b23d3029275aa74decda9`, `ProjectElement.SetProperty` trims/validates the key but assigns `value ?? string.Empty` directly to `Properties`. `QsdbProjectStore.Serialize(...)` writes every property pair through `Map(...)` as XML `name`/`value` attributes and `ValidateSerializedXmlText(...)` verifies XML characters. Therefore `SetProperty("Note", "bad\u0001value")` is accepted at the public writer boundary but cannot be serialized as canonical QSDB XML.
 
 No matching current claim/commit was found for ProjectElement property-value XML persistability.
+
+## Implementation evidence
+
+- `f3501927642c2bb1b6fab0ad63335d7de1c1ca53` adds `XmlConvert.VerifyXmlChars` validation for the normalized public property value before no-op detection, backing-map mutation, or dirty/timestamp propagation.
+- `38113becd5451259d7aab91b9acbdee8f12e178b` adds focused smoke coverage proving `U+0001` replacement rejection is failure-atomic for value/Dirty/UpdatedUtc and that XML-valid whitespace/newline/tab text round-trips exactly through QSDB SaveNew/Load.
+- Agent-branch compare from claim commit reports only the reserved source file plus the new focused smoke file.
+- Executable .NET/native validation has not been run in this connector-only environment; no runtime PASS is claimed.
 
 ## Validation plan
 
