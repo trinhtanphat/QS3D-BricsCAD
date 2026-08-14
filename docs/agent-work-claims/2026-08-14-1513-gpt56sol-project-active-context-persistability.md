@@ -62,3 +62,7 @@ Executable .NET smoke/build and licensed BricsCAD/native validation were **not r
 ## Completion condition
 
 Satisfied: claim-first reservation, live baseline reconciliation, isolated supported-writer fix, focused regression source, remote readback/ancestry verification, explicit validation limits, and completed claim metadata are present on `main`.
+
+## 2026-08-14 health-fixture reconciliation
+
+The completed trimming contract makes the older `ModelHealthActiveFloorZoneCanonicalitySmoke` padded-setter expectation unreachable. Parent `/root` delegated only that test fixture to `/root/fix_curtain_method_gates` under claim `2026-08-14-codex-active-context-health-smoke-reconcile.md`. The follow-up preserves case-variant, missing-reference and ambiguity health coverage and does not edit this claim's production source.
