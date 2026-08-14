@@ -41,15 +41,18 @@ namespace QS3D.Core.Recognition
             var normalized = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in mappings)
             {
-                var pattern = (item.Key ?? string.Empty).Trim();
-                if (pattern.Length == 0) throw new InvalidOperationException(label + " contains an empty layer mapping pattern.");
-                var key = RecognitionText.Normalize(pattern);
-                if (key.Length == 0) throw new InvalidOperationException(label + " contains a layer mapping pattern that normalizes to empty: " + pattern);
+                var pattern = item.Key ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(pattern)) throw new InvalidOperationException(label + " contains an empty layer mapping pattern.");
+                var canonicalPattern = pattern.Trim();
+                if (!string.Equals(pattern, canonicalPattern, StringComparison.Ordinal))
+                    throw new InvalidOperationException(label + " contains a non-canonical layer mapping pattern with leading/trailing whitespace: " + pattern);
+                var key = RecognitionText.Normalize(canonicalPattern);
+                if (key.Length == 0) throw new InvalidOperationException(label + " contains a layer mapping pattern that normalizes to empty: " + canonicalPattern);
                 if (!TryParseNamedCategory(item.Value, out _))
-                    throw new InvalidOperationException(label + " contains an invalid layer mapping category for " + pattern + ": " + item.Value);
+                    throw new InvalidOperationException(label + " contains an invalid layer mapping category for " + canonicalPattern + ": " + item.Value);
                 if (normalized.TryGetValue(key, out var previous))
-                    throw new InvalidOperationException(label + " contains ambiguous normalized layer mappings: " + previous + " and " + pattern + ".");
-                normalized.Add(key, pattern);
+                    throw new InvalidOperationException(label + " contains ambiguous normalized layer mappings: " + previous + " and " + canonicalPattern + ".");
+                normalized.Add(key, canonicalPattern);
             }
         }
 
