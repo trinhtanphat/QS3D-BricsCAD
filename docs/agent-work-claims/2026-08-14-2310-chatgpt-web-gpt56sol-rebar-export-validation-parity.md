@@ -2,10 +2,15 @@
 
 - Agent: `chatgpt-web-gpt56sol-rebar-export-validation-parity`
 - Date: 2026-08-14
+- Registered: 2026-08-14 23:10 +07:00 (`Asia/Ho_Chi_Minh`)
 - Status: `ACTIVE`
 - Baseline main SHA: `fd74a3a030f03ad1c3192006c3eb77e2584c1775`
+- Claim commit / post-claim baseline: `1686f7faab0d2715d5fe1f80998ca61f67cef671`
 - Implementation branch: `agent/chatgpt-web-gpt56sol/rebar-export-validation-parity-20260814`
+- Source commit: `188ca33699c73399bf782b4048443c3acbd27b21`
+- Regression commit / implementation head: `450054fa39f6d5381c13f8384fe5cc08754138bd`
 - Planned integration branch: `integration/chatgpt-web-gpt56sol-rebar-export-validation-parity-20260814`
+- Intended integration batch: pending batch coordinator selection
 - Priority: Core export correctness
 
 ## Reserved scope
@@ -36,7 +41,17 @@ At baseline `fd74a3a030f03ad1c3192006c3eb77e2584c1775`, `RebarCsvExporter.Valida
 
 The existing registered `BbsRegressionSmoke` already exercises both Rebar CSV and XLSX exporters, so no smoke registration surface is required.
 
-No matching open PR or recent commit was found for this exact parity lane, and the active QuantityRule XML persistability lane reserves unrelated rule-engine/persistence smoke surfaces.
+No matching open PR or recent commit was found for this exact parity lane, and the active QuantityRule XML persistability lane reserved unrelated rule-engine/persistence smoke surfaces.
+
+## Implementation evidence before integration
+
+- Claim visibility was read back from exact post-claim SHA `1686f7faab0d2715d5fe1f80998ca61f67cef671` before source work.
+- The agent branch was created from that exact post-claim SHA.
+- Source commit `188ca33699c73399bf782b4048443c3acbd27b21` changes only three validator calls in `XlsxRebarScheduleExporter`: `CuttingLengthM`, `TotalLengthM`, and `UnitWeightKgM` now use `ValidatePositive`; `NetWeightKg`, `WastePercent`, and `TotalWeightKg` remain `ValidateNonNegative`.
+- Regression commit `450054fa39f6d5381c13f8384fe5cc08754138bd` extends the already-registered `BbsRegressionSmoke` to require both CSV and XLSX to reject zero for each of the three positive-only fields and requires XLSX to reject before filesystem mutation with field-level strict-positive diagnostics.
+- Both GitHub commit diffs were read back and show only the reserved source/test surfaces.
+- Local/container execution is not claimed: the available container could not resolve `github.com`, so the repository could not be cloned for a local `dotnet` smoke run in this session. No false PASS is recorded.
+- No manual GitHub Actions dispatch/rerun/cancel was performed; agent branches are not the repository's final V25 CI trigger under `CI_POLICY.md`.
 
 ## Validation plan
 
@@ -45,7 +60,7 @@ No matching open PR or recent commit was found for this exact parity lane, and t
 - make the smallest XLSX validator-routing change;
 - extend `BbsRegressionSmoke` so each affected zero-valued field is rejected by both CSV and XLSX before destination mutation;
 - run the Core smoke harness and applicable repository preflight/source guards when executable in the available environment;
-- publish the implementation branch and PR/integration handoff without landing implementation on `main` unless separately authorized;
+- publish the implementation branch and integration handoff without landing implementation on `main` unless separately authorized;
 - continue read-only audit of quantity/BQ/schedule export contracts after the rebar lane is ready for integration.
 
 ## Completion condition
