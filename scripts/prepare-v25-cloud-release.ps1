@@ -88,6 +88,12 @@ try {
         throw 'Release-preparation diff failed git diff --check.'
     }
 
+    if ($changed.Count -eq 0) {
+        Write-Host "Source identity already matches $tag; immutable release commit remains $dispatch even if main advances later."
+        Write-Output $dispatch
+        return
+    }
+
     & git fetch --no-tags origin main
     if ($LASTEXITCODE -ne 0) {
         throw 'Could not refresh origin/main before release preparation.'
@@ -98,12 +104,6 @@ try {
     }
     if ($remoteMain -ne $dispatch) {
         throw "main moved after this workflow was dispatched. Dispatched=$dispatch current-origin/main=$remoteMain. Start a fresh release run instead of overwriting concurrent work."
-    }
-
-    if ($changed.Count -eq 0) {
-        Write-Host "Source identity already matches $tag; release commit remains $dispatch."
-        Write-Output $dispatch
-        return
     }
 
     & git config user.name 'github-actions[bot]'
