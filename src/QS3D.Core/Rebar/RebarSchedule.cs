@@ -46,16 +46,18 @@ namespace QS3D.Core.Rebar
 
     public static class RebarScheduleBuilder
     {
+        private const int MaxRowCount = 10000;
+
         public static IReadOnlyList<RebarScheduleRow> Build(IEnumerable<RebarScheduleInput> inputs)
         {
             if (inputs == null) throw new ArgumentNullException(nameof(inputs));
             var rows = new List<RebarScheduleRow>();
-            foreach (var input in inputs) Append(input ?? throw new ArgumentException("Rebar schedule input cannot contain null.", nameof(inputs)), rows);
+            foreach (var input in inputs) Append(input ?? throw new ArgumentException("Rebar schedule input cannot contain null.", nameof(inputs)), rows, nameof(inputs));
             ValidateAggregate(rows);
             return rows.AsReadOnly();
         }
 
-        private static void Append(RebarScheduleInput input, ICollection<RebarScheduleRow> rows)
+        private static void Append(RebarScheduleInput input, ICollection<RebarScheduleRow> rows, string inputParameterName)
         {
             if (string.IsNullOrWhiteSpace(input.Notation)) throw new ArgumentException("Rebar notation is required.", nameof(input));
             EnsureFiniteNonNegative(input.CuttingLengthM, nameof(input.CuttingLengthM));
@@ -80,6 +82,8 @@ namespace QS3D.Core.Rebar
 
             for (var index = 0; index < groups.Count; index++)
             {
+                if (rows.Count >= MaxRowCount)
+                    throw new ArgumentOutOfRangeException(inputParameterName, "Rebar schedule exceeds the supported row bound of " + MaxRowCount + ".");
                 var group = groups[index];
                 var quantity = ResolveQuantity(group, input);
                 var mark = groups.Count == 1 ? baseMark : baseMark + "-" + (index + 1).ToString(CultureInfo.InvariantCulture);
