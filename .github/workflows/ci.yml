@@ -26,6 +26,8 @@ jobs:
         run: |
           foreach ($script in @(
             'scripts/package-v25.ps1',
+            'scripts/verify-v25-package.ps1',
+            'scripts/test-v25-package-verifier.ps1',
             'scripts/install-v25-autoload.ps1',
             'scripts/uninstall-v25-autoload.ps1',
             'scripts/update-v25.ps1',
@@ -42,6 +44,9 @@ jobs:
               throw "PowerShell parse failure: $script"
             }
           }
+      - name: V25 package integrity contract tests
+        shell: pwsh
+        run: .\scripts\test-v25-package-verifier.ps1
 
   core:
     if: ${{ github.event_name == 'workflow_dispatch' }}
