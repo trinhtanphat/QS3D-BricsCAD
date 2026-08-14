@@ -1,6 +1,6 @@
 # Work claim — issue #80 Source Reconcile canonical source ownership
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-issue80-source-owner-canonicalization-20260814` (`/root/fix_source_reconcile_desync`)
 - Registered: `2026-08-14T14:45:00+07:00`
 - Baseline main SHA: `28aaf5289f87183f3f38f10f245cb5f45624674d`
@@ -42,3 +42,11 @@ The private index can therefore select one semantic owner when the same logical 
 ## Completion condition
 
 The bounded source/gate correction is merged to current `main`, remote-safe validation is recorded, issue `#80` remains open for its larger interactive/native edit UX and local qualification scope, and this claim is marked `COMPLETED` without implying BricsCAD runtime evidence.
+
+## Completion record
+
+- Claim PR `#1196` merged as `0c51a765b74638d05ea173a62180d13c82432287`.
+- Source commit `cefd2612c8b1e3c39e61bf7060ec3ed081e5848e` merged through PR `#1197` as `c1eda700301b4dc8671ba2d4c4a418f3e5ab303c`.
+- `ResolveTargets` retains generated-output classification first, then uses `SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner` for canonical source ownership. The private raw SourceHandles index was removed; unknown-source, exactly-one-source and duplicate-selected-element refusals remain.
+- Six focused Source Reconcile gates PASS; Core smoke `ALL PASS`; generic preflight PASS; installed-reference V25 `Release|x64` build PASS with `0 warnings / 0 errors`.
+- No BricsCAD runtime, private data, GitHub Actions, LOCAL-004 runner/probe/docs, issue `#1005` coordinator, geometry or release work was changed/run. Issue `#80` remains open for the broader interactive/native modify workflow and licensed qualification.
