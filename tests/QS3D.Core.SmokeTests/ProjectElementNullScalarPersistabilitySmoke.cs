@@ -13,7 +13,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             NullAssignmentsCanonicalizeImmediately();
-            ConstructorTrimAndSetterExactnessRemain();
+            ConstructorAndRelationSettersTrimWhileFingerprintRemainsExact();
             CanonicalEmptyScalarsRoundTripThroughQsdb();
         }
 
@@ -35,7 +35,7 @@ namespace QS3D.Core.SmokeTests
             Equal(string.Empty, element.DrawingFingerprint);
         }
 
-        private static void ConstructorTrimAndSetterExactnessRemain()
+        private static void ConstructorAndRelationSettersTrimWhileFingerprintRemainsExact()
         {
             var element = new ProjectElement("ELEMENT-EXACT", ElementCategory.Beam, "  F  ", "  L  ", "  Z  ");
             Equal("F", element.FamilyId);
@@ -47,9 +47,9 @@ namespace QS3D.Core.SmokeTests
             element.ZoneId = "  Z2  ";
             element.DrawingFingerprint = "  FP2  ";
 
-            Equal("  F2  ", element.FamilyId);
-            Equal("  L2  ", element.FloorId);
-            Equal("  Z2  ", element.ZoneId);
+            Equal("F2", element.FamilyId);
+            Equal("L2", element.FloorId);
+            Equal("Z2", element.ZoneId);
             Equal("  FP2  ", element.DrawingFingerprint);
         }
 
