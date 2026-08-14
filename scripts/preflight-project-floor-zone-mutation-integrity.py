@@ -62,8 +62,13 @@ def main():
         'throw new InvalidOperationException("Zone assignment target collection contains a null element.");',
     ], "zone", missing)
     require(project_state, [
-        'set => SetPersistedScalar(ref _activeFloorId, value);',
-        'set => SetPersistedScalar(ref _activeZoneId, value);',
+        'set => SetActiveContextId(ref _activeFloorId, value);',
+        'set => SetActiveContextId(ref _activeZoneId, value);',
+        'private void SetActiveContextId(ref string field, string? value)',
+        'var normalizedValue = (value ?? string.Empty).Trim();',
+        'if (normalizedValue.Any(char.IsControl))',
+        'throw new ArgumentException("Active context id cannot contain control characters.", nameof(value));',
+        'SetPersistedScalar(ref field, normalizedValue);',
         'var nextChangeVersion = checked(ChangeVersion + 1L);',
     ], "project state", missing)
     require(smoke, [
