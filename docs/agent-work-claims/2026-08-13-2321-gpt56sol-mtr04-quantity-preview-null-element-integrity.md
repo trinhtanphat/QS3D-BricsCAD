@@ -1,10 +1,11 @@
 # Work claim — MTR-04 quantity preview null-element integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `gpt56sol-mtr04-quantity-preview-null-element-integrity-20260813-2321`
 - Registered: `2026-08-13T23:21:00+07:00`
 - Baseline main SHA: `d9aff385c63effd895a933c0e6e60fcddb268427`
 - Reactivated: `2026-08-13T23:37:00+07:00`
+- Completed: `2026-08-14T08:00:00+07:00`
 - Priority: `P0` measurement-rule trust integrity.
 
 ## Reserved scope
@@ -23,17 +24,17 @@ Make quantity-rule preview fail closed with a deterministic domain error when `P
 - Quantity formulas, rule identity/output semantics, persistence, reports, UI, BricsCAD/native behavior.
 - Other current agent claims.
 
-## Validation plan
+## Validation evidence
 
-- Refresh `main` and claims immediately before production writes.
-- Add focused regression covering both element and project preview entry points against a null collection member.
-- Preserve duplicate-ID and canonical positive regressions.
-- Read back pushed files and inspect commit ancestry; no manual GitHub Actions rerun and no native PASS claims.
+- Production fix: `1017370e7ac55b1fc70d996882e1e3b9f78ffc66` — `ValidateUniqueElementIds` rejects null collection members with the deterministic domain error `Project contains a null element.` before preview projection.
+- Focused regression: `192c7e794ff0e998f8e49e010fc8e1beea72fe5b` — covers null collection members through both `PreviewElement` and `PreviewProject`, including a singleton-null project, while preserving duplicate-ID and canonical positive regressions.
+- Both changed files were read back from current `main` after the regression write.
+- No manual GitHub Actions rerun and no BricsCAD/native PASS are claimed by this remote-safe lane.
 
 ## Coordination
 
-The earlier quantity-preview global element-integrity work is `COMPLETED` and covers unrelated duplicate element IDs only. This exact claim was released only because the prior session's source-write route was blocked. It has now been reactivated on refreshed `main`; the production defect remains present: `ValidateUniqueElementIds` skips nulls while preview paths later require every collection member to be a valid element.
+The earlier quantity-preview global element-integrity work is `COMPLETED` and covers unrelated duplicate element IDs. This claim is now complete for the null-member invariant; persistence, MTR-05, UI, native runtime, and other active agent scopes remain excluded.
 
 ## Completion condition
 
-Null element collection corruption fails closed before preview projection, focused deterministic regression coverage is pushed to current `main`, and this claim is closed `COMPLETED` with actual readback evidence and remaining LOCAL/native gates recorded.
+Satisfied: null element collection corruption fails closed before preview projection and focused deterministic regression coverage is present on `main`.
