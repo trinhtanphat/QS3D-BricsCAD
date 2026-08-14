@@ -93,8 +93,8 @@ else:
         "public void Restore(ProjectState project)",
         "target.Elements.Clear()",
         "target.AuditEvents.Clear()",
-        "target.Metadata.Clear()",
-        "RestorePersistenceState",
+        "targetMetadata.ReplacePersistenceState(source.Metadata)",
+        "target.RestorePersistenceState(source.UpdatedUtc, source.ChangeVersion)",
     ):
         if token not in text:
             errors.append("ProjectStateSnapshot missing deep rollback contract: " + token)
