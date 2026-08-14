@@ -29,6 +29,8 @@ def main() -> int:
         unblock_helper = read("scripts/unblock-v25-netload.ps1")
         package = read("scripts/package-v25.ps1")
         release_package = read("scripts/package-v25-release.ps1")
+        manual_release = read(".github/workflows/release-v25.yml")
+        signed_finalize = read("scripts/finalize-v25-signed-package.ps1")
         preferences = read("src/QS3D.BricsCAD.V25/Updates/UpdatePreferences.cs")
         settings = read("src/QS3D.BricsCAD.V25/Updates/UpdateSettingsCommands.cs")
         bootstrapper = read("src/QS3D.BricsCAD.V25/Updates/UpdateBootstrapper.cs")
@@ -89,6 +91,13 @@ def main() -> int:
         require(release_package, "$metadata.gitCommit", "signed release provenance validation")
         require(release_package, "does not match the exact clean package source HEAD", "signed release provenance validation")
 
+        signed_recovery_path = r"'dist\QS3D-BricsCAD-V25\unblock-v25-netload.ps1'"
+        require(manual_release, signed_recovery_path, "signed V25 release recovery helper")
+        if manual_release.count(signed_recovery_path) < 2:
+            raise AssertionError("signed V25 release recovery helper: helper must be present in both Authenticode sign and verify payloads")
+        require(signed_finalize, "'unblock-v25-netload.ps1'", "signed V25 package finalization recovery helper")
+        require(signed_finalize, "signedExecutablePayload", "signed V25 package executable metadata")
+
         require(preferences, 'InstallOnExitValue = "InstallOnExit"', "update preference")
         require(preferences, "ReadBoolean(InstallOnExitValue, false)", "safe update-on-close default")
         require(settings, '[CommandMethod("QS3DUPDATEONCLOSE"', "update-on-close command")
@@ -117,7 +126,7 @@ def main() -> int:
         print("ERROR:", exc)
         return 1
 
-    print("PASS: secure install, integrity-first manual NETLOAD MOTW recovery, signed release provenance, automatic check, update-on-close, and retry-coordinated ribbon update UX contracts are guarded.")
+    print("PASS: secure install, integrity-first manual NETLOAD MOTW recovery, signed recovery-helper coverage, signed release provenance, automatic check, update-on-close, and retry-coordinated ribbon update UX contracts are guarded.")
     return 0
 
 
