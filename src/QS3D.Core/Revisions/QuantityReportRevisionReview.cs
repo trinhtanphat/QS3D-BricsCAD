@@ -287,7 +287,7 @@ namespace QS3D.Core.Revisions
             Add(fields, nameof(before.Floor), before.Floor, after.Floor);
             Add(fields, nameof(before.Zone), before.Zone, after.Zone);
             Add(fields, nameof(before.Category), before.Category, after.Category);
-            Add(fields, nameof(before.FamilyId), before.FamilyId, after.FamilyId);
+            AddIdentity(fields, nameof(before.FamilyId), before.FamilyId, after.FamilyId);
             Add(fields, nameof(before.FamilyName), before.FamilyName, after.FamilyName);
             Add(fields, nameof(before.ElementName), before.ElementName, after.ElementName);
             Add(fields, nameof(before.Material), before.Material, after.Material);
@@ -313,6 +313,11 @@ namespace QS3D.Core.Revisions
         private static void Add(ICollection<string> fields, string name, string before, string after)
         {
             if (!string.Equals(before ?? string.Empty, after ?? string.Empty, StringComparison.Ordinal)) fields.Add(name);
+        }
+
+        private static void AddIdentity(ICollection<string> fields, string name, string before, string after)
+        {
+            if (!string.Equals(before ?? string.Empty, after ?? string.Empty, StringComparison.OrdinalIgnoreCase)) fields.Add(name);
         }
 
         private static void Add(ICollection<string> fields, string name, double before, double after, string key)
