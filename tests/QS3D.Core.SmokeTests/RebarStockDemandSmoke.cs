@@ -8,10 +8,11 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             DemandKeepsMaterialComponentsSeparate();
+            CanonicalIdentityFailsClosed();
             DuplicateCutIdentityFailsClosed();
             NonFinitePolicyFailsClosed();
-            ProcurementKeepsOffCutSeparate();
-            ExcessOffCutFailsClosed();
+            ProcurementKeepsKerfAndOffCutSeparate();
+            ExcessWasteFailsClosed();
         }
 
         private static void DemandKeepsMaterialComponentsSeparate()
@@ -29,18 +30,33 @@ namespace QS3D.Core.SmokeTests
                 new RebarCutAllowancePolicy(0.003d, 0.02d));
 
             Equal(3L, demand.RequiredCutCount);
+            Equal(2, demand.RequiredCuts.Count);
             Near(11d, demand.RequiredCutLengthM);
             Near(0.06d, demand.AllowanceLengthM);
-            Near(0.009d, demand.KerfLengthM);
-            Near(11.069d, demand.FabricationDemandLengthM);
+            Near(11.06d, demand.DemandLengthBeforeKerfM);
+            Near(0.003d, demand.AllowancePolicy.KerfPerCutM);
+            Near(20d, demand.DiameterMm);
+            Near(12d, demand.StockLengthM);
             Equal("G-01", demand.GroupId);
             Equal("CB400-V", demand.Grade);
+        }
+
+        private static void CanonicalIdentityFailsClosed()
+        {
+            Throws<ArgumentException>(() => new RebarCutRequirement(" CUT-A", 3d, 1));
+            Throws<ArgumentException>(() => new RebarStockDemand(
+                "G-02 ",
+                "CB500-V",
+                16d,
+                12d,
+                new[] { new RebarCutRequirement("CUT-A", 3d, 1) },
+                new RebarCutAllowancePolicy()));
         }
 
         private static void DuplicateCutIdentityFailsClosed()
         {
             Throws<ArgumentException>(() => new RebarStockDemand(
-                "G-02",
+                "G-03",
                 "CB500-V",
                 16d,
                 12d,
@@ -58,17 +74,18 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentOutOfRangeException>(() => new RebarCutAllowancePolicy(0d, double.PositiveInfinity));
         }
 
-        private static void ProcurementKeepsOffCutSeparate()
+        private static void ProcurementKeepsKerfAndOffCutSeparate()
         {
-            var procurement = new RebarStockProcurementQuantities(12d, 1, 0.931d);
+            var procurement = new RebarStockProcurementQuantities(12d, 1, 0.009d, 0.931d);
             Equal(1, procurement.StockBarCount);
             Near(12d, procurement.ProcurementLengthM);
+            Near(0.009d, procurement.KerfLengthM);
             Near(0.931d, procurement.OffCutLengthM);
         }
 
-        private static void ExcessOffCutFailsClosed()
+        private static void ExcessWasteFailsClosed()
         {
-            Throws<ArgumentOutOfRangeException>(() => new RebarStockProcurementQuantities(12d, 1, 12.001d));
+            Throws<ArgumentOutOfRangeException>(() => new RebarStockProcurementQuantities(12d, 1, 0.01d, 12d));
         }
 
         private static void Near(double expected, double actual)
