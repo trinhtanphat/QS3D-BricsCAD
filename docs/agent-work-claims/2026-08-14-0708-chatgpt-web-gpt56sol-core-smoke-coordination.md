@@ -2,9 +2,11 @@
 
 - Agent: `chatgpt-web-gpt56sol`
 - Started: `2026-08-14 07:08 +07:00`
-- Status: `ACTIVE`
+- Status: `SOURCE_FIXED / PENDING_FRESH_CI`
 - Baseline observed before claim: `main` at `2dc87bf0985c5967f9ca45f09aac22ba85e2e0cd` (must be refreshed after this claim lands)
 - Initial claim commit: `3cb24f5d9041209e00704d8270c61218278d8baf`
+- Claim-amendment commit: `404e110d954a354541cefaf0c3dddde5e399c0e7`
+- Source-fix commit: `d03edf8e4c476ee929d731a2c0c7400a8b8d14e4`
 
 ## Scope
 
@@ -35,6 +37,14 @@ After this amendment commit lands and is read back from current `main`, this cla
 - issue `#1092` closeout/status updates tied only to this fix
 
 The amendment does **not** reserve LOCAL-003 native BricsCAD qualification or any other source lane. If the fix proves to require another source/test path, stop and land another claim amendment before reading/editing/testing that new path.
+
+## 2026-08-14 07:17 +07:00 source fix
+
+- `d03edf8e4c476ee929d731a2c0c7400a8b8d14e4` updates `ModelHealthService` so persisted and live source handles use the existing `GeneratedHandleIdentity.Normalize` identity contract.
+- Numeric aliases such as `A`, `00a`, and `0xA` now canonicalize to one SourceHandle identity for intra-element duplicate detection, cross-element ownership detection, and liveness matching.
+- Malformed textual handles retain the existing trimmed, case-insensitive compatibility path because `GeneratedHandleIdentity.Normalize` falls back to the trimmed text when hexadecimal parsing is not applicable.
+- `liveGeneratedSolidHandles` intentionally remains on the pre-existing normalization path; this source-handle fix does not broaden generated-solid semantics.
+- Fresh exact-SHA Actions validation is still pending. The available GitHub connector exposes rerun actions but no workflow-dispatch action; rerunning #138 would validate stale SHA `93a5547224a5248ae741ccd8dd4368bac27b6b00`, so it was intentionally not used as evidence for `d03edf8...`.
 
 ## Collision rules for this claim
 
