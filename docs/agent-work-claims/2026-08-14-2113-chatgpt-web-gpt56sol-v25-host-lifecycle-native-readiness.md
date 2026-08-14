@@ -4,14 +4,16 @@
 - Agent: `chatgpt-web-gpt56sol-v25-native-readiness`
 - Registered: `2026-08-14T21:13:00+07:00`
 - Blocked: `2026-08-14T21:24:00+07:00`
+- Refreshed blocker: `2026-08-14T21:46:00+07:00`
 - Baseline main SHA: `6826ef6616e4d818ee377d2e4e581a75af27bd2c`
 - Claim commit: `ab4c8ed9a5ef630d5aae36ad66e704f9be463b0f`
 - Implementation branch: `agent/chatgpt-web-gpt56sol-v25-native-readiness/v25-host-lifecycle-native-readiness-20260814`
 - Implementation commit: `6ded8225b895bb79de87545faff5261db64ac76d`
-- Integration batch: `integration/chatgpt-web-gpt56sol-v25-native-readiness-20260814`
-- Integration commit: `5c7552e46d4df044481cdc6970c7171e576f2284`
-- Integration PR: `#1348`
-- Integration base SHA: `ff9c439b78caaba434a479df9a4e11d91d90f977`
+- Clean integration branch: `integration/chatgpt-web-gpt56sol-v25-native-readiness-20260814-r2`
+- Clean integration commit: `e676ad900f8a03cb27201c2356255e03edb9410d`
+- Clean integration PR: `#1354`
+- Clean integration base SHA: `07335185bb5385eba49f21d16b24f89a73ee2083`
+- Superseded PR: `#1348` (closed unmerged; no force-push)
 - Priority: close remote-safe adapter/native-host safety gaps before treating the V25 adapter source lane as release-grade.
 
 ## Reserved scope
@@ -30,33 +32,34 @@ The implementation must preserve the current V25 `net48/x64` hosted-plugin produ
 
 ## Exclusions / collision boundaries
 
-- Do not modify V25 preview tag sequencing, release dispatcher/version scripts, or other surfaces reserved by the active release-preview-sequence claim.
-- Do not modify Core persistence/project mutation surfaces reserved by concurrent persistence claims.
+- Do not modify V25 preview tag sequencing, release dispatcher/version scripts, `scripts/preflight-ci-manual-only.py`, or other surfaces reserved by the active release-preview-sequence claim.
+- Do not modify Core persistence/project mutation surfaces reserved by concurrent claims.
 - Do not redesign the updater protocol, release manifest, signing policy, Ribbon feature set, Palette UI, native geometry builders, or semantic model.
 - Do not claim real `NETLOAD`, licensed BricsCAD V25, private-DWG, native UI, installer, or Authenticode `LOCAL_PASS` from remote/static evidence.
 - Keep V26 build compatibility: V25-only BREP readiness checks must not introduce an unconditional V26 compile-time dependency on `TD_MgdBrep.dll`.
 
 ## Evidence / reason
 
-Current `PluginEntry.Terminate()` executes updater, ribbon, document, palette and augmenter cleanup sequentially without a top-level containment boundary. `UpdateBootstrapper.Start()` sets `_started = true` before event subscription/coordinator startup and has no rollback if a later step throws; `Stop()` can likewise stop before completing unsubscribe/coordinator/window cleanup. By contrast, `DocumentLifecycleCoordinator` already rolls back failed startup and performs best-effort independent teardown.
+Original source review found two release-grade adapter gaps: top-level host teardown could be stranded by one failing updater/native service, and `QS3DRUNTIMECHECK` validated BrxMgd/TD_Mgd while omitting the required V25 `TD_MgdBrep` assembly consumed by quantity geometry explanation.
 
-`QS3D.BricsCAD.V25.csproj` requires `BrxMgd.dll`, `TD_Mgd.dll` and `TD_MgdBrep.dll`, and quantity geometry explanation consumes `Teigha.BoundaryRepresentation`; current `QS3DRUNTIMECHECK` validates only the BrxMgd and TD_Mgd runtime majors. That leaves the required BREP native-managed dependency outside the adapter readiness verdict.
-
-Implementation `6ded8225b895bb79de87545faff5261db64ac76d` closes these source gaps. The refreshed integration commit `5c7552e46d4df044481cdc6970c7171e576f2284` was rebuilt on then-current main `ff9c439b78caaba434a479df9a4e11d91d90f977`; compare shows only the three reserved V25 source files plus the new preflight. PR #1348 is mergeable.
+Implementation `6ded8225b895bb79de87545faff5261db64ac76d` closes those source gaps. The first integration PR #1348 was later closed unmerged because a history refresh absorbed unrelated already-landed `main` commits and made the PR patch non-scope-clean. No force-push was used. Clean replacement branch `integration/chatgpt-web-gpt56sol-v25-native-readiness-20260814-r2` was built directly from main `07335185bb5385eba49f21d16b24f89a73ee2083`; exact compare to `e676ad900f8a03cb27201c2356255e03edb9410d` contains only the three reserved V25 source files plus `scripts/preflight-v25-host-lifecycle-native-readiness.py`. PR #1354 is the canonical integration PR.
 
 ## Current blocker
 
-Do **not** land PR #1348 while `docs/agent-work-claims/2026-08-14-2053-gpt56sol-release-preview-sequence-migration.md` remains `ACTIVE` and current `.github/workflows/dispatch-v25-cloud-after-main-integration.yml` still derives the public preview ordinal from `10000 + GITHUB_RUN_NUMBER`.
+The original unsafe preview-number generator is no longer the blocker. Release-preview-sequence integration `e131b868292ccf6856af0287763bf52983a4d288` landed and the current dispatcher derives the next public preview from published matching-series Git tags instead of `GITHUB_RUN_NUMBER`. The release bot subsequently prepared the correct historical next ordinal `v0.1.0-preview.10015` on commit `92c8076a8362d86706c7b046c7eec70aa2ddc9d4`.
 
-Any `src/**` push to `main` automatically triggers that dispatcher. During this work, the existing dispatcher already produced bot commit `ff9c439b78caaba434a479df9a4e11d91d90f977` (`chore(release): prepare v0.1.0-preview.10019`). Merging this source PR before the reserved dispatcher repair lands would knowingly create another release-side-effect race and would violate the active claim boundary.
+However V25 cloud run #188 / `31810692054` failed deterministically at `Manual-only CI policy gate` immediately after release-source preparation. `scripts/preflight-ci-manual-only.py` still requires the removed legacy dispatcher token `10000 + GITHUB_RUN_NUMBER`, so the policy guard rejects the newly-correct dispatcher before generic/feature guards or builds run.
 
-Unblock condition: the release-preview-sequence owner marks that claim `COMPLETED` (or owner explicitly coordinates takeover), current `main` no longer derives public preview ordinals from `GITHUB_RUN_NUMBER`, then refresh/rebase PR #1348 on that exact main before merge.
+That stale policy surface belongs to the still-ACTIVE release-preview-sequence ownership boundary. Current main commit `a464fae71a14bc3b887f2f39f1eacf914b187e94` is the other agent's claim-only reservation `claim: repair stale manual-only release sequence guard`. This lane must not collide with that work.
+
+Unblock condition: the release-preview-sequence owner lands the stale manual-only policy repair, closes its claim as `COMPLETED`, and the known deterministic `Manual-only CI policy gate` blocker is absent on a fresh current-main V25 qualification path. Then refresh PR #1354 once more on the exact latest main and merge only its four reserved surfaces.
 
 ## Validation plan
 
 - Deterministic regression/source guard is present for rollback-safe updater bootstrap, independent top-level teardown, V25 BREP runtime-major readiness and the V26 no-BREP shared-source boundary.
 - `scripts/preflight-all.py` automatically discovers the new `preflight-*.py` guard in standard CI/release gates.
-- Refresh current `main` after the release dispatcher blocker is cleared, reconcile only non-overlapping changes, merge PR #1348 once, then use the repository's standing exact-main V25 cloud CI path.
+- Exact clean integration compare at `07335185... -> e676ad90...` contains only four reserved files.
+- After the release-policy blocker is cleared, refresh current `main`, rebuild a scope-clean integration head if needed, merge once, then use the repository's standing exact-main V25 cloud CI path.
 - Report source/static/CI evidence separately from licensed BricsCAD runtime evidence.
 
 ## Completion condition
