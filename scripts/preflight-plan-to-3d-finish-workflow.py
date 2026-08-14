@@ -67,11 +67,11 @@ if '.RegenerateDirty(project)' in window:
     errors.append("window authoring must not regenerate unrelated dirty project elements")
 
 for token, label in (
-    ('TabId = "QS3D_AUTHOR"', "author tab binding"),
+    ('private const string AuthorTabId = "QS3D_AUTHOR";', "author tab binding"),
     ('"2D → Tường 3D", "QS3DCONVERT2D"', "2D-to-3D ribbon entry"),
     ('"Vẽ Cửa Sổ", "QS3DDRAWWINDOW"', "window ribbon entry"),
     ('"Vật liệu", "QS3DMATERIALS"', "material ribbon entry"),
-    ('var button = FindById(items, spec.Id);', "idempotent ribbon reconciliation"),
+    ('var button = FindById(items as IEnumerable, spec.Id) ?? FindByText(items, spec.Text);', "idempotent ribbon reconciliation"),
 ):
     if token not in ribbon:
         errors.append(label + " missing token: " + token)
@@ -138,4 +138,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: quick 2D->3D workflow is discoverable in TAO MOI, Window authoring reuses guarded WallOpening+AutoHost semantics with rollback, Ribbon initialization follows the bounded coordinator, schedules preserve a Window usage group, and local-runtime qualification remains pending until exact evidence exists.")
+print("PASS: quick 2D->3D workflow is discoverable in the grouped Author Ribbon, Window authoring reuses guarded WallOpening+AutoHost semantics with rollback, Ribbon initialization follows the bounded coordinator, schedules preserve a Window usage group, and local-runtime qualification remains pending until exact evidence exists.")
