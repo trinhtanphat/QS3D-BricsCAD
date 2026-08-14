@@ -4,7 +4,10 @@
 - Date: 2026-08-14
 - Status: `ACTIVE`
 - Baseline main SHA: `af791a6b89264fdb0042faecf29888184586d945`
+- Claim commit: `cce32ee36a045fc81af43157428e29fd5149016d`
 - Implementation branch: `agent/chatgpt-web-gpt56sol/drawing-path-xml-persistability-20260814`
+- Source commit: `76403b171cfdad8fb11d8e3228e5945019c919cc`
+- Regression commit / implementation head: `2b8b46ba342128af52cf1cb30d62f5dfa6e74200`
 - Planned integration branch: `integration/chatgpt-web-gpt56sol-drawing-path-xml-persistability-20260814`
 - Priority: Core P1 persistence integrity
 
@@ -31,6 +34,13 @@ This lane preserves the established exact DrawingPath round-trip contract, inclu
 At baseline `af791a6b89264fdb0042faecf29888184586d945`, `ProjectState.DrawingPath` calls `SetPersistedScalar(ref _drawingPath, value)` without text validation. `QsdbProjectStore.Serialize(...)` writes `project.DrawingPath` directly to the root `drawingPath` XML attribute, while `ValidateSerializedXmlText(...)` calls `XmlConvert.VerifyXmlChars(...)`; therefore a value such as `"drawing\u0001path.dwg"` is accepted by the public mutation API but rejected by the canonical persistence boundary. The existing drawing-identity smoke intentionally verifies exact whitespace preservation and does not cover invalid control-character mutation.
 
 The previously completed drawing-fingerprint public-mutation claim explicitly excluded DrawingPath semantics, so this is a separate scalar and does not reopen/duplicate that lane.
+
+## Implementation evidence before integration
+
+- Source commit `76403b171cfdad8fb11d8e3228e5945019c919cc` adds only the pre-mutation control-character guard and continues to pass accepted raw text unchanged to `SetPersistedScalar`.
+- Regression commit `2b8b46ba342128af52cf1cb30d62f5dfa6e74200` adds the `U+0001` rejection/atomicity assertions while retaining the existing whitespace-preserving Save→Load fixture.
+- Compare from claim commit to implementation head reports exactly two modified files: `ProjectState.cs` and `QsdbDrawingIdentityRoundTripSmoke.cs`.
+- Source/test were read back from the branch; the test contains the C# `\u0001` runtime escape. No managed or native test PASS is claimed from the branch because CI remains manual-only.
 
 ## Validation plan
 
