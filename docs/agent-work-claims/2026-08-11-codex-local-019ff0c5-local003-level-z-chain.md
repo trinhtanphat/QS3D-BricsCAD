@@ -1,6 +1,6 @@
 # Work claim — LOCAL-003 shared native Level Z-chain
 
-- Status: `BLOCKED`
+- Status: `ACTIVE`
 - Agent: `codex-local-019ff0c5` (`/root`, local Windows + licensed BricsCAD V25 agent)
 - Registered: `2026-08-11T19:43:12+07:00`
 - Baseline main SHA: `c7dd212d36677a1d2e005becf8709768fe98d6a1`
@@ -722,3 +722,9 @@ This is a CAD-independent source/test contract conflict. This local worker did n
 The local checkout is synchronized with `origin/main@604b8662be656e5a87fd8b43769526b1debec7b5`, issue `#1092` remains closed with fresh deterministic smoke evidence, and a new process audit found no running BricsCAD process. Newly added active claims were read and do not reserve Level placement, the Level runner, or LOCAL-003 evidence.
 
 This status-only reactivation must reach `origin/main` before qualification resumes. After publication, re-fetch and require a clean newest exact SHA, full Core smoke, all focused Level/static gates, the installed-reference V25 `Release|x64` build and matching plugin/Core `ProductVersion`; only then create a fresh disposable `*.level-z-probe-copy.dwg` and execute `scripts/test-bricscad-v25-level-z.ps1`. No GitHub Actions are authorized.
+
+## 2026-08-14 exact-current reactivation after source blockers cleared
+
+The local checkout is clean and synchronized with `origin/main@e17a203d287f81d2ddae7b750a972cfd6d8ed53f`. Issues `#990`, `#1092` and `#1101` are closed with their non-local corrections integrated, and the process audit again reports zero BricsCAD processes. Current ACTIVE/BLOCKED claim and open-PR review found no competing owner for Level placement, the Level runner or LOCAL-003 evidence.
+
+This claim is reactivated before any renewed build or native launch. After this status-only commit is visible on `origin/main`, re-fetch the newest clean main, require full Core smoke, all focused Level/static gates, installed-reference V25 `Release|x64` build and matching plugin/Core `ProductVersion`, then execute one fresh disposable Level probe. A new CAD-independent failure returns to a non-local owner; a native failure is recorded only with sanitized evidence. No GitHub Actions are authorized.
