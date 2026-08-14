@@ -50,7 +50,13 @@ def main():
     require_order(updater, "UpdateCoordinator.Instance.Start();", "_started = true;", "updater only marks started after coordinator start", failures)
     require(updater, "UpdateCoordinator.Instance.AutomaticUpdateFound -= OnAutomaticUpdateFound;", "updater event rollback/unsubscribe", failures)
     require(updater, "try { UpdateCoordinator.Instance.Stop(); }\n                catch { }\n                _started = false;\n                throw;", "updater failed-start rollback", failures)
-    require_order(updater, "_started = false;\n            TryScheduleVerifiedUpdateOnExit();", "try { UpdateCoordinator.Instance.AutomaticUpdateFound -= OnAutomaticUpdateFound; }", "updater teardown idempotence", failures)
+    stop_start = updater.find("internal static void Stop()")
+    stop_end = updater.find("private static void TryScheduleVerifiedUpdateOnExit()", stop_start + 1)
+    stop_body = updater[stop_start:stop_end] if stop_start >= 0 and stop_end > stop_start else ""
+    if not stop_body:
+        failures.append("updater teardown idempotence: UpdateBootstrapper.Stop body not found")
+    else:
+        require_order(stop_body, "_started = false;\n            TryScheduleVerifiedUpdateOnExit();", "try { UpdateCoordinator.Instance.AutomaticUpdateFound -= OnAutomaticUpdateFound; }", "updater teardown idempotence", failures)
     require(updater, "try { UpdateCenterWindowHost.Close(); }\n            catch { }", "updater window teardown containment", failures)
 
     require(runtime, "#if !BRICSCAD_V26\nusing Teigha.BoundaryRepresentation;\n#endif", "V25-only BREP compile guard", failures)

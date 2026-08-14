@@ -25,12 +25,7 @@ if not errors:
         "InterchangeFieldPrecedenceChoice.Unspecified",
         "InterchangeFieldPrecedenceChoice.KeepTarget",
         "InterchangeFieldPrecedenceChoice.UseSource",
-        '"familyId"',
-        '"floorId"',
-        '"zoneId"',
-        '"dependencies"',
-        '"properties"',
-        '"quantities"',
+        '"familyId"', '"floorId"', '"zoneId"', '"dependencies"', '"properties"', '"quantities"',
         "requiresGeneratedOutputReset",
         "AddSelectedSourceNameBatchCollisions",
     )
@@ -38,48 +33,41 @@ if not errors:
         if token not in planner:
             errors.append("field-merge planner missing preview/precedence token: " + token)
 
-    forbidden = (
-        "ProjectStateSnapshot.Capture",
-        "ProjectFamilyService.SetProperty",
-        "ProjectFamilyService.RemoveProperty",
-        "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles",
-        "ProjectInterchangeNativeCleanupAuthorization",
-    )
-    for token in forbidden:
+    for token in ("ProjectStateSnapshot.Capture", "ProjectFamilyService.SetProperty", "ProjectFamilyService.RemoveProperty", "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles", "ProjectInterchangeNativeCleanupAuthorization"):
         if token in planner:
             errors.append("preview-only field-merge planner crossed mutation/native boundary: " + token)
 
-    if "FieldMerge" in coordinator or "FieldPrecedence" in coordinator:
-        errors.append("preview-only field merge must not be exposed as an executable coordinator mode before a reviewed executor/native-cleanup contract exists")
-
-    smoke_required = (
-        "MixedPrecedenceIsDeterministicAndPreviewOnly",
-        "UnspecifiedPrecedenceFailsClosed",
-        "CategoryMismatchBlocksFieldMerge",
-        "GeneratedSolidHandle",
-        "sourceHandles",
-        "drawingFingerprint",
+    coordinator_required = (
+        "FieldMerge = 4",
+        "public ProjectInterchangeFieldMergePolicy? FieldMergePolicy { get; set; }",
+        "ProjectInterchangeFieldMergeExecutionPlan? _fieldMergeExecutionPlan",
+        "public ProjectInterchangeFieldMergeAuthorization CreateFieldMergeAuthorization()",
+        "return _fieldMergeExecutionPlan.CreateAuthorization();",
+        "case ProjectInterchangeImportExecutionMode.FieldMerge:",
+        "return PlanFieldMerge(target, json, request.FieldMergePolicy);",
+        "FieldMerge execution requires authorization created from the exact reviewed FieldMerge coordinator plan.",
     )
-    for token in smoke_required:
+    for token in coordinator_required:
+        if token not in coordinator:
+            errors.append("reviewed FieldMerge coordinator exposure missing token: " + token)
+    if "ProjectInterchangeImportExecutionMode.FieldMerge" in coordinator and "request.PreserveSourceHandleProvenance" in coordinator:
+        field_case = coordinator.find("if (request.Mode == ProjectInterchangeImportExecutionMode.FieldMerge)")
+        if field_case >= 0:
+            field_block = coordinator[field_case:coordinator.find("var plan = Plan", field_case)]
+            if "nativeCleanupAuthorization.ElementIds.Count != 0" not in field_block:
+                errors.append("FieldMerge coordinator must reject unrelated UseSource native cleanup authority")
+
+    for token in ("MixedPrecedenceIsDeterministicAndPreviewOnly", "UnspecifiedPrecedenceFailsClosed", "CategoryMismatchBlocksFieldMerge", "GeneratedSolidHandle", "sourceHandles", "drawingFingerprint"):
         if token not in smoke:
             errors.append("field-merge smoke missing boundary regression: " + token)
-
-    batch_required = (
-        "SelectedDuplicateSourceNamesBlockSameScope",
-        "FamilyDuplicateSourceNamesRemainCategoryScoped",
-        "Shared Zone",
-        "Shared Floor",
-        "Shared Beam",
-    )
-    for token in batch_required:
+    for token in ("SelectedDuplicateSourceNamesBlockSameScope", "FamilyDuplicateSourceNamesRemainCategoryScoped", "Shared Zone", "Shared Floor", "Shared Beam"):
         if token not in batch_name_smoke:
             errors.append("field-merge batch-name smoke missing ownership regression: " + token)
 
 if errors:
     print("QS3D interchange field-merge preflight")
-    for error in errors:
-        print("ERROR:", error)
+    for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: field-level precedence remains deterministic, explicit, fail-closed and preview-only; batch display-name ownership is guarded and native/provenance authority is not merged or exposed as an executable coordinator mode.")
+print("PASS: field-level precedence remains deterministic, explicit and fail-closed; planning stays preview-only, while reviewed coordinator exposure requires the exact FieldMerge execution plan/authorization and rejects unrelated native cleanup authority.")

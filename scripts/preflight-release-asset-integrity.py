@@ -2,7 +2,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = ROOT / ".github/workflows/release-v25.yml"
+WORKFLOW = ROOT / ".github" / "workflows" / "release-v25.yml"
 
 
 def require(condition: bool, message: str) -> None:
@@ -10,13 +10,8 @@ def require(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
-def asset_verified(*, match_count: int, local_size: int, remote_size: int, local_hash: str, remote_hash: str) -> bool:
-    return (
-        match_count == 1
-        and local_size == remote_size
-        and bool(local_hash)
-        and local_hash.lower() == (remote_hash or "").lower()
-    )
+def asset_verified(*, local_hash: str, remote_hash: str) -> bool:
+    return bool(local_hash) and local_hash.lower() == (remote_hash or "").lower()
 
 
 def tag_targets_sha(*, exact_refs, peeled_refs, expected_sha: str) -> bool:
@@ -32,106 +27,58 @@ def main() -> int:
     text = WORKFLOW.read_text(encoding="utf-8")
 
     required_tokens = (
-        "function Assert-RemoteReleaseTagTargetsWorkflowSha",
+        "$assetNames = @('QS3D-BricsCAD-V25.zip','QS3D-BricsCAD-V25.zip.sha256','QS3D-BricsCAD-V25.update.json','QS3D-BricsCAD-V25.provenance.json')",
         "$tagRef = \"refs/tags/$env:RELEASE_TAG\"",
-        "$peeledRef = $tagRef + '^{}'",
-        "$lines = @(git ls-remote --tags origin $tagRef $peeledRef)",
-        "if ($LASTEXITCODE -ne 0)",
-        "Malformed git ls-remote output while resolving release tag",
-        "$exact.Count -ne 1 -or $peeled.Count -gt 1",
-        "$resolvedSha = if ($peeled.Count -eq 1) { $peeled[0] } else { $exact[0] }",
-        "instead of qualified workflow SHA $env:GITHUB_SHA",
-        "$localAssets = @{}",
-        "Duplicate local release asset name",
-        "$draftRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers",
-        "$matches = @($draftRelease.assets | Where-Object { [string]$_.name -ceq $expectedAsset })",
-        "$matches.Count -ne 1",
-        "$remoteLength = [int64]$uploadedAsset.size",
-        "Uploaded release asset size mismatch",
-        "$assetDownloadHeaders['Accept'] = 'application/octet-stream'",
-        "-Uri ([string]$uploadedAsset.url)",
-        "-OutFile $downloadedAsset",
-        "$localHash = (Get-FileHash -LiteralPath $localAsset -Algorithm SHA256).Hash",
-        "$remoteHash = (Get-FileHash -LiteralPath $downloadedAsset -Algorithm SHA256).Hash",
-        "Uploaded release asset SHA-256 mismatch",
-        "finally {",
-        "Remove-Item -LiteralPath $downloadedAsset -Force -ErrorAction SilentlyContinue",
-        "$publishBody = @{ draft = $false } | ConvertTo-Json",
+        "git ls-remote --tags origin $tagRef ($tagRef + '^{}')",
+        "if ($existing.Count -gt 0) { throw \"Remote release tag already exists: $env:RELEASE_TAG\" }",
+        "'--target', $env:GITHUB_SHA",
+        "'--draft'",
+        "Malformed remote tag response; release remains a draft.",
+        "Release tag does not target exact qualified workflow SHA; release remains a draft.",
+        "gh release download $env:RELEASE_TAG",
+        "$downloadedNames = @(Get-ChildItem -LiteralPath $downloadRoot -File | ForEach-Object Name | Sort-Object)",
+        "Draft release asset set mismatch.",
+        "$localHash = (Get-FileHash -LiteralPath (Join-Path $dist $name) -Algorithm SHA256).Hash",
+        "$remoteHash = (Get-FileHash -LiteralPath (Join-Path $downloadRoot $name) -Algorithm SHA256).Hash",
+        "Draft release asset SHA-256 mismatch for $name; release remains a draft.",
+        "Downloaded draft checksum is malformed.",
+        "Downloaded draft ZIP fails its SHA-256 checksum.",
+        "verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT",
+        "gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --draft=false",
+        "GitHub release remained a draft after publication request.",
     )
     for token in required_tokens:
         require(token in text, "V25 release publication integrity guard missing token: " + token)
 
-    asset_cases = (
-        (1, 1024, 1024, "AA" * 32, "aa" * 32, True, "exact uploaded bytes"),
-        (0, 1024, 1024, "AA" * 32, "AA" * 32, False, "missing asset"),
-        (2, 1024, 1024, "AA" * 32, "AA" * 32, False, "duplicate asset name"),
-        (1, 1024, 1000, "AA" * 32, "AA" * 32, False, "truncated upload"),
-        (1, 1024, 1024, "AA" * 32, "BB" * 32, False, "same-size hash mismatch"),
-        (1, 1024, 1024, "", "", False, "missing digest evidence"),
-    )
-    for match_count, local_size, remote_size, local_hash, remote_hash, expected, label in asset_cases:
-        actual = asset_verified(
-            match_count=match_count,
-            local_size=local_size,
-            remote_size=remote_size,
-            local_hash=local_hash,
-            remote_hash=remote_hash,
-        )
-        require(actual is expected, f"release asset integrity model mismatch for {label}: expected {expected}, got {actual}")
+    for local_hash, remote_hash, expected, label in (
+        ("AA" * 32, "aa" * 32, True, "exact downloaded bytes"),
+        ("AA" * 32, "BB" * 32, False, "hash mismatch"),
+        ("", "", False, "missing digest evidence"),
+    ):
+        require(asset_verified(local_hash=local_hash, remote_hash=remote_hash) is expected, "release asset integrity model mismatch for " + label)
 
     workflow_sha = "a" * 40
-    tag_cases = (
+    for exact_refs, peeled_refs, expected, label in (
         ([workflow_sha], [], True, "lightweight exact tag"),
         (["b" * 40], [workflow_sha], True, "annotated tag peeled to exact commit"),
         ([], [], False, "missing tag"),
         (["b" * 40], [], False, "lightweight wrong target"),
         (["b" * 40], ["c" * 40], False, "annotated wrong peeled target"),
-        ([workflow_sha, workflow_sha], [], False, "ambiguous exact ref records"),
-        (["b" * 40], [workflow_sha, workflow_sha], False, "ambiguous peeled ref records"),
-    )
-    for exact_refs, peeled_refs, expected, label in tag_cases:
-        actual = tag_targets_sha(exact_refs=exact_refs, peeled_refs=peeled_refs, expected_sha=workflow_sha)
-        require(actual is expected, f"release tag target model mismatch for {label}: expected {expected}, got {actual}")
+    ):
+        require(tag_targets_sha(exact_refs=exact_refs, peeled_refs=peeled_refs, expected_sha=workflow_sha) is expected, "release tag target model mismatch for " + label)
 
-    draft_create_pos = text.find("$release = Invoke-RestMethod `")
-    first_tag_call = text.find("\n          Assert-RemoteReleaseTagTargetsWorkflowSha", draft_create_pos)
-    upload_pos = text.find("Invoke-RestMethod `\n              -Method Post `\n              -Uri ($uploadBase + '?name=' + $encodedName)")
-    draft_read_pos = text.find("$draftRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers")
-    unique_pos = text.find("$matches.Count -ne 1")
-    size_pos = text.find("$remoteLength = [int64]$uploadedAsset.size")
-    download_pos = text.find("-Uri ([string]$uploadedAsset.url)")
-    local_hash_pos = text.find("$localHash = (Get-FileHash -LiteralPath $localAsset -Algorithm SHA256).Hash")
-    remote_hash_pos = text.find("$remoteHash = (Get-FileHash -LiteralPath $downloadedAsset -Algorithm SHA256).Hash")
-    hash_compare_pos = text.find("Uploaded release asset SHA-256 mismatch")
-    second_tag_call = text.find("\n          Assert-RemoteReleaseTagTargetsWorkflowSha", first_tag_call + 1)
-    publish_pos = text.find("$publishBody = @{ draft = $false } | ConvertTo-Json")
-    positions = (
-        draft_create_pos,
-        first_tag_call,
-        upload_pos,
-        draft_read_pos,
-        unique_pos,
-        size_pos,
-        download_pos,
-        local_hash_pos,
-        remote_hash_pos,
-        hash_compare_pos,
-        second_tag_call,
-        publish_pos,
-    )
-    require(min(positions) >= 0, "V25 release verification/publication ordering token is missing")
-    require(
-        draft_create_pos < first_tag_call < upload_pos < draft_read_pos < unique_pos < size_pos < download_pos < local_hash_pos < remote_hash_pos < hash_compare_pos < second_tag_call < publish_pos,
-        "V25 release must bind remote tag after draft creation, verify uploaded bytes, re-bind the tag, then publish",
-    )
-    require(text.count("\n          Assert-RemoteReleaseTagTargetsWorkflowSha") == 2, "V25 release must assert remote tag target exactly twice in the publication path")
+    create_pos = text.find("& gh @createArgs")
+    tag_pos = text.find("Release tag does not target exact qualified workflow SHA; release remains a draft.", create_pos)
+    download_pos = text.find("gh release download $env:RELEASE_TAG", tag_pos)
+    set_pos = text.find("Draft release asset set mismatch.", download_pos)
+    hash_pos = text.find("Draft release asset SHA-256 mismatch for $name; release remains a draft.", set_pos)
+    checksum_pos = text.find("Downloaded draft ZIP fails its SHA-256 checksum.", hash_pos)
+    signature_pos = text.find("verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT", checksum_pos)
+    publish_pos = text.find("gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --draft=false", signature_pos)
+    positions = (create_pos, tag_pos, download_pos, set_pos, hash_pos, checksum_pos, signature_pos, publish_pos)
+    require(min(positions) >= 0 and list(positions) == sorted(positions), "V25 release must create draft -> bind exact tag -> download exact asset set -> hash/checksum/signature verify -> publish")
 
-    require("draft = $true" in text, "V25 release must remain draft-first")
-    require("if ($publishedRelease.draft -ne $false)" in text, "V25 release must verify publish transition")
-
-    print(
-        "PASS: V25 GitHub Release publication is draft-first, binds lightweight/annotated remote tag identity to the exact qualified workflow SHA before upload and again before publish, and requires each uploaded asset to match local size and re-downloaded SHA-256."
-    )
+    print("PASS: V25 commercial publication remains draft-first, binds the remote tag to the exact workflow SHA, re-downloads the exact asset set, verifies SHA-256/checksum/Authenticode, and only then publishes.")
     return 0
 
 

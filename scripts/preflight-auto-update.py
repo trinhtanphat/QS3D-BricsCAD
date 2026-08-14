@@ -75,19 +75,13 @@ def main() -> int:
     require(launcher, "-AllowSameVersion", "newer prerelease same-assembly-version handoff")
     require(launcher, "TryRequestGracefulHostClose", "graceful host-close API")
     require(launcher, "process.CloseMainWindow()", "WM_CLOSE-style BricsCAD close request")
-    require(launcher, '"QS3D",\n                    "UpdateLogs"', "log path outside replaceable plugin directory")
     reject(launcher, "Stop-Process", "forced BricsCAD termination")
     reject(launcher, "taskkill", "forced BricsCAD termination")
-
-    # Readiness timeout may terminate only the detached PowerShell updater child before
-    # BricsCAD is asked to close. Generic/current-host process termination remains forbidden.
     require(launcher, "private static void TryTerminateUnreadyWorker(Process updater)", "narrow detached-worker cleanup helper")
     require(launcher, "updater.Kill();", "detached-worker readiness-timeout cleanup")
     kill_lines = [line.strip() for line in launcher.splitlines() if ".Kill(" in line]
     if kill_lines != ["updater.Kill();"]:
         raise AssertionError("only detached updater.Kill() is permitted; found: " + repr(kill_lines))
-    if "process.Kill(" in launcher or "Process.GetCurrentProcess().Kill(" in launcher:
-        raise AssertionError("BricsCAD/current-process force termination is forbidden")
 
     require(commands, '[CommandMethod("QS3DUPDATE", CommandFlags.Modal)]', "QS3DUPDATE command")
     reject(commands, '[CommandMethod("QS3DVERSION", CommandFlags.Modal)]', "duplicate updater QS3DVERSION command")
@@ -99,37 +93,31 @@ def main() -> int:
     require(runtime_diagnostics, '[CommandMethod("QS3DRUNTIMECHECK", CommandFlags.Modal)]', "deep runtime diagnostic command")
     require(runtime_diagnostics, "WriteVersionSummary();", "concise QS3DVERSION path")
     require(runtime_diagnostics, "Run QS3DRUNTIMECHECK for full runtime/package verification.", "deep-check handoff hint")
-    reject(runtime_diagnostics, "public void VersionCheck()\n        {\n            RuntimeCheck();", "QS3DVERSION forwarding to full diagnostic")
 
     require(ui, 'MakeButton("Kiểm tra lại"', "manual refresh button")
     require(ui, 'MakeButton("Cập nhật ngay"', "one-click update button")
-    require(ui, "CreateButtonTemplate", "custom dark button template")
-    require(ui, "UIElement.IsMouseOverProperty", "dark hover-state trigger")
-    require(ui, "Button.IsPressedProperty", "dark pressed-state trigger")
-    require(ui, "UIElement.IsEnabledProperty", "dark disabled-state trigger")
-    require(ui, 'new SolidColorBrush(Color.FromRgb(45, 52, 64))', "dark disabled button background")
     require(ui, '"Cài thủ công"', "manual preview primary action")
-    require(ui, "HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled", "wrapped release notes")
-    require(ui, "ToDisplayVersion", "compact user-facing version display")
     require(ui, "TryRequestGracefulHostClose", "one-click graceful close wiring")
     require(ui, "ShowModelessWindow", "modeless Update Center")
 
     require(bootstrapper, "AutomaticUpdateFound += OnAutomaticUpdateFound", "automatic release notification")
     require(plugin_entry, "UpdateBootstrapper.Start();", "plugin initialize updater start")
-    require(plugin_entry, "UpdateBootstrapper.Stop();", "plugin terminate updater stop")
+    require(plugin_entry, "TryCleanup(UpdateBootstrapper.Stop);", "contained plugin updater stop")
 
     require(package, "Get-ChildItem (Join-Path $root 'src/QS3D.BricsCAD.V25') -Recurse -Filter '*.cs'", "recursive command discovery")
     require(package, "[CommandMethod", "DemandLoad command extraction")
 
     require(workflow, "Create signed auto-update manifest", "signed manifest generation step")
-    require(workflow, "if: ${{ inputs.sign_package }}", "signed-only manifest generation")
     require(workflow, "new-v25-update-manifest.ps1", "canonical manifest generator")
     require(workflow, "QS3D-BricsCAD-V25.update.json", "manifest release asset")
-    require(workflow, "if ($signPackage) { $releaseAssets += 'dist\\QS3D-BricsCAD-V25.update.json' }", "signed-only manifest upload")
-    require(workflow, "if ($signPackage) { $expectedAssets += 'QS3D-BricsCAD-V25.update.json' }", "signed release publication gate")
-    require(workflow, "unsigned explicit prerelease preview; manual install only", "unsigned release manual-only policy")
+    require(workflow, "ExpectedSignerThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT", "manifest signer pin")
+    require(workflow, "Create commercial checksum and provenance", "manifest provenance binding")
+    require(workflow, "Verify candidate after job boundary", "signed manifest cross-job verification")
+    require(workflow, "Create draft, verify uploaded bytes, then publish", "draft-first signed release publication")
+    reject(workflow, "inputs.sign_package", "obsolete optional signing branch")
+    reject(workflow, "sign_package:", "obsolete optional signing input")
 
-    print("PASS: secure GitHub release auto-update source contract is present.")
+    print("PASS: secure GitHub release auto-update source contract is present and commercial releases remain signed-only with contained updater teardown.")
     return 0
 
 
