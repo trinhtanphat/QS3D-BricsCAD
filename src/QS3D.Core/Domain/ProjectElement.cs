@@ -161,6 +161,7 @@ namespace QS3D.Core.Domain
 
         public void MarkGeneratedGeometryStale(string reason)
         {
+            var normalizedReason = NormalizeStaleReason(reason);
             var changed = false;
             var hasOutput = false;
             bool outputPresent;
@@ -175,27 +176,29 @@ namespace QS3D.Core.Domain
             changed |= MarkGeneratedOutputStale(GeneratedCurtainFrameHandlesKey, GeneratedCurtainFrameStateKey, GeneratedCurtainFrameStaleSnapshotKey, out outputPresent); hasOutput |= outputPresent;
             changed |= MarkGeneratedCurtainPanelOutputStale(out outputPresent); hasOutput |= outputPresent;
             if (!hasOutput) return;
-            changed |= SetAggregateStaleReason(reason);
+            changed |= SetAggregateStaleReason(normalizedReason);
             if (changed) UpdatedUtc = DateTime.UtcNow;
         }
 
         public void MarkGeneratedCurtainFrameStale(string reason)
         {
+            var normalizedReason = NormalizeStaleReason(reason);
             var changed = MarkGeneratedOutputStale(
                 GeneratedCurtainFrameHandlesKey,
                 GeneratedCurtainFrameStateKey,
                 GeneratedCurtainFrameStaleSnapshotKey,
                 out var hasOutput);
             if (!hasOutput) return;
-            changed |= SetAggregateStaleReason(reason);
+            changed |= SetAggregateStaleReason(normalizedReason);
             if (changed) UpdatedUtc = DateTime.UtcNow;
         }
 
         public void MarkGeneratedCurtainPanelStale(string reason)
         {
+            var normalizedReason = NormalizeStaleReason(reason);
             var changed = MarkGeneratedCurtainPanelOutputStale(out var hasOutput);
             if (!hasOutput) return;
-            changed |= SetAggregateStaleReason(reason);
+            changed |= SetAggregateStaleReason(normalizedReason);
             if (changed) UpdatedUtc = DateTime.UtcNow;
         }
 
@@ -319,6 +322,12 @@ namespace QS3D.Core.Domain
             {
                 throw new ArgumentException(label + " contains characters that are invalid in XML.", parameterName, ex);
             }
+        }
+
+        private static string NormalizeStaleReason(string? reason)
+        {
+            var normalized = string.IsNullOrWhiteSpace(reason) ? "Semantic/source state changed." : reason.Trim();
+            return RequireXmlText(normalized, nameof(reason), "Generated geometry stale reason");
         }
 
         private static ElementCategory RequireCategory(ElementCategory value)
