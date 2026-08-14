@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             CommonAndMixedValuesAreStable();
+            QuantitySignedZeroProjectionIsCanonical();
             ReferencePresenceCountsActualAssignments();
             FamilyDefaultsParticipateInEffectiveValues();
             InternalOwnershipPropertiesStayHidden();
@@ -50,6 +51,36 @@ namespace QS3D.Core.SmokeTests
             var length = result.Quantities.Single(x => x.Name == "LengthM");
             Equal(true, length.IsMixed);
             Equal(2, length.PresentCount);
+        }
+
+        private static void QuantitySignedZeroProjectionIsCanonical()
+        {
+            var project = BuildProject();
+            var negativeZero = BitConverter.Int64BitsToDouble(long.MinValue);
+            var negativeElement = project.FindElement("B-001")!;
+            var positiveElement = project.FindElement("B-002")!;
+            negativeElement.Quantities["LengthM"] = negativeZero;
+            var version = project.ChangeVersion;
+
+            var single = SemanticSelectionInspector.Inspect(project, new[] { "B-001" })
+                .Quantities.Single(x => x.Name == "LengthM");
+            Equal(false, single.IsMixed);
+            Equal(1, single.PresentCount);
+            if (!single.Value.HasValue) throw new Exception("Signed-zero quantity projection lost the selected value.");
+            Equal(0L, BitConverter.DoubleToInt64Bits(single.Value.Value));
+            Equal(long.MinValue, BitConverter.DoubleToInt64Bits(negativeElement.Quantities["LengthM"]));
+            Equal(version, project.ChangeVersion);
+
+            positiveElement.Quantities["LengthM"] = 0d;
+            var combined = SemanticSelectionInspector.Inspect(project, new[] { "B-002", "B-001" })
+                .Quantities.Single(x => x.Name == "LengthM");
+            Equal(false, combined.IsMixed);
+            Equal(2, combined.PresentCount);
+            if (!combined.Value.HasValue) throw new Exception("Equivalent signed zeros must retain a canonical shared quantity value.");
+            Equal(0L, BitConverter.DoubleToInt64Bits(combined.Value.Value));
+            Equal(long.MinValue, BitConverter.DoubleToInt64Bits(negativeElement.Quantities["LengthM"]));
+            Equal(0L, BitConverter.DoubleToInt64Bits(positiveElement.Quantities["LengthM"]));
+            Equal(version, project.ChangeVersion);
         }
 
         private static void ReferencePresenceCountsActualAssignments()
