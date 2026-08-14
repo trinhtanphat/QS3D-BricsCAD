@@ -6,14 +6,14 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILDERS = [
     (
         ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameSolidBuilder.cs",
-        "public static CurtainFrameBuildResult BuildSelectedLineWalls(Document document, ProjectState project)",
+        "public static CurtainFrameBuildResult BuildSelectedLineWalls(Document document, ProjectState project, bool allowInteractiveSelection = true)",
         "private static void CommitSemanticUpdate",
         'AuditTrail.ForProject(project).Record("geometry.curtain.frames"',
         "Curtain LINE frame",
     ),
     (
         ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallPathFrameSolidBuilder.cs",
-        "public static CurtainFrameBuildResult BuildSelectedOpenPolylines(Document document, ProjectState project)",
+        "public static CurtainFrameBuildResult BuildSelectedOpenPolylines(Document document, ProjectState project, bool allowInteractiveSelection = true)",
         "private static void CommitSemanticUpdate",
         'AuditTrail.ForProject(project).Record("geometry.curtain.path.frames"',
         "Curtain path frame",
