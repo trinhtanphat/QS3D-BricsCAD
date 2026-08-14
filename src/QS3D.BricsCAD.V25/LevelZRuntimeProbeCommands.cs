@@ -70,6 +70,12 @@ namespace QS3D.BricsCAD.V25
             ZRange? observedGlassRange = null;
             ZRange? observedFrameRange = null;
             ZRange? observedPanelRange = null;
+            var rebarStage = string.Empty;
+            int? observedBeamRebarCount = null;
+            int? observedBeamStirrupElementCount = null;
+            int? observedBeamStirrupCount = null;
+            ZRange? observedRebarRange = null;
+            ZRange? observedStirrupRange = null;
             try
             {
                 var nonce = Environment.GetEnvironmentVariable(NonceVariable) ?? string.Empty;
@@ -193,16 +199,30 @@ namespace QS3D.BricsCAD.V25
                 Require(string.Equals(Property(glassWall, "GeneratedCurtainPanelMode"), "LinePanelSolids.OpeningAware", StringComparison.Ordinal), "Curtain panel opening-aware mode");
 
                 failureCode = "LEVEL_Z_RUNTIME_REBAR_FAILED";
+                rebarStage = "longitudinal_build";
                 Select(document, sources.Beam.ObjectId);
                 var rebarCount = BeamRebarSolidBuilder.BuildSelected(document, project);
+                observedBeamRebarCount = rebarCount;
+                rebarStage = "longitudinal_count";
                 Require(rebarCount == 4, "Beam longitudinal rebar count");
+                rebarStage = "stirrup_build";
                 Select(document, sources.Beam.ObjectId);
                 var stirrupResult = BeamStirrupSolidBuilder.BuildSelected(document, project);
+                observedBeamStirrupElementCount = stirrupResult.Elements;
+                observedBeamStirrupCount = stirrupResult.Stirrups;
+                rebarStage = "stirrup_count";
                 Require(stirrupResult.Elements == 1 && stirrupResult.Stirrups > 0, "Beam stirrup result");
+                rebarStage = "longitudinal_range_read";
                 var rebarRange = ReadZRange(document, Handles(beam, "GeneratedRebarHandles"), "Beam rebar");
+                observedRebarRange = rebarRange;
+                rebarStage = "stirrup_range_read";
                 var stirrupRange = ReadZRange(document, Handles(beam, "GeneratedBeamStirrupHandles"), "Beam stirrups");
+                observedStirrupRange = stirrupRange;
+                rebarStage = "longitudinal_containment";
                 RequireContained(rebarRange, beamRange, "Beam rebar Z");
+                rebarStage = "stirrup_containment";
                 RequireContained(stirrupRange, beamRange, "Beam stirrup Z");
+                rebarStage = "complete";
 
                 failureCode = "LEVEL_Z_RUNTIME_LEVEL_EDIT_FAILED";
                 new WallRegenerator().Regenerate(project, boundedWall);
@@ -269,7 +289,7 @@ namespace QS3D.BricsCAD.V25
                 document.Editor.SetImpliedSelection(Array.Empty<ObjectId>());
                 document.Editor.WriteMessage("\nQS3D Level Z runtime probe PASS.");
             }
-            catch (System.Exception)
+            catch (System.Exception error)
             {
                 TryWriteFailure(
                     requestedPath,
@@ -277,7 +297,14 @@ namespace QS3D.BricsCAD.V25
                     observedLegacyRange,
                     observedGlassRange,
                     observedFrameRange,
-                    observedPanelRange);
+                    observedPanelRange,
+                    rebarStage,
+                    observedBeamRebarCount,
+                    observedBeamStirrupElementCount,
+                    observedBeamStirrupCount,
+                    observedRebarRange,
+                    observedStirrupRange,
+                    error);
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
                     "\nQS3D Level Z runtime probe FAIL. See the local qualification marker.");
             }
@@ -495,7 +522,14 @@ namespace QS3D.BricsCAD.V25
             ZRange? observedLegacyRange,
             ZRange? observedGlassRange,
             ZRange? observedFrameRange,
-            ZRange? observedPanelRange)
+            ZRange? observedPanelRange,
+            string rebarStage,
+            int? observedBeamRebarCount,
+            int? observedBeamStirrupElementCount,
+            int? observedBeamStirrupCount,
+            ZRange? observedRebarRange,
+            ZRange? observedStirrupRange,
+            System.Exception error)
         {
             try
             {
@@ -516,6 +550,18 @@ namespace QS3D.BricsCAD.V25
                     AddObservedRange(lines, "glass", observedGlassRange);
                     AddObservedRange(lines, "frame", observedFrameRange);
                     AddObservedRange(lines, "panel", observedPanelRange);
+                    if (string.Equals(failureCode, "LEVEL_Z_RUNTIME_REBAR_FAILED", StringComparison.Ordinal))
+                    {
+                        lines.Add("rebar_stage=" + RequireRebarStage(rebarStage));
+                        AddObservedCount(lines, "observed_beam_rebar_count", observedBeamRebarCount);
+                        AddObservedCount(lines, "observed_beam_stirrup_element_count", observedBeamStirrupElementCount);
+                        AddObservedCount(lines, "observed_beam_stirrup_count", observedBeamStirrupCount);
+                        AddObservedRange(lines, "rebar", observedRebarRange);
+                        AddObservedRange(lines, "stirrup", observedStirrupRange);
+                        lines.Add("exception_type=" + OneLine(error.GetType().FullName ?? error.GetType().Name));
+                        lines.Add("exception_target=" + OneLine(error.TargetSite?.Name ?? string.Empty));
+                        lines.Add("exception_hresult=0x" + error.HResult.ToString("X8", CultureInfo.InvariantCulture));
+                    }
                     WriteMarkerAtomic(normalized, lines);
                 }
             }
@@ -527,6 +573,31 @@ namespace QS3D.BricsCAD.V25
             if (range == null) return;
             lines.Add("observed_" + prefix + "_min_z_m=" + Number(range.MinimumM));
             lines.Add("observed_" + prefix + "_max_z_m=" + Number(range.MaximumM));
+        }
+
+        private static void AddObservedCount(List<string> lines, string key, int? value)
+        {
+            if (!value.HasValue) return;
+            lines.Add(key + "=" + value.Value.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static string RequireRebarStage(string value)
+        {
+            switch (value)
+            {
+                case "longitudinal_build":
+                case "longitudinal_count":
+                case "stirrup_build":
+                case "stirrup_count":
+                case "longitudinal_range_read":
+                case "stirrup_range_read":
+                case "longitudinal_containment":
+                case "stirrup_containment":
+                case "complete":
+                    return value;
+                default:
+                    return "longitudinal_build";
+            }
         }
 
         private static void WriteMarkerAtomic(string resultPath, IEnumerable<string> lines)

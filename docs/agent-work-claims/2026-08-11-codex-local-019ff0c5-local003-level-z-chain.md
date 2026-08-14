@@ -740,3 +740,9 @@ Parent task `/root` explicitly delegated the CAD-independent production correcti
 The exact `8676b6a8430062931356be7dca3bace268ca233d` licensed rerun verified the corrected Curtain chain and then returned sanitized `LEVEL_Z_RUNTIME_REBAR_FAILED` with complete cleanup. The local worker made no rebar builder change.
 
 Parent task `/root` explicitly delegated the CAD-independent Level-rebar source correction to `/root/fix_level_curtain_frame_z`. Reactivated claim `2026-08-14-codex-issue1125-level-curtain-frame-z.md` owns only the implicated production rebar/mesh builder placement and minimum focused source coverage. This LOCAL-003 claim retains all runtime probe/runner/evidence and will not concurrently edit those successor source surfaces while the delegated claim is `ACTIVE`.
+
+## 2026-08-14 sanitized rebar checkpoint diagnostics
+
+The exact licensed rerun on `5972a5bfda3a20df549e75364b40b0824286f162` verified the corrected legacy/host/Curtain ranges but still returned the coarse `LEVEL_Z_RUNTIME_REBAR_FAILED` code. That code covered longitudinal build/count, stirrup build/count, native range reads and two containment checks, so another production edit was not justified.
+
+Within this already-published LOCAL-003 probe/runner reservation, the harness is narrowed to emit only an allowlisted `rebar_stage`, reached nonnegative result counts, reached finite rebar/stirrup Z ranges, and exception type/target/HResult classification. It must never emit exception message, stack, source/data, IDs, handles, drawing paths or geometry identities. The runner and focused gate validate that allowlist and preserve exact-SHA, disposable-copy and cleanup behavior. Production rebar builders remain read-only until a fresh licensed marker identifies a bounded source defect.
