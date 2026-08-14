@@ -16,6 +16,9 @@ namespace QS3D.Core.SmokeTests
             ExecuteRejectsCleanupAuthorityForOtherModes();
             UseSourceExecuteRequiresAndConsumesExplicitAuthorization();
             ProvenanceToggleSelectsCombinedExecution();
+            FieldMergePlanRequiresExplicitPolicyAndNoProvenance();
+            FieldMergePlanSurfacesDedicatedReviewMetrics();
+            FieldMergeExecuteRequiresExactAuthorization();
             InvalidModeFailsClosed();
         }
 
@@ -157,6 +160,112 @@ namespace QS3D.Core.SmokeTests
             Equal(ProjectInterchangeAppendProvenanceImporter.ImportMode, target.Metadata[ProjectInterchangeAppendOnlyImporter.LastModeKey]);
         }
 
+        private static void FieldMergePlanRequiresExplicitPolicyAndNoProvenance()
+        {
+            var target = TargetProject(includeGenerated: false);
+            var json = ProjectInterchangeJsonExporter.Build(SourceCollisionProject(withFingerprint: true));
+
+            Throws<InvalidOperationException>(() => ProjectInterchangeImportCoordinator.Plan(
+                target,
+                json,
+                Request(ProjectInterchangeImportExecutionMode.FieldMerge, false)));
+
+            Throws<InvalidOperationException>(() => ProjectInterchangeImportCoordinator.Plan(
+                target,
+                json,
+                Request(
+                    ProjectInterchangeImportExecutionMode.FieldMerge,
+                    true,
+                    FieldMergePolicy(InterchangeFieldPrecedenceChoice.UseSource))));
+
+            Throws<InvalidOperationException>(() => ProjectInterchangeImportCoordinator.Plan(
+                target,
+                json,
+                Request(
+                    ProjectInterchangeImportExecutionMode.KeepTarget,
+                    false,
+                    FieldMergePolicy(InterchangeFieldPrecedenceChoice.UseSource))));
+        }
+
+        private static void FieldMergePlanSurfacesDedicatedReviewMetrics()
+        {
+            var target = TargetProject(includeGenerated: true);
+            var json = ProjectInterchangeJsonExporter.Build(SourceCollisionProject(withFingerprint: true));
+            var request = Request(
+                ProjectInterchangeImportExecutionMode.FieldMerge,
+                false,
+                FieldMergePolicy(InterchangeFieldPrecedenceChoice.UseSource));
+            var plan = ProjectInterchangeImportCoordinator.Plan(target, json, request);
+
+            True(plan.CanExecute);
+            Equal(ProjectInterchangeImportExecutionMode.FieldMerge, plan.Mode);
+            Equal(0, plan.SemanticIdentitiesToReplace);
+            Equal(1, plan.FieldMergeSourceFieldsToApply);
+            Equal(0, plan.FieldMergeTargetFieldsToKeep);
+            Equal(0, plan.FieldMergeUnresolvedDecisionCount);
+            Equal(0, plan.FieldMergeSourceOnlyIdentityCount);
+            Equal(1, plan.FieldMergeAffectedTargetElements);
+            Equal(1, plan.FieldMergeNativeCleanupHandlesRequired);
+            True(plan.RequiresNativeCleanup);
+            Equal(1, plan.NativeCleanupRequirements.Count);
+            Equal("E1", plan.NativeCleanupRequirements[0].ElementId);
+            Equal("AA11", plan.NativeCleanupRequirements[0].OwnerHandles.Single());
+            Throws<InvalidOperationException>(() => plan.CreateNativeCleanupAuthorization());
+            True(plan.CreateFieldMergeAuthorization() != null);
+            Equal("TARGET", (target.FindElement("E1") ?? throw new Exception("Target missing.")).Properties["Mark"]);
+        }
+
+        private static void FieldMergeExecuteRequiresExactAuthorization()
+        {
+            var target = TargetProject(includeGenerated: true);
+            var json = ProjectInterchangeJsonExporter.Build(SourceCollisionProject(withFingerprint: true));
+            var request = Request(
+                ProjectInterchangeImportExecutionMode.FieldMerge,
+                false,
+                FieldMergePolicy(InterchangeFieldPrecedenceChoice.UseSource));
+            var plan = ProjectInterchangeImportCoordinator.Plan(target, json, request);
+
+            Throws<InvalidOperationException>(() => ProjectInterchangeImportCoordinator.Execute(
+                target,
+                json,
+                request,
+                ProjectInterchangeNativeCleanupAuthorization.None));
+            Throws<InvalidOperationException>(() => ProjectInterchangeImportCoordinator.Execute(
+                target,
+                json,
+                request,
+                ProjectInterchangeNativeCleanupAuthorization.ForElementIds(new[] { "E1" })));
+
+            var otherSource = SourceCollisionProject(withFingerprint: true);
+            (otherSource.FindElement("E1") ?? throw new Exception("Other source missing.")).Properties["Mark"] = "OTHER";
+            var otherJson = ProjectInterchangeJsonExporter.Build(otherSource);
+            var otherPlan = ProjectInterchangeImportCoordinator.Plan(target, otherJson, request);
+            var wrongAuthorization = otherPlan.CreateFieldMergeAuthorization();
+            Throws<InvalidOperationException>(() => ProjectInterchangeImportCoordinator.Execute(
+                target,
+                json,
+                request,
+                wrongAuthorization));
+            Equal("TARGET", (target.FindElement("E1") ?? throw new Exception("Target missing.")).Properties["Mark"]);
+
+            var result = ProjectInterchangeImportCoordinator.Execute(
+                target,
+                json,
+                request,
+                plan.CreateFieldMergeAuthorization());
+
+            Equal(ProjectInterchangeImportExecutionMode.FieldMerge, result.Mode);
+            Equal(0, result.SemanticIdentitiesReplaced);
+            Equal(1, result.FieldMergeSourceFieldsApplied);
+            Equal(0, result.FieldMergeTargetFieldsKept);
+            Equal(1, result.FieldMergeAffectedTargetElements);
+            Equal(1, result.FieldMergeNativeCleanupHandlesRequired);
+            Equal(1, result.NativeCleanupElementsAuthorized);
+            var merged = target.FindElement("E1") ?? throw new Exception("Merged target missing.");
+            Equal("SOURCE", merged.Properties["Mark"]);
+            False(merged.Properties.ContainsKey("GeneratedSolidHandle"));
+        }
+
         private static void InvalidModeFailsClosed()
         {
             var target = new ProjectState("TARGET", "Target");
@@ -164,11 +273,31 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentOutOfRangeException>(() => ProjectInterchangeImportCoordinator.Plan(target, "{}", request));
         }
 
-        private static ProjectInterchangeImportRequest Request(ProjectInterchangeImportExecutionMode mode, bool provenance) =>
+        private static ProjectInterchangeImportRequest Request(
+            ProjectInterchangeImportExecutionMode mode,
+            bool provenance,
+            ProjectInterchangeFieldMergePolicy? fieldMergePolicy = null) =>
             new ProjectInterchangeImportRequest
             {
                 Mode = mode,
-                PreserveSourceHandleProvenance = provenance
+                PreserveSourceHandleProvenance = provenance,
+                FieldMergePolicy = fieldMergePolicy
+            };
+
+        private static ProjectInterchangeFieldMergePolicy FieldMergePolicy(InterchangeFieldPrecedenceChoice elementProperties) =>
+            new ProjectInterchangeFieldMergePolicy
+            {
+                ZoneName = InterchangeFieldPrecedenceChoice.KeepTarget,
+                FloorName = InterchangeFieldPrecedenceChoice.KeepTarget,
+                FloorElevation = InterchangeFieldPrecedenceChoice.KeepTarget,
+                FamilyName = InterchangeFieldPrecedenceChoice.KeepTarget,
+                FamilyProperties = InterchangeFieldPrecedenceChoice.KeepTarget,
+                ElementFamily = InterchangeFieldPrecedenceChoice.KeepTarget,
+                ElementFloor = InterchangeFieldPrecedenceChoice.KeepTarget,
+                ElementZone = InterchangeFieldPrecedenceChoice.KeepTarget,
+                ElementDependencies = InterchangeFieldPrecedenceChoice.KeepTarget,
+                ElementProperties = elementProperties,
+                ElementQuantities = InterchangeFieldPrecedenceChoice.KeepTarget
             };
 
         private static ProjectState TargetProject(bool includeGenerated)

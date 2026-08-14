@@ -10,18 +10,21 @@ namespace QS3D.Core.Export
         AppendOnly = 0,
         KeepTarget = 1,
         ImportAsNew = 2,
-        UseSourceSemanticData = 3
+        UseSourceSemanticData = 3,
+        FieldMerge = 4
     }
 
     public sealed class ProjectInterchangeImportRequest
     {
         public ProjectInterchangeImportExecutionMode Mode { get; set; }
         public bool PreserveSourceHandleProvenance { get; set; }
+        public ProjectInterchangeFieldMergePolicy? FieldMergePolicy { get; set; }
     }
 
     public sealed class ProjectInterchangeImportCoordinatorPlan
     {
         private readonly ProjectInterchangeUseSourceSemanticPlan? _useSourceSemanticPlan;
+        private readonly ProjectInterchangeFieldMergeExecutionPlan? _fieldMergeExecutionPlan;
 
         internal ProjectInterchangeImportCoordinatorPlan(
             ProjectInterchangeImportExecutionMode mode,
@@ -36,7 +39,8 @@ namespace QS3D.Core.Export
             int sourceHandleCount,
             int blockerCount,
             IReadOnlyList<ProjectInterchangeNativeCleanupRequirement> nativeCleanupRequirements,
-            ProjectInterchangeUseSourceSemanticPlan? useSourceSemanticPlan)
+            ProjectInterchangeUseSourceSemanticPlan? useSourceSemanticPlan,
+            ProjectInterchangeFieldMergeExecutionPlan? fieldMergeExecutionPlan)
         {
             Mode = mode;
             PreserveSourceHandleProvenance = preserveSourceHandleProvenance;
@@ -51,11 +55,35 @@ namespace QS3D.Core.Export
             BlockerCount = blockerCount;
             NativeCleanupRequirements = nativeCleanupRequirements ?? throw new ArgumentNullException(nameof(nativeCleanupRequirements));
             _useSourceSemanticPlan = useSourceSemanticPlan;
+            _fieldMergeExecutionPlan = fieldMergeExecutionPlan;
 
             if (Mode == ProjectInterchangeImportExecutionMode.UseSourceSemanticData && _useSourceSemanticPlan == null)
                 throw new InvalidOperationException("UseSource coordinator plan requires its canonical semantic plan.");
             if (Mode != ProjectInterchangeImportExecutionMode.UseSourceSemanticData && _useSourceSemanticPlan != null)
                 throw new InvalidOperationException("Only UseSource coordinator plans may retain a canonical UseSource semantic plan.");
+            if (Mode == ProjectInterchangeImportExecutionMode.FieldMerge && _fieldMergeExecutionPlan == null)
+                throw new InvalidOperationException("FieldMerge coordinator plan requires its canonical reviewed field-merge execution plan.");
+            if (Mode != ProjectInterchangeImportExecutionMode.FieldMerge && _fieldMergeExecutionPlan != null)
+                throw new InvalidOperationException("Only FieldMerge coordinator plans may retain a canonical field-merge execution plan.");
+
+            if (_fieldMergeExecutionPlan == null)
+            {
+                FieldMergeSourceFieldsToApply = 0;
+                FieldMergeTargetFieldsToKeep = 0;
+                FieldMergeUnresolvedDecisionCount = 0;
+                FieldMergeSourceOnlyIdentityCount = 0;
+                FieldMergeAffectedTargetElements = 0;
+                FieldMergeNativeCleanupHandlesRequired = 0;
+            }
+            else
+            {
+                FieldMergeSourceFieldsToApply = _fieldMergeExecutionPlan.FieldPlan.SourceChoiceCount;
+                FieldMergeTargetFieldsToKeep = _fieldMergeExecutionPlan.FieldPlan.TargetChoiceCount;
+                FieldMergeUnresolvedDecisionCount = _fieldMergeExecutionPlan.FieldPlan.UnresolvedDecisionCount;
+                FieldMergeSourceOnlyIdentityCount = _fieldMergeExecutionPlan.FieldPlan.SourceOnlyIdentityCount;
+                FieldMergeAffectedTargetElements = _fieldMergeExecutionPlan.AffectedTargetElementIds.Count;
+                FieldMergeNativeCleanupHandlesRequired = _fieldMergeExecutionPlan.TargetGeneratedHandlesToClean;
+            }
 
             var cleanupIds = new List<string>();
             foreach (var requirement in NativeCleanupRequirements)
@@ -81,6 +109,12 @@ namespace QS3D.Core.Export
         public int BlockerCount { get; }
         public IReadOnlyList<ProjectInterchangeNativeCleanupRequirement> NativeCleanupRequirements { get; }
         public IReadOnlyList<string> NativeCleanupElementIds { get; }
+        public int FieldMergeSourceFieldsToApply { get; }
+        public int FieldMergeTargetFieldsToKeep { get; }
+        public int FieldMergeUnresolvedDecisionCount { get; }
+        public int FieldMergeSourceOnlyIdentityCount { get; }
+        public int FieldMergeAffectedTargetElements { get; }
+        public int FieldMergeNativeCleanupHandlesRequired { get; }
         public bool RequiresNativeCleanup => NativeCleanupRequirements.Count > 0;
         public bool CanExecute => BlockerCount == 0;
 
@@ -89,6 +123,13 @@ namespace QS3D.Core.Export
             if (Mode != ProjectInterchangeImportExecutionMode.UseSourceSemanticData || _useSourceSemanticPlan == null)
                 throw new InvalidOperationException("Native cleanup authorization can be created only from a reviewed UseSourceSemanticData coordinator plan.");
             return ProjectInterchangeNativeCleanupAuthorization.ForPlan(_useSourceSemanticPlan);
+        }
+
+        public ProjectInterchangeFieldMergeAuthorization CreateFieldMergeAuthorization()
+        {
+            if (Mode != ProjectInterchangeImportExecutionMode.FieldMerge || _fieldMergeExecutionPlan == null)
+                throw new InvalidOperationException("FieldMerge authorization can be created only from a reviewed FieldMerge coordinator plan.");
+            return _fieldMergeExecutionPlan.CreateAuthorization();
         }
     }
 
@@ -107,6 +148,10 @@ namespace QS3D.Core.Export
             NamesRemapped = plan.NamesToRemap;
             SourceHandlesPreservedAsProvenance = plan.PreserveSourceHandleProvenance ? plan.SourceHandleCount : 0;
             NativeCleanupElementsAuthorized = plan.RequiresNativeCleanup ? plan.NativeCleanupElementIds.Count : 0;
+            FieldMergeSourceFieldsApplied = plan.FieldMergeSourceFieldsToApply;
+            FieldMergeTargetFieldsKept = plan.FieldMergeTargetFieldsToKeep;
+            FieldMergeAffectedTargetElements = plan.FieldMergeAffectedTargetElements;
+            FieldMergeNativeCleanupHandlesRequired = plan.FieldMergeNativeCleanupHandlesRequired;
         }
 
         public ProjectInterchangeImportExecutionMode Mode { get; }
@@ -119,6 +164,10 @@ namespace QS3D.Core.Export
         public int NamesRemapped { get; }
         public int SourceHandlesPreservedAsProvenance { get; }
         public int NativeCleanupElementsAuthorized { get; }
+        public int FieldMergeSourceFieldsApplied { get; }
+        public int FieldMergeTargetFieldsKept { get; }
+        public int FieldMergeAffectedTargetElements { get; }
+        public int FieldMergeNativeCleanupHandlesRequired { get; }
     }
 
     /// <summary>
@@ -135,6 +184,7 @@ namespace QS3D.Core.Export
             if (target == null) throw new ArgumentNullException(nameof(target));
             if (request == null) throw new ArgumentNullException(nameof(request));
             ValidateMode(request.Mode);
+            ValidateRequest(request);
 
             switch (request.Mode)
             {
@@ -146,6 +196,8 @@ namespace QS3D.Core.Export
                     return PlanImportAsNew(target, json, request.PreserveSourceHandleProvenance);
                 case ProjectInterchangeImportExecutionMode.UseSourceSemanticData:
                     return PlanUseSource(target, json, request.PreserveSourceHandleProvenance);
+                case ProjectInterchangeImportExecutionMode.FieldMerge:
+                    return PlanFieldMerge(target, json, request.FieldMergePolicy);
                 default:
                     throw new ArgumentOutOfRangeException(nameof(request.Mode));
             }
@@ -157,13 +209,45 @@ namespace QS3D.Core.Export
             ProjectInterchangeImportRequest request,
             ProjectInterchangeNativeCleanupAuthorization nativeCleanupAuthorization)
         {
+            return ExecuteCore(target, json, request, nativeCleanupAuthorization, null);
+        }
+
+        public static ProjectInterchangeImportCoordinatorResult Execute(
+            ProjectState target,
+            string json,
+            ProjectInterchangeImportRequest request,
+            ProjectInterchangeFieldMergeAuthorization fieldMergeAuthorization)
+        {
+            return ExecuteCore(target, json, request, ProjectInterchangeNativeCleanupAuthorization.None, fieldMergeAuthorization);
+        }
+
+        private static ProjectInterchangeImportCoordinatorResult ExecuteCore(
+            ProjectState target,
+            string json,
+            ProjectInterchangeImportRequest request,
+            ProjectInterchangeNativeCleanupAuthorization nativeCleanupAuthorization,
+            ProjectInterchangeFieldMergeAuthorization? fieldMergeAuthorization)
+        {
             if (target == null) throw new ArgumentNullException(nameof(target));
             if (request == null) throw new ArgumentNullException(nameof(request));
             if (nativeCleanupAuthorization == null) throw new ArgumentNullException(nameof(nativeCleanupAuthorization));
             ValidateMode(request.Mode);
+            ValidateRequest(request);
 
-            if (request.Mode != ProjectInterchangeImportExecutionMode.UseSourceSemanticData && nativeCleanupAuthorization.ElementIds.Count != 0)
-                throw new InvalidOperationException("Native cleanup authorization is accepted only for UseSourceSemanticData. The requested import mode must not silently consume unrelated cleanup authority.");
+            if (request.Mode == ProjectInterchangeImportExecutionMode.FieldMerge)
+            {
+                if (nativeCleanupAuthorization.ElementIds.Count != 0)
+                    throw new InvalidOperationException("FieldMerge uses its own exact reviewed-plan authorization; unrelated UseSource native cleanup authority is not accepted.");
+                if (fieldMergeAuthorization == null)
+                    throw new InvalidOperationException("FieldMerge execution requires authorization created from the exact reviewed FieldMerge coordinator plan.");
+            }
+            else
+            {
+                if (fieldMergeAuthorization != null)
+                    throw new InvalidOperationException("FieldMerge authorization is accepted only for FieldMerge mode.");
+                if (request.Mode != ProjectInterchangeImportExecutionMode.UseSourceSemanticData && nativeCleanupAuthorization.ElementIds.Count != 0)
+                    throw new InvalidOperationException("Native cleanup authorization is accepted only for UseSourceSemanticData. The requested import mode must not silently consume unrelated cleanup authority.");
+            }
 
             var plan = Plan(target, json, request);
             if (!plan.CanExecute)
@@ -197,6 +281,14 @@ namespace QS3D.Core.Export
                         ProjectInterchangeUseSourceProvenanceImporter.Import(target, json, nativeCleanupAuthorization);
                     else
                         ProjectInterchangeUseSourceSemanticImporter.Import(target, json, nativeCleanupAuthorization);
+                    break;
+
+                case ProjectInterchangeImportExecutionMode.FieldMerge:
+                    ProjectInterchangeFieldMergeImporter.Import(
+                        target,
+                        json,
+                        request.FieldMergePolicy ?? throw new InvalidOperationException("FieldMerge mode requires an explicit field precedence policy."),
+                        fieldMergeAuthorization ?? throw new InvalidOperationException("FieldMerge execution requires reviewed authorization."));
                     break;
 
                 default:
@@ -329,6 +421,33 @@ namespace QS3D.Core.Export
                 plan);
         }
 
+        private static ProjectInterchangeImportCoordinatorPlan PlanFieldMerge(
+            ProjectState target,
+            string json,
+            ProjectInterchangeFieldMergePolicy? policy)
+        {
+            if (policy == null)
+                throw new InvalidOperationException("FieldMerge mode requires an explicit field precedence policy.");
+
+            var plan = ProjectInterchangeFieldMergeImporter.Plan(target, json, policy);
+            var blockers = checked(checked(plan.FieldPlan.Blockers.Count + plan.FieldPlan.UnresolvedDecisionCount) + plan.ExecutionBlockers.Count);
+            return Build(
+                ProjectInterchangeImportExecutionMode.FieldMerge,
+                false,
+                plan.FieldPlan.SourceProjectId,
+                plan.ValidationWarnings,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                blockers,
+                plan.NativeCleanupRequirements,
+                null,
+                plan);
+        }
+
         private static ProjectInterchangeImportCoordinatorPlan Build(
             ProjectInterchangeImportExecutionMode mode,
             bool preserve,
@@ -342,7 +461,8 @@ namespace QS3D.Core.Export
             int sourceHandleCount,
             int blockers,
             IEnumerable<ProjectInterchangeNativeCleanupRequirement> cleanupRequirements,
-            ProjectInterchangeUseSourceSemanticPlan? useSourceSemanticPlan = null)
+            ProjectInterchangeUseSourceSemanticPlan? useSourceSemanticPlan = null,
+            ProjectInterchangeFieldMergeExecutionPlan? fieldMergeExecutionPlan = null)
         {
             var cleanup = new List<ProjectInterchangeNativeCleanupRequirement>();
             foreach (var requirement in cleanupRequirements ?? Array.Empty<ProjectInterchangeNativeCleanupRequirement>())
@@ -365,7 +485,23 @@ namespace QS3D.Core.Export
                 sourceHandleCount,
                 blockers,
                 new ReadOnlyCollection<ProjectInterchangeNativeCleanupRequirement>(cleanup),
-                useSourceSemanticPlan);
+                useSourceSemanticPlan,
+                fieldMergeExecutionPlan);
+        }
+
+        private static void ValidateRequest(ProjectInterchangeImportRequest request)
+        {
+            if (request.Mode == ProjectInterchangeImportExecutionMode.FieldMerge)
+            {
+                if (request.PreserveSourceHandleProvenance)
+                    throw new InvalidOperationException("FieldMerge does not support source-handle provenance. Choose a provenance-capable identity import mode instead of silently ignoring the request.");
+                if (request.FieldMergePolicy == null)
+                    throw new InvalidOperationException("FieldMerge mode requires an explicit field precedence policy.");
+                return;
+            }
+
+            if (request.FieldMergePolicy != null)
+                throw new InvalidOperationException("FieldMergePolicy is accepted only for FieldMerge mode; unrelated modes must not silently consume or ignore field precedence policy.");
         }
 
         private static void ValidateMode(ProjectInterchangeImportExecutionMode mode)
