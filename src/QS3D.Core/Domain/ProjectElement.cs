@@ -69,9 +69,9 @@ namespace QS3D.Core.Domain
         {
             Id = RequireId(id);
             _category = RequireCategory(category);
-            FamilyId = familyId?.Trim() ?? string.Empty;
-            FloorId = floorId?.Trim() ?? string.Empty;
-            ZoneId = zoneId?.Trim() ?? string.Empty;
+            _familyId = NormalizeOptionalRelationId(familyId);
+            _floorId = NormalizeOptionalRelationId(floorId);
+            _zoneId = NormalizeOptionalRelationId(zoneId);
             SourceHandles = new List<string>();
             DependsOn = new List<string>();
             Properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

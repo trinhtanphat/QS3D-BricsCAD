@@ -11,9 +11,10 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             ConstructorAndSetterRelationsNormalize();
+            ConstructorControlCharacterRelationsFail();
             ControlCharacterRelationsFailAtomically();
             NullStillClearsRelations();
-            DrawingFingerprintRemainsExact();
+            DrawingFingerprintUsesCanonicalContract();
         }
 
         private static void ConstructorAndSetterRelationsNormalize()
@@ -36,6 +37,41 @@ namespace QS3D.Core.SmokeTests
             Equal("FAMILY-02", element.FamilyId);
             Equal("FLOOR-02", element.FloorId);
             Equal("ZONE-02", element.ZoneId);
+
+            var emptyRelations = new ProjectElement(
+                "ELEMENT-REL-CONSTRUCTOR-NULL",
+                ElementCategory.ArchitecturalWall,
+                null!,
+                null!,
+                null!);
+
+            Equal(string.Empty, emptyRelations.FamilyId);
+            Equal(string.Empty, emptyRelations.FloorId);
+            Equal(string.Empty, emptyRelations.ZoneId);
+        }
+
+        private static void ConstructorControlCharacterRelationsFail()
+        {
+            Throws<ArgumentException>(() => new ProjectElement(
+                "ELEMENT-REL-CONSTRUCTOR-FAMILY",
+                ElementCategory.ArchitecturalWall,
+                "FAMILY\u0001-01",
+                "FLOOR-01",
+                "ZONE-01"));
+
+            Throws<ArgumentException>(() => new ProjectElement(
+                "ELEMENT-REL-CONSTRUCTOR-FLOOR",
+                ElementCategory.ArchitecturalWall,
+                "FAMILY-01",
+                "FLOOR\u0001-01",
+                "ZONE-01"));
+
+            Throws<ArgumentException>(() => new ProjectElement(
+                "ELEMENT-REL-CONSTRUCTOR-ZONE",
+                ElementCategory.ArchitecturalWall,
+                "FAMILY-01",
+                "FLOOR-01",
+                "ZONE\u0001-01"));
         }
 
         private static void ControlCharacterRelationsFailAtomically()
@@ -81,14 +117,14 @@ namespace QS3D.Core.SmokeTests
             Equal(string.Empty, element.ZoneId);
         }
 
-        private static void DrawingFingerprintRemainsExact()
+        private static void DrawingFingerprintUsesCanonicalContract()
         {
             var element = new ProjectElement("ELEMENT-REL-DRAWING", ElementCategory.ArchitecturalWall)
             {
                 DrawingFingerprint = "  drawing:fingerprint:AbC123  "
             };
 
-            Equal("  drawing:fingerprint:AbC123  ", element.DrawingFingerprint);
+            Equal("drawing:fingerprint:AbC123", element.DrawingFingerprint);
         }
 
         private static void Throws<T>(Action action) where T : Exception
