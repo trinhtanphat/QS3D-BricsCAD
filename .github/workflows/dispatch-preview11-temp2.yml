@@ -1,0 +1,58 @@
+name: Dispatch V25 preview.11 once
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/dispatch-preview11-temp2.yml
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  dispatch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Remove one-shot dispatcher and dispatch preview.11
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm .github/workflows/dispatch-preview11-temp2.yml
+          git commit -m "ci: remove preview.11 one-shot dispatcher"
+
+          pushed=0
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase origin main
+            if git push origin HEAD:main; then
+              pushed=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$pushed" -ne 1 ]; then
+            echo "Failed to remove one-shot dispatcher from main" >&2
+            exit 1
+          fi
+
+          git fetch origin main
+          if git ls-tree -r origin/main --name-only | grep -Fx '.github/workflows/dispatch-preview11-temp2.yml'; then
+            echo "One-shot dispatcher is still present on main" >&2
+            exit 1
+          fi
+
+          gh workflow run release-v25-cloud.yml \
+            --repo "trinhtanphat/QS3D-BricsCAD" \
+            --ref main \
+            -f release_tag=v0.1.0-preview.11 \
+            -f confirm_release=RELEASE
