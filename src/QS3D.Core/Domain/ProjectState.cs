@@ -235,10 +235,11 @@ namespace QS3D.Core.Domain
 
         private void SetPersistedScalar(ref string field, string value)
         {
-            if (string.Equals(field, value, StringComparison.Ordinal)) return;
+            var normalizedValue = value ?? string.Empty;
+            if (string.Equals(field, normalizedValue, StringComparison.Ordinal)) return;
             var nextChangeVersion = checked(ChangeVersion + 1L);
             var nextUpdatedUtc = DateTime.UtcNow;
-            field = value;
+            field = normalizedValue;
             UpdatedUtc = nextUpdatedUtc;
             ChangeVersion = nextChangeVersion;
         }
