@@ -126,18 +126,18 @@ if RIBBON.is_file():
     if text.count(button) != 1:
         errors.append("Quick Workflow Ribbon must contain exactly one stable Vẽ Tương Tự/Create Similar button")
     for token in (
-        'private const string PanelSourceId = "QS3D_AUTHOR_QUICK_PANEL_SOURCE";',
-        'private const string PanelTitle = "Tác vụ nhanh";',
-        "FindPanelSource(panelItems, PanelSourceId) ?? CreateQuickPanel(panels)",
+        'private const string AuthorPanelSourceId = "QS3D_AUTHOR_QUICK_PANEL_SOURCE";',
+        'FindPanelSource(authorPanelItems, AuthorPanelSourceId)',
+        'CreatePanel(authorPanels, AuthorPanelSourceId, "Tác vụ nhanh")',
         "private static object? FindPanelSource(IEnumerable panels, string sourceId)",
-        "private static object CreateQuickPanel(object panels)",
+        "private static object CreatePanel(object panels, string sourceId, string title)",
         'Create("Bricscad.Windows.RibbonPanelSource")',
-        'SetProperty(source, "Id", PanelSourceId);',
-        'SetProperty(source, "Title", PanelTitle);',
+        'SetProperty(source, "Id", sourceId);',
+        'SetProperty(source, "Title", title);',
         'Create("Bricscad.Windows.RibbonPanel")',
         'SetProperty(panel, "Source", source);',
         "Add(panels, panel);",
-        "var button = FindById(items, spec.Id);",
+        "var button = FindById(items as IEnumerable, spec.Id) ?? FindByText(items, spec.Text);",
         "if (button == null)",
         'button = Create("Bricscad.Windows.RibbonButton");',
         'SetProperty(button, "Id", spec.Id);',
@@ -146,7 +146,7 @@ if RIBBON.is_file():
         'SetProperty(button, "Text", spec.Text);',
         'SetProperty(button, "CommandParameter", spec.Command);',
         'SetProperty(button, "CommandHandler", new CommandHandler());',
-        "private static object? FindById(object collection, string id)",
+        "private static object? FindById(IEnumerable? collection, string id)",
         "Application.DocumentManager.MdiActiveDocument?.SendStringToExecute(command + \" \", true, false, false);",
     ):
         if token not in text:
@@ -157,12 +157,13 @@ if RIBBON.is_file():
         "if (source == null) source = candidate;",
         "if (CollectionContainsId(items, spec.Id)) continue;",
         "private static bool CollectionContainsId(object collection, string id)",
+        "CreateQuickPanel(",
     ):
         if forbidden in text:
             errors.append("Quick Workflow Ribbon must not use stale flat-panel/create-only routing: " + forbidden)
 
-    loop = text.find("foreach (var spec in Buttons)")
-    find_button = text.find("var button = FindById(items, spec.Id);", loop)
+    loop = text.find("foreach (var spec in specs)")
+    find_button = text.find("var button = FindById(items as IEnumerable, spec.Id) ?? FindByText(items, spec.Text);", loop)
     create_button = text.find("if (button == null)", find_button)
     reconcile_name = text.find('SetProperty(button, "Name", spec.Text);', create_button)
     reconcile_command = text.find('SetProperty(button, "CommandParameter", spec.Command);', reconcile_name)
@@ -197,4 +198,4 @@ if errors:
         print("- " + error)
     sys.exit(1)
 
-print("Create Similar preflight PASS: selection/ownership/Family freshness stays guarded, authoring delegates to Active Family Quick/Advanced, and Quick Workflow uses one deterministic dedicated panel whose stable buttons reconcile current state after reinitialize.")
+print("Create Similar preflight PASS: selection/ownership/Family freshness stays guarded, authoring delegates to Active Family Quick/Advanced, and Quick Workflow uses the grouped Author quick panel whose stable buttons reconcile current state after reinitialize.")
