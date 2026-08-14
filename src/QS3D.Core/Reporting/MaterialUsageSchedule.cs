@@ -66,6 +66,8 @@ namespace QS3D.Core.Reporting
                 if (AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) continue;
                 var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
                 families.TryGetValue(familyId, out var family);
+                if (family != null && family.Category != element.Category)
+                    throw new InvalidOperationException("Material usage element " + element.Id + " category " + element.Category + " does not match Family " + family.Id + " category " + family.Category + ". Repair the Family relation before reporting.");
                 var material = Effective(element, family, "Material");
                 if (material.Length > 0)
                     Add(project, element, family, floors, units, rows, order, material, "Material", MetricsForMainMaterial(element));
