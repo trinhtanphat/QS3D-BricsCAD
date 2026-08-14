@@ -59,7 +59,7 @@ for needle in (
     "Cad.CadHandleService.Select(document, handles)",
     'DispatchExistingCommand("QS3DREGEN "',
     'DispatchExistingCommand("QS3DBQ "',
-    'document.SendStringToExecute("QS3DZOOMSELECTED "',
+    "ViewportCommands.TryZoomSelection(document)",
     "public void SetInspectionReadOnly",
     "public void ClearQuantityInsights",
 ):
@@ -71,9 +71,10 @@ for forbidden in (
     "ExistingProjectMutationContext.Require",
     ".Touch()",
     "ProjectContextCoordinator.Save",
+    'SendStringToExecute("QS3DZOOMSELECTED ',
 ):
     if forbidden in code:
-        errors.append("read-only quantity insight must not mutate project state: " + forbidden)
+        errors.append("read-only quantity insight must not use stale mutation/queued-zoom behavior: " + forbidden)
 
 for needle in (
     "ObservableCollection<QuantityInsightFloorViewModel>",
@@ -102,8 +103,6 @@ for needle in (
     if needle not in palette:
         errors.append("PaletteCoordinator missing quantity workspace integration: " + needle)
 
-# Existing BLT-style drawing/layer controls are a coexistence requirement: the new
-# quantity surface must not replace their handlers or turn them into decorative UI.
 for needle in (
     'Click="OnAttachXrefClick"',
     'Click="OnReloadXrefClick"',
@@ -132,6 +131,6 @@ if errors:
 
 print(
     "PASS: the BLT-inspired far-right quantity workspace is backed by live read-only QS3D reporting, "
-    "selection highlighting, CAD locate/zoom, QS3DREGEN/QS3DBQ dispatch, project totals, and the existing "
+    "selection highlighting, direct CAD locate/zoom, QS3DREGEN/QS3DBQ dispatch, project totals, and the existing "
     "drawing/Xref/layer manager remains wired to its real handlers."
 )
