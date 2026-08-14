@@ -221,14 +221,16 @@ else { New-Item -ItemType Directory -Path $ArtifactDir | Out-Null }
 
 $resultPath = Join-Path $ArtifactDir "curtain-panel-workspace-review-result.txt"
 $progressPath = Join-Path $ArtifactDir "curtain-panel-workspace-review-progress.txt"
+$prepareResultPath = Join-Path $ArtifactDir "curtain-panel-runtime-result.txt"
 $scriptPath = Join-Path $ArtifactDir "curtain-panel-workspace-review.private.scr"
 $metadataPath = Join-Path $ArtifactDir "curtain-panel-workspace-review-metadata.json"
 $originalCopyPath = Join-Path $ArtifactDir "curtain-panel-workspace-review-original.private.dwg"
 $uiLayoutBackupPath = Join-Path $ArtifactDir "curtain-panel-workspace-review-ui-layout.private.txt"
 $uiLayoutPath = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) "QS3D\BricsCAD-V25\ui-layout-v1.txt"
-foreach ($output in @($resultPath, $progressPath, $scriptPath, $metadataPath, $originalCopyPath, $uiLayoutBackupPath)) {
+foreach ($output in @($resultPath, $progressPath, $prepareResultPath, $scriptPath, $metadataPath, $originalCopyPath, $uiLayoutBackupPath)) {
     if (Test-Path -LiteralPath $output) { throw "Curtain P10 output already exists." }
 }
+$runPrivateFiles = @($privateFiles) + @($prepareResultPath)
 
 $drawingHashBefore = (Get-FileHash -LiteralPath $DrawingCopy -Algorithm SHA256).Hash.ToUpperInvariant()
 $pluginHash = (Get-FileHash -LiteralPath $PluginDll -Algorithm SHA256).Hash.ToUpperInvariant()
@@ -254,6 +256,8 @@ $nonce = [Guid]::NewGuid().ToString("N")
 $oldResult = [Environment]::GetEnvironmentVariable("QS3D_CURTAIN_P10_RESULT", "Process")
 $oldNonce = [Environment]::GetEnvironmentVariable("QS3D_CURTAIN_P10_NONCE", "Process")
 $oldProgress = [Environment]::GetEnvironmentVariable("QS3D_CURTAIN_P10_PROGRESS", "Process")
+$oldPrepareResult = [Environment]::GetEnvironmentVariable("QS3D_CURTAIN_PANEL_RESULT", "Process")
+$oldPrepareNonce = [Environment]::GetEnvironmentVariable("QS3D_CURTAIN_PANEL_NONCE", "Process")
 $process = $null
 $launcherId = 0
 $launcherHandoffs = 0
@@ -273,6 +277,8 @@ try {
     $env:QS3D_CURTAIN_P10_RESULT = $resultPath
     $env:QS3D_CURTAIN_P10_NONCE = $nonce
     $env:QS3D_CURTAIN_P10_PROGRESS = $progressPath
+    $env:QS3D_CURTAIN_PANEL_RESULT = $prepareResultPath
+    $env:QS3D_CURTAIN_PANEL_NONCE = $nonce
     $script = @(
         "FILEDIA", "0",
         "CMDECHO", "1",
@@ -341,7 +347,7 @@ finally {
     catch { if ($null -eq $cleanupError) { $cleanupError = $_ } }
     try { Remove-ExactFile -Path $scriptPath; $scriptCleanupVerified = $true }
     catch { if ($null -eq $cleanupError) { $cleanupError = $_ } }
-    foreach ($privateFile in $privateFiles) {
+    foreach ($privateFile in $runPrivateFiles) {
         try { Remove-ExactFile -Path $privateFile }
         catch { if ($null -eq $cleanupError) { $cleanupError = $_ } }
     }
@@ -379,13 +385,15 @@ finally {
         if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
             throw "Curtain P10 cleanup left a BricsCAD process."
         }
-        $privateStateCleanupVerified = @($privateFiles | Where-Object { Test-Path -LiteralPath $_ }).Count -eq 0
+        $privateStateCleanupVerified = @($runPrivateFiles | Where-Object { Test-Path -LiteralPath $_ }).Count -eq 0
         if (-not $privateStateCleanupVerified) { throw "Curtain P10 private-state cleanup failed." }
     }
     catch { if ($null -eq $cleanupError) { $cleanupError = $_ } }
     Restore-EnvironmentValue -Name "QS3D_CURTAIN_P10_RESULT" -Value $oldResult
     Restore-EnvironmentValue -Name "QS3D_CURTAIN_P10_NONCE" -Value $oldNonce
     Restore-EnvironmentValue -Name "QS3D_CURTAIN_P10_PROGRESS" -Value $oldProgress
+    Restore-EnvironmentValue -Name "QS3D_CURTAIN_PANEL_RESULT" -Value $oldPrepareResult
+    Restore-EnvironmentValue -Name "QS3D_CURTAIN_PANEL_NONCE" -Value $oldPrepareNonce
 }
 
 try { $lastProgressPhase = Read-Qs3dProgressPhase -Path $progressPath }
