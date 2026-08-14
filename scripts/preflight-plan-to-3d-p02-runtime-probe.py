@@ -10,9 +10,10 @@ HELPER = ROOT / "scripts/bricscad-runner-window-interop.ps1"
 WORKFLOW = ROOT / "docs/PLAN-TO-3D-WORKFLOW.md"
 INBOX = ROOT / "docs/LOCAL-AGENT-INBOX.md"
 CLAIM = ROOT / "docs/agent-work-claims/2026-08-14-codex-local014-plan2d-p02-preparation.md"
+EVIDENCE_CLAIM = ROOT / "docs/agent-work-claims/2026-08-14-codex-local014-plan2d-p02-runtime-cleanup.md"
 errors = []
 
-for path in (PROBE, PRODUCTION, RUNNER, HELPER, WORKFLOW, INBOX, CLAIM):
+for path in (PROBE, PRODUCTION, RUNNER, HELPER, WORKFLOW, INBOX, CLAIM, EVIDENCE_CLAIM):
     if not path.is_file():
         errors.append("missing Plan-to-3D P02 file: " + str(path.relative_to(ROOT)))
 
@@ -184,7 +185,8 @@ if WORKFLOW.is_file():
     text = WORKFLOW.read_text(encoding="utf-8")
     for token in (
         "LOCAL-014", "P02", "QS3DPLAN2DP02PREPARE", "QS3DPLAN2DP02VERIFY",
-        "test-bricscad-v25-plan-to-3d-p02.ps1", "SOURCE_READY", "PENDING_LOCAL",
+        "test-bricscad-v25-plan-to-3d-p02.ps1", "LOCAL_PASS", "PENDING_LOCAL",
+        "7f57130470d4440f25dd27ea0bc3207cbb777a07",
         "QS3DCONVERT2D", "QS3DPLAN2WALLS", "open straight POLYLINE",
     ):
         if token not in text:
@@ -196,12 +198,13 @@ if INBOX.is_file():
     end = text.find("\n## LOCAL-", start + 1)
     section = text[start:] if start >= 0 and end < 0 else text[start:end]
     for token in (
-        "P02 source-ready handoff", "QS3DPLAN2DP02PREPARE", "QS3DPLAN2DP02VERIFY",
+        "P02 exact evidence", "7f57130470d4440f25dd27ea0bc3207cbb777a07",
+        "QS3DPLAN2DP02PREPARE", "QS3DPLAN2DP02VERIFY",
         "test-bricscad-v25-plan-to-3d-p02.ps1", "open straight POLYLINE",
-        "unrelated dirty", "SOURCE_READY", "PENDING_LOCAL",
+        "unrelated dirty", "LOCAL_PASS", "PENDING_LOCAL",
     ):
         if token not in section:
-            errors.append("LOCAL-014 missing Plan-to-3D P02 handoff token: " + token)
+            errors.append("LOCAL-014 missing Plan-to-3D P02 exact-evidence token: " + token)
     if "Status: PASS" in section:
         errors.append("LOCAL-014 must not be promoted by source-only P02 preparation")
 
@@ -213,6 +216,16 @@ if CLAIM.is_file():
     if "Status: `ACTIVE`" not in text and "Status: `COMPLETED`" not in text:
         errors.append("Plan-to-3D P02 claim must remain ACTIVE during work or COMPLETED at closeout")
 
+if EVIDENCE_CLAIM.is_file():
+    text = EVIDENCE_CLAIM.read_text(encoding="utf-8")
+    for token in (
+        "Status: `COMPLETED`", "7f57130470d4440f25dd27ea0bc3207cbb777a07",
+        "EE7FA1C5F1A28127622C76F9E246B2E1388E77ED1C2029E1167B7457EE336C80",
+        "P02_QUICK_ALIAS_POLYLINE_FAMILY_DIRTY_ONLY", "overall LOCAL-014 remains OPEN/PENDING_LOCAL",
+    ):
+        if token not in text:
+            errors.append("Plan-to-3D P02 runtime-evidence claim missing token: " + token)
+
 print("QS3D Plan-to-3D P02 runtime probe preflight")
 if errors:
     for error in errors:
@@ -220,4 +233,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: automation-only LOCAL-014/P02 prepares both quick aliases, one open straight POLYLINE, preferred ArchitecturalWall Family defaults and unrelated-dirty preservation under an exact-SHA/privacy/cleanup runner while production Plan-to-3D source remains unchanged and licensed evidence stays PENDING_LOCAL.")
+print("PASS: LOCAL-014/P02 has exact-SHA licensed quick-alias/open-POLYLINE/preferred-Family/unrelated-dirty evidence under the guarded privacy/cleanup runner while the excluded LOCAL-014 matrix remains PENDING_LOCAL.")

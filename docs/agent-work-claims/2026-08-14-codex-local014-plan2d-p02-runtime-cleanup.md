@@ -1,6 +1,6 @@
 # Work claim — LOCAL-014/P02 licensed runtime cleanup and evidence
 
-- Status: `ACTIVE / LOCAL_ONLY`
+- Status: `COMPLETED`
 - Agent: `codex-local-worker` (`/root`)
 - Registered: `2026-08-14T13:08:00+07:00`
 - Baseline main SHA: `05fa8363307557fb6b0d405ed566c283136c068f`
@@ -34,3 +34,12 @@ The PowerShell runner then rejected the otherwise successful run because BricsCA
 - Require the same sanitized PASS marker, unchanged DWG hash, zero process, deleted script, absent `.qsdb`/`.bak`/lock state and reviewed privacy-safe metadata.
 - Commit/push/merge only request-scoped changes; do not dispatch GitHub Actions.
 
+## Closeout evidence
+
+- Claim-only PR `#1136` squash-merged as `4c84a8f1075bbebd10990272676760fac60c35d4` before implementation.
+- Runner/gate implementation PR `#1139` squash-merged as exact runtime candidate `7f57130470d4440f25dd27ea0bc3207cbb777a07`.
+- Exact candidate validation: focused P02 gate PASS; generic preflight PASS; Core Release build `0` warnings / `0` errors and smoke `ALL PASS`; installed-reference V25 `Release|x64` build `0` warnings / `0` errors. Eight other Plan-to-3D gates passed; the finish-workflow aggregate gate had an unrelated current-main Ribbon literal drift and was not edited in this lane.
+- Licensed P02 rerun PASS on BricsCAD V25.2.10 x64 with plugin SHA-256 `EE7FA1C5F1A28127622C76F9E246B2E1388E77ED1C2029E1167B7457EE336C80`.
+- Sanitized marker: two quick aliases; one LINE plus one open straight POLYLINE; two semantic walls; two generated solids; preferred Family `0.31 m / 4.2 m / 0.45 m`; unrelated dirty and source geometry preserved; ownership disjoint; native bounds verified; wall-scoped Core/runtime Health error counts both zero.
+- Disposable DWG SHA-256 stayed `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`; process, script and private drawing state cleanup were all verified. No private/customer data or GitHub Actions were used.
+- P02 is qualified only for `P02_QUICK_ALIAS_POLYLINE_FAMILY_DIRTY_ONLY`; overall LOCAL-014 remains OPEN/PENDING_LOCAL for the excluded matrix.
