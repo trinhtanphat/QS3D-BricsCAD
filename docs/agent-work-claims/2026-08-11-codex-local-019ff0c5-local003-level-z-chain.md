@@ -786,3 +786,7 @@ Within this already-published LOCAL-003 probe/runner reservation, the harness is
 ## 2026-08-14 Revision capture invalid-ID fixture delegation
 
 Parent task `/root` explicitly delegates only `tests/QS3D.Core.SmokeTests/RevisionCaptureXmlTextIntegritySmoke.cs` to `/root/fix_level_curtain_frame_z` under `2026-08-14-1415-codex-revision-capture-invalid-id-fixture.md`. The child claim owns only the test-local valid-construction plus `<Id>k__BackingField` corruption needed to preserve the real revision-capture XML fail-closed boundary. This LOCAL-003 claim retains Level probe/runner/runtime ownership and will not edit the delegated smoke while the child claim is `ACTIVE`.
+
+## 2026-08-14 Room Finish collision-fixture delegation
+
+Parent task `/root` explicitly delegates the Room Finish collision smoke and its focused test gate to `/root/fix_level_curtain_frame_z` under `2026-08-14-1420-codex-room-finish-schedule-collision-fixture.md`. The child claim owns only the valid printable-delimiter fixture, explicit historical six-token collision proof and matching gate tokens. This LOCAL-003 claim retains Level probe/runner/runtime ownership and will not edit those delegated test surfaces while the child claim is `ACTIVE`.
