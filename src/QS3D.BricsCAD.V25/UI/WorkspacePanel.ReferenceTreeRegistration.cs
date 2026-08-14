@@ -10,10 +10,7 @@ namespace QS3D.BricsCAD.V25.UI
     {
         internal static readonly bool ReferenceWorkspaceTreeRegistrationReady = RegisterReferenceWorkspaceTree();
 
-        private static bool RegisterReferenceWorkspaceTree()
-        {
+        private static bool RegisterReferenceWorkspaceTree() =>
             ReferenceWorkspaceTreeAugmenter.EnsureRegistered();
-            return true;
-        }
     }
 }
