@@ -9,22 +9,23 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
-            var project = CreateProjectWithNullBacking();
+            var project = CreateProjectWithCanonicalAndNullBacking();
+            AssertExpectedBacking(project, "source fixture");
 
             var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
-            AssertNullBacking(detached, "detached copy");
+            AssertExpectedBacking(detached, "detached copy");
 
             var originalElement = project.Elements[0];
             var snapshot = ProjectStateSnapshot.Capture(project);
-            MutateNullBacking(project);
+            MutateBacking(project);
             snapshot.Restore(project);
 
             if (!ReferenceEquals(originalElement, project.Elements[0]))
                 throw new InvalidOperationException("rollback restore must preserve the captured ProjectElement object identity.");
-            AssertNullBacking(project, "rollback restore");
+            AssertExpectedBacking(project, "rollback restore");
         }
 
-        private static ProjectState CreateProjectWithNullBacking()
+        private static ProjectState CreateProjectWithCanonicalAndNullBacking()
         {
             var project = new ProjectState("P-SNAPSHOT-NULL", "Snapshot Null Fidelity")
             {
@@ -64,7 +65,7 @@ namespace QS3D.Core.SmokeTests
             return project;
         }
 
-        private static void MutateNullBacking(ProjectState project)
+        private static void MutateBacking(ProjectState project)
         {
             project.DrawingPath = "changed-path";
             project.DrawingFingerprint = "changed-fingerprint";
@@ -90,20 +91,20 @@ namespace QS3D.Core.SmokeTests
             audit.CorrelationId = "changed-correlation";
         }
 
-        private static void AssertNullBacking(ProjectState project, string label)
+        private static void AssertExpectedBacking(ProjectState project, string label)
         {
-            IsNull(project.DrawingPath, label + " project drawing path");
-            IsNull(project.DrawingFingerprint, label + " project drawing fingerprint");
-            IsNull(project.ActiveZoneId, label + " active zone id");
-            IsNull(project.ActiveFloorId, label + " active floor id");
-            IsNull(project.Metadata["NullMetadata"], label + " project metadata value");
+            IsEmpty(project.DrawingPath, label + " project drawing path");
+            IsEmpty(project.DrawingFingerprint, label + " project drawing fingerprint");
+            IsEmpty(project.ActiveZoneId, label + " active zone id");
+            IsEmpty(project.ActiveFloorId, label + " active floor id");
+            IsEmpty(project.Metadata["NullMetadata"], label + " project metadata value");
             IsNull(project.Families[0].Properties["NullFamilyProperty"], label + " family property value");
 
             var element = project.Elements[0];
-            IsNull(element.FamilyId, label + " element family id");
-            IsNull(element.FloorId, label + " element floor id");
-            IsNull(element.ZoneId, label + " element zone id");
-            IsNull(element.DrawingFingerprint, label + " element drawing fingerprint");
+            IsEmpty(element.FamilyId, label + " element family id");
+            IsEmpty(element.FloorId, label + " element floor id");
+            IsEmpty(element.ZoneId, label + " element zone id");
+            IsEmpty(element.DrawingFingerprint, label + " element drawing fingerprint");
             IsNull(element.SourceHandles[0], label + " source handle");
             IsNull(element.DependsOn[0], label + " dependency");
             IsNull(element.Properties["NullProperty"], label + " element property value");
@@ -114,6 +115,12 @@ namespace QS3D.Core.SmokeTests
             IsNull(audit.Detail, label + " audit detail");
             IsNull(audit.Actor, label + " audit actor");
             IsNull(audit.CorrelationId, label + " audit correlation id");
+        }
+
+        private static void IsEmpty(string? value, string label)
+        {
+            if (!string.Equals(value, string.Empty, StringComparison.Ordinal))
+                throw new InvalidOperationException(label + ": expected canonical empty-string backing state.");
         }
 
         private static void IsNull(object? value, string label)
