@@ -15,7 +15,7 @@ jobs:
   dispatch:
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch V25 preview 10 from current main
+      - name: Dispatch V25 preview 10 from current main (retry 2)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
