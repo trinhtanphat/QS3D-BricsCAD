@@ -299,6 +299,10 @@ namespace QS3D.BricsCAD.V25.Cad
             var startX = CadGeometryGuard.Finite(start.X, label + "/start X");
             var startY = CadGeometryGuard.Finite(start.Y, label + "/start Y");
             var startZ = CadGeometryGuard.Finite(start.Z, label + "/start Z");
+            var halfLength = length / 2d;
+            var centerX = CadGeometryGuard.Add(startX, CadGeometryGuard.Multiply(unit.X, halfLength, label + "/center offset X"), label + "/center X");
+            var centerY = CadGeometryGuard.Add(startY, CadGeometryGuard.Multiply(unit.Y, halfLength, label + "/center offset Y"), label + "/center Y");
+            var centerZ = CadGeometryGuard.Add(startZ, CadGeometryGuard.Multiply(unit.Z, halfLength, label + "/center offset Z"), label + "/center Z");
             var solid = new Solid3d();
             try
             {
@@ -309,7 +313,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 var rotationAxis = Vector3d.ZAxis.CrossProduct(unit);
                 if (rotationAxis.Length > 1e-12d) solid.TransformBy(Matrix3d.Rotation(angle, rotationAxis, Point3d.Origin));
                 else if (unit.Z < 0d) solid.TransformBy(Matrix3d.Rotation(Math.PI, Vector3d.XAxis, Point3d.Origin));
-                solid.TransformBy(Matrix3d.Displacement(new Vector3d(startX, startY, startZ)));
+                solid.TransformBy(Matrix3d.Displacement(new Vector3d(centerX, centerY, centerZ)));
                 var complete = solid;
                 solid = null!;
                 return complete;
