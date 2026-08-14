@@ -19,7 +19,7 @@ if ($dispatch -notmatch '^[0-9a-f]{40}$') {
 }
 
 function Get-ReleaseStatusEntries {
-    $lines = @(& git status --porcelain=v1 --untracked-files=all)
+    $lines = @(& git status --porcelain=v1 --untracked-files=all -- . ':(exclude).nuget/packages/**')
     if ($LASTEXITCODE -ne 0) {
         throw 'Could not inspect release-preparation Git status.'
     }
@@ -43,12 +43,6 @@ function Get-ReleaseStatusEntries {
     return @($entries)
 }
 
-function Test-IsExpectedNuGetCachePath {
-    param([string]$Path)
-    return [string]::Equals($Path, '.nuget/packages', [StringComparison]::OrdinalIgnoreCase) -or
-        $Path.StartsWith('.nuget/packages/', [StringComparison]::OrdinalIgnoreCase)
-}
-
 Push-Location $root
 try {
     $head = ([string](& git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
@@ -58,9 +52,6 @@ try {
 
     $initialStatus = @(Get-ReleaseStatusEntries)
     foreach ($entry in $initialStatus) {
-        if ($entry.State -eq '??' -and (Test-IsExpectedNuGetCachePath -Path $entry.Path)) {
-            continue
-        }
         throw "Release preparation must start from a clean checkout/index. Unexpected status '$($entry.State)' at $($entry.Path)."
     }
 
@@ -82,9 +73,6 @@ try {
     $status = @(Get-ReleaseStatusEntries)
     $changed = @()
     foreach ($entry in $status) {
-        if ($entry.State -eq '??' -and (Test-IsExpectedNuGetCachePath -Path $entry.Path)) {
-            continue
-        }
         if ($entry.State -ne ' M') {
             throw "Preview synchronization produced an unexpected Git status '$($entry.State)' at $($entry.Path)."
         }
@@ -145,9 +133,6 @@ try {
 
     $postStageStatus = @(Get-ReleaseStatusEntries)
     foreach ($entry in $postStageStatus) {
-        if ($entry.State -eq '??' -and (Test-IsExpectedNuGetCachePath -Path $entry.Path)) {
-            continue
-        }
         if ($entry.State -ne 'M ' -or $entry.Path -notin $staged) {
             throw "Release-preparation working tree changed after staging: '$($entry.State)' at $($entry.Path)."
         }
@@ -168,9 +153,6 @@ try {
 
     $postCommitStatus = @(Get-ReleaseStatusEntries)
     foreach ($entry in $postCommitStatus) {
-        if ($entry.State -eq '??' -and (Test-IsExpectedNuGetCachePath -Path $entry.Path)) {
-            continue
-        }
         throw "Release-preparation working tree is not clean after commit: '$($entry.State)' at $($entry.Path)."
     }
 
