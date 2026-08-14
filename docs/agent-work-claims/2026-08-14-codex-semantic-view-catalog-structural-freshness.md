@@ -1,6 +1,6 @@
 # Work claim — Semantic View catalog structural freshness
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `/root/fix_source_reconcile_desync`
 - Registered: `2026-08-14T16:02:57+07:00`
 - Baseline main SHA: `968761f9cf97850cb3e43f3b5e009e04b7765f07`
@@ -34,3 +34,13 @@
 - focused new smoke and static gate plus existing semantic View/Sheet/Schedule/TitleBlock gates;
 - `QS3D.Core` and `QS3D.Core.SmokeTests` Release builds;
 - full deterministic Core smoke, reporting the first unrelated blocker without expanding scope.
+
+## Completion
+
+- Claim PR `#1252` merged as `a8ad1db5f988b885c3a2c79531dca539ab1c28f6` before implementation began.
+- Source PR `#1260` merged as `77b28623cf7f0d45a01da601b3875d93f5e4b4fe`.
+- Focused structural-freshness gate: `PASS` on the exact merged source.
+- Twenty Core View/Sheet/Schedule/TitleBlock/documentation preflights: `PASS`.
+- `QS3D.Core` and `QS3D.Core.SmokeTests` Release builds: `0` warnings, `0` errors.
+- Full deterministic Core smoke reached the unrelated `ProjectStatePersistedScalarVersioningSmoke.PersistedScalarsAdvanceVersionExactlyOnce` fixture, whose padded `ActiveZoneId` expectation predates current canonical relation storage. This lane did not expand into that fixture.
+- Final implementation remained limited to `SemanticViewPlanner.BuildCatalog`, one auto-registered focused smoke, and one focused static gate; no native/runtime/LOCAL/Actions surface changed.
