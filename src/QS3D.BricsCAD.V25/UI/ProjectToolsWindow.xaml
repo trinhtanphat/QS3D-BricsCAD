@@ -197,10 +197,14 @@
 
                 <Border Style="{StaticResource ProjectCard}">
                     <StackPanel>
-                        <TextBlock Text="GRID / REFERENCE REVIEW" Style="{StaticResource PanelTitle}"/>
-                        <TextBlock Text="Review planner hình học từ semantic Grid đang chọn; các thao tác preview không tạo CAD entity mới."
+                        <TextBlock Text="GRID / REFERENCE WORKFLOW" Style="{StaticResource PanelTitle}"/>
+                        <TextBlock Text="Capture source Grid → đánh số → gắn nhãn native → review planner. Các nút review không tạo CAD entity mới."
                                    Style="{StaticResource Caption}" Margin="0,0,0,5"/>
                         <UniformGrid Columns="2">
+                            <Button Content="Capture Grid / Trục" Tag="QS3DGRID" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick" ToolTip="Capture LINE/ARC source thành semantic Grid bằng workflow chuẩn QS3DGRID."/>
+                            <Button Content="Đánh số Grid" Tag="QS3DGRIDNUMBER" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick" ToolTip="Gán GridLabel theo naming workflow hiện hữu."/>
+                            <Button Content="Gắn nhãn Grid đã chọn" Tag="QS3DGRIDANNOTATE" Style="{StaticResource ProjectCommand}" Click="OnCommandClick" ToolTip="Replace native bubble/text cho Grid source đang chọn bằng ownership chuẩn QS3D."/>
+                            <Button Content="Gắn nhãn tất cả Grid" Tag="QS3DGRIDANNOTATEALL" Style="{StaticResource ProjectCommand}" Click="OnCommandClick" ToolTip="Replace annotation cho toàn bộ semantic Grid đã có GridLabel."/>
                             <Button Content="Grid Intersections" Tag="QS3DGRIDINTERSECTIONS" Style="{StaticResource ProjectCommand}" Click="OnCommandClick" ToolTip="Inspect finite Grid intersections qua GridIntersectionPlanner."/>
                             <Button Content="Grid Auto Number" Tag="QS3DGRIDNUMBERAUTO" Style="{StaticResource ProjectCommand}" Click="OnCommandClick" ToolTip="Spatial ordering/auto-number qua GridSpatialOrderingPlanner."/>
                             <Button Content="Grid System Preview" Tag="QS3DGRIDSYSTEMPREVIEW" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick" ToolTip="Preview rectangular Grid system qua GridSystemPlanner; read-only, không materialize CAD."/>
