@@ -94,7 +94,7 @@ namespace QS3D.Core.Domain
         public string FamilyId { get => _familyId; set => _familyId = NormalizeOptionalRelationId(value); }
         public string FloorId { get => _floorId; set => _floorId = NormalizeOptionalRelationId(value); }
         public string ZoneId { get => _zoneId; set => _zoneId = NormalizeOptionalRelationId(value); }
-        public string DrawingFingerprint { get => _drawingFingerprint; set => _drawingFingerprint = value ?? string.Empty; }
+        public string DrawingFingerprint { get => _drawingFingerprint; set => _drawingFingerprint = NormalizeDrawingFingerprint(value); }
         public IList<string> SourceHandles { get; }
         public IList<string> DependsOn { get; }
         public IDictionary<string, string> Properties { get; }
@@ -290,6 +290,13 @@ namespace QS3D.Core.Domain
             var normalized = (value ?? string.Empty).Trim();
             if (normalized.Any(char.IsControl)) throw new ArgumentException("Element relation id cannot contain control characters.", nameof(value));
             return normalized;
+        }
+
+        private static string NormalizeDrawingFingerprint(string? value)
+        {
+            var rawValue = value ?? string.Empty;
+            if (rawValue.Any(char.IsControl)) throw new ArgumentException("Element drawing fingerprint cannot contain control characters.", nameof(value));
+            return rawValue.Trim();
         }
 
         private static string RequireId(string id)
