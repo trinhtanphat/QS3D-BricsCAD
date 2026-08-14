@@ -6,10 +6,11 @@
 - Scope expanded: `2026-08-14T20:58:00+07:00`
 - Baseline main SHA: `bd34bc749bf1214e240de1c3b2a5ee42b52291fb`
 - Claim-visible main SHA: `c29807f08d4e3d66fd98ab123ffc69a08edff4d5`
+- Implementation branch: `agent/chatgpt-gpt56sol/projectelement-constructor-relation-controls`
+- Implementation commit: `d9feb3dd2ab59feaf8e0c3d8f528d74001e39958`
+- Integration batch: `integration/20260814-projectelement-constructor-relation-controls`
 - Priority: Core P1 invariant + adjacent deterministic smoke regression found during owner-requested whole-repository review
 - Task Key: `CORE-PROJECTELEMENT-CONSTRUCTOR-RELATION-CONTROLS`
-- Implementation branch: `agent/chatgpt-gpt56sol/projectelement-constructor-relation-controls`
-- Integration batch: `integration/20260814-projectelement-constructor-relation-controls`
 
 ## Confirmed defects
 
@@ -35,6 +36,14 @@
 - No Slab/Open, Source Reconcile/Undo, reporting, interchange, BricsCAD adapter/runtime, signing, licensing, or LOCAL_ONLY work.
 - Do not change relation dirty-tracking semantics or add a second relation normalization model.
 - No manual GitHub Actions dispatch/rerun and no force-push.
+
+## Validation evidence so far
+
+- Agent branch is exactly one implementation commit ahead of its post-expansion claim baseline.
+- The agent diff is limited to `ProjectElement.cs` and `ProjectElementRelationPersistabilitySmoke.cs`.
+- Constructor relation assignments now call the same `NormalizeOptionalRelationId(...)` helper used by public setters.
+- Focused regression source covers constructor padding/null canonicalization, constructor control-character rejection for Family/Floor/Zone, existing setter atomicity, and the already-landed trimmed drawing-fingerprint contract.
+- Concurrent main movement through `aee493fa6e67b03551883bfbb047e743b38b6bba` touched only the separately owned QSDB negative-quantity claim/validator/smoke surfaces and did not overlap this lane.
 
 ## Validation plan
 
