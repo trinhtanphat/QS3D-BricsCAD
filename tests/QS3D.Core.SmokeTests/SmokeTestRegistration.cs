@@ -5,6 +5,7 @@ namespace QS3D.Core.SmokeTests
         internal static void RunAll()
         {
             ProjectQuantitySmoke.Run();
+            QuantityRuleTokenXmlPersistabilitySmoke.Run();
             QuantityReportFamilyCategorySmoke.Run();
             MaterialUsageFamilyCategorySmoke.Run();
             DoorOpeningFamilyCategorySmoke.Run();
@@ -143,6 +144,7 @@ namespace QS3D.Core.SmokeTests
             DrawingUnitResolutionSmoke.Run();
             ProxyCaptureEligibilitySmoke.Run();
             MeasuredSolidQuantityPolicySmoke.Run();
+            MepRecognitionSmoke.Run();
             CubicostParitySmoke.Run();
         }
     }
