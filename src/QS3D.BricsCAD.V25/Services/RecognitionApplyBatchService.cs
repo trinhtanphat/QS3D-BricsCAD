@@ -5,6 +5,7 @@ using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
+using QS3D.Core.Model;
 using QS3D.Core.Persistence;
 using QS3D.Core.Recognition;
 using QS3D.Core.Services;
