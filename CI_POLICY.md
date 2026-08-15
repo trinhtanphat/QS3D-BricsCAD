@@ -33,8 +33,8 @@ QS3D separates validation from publishing. A branch must not need to land on `ma
 
 The approved stages are:
 
-1. **automatic branch validation before PR** — `.github/workflows/ci.yml` on eligible `agent/**` pushes;
-2. **PR / combined integration validation** — the same `ci.yml` on PR merge candidates and `integration/**` combined trees when applicable;
+1. **automatic branch/PR validation** — `.github/workflows/ci.yml`; for watched task branches, the branch-push run must be green before a new PR is opened;
+2. **combined integration validation** — the same `ci.yml` on PR merge candidates and `integration/**` combined trees when applicable;
 3. **exact-main release** — `.github/workflows/dispatch-v25-cloud-after-main-integration.yml` dispatches `.github/workflows/release-v25-cloud.yml` only after an authorized integration-relevant landing on `main`.
 
 Green branch CI proves only the tested branch SHA. Green PR CI proves only the tested PR merge candidate. Green integration CI proves only that frozen combined tree. None of those results is permission to merge and none is a release. Exact-main release CI remains the final cloud evidence for the SHA that actually landed.
