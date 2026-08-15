@@ -57,6 +57,7 @@ if COMMAND.is_file():
         'SourceDigest(document, owners)',
         'EntityDigest(document, generated)',
         'NATIVE_UNDO_SEMANTIC_DIVERGENCE',
+        '"success_reconcile_count=3"',
         'SourceReconcileUndoCoordinator.CaptureSanitizedState(context.Document, context.Project)',
         'afterUndo.CompareMarkerTo(beforeUndo)',
         'final_selection_class=',
@@ -75,6 +76,8 @@ if COMMAND.is_file():
     for token in required:
         if token not in text:
             errors.append("LOCAL-004 probe command missing contract token: " + token)
+    if text.count('"success_reconcile_count=3"') != 2:
+        errors.append("LOCAL-004 session and cold-reopen markers must report exactly three successful reconciles")
     for forbidden in (
         'SourceReconcileService.ReconcileSelection',
         'GeneratedDependentGeometryInvalidator.Prepare',
@@ -188,7 +191,11 @@ if RUNNER.is_file():
         '"QS3DSRTMARKERAFTERUNDO"',
         '"QS3DSRTMARKERAFTERREDO"',
         '"QS3DSRTMARKERPUBLISH"',
-        '"_.UNDO", "1", "QS3DSRTMARKERAFTERUNDO", "QS3DSRTCHECKUNDO", "_.REDO", "QS3DSRTMARKERAFTERREDO", "QS3DSRTCHECKREDO"',
+        '"_.UNDO", "_Mark"',
+        '"_.UNDO", "_Back"',
+        '"_.UNDO", "_Begin"',
+        '"_.UNDO", "_End", "_.UNDO", "1", "_.REDO"',
+        'Require-Qs3dValue -Marker $phaseMarker -Key "success_reconcile_count" -Expected "3"',
         '"QS3DSAVE", "_.QSAVE"',
         'QS3D_SOURCE_RECONCILE_RUNTIME_V1',
         'LOCAL_004_ONLY',
@@ -227,20 +234,48 @@ if RUNNER.is_file():
     for token in required:
         if token not in text:
             errors.append("LOCAL-004 runner missing contract token: " + token)
-    ordered = (
+    prefix_ordered = (
         '"QS3DSRTPREPARE"', '"QS3DSYNCSOURCE"', '"QS3DSRTAFTERSYNC1"',
         '"QS3DSRTPREPAREROLLBACK"', '"INSUNITS", "6"', '"QS3DSRTCHECKROLLBACK"',
         '"QS3DSRTPREPGENERATED"', '"QS3DSRTCHECKGENERATED"',
         '"QS3DSRTPREPAMBIGUOUS"', '"QS3DSRTCHECKAMBIGUOUS"',
         '"_.OPEN"', '"QS3DSRTSEEDB"', '"QS3DSRTCHECKB"',
-        '"QS3DSRTMARKERBEFOREFINAL"', '"QS3DSRTSELECTSOURCES"', '"QS3DSRTAFTERFINALSYNC"', '"QS3DSRTMARKERAFTERFINAL"',
-        '"_.UNDO"', '"QS3DSRTMARKERAFTERUNDO"', '"QS3DSRTCHECKUNDO"',
-        '"_.REDO"', '"QS3DSRTMARKERAFTERREDO"', '"QS3DSRTCHECKREDO"',
+        '"QS3DSRTMARKERBEFOREFINAL"',
+    )
+    positions = [text.find(token) for token in prefix_ordered]
+    if any(position < 0 for position in positions) or positions != sorted(positions):
+        errors.append("LOCAL-004 runner pre-Undo state machine is not in canonical order")
+
+    compact = "".join(text.split())
+    explicit_cycles = (
+        '"QS3DSRTMARKERBEFOREFINAL","_.UNDO","_Mark","QS3DSRTSELECTSOURCES",'
+        '"QS3DSYNCSOURCE","QS3DSRTAFTERFINALSYNC","QS3DSRTMARKERAFTERFINAL",'
+        '"_.UNDO","_Back","QS3DSRTMARKERAFTERUNDO","QS3DSRTCHECKUNDO",'
+        '"_.UNDO","_Begin","QS3DSRTSELECTSOURCES","QS3DSYNCSOURCE",'
+        '"QS3DSRTAFTERFINALSYNC","QS3DSRTMARKERAFTERFINAL","_.UNDO","_End",'
+        '"_.UNDO","1","_.REDO","QS3DSRTMARKERAFTERREDO","QS3DSRTCHECKREDO"'
+    )
+    if explicit_cycles not in compact:
+        errors.append("LOCAL-004 runner must isolate Undo with Mark/Back and Redo with direct grouped UNDO/REDO")
+    if (
+        text.count('"QS3DSYNCSOURCE"') != 7
+        or text.count('"QS3DSRTSELECTSOURCES"') != 2
+        or text.count('"QS3DSRTAFTERFINALSYNC"') != 2
+        or text.count('"QS3DSRTMARKERAFTERFINAL"') != 2
+        or text.count('"_.UNDO"') != 5
+        or text.count('"_.U"') != 0
+        or text.count('"_.REDO"') != 1
+        or compact.count('"_.UNDO","1"') != 1
+    ):
+        errors.append("LOCAL-004 runner explicit Undo/Redo command cardinality drifted")
+
+    cycles_end = text.find('"QS3DSRTCHECKREDO"', text.find('"_.REDO"'))
+    suffix_ordered = (
         '"QS3DSRTFINALREBUILD"', '"QS3DSRTSESSION1"', '"QS3DSRTMARKERPUBLISH"', '"QS3DSAVE"', '"_.QSAVE"',
     )
-    positions = [text.find(token) for token in ordered]
-    if any(position < 0 for position in positions) or positions != sorted(positions):
-        errors.append("LOCAL-004 runner command state machine is not in canonical order")
+    suffix_positions = [text.find(token, cycles_end) for token in suffix_ordered]
+    if cycles_end < 0 or any(position < 0 for position in suffix_positions) or suffix_positions != sorted(suffix_positions):
+        errors.append("LOCAL-004 runner post-Redo state machine is not in canonical order")
     metadata_start = text.find('$metadata = [ordered]@{')
     metadata_end = text.find('$metadata | ConvertTo-Json', metadata_start)
     metadata = text[metadata_start:metadata_end].lower()
@@ -273,7 +308,7 @@ if SOURCE_COMMAND.is_file() and SOURCE_SERVICE.is_file():
 
 if CLAIM.is_file():
     text = CLAIM.read_text(encoding="utf-8")
-    for token in ('LOCAL-004', 'Status: `ACTIVE`', 'QS3DSYNCSOURCE', 'Undo/Redo', 'INSUNITS', 'post-Undo marker discriminator split'):
+    for token in ('LOCAL-004', 'Status: `COMPLETED / LOCAL_PASS`', 'QS3DSYNCSOURCE', 'Undo/Redo', 'INSUNITS', 'post-Undo marker discriminator split', 'Exact integrated LOCAL_PASS'):
         if token not in text:
             errors.append("LOCAL-004 claim missing coordination token: " + token)
 

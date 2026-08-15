@@ -359,8 +359,12 @@ try {
         "QS3DSRTPREPGENERATED", "QS3DSYNCSOURCE", "QS3DSRTCHECKGENERATED",
         "QS3DSRTPREPAMBIGUOUS", "QS3DSYNCSOURCE", "QS3DSRTCHECKAMBIGUOUS",
         "_.OPEN", ('"' + $drawingB + '"'), "QS3DSRTSEEDB", "QS3DSYNCSOURCE", "QS3DSRTCHECKB",
-        "QS3DSRTMARKERBEFOREFINAL", "QS3DSRTSELECTSOURCES", "QS3DSYNCSOURCE", "QS3DSRTAFTERFINALSYNC", "QS3DSRTMARKERAFTERFINAL",
-        "_.UNDO", "1", "QS3DSRTMARKERAFTERUNDO", "QS3DSRTCHECKUNDO", "_.REDO", "QS3DSRTMARKERAFTERREDO", "QS3DSRTCHECKREDO",
+        "QS3DSRTMARKERBEFOREFINAL", "_.UNDO", "_Mark", "QS3DSRTSELECTSOURCES",
+        "QS3DSYNCSOURCE", "QS3DSRTAFTERFINALSYNC", "QS3DSRTMARKERAFTERFINAL",
+        "_.UNDO", "_Back", "QS3DSRTMARKERAFTERUNDO", "QS3DSRTCHECKUNDO",
+        "_.UNDO", "_Begin", "QS3DSRTSELECTSOURCES",
+        "QS3DSYNCSOURCE", "QS3DSRTAFTERFINALSYNC", "QS3DSRTMARKERAFTERFINAL",
+        "_.UNDO", "_End", "_.UNDO", "1", "_.REDO", "QS3DSRTMARKERAFTERREDO", "QS3DSRTCHECKREDO",
         "QS3DSRTSELECTLINE", "QS3DBUILD3D", "QS3DSRTSELECTPOLY", "QS3DBUILD3D", "QS3DSRTFINALREBUILD",
         "QS3DSRTSESSION1", "QS3DSRTMARKERPUBLISH", "QS3DSAVE", "_.QSAVE", "_.QUIT", "_Y"
     )
@@ -395,7 +399,7 @@ try {
     $markerDiagnostic = Read-Qs3dMarker -Path $markerDiagnosticPath
     Require-PostUndoMarkerDiagnostics -Marker $markerDiagnostic -Nonce $nonce -RequireRedo
     Require-Qs3dValue -Marker $phaseMarker -Key "source_count" -Expected "2"
-    Require-Qs3dValue -Marker $phaseMarker -Key "success_reconcile_count" -Expected "2"
+    Require-Qs3dValue -Marker $phaseMarker -Key "success_reconcile_count" -Expected "3"
     foreach ($key in @("generated_refusal_verified", "ambiguous_refusal_verified", "forced_rollback_verified", "multi_document_refusal_verified", "source_geometry_preserved", "generated_replacement_verified")) {
         Require-Qs3dValue -Marker $phaseMarker -Key $key -Expected "true"
     }
