@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Xml;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Mapping
@@ -157,6 +158,14 @@ namespace QS3D.Core.Mapping
             {
                 if (char.IsControl(value[i]))
                     throw new ArgumentException("Mapping identifier must not contain control characters.", parameterName);
+            }
+            try
+            {
+                XmlConvert.VerifyXmlChars(value);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException("Mapping identifier contains characters that are invalid in XML.", parameterName, ex);
             }
             return value;
         }
