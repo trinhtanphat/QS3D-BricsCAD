@@ -26,7 +26,7 @@ if not errors:
         'foreach (var node in document.Nodes())',
         'ReferenceEquals(node, root)',
         'Unsupported QS3D revision document-level XML content.',
-        'ValidateElement(root, "qs3dRevision", new[] { "id", "createdUtc" }, new[] { "elements" })',
+        'ValidateElement(root, "qs3dRevision", new[] { "id", "createdUtc", "schemaVersion", "projectId" }, new[] { "elements" })',
         'RequireExactlyOne(root, "elements")',
         'parent.Elements(name).Take(2).Count() != 1',
         'ValidateElement(element, "element", new[] { "id", "category", "familyId", "floorId", "zoneId" }, new[] { "properties", "quantities", "sourceHandles", "dependencies" })',
@@ -80,4 +80,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: revision XML load rejects document-level sibling nodes and CDATA, requires canonical containers, and fails closed on foreign namespaces and unknown XML content.")
+print("PASS: revision XML load accepts the v2 schemaVersion/projectId root identity contract while rejecting document siblings, CDATA, foreign namespaces and unknown XML content.")

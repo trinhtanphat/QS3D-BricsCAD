@@ -4,16 +4,39 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.Core/Documentation/SemanticDocumentationCatalogStore.cs"
+METADATA = ROOT / "src/QS3D.Core/Domain/ProjectMetadataDictionary.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/SemanticDocumentationCatalogSaveStructuralFreshnessSmoke.cs"
 REGISTRATION = ROOT / "tests/QS3D.Core.SmokeTests/SemanticDocumentationCatalogSaveStructuralFreshnessSmokeRegistration.cs"
 errors = []
 
-for path in (SOURCE, SMOKE, REGISTRATION):
+
+def metadata_revision_owned(metadata):
+    setter = metadata.find('public string this[string key] { get => _items[key]; set => SetPublic(key, value, false); }')
+    set_public = metadata.find('Set(canonicalKey, xmlValue, addOnly, true);')
+    remove_public = metadata.find('public bool Remove(string key) => Remove(key, true);')
+    remove_private = metadata.find('private bool Remove(string key, bool touchMutation)')
+    remove_touch = metadata.find('if (touchMutation) TouchProject();', remove_private)
+    remove_storage = metadata.find('return _items.Remove(key);', remove_private)
+    set_private = metadata.find('private void Set(string key, string value, bool addOnly, bool touchMutation)')
+    set_touch = metadata.find('if (touchMutation) TouchProject();', set_private)
+    set_storage = metadata.find('if (addOnly) _items.Add(key, normalizedValue); else _items[key] = normalizedValue;', set_private)
+    touch_owner = metadata.find('private void TouchProject()')
+    project_touch = metadata.find('project.Touch();', touch_owner)
+    return (
+        min(setter, set_public, remove_public, remove_private, remove_touch, remove_storage, set_private, set_touch, set_storage, touch_owner, project_touch) >= 0
+        and remove_private < remove_touch < remove_storage
+        and set_private < set_touch < set_storage
+        and touch_owner < project_touch
+    )
+
+
+for path in (SOURCE, METADATA, SMOKE, REGISTRATION):
     if not path.is_file():
         errors.append("missing documentation catalog save freshness file: " + str(path.relative_to(ROOT)))
 
-if SOURCE.is_file():
+if SOURCE.is_file() and METADATA.is_file():
     source = SOURCE.read_text(encoding="utf-8")
+    metadata = METADATA.read_text(encoding="utf-8")
     start = source.find("public void Save(")
     end = source.find("public SemanticDocumentationCatalog Load", start)
     method = source[start:end] if start >= 0 and end > start else ""
@@ -26,10 +49,11 @@ if SOURCE.is_file():
     view_plans = method.find("var viewPlans = SemanticViewPlanner.BuildCatalog(project, viewDefinitions);", after_sheets)
     sheet_plans = method.find("SemanticSheetPlanner.BuildCatalog(sheetDefinitions, viewPlans);", view_plans)
     after_planners = method.find("EnsureProjectStructureUnchanged(project, projectSnapshot);", sheet_plans)
-    empty_touch = method.find("project.Touch();", after_planners)
-    empty_pre_touch = method.rfind("EnsureProjectStructureUnchanged(project, projectSnapshot);", after_planners, empty_touch)
-    normal_touch = method.find("project.Touch();", empty_touch + 1)
-    normal_pre_touch = method.rfind("EnsureProjectStructureUnchanged(project, projectSnapshot);", empty_touch + 1, normal_touch)
+    empty_remove = method.find("project.Metadata.Remove(MetadataKey);", after_planners)
+    empty_pre_mutation = method.rfind("EnsureProjectStructureUnchanged(project, projectSnapshot);", after_planners, empty_remove)
+    payload = method.find("var payload = Serialize(viewDefinitions, sheetDefinitions);", empty_remove)
+    normal_assign = method.find("project.Metadata[MetadataKey] = payload;", payload)
+    normal_pre_mutation = method.rfind("EnsureProjectStructureUnchanged(project, projectSnapshot);", payload, normal_assign)
 
     positions = (
         capture,
@@ -40,19 +64,23 @@ if SOURCE.is_file():
         view_plans,
         sheet_plans,
         after_planners,
-        empty_pre_touch,
-        empty_touch,
-        normal_pre_touch,
-        normal_touch,
+        empty_pre_mutation,
+        empty_remove,
+        payload,
+        normal_pre_mutation,
+        normal_assign,
     )
     if min(positions) < 0 or not (
         capture < views < after_views < sheets < after_sheets < view_plans < sheet_plans < after_planners
-        < empty_pre_touch < empty_touch < normal_pre_touch < normal_touch
+        < empty_pre_mutation < empty_remove < payload < normal_pre_mutation < normal_assign
     ):
-        errors.append("Save must snapshot before both caller enumerations, recheck after each/planning, and recheck immediately before either persistence mutation.")
+        errors.append("Save must snapshot before caller enumerations, recheck after enumeration/planning, and recheck immediately before either metadata persistence mutation.")
 
     if method.count("EnsureProjectStructureUnchanged(project, projectSnapshot);") != 5:
         errors.append("Save must perform exactly five project freshness checks across enumeration, planning and mutation boundaries.")
+
+    if not metadata_revision_owned(metadata):
+        errors.append("ProjectMetadataDictionary must own exact-once project revision updates for public Remove/indexer persistence mutations.")
 
     for token in (
         "project.ChangeVersion,",
@@ -107,4 +135,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: SemanticDocumentationCatalogStore.Save rejects project revision, ordered reference, or planner-value drift across caller-controlled view/sheet enumeration before persistence mutation.")
+print("PASS: SemanticDocumentationCatalogStore.Save rejects structural drift immediately before metadata persistence while ProjectMetadataDictionary owns exact-once revision mutation.")
