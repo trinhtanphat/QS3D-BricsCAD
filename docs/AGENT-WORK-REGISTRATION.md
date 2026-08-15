@@ -27,25 +27,49 @@ A reservation should identify:
 
 `ACTIVE` and `BLOCKED` reservations remain owned until completed, released, superseded, or explicitly reassigned by the owner/coordinator.
 
+## Strict lane non-interference — highest priority for normal agents
+
+A normal AI agent/chat session owns **only its assigned/reserved lane**. Work owned by another agent/session—including local agents—is out of scope unless the repository owner explicitly expands this session's role.
+
+A normal agent must **not** opportunistically inspect, audit, review, validate, fix, merge, close, modify, reassign, rerun CI for, or otherwise manage another agent/session's work. In particular, do not open another agent's branch/PR/Issue merely to judge progress, evidence quality, merge readiness, LOCAL_ONLY status, CI status, or whether that agent has finished.
+
+Cross-agent visibility is limited to the **minimum coordination metadata necessary to avoid an obvious collision**, for example: whether a lane/file/symbol is already reserved and the reservation's stated scope/exclusions. Once another owner is identified, stop there and choose a different non-overlapping lane unless the owner explicitly assigns coordination with that agent.
+
+For normal agents:
+
+- do not fetch another agent's PR diff/patch for curiosity or general review;
+- do not read another agent's local/runtime evidence unless the owner explicitly asks this session to review that exact evidence;
+- do not monitor another agent's branch commits, CI runs, draft status, or completion status;
+- do not merge/close/update another agent's PR or Issue;
+- do not take over another agent's lane because it appears stale, slow, blocked, or incomplete;
+- do not "continue all" by sweeping unrelated agents' open work;
+- do not treat LOCAL_ONLY work owned by local agents as this session's backlog;
+- if another agent's already-landed work on current `main` overlaps this lane, inspect **current `main` only** as implementation truth; do not backtrack into that agent's branch/PR history unless explicitly authorized.
+
+The only normal exception is a **minimal collision check** against visible reservations. Any broader cross-agent inspection requires explicit owner wording such as `review PR #...`, `coordinate with agent ...`, `merge this named batch`, or `you are the integration coordinator`.
+
+This section overrides broader wording elsewhere that could be read as permission for a normal agent to inspect "concurrent work". For normal agents, "check concurrent work" means **minimal reservation/collision metadata only**, not auditing other agents.
+
 ## Mandatory sequence for a normal agent
 
 1. Fetch/read current `origin/main` and record the exact SHA.
-2. Read `AGENTS.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, `CI_POLICY.md`, this file, open relevant Issues/PRs, and active/blocking claims.
-3. Choose a non-overlapping lane.
-4. Create or update a GitHub Issue to register the lane, unless an existing owner-created issue already uniquely identifies it.
-5. Create a dedicated branch from the latest valid baseline, normally:
+2. Read `AGENTS.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, `CI_POLICY.md`, this file, and the Issue/claim/runbook for **this lane**.
+3. Perform only the minimal reservation/collision check needed to verify that this lane is not already owned; do not audit other agents' work.
+4. Choose a non-overlapping lane.
+5. Create or update a GitHub Issue to register the lane, unless an existing owner-created issue already uniquely identifies it.
+6. Create a dedicated branch from the latest valid baseline, normally:
 
    ```text
    agent/<agent-id>/<scope>
    ```
 
-6. Put every repository change for the task on that branch, including docs/Markdown/claims/chores.
-7. Implement only the reserved lane.
-8. Run relevant branch-local/static/unit/smoke validation.
-9. Re-fetch `origin/main`; if it moved, reconcile safely without overwriting concurrent work.
-10. Push only the task branch.
-11. Open/update a PR targeting the intended integration branch or `main`.
-12. Stop before merge unless the owner explicitly authorized this session to merge/integrate.
+7. Put every repository change for the task on that branch, including docs/Markdown/claims/chores.
+8. Implement only the reserved lane.
+9. Run relevant branch-local/static/unit/smoke validation for this lane.
+10. Re-fetch `origin/main`; if it moved, reconcile against current `main` safely without inspecting or overwriting another agent's unmerged work.
+11. Push only the task branch.
+12. Open/update a PR targeting the intended integration branch or `main`.
+13. Stop before merge unless the owner explicitly authorized this session to merge/integrate.
 
 A chat message, local patch, or unpushed branch is not a visible reservation. An Issue plus pushed task branch/PR is the preferred coordination surface.
 
@@ -75,7 +99,7 @@ Authorization is limited to the named PR/batch/task. It does not carry forward a
 Every normal agent must:
 
 1. base its branch on the latest valid `main` baseline;
-2. periodically refresh `origin/main` and inspect relevant concurrent work;
+2. periodically refresh `origin/main` without auditing other agents' branches/PRs;
 3. keep edits inside the reserved scope;
 4. make coherent lane/request-level commits rather than file-by-file noise;
 5. never force-push or reset shared `main`;
@@ -111,6 +135,8 @@ For a multi-agent owner request, the owner-authorized coordinator should assembl
 integration/<batch-id>
 ```
 
+The coordinator exception begins **only after explicit owner authorization**. Only then may that coordinator inspect the exact named participating Issues/PRs/branches required for the authorized batch.
+
 The coordinator must:
 
 1. refresh latest `origin/main`;
@@ -128,15 +154,17 @@ Do not assemble a multi-agent batch by independently landing each agent PR on `m
 
 ## Definition of `ALL MERGED TO MAIN`
 
-For a specific owner request, state **ALL MERGED TO MAIN** only after an authorized integration reviewer freshly verifies:
+For a specific owner request, state **ALL MERGED TO MAIN** only after an **owner-authorized integration reviewer/coordinator** freshly verifies:
 
-- every required Issue/reservation is terminal or explicitly excluded/superseded;
+- every required Issue/reservation in the explicitly authorized batch is terminal or explicitly excluded/superseded;
 - every required implementation/docs commit is represented in the integrated result and reachable from current `main`;
-- no required work exists only on an agent branch, worktree, stash, draft patch or unmerged PR;
+- no required work for that authorized batch exists only on an agent branch, worktree, stash, draft patch or unmerged PR;
 - current `main` was refreshed after the authorized landing;
 - the combined tree contains the intended behavior without unresolved merge markers, accidental reversions, duplicate competing implementations or known semantic/API/test collisions;
 - required remote-safe validation passed or environment-gated evidence is explicitly handed off;
 - the exact current `main` SHA is recorded.
+
+A normal non-coordinator agent must not perform this repository-wide/multi-agent sweep merely to decide whether its own chat can end. Its completion question is limited to **its own Issue/branch/PR/lane**.
 
 Branch deletion, Issue state, PR UI state, or a previous CI run is not sufficient proof.
 
@@ -145,14 +173,14 @@ Branch deletion, Issue state, PR UI state, or a previous CI run is not sufficien
 If work expands beyond the registered scope:
 
 1. stop before touching the added implementation surface;
-2. refresh `main` and recheck Issues/PRs/reservations;
+2. refresh `main` and perform only the minimum collision check for the added scope;
 3. update the task Issue and branch claim/handoff with the added scope;
-4. resolve any overlap;
+4. if the added scope is owned by another agent, do not inspect or take it over; keep it excluded unless the owner explicitly reassigns it;
 5. continue on the same task branch or a new dedicated branch as appropriate.
 
 Do not push a claim amendment to `main` merely to reserve the expanded scope.
 
-If another agent should continue, leave exact completed state, remaining work, branch/commit/PR references and successor boundary in the Issue/PR/handoff.
+If another agent should continue, leave exact completed state, remaining work, branch/commit/PR references and successor boundary in **this lane's** Issue/PR/handoff; do not manage the successor's execution.
 
 ## Closing a task
 
@@ -161,10 +189,10 @@ Before an authorized merge, update the Issue/PR with:
 - branch name;
 - implementation/docs commit SHA(s);
 - validation actually executed;
-- known LOCAL_ONLY/policy gates;
-- intended integration batch.
+- known LOCAL_ONLY/policy gates belonging to this lane;
+- intended integration batch when known.
 
-After the authorized merge, the coordinator may close/update the Issue and, when repository-history Markdown is useful, include the claim close-out in the same authorized integration/docs PR. A normal agent does not push close-out Markdown directly to `main`.
+After the authorized merge, the coordinator may close/update the Issue and, when repository-history Markdown is useful, include the claim close-out in the same authorized integration/docs PR. A normal agent does not push close-out Markdown directly to `main` and does not close another agent's Issue/PR.
 
 ## CI boundary
 
@@ -178,6 +206,7 @@ See `CI_POLICY.md` and `.github/workflows/dispatch-v25-cloud-after-main-integrat
 
 - Never force-push `main` or reset it backwards.
 - Never silently overwrite another agent's work.
+- Never inspect/manage another agent's work beyond the minimum collision metadata unless the owner explicitly authorizes that cross-agent role.
 - Normal task authorization never implies `main` merge authorization.
 - CI authorization never implies `main` merge authorization.
 - `main` merge authorization never implies unrelated manual CI/release authorization.
