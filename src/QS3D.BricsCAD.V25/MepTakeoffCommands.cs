@@ -25,7 +25,7 @@ namespace QS3D.BricsCAD.V25
     {
         private const string DefaultRegion = "DRAWING";
         private const int MaxLocateReviewPairs = 200;
-        private static readonly MepRecognitionProfile RecognitionProfile = MepRecognitionProfiles.CreateDefault();
+        private static MepRecognitionProfile RecognitionProfile => MepRecognitionProfileProvider.Current;
 
         [CommandMethod("QS3DMEPTAKEOFF", CommandFlags.UsePickSet)]
         public void MepTakeoff()
