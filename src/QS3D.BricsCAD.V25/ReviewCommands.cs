@@ -82,9 +82,13 @@ namespace QS3D.BricsCAD.V25
                 var applied = 0;
                 var skipped = 0;
 
-                Func<IReadOnlyList<RecognitionResult>, int> apply = results =>
+                Func<IReadOnlyList<RecognitionResult>, bool, int> apply = (results, requireLiveConfidence) =>
                 {
-                    var plan = RecognitionApplyBatchService.PrepareStrict(doc, reviewProjectId, results);
+                    var plan = RecognitionApplyBatchService.PrepareStrict(
+                        doc,
+                        reviewProjectId,
+                        results,
+                        requireAutoAcceptance: requireLiveConfidence);
                     var committed = RecognitionApplyBatchService.Commit(doc, reviewProjectId, plan);
                     applied += committed;
                     if (committed > 0)
@@ -92,7 +96,10 @@ namespace QS3D.BricsCAD.V25
                         try
                         {
                             PaletteCoordinator.RefreshProject();
-                            PaletteCoordinator.SetStatus("Nhận dạng: đã áp dụng atomically " + committed + " đối tượng.");
+                            PaletteCoordinator.SetStatus(
+                                requireLiveConfidence
+                                    ? "Nhận dạng chắc chắn: đã áp dụng atomically " + committed + " đối tượng sau live confidence recheck."
+                                    : "Nhận dạng: đã áp dụng atomically " + committed + " đối tượng.");
                         }
                         catch (System.Exception uiError)
                         {
