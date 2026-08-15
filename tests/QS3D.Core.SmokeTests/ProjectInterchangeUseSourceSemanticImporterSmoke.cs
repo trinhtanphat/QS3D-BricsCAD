@@ -14,9 +14,39 @@ namespace QS3D.Core.SmokeTests
             PlanClassifiesReplacementAndNativeCleanup();
             ImportRejectsMissingNativeCleanupWithoutMutation();
             ImportRejectsStaleNativeCleanupHandleAuthorizationWithoutMutation();
+            CaseInsensitiveCollisionsUseSourceAndAddDistinctItems();
             ImportReplacesInPlaceAndInvalidatesAffectedTargetElements();
             SemanticOnlyReplacementNeedsNoNativeAuthorization();
             ConflictsFailBeforeMutation();
+        }
+
+        private static void CaseInsensitiveCollisionsUseSourceAndAddDistinctItems()
+        {
+            var target = LowercaseIdentityTargetProject();
+            var existingFamily = target.Families.Single();
+            var existingElement = target.Elements.Single();
+
+            var result = ProjectInterchangeUseSourceSemanticImporter.Import(
+                target,
+                ProjectInterchangeJsonExporter.Build(SourceProject()),
+                ProjectInterchangeNativeCleanupAuthorization.None);
+
+            Equal(4, result.ZonesAdded + result.FloorsAdded + result.FamiliesAdded + result.ElementsAdded);
+            Equal(4, result.ZonesReplaced + result.FloorsReplaced + result.FamiliesReplaced + result.ElementsReplaced);
+            Equal(2, target.Zones.Count);
+            Equal(2, target.Floors.Count);
+            Equal(2, target.Families.Count);
+            Equal(2, target.Elements.Count);
+            True(ReferenceEquals(existingFamily, target.Families.Single(x => x.Id == "fam1")));
+            True(ReferenceEquals(existingElement, target.Elements.Single(x => x.Id == "e1")));
+            Equal("Source Zone Same Id", (target.FindZone("z1") ?? throw new Exception("Replaced Zone missing.")).Name);
+            Equal("Source Floor Same Id", (target.FindFloor("f1") ?? throw new Exception("Replaced Floor missing.")).Name);
+            Equal("SOURCE-C99", existingFamily.Properties["Material"]);
+            Equal("SOURCE-B-01", existingElement.Properties["Mark"]);
+            Equal("z1", target.ActiveZoneId);
+            Equal("f1", target.ActiveFloorId);
+            Equal("fam1", target.Metadata["ActiveFamilyId"]);
+            True(target.FindElement("E2") != null);
         }
 
         private static void PlanClassifiesReplacementAndNativeCleanup()
@@ -316,6 +346,31 @@ namespace QS3D.Core.SmokeTests
                 targetOnly.Properties[ProjectElement.GeneratedRebarStateKey] = "current";
             }
             project.Elements.Add(targetOnly);
+            return project;
+        }
+
+        private static ProjectState LowercaseIdentityTargetProject()
+        {
+            var project = new ProjectState("TARGET-P", "Target Project")
+            {
+                DrawingPath = "target.dwg",
+                DrawingFingerprint = "target-fingerprint",
+                ActiveZoneId = "z1",
+                ActiveFloorId = "f1"
+            };
+            project.Zones.Add(new ZoneDefinition("z1", "Target Zone"));
+            project.Floors.Add(new FloorDefinition("f1", "Target Floor", 0d));
+            var family = new ProjectFamily("fam1", "Target Beam Family", ElementCategory.Beam);
+            family.Properties["Material"] = "C30";
+            project.Families.Add(family);
+            project.Metadata["ActiveFamilyId"] = family.Id;
+            var element = new ProjectElement("e1", ElementCategory.Beam, family.Id, "f1", "z1")
+            {
+                DrawingFingerprint = project.DrawingFingerprint
+            };
+            element.Properties["Mark"] = "TARGET-B-01";
+            element.Quantities["LengthM"] = 4d;
+            project.Elements.Add(element);
             return project;
         }
 
