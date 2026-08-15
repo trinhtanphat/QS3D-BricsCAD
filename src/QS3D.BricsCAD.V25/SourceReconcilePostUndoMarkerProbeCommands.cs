@@ -18,16 +18,20 @@ namespace QS3D.BricsCAD.V25
     /// </summary>
     public sealed class SourceReconcilePostUndoMarkerProbeCommands
     {
-        private const string PhaseVariable = "QS3D_SOURCE_RECONCILE_PHASE_RESULT";
+        private const string MarkerVariable = "QS3D_SOURCE_RECONCILE_MARKER_RESULT";
         private const string NonceVariable = "QS3D_SOURCE_RECONCILE_NONCE";
-        private const string PhaseFileName = "source-reconcile-session1.txt";
-        private const string Schema = "QS3D_SOURCE_RECONCILE_RUNTIME_V1";
+        private const string MarkerFileName = "source-reconcile-post-undo-marker.txt";
+        private const string Schema = "QS3D_SOURCE_RECONCILE_POST_UNDO_MARKER_V1";
+        private const string Boundary = "LOCAL_004_ONLY";
         private static readonly object Gate = new object();
         private static MarkerState? _state;
 
         [CommandMethod("QS3DSRTMARKERBEFOREFINAL", CommandFlags.Modal)]
         public void CaptureBeforeFinal()
         {
+            var path = RequiredMarkerPath();
+            if (File.Exists(path))
+                throw new InvalidOperationException("LOCAL-004 post-Undo marker diagnostic already exists.");
             var context = Context();
             var snapshot = SourceReconcileUndoCoordinator.CaptureSanitizedState(context.Document, context.Project);
             lock (Gate) _state = new MarkerState(snapshot);
@@ -50,13 +54,14 @@ namespace QS3D.BricsCAD.V25
         {
             var context = Context();
             var current = SourceReconcileUndoCoordinator.CaptureSanitizedState(context.Document, context.Project);
+            MarkerState state;
             lock (Gate)
             {
-                var state = RequireState();
+                state = RequireState();
                 var postFinal = state.PostFinal ?? throw new InvalidOperationException("LOCAL-004 post-final marker baseline is missing.");
-                state.PostUndoVsPreFinal = current.CompareMarkerTo(state.PreFinal);
-                state.PostUndoVsPostFinal = current.CompareMarkerTo(postFinal);
+                state.PostUndoClass = ClassifyMarker(current, state.PreFinal, postFinal);
                 state.UndoCaptured = true;
+                WriteNew(RequiredMarkerPath(), MarkerLines(state, includeRedo: false));
             }
         }
 
@@ -65,13 +70,16 @@ namespace QS3D.BricsCAD.V25
         {
             var context = Context();
             var current = SourceReconcileUndoCoordinator.CaptureSanitizedState(context.Document, context.Project);
+            MarkerState state;
             lock (Gate)
             {
-                var state = RequireState();
+                state = RequireState();
                 var postFinal = state.PostFinal ?? throw new InvalidOperationException("LOCAL-004 post-final marker baseline is missing.");
-                state.PostRedoVsPreFinal = current.CompareMarkerTo(state.PreFinal);
-                state.PostRedoVsPostFinal = current.CompareMarkerTo(postFinal);
+                if (!state.UndoCaptured)
+                    throw new InvalidOperationException("LOCAL-004 post-Undo marker classification is missing.");
+                state.PostRedoClass = ClassifyMarker(current, state.PreFinal, postFinal);
                 state.RedoCaptured = true;
+                ReplaceAtomic(RequiredMarkerPath(), MarkerLines(state, includeRedo: true).ToList());
             }
         }
 
@@ -84,36 +92,15 @@ namespace QS3D.BricsCAD.V25
                 state = RequireState();
                 if (!state.UndoCaptured || !state.RedoCaptured)
                     throw new InvalidOperationException("LOCAL-004 post-Undo marker discriminator sequence is incomplete.");
-                RequireClassification(state.PostUndoVsPreFinal);
-                RequireClassification(state.PostUndoVsPostFinal);
-                RequireClassification(state.PostRedoVsPreFinal);
-                RequireClassification(state.PostRedoVsPostFinal);
+                RequireClassification(state.PostUndoClass);
+                RequireClassification(state.PostRedoClass);
             }
 
-            var path = RequiredPhasePath();
-            var nonce = RequiredNonce();
+            var path = RequiredMarkerPath();
             var lines = File.ReadAllLines(path).ToList();
-            RequireExactLine(lines, "status=PASS");
-            RequireExactLine(lines, "schema=" + Schema);
-            RequireExactLine(lines, "qualification_boundary=LOCAL_004_ONLY");
-            RequireExactLine(lines, "nonce=" + nonce);
-            foreach (var prefix in new[]
-            {
-                "post_undo_marker_vs_pre_final_state=",
-                "post_undo_marker_vs_post_final_state=",
-                "post_redo_marker_vs_pre_final_state=",
-                "post_redo_marker_vs_post_final_state="
-            })
-            {
-                if (lines.Any(line => line.StartsWith(prefix, StringComparison.Ordinal)))
-                    throw new InvalidOperationException("LOCAL-004 post-Undo marker discriminator was already published.");
-            }
-
-            lines.Add("post_undo_marker_vs_pre_final_state=" + state.PostUndoVsPreFinal);
-            lines.Add("post_undo_marker_vs_post_final_state=" + state.PostUndoVsPostFinal);
-            lines.Add("post_redo_marker_vs_pre_final_state=" + state.PostRedoVsPreFinal);
-            lines.Add("post_redo_marker_vs_post_final_state=" + state.PostRedoVsPostFinal);
-            ReplaceAtomic(path, lines);
+            var expected = MarkerLines(state, includeRedo: true).ToList();
+            if (lines.Count != expected.Count || !lines.SequenceEqual(expected, StringComparer.Ordinal))
+                throw new InvalidOperationException("LOCAL-004 post-Undo marker diagnostic contract is invalid.");
         }
 
         private static ProbeContext Context()
@@ -130,10 +117,27 @@ namespace QS3D.BricsCAD.V25
 
         private static void RequireClassification(string value)
         {
-            if (!string.Equals(value, "ADVANCED", StringComparison.Ordinal) &&
-                !string.Equals(value, "UNCHANGED", StringComparison.Ordinal) &&
-                !string.Equals(value, "MISSING_OR_INVALID", StringComparison.Ordinal))
+            if (!string.Equals(value, "BEFORE", StringComparison.Ordinal) &&
+                !string.Equals(value, "AFTER", StringComparison.Ordinal) &&
+                !string.Equals(value, "OTHER_OR_INVALID", StringComparison.Ordinal))
                 throw new InvalidOperationException("LOCAL-004 post-Undo marker discriminator classification is invalid.");
+        }
+
+        private static string ClassifyMarker(
+            SourceReconcileUndoCoordinator.SanitizedDiagnosticSnapshot current,
+            SourceReconcileUndoCoordinator.SanitizedDiagnosticSnapshot before,
+            SourceReconcileUndoCoordinator.SanitizedDiagnosticSnapshot after)
+        {
+            var versusBefore = current.CompareMarkerTo(before);
+            var versusAfter = current.CompareMarkerTo(after);
+            if (string.Equals(versusBefore, "MISSING_OR_INVALID", StringComparison.Ordinal) ||
+                string.Equals(versusAfter, "MISSING_OR_INVALID", StringComparison.Ordinal))
+                return "OTHER_OR_INVALID";
+
+            var isBefore = string.Equals(versusBefore, "UNCHANGED", StringComparison.Ordinal);
+            var isAfter = string.Equals(versusAfter, "UNCHANGED", StringComparison.Ordinal);
+            if (isBefore == isAfter) return "OTHER_OR_INVALID";
+            return isBefore ? "BEFORE" : "AFTER";
         }
 
         private static string RequiredNonce()
@@ -144,22 +148,42 @@ namespace QS3D.BricsCAD.V25
             return nonce;
         }
 
-        private static string RequiredPhasePath()
+        private static string RequiredMarkerPath()
         {
-            var raw = (Environment.GetEnvironmentVariable(PhaseVariable) ?? string.Empty).Trim();
-            if (raw.Length == 0) throw new InvalidOperationException("LOCAL-004 phase marker path is missing.");
+            var raw = (Environment.GetEnvironmentVariable(MarkerVariable) ?? string.Empty).Trim();
+            if (raw.Length == 0) throw new InvalidOperationException("LOCAL-004 post-Undo marker path is missing.");
             var path = Path.GetFullPath(raw);
             var directory = Path.GetDirectoryName(path);
-            if (!string.Equals(Path.GetFileName(path), PhaseFileName, StringComparison.OrdinalIgnoreCase) ||
-                string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory) || !File.Exists(path))
-                throw new InvalidOperationException("LOCAL-004 phase marker path is invalid.");
+            if (!string.Equals(Path.GetFileName(path), MarkerFileName, StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+                throw new InvalidOperationException("LOCAL-004 post-Undo marker path is invalid.");
             return path;
         }
 
-        private static void RequireExactLine(IReadOnlyCollection<string> lines, string expected)
+        private static IEnumerable<string> MarkerLines(MarkerState state, bool includeRedo)
         {
-            if (!lines.Contains(expected, StringComparer.Ordinal))
-                throw new InvalidOperationException("LOCAL-004 phase marker contract is invalid.");
+            RequireClassification(state.PostUndoClass);
+            yield return "status=PASS";
+            yield return "schema=" + Schema;
+            yield return "qualification_boundary=" + Boundary;
+            yield return "nonce=" + RequiredNonce();
+            yield return "post_undo_marker_class=" + state.PostUndoClass;
+            if (includeRedo)
+            {
+                RequireClassification(state.PostRedoClass);
+                yield return "post_redo_marker_class=" + state.PostRedoClass;
+            }
+        }
+
+        private static void WriteNew(string path, IEnumerable<string> lines)
+        {
+            using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
+            {
+                foreach (var line in lines) writer.WriteLine(line);
+                writer.Flush();
+                stream.Flush(true);
+            }
         }
 
         private static void ReplaceAtomic(string path, IReadOnlyCollection<string> lines)
@@ -205,10 +229,8 @@ namespace QS3D.BricsCAD.V25
 
             public SourceReconcileUndoCoordinator.SanitizedDiagnosticSnapshot PreFinal { get; }
             public SourceReconcileUndoCoordinator.SanitizedDiagnosticSnapshot? PostFinal { get; set; }
-            public string PostUndoVsPreFinal { get; set; } = "MISSING_OR_INVALID";
-            public string PostUndoVsPostFinal { get; set; } = "MISSING_OR_INVALID";
-            public string PostRedoVsPreFinal { get; set; } = "MISSING_OR_INVALID";
-            public string PostRedoVsPostFinal { get; set; } = "MISSING_OR_INVALID";
+            public string PostUndoClass { get; set; } = "OTHER_OR_INVALID";
+            public string PostRedoClass { get; set; } = "OTHER_OR_INVALID";
             public bool UndoCaptured { get; set; }
             public bool RedoCaptured { get; set; }
         }
