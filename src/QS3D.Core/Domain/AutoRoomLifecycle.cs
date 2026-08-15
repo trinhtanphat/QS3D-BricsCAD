@@ -172,6 +172,8 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (room == null) throw new ArgumentNullException(nameof(room));
             if (family == null) throw new ArgumentNullException(nameof(family));
+            var metadata = project.Metadata as ProjectMetadataDictionary
+                ?? throw new InvalidOperationException("Auto-room family synchronization requires the canonical project metadata store.");
 
             ResolveProjectElements(project);
             ValidateUniqueFamilyIds(project);
@@ -274,8 +276,8 @@ namespace QS3D.Core.Domain
             project.Touch();
             foreach (var key in roomRemoves) room.Properties.Remove(key);
             foreach (var property in roomSets) room.Properties[property.Key] = property.Value;
-            foreach (var key in metadataRemoves) project.Metadata.Remove(key);
-            foreach (var property in metadataSets) project.Metadata[property.Key] = property.Value;
+            foreach (var key in metadataRemoves) metadata.RemoveOwned(key);
+            foreach (var property in metadataSets) metadata.SetOwned(property.Key, property.Value);
             if (familyChanged) room.FamilyId = family.Id;
             if (changed > 0) room.MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity);
             return changed;
