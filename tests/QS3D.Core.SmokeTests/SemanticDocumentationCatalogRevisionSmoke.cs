@@ -43,7 +43,7 @@ namespace QS3D.Core.SmokeTests
             try
             {
                 var store = new QsdbProjectStore();
-                store.Save(new ProjectState("DOC-REV", "Documentation revision"), path);
+                store.Save(BuildProject(), path);
 
                 var document = XDocument.Load(path, LoadOptions.None);
                 var root = document.Root ?? throw new Exception("Serialized QSDB root was not found for documentation catalog revision-ceiling fixture.");

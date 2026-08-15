@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Model;
@@ -31,25 +32,31 @@ namespace QS3D.Core.SmokeTests
             var version = project.ChangeVersion;
             ThrowsInvalidOperation(() => new ProjectRecognitionService().SuggestBatch(
                 project,
-                MutatingSnapshots(project, () => project.Metadata[MappingKey(WallLayer)] = ElementCategory.Beam.ToString())));
+                MutatingSnapshots(project, () => SetPersistenceMetadata(project, MappingKey(WallLayer), ElementCategory.Beam.ToString()))));
             if (project.ChangeVersion != version)
-                throw new InvalidOperationException("Recognition layer-mapping freshness smoke requires direct metadata mutation to bypass ChangeVersion.");
+                throw new InvalidOperationException("Recognition layer-mapping freshness persistence fixture unexpectedly advanced ChangeVersion.");
         }
 
         private static void RejectsLayerMappingAddition()
         {
             var project = CreateProject();
+            var version = project.ChangeVersion;
             ThrowsInvalidOperation(() => new ProjectRecognitionService().SuggestBatch(
                 project,
-                MutatingSnapshots(project, () => project.Metadata[MappingKey(BeamLayer)] = ElementCategory.Beam.ToString())));
+                MutatingSnapshots(project, () => SetPersistenceMetadata(project, MappingKey(BeamLayer), ElementCategory.Beam.ToString()))));
+            if (project.ChangeVersion != version)
+                throw new InvalidOperationException("Recognition layer-mapping addition persistence fixture unexpectedly advanced ChangeVersion.");
         }
 
         private static void RejectsLayerMappingRemoval()
         {
             var project = CreateProject();
+            var version = project.ChangeVersion;
             ThrowsInvalidOperation(() => new ProjectRecognitionService().SuggestBatch(
                 project,
-                MutatingSnapshots(project, () => project.Metadata.Remove(MappingKey(WallLayer)))));
+                MutatingSnapshots(project, () => RemovePersistenceMetadata(project, MappingKey(WallLayer)))));
+            if (project.ChangeVersion != version)
+                throw new InvalidOperationException("Recognition layer-mapping removal persistence fixture unexpectedly advanced ChangeVersion.");
         }
 
         private static void PreservesUnchangedLayerMappings()
@@ -67,9 +74,12 @@ namespace QS3D.Core.SmokeTests
         private static void IgnoresUnrelatedMetadataMutation()
         {
             var project = CreateProject();
+            var version = project.ChangeVersion;
             var batch = new ProjectRecognitionService().SuggestBatch(
                 project,
-                MutatingSnapshots(project, () => project.Metadata["RecognitionFreshness.Unrelated"] = "changed"));
+                MutatingSnapshots(project, () => SetPersistenceMetadata(project, "RecognitionFreshness.Unrelated", "changed")));
+            if (project.ChangeVersion != version)
+                throw new InvalidOperationException("Recognition unrelated-metadata persistence fixture unexpectedly advanced ChangeVersion.");
             if (batch.Results.Count != 1 || batch.Results[0].TopCandidate == null ||
                 batch.Results[0].TopCandidate!.Category != ElementCategory.ArchitecturalWall)
                 throw new InvalidOperationException("Layer-mapping freshness guard widened unexpectedly to unrelated metadata.");
@@ -90,6 +100,25 @@ namespace QS3D.Core.SmokeTests
             if (mutation == null) throw new ArgumentNullException(nameof(mutation));
             mutation();
             yield return new EntitySnapshot("R1", "Line", WallLayer);
+        }
+
+        private static void SetPersistenceMetadata(ProjectState project, string key, string value)
+        {
+            var method = project.Metadata.GetType().GetMethod(
+                "SetPersistenceValue",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Project metadata persistence setter is unavailable.");
+            method.Invoke(project.Metadata, new object[] { key, value });
+        }
+
+        private static void RemovePersistenceMetadata(ProjectState project, string key)
+        {
+            var method = project.Metadata.GetType().GetMethod(
+                "RemoveOwned",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Project metadata persistence remover is unavailable.");
+            if (!(bool)(method.Invoke(project.Metadata, new object[] { key }) ?? false))
+                throw new InvalidOperationException("Recognition freshness fixture expected persisted layer metadata removal.");
         }
 
         private static void ThrowsInvalidOperation(Action action)
