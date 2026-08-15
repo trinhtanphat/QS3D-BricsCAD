@@ -28,6 +28,15 @@ def main():
                 "if (_creatingNew)",
                 "return (NewCategoryCombo.SelectedItem as CategoryChoice)?.Category;",
                 "return (FamilyList.SelectedItem as ProjectFamily)?.Category;",
+                "if (FamilyList.SelectedItem != null) _creatingNew = false;",
+            ),
+        )
+        manager = require(
+            ROOT / "src/QS3D.BricsCAD.V25/UI/FamilyManagerWindow.xaml.cs",
+            (
+                "private void OnFamilySelectionChanged",
+                "if (_creatingNew && FamilyList.SelectedItem == null)",
+                "RefreshQuickWorkflow();",
             ),
         )
         catalog = require(
@@ -51,9 +60,18 @@ def main():
     ):
         return fail("Quick category resolution must use NewCategoryCombo only in explicit new-Family mode")
 
-    legacy = "if (!_creatingNew && FamilyList.SelectedItem is ProjectFamily selected)"
-    if legacy in quick[resolver : resolver + 600]:
-        return fail("normal no-selection state must not fall back to NewCategoryCombo defaults")
+    if "_creatingNew = FamilyList.SelectedItem == null;" in quick:
+        return fail("ordinary Family deselection must not implicitly enter New mode")
+
+    selection = manager.find("private void OnFamilySelectionChanged")
+    preserve_new = manager.find("if (_creatingNew && FamilyList.SelectedItem == null)", selection)
+    preserve_refresh = manager.find("RefreshQuickWorkflow();", preserve_new)
+    reset_mode = manager.find("_creatingNew = false;", selection)
+    load_family = manager.find("LoadFamily();", reset_mode)
+    if min(selection, preserve_new, preserve_refresh, reset_mode, load_family) < 0 or not (
+        selection < preserve_new < preserve_refresh < reset_mode < load_family
+    ):
+        return fail("selection handler must preserve explicit New-mode clearing before normal selection reset/load")
 
     rebind = catalog.find("private void OnFamilyCatalogItemsSourceChanged")
     grouping = catalog.find("ApplyFamilyCatalogGrouping();", rebind)
@@ -65,8 +83,8 @@ def main():
         return fail("catalog rebind must group first and defer a Quick Form refresh until loading completes")
 
     print(
-        "PASS: Family Manager Quick Form binds NewCategory only in explicit draft mode, collapses normal "
-        "no-selection state, and refreshes after catalog ItemsSource rebinding suppressed SelectionChanged."
+        "PASS: Family Manager Quick Form keeps New mode explicit, collapses ordinary no-selection state, "
+        "preserves OnNew selection clearing, and refreshes after catalog rebinding suppresses SelectionChanged."
     )
     return 0
 
