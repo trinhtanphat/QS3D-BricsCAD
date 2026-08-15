@@ -36,6 +36,9 @@ def main():
             (
                 "private void OnFamilySelectionChanged",
                 "if (_creatingNew && FamilyList.SelectedItem == null)",
+                "private void OnNewClick",
+                "FamilyList.SelectedItem = null;",
+                "FamilyNameBox.Focus();",
                 "RefreshQuickWorkflow();",
             ),
         )
@@ -73,6 +76,16 @@ def main():
     ):
         return fail("selection handler must preserve explicit New-mode clearing before normal selection reset/load")
 
+    new_click = manager.find("private void OnNewClick")
+    set_new = manager.find("_creatingNew = true;", new_click)
+    clear_selection = manager.find("FamilyList.SelectedItem = null;", set_new)
+    focus = manager.find("FamilyNameBox.Focus();", clear_selection)
+    refresh_new = manager.find("RefreshQuickWorkflow();", focus)
+    if min(new_click, set_new, clear_selection, focus, refresh_new) < 0 or not (
+        new_click < set_new < clear_selection < focus < refresh_new
+    ):
+        return fail("OnNewClick must refresh the Quick Form even when selection was already empty")
+
     rebind = catalog.find("private void OnFamilyCatalogItemsSourceChanged")
     grouping = catalog.find("ApplyFamilyCatalogGrouping();", rebind)
     defer = catalog.find("Dispatcher.BeginInvoke(new Action(() =>", rebind)
@@ -83,8 +96,8 @@ def main():
         return fail("catalog rebind must group first and defer a Quick Form refresh until loading completes")
 
     print(
-        "PASS: Family Manager Quick Form keeps New mode explicit, collapses ordinary no-selection state, "
-        "preserves OnNew selection clearing, and refreshes after catalog rebinding suppresses SelectionChanged."
+        "PASS: Family Manager Quick Form keeps New mode explicit, handles New from an already-empty selection, "
+        "collapses ordinary no-selection state, and refreshes after catalog rebinding suppresses SelectionChanged."
     )
     return 0
 
