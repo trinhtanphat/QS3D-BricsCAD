@@ -169,7 +169,11 @@ function Wait-Qs3dExit {
     param([Parameter(Mandatory = $true)][Diagnostics.Process]$Process, [Parameter(Mandatory = $true)][DateTime]$Deadline)
     while ((Get-Date) -lt $Deadline) {
         $Process.Refresh()
-        if ($Process.HasExited) { return }
+        if ($Process.HasExited) {
+            [void]$Process.WaitForExit(15000)
+            $Process.Refresh()
+            return
+        }
         [void](Close-Qs3dProxyInformationDialog -Process $Process)
         Start-Sleep -Milliseconds 400
     }

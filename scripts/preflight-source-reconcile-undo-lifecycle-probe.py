@@ -99,6 +99,7 @@ if RUNNER.is_file():
         '-WindowStyle Hidden',
         'function Find-Qs3dHandoffProcess',
         'function Wait-Qs3dHandoffProcess',
+        'function Wait-Qs3dExit',
         'function Stop-Qs3dLaunchedProcess',
         'ParentProcessId = " + $LauncherId',
         '$variants = @("OBJECT_ONLY", "DB_ENABLE_OBJECT", "DB_START_OBJECT", "DB_ENABLE_DB_START_OBJECT")',
@@ -133,6 +134,18 @@ if RUNNER.is_file():
 
     if 'variants = @($results)' in text:
         errors.append("Undo lifecycle runner regressed to Windows PowerShell 5.1-incompatible generic-list array materialization")
+
+    wait_exit_start = text.find('function Wait-Qs3dExit')
+    wait_exit_end = text.find('if ([Environment]::OSVersion.Platform', wait_exit_start)
+    wait_exit = text[wait_exit_start:wait_exit_end]
+    has_exited_position = wait_exit.find('if ($Process.HasExited) {')
+    finalize_position = wait_exit.find('[void]$Process.WaitForExit(15000)', has_exited_position)
+    refresh_position = wait_exit.find('$Process.Refresh()', finalize_position)
+    return_position = wait_exit.find('return', refresh_position)
+    if min(has_exited_position, finalize_position, refresh_position, return_position) < 0 or not (
+        has_exited_position < finalize_position < refresh_position < return_position
+    ):
+        errors.append("Undo lifecycle runner must finalize the exact exited host process before the next variant")
 
     sequence = (
         '"QS3DSRULPREPARE", "QS3DSRULMUTATE"',
@@ -202,4 +215,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: four fresh-process database/object Undo variants are statically bound to an existing XData mutation plus topology sentinel, close the synthetic DWG explicitly without saving before host quit, materialize generic result metadata through the Windows PowerShell 5.1-safe pipeline path without masking qualification errors, preserve sanitized evidence/cleanup guards, and leave production Source Reconcile database Undo lifecycle untouched.")
+print("PASS: four fresh-process database/object Undo variants are statically bound to an existing XData mutation plus topology sentinel, close the synthetic DWG explicitly without saving, finalize each exact exited host process before the next variant, materialize generic result metadata through the Windows PowerShell 5.1-safe pipeline path without masking qualification errors, preserve sanitized evidence/cleanup guards, and leave production Source Reconcile database Undo lifecycle untouched.")
