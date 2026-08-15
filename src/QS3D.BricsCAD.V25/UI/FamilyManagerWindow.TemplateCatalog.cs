@@ -18,18 +18,89 @@ namespace QS3D.BricsCAD.V25.UI
     {
         private bool _familyTemplateCatalogConfigured;
         private DependencyPropertyDescriptor? _familyListItemsSourceDescriptor;
+        private ComboBox? _familyTemplateCombo;
 
         private void ConfigureFamilyTemplateUiAndCatalog()
         {
             if (_familyTemplateCatalogConfigured) return;
             _familyTemplateCatalogConfigured = true;
 
-            FamilyTemplateCombo.ItemsSource = new[] { StandardFamilyTemplateCatalog.VietnamStandard01Id };
-            FamilyTemplateCombo.SelectedIndex = 0;
-
+            InstallFamilyTemplatePanel();
+            InstallFamilyCatalogGroupStyle();
             _familyListItemsSourceDescriptor = DependencyPropertyDescriptor.FromProperty(ItemsControl.ItemsSourceProperty, typeof(ListView));
             _familyListItemsSourceDescriptor?.AddValueChanged(FamilyList, OnFamilyCatalogItemsSourceChanged);
             ApplyFamilyCatalogGrouping();
+        }
+
+        private void InstallFamilyTemplatePanel()
+        {
+            if (!(QsQuickWorkflowCard.Parent is StackPanel rightPanel)) return;
+
+            var card = new Border { Margin = new Thickness(0, 0, 0, 10) };
+            if (TryFindResource("ManagerCard") is Style cardStyle) card.Style = cardStyle;
+            var stack = new StackPanel();
+            card.Child = stack;
+
+            var title = new TextBlock { Text = "FAMILY TEMPLATE" };
+            if (TryFindResource("PanelTitle") is Style titleStyle) title.Style = titleStyle;
+            stack.Children.Add(title);
+
+            var row = new Grid { Margin = new Thickness(0, 2, 0, 6) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            _familyTemplateCombo = new ComboBox
+            {
+                MinWidth = 220,
+                Margin = new Thickness(0, 0, 8, 0),
+                ItemsSource = new[] { StandardFamilyTemplateCatalog.VietnamStandard01Id },
+                SelectedIndex = 0,
+                ToolTip = "Thư viện Family chuẩn dùng chung giữa các project"
+            };
+            Grid.SetColumn(_familyTemplateCombo, 0);
+            row.Children.Add(_familyTemplateCombo);
+
+            var loadButton = new Button { Content = "Nạp Template", Margin = new Thickness(0, 0, 6, 0) };
+            if (TryFindResource("AccentButton") is Style accentStyle) loadButton.Style = accentStyle;
+            loadButton.Click += OnLoadFamilyTemplateClick;
+            Grid.SetColumn(loadButton, 1);
+            row.Children.Add(loadButton);
+
+            var saveButton = new Button { Content = "Lưu Template" };
+            if (TryFindResource("DenseButton") is Style denseStyle) saveButton.Style = denseStyle;
+            saveButton.Click += OnSaveFamilyTemplateClick;
+            Grid.SetColumn(saveButton, 2);
+            row.Children.Add(saveButton);
+            stack.Children.Add(row);
+
+            var hint = new TextBlock
+            {
+                Text = "Nạp một lần để có sẵn thư viện DẦM • SÀN • CỘT • TƯỜNG • MÓNG • HOÀN THIỆN với tên, kích thước, vật liệu và BQ Code chuẩn. Nạp lại là idempotent theo Category + Family Name.",
+                TextWrapping = TextWrapping.Wrap
+            };
+            if (TryFindResource("Caption") is Style captionStyle) hint.Style = captionStyle;
+            stack.Children.Add(hint);
+
+            rightPanel.Children.Insert(0, card);
+        }
+
+        private void InstallFamilyCatalogGroupStyle()
+        {
+            FamilyList.GroupStyle.Clear();
+            var groupStyle = new GroupStyle();
+            var containerStyle = new Style(typeof(GroupItem));
+            var template = new ControlTemplate(typeof(GroupItem));
+            var expander = new FrameworkElementFactory(typeof(Expander));
+            expander.SetValue(Expander.IsExpandedProperty, true);
+            expander.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 2, 0, 2));
+            expander.SetBinding(Expander.HeaderProperty, new Binding("Name"));
+            var itemsPresenter = new FrameworkElementFactory(typeof(ItemsPresenter));
+            expander.AppendChild(itemsPresenter);
+            template.VisualTree = expander;
+            containerStyle.Setters.Add(new Setter(Control.TemplateProperty, template));
+            groupStyle.ContainerStyle = containerStyle;
+            FamilyList.GroupStyle.Add(groupStyle);
         }
 
         private void OnFamilyCatalogItemsSourceChanged(object? sender, EventArgs e) => ApplyFamilyCatalogGrouping();
@@ -54,7 +125,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("nạp QS3D Family Template");
-                if (!string.Equals(FamilyTemplateCombo.SelectedItem as string, StandardFamilyTemplateCatalog.VietnamStandard01Id, StringComparison.Ordinal))
+                if (!string.Equals(_familyTemplateCombo?.SelectedItem as string, StandardFamilyTemplateCatalog.VietnamStandard01Id, StringComparison.Ordinal))
                     throw new InvalidOperationException("Chọn QS3D Family Template hợp lệ trước khi nạp.");
 
                 var project = ExistingProjectMutationContext.Require(_document, "Nạp QS3D Family Template");
