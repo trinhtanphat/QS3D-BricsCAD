@@ -19,7 +19,7 @@ namespace QS3D.BricsCAD.V25
     {
         private const int MaxRecognizedSolids = 500;
         private const int MaxBroadPhasePairs = 100000;
-        private static readonly MepRecognitionProfile RecognitionProfile = MepRecognitionProfiles.CreateDefault();
+        private static MepRecognitionProfile RecognitionProfile => MepRecognitionProfileProvider.Current;
 
         [CommandMethod("QS3DMEPEXACTCLASH", CommandFlags.UsePickSet)]
         public void ExactMepClash()
