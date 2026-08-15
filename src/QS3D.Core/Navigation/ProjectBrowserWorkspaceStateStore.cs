@@ -148,20 +148,21 @@ namespace QS3D.Core.Navigation
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (state == null) throw new ArgumentNullException(nameof(state));
+            var metadata = RequireOwnedMetadata(project);
             ValidateAgainstProject(project, state);
             var serialized = Serialize(state);
             if (serialized.Length > MaxSerializedChars)
                 throw new InvalidOperationException("Project browser workspace state exceeds the maximum persisted size.");
-            if (project.Metadata.TryGetValue(MetadataKey, out var existing) && string.Equals(existing, serialized, StringComparison.Ordinal))
+            if (metadata.TryGetValue(MetadataKey, out var existing) && string.Equals(existing, serialized, StringComparison.Ordinal))
                 return false;
-            project.Metadata[MetadataKey] = serialized;
+            metadata.SetOwned(MetadataKey, serialized);
             return true;
         }
 
         public bool Clear(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            return project.Metadata.Remove(MetadataKey);
+            return RequireOwnedMetadata(project).RemoveOwned(MetadataKey);
         }
 
         public string Serialize(ProjectBrowserWorkspaceState state)
@@ -286,6 +287,12 @@ namespace QS3D.Core.Navigation
             ProjectBrowserSelectionPlanner.PlanReveal(query.Root, state.SelectedElementIds, state.PrimaryElementId);
         }
 
+        private static ProjectMetadataDictionary RequireOwnedMetadata(ProjectState project)
+        {
+            return project.Metadata as ProjectMetadataDictionary
+                ?? throw new InvalidOperationException("Project Browser workspace persistence requires the canonical project metadata store.");
+        }
+
         private static XElement Collection(string containerName, string itemName, IEnumerable<string> values) =>
             new XElement(containerName, (values ?? Enumerable.Empty<string>()).Select(x => new XElement(itemName, x)));
 
@@ -357,7 +364,6 @@ namespace QS3D.Core.Navigation
                     throw new InvalidDataException("Project browser workspace collection contains unsupported element: " + child.Name + ".");
             ValidateContainerNodes(container, container.Name.LocalName);
         }
-
         private static void ValidateItemShape(XElement element, string itemName)
         {
             if (element.HasAttributes)
