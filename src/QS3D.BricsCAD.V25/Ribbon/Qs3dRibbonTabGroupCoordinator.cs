@@ -60,15 +60,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     return false;
 
                 var orderedOwnedTabs = OrderOwnedTabs(ownedTabs);
-                if (!AlreadyGroupedAtEnd(snapshot, orderedOwnedTabs))
-                {
-                    // Remove/re-add QS3D-owned objects only. This preserves the relative order
-                    // and every property/panel/button of all native and third-party host tabs.
-                    foreach (var tab in ownedTabs)
-                        Remove(tabs, tab);
-                    foreach (var tab in orderedOwnedTabs)
-                        Add(tabs, tab);
-                }
+                if (!AlreadyGroupedAtEnd(snapshot, orderedOwnedTabs) &&
+                    !TryGroupOwnedTabs(tabs, ownedTabs, orderedOwnedTabs))
+                    return false;
 
                 if (!AlreadyGroupedAtEnd(Snapshot(tabs), orderedOwnedTabs))
                     return false;
@@ -83,6 +77,48 @@ namespace QS3D.BricsCAD.V25.Ribbon
         }
 
         public static void Reset() => _initialized = false;
+
+        private static bool TryGroupOwnedTabs(object tabs, IReadOnlyList<object> ownedTabs, IReadOnlyList<object> orderedOwnedTabs)
+        {
+            try
+            {
+                // Remove/re-add QS3D-owned objects only. This preserves the relative order
+                // and every property/panel/button of all native and third-party host tabs.
+                foreach (var tab in ownedTabs)
+                    Remove(tabs, tab);
+                foreach (var tab in orderedOwnedTabs)
+                    Add(tabs, tab);
+
+                if (AlreadyGroupedAtEnd(Snapshot(tabs), orderedOwnedTabs))
+                    return true;
+            }
+            catch
+            {
+                // Recovery below deliberately touches QS3D-owned objects only.
+            }
+
+            RecoverMissingOwnedTabs(tabs, ownedTabs);
+            return false;
+        }
+
+        private static void RecoverMissingOwnedTabs(object tabs, IReadOnlyList<object> ownedTabs)
+        {
+            try
+            {
+                var current = Snapshot(tabs);
+                foreach (var tab in ownedTabs)
+                {
+                    if (current.Any(candidate => ReferenceEquals(candidate, tab)))
+                        continue;
+                    Add(tabs, tab);
+                    current.Add(tab);
+                }
+            }
+            catch
+            {
+                // Best effort only: never touch native/third-party tabs during recovery.
+            }
+        }
 
         private static List<object> OrderOwnedTabs(IReadOnlyList<object> ownedTabs)
         {
