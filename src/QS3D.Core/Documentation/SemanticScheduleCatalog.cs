@@ -84,10 +84,23 @@ namespace QS3D.Core.Documentation
             var root = Parse(payload);
             if (root.Name.NamespaceName.Length != 0 || !string.Equals(root.Name.LocalName, "semanticSchedules", StringComparison.Ordinal) || (string)root.Attribute("version") != "1")
                 throw new InvalidDataException("Semantic schedule catalog format/version is invalid.");
-            ValidateSchema(root);
-            var definitions = root.Elements("schedule").Select(ReadDefinition).ToList();
+            var scheduleNodes = MaterializeScheduleNodesBounded(root);
+            ValidateSchema(root, scheduleNodes);
+            var definitions = scheduleNodes.Select(ReadDefinition).ToList();
             ValidateCatalog(definitions);
             return definitions.AsReadOnly();
+        }
+
+        private static IReadOnlyList<XElement> MaterializeScheduleNodesBounded(XElement root)
+        {
+            var result = new List<XElement>(MaxSchedules);
+            foreach (var schedule in root.Elements("schedule"))
+            {
+                if (result.Count >= MaxSchedules)
+                    throw new InvalidOperationException("Semantic schedule catalog exceeds the supported 128 definitions.");
+                result.Add(schedule);
+            }
+            return result.AsReadOnly();
         }
 
         public static void Save(ProjectState project, IEnumerable<SemanticScheduleDefinition> definitions)
@@ -262,11 +275,11 @@ namespace QS3D.Core.Documentation
             return category;
         }
 
-        private static void ValidateSchema(XElement root)
+        private static void ValidateSchema(XElement root, IReadOnlyList<XElement> schedules)
         {
             ValidateElement(root, "semanticSchedules", new[] { "version" }, new[] { "schedule" });
             EnsureRequiredAttributes(root, "version");
-            foreach (var schedule in root.Elements("schedule"))
+            foreach (var schedule in schedules)
             {
                 ValidateElement(schedule, "schedule", new[] { "id", "name", "title", "floorId", "zoneId" }, new[] { "categories", "include", "exclude", "columns" });
                 EnsureRequiredAttributes(schedule, "id", "name", "title", "floorId", "zoneId");
