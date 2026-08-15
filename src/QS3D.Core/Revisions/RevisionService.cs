@@ -24,7 +24,6 @@ namespace QS3D.Core.Revisions
     {
         public string Id { get; set; } = string.Empty;
         public DateTime CreatedUtc { get; set; }
-        public string ProjectId { get; set; } = string.Empty;
         public IList<RevisionElementSnapshot> Elements { get; } = new List<RevisionElementSnapshot>();
     }
 
@@ -52,14 +51,7 @@ namespace QS3D.Core.Revisions
             if (string.IsNullOrWhiteSpace(revisionId) || !string.Equals(revisionId, revisionId.Trim(), StringComparison.Ordinal))
                 throw new ArgumentException("Revision id is required and must not contain leading/trailing whitespace.", nameof(revisionId));
             ValidateXmlArgument(revisionId, nameof(revisionId), "Revision id");
-            ValidateCanonicalRequired(project.ProjectId, "project id");
-            ValidateXmlState(project.ProjectId, "project id");
-            var snapshot = new RevisionSnapshot
-            {
-                Id = revisionId,
-                CreatedUtc = DateTime.UtcNow,
-                ProjectId = project.ProjectId
-            };
+            var snapshot = new RevisionSnapshot { Id = revisionId, CreatedUtc = DateTime.UtcNow };
             var elementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
@@ -143,7 +135,6 @@ namespace QS3D.Core.Revisions
         {
             if (before == null) throw new ArgumentNullException(nameof(before));
             if (after == null) throw new ArgumentNullException(nameof(after));
-            ValidateProjectIdentityCompatibility(before, after);
             var result = new List<RevisionDelta>();
             var left = Index(before, "before");
             var right = Index(after, "after");
@@ -169,24 +160,6 @@ namespace QS3D.Core.Revisions
                 if (delta.Fields.Count > 0) result.Add(delta);
             }
             return result.AsReadOnly();
-        }
-
-        private static void ValidateProjectIdentityCompatibility(RevisionSnapshot before, RevisionSnapshot after)
-        {
-            var beforeProjectId = before.ProjectId ?? string.Empty;
-            var afterProjectId = after.ProjectId ?? string.Empty;
-
-            if (beforeProjectId.Length == 0 && afterProjectId.Length == 0) return;
-
-            if (beforeProjectId.Length == 0)
-                throw new InvalidOperationException("Revision baseline has no project identity; capture a new baseline before comparing.");
-            if (afterProjectId.Length == 0)
-                throw new InvalidOperationException("Current revision has no project identity; capture a new revision before comparing.");
-            ValidateCanonicalRequired(beforeProjectId, "before project id");
-            ValidateCanonicalRequired(afterProjectId, "after project id");
-
-            if (!string.Equals(beforeProjectId, afterProjectId, StringComparison.Ordinal))
-                throw new InvalidOperationException("Revision baseline belongs to a different project; capture a new baseline before comparing.");
         }
 
         private static IReadOnlyList<string> CanonicalSourceHandles(ProjectElement element) =>
