@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             InvalidRevisionIdFailsAtCaptureBoundary();
+            InvalidPropertyValueFailsAtPublicMutationBoundary();
             InvalidProjectPayloadFailsAtCaptureBoundary();
             ValidUnicodeIsPreservedExactly();
         }
@@ -20,6 +21,21 @@ namespace QS3D.Core.SmokeTests
             var service = new RevisionService();
             var project = new ProjectState("revision-xml-integrity", "Revision XML Integrity");
             Throws<ArgumentException>(() => service.Capture(project, "REV-\u0001-A"));
+        }
+
+        private static void InvalidPropertyValueFailsAtPublicMutationBoundary()
+        {
+            var element = new ProjectElement("E-1", ElementCategory.ArchitecturalWall);
+            element.MarkClean(ElementDirtyFlags.All);
+            var dirty = element.Dirty;
+            var updatedUtc = element.UpdatedUtc;
+
+            Throws<ArgumentException>(() => element.SetProperty("Note", "bad-\u0001-value"));
+
+            if (element.Properties.ContainsKey("Note"))
+                throw new Exception("Invalid XML property value was retained after public mutation rejection.");
+            Equal(dirty, element.Dirty);
+            Equal(updatedUtc, element.UpdatedUtc);
         }
 
         private static void InvalidProjectPayloadFailsAtCaptureBoundary()
@@ -53,7 +69,7 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithElement(invalidFloorElement), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithElement(invalidZoneElement), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.Properties["P-\u0001-1"] = "ok"), "REV-XML"));
-            Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.SetProperty("Note", "bad-\u0001-value")), "REV-XML"));
+            Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.Properties["Note"] = "bad-\u0001-value"), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.Quantities["Q-\u0001-1"] = 1d), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.SourceHandles.Add("H-\u0001-1")), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.DependsOn.Add("D-\u0001-1")), "REV-XML"));
