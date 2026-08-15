@@ -169,9 +169,9 @@ namespace QS3D.BricsCAD.V25.UI
                 PaletteCoordinator.SetStatus("Workspace dự toán → " + label + " • " + command + ".");
                 _document.SendStringToExecute(command + " ", true, false, false);
             }
-            catch (Exception ex)
+            catch
             {
-                var message = "Không thể mở " + label + ": " + ex.Message;
+                const string message = "Không thể mở workspace dự toán này. Hãy thử lại hoặc đóng bảng BQ và mở lại.";
                 try { PaletteCoordinator.SetStatus(message); } catch { }
                 MessageBox.Show(this, message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
