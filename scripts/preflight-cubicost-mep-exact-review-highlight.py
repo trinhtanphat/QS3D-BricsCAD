@@ -41,11 +41,11 @@ for token in (
     "left.CheckInterference(right)",
     "left.Highlight()",
     "right.Highlight()",
-    "highlightOwned = true",
+    "highlightApplied = true",
     "document.Editor.SetImpliedSelection",
     "document.Editor.GetString",
     "finally",
-    "if (highlightOwned",
+    "if (highlightApplied",
     "UnhighlightBestEffort",
     "entity.Unhighlight()",
     "if (rightHighlighted",
@@ -65,18 +65,25 @@ for forbidden in (
     "QsdbProjectStore",
     "Task.Run",
     "Parallel.For",
+    "highlightOwned",
 ):
     forbid(source, forbidden, "read-only highlight boundary")
 
 for token in (
     "QS3DMEPEXACTCLASHHIGHLIGHT",
-    "ownership",
     "CheckInterference",
     "Unhighlight",
     "PENDING_LOCAL / DO_NOT_RETRY_REMOTE",
-    "pre-existing highlight",
+    "ownership token",
+    "not a PASS requirement",
 ):
     require(doc, token, "exact review documentation")
+
+for forbidden in (
+    "acquired ownership of both highlights",
+    "removes only highlight state owned by this command",
+):
+    forbid(doc, forbidden, "truthful highlight contract")
 
 if errors:
     print("Cubicost exact clash highlight preflight: FAIL")
