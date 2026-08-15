@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Xml.Linq;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
@@ -26,7 +28,13 @@ namespace QS3D.Core.SmokeTests
         private static void PaddedMapKeyFailsBeforePersistence()
         {
             var project = NewProject("map-key");
-            project.Metadata[" padded "] = "value";
+            var metadataItemsField = project.Metadata.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Project metadata backing dictionary field is unavailable.");
+            var metadataItems = metadataItemsField.GetValue(project.Metadata) as IDictionary<string, string>
+                ?? throw new InvalidOperationException("Project metadata backing dictionary is unavailable.");
+            metadataItems[" padded "] = "value";
+            if (!string.Equals(project.Metadata[" padded "], "value", StringComparison.Ordinal))
+                throw new Exception("Raw padded metadata key fixture was not visible through project metadata.");
             RejectSave(project, "Padded metadata key was silently persisted/normalized.");
 
             project = NewProject("property-key");
