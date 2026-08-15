@@ -106,7 +106,7 @@ namespace QS3D.BricsCAD.V25
             private readonly Document _document;
             private readonly Database _database;
             private readonly Transaction _transaction;
-            private readonly BlockTableRecord _modelSpace;
+            private readonly BlockBegin _markerCarrier;
             private readonly DocumentHistory _history;
             private readonly string _previousRevision;
             private readonly string _nextRevision;
@@ -122,7 +122,7 @@ namespace QS3D.BricsCAD.V25
                 Document document,
                 Database database,
                 Transaction transaction,
-                BlockTableRecord modelSpace,
+                BlockBegin markerCarrier,
                 DocumentHistory history,
                 string previousRevision,
                 string nextRevision,
@@ -133,7 +133,7 @@ namespace QS3D.BricsCAD.V25
                 _document = document;
                 _database = database;
                 _transaction = transaction;
-                _modelSpace = modelSpace;
+                _markerCarrier = markerCarrier;
                 _history = history;
                 _previousRevision = previousRevision;
                 _nextRevision = nextRevision;
@@ -174,8 +174,9 @@ namespace QS3D.BricsCAD.V25
                     new TypedValue((int)DxfCode.ExtendedDataAsciiString, _nextRevision)))
                 {
                     EnsureRegApp(_database, _transaction);
-                    _modelSpace.DisableUndoRecording(false);
-                    _modelSpace.XData = marker;
+                    _markerCarrier.DisableUndoRecording(false);
+                    _markerCarrier.UpgradeOpen();
+                    _markerCarrier.XData = marker;
                 }
             }
 
@@ -519,8 +520,8 @@ namespace QS3D.BricsCAD.V25
             ProjectContextCoordinator.RequireBackingStoreUnchanged(document, project, "Source Reconcile Undo registration");
             Attach(document);
 
-            var modelSpace = OpenModelSpace(document.Database, transaction, OpenMode.ForWrite);
-            var previousRevision = ReadRevision(modelSpace);
+            var markerCarrier = OpenMarkerCarrier(document.Database, transaction, OpenMode.ForRead);
+            var previousRevision = ReadRevision(markerCarrier);
             DocumentHistory history;
             HistoryEntry beforeEntry;
             var rebase = false;
@@ -560,7 +561,7 @@ namespace QS3D.BricsCAD.V25
                 document,
                 document.Database,
                 transaction,
-                modelSpace,
+                markerCarrier,
                 history,
                 previousRevision,
                 nextRevision,
@@ -797,16 +798,16 @@ namespace QS3D.BricsCAD.V25
         {
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
-                var modelSpace = OpenModelSpace(document.Database, transaction, OpenMode.ForRead);
-                var revision = ReadRevision(modelSpace);
+                var markerCarrier = OpenMarkerCarrier(document.Database, transaction, OpenMode.ForRead);
+                var revision = ReadRevision(markerCarrier);
                 transaction.Commit();
                 return revision;
             }
         }
 
-        private static string ReadRevision(BlockTableRecord modelSpace)
+        private static string ReadRevision(BlockBegin markerCarrier)
         {
-            using (var marker = modelSpace.GetXDataForApplication(RegAppName))
+            using (var marker = markerCarrier.GetXDataForApplication(RegAppName))
             {
                 if (marker == null) return string.Empty;
                 var values = marker.AsArray();
@@ -819,6 +820,12 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("Source Reconcile native Undo revision is malformed.");
                 return revision;
             }
+        }
+
+        private static BlockBegin OpenMarkerCarrier(Database database, Transaction transaction, OpenMode mode)
+        {
+            var modelSpace = OpenModelSpace(database, transaction, OpenMode.ForRead);
+            return (BlockBegin)transaction.GetObject(modelSpace.BlockBeginId, mode);
         }
 
         private static BlockTableRecord OpenModelSpace(Database database, Transaction transaction, OpenMode mode)
