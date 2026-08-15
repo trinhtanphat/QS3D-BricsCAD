@@ -26,10 +26,10 @@ if SOURCE.is_file():
     view_plans = method.find("var viewPlans = SemanticViewPlanner.BuildCatalog(project, viewDefinitions);", after_sheets)
     sheet_plans = method.find("SemanticSheetPlanner.BuildCatalog(sheetDefinitions, viewPlans);", view_plans)
     after_planners = method.find("EnsureProjectStructureUnchanged(project, projectSnapshot);", sheet_plans)
-    empty_touch = method.find("project.Touch();", after_planners)
-    empty_pre_touch = method.rfind("EnsureProjectStructureUnchanged(project, projectSnapshot);", after_planners, empty_touch)
-    normal_touch = method.find("project.Touch();", empty_touch + 1)
-    normal_pre_touch = method.rfind("EnsureProjectStructureUnchanged(project, projectSnapshot);", empty_touch + 1, normal_touch)
+    empty_mutation = method.find("project.Metadata.Remove(MetadataKey);", after_planners)
+    empty_pre_mutation = method.rfind("EnsureProjectStructureUnchanged(project, projectSnapshot);", after_planners, empty_mutation)
+    normal_mutation = method.find("project.Metadata[MetadataKey] = payload;", empty_mutation + 1)
+    normal_pre_mutation = method.rfind("EnsureProjectStructureUnchanged(project, projectSnapshot);", empty_mutation + 1, normal_mutation)
 
     positions = (
         capture,
@@ -40,19 +40,22 @@ if SOURCE.is_file():
         view_plans,
         sheet_plans,
         after_planners,
-        empty_pre_touch,
-        empty_touch,
-        normal_pre_touch,
-        normal_touch,
+        empty_pre_mutation,
+        empty_mutation,
+        normal_pre_mutation,
+        normal_mutation,
     )
     if min(positions) < 0 or not (
         capture < views < after_views < sheets < after_sheets < view_plans < sheet_plans < after_planners
-        < empty_pre_touch < empty_touch < normal_pre_touch < normal_touch
+        < empty_pre_mutation < empty_mutation < normal_pre_mutation < normal_mutation
     ):
-        errors.append("Save must snapshot before both caller enumerations, recheck after each/planning, and recheck immediately before either persistence mutation.")
+        errors.append("Save must snapshot before both caller enumerations, recheck after each/planning, and recheck immediately before either metadata persistence mutation.")
 
     if method.count("EnsureProjectStructureUnchanged(project, projectSnapshot);") != 5:
         errors.append("Save must perform exactly five project freshness checks across enumeration, planning and mutation boundaries.")
+
+    if "project.Touch();" in method:
+        errors.append("Save must not directly Touch before public metadata Set/Remove; ProjectMetadataDictionary owns the exact-once revision boundary.")
 
     for token in (
         "project.ChangeVersion,",
@@ -107,4 +110,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: SemanticDocumentationCatalogStore.Save rejects project revision, ordered reference, or planner-value drift across caller-controlled view/sheet enumeration before persistence mutation.")
+print("PASS: SemanticDocumentationCatalogStore.Save rejects project revision, ordered reference, or planner-value drift across caller-controlled view/sheet enumeration immediately before public metadata persistence.")
