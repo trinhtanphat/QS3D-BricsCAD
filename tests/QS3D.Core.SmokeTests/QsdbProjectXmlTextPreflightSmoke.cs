@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
@@ -46,7 +47,15 @@ namespace QS3D.Core.SmokeTests
         private static void LoneSurrogateFailsBeforeFilesystemMutation()
         {
             var project = Project("P-QSDB-XML-SURROGATE");
-            project.DrawingPath = new string(new[] { '\uD800' });
+            var invalid = new string(new[] { '\uD800' });
+            Throws<ArgumentException>(() => project.DrawingPath = invalid);
+            var drawingPathField = typeof(ProjectState).GetField(
+                "_drawingPath",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectState raw DrawingPath fixture field was not found.");
+            drawingPathField.SetValue(project, invalid);
+            if (!string.Equals(project.DrawingPath, invalid, StringComparison.Ordinal))
+                throw new InvalidOperationException("ProjectState malformed legacy DrawingPath fixture was not injected.");
             AssertPreflightFailure(project, "invalid-drawing-path-surrogate");
         }
 

@@ -109,7 +109,7 @@ for token in (
     "case ElementCategory.Stair:",
     "case ElementCategory.Railing:",
     "vertical = CadElementVerticalPlacement.Resolve(",
-    "CadGeometryGuard.Subtract(vertical.BottomDrawing, polyline.Elevation",
+    "CadGeometryGuard.Subtract(vertical.BottomDrawing, sourceElevation",
     "case ElementCategory.Earthwork:",
     'CadGeometryGuard.Number(element, family, "TopOffsetM", 0d)',
 ):
