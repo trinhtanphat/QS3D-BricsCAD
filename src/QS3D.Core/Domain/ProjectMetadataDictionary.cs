@@ -8,6 +8,7 @@ namespace QS3D.Core.Domain
 {
     internal sealed class ProjectMetadataDictionary : IDictionary<string, string>
     {
+        private const string ProjectBrowserWorkspaceMetadataKey = "QS3D.ProjectBrowser.WorkspaceState";
         private readonly Dictionary<string, string> _items = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private ProjectState? _project;
 
@@ -41,7 +42,7 @@ namespace QS3D.Core.Domain
         {
             if (_items.Count == 0) return;
             if (_items.Keys.Any(IsReservedKey)) ValidateReserved(_items);
-            TouchProject();
+            if (_items.Keys.Any(TracksSemanticDirtyState)) TouchProject();
             _items.Clear();
         }
 
@@ -53,7 +54,7 @@ namespace QS3D.Core.Domain
             var collection = (ICollection<KeyValuePair<string, string>>)_items;
             if (!collection.Contains(item)) return false;
             if (IsReservedKey(item.Key)) ValidateReserved(_items);
-            TouchProject();
+            if (TracksSemanticDirtyState(item.Key)) TouchProject();
             return collection.Remove(item);
         }
 
@@ -93,7 +94,7 @@ namespace QS3D.Core.Domain
         {
             if (!_items.ContainsKey(key)) return false;
             if (IsReservedKey(key)) ValidateReserved(_items);
-            if (touchMutation) TouchProject();
+            if (touchMutation && TracksSemanticDirtyState(key)) TouchProject();
             return _items.Remove(key);
         }
 
@@ -118,13 +119,18 @@ namespace QS3D.Core.Domain
                 ValidateReserved(next);
             }
 
-            if (touchMutation) TouchProject();
+            if (touchMutation && TracksSemanticDirtyState(key)) TouchProject();
             if (addOnly) _items.Add(key, normalizedValue); else _items[key] = normalizedValue;
         }
 
         private static bool IsReservedKey(string key)
         {
             return ProjectMeasurementWorkItemMappingCodec.IsReservedKey(key) || ProjectTbqWorkspaceCodec.IsReservedKey(key);
+        }
+
+        private static bool TracksSemanticDirtyState(string key)
+        {
+            return !string.Equals(key, ProjectBrowserWorkspaceMetadataKey, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void ValidateReserved(IEnumerable<KeyValuePair<string, string>> metadata)
