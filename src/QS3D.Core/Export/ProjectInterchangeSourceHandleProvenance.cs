@@ -63,6 +63,7 @@ namespace QS3D.Core.Export
         private const string ProjectRecordSuffix = ".Project";
         private const string ElementRecordSegment = ".Element.";
         private const string RecordVersion = "v1";
+        private const string SourceReferenceScope = "drawing-local";
         private const int MaxSourceHandleLength = 128;
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
@@ -159,6 +160,8 @@ namespace QS3D.Core.Export
             var fields = DecodeRecord(encoded);
             if (fields.Count < 4 || !string.Equals(fields[0], sourceElementId.Trim(), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Interchange provenance record does not match the requested source element identity.");
+            if (!string.Equals(fields[2], SourceReferenceScope, StringComparison.Ordinal))
+                throw new InvalidOperationException("Interchange provenance record contains a non-drawing-local source-reference scope.");
             if (!int.TryParse(fields[3], NumberStyles.None, CultureInfo.InvariantCulture, out var handleCount) || handleCount < 0)
                 throw new InvalidOperationException("Interchange provenance record contains an invalid source-handle count.");
             if (fields.Count != 4 + handleCount)
