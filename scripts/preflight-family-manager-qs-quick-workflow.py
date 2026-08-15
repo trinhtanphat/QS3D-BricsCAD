@@ -71,8 +71,6 @@ def main() -> None:
         "canonical draw support predicate": 'ActiveFamilyQuickDrawCommands.SupportsFamily(routeProbe)',
         "post-modal canonical draw dispatch": '_document.SendStringToExecute("QS3DDRAWACTIVE ", true, false, false);',
         "close before draw dispatch": 'Close();',
-        "positive dimension validation": 'if (positive && value <= 0d)',
-        "finite value validation": 'double.IsNaN(value) || double.IsInfinity(value)',
     }
     for label, token in code_contracts.items():
         require(token in code, f"missing {label}: {token}")
@@ -91,6 +89,11 @@ def main() -> None:
         "case ElementCategory.GlassWall: return GlassWall;",
         "case ElementCategory.Slab: return Slab;",
         "case ElementCategory.Foundation: return Foundation;",
+        "double.TryParse(raw, NumberStyles.Float, culture, out valueMm)",
+        "double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out valueMm)",
+        "double.IsNaN(valueMm) || double.IsInfinity(valueMm)",
+        "if (positive && valueMm <= 0d)",
+        "return valueMm / MillimetersPerMeter;",
     ):
         require(token in schema, f"canonical quick schema service missing: {token}")
 
@@ -222,7 +225,7 @@ def main() -> None:
     require(code.count('_document.SendStringToExecute("QS3DDRAWACTIVE ", true, false, false);') == 1,
             "Lưu & Vẽ must queue exactly one canonical QS3DDRAWACTIVE command")
 
-    print(f"{PREFIX} PASS: Family Manager QS quick workflow uses intentional draft state and audited canonical mutation; category keys/defaults/material remain guarded at ProjectFamilyQuickSchemaService; existing Direct Draw routing stays single-path.")
+    print(f"{PREFIX} PASS: Family Manager QS quick workflow uses intentional draft state and audited canonical mutation; category keys/defaults/material and UI-mm validation remain guarded at ProjectFamilyQuickSchemaService; existing Direct Draw routing stays single-path.")
 
 
 if __name__ == "__main__":
