@@ -49,6 +49,7 @@ namespace QS3D.BricsCAD.V25.UI
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             _familyTemplateCombo = new ComboBox
             {
@@ -67,16 +68,22 @@ namespace QS3D.BricsCAD.V25.UI
             Grid.SetColumn(loadButton, 1);
             row.Children.Add(loadButton);
 
+            var loadFileButton = new Button { Content = "Nạp file…", Margin = new Thickness(0, 0, 6, 0) };
+            if (TryFindResource("DenseButton") is Style loadFileStyle) loadFileButton.Style = loadFileStyle;
+            loadFileButton.Click += OnLoadFamilyTemplateFileClick;
+            Grid.SetColumn(loadFileButton, 2);
+            row.Children.Add(loadFileButton);
+
             var saveButton = new Button { Content = "Lưu Template" };
             if (TryFindResource("DenseButton") is Style denseStyle) saveButton.Style = denseStyle;
             saveButton.Click += OnSaveFamilyTemplateClick;
-            Grid.SetColumn(saveButton, 2);
+            Grid.SetColumn(saveButton, 3);
             row.Children.Add(saveButton);
             stack.Children.Add(row);
 
             var hint = new TextBlock
             {
-                Text = "Nạp một lần để có sẵn thư viện DẦM • SÀN • CỘT • TƯỜNG • MÓNG • HOÀN THIỆN với tên, kích thước, vật liệu và BQ Code chuẩn. Nạp lại là idempotent theo Category + Family Name.",
+                Text = "Nạp template chuẩn hoặc file .qs3dtpl Family-only. Import khớp Category + Name, giữ Family ID/custom property của project và không áp dụng rule/layer/BQ layout từ file.",
                 TextWrapping = TextWrapping.Wrap
             };
             if (TryFindResource("Caption") is Style captionStyle) hint.Style = captionStyle;
@@ -165,6 +172,59 @@ namespace QS3D.BricsCAD.V25.UI
             catch (Exception ex)
             {
                 SetStatus("Nạp Family Template lỗi: " + ex.Message);
+            }
+        }
+
+        private void OnLoadFamilyTemplateFileClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                EnsureActive("nạp file QS3D Family Template");
+                var dialog = new OpenFileDialog
+                {
+                    Title = "Nạp QS3D Family Template",
+                    Filter = "QS3D Template (*.qs3dtpl)|*.qs3dtpl|All files (*.*)|*.*",
+                    DefaultExt = ".qs3dtpl",
+                    CheckFileExists = true,
+                    Multiselect = false
+                };
+                if (dialog.ShowDialog(this) != true) return;
+
+                var store = new TemplateProfileStore();
+                var profile = store.Load(dialog.FileName);
+                var project = ExistingProjectMutationContext.Require(_document, "Nạp file QS3D Family Template");
+                var previousId = (FamilyList.SelectedItem as ProjectFamily)?.Id ?? string.Empty;
+                var result = ExecuteAtomic(
+                    project,
+                    () => FamilyTemplateImportService.Apply(project, profile),
+                    "Nạp file QS3D Family Template");
+
+                var preferredId = previousId;
+                if (string.IsNullOrWhiteSpace(preferredId) || project.FindFamily(preferredId) == null)
+                {
+                    var firstSource = profile.Families.FirstOrDefault();
+                    if (firstSource != null)
+                    {
+                        preferredId = project.Families
+                            .FirstOrDefault(x => x.Category == firstSource.Category &&
+                                                 string.Equals(x.Name, firstSource.Name, StringComparison.OrdinalIgnoreCase))?.Id
+                            ?? string.Empty;
+                    }
+                }
+
+                var ignoredSections = profile.QuantityRules.Count + profile.LayerMappings.Count + profile.VisibleBqColumns.Count;
+                RefreshAfterCommit(
+                    () => RefreshAll(preferredId),
+                    "Đã nạp Family-only “" + profile.Name + "” • thêm " +
+                    result.FamiliesAdded.ToString(CultureInfo.InvariantCulture) + " Family • cập nhật " +
+                    result.FamiliesUpdated.ToString(CultureInfo.InvariantCulture) + " Family • áp dụng " +
+                    result.PropertiesApplied.ToString(CultureInfo.InvariantCulture) + " property • bỏ qua " +
+                    ignoredSections.ToString(CultureInfo.InvariantCulture) + " mục rule/layer/BQ ngoài phạm vi Family.",
+                    "Family template file import");
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Nạp file Family Template lỗi: " + ex.Message);
             }
         }
 
