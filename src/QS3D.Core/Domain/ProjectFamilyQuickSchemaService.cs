@@ -59,7 +59,7 @@ namespace QS3D.Core.Domain
         private static readonly ProjectFamilyQuickSchema Column = Schema(
             ElementCategory.Column,
             new[] { "WidthM", "DepthM", "HeightM", "BottomOffsetM" },
-            new[] { "WidthM", "DepthM" },
+            new[] { "WidthM", "DepthM", "HeightM" },
             new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
             {
                 ["WidthM"] = 0.4d,
@@ -72,7 +72,7 @@ namespace QS3D.Core.Domain
         private static readonly ProjectFamilyQuickSchema ArchitecturalWall = Schema(
             ElementCategory.ArchitecturalWall,
             new[] { "ThicknessM", "HeightM", "BottomOffsetM" },
-            new[] { "ThicknessM" },
+            new[] { "ThicknessM", "HeightM" },
             new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
             {
                 ["ThicknessM"] = 0.2d,
@@ -84,7 +84,7 @@ namespace QS3D.Core.Domain
         private static readonly ProjectFamilyQuickSchema StructuralWall = Schema(
             ElementCategory.StructuralWall,
             new[] { "ThicknessM", "HeightM", "BottomOffsetM" },
-            new[] { "ThicknessM" },
+            new[] { "ThicknessM", "HeightM" },
             new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
             {
                 ["ThicknessM"] = 0.2d,
@@ -96,7 +96,7 @@ namespace QS3D.Core.Domain
         private static readonly ProjectFamilyQuickSchema WallPier = Schema(
             ElementCategory.WallPier,
             new[] { "ThicknessM", "HeightM", "BottomOffsetM" },
-            new[] { "ThicknessM" },
+            new[] { "ThicknessM", "HeightM" },
             new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
             {
                 ["ThicknessM"] = 0.2d,
@@ -108,7 +108,7 @@ namespace QS3D.Core.Domain
         private static readonly ProjectFamilyQuickSchema GlassWall = Schema(
             ElementCategory.GlassWall,
             new[] { "ThicknessM", "HeightM", "BottomOffsetM" },
-            new[] { "ThicknessM" },
+            new[] { "ThicknessM", "HeightM" },
             new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
             {
                 ["ThicknessM"] = 0.012d,
