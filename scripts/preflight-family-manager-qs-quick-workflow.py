@@ -42,15 +42,19 @@ def main() -> None:
     code_contracts = {
         "canonical CAD project-context namespace": 'using QS3D.BricsCAD.V25.Cad;',
         "late selection event hookup": 'FamilyList.SelectionChanged += OnQuickFamilySelectionChanged;',
-        "new-mode race repair": '_creatingNew = FamilyList.SelectedItem == null;',
-        "category-aware key set": 'private static HashSet<string> QuickKeys(ElementCategory category)',
+        "selection handler loading guard": 'if (_loading) return;',
+        "selected Family exits draft mode": 'if (FamilyList.SelectedItem != null) _creatingNew = false;',
+        "selection refresh": 'RefreshQuickWorkflow();',
+        "category-aware schema": 'ProjectFamilyQuickSchemaService.GetSchema(category)',
         "Direct Draw width key": '"WidthM"',
         "Direct Draw depth key": '"DepthM"',
         "Direct Draw height key": '"HeightM"',
         "Direct Draw thickness key": '"ThicknessM"',
         "Direct Draw offset key": '"BottomOffsetM"',
         "atomic Family mutation": 'var family = ExecuteAtomic(project, () =>',
-        "canonical Family property service": 'ProjectFamilyService.SetProperty(project, target.Id, pair.Key, pair.Value);',
+        "current audited Family property helper": 'SetQuickPropertyWithAudit(project, target, pair.Key, pair.Value, auditSource);',
+        "canonical Family property service": 'var update = ProjectFamilyService.SetProperty(project, target.Id, key, value);',
+        "no-op aware property audit": 'if (project.ChangeVersion == beforeVersion) return;',
         "canonical active Family service": 'ProjectFamilyActivationService.SetActive(project, target.Id);',
         "canonical draw support predicate": 'ActiveFamilyQuickDrawCommands.SupportsFamily(routeProbe)',
         "post-modal canonical draw dispatch": '_document.SendStringToExecute("QS3DDRAWACTIVE ", true, false, false);',
@@ -60,6 +64,9 @@ def main() -> None:
     }
     for label, token in code_contracts.items():
         require(token in code, f"missing {label}: {token}")
+
+    require('_creatingNew = FamilyList.SelectedItem == null;' not in code,
+            "quick selection handler must not infer draft mode from a transient null selection")
 
     defaults = {
         "Wall thickness": 'ThicknessM = 0.2d, HeightM = 3.6d',
@@ -84,7 +91,7 @@ def main() -> None:
     require(code.count('_document.SendStringToExecute("QS3DDRAWACTIVE ", true, false, false);') == 1,
             "Lưu & Vẽ must queue exactly one canonical QS3DDRAWACTIVE command")
 
-    print(f"{PREFIX} PASS: Family Manager QS quick workflow contract is guarded.")
+    print(f"{PREFIX} PASS: Family Manager QS quick workflow uses intentional draft state, audited canonical property mutation, one active-Family mutation point, and the existing Direct Draw route.")
 
 
 if __name__ == "__main__":
