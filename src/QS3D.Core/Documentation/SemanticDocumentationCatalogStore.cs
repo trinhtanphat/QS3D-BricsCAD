@@ -80,6 +80,7 @@ namespace QS3D.Core.Documentation
             if (project.ChangeVersion != snapshot.ChangeVersion)
                 throw new InvalidOperationException("Project changed while the semantic documentation catalog was being saved.");
             EnsureSameReferences(project.Elements, snapshot.Elements);
+            EnsureSameElementPlanningValues(project.Elements, snapshot.ElementPlanningValues);
             EnsureSameReferences(project.Floors, snapshot.Floors);
             EnsureSameReferences(project.Zones, snapshot.Zones);
         }
@@ -93,6 +94,32 @@ namespace QS3D.Core.Documentation
                     throw new InvalidOperationException("Project structure changed while the semantic documentation catalog was being saved.");
         }
 
+        private static void EnsureSameElementPlanningValues(
+            IList<ProjectElement> current,
+            IReadOnlyList<ProjectElementPlanningValues> expected)
+        {
+            if (current.Count != expected.Count)
+                throw new InvalidOperationException("Project structure changed while the semantic documentation catalog was being saved.");
+            for (var i = 0; i < expected.Count; i++)
+            {
+                var element = current[i];
+                var values = expected[i];
+                if (element == null)
+                {
+                    if (!values.IsNull)
+                        throw new InvalidOperationException("Project structure changed while the semantic documentation catalog was being saved.");
+                    continue;
+                }
+
+                if (values.IsNull ||
+                    !string.Equals(element.Id, values.Id, StringComparison.Ordinal) ||
+                    element.Category != values.Category ||
+                    !string.Equals(element.FloorId, values.FloorId, StringComparison.Ordinal) ||
+                    !string.Equals(element.ZoneId, values.ZoneId, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Project structure changed while the semantic documentation catalog was being saved.");
+            }
+        }
+
         private sealed class ProjectStructureSnapshot
         {
             public ProjectStructureSnapshot(
@@ -103,14 +130,34 @@ namespace QS3D.Core.Documentation
             {
                 ChangeVersion = changeVersion;
                 Elements = elements;
+                ElementPlanningValues = elements.Select(x => new ProjectElementPlanningValues(x)).ToArray();
                 Floors = floors;
                 Zones = zones;
             }
 
             public long ChangeVersion { get; }
             public IReadOnlyList<ProjectElement> Elements { get; }
+            public IReadOnlyList<ProjectElementPlanningValues> ElementPlanningValues { get; }
             public IReadOnlyList<FloorDefinition> Floors { get; }
             public IReadOnlyList<ZoneDefinition> Zones { get; }
+        }
+
+        private sealed class ProjectElementPlanningValues
+        {
+            public ProjectElementPlanningValues(ProjectElement? element)
+            {
+                IsNull = element == null;
+                Id = element?.Id;
+                Category = element?.Category ?? default;
+                FloorId = element?.FloorId;
+                ZoneId = element?.ZoneId;
+            }
+
+            public bool IsNull { get; }
+            public string? Id { get; }
+            public ElementCategory Category { get; }
+            public string? FloorId { get; }
+            public string? ZoneId { get; }
         }
 
         public SemanticDocumentationCatalog Load(ProjectState project)
