@@ -214,3 +214,28 @@ The corrected production fix and regressions are merged to current `main`, the e
 - The focused guard requires that exact adjacency and single use. No snapshot/history/project/stamp/cache/backing-store/affinity/event/generated/service behavior and no LOCAL-004 probe/runner/gate/docs/private surface changed.
 - Six focused Source Reconcile gates passed; Core Release build passed `0/0`; Core smoke reported `ALL PASS`; installed-reference V25 `Release|x64` adapter/Core build passed `0/0`, with both ProductVersion values identifying exact source commit `86afdf93b58169ef8ce755de459a3e4beedbbe29`.
 - Issue `#1005` and this claim remain `OPEN / ACTIVE / PENDING_LOCAL`. `/root` retains the unchanged exact-SHA licensed rerun, cleanup evidence and result publication; no runtime PASS is inferred from source/build evidence.
+
+## ModelSpace BTR read-before-upgrade continuation
+
+- Exact licensed evidence at candidate `86afdf93b58169ef8ce755de459a3e4beedbbe29` is issue comment `#issuecomment-5299890294`: the post-Undo marker remained `AFTER`, as did post-Redo, while generated entities participated in native Undo and all semantic-history, project/revision, cold-reopen and cleanup prerequisites remained coherent. Enabling recording after the BTR was already opened `ForWrite` therefore did not retroactively enroll its XData mutation.
+- Baseline `main` is `96862d6cdfddd8bb2ea4a0055505005859467ea7`. `/root` delegated the next bounded continuation to `/root/local004_postundo_marker` under the active `2026-08-15-codex-issue1005-modelspace-btr-undo-recording.md` claim. It owns only the coordinator lifecycle change from initial ModelSpace `ForRead` to `DisableUndoRecording(false)` then `UpgradeOpen()` immediately before the existing XData assignment, plus the minimum focused coherence-guard assertion.
+- Database-level undo grouping, semantic snapshots/history/project/revision/stamp/cache/backing-store/affinity/events/generated/service behavior, and all LOCAL-004 probe/runner/gate/docs/private/BricsCAD/Actions surfaces remain excluded. Issue `#1005` and both claims remain `OPEN / ACTIVE / PENDING_LOCAL` for an exact-SHA licensed rerun.
+
+## ModelSpace BTR read-before-upgrade candidate
+
+- Production commit `0542131348e6393a4d28d6e0945ec60c2ee3bff6` is merged on current `main`. The existing ModelSpace BTR stays `ForRead` through prior-marker capture and is enrolled for native Undo before its deliberate `UpgradeOpen()` and existing staged revision-XData assignment.
+- The focused coherence guard pins that exact lifecycle/order. All other semantic and native guards remain unchanged, and no LOCAL-004/private/BricsCAD/Actions surface changed. Six focused Source Reconcile gates passed; Core build passed `0/0`; Core smoke reported `ALL PASS`; installed-reference V25 adapter/Core build passed `0/0`, with both ProductVersion values identifying exact source commit `0542131348e6393a4d28d6e0945ec60c2ee3bff6`.
+- Issue `#1005` and both claims remain `OPEN / ACTIVE / PENDING_LOCAL`. `/root` retains the exact-SHA licensed rerun, cleanup evidence and result publication; no runtime PASS is inferred.
+
+## Existing BlockBegin marker-carrier continuation
+
+- Exact licensed evidence at `0542131348e6393a4d28d6e0945ec60c2ee3bff6` is issue comment `#issuecomment-5299928862`. Enabling BTR undo recording before its write upgrade did not change post-Undo or post-Redo marker class `AFTER`, while generated entities participated in native Undo and every semantic/history/reopen/cleanup prerequisite remained coherent. This runtime-disproves the BTR open-order hypothesis.
+- Baseline `main` is `6838001b837338ca70025f07aca57a7652251511`. `/root` delegated one bounded carrier correction to `/root/local004_postundo_marker` under the active `2026-08-15-codex-issue1005-modelspace-btr-undo-recording.md` claim. V25 documents ModelSpace's existing `BlockBegin` as an automatically managed, geometry-free entity that may carry application XData; the candidate will read and stage the same revision payload on that entity instead of on the BTR.
+- No database undo record, object/entity creation or deletion, transaction/service/grouping change, semantic snapshot/history/project/revision/stamp/cache/backing-store/affinity/event/generated change, or LOCAL-004/private/BricsCAD/Actions surface is in scope. Issue `#1005` and both claims remain `OPEN / ACTIVE / PENDING_LOCAL` for an exact-SHA licensed rerun.
+
+## Existing BlockBegin marker-carrier candidate
+
+- Production commit `5e79a87bb3e5858d35a3c92fa8a827d2902d85d5` is merged on current `main`. The revision marker now lives on ModelSpace's existing, geometry-free `BlockBegin` entity and retains the `ForRead` -> enable recording -> `UpgradeOpen()` -> staged XData lifecycle inside the unchanged outer transaction.
+- No object/entity or database undo record was added, and no transaction grouping, semantic guard, generated behavior or LOCAL-004/private/Actions surface changed. The focused guard rejects regression to the BTR carrier or construction of a BlockBegin.
+- Six focused Source Reconcile gates passed; Core build passed `0/0`; Core smoke reported `ALL PASS`; installed-reference V25 adapter/Core build passed `0/0`, with both ProductVersion values identifying exact source commit `5e79a87bb3e5858d35a3c92fa8a827d2902d85d5`.
+- Issue `#1005` and both claims remain `OPEN / ACTIVE / PENDING_LOCAL`. `/root` retains the exact-SHA licensed rerun, cleanup evidence and result publication; no runtime PASS is inferred.

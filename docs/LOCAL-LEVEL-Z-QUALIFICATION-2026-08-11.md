@@ -79,6 +79,18 @@ The sanitized marker verified legacy wall `1.2..3.7 m`, Bottom+Top wall `3.1..6.
 
 This is state 2 only. The follow-on matrix below remains `PENDING_LOCAL`; LOCAL-003 stays `IN_PROGRESS` and customer-release qualification remains false.
 
+## Exact representative native-unit parity result
+
+On 2026-08-15, clean exact branch SHA `f00a948521d911aef314e7d8dd5b4bf1f7613bb3` passed the guarded representative probe separately in native Millimeter (`INSUNITS=4`) and native Meter (`INSUNITS=6`) drawings with the same matching plugin/Core ProductVersion. BricsCAD V25.2.10 x64 loaded plugin SHA-256 `F6D3113F6336FC3E945898F72B239646361F7524A3CEE0080E0D3246D08EB6AD`.
+
+Both sanitized markers reported the requested native unit and passed the same expected representative matrix: legacy wall `1.2..3.7 m`, Bottom+Top wall `3.1..6.8 m`, Bottom-only Beam `3.25..3.85 m`, physical-opening reduction, Curtain frames/panels `16/14`, Beam longitudinal/stirrup counts `4/6`, zero pre-edit Level health issues, seven stale outputs after the Level edit, Level-edit invalidation and Top-only fail-closed behavior. Both test-owned hosts exited gracefully inside the default 15-second bound after the runner script closed the active disposable drawing without saving and then quit the host.
+
+For both unit modes, process/script/private-state cleanup, read-only-before-launch and read-only-through-host-exit, unwritten drawing verification, backup restoration and original attribute restoration were true. Before/after/current synthetic-copy SHA-256 remained `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`, and no sidecar remained. The focused Level runtime preflight, full Core smoke and installed-reference V25 `Release|x64` build passed for this exact candidate before launch.
+
+This is a bounded `LOCAL_PASS` for **representative native unit parity only**. It does not replace the complete-family matrix in both units and does not qualify Undo/Redo, save/reopen, cold-cache rebind, multi-DWG or private-DWG behavior. LOCAL-003 remains `IN_PROGRESS / PENDING_LOCAL`, and a final integrated/release SHA still requires its own applicable exact-SHA rerun.
+
+The integrated-main rerun completed on exact merge SHA `44195df7acf5db6ea06605090384410367cf95f2` after PR `#1466` restored the PR `#1432` unit-parity diff that had been lost during a concurrent stale-base merge. The focused Level-Z gate, full Core smoke and installed-reference V25 `Release|x64` build passed first. Matching adapter/Core ProductVersion and adapter SHA-256 `52669B6120A99422C357E25AF1D6343C324B598853C76D0D088FC3D6A30DE747` then passed separate BricsCAD V25.2.10 x64 Millimeter and Meter runs with the same complete representative marker contract. Both hosts exited gracefully; process/script/private-state/read-only-through-exit/unwritten-DWG/restoration/attribute checks passed; the synthetic drawing stayed at SHA-256 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`. This removes the integrated-SHA caveat only for representative mm/m parity; the wider LOCAL-003 matrix remains pending.
+
 ## Required follow-on interactive matrix
 
 Use the exact same SHA and built DLL. Cover at minimum:

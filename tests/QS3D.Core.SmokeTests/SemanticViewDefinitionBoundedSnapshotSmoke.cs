@@ -9,9 +9,20 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
+            CategoriesStopAtFirstOverBoundItem();
             IncludeIdsStopAtFirstOverBoundItem();
             ExcludeIdsStopAtFirstOverBoundItem();
             AcceptedCollectionsRemainDefensiveSnapshots();
+        }
+
+        private static void CategoriesStopAtFirstOverBoundItem()
+        {
+            MustFailCapacity(
+                () => new SemanticViewDefinition(
+                    "V-CATEGORIES",
+                    "Category bound",
+                    categories: OverBoundedCategories()),
+                "Semantic view supports at most 100000 categories.");
         }
 
         private static void IncludeIdsStopAtFirstOverBoundItem()
@@ -38,22 +49,32 @@ namespace QS3D.Core.SmokeTests
 
         private static void AcceptedCollectionsRemainDefensiveSnapshots()
         {
+            var categories = new List<ElementCategory> { ElementCategory.Beam };
             var include = new List<string> { "E-1" };
             var exclude = new List<string> { "E-2" };
             var definition = new SemanticViewDefinition(
                 "V-SNAPSHOT",
                 "Snapshot",
-                categories: new[] { ElementCategory.Beam },
+                categories: categories,
                 includeElementIds: include,
                 excludeElementIds: exclude);
 
+            categories.Clear();
             include.Clear();
             exclude.Clear();
 
+            Equal(1, definition.Categories.Count);
+            Equal(ElementCategory.Beam, definition.Categories[0]);
             Equal(1, definition.IncludeElementIds.Count);
             Equal("E-1", definition.IncludeElementIds[0]);
             Equal(1, definition.ExcludeElementIds.Count);
             Equal("E-2", definition.ExcludeElementIds[0]);
+        }
+
+        private static IEnumerable<ElementCategory> OverBoundedCategories()
+        {
+            for (var i = 0; i <= 100000; i++) yield return ElementCategory.Beam;
+            throw new ApplicationException("Category source enumerated beyond the first over-bound item.");
         }
 
         private static IEnumerable<string> OverBoundedIds(string sentinelMessage)

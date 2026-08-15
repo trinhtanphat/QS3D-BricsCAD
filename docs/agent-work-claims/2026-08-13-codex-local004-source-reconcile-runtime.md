@@ -80,3 +80,49 @@ The claim is visible on `origin/main`; the guarded probe/runner/gate are merged;
 - Exact implementation commit `eea8822bcb962dd01fc126d1fd046c5b67e07170` captures the post-Undo marker before the semantic coherence check and persists it in a dedicated exact-key diagnostic. Only `BEFORE`, `AFTER`, or `OTHER_OR_INVALID` may be published; an optional post-Redo class uses the same allowlist.
 - All six focused Source Reconcile gates and the PowerShell parser passed. The installed-reference V25 `Release|x64` adapter/Core build completed with `0 warnings / 0 errors`, and both ProductVersion values identify exact commit `eea8822bcb962dd01fc126d1fd046c5b67e07170`.
 - The root LOCAL-004 owner should run the licensed matrix on an exact clean descendant containing that commit. A post-Undo `AFTER` receipt bounds the next production lane to explicit ModelSpace block-table-record undo recording; this source handoff does not promote LOCAL-004 or alter production behavior.
+
+## 2026-08-15 database Undo lifecycle diagnostic matrix
+
+Three exact licensed candidates changed only the Source Reconcile revision carrier's
+existing-object XData enrollment and all returned the same sanitized result: native
+generated output was removed by Undo while the revision marker remained `AFTER`.
+The tested variants were ModelSpace BTR late object enable, ModelSpace BTR
+ForRead/object-enable/UpgradeOpen, and the existing ModelSpace BlockBegin entity with
+the same read/enable/upgrade sequence. This disproves further carrier substitution as
+an evidence-backed production fix.
+
+This existing LOCAL-004 claim is expanded before implementation to own one additive,
+repository-synthetic V25 diagnostic matrix that isolates the database-level Undo
+lifecycle without changing Source Reconcile production behavior:
+
+- new `src/QS3D.BricsCAD.V25/SourceReconcileUndoLifecycleProbeCommands.cs`;
+- new `scripts/test-bricscad-v25-source-reconcile-undo-lifecycle.ps1`;
+- new `scripts/preflight-source-reconcile-undo-lifecycle-probe.py`;
+- this claim and the existing LOCAL-004/Source Reconcile handoff notes for the
+  sanitized result only.
+
+Each variant must run in a fresh disposable repository-sample drawing/process and
+mutate one existing object's XData plus one topology sentinel in the same native
+transaction. The exact variants are `OBJECT_ONLY`, `DB_ENABLE_OBJECT`,
+`DB_START_OBJECT`, and `DB_ENABLE_DB_START_OBJECT`. Output is restricted to the
+variant plus allowlisted classes for database recording at entry/after enable/after
+start and for existing-object/topology state after native Undo. No raw IDs, Handles,
+revision tokens, paths, messages, counts, drawing data or private state may be
+published. The runner must require a clean exact-SHA build, zero pre-existing
+BricsCAD processes, fresh copies, close-without-save, byte-for-byte fixture recovery,
+and exact process/script/environment cleanup.
+
+This matrix is diagnostic only. It must not call `Database.StartUndoRecord()` or
+database-wide `DisableUndoRecording(false)` from production code, alter the current
+Source Reconcile marker/history/event guards, infer `LOCAL_PASS`, or close issue
+`#1005`. A production change is allowed only after the matrix distinguishes a
+database lifecycle that records the existing-object mutation in the same Undo group
+as the topology sentinel. The current operator-owned BricsCAD process is out of
+scope; execution waits for the mandatory zero-process boundary.
+
+### Diagnostic implementation handoff
+
+- Claim expansion commit `8dbf11da3ba09f875a926e115b19b8543ef4a608` merged first through PR `#1498` at `de7aba1295abbc113cd548a6f86b8c6462172b2a`.
+- Implementation commit `5e319c34b8b9d125c0985784f4263591bbb2f518` merged through PR `#1507` at `3e5bb15b6f55968234bcc2c784c07e770f88439a`. The production Source Reconcile coordinator/service and existing LOCAL-004 runner/probe remain unchanged.
+- Exact implementation validation passed: PowerShell AST; seven focused Source Reconcile/manual-policy gates; aggregate preflight `809/809`; Core Release build `0 warnings / 0 errors`; Core smoke `ALL PASS`; installed-reference V25 `Release|x64` build `0 warnings / 0 errors`; adapter/Core ProductVersion suffix `+5e319c34b8b9d125c0985784f4263591bbb2f518`.
+- Licensed execution was intentionally not attempted because an operator-owned BricsCAD process was active. The claim remains `ACTIVE / PENDING_LOCAL`; issue `#1005` and LOCAL-004 remain open until a clean exact-SHA, zero-process matrix run returns the four sanitized variant tuples.
