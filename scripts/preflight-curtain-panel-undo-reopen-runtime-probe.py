@@ -144,37 +144,48 @@ if RUNNER.is_file():
 
     if text.count('Start-Process -FilePath $bricscadExe') != 2:
         errors.append("Curtain P11 runner must launch exactly two isolated BricsCAD sessions")
-    if text.count('"QS3DCURTAINP11SELECT"') != 2:
-        errors.append("Curtain P11 runner must restore the canonical source selection immediately before both builds")
-    if text.count('"QS3DCURTAIN3D", "P", ""') != 2:
-        errors.append("Curtain P11 runner must explicitly accept the previous canonical source selection for both production builds")
+    if text.count('"QS3DCURTAINP11SELECT"') != 3:
+        errors.append("Curtain P11 runner must restore the canonical source selection immediately before all three builds")
+    if text.count('"QS3DCURTAIN3D", "P", ""') != 3:
+        errors.append("Curtain P11 runner must explicitly accept the previous canonical source selection for all three production builds")
+    if text.count('"QS3DCURTAINP11BASELINE"') != 2:
+        errors.append("Curtain P11 runner must capture one in-memory after-state for each session-one build")
+    if text.count('"QS3DCURTAINP11CHECKUNDO"') != 1 or text.count('"QS3DCURTAINP11CHECKREDO"') != 1:
+        errors.append("Curtain P11 runner must check exactly one isolated Undo cycle and one isolated Redo cycle")
     first_prepare = text.find('"QS3DCURTAINP11PREPARE"')
     first_select = text.find('"QS3DCURTAINP11SELECT"', first_prepare)
-    undo_mark = text.find('"_.UNDO", "_Mark"', first_select)
-    first_build = text.find('"QS3DCURTAIN3D", "P", ""', undo_mark)
-    baseline = text.find('"QS3DCURTAINP11BASELINE"', first_build)
-    undo_back = text.find('"_.UNDO", "_Back"', baseline)
-    check_undo = text.find('"QS3DCURTAINP11CHECKUNDO"', undo_back)
-    redo = text.find('"_.REDO"', check_undo)
+    first_undo_mark = text.find('"_.UNDO", "_Mark"', first_select)
+    first_build = text.find('"QS3DCURTAIN3D", "P", ""', first_undo_mark)
+    first_baseline = text.find('"QS3DCURTAINP11BASELINE"', first_build)
+    first_undo_back = text.find('"_.UNDO", "_Back"', first_baseline)
+    check_undo = text.find('"QS3DCURTAINP11CHECKUNDO"', first_undo_back)
+    second_select = text.find('"QS3DCURTAINP11SELECT"', check_undo)
+    second_undo_mark = text.find('"_.UNDO", "_Mark"', second_select)
+    second_build = text.find('"QS3DCURTAIN3D", "P", ""', second_undo_mark)
+    second_baseline = text.find('"QS3DCURTAINP11BASELINE"', second_build)
+    second_undo_back = text.find('"_.UNDO", "_Back"', second_baseline)
+    redo = text.find('"_.REDO"', second_undo_back)
     check_redo = text.find('"QS3DCURTAINP11CHECKREDO"', redo)
     reopen = text.find('"QS3DCURTAINP11REOPEN"')
-    second_select = text.find('"QS3DCURTAINP11SELECT"', reopen)
-    second_build = text.find('"QS3DCURTAIN3D", "P", ""', second_select)
+    third_select = text.find('"QS3DCURTAINP11SELECT"', reopen)
+    third_build = text.find('"QS3DCURTAIN3D", "P", ""', third_select)
     if not (
-        first_prepare < first_select < undo_mark < first_build < baseline < undo_back < check_undo < redo < check_redo
-        and reopen < second_select < second_build
+        first_prepare < first_select < first_undo_mark < first_build < first_baseline < first_undo_back < check_undo
+        < second_select < second_undo_mark < second_build < second_baseline < second_undo_back < redo < check_redo
+        and reopen < third_select < third_build
     ):
-        errors.append("Curtain P11 runner must reselect at a distinct command boundary immediately before each production build")
+        errors.append("Curtain P11 runner must isolate one Undo-check build, one immediate-Redo build and one cold-reopen rebuild")
     compact = ''.join(text.split())
     if (
-        text.count('"_.UNDO"') != 2
-        or text.count('"_Mark"') != 1
-        or text.count('"_Back"') != 1
+        text.count('"_.UNDO"') != 4
+        or text.count('"_Mark"') != 2
+        or text.count('"_Back"') != 2
+        or text.count('"_.REDO"') != 1
         or '"_.UNDO","1"' in compact
         or '"QS3DCURTAINP11SELECT","_.UNDO","_Mark","QS3DCURTAIN3D","P",""' not in compact
-        or '"QS3DCURTAINP11BASELINE","_.UNDO","_Back","QS3DCURTAINP11CHECKUNDO","_.REDO","QS3DCURTAINP11CHECKREDO"' not in compact
+        or '"QS3DCURTAINP11BASELINE","_.UNDO","_Back","QS3DCURTAINP11CHECKUNDO","QS3DCURTAINP11SELECT","_.UNDO","_Mark","QS3DCURTAIN3D","P","","QS3DCURTAINP11BASELINE","_.UNDO","_Back","_.REDO","QS3DCURTAINP11CHECKREDO"' not in compact
     ):
-        errors.append("Curtain P11 runner must isolate the first Curtain build with one explicit native Undo Mark/Back boundary before Redo")
+        errors.append("Curtain P11 runner must use two native Undo Mark/Back pairs and let the second Back immediately precede Redo")
     if text.find('"QS3DCURTAINP11REOPEN"') > text.rfind('"QS3DCURTAIN3D"'):
         errors.append("Curtain P11 second session must validate cold reopen before rebuild")
     if text.find('Copy-Item -LiteralPath $originalCopyPath -Destination $DrawingCopy -Force') < text.find('Stop-Qs3dLaunchedProcess -Process $processTwo'):
@@ -196,4 +207,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: P11 probe keeps handles/IDs private, isolates the Curtain build with native Undo Mark/Back, retains Redo, cold QSDB reopen and ownership-scoped rebuild across two exact-SHA V25 sessions, restores the disposable DWG, removes private sidecars/scripts and keeps broader LOCAL-002 pending.")
+print("PASS: P11 probe keeps handles/IDs private, isolates separate Undo-check and immediate-Redo builds with native Undo Mark/Back, retains cold QSDB reopen and ownership-scoped rebuild across two exact-SHA V25 sessions, restores the disposable DWG, removes private sidecars/scripts and keeps broader LOCAL-002 pending.")
