@@ -7,7 +7,8 @@ param(
     [Parameter(Mandatory = $true)][ValidatePattern("^[0-9a-fA-F]{40}$")][string]$ExpectedSourceSha,
     [Parameter(Mandatory = $true)][switch]$ConfirmDisposableCopy,
     [ValidateSet("Millimeter", "Meter")][string]$NativeDrawingUnit = "Millimeter",
-    [ValidateRange(30, 900)][int]$StartupTimeoutSeconds = 240
+    [ValidateRange(30, 900)][int]$StartupTimeoutSeconds = 240,
+    [ValidateRange(15, 120)][int]$GracefulExitTimeoutSeconds = 15
 )
 
 $ErrorActionPreference = "Stop"
@@ -318,7 +319,7 @@ try {
 
     $process.Refresh()
     if (-not $process.HasExited) {
-        $gracefulExit = $process.WaitForExit(15000)
+        $gracefulExit = $process.WaitForExit($GracefulExitTimeoutSeconds * 1000)
     }
     else {
         $gracefulExit = $true
@@ -346,7 +347,7 @@ try {
     Require-Qs3dLevelNumber -Marker $marker -Key "bounded_wall_top_m" -Expected 6.8
     Require-Qs3dLevelNumber -Marker $marker -Key "bottom_beam_bottom_m" -Expected 3.25
     Require-Qs3dLevelNumber -Marker $marker -Key "bottom_beam_top_m" -Expected 3.85
-    if (-not $gracefulExit) { throw "BricsCAD did not exit gracefully after the Level Z marker." }
+    if (-not $gracefulExit) { throw "BricsCAD did not exit gracefully within $GracefulExitTimeoutSeconds seconds after the Level Z marker." }
 
     $frameCount = Read-PositiveLevelInt -Marker $marker -Key "curtain_frame_count"
     $panelCount = Read-PositiveLevelInt -Marker $marker -Key "curtain_panel_count"
@@ -411,6 +412,7 @@ $metadata = [ordered]@{
     drawing_copy_sha256_after = $drawingHashAfter
     proxy_information_dialogs_dismissed = $proxyInformationDialogsDismissed
     graceful_exit = $gracefulExit
+    graceful_exit_timeout_seconds = $GracefulExitTimeoutSeconds
     process_cleanup_verified = $processCleanupVerified
     script_cleanup_verified = $scriptCleanupVerified
     private_state_cleanup_verified = $privateStateCleanupVerified
