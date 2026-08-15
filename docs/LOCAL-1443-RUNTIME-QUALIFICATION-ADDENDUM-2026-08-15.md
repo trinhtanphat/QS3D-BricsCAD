@@ -3,15 +3,16 @@
 **Date:** 2026-08-15 (UTC+7)  
 **Disposition:** `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`  
 **Canonical queues:** `docs/LOCAL-AGENT-INBOX.md` entries `LOCAL-001` and `LOCAL-003`; issue #72 for LOCAL-003 evidence  
-**Canonical source recovery:** PR #1556, checkpoint head `e871826971f54408ff29cbfdf443b43387e33a72`  
-**Curved/round runtime harness recovery:** stacked PR #1548, checkpoint head `d7e1996c81b4c46777c03a25893e1fcf7df1e340`  
-**Locked main parent for this recovery checkpoint:** `c126bda58d1e226f2199e35f628b20ec9aef946c`  
+**Canonical source recovery:** PR #1556, checkpoint head `7809562a33aaf94acc97ea5d1f51d34f64103493`  
+**Curved/round runtime harness recovery:** stacked PR #1548, checkpoint head `670589b02563b5a9ca3b211fea81da05729bf6a4`  
+**Locked source checkpoint parent:** `c126bda58d1e226f2199e35f628b20ec9aef946c`  
+**Latest collision-audited main:** `88f83db19ed5dfd85606d5a5e00adfc28f4fd99c`  
 **Original reviewed implementation:** PR #1472 / `067ec63931a7a4c48849ddb87958155964bb6b3e`  
 **Original reviewed harness:** PR #1528 / `687ea56d66e5a3359c3107e66c4f97a319a49587`
 
 This file is a qualification addendum, not a second live LOCAL queue. The original #1472 and #1528 work targeted the now-stale `integration/20260815-merge-all-v2`. Fresh-base PR #1556 recovers the exact reviewed production/guard blobs on current-main ancestry, and stacked PR #1548 recovers the exact reviewed additive runtime-harness blobs on top of #1556. Recovery PR #1544 and stale harness PR #1528 are superseded; no implementation was discarded.
 
-The repository is highly concurrent. These SHAs are a verified recovery checkpoint, not permission to merge a stale base later. The authorized coordinator must refetch current `main`, re-check reserved-path overlap, and preserve the same four-file source delta plus three-file stacked harness delta immediately before landing.
+The repository is highly concurrent. These SHAs are verified recovery checkpoints, not permission to merge a stale base later. The authorized coordinator must refetch current `main`, re-check reserved-path overlap, and preserve the same four-file source delta plus three-file stacked harness delta immediately before landing. The collision audit through `88f83db19ed5dfd85606d5a5e00adfc28f4fd99c` found no changes to any of those seven reserved source/harness paths or this addendum path.
 
 No source/static result in #1556 or #1548 is licensed runtime evidence. Do not publish `LOCAL_PASS`, `P10_PASS`, or production-complete status until a licensed BricsCAD V25 x64 worker executes the final intended exact SHA and posts sanitized evidence to the canonical queue.
 
@@ -98,8 +99,8 @@ No duplicate guard is justified unless current source materially changes the gua
 
 ## Recovery and integration boundary
 
-- PR #1556 recovers exactly the four reviewed #1472 production/guard files onto the locked current-main ancestry.
-- PR #1548 is stacked on #1556 and recovers exactly the three reviewed #1528 runtime-harness files.
+- PR #1556 recovers exactly the four reviewed #1472 production/guard files onto current-main ancestry; current checkpoint head is `7809562a33aaf94acc97ea5d1f51d34f64103493`.
+- PR #1548 is stacked on #1556 and recovers exactly the three reviewed #1528 runtime-harness files; current checkpoint head is `670589b02563b5a9ca3b211fea81da05729bf6a4`.
 - PR #1544 is superseded by #1556; PR #1528 is superseded by #1548; no source or harness implementation was discarded.
 - The old docs PR #1499 is superseded by PR #1550.
 - `docs/LOCAL-AGENT-INBOX.md` remains a shared coordination surface and is deliberately not edited by this recovery lane.
