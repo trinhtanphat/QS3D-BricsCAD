@@ -1,8 +1,9 @@
 # Work claim — LOCAL-004 Source Reconcile native atomicity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED / LOCAL_PASS`
 - Agent: `codex-local-root-20260813`
 - Registered: `2026-08-13T15:02:00+07:00`
+- Completed: `2026-08-15T12:53:38+07:00`
 - Baseline main SHA: `bd429d3ceec1058f984fca068ce54aeb88e391fe`
 - Priority: `LOCAL-004 / P0` — `QS3DSYNCSOURCE` requires licensed BricsCAD V25 transactions, real source edits, native generated-output invalidation, Undo/Redo, multi-DWG and cold reopen.
 
@@ -220,3 +221,10 @@ Production coordinator/service/invalidation/history behavior, lifecycle diagnost
 - The runner selected the exact sources and then inserted modal `UNDO Mark` or `UNDO Begin` before `QS3DSYNCSOURCE`. Those modal commands consume the PICKFIRST lifetime boundary, so production correctly reaches its interactive fallback with no implied selection and the batch waits. This is the same harness selection-lifetime class already proven in other guarded runtime lanes; it is not a production Source Reconcile failure.
 
 The bounded correction is order-only: each cycle must run `UNDO Mark` or `UNDO Begin` first, then immediately reseed the same exact source pair with `QS3DSRTSELECTSOURCES`, then call `QS3DSYNCSOURCE`. Mark/Back, Begin/End, direct `UNDO 1` -> `REDO`, successful-reconcile count three, marker/semantic checks, and all privacy/cleanup/refusal/rollback/reopen contracts remain unchanged. Only the existing runner and focused gate require this reorder; the probe count change remains valid. Production source and the lifecycle diagnostic remain excluded.
+
+### Exact integrated LOCAL_PASS
+
+- The automation correction landed on current main through PR `#1646` at exact SHA `b1845fef5565d086a1c69ab63ab086cea52b1678`. The installed-reference V25 `Release|x64` adapter build passed with `0 warnings / 0 errors`, Core and Smoke Release builds passed with full smoke `ALL PASS`, and ProductVersion was `0.1.0-preview.10045+b1845fef5565d086a1c69ab63ab086cea52b1678`.
+- Licensed BricsCAD V25.2.10 completed the full exact-main matrix with `production_local004_qualified=true`, three successful reconciles, post-Undo marker `BEFORE`, post-Redo marker `AFTER`, and both semantic Undo and Redo coherent. Generated/ambiguous/multi-DWG refusal, forced rollback, source preservation, generated replacement, save and cold reopen all passed with `error_code=NONE`.
+- Process, script, private-state and disposable-drawing restoration checks all passed; the repository fixture remained at SHA-256 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`, and zero BricsCAD processes remained. No private/customer drawing or GitHub Actions was used.
+- Issue `#1005` was closed with the sanitized exact-main evidence at `2026-08-15T05:53:38Z`. This claim is complete and releases its reserved surfaces.

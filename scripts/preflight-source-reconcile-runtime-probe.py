@@ -308,7 +308,7 @@ if SOURCE_COMMAND.is_file() and SOURCE_SERVICE.is_file():
 
 if CLAIM.is_file():
     text = CLAIM.read_text(encoding="utf-8")
-    for token in ('LOCAL-004', 'Status: `ACTIVE`', 'QS3DSYNCSOURCE', 'Undo/Redo', 'INSUNITS', 'post-Undo marker discriminator split'):
+    for token in ('LOCAL-004', 'Status: `COMPLETED / LOCAL_PASS`', 'QS3DSYNCSOURCE', 'Undo/Redo', 'INSUNITS', 'post-Undo marker discriminator split', 'Exact integrated LOCAL_PASS'):
         if token not in text:
             errors.append("LOCAL-004 claim missing coordination token: " + token)
 
