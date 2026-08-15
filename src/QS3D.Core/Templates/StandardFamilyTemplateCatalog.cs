@@ -126,12 +126,15 @@ namespace QS3D.Core.Templates
                     if (!added && changed) result.FamiliesUpdated++;
                 }
 
-                AuditTrail.ForProject(project).Record(
-                    "template.apply",
-                    string.Empty,
-                    VietnamStandard01Id + " • families +" + result.FamiliesAdded.ToString(CultureInfo.InvariantCulture) +
-                    "/~" + result.FamiliesUpdated.ToString(CultureInfo.InvariantCulture) +
-                    " • properties " + result.PropertiesApplied.ToString(CultureInfo.InvariantCulture));
+                if (result.FamiliesAdded > 0 || result.FamiliesUpdated > 0 || result.PropertiesApplied > 0)
+                {
+                    AuditTrail.ForProject(project).Record(
+                        "template.apply",
+                        string.Empty,
+                        VietnamStandard01Id + " • families +" + result.FamiliesAdded.ToString(CultureInfo.InvariantCulture) +
+                        "/~" + result.FamiliesUpdated.ToString(CultureInfo.InvariantCulture) +
+                        " • properties " + result.PropertiesApplied.ToString(CultureInfo.InvariantCulture));
+                }
                 return result;
             }
             catch (Exception applyError)
