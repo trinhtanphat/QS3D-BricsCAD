@@ -56,7 +56,8 @@ jobs:
           echo "Triggering integration source: ${source_sha}"
           echo "Current main at dispatch time: ${current_main}"
           if [[ "${current_main}" != "${source_sha}" ]]; then
-            echo "main advanced during debounce; release will remain pinned to triggering source ${source_sha}."
+            echo "main advanced during debounce; stale dispatcher ${source_sha} will exit without reserving or dispatching. Newest main ${current_main} is responsible for release."
+            exit 0
           fi
 
           git fetch --force --tags origin
