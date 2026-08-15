@@ -66,3 +66,10 @@ The claim is complete when the guarded probe/runner/gate is integrated on curren
 - BricsCAD `25.2.10` returned sanitized source-blocking result `native_undo / SEMANTIC_NATIVE_DIVERGENCE`. Undo coherence was false; Redo, cold reopen and ownership-scoped rebuild coherence were true. Reopened and rebuilt counts were both 1 host / 10 frames / 15 panels, Health issues were zero, source and unrelated sentinel were preserved, the old set was removed and the replacement was disjoint.
 - Process, private-script, QSDB, native drawing-backup and drawing-lock cleanup were independently true. The disposable synthetic DWG was restored byte-for-byte to SHA-256 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`.
 - Remote product correction is handed to issue `#987`; P10 remains independently tracked by `#982`. P11 and overall LOCAL-002 remain source-blocked `PENDING_LOCAL`. No GitHub Actions, private/customer drawing or production Curtain fix was performed by this local claim.
+
+### Final licensed qualification
+
+- The final grouped Undo/Redo runner passed on exact merged SHA `58dbc1b80d45774593303856285dd69f81c7e1a2` with BricsCAD `25.2.10`, matching adapter ProductVersion and adapter SHA-256 `201AF99477BD4AA96111A69BF89F883F5870DDFFE26F5621C5AEB476B0D455C1`.
+- Undo coherence, Redo coherence, cold reopen and ownership-scoped rebuild all passed. Undo removed the generated after-set, restored the semantic before-state and preserved the source/unrelated sentinel. Reopen and rebuild each produced 1 host / 10 frames / 15 panels; the old generated set was removed, the replacement set was disjoint and Health issues were zero.
+- The guarded before/restored hash was `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`; all launched-process, private-script, sidecar, drawing-lock, native-backup and drawing-restoration cleanup checks passed, leaving zero BricsCAD processes.
+- P11 is therefore bounded `LOCAL_PASS`. Overall LOCAL-002 deliberately remains `PENDING_LOCAL` for broad H.1 and Family-editor qualification. Issue `#987` is historical `CLOSED` and was not reopened. No GitHub Actions or private/customer data was used.
