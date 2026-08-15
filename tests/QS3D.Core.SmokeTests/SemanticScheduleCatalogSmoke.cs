@@ -24,6 +24,8 @@ namespace QS3D.Core.SmokeTests
             NullProjectElementsFailClosed();
             StaleReferencesFailClosedAtRenderTime();
             DuplicateDefinitionsAndOverlappingListsFailClosed();
+            LoadAcceptsCapacityAndRejectsMalformedExcessByCapacity();
+            MalformedScheduleWithinCapacityKeepsSchemaFailure();
         }
 
         private static void SaveLoadRoundTripIsDeterministic()
@@ -197,6 +199,69 @@ namespace QS3D.Core.SmokeTests
             {
                 Definition("S3", "Overlap", "OVERLAP", "", "", new[] { "E1" }, new[] { "e1" })
             }));
+        }
+
+        private static void LoadAcceptsCapacityAndRejectsMalformedExcessByCapacity()
+        {
+            var project = Project();
+            var definitions = Enumerable.Range(1, 128)
+                .Select(index => Definition(
+                    "S-CAP-" + index,
+                    "Capacity " + index,
+                    "CAPACITY " + index,
+                    string.Empty,
+                    string.Empty,
+                    Array.Empty<string>(),
+                    Array.Empty<string>()))
+                .ToArray();
+            SemanticScheduleCatalog.Save(project, definitions);
+            Equal(128, SemanticScheduleCatalog.Load(project).Count);
+
+            var root = XDocument.Parse(project.Metadata[SemanticScheduleCatalog.MetadataKey]).Root
+                ?? throw new Exception("Catalog root missing.");
+            root.Add(new XElement(
+                "schedule",
+                new XAttribute("unsupported-excess-detail", "must-not-be-validated")));
+            project.Metadata[SemanticScheduleCatalog.MetadataKey] = root.ToString(SaveOptions.DisableFormatting);
+
+            try
+            {
+                SemanticScheduleCatalog.Load(project);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Equal("Semantic schedule catalog exceeds the supported 128 definitions.", ex.Message);
+                return;
+            }
+            catch (InvalidDataException ex)
+            {
+                throw new Exception("The malformed 129th schedule reached detailed schema validation before the catalog capacity guard.", ex);
+            }
+
+            throw new Exception("Expected Semantic Schedule load capacity rejection.");
+        }
+
+        private static void MalformedScheduleWithinCapacityKeepsSchemaFailure()
+        {
+            var project = Project();
+            SemanticScheduleCatalog.Save(project, new[]
+            {
+                Definition(
+                    "S-SCHEMA",
+                    "Schema failure",
+                    "SCHEMA FAILURE",
+                    string.Empty,
+                    string.Empty,
+                    Array.Empty<string>(),
+                    Array.Empty<string>())
+            });
+            var root = XDocument.Parse(project.Metadata[SemanticScheduleCatalog.MetadataKey]).Root
+                ?? throw new Exception("Catalog root missing.");
+            (root.Element("schedule") ?? throw new Exception("Schedule missing."))
+                .Add(new XAttribute("unsupported-within-capacity", "must-fail-schema"));
+            project.Metadata[SemanticScheduleCatalog.MetadataKey] = root.ToString(SaveOptions.DisableFormatting);
+
+            Throws<InvalidDataException>(() => SemanticScheduleCatalog.Load(project));
         }
 
         private static SemanticScheduleDefinition Definition(

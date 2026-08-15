@@ -1,6 +1,6 @@
 # Work claim — Documentation catalog save structural freshness
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `Codex /root/audit_documentation_gap`
 - Registered: `2026-08-15T08:27:43+07:00`
 - Baseline main SHA: `b0fe2bb88206ddab1cb99ae1c1154838f6eaa6b3`
@@ -39,3 +39,14 @@ The active documentation-table claim reserves only `SemanticDocumentationTableBu
 ## Completion condition
 
 The claim is visible on `origin/main` before implementation, the Store fails closed on revision or ordered project reference-identity drift across both input enumerations, focused regression evidence is merged, and this claim records exact SHAs while leaving #77 open.
+
+## Completion evidence
+
+- Claim commit `718227ebaffc4f6e3a40bbe59450dce00633b6dc` was merged first through PR `#1440` at `bbf44df6f5440566758122866289ea60973e155c` and verified as an ancestor of `origin/main` before implementation.
+- Implementation commit `e43d655f97c11fa7480a9dabf0ece30a90d0c4dc` was merged normally through PR `#1448` at `f8f5c867c97999f5590dc207cc45925574a0cfa1`.
+- `SemanticDocumentationCatalogStore.Save(...)` now snapshots `ChangeVersion` plus ordered `Elements` / `Floors` / `Zones` reference identities before external enumeration, checks after views, after sheets, after planners and immediately before either persistence mutation.
+- The one module-registered deterministic smoke covers same-ID element replacement and revision drift in both view and sheet enumerators plus stable first-save/repeated-save behavior.
+- `QS3D.Core` Release build: `0` warnings, `0` errors.
+- `QS3D.Core.SmokeTests` Release build: `0` warnings, `0` errors; full deterministic run: `ALL PASS`.
+- Focused new static gate: `PASS`; all `41` documentation/view/sheet/schedule/tag/title-block preflights: `PASS`; aggregate preflight: `808/808 PASS`.
+- No native/V25/UI/runtime, LOCAL automation, private data, release/signing or GitHub Actions operation was performed. Broad issue `#77` remains open.
