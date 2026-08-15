@@ -477,12 +477,25 @@ namespace QS3D.Core.Documentation
         {
             if (string.IsNullOrWhiteSpace(value))
                 throw new InvalidOperationException("Semantic documentation required text must not be blank.");
-            return value!.Trim();
+            return RequireXmlText(value!.Trim());
         }
 
         private static string CanonicalOptionalText(string? value)
         {
-            return string.IsNullOrWhiteSpace(value) ? string.Empty : value!.Trim();
+            return string.IsNullOrWhiteSpace(value) ? string.Empty : RequireXmlText(value!.Trim());
+        }
+
+        private static string RequireXmlText(string value)
+        {
+            try
+            {
+                XmlConvert.VerifyXmlChars(value);
+                return value;
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidOperationException("Semantic documentation text contains characters that are invalid in XML.", ex);
+            }
         }
     }
 }
