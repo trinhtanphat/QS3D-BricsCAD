@@ -40,14 +40,19 @@ namespace QS3D.Core.Documentation
             if (views == null) throw new ArgumentNullException(nameof(views));
             if (sheets == null) throw new ArgumentNullException(nameof(sheets));
 
+            var projectSnapshot = CaptureProjectStructure(project);
             var viewDefinitions = MaterializeViews(views);
+            EnsureProjectStructureUnchanged(project, projectSnapshot);
             var sheetDefinitions = MaterializeSheets(sheets);
+            EnsureProjectStructureUnchanged(project, projectSnapshot);
             var viewPlans = SemanticViewPlanner.BuildCatalog(project, viewDefinitions);
             SemanticSheetPlanner.BuildCatalog(sheetDefinitions, viewPlans);
+            EnsureProjectStructureUnchanged(project, projectSnapshot);
 
             if (viewDefinitions.Count == 0 && sheetDefinitions.Count == 0)
             {
                 if (!project.Metadata.ContainsKey(MetadataKey)) return;
+                EnsureProjectStructureUnchanged(project, projectSnapshot);
                 project.Touch();
                 project.Metadata.Remove(MetadataKey);
                 return;
@@ -58,8 +63,54 @@ namespace QS3D.Core.Documentation
                 throw new InvalidOperationException("Semantic documentation catalog exceeds the 1 MiB metadata limit.");
             if (project.Metadata.TryGetValue(MetadataKey, out var current) && string.Equals(current, payload, StringComparison.Ordinal)) return;
 
+            EnsureProjectStructureUnchanged(project, projectSnapshot);
             project.Touch();
             project.Metadata[MetadataKey] = payload;
+        }
+
+        private static ProjectStructureSnapshot CaptureProjectStructure(ProjectState project) =>
+            new ProjectStructureSnapshot(
+                project.ChangeVersion,
+                project.Elements.ToArray(),
+                project.Floors.ToArray(),
+                project.Zones.ToArray());
+
+        private static void EnsureProjectStructureUnchanged(ProjectState project, ProjectStructureSnapshot snapshot)
+        {
+            if (project.ChangeVersion != snapshot.ChangeVersion)
+                throw new InvalidOperationException("Project changed while the semantic documentation catalog was being saved.");
+            EnsureSameReferences(project.Elements, snapshot.Elements);
+            EnsureSameReferences(project.Floors, snapshot.Floors);
+            EnsureSameReferences(project.Zones, snapshot.Zones);
+        }
+
+        private static void EnsureSameReferences<T>(IList<T> current, IReadOnlyList<T> expected) where T : class
+        {
+            if (current.Count != expected.Count)
+                throw new InvalidOperationException("Project structure changed while the semantic documentation catalog was being saved.");
+            for (var i = 0; i < expected.Count; i++)
+                if (!ReferenceEquals(current[i], expected[i]))
+                    throw new InvalidOperationException("Project structure changed while the semantic documentation catalog was being saved.");
+        }
+
+        private sealed class ProjectStructureSnapshot
+        {
+            public ProjectStructureSnapshot(
+                long changeVersion,
+                IReadOnlyList<ProjectElement> elements,
+                IReadOnlyList<FloorDefinition> floors,
+                IReadOnlyList<ZoneDefinition> zones)
+            {
+                ChangeVersion = changeVersion;
+                Elements = elements;
+                Floors = floors;
+                Zones = zones;
+            }
+
+            public long ChangeVersion { get; }
+            public IReadOnlyList<ProjectElement> Elements { get; }
+            public IReadOnlyList<FloorDefinition> Floors { get; }
+            public IReadOnlyList<ZoneDefinition> Zones { get; }
         }
 
         public SemanticDocumentationCatalog Load(ProjectState project)
