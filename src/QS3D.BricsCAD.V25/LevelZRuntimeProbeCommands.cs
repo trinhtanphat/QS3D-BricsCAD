@@ -269,6 +269,7 @@ namespace QS3D.BricsCAD.V25
                     "source_sha=" + sourceSha,
                     "schema=QS3D_LEVEL_Z_RUNTIME_V1",
                     "is_64bit=true",
+                    "native_drawing_unit=" + nativeUnit.ToString(),
                     "legacy_wall_bottom_m=" + Number(legacyRange.MinimumM),
                     "legacy_wall_top_m=" + Number(legacyRange.MaximumM),
                     "bounded_wall_bottom_m=" + Number(boundedRange.MinimumM),
