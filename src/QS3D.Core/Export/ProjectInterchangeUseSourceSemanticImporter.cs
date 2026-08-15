@@ -282,6 +282,39 @@ namespace QS3D.Core.Export
             public ProjectInterchangeUseSourceSemanticPlan Plan { get; }
         }
 
+        private sealed class ResolutionActionIndex
+        {
+            private readonly Dictionary<InterchangeIdentityKind, Dictionary<string, InterchangeImportResolutionAction>> _actionsByKind =
+                new Dictionary<InterchangeIdentityKind, Dictionary<string, InterchangeImportResolutionAction>>();
+
+            public ResolutionActionIndex(ProjectInterchangeImportResolutionPlan plan)
+            {
+                if (plan == null) throw new ArgumentNullException(nameof(plan));
+                foreach (var item in plan.Items)
+                {
+                    if (!_actionsByKind.TryGetValue(item.Kind, out var actionsById))
+                    {
+                        actionsById = new Dictionary<string, InterchangeImportResolutionAction>(StringComparer.OrdinalIgnoreCase);
+                        _actionsByKind.Add(item.Kind, actionsById);
+                    }
+
+                    if (actionsById.ContainsKey(item.Id))
+                        throw new InvalidOperationException("Sequence contains more than one matching element");
+                    actionsById.Add(item.Id, item.Action);
+                }
+            }
+
+            public bool ShouldAdd(InterchangeIdentityKind kind, string id)
+            {
+                if (!_actionsByKind.TryGetValue(kind, out var actionsById) ||
+                    !actionsById.TryGetValue(id ?? string.Empty, out var action))
+                    throw new InvalidOperationException("Sequence contains no matching element");
+                if (action == InterchangeImportResolutionAction.AddSourceSemanticData) return true;
+                if (action == InterchangeImportResolutionAction.UseSourceSemanticData) return false;
+                throw new InvalidOperationException("UseSource semantic mutation reached a non-executable resolution for " + kind + " " + id + ".");
+            }
+        }
+
         public const string ImportMode = "UseSourceSemanticData";
         public const string LastSemanticIdentitiesAddedKey = "Interchange.LastImport.SemanticIdentitiesAdded";
         public const string LastSemanticIdentitiesReplacedKey = "Interchange.LastImport.SemanticIdentitiesReplaced";
@@ -306,8 +339,8 @@ namespace QS3D.Core.Export
             var prepared = Prepare(target, json);
             EnsureNativeCleanupAuthorized(prepared.Plan, nativeCleanupAuthorization);
             var source = prepared.Source;
-            var resolution = prepared.Resolution;
             var plan = prepared.Plan;
+            var resolutionActions = new ResolutionActionIndex(prepared.Resolution);
             var snapshot = ProjectStateSnapshot.Capture(target);
 
             var targetHadZones = target.Zones.Count > 0;
@@ -322,7 +355,7 @@ namespace QS3D.Core.Export
             {
                 foreach (var zoneSnapshot in source.Zones.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                 {
-                    if (ShouldAdd(resolution, InterchangeIdentityKind.Zone, zoneSnapshot.Id))
+                    if (resolutionActions.ShouldAdd(InterchangeIdentityKind.Zone, zoneSnapshot.Id))
                     {
                         ProjectZoneService.Create(target, zoneSnapshot.Id, zoneSnapshot.Name);
                     }
@@ -335,7 +368,7 @@ namespace QS3D.Core.Export
 
                 foreach (var floorSnapshot in source.Floors.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                 {
-                    if (ShouldAdd(resolution, InterchangeIdentityKind.Floor, floorSnapshot.Id))
+                    if (resolutionActions.ShouldAdd(InterchangeIdentityKind.Floor, floorSnapshot.Id))
                     {
                         ProjectFloorService.Create(target, floorSnapshot.Id, floorSnapshot.Name, floorSnapshot.ElevationM);
                     }
@@ -350,7 +383,7 @@ namespace QS3D.Core.Export
                 foreach (var familySnapshot in source.Families.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                 {
                     ProjectFamily family;
-                    if (ShouldAdd(resolution, InterchangeIdentityKind.Family, familySnapshot.Id))
+                    if (resolutionActions.ShouldAdd(InterchangeIdentityKind.Family, familySnapshot.Id))
                     {
                         family = ProjectFamilyService.Create(target, familySnapshot.Id, familySnapshot.Name, familySnapshot.Category);
                     }
@@ -368,7 +401,7 @@ namespace QS3D.Core.Export
                 foreach (var elementSnapshot in source.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                 {
                     ProjectElement element;
-                    if (ShouldAdd(resolution, InterchangeIdentityKind.Element, elementSnapshot.Id))
+                    if (resolutionActions.ShouldAdd(InterchangeIdentityKind.Element, elementSnapshot.Id))
                     {
                         element = new ProjectElement(
                             elementSnapshot.Id,
@@ -721,14 +754,6 @@ namespace QS3D.Core.Export
         private static int Count(ProjectInterchangeImportResolutionPlan plan, InterchangeIdentityKind kind, InterchangeImportResolutionAction action)
         {
             return plan.Items.Count(x => x.Kind == kind && x.Action == action);
-        }
-
-        private static bool ShouldAdd(ProjectInterchangeImportResolutionPlan plan, InterchangeIdentityKind kind, string id)
-        {
-            var item = plan.Items.Single(x => x.Kind == kind && string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
-            if (item.Action == InterchangeImportResolutionAction.AddSourceSemanticData) return true;
-            if (item.Action == InterchangeImportResolutionAction.UseSourceSemanticData) return false;
-            throw new InvalidOperationException("UseSource semantic mutation reached a non-executable resolution for " + kind + " " + id + ".");
         }
 
         private static void RestoreExistingActiveContext(
