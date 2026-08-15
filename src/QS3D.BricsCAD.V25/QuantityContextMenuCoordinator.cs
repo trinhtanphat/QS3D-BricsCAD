@@ -4,14 +4,15 @@ using System.Linq;
 using System.Reflection;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
+using Teigha.DatabaseServices;
+using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
 {
     /// <summary>
-    /// Adds a small QS3D action to the native BricsCAD right-click menu without taking over
-    /// selection or mutating the drawing from a menu callback. Reflection keeps the adapter
-    /// tolerant of minor BrxMgd context-menu surface differences while still using the public
-    /// BricsCAD Application context-menu API.
+    /// Adds a QS3D action to the native BricsCAD object right-click menu. The callback stays
+    /// read-only and dispatches a normal QS3D command, so database/project mutation never occurs
+    /// while BricsCAD owns the native context-menu callback stack.
     /// </summary>
     internal static class QuantityContextMenuCoordinator
     {
@@ -19,6 +20,7 @@ namespace QS3D.BricsCAD.V25
         private const string MenuItemTypeName = "System.Windows.Forms.MenuItem, System.Windows.Forms";
         private const string QuantityCommand = "QS3DQUANTITYINSIGHT";
 
+        private static RXClass? _entityRuntimeClass;
         private static object? _extension;
         private static object? _menuItem;
         private static Delegate? _clickHandler;
@@ -32,6 +34,8 @@ namespace QS3D.BricsCAD.V25
                 ?? throw new InvalidOperationException("BricsCAD ContextMenuExtension type is unavailable.");
             var menuItemType = Type.GetType(MenuItemTypeName, false)
                 ?? throw new InvalidOperationException("Windows Forms MenuItem type is unavailable.");
+            var runtimeClass = RXObject.GetClass(typeof(Entity))
+                ?? throw new InvalidOperationException("BricsCAD Entity RXClass is unavailable.");
 
             object? extension = null;
             object? item = null;
@@ -52,15 +56,14 @@ namespace QS3D.BricsCAD.V25
 
                 popupHandler = AttachEvent(extension, "Popup", nameof(OnMenuPopup), required: false);
 
-                var addMethod = typeof(Application).GetMethod(
-                    "AddDefaultContextMenuExtension",
-                    BindingFlags.Public | BindingFlags.Static,
-                    null,
-                    new[] { extensionType },
-                    null)
-                    ?? throw new InvalidOperationException("BricsCAD AddDefaultContextMenuExtension API is unavailable.");
-                addMethod.Invoke(null, new[] { extension });
+                var addMethod = FindApplicationMethod(
+                    "AddObjectContextMenuExtension",
+                    runtimeClass.GetType(),
+                    extensionType)
+                    ?? throw new InvalidOperationException("BricsCAD AddObjectContextMenuExtension API is unavailable.");
+                addMethod.Invoke(null, new object[] { runtimeClass, extension });
 
+                _entityRuntimeClass = runtimeClass;
                 _extension = extension;
                 _menuItem = item;
                 _clickHandler = clickHandler;
@@ -77,27 +80,26 @@ namespace QS3D.BricsCAD.V25
 
         public static void Stop()
         {
+            var runtimeClass = _entityRuntimeClass;
             var extension = _extension;
             var item = _menuItem;
             var clickHandler = _clickHandler;
             var popupHandler = _popupHandler;
+            _entityRuntimeClass = null;
             _extension = null;
             _menuItem = null;
             _clickHandler = null;
             _popupHandler = null;
 
-            if (extension != null)
+            if (runtimeClass != null && extension != null)
             {
                 try
                 {
-                    var extensionType = extension.GetType();
-                    var removeMethod = typeof(Application).GetMethod(
-                        "RemoveDefaultContextMenuExtension",
-                        BindingFlags.Public | BindingFlags.Static,
-                        null,
-                        new[] { extensionType },
-                        null);
-                    removeMethod?.Invoke(null, new[] { extension });
+                    var removeMethod = FindApplicationMethod(
+                        "RemoveObjectContextMenuExtension",
+                        runtimeClass.GetType(),
+                        extension.GetType());
+                    removeMethod?.Invoke(null, new object[] { runtimeClass, extension });
                 }
                 catch
                 {
@@ -179,6 +181,19 @@ namespace QS3D.BricsCAD.V25
                 target.GetType().GetEvent(eventName, BindingFlags.Instance | BindingFlags.Public)?.RemoveEventHandler(target, handler);
             }
             catch { }
+        }
+
+        private static MethodInfo? FindApplicationMethod(string name, Type firstType, Type secondType)
+        {
+            return typeof(Application).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .FirstOrDefault(method =>
+                {
+                    if (!string.Equals(method.Name, name, StringComparison.Ordinal)) return false;
+                    var parameters = method.GetParameters();
+                    return parameters.Length == 2 &&
+                           parameters[0].ParameterType.IsAssignableFrom(firstType) &&
+                           parameters[1].ParameterType.IsAssignableFrom(secondType);
+                });
         }
 
         private static object? GetProperty(object target, string name) =>
