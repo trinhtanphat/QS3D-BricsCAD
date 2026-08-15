@@ -149,7 +149,8 @@ namespace QS3D.Core.Revisions
 
             var raw = versionAttribute.Value;
             if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal) ||
-                !int.TryParse(raw, NumberStyles.None, CultureInfo.InvariantCulture, out var version))
+                !int.TryParse(raw, NumberStyles.None, CultureInfo.InvariantCulture, out var version) ||
+                !string.Equals(raw, version.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
                 throw new InvalidDataException("QS3D revision schemaVersion must be a canonical integer.");
 
             if (version == 1)
