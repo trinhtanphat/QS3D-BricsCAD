@@ -34,7 +34,7 @@ doc = DOC.read_text(encoding="utf-8")
 for token in (
     '[CommandMethod("QS3DMEPEXACTCLASHHIGHLIGHT", CommandFlags.UsePickSet)]',
     "snapshots.Count != 2",
-    "MepRecognitionProfiles.CreateDefault()",
+    "MepRecognitionProfileProvider.Current",
     "CadHandleService.Resolve(document",
     "ids.Count != 2",
     "OpenMode.ForRead",
@@ -54,6 +54,7 @@ for token in (
     require(source, token, "exact review source")
 
 for forbidden in (
+    "MepRecognitionProfiles.CreateDefault()",
     "OpenMode.ForWrite",
     "BooleanOperation(",
     "Clone(",
