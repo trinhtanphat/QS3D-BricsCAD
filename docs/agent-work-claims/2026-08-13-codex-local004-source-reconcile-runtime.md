@@ -81,41 +81,26 @@ The claim is visible on `origin/main`; the guarded probe/runner/gate are merged;
 - All six focused Source Reconcile gates and the PowerShell parser passed. The installed-reference V25 `Release|x64` adapter/Core build completed with `0 warnings / 0 errors`, and both ProductVersion values identify exact commit `eea8822bcb962dd01fc126d1fd046c5b67e07170`.
 - The root LOCAL-004 owner should run the licensed matrix on an exact clean descendant containing that commit. A post-Undo `AFTER` receipt bounds the next production lane to explicit ModelSpace block-table-record undo recording; this source handoff does not promote LOCAL-004 or alter production behavior.
 
-## 2026-08-15 database Undo lifecycle diagnostic matrix
+## 2026-08-15 ModelSpace BTR undo-recording candidate result
 
-Three exact licensed candidates changed only the Source Reconcile revision carrier's
-existing-object XData enrollment and all returned the same sanitized result: native
-generated output was removed by Undo while the revision marker remained `AFTER`.
-The tested variants were ModelSpace BTR late object enable, ModelSpace BTR
-ForRead/object-enable/UpgradeOpen, and the existing ModelSpace BlockBegin entity with
-the same read/enable/upgrade sequence. This disproves further carrier substitution as
-an evidence-backed production fix.
+- Clean exact SHA `f8f5c867c97999f5590dc207cc45925574a0cfa1`, containing production implementation `86afdf93b58169ef8ce755de459a3e4beedbbe29`, passed the six focused Source Reconcile gates, manual-only and generic preflight, Core Release build, full Core smoke and the installed-reference V25 `Release|x64` build. Plugin/Core ProductVersion ended in the exact SHA; adapter SHA-256 was `9E75D2E5345B766403BAAB21C4201B8C65282BB706FC29BE5F8DB6C63E337B55`.
+- The licensed BricsCAD V25.2.10 matrix passed both successful reconciles, generated/ambiguous/multi-document refusal, forced rollback, source preservation, generated replacement and cold reopen. Immediately before native Undo, selection/owner classes were `BOTH_SOURCES/BOTH`, generated state was `REMOVED_ALL`, project/revision/native marker were `CHANGED/ADVANCED/ADVANCED`, and history remained `SYNCED` with `MULTIPLE` entries.
+- Final result remained `native_undo / NATIVE_UNDO_SEMANTIC_DIVERGENCE`: `undo_coherent=false`, `redo_coherent=true`, and both privacy-safe post-Undo/post-Redo native marker classes were `AFTER`. The exact runtime receipt therefore disproves `DisableUndoRecording(false)` immediately before the existing ModelSpace XData assignment as sufficient on BricsCAD V25.
+- Process, private script, private state and drawing restoration all verified true; launcher handoffs were zero, no BricsCAD process remained and the synthetic repository fixture hash stayed `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`. Sanitized issue handoff is `#1005` comment `#issuecomment-5299901488`. No production source, customer/private drawing or GitHub Actions were used.
+- The claim stays `ACTIVE / PENDING_LOCAL`; LOCAL-004 stays `IN_PROGRESS`, issue `#1005` stays open, and production diagnosis returns to a non-local claim-first source lane before another exact-SHA licensed rerun.
 
-This existing LOCAL-004 claim is expanded before implementation to own one additive,
-repository-synthetic V25 diagnostic matrix that isolates the database-level Undo
-lifecycle without changing Source Reconcile production behavior:
+## 2026-08-15 read-before-upgrade candidate result
 
-- new `src/QS3D.BricsCAD.V25/SourceReconcileUndoLifecycleProbeCommands.cs`;
-- new `scripts/test-bricscad-v25-source-reconcile-undo-lifecycle.ps1`;
-- new `scripts/preflight-source-reconcile-undo-lifecycle-probe.py`;
-- this claim and the existing LOCAL-004/Source Reconcile handoff notes for the
-  sanitized result only.
+- Exact implementation SHA `0542131348e6393a4d28d6e0945ec60c2ee3bff6` was pushed before qualification. Its source handoff already recorded six focused gates, Core build/smoke and installed-reference V25 build PASS. To respect the weak local machine, this pass reran the six lightweight guards and only the minimum local adapter build needed for NETLOAD; it passed with `0 warnings / 0 errors`, matching plugin/Core ProductVersion and adapter SHA-256 `538873724F79CDAAA3DBC290F138D6E0E3F9F93FB7C200EACE7DF46118F8ABB1`.
+- Licensed BricsCAD V25.2.10 passed both reconciles, generated/ambiguous/multi-document refusal, forced rollback, source preservation, generated replacement and cold reopen. Immediately before native Undo, selection/owners were `BOTH_SOURCES/BOTH`, generated state was `REMOVED_ALL`, project/revision/native marker were `CHANGED/ADVANCED/ADVANCED`, and history was `SYNCED` with `MULTIPLE` entries.
+- Final result remained `native_undo / NATIVE_UNDO_SEMANTIC_DIVERGENCE`: `undo_coherent=false`, `redo_coherent=true`, and both privacy-safe post-Undo/post-Redo native marker classes were `AFTER`. The runtime receipt therefore disproves the `ForRead -> DisableUndoRecording(false) -> UpgradeOpen() -> XData` lifecycle as sufficient on BricsCAD V25.
+- Process, private script, private state and drawing restoration all verified true; launcher handoffs were zero, no BricsCAD process remained and the repository fixture hash stayed `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`. Sanitized handoff is issue `#1005` comment `#issuecomment-5299942994`. No production source, private/customer drawing or GitHub Actions were used.
+- The claim stays `ACTIVE / PENDING_LOCAL`; LOCAL-004 stays `IN_PROGRESS`, issue `#1005` stays open and production diagnosis returns to a non-local claim-first source lane before another exact-SHA licensed rerun.
 
-Each variant must run in a fresh disposable repository-sample drawing/process and
-mutate one existing object's XData plus one topology sentinel in the same native
-transaction. The exact variants are `OBJECT_ONLY`, `DB_ENABLE_OBJECT`,
-`DB_START_OBJECT`, and `DB_ENABLE_DB_START_OBJECT`. Output is restricted to the
-variant plus allowlisted classes for database recording at entry/after enable/after
-start and for existing-object/topology state after native Undo. No raw IDs, Handles,
-revision tokens, paths, messages, counts, drawing data or private state may be
-published. The runner must require a clean exact-SHA build, zero pre-existing
-BricsCAD processes, fresh copies, close-without-save, byte-for-byte fixture recovery,
-and exact process/script/environment cleanup.
+## 2026-08-15 existing BlockBegin carrier result
 
-This matrix is diagnostic only. It must not call `Database.StartUndoRecord()` or
-database-wide `DisableUndoRecording(false)` from production code, alter the current
-Source Reconcile marker/history/event guards, infer `LOCAL_PASS`, or close issue
-`#1005`. A production change is allowed only after the matrix distinguishes a
-database lifecycle that records the existing-object mutation in the same Undo group
-as the topology sentinel. The current operator-owned BricsCAD process is out of
-scope; execution waits for the mandatory zero-process boundary.
+- Exact implementation SHA `5e79a87bb3e5858d35a3c92fa8a827d2902d85d5` moved revision read/write to ModelSpace's existing `BlockBegin` entity and retained the guarded read/enroll/upgrade/write sequence. Its handoff recorded all six focused Source Reconcile gates, Core smoke and installed-reference V25 build PASS with matching plugin/Core ProductVersion. The authoritative licensed adapter SHA-256 was `872C4DA82D6DF9F1FDB204EE7208482966C3CD984C4EBF68A5561E3BD135ABB3`.
+- Licensed BricsCAD V25.2.10 passed both reconciles, generated/ambiguous/multi-document refusal, forced rollback, source preservation, generated replacement and cold reopen. Immediately before native Undo, selection/owners were `BOTH_SOURCES/BOTH`, generated state was `REMOVED_ALL`, project/revision/native marker were `CHANGED/ADVANCED/ADVANCED`, and history was `SYNCED` with `MULTIPLE` entries.
+- Final result remained `native_undo / NATIVE_UNDO_SEMANTIC_DIVERGENCE`: `undo_coherent=false`, `redo_coherent=true`, and both privacy-safe post-Undo/post-Redo native marker classes were `AFTER`. This exact receipt disproves existing BlockBegin XData under the same object enrollment/upgrade sequence as a usable V25 Undo carrier. Together with the preceding BTR candidates, three carrier/enrollment variants now produce the same discriminator while generated entities participate in native Undo.
+- Process, private script, private state and drawing restoration all verified true; no BricsCAD process remained and the repository fixture hash stayed `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`. Sanitized handoff is issue `#1005` comment `#issuecomment-5299980425`. No production source, private/customer drawing or GitHub Actions were used.
+- The claim stays `ACTIVE / PENDING_LOCAL`; LOCAL-004 stays `IN_PROGRESS` and issue `#1005` stays open. Do not spend another licensed run on a carrier substitution until a non-local source claim proves a distinct V25 existing-object undo-record lifecycle while preserving all semantic/history/project/stamp/backing-store guards.

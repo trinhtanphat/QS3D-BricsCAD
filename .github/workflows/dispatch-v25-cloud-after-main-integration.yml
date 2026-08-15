@@ -21,6 +21,7 @@ on:
 permissions:
   contents: read
   actions: write
+  issues: write
 
 concurrency:
   group: qs3d-v25-cloud-main-integration
@@ -40,7 +41,7 @@ jobs:
           fetch-depth: 1
           fetch-tags: true
 
-      - name: Dispatch triggering main SHA to V25 cloud CI
+      - name: Reserve preview ordinal and dispatch triggering main SHA
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -55,34 +56,55 @@ jobs:
           echo "Triggering integration source: ${source_sha}"
           echo "Current main at dispatch time: ${current_main}"
           if [[ "${current_main}" != "${source_sha}" ]]; then
-            echo "main advanced during debounce; release will remain pinned to triggering source ${source_sha}."
+            echo "main advanced during debounce; stale dispatcher ${source_sha} will exit without reserving or dispatching. Newest main ${current_main} is responsible for release."
+            exit 0
           fi
 
           git fetch --force --tags origin
           series_prefix="v0.1.0-preview."
+          reservation_issue=1441
+          reservation_prefix="QS3D_V25_PREVIEW_RESERVATION"
           max_preview=0
           found_preview=0
-          while IFS= read -r existing_tag; do
-            [[ -n "${existing_tag}" ]] || continue
-            if [[ ! "${existing_tag}" =~ ^v0\.1\.0-preview\.([1-9][0-9]*)$ ]]; then
-              echo "Matching-series tag is non-canonical and blocks automatic preview derivation: ${existing_tag}" >&2
+
+          consider_preview() {
+            local ordinal_text="$1"
+            local source_label="$2"
+            if [[ ! "${ordinal_text}" =~ ^[1-9][0-9]*$ ]]; then
+              echo "${source_label} preview ordinal is non-canonical: ${ordinal_text}" >&2
               exit 1
             fi
-            ordinal_text="${BASH_REMATCH[1]}"
             if (( ${#ordinal_text} > 5 )); then
-              echo "Published preview ordinal exceeds the FileVersion 0..65535 range: ${existing_tag}" >&2
+              echo "${source_label} preview ordinal exceeds the FileVersion 0..65535 range: ${ordinal_text}" >&2
               exit 1
             fi
-            ordinal=$((10#${ordinal_text}))
+            local ordinal=$((10#${ordinal_text}))
             if (( ordinal > 65535 )); then
-              echo "Published preview ordinal exceeds the FileVersion 0..65535 range: ${existing_tag}" >&2
+              echo "${source_label} preview ordinal exceeds the FileVersion 0..65535 range: ${ordinal_text}" >&2
               exit 1
             fi
             found_preview=1
             if (( ordinal > max_preview )); then
               max_preview=${ordinal}
             fi
+          }
+
+          while IFS= read -r existing_tag; do
+            [[ -n "${existing_tag}" ]] || continue
+            if [[ ! "${existing_tag}" =~ ^v0\.1\.0-preview\.([1-9][0-9]*)$ ]]; then
+              echo "Matching-series tag is non-canonical and blocks automatic preview derivation: ${existing_tag}" >&2
+              exit 1
+            fi
+            consider_preview "${BASH_REMATCH[1]}" "Published"
           done < <(git tag --list "${series_prefix}*")
+
+          reservation_regex="^${reservation_prefix} ordinal=([1-9][0-9]*) source_sha=([0-9a-f]{40}) run_id=([1-9][0-9]*)$"
+          while IFS= read -r reservation; do
+            [[ -n "${reservation}" ]] || continue
+            if [[ "${reservation}" =~ ${reservation_regex} ]]; then
+              consider_preview "${BASH_REMATCH[1]}" "Reserved"
+            fi
+          done < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments" --jq '.[] | select(.user.login == "github-actions[bot]") | .body')
 
           if (( found_preview == 0 )); then
             preview=1
@@ -94,6 +116,12 @@ jobs:
             preview=$((max_preview + 1))
           fi
           tag="${series_prefix}${preview}"
+
+          reservation="${reservation_prefix} ordinal=${preview} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"
+          gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments" \
+            -f body="${reservation}" >/dev/null
+          echo "Reserved automatic preview ordinal ${preview} for ${source_sha}."
 
           echo "Dispatching release-v25-cloud.yml for ${source_sha} as ${tag}"
           gh workflow run release-v25-cloud.yml \
