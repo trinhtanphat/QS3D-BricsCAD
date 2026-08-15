@@ -64,6 +64,25 @@ function Read-NonNegativeMarkerLong {
     return $value
 }
 
+function Read-Qs3dBoolean {
+    param([Parameter(Mandatory = $true)]$Marker, [Parameter(Mandatory = $true)][string]$Key)
+    if (-not $Marker.ContainsKey($Key)) { throw "Curtain P11 marker is missing '$Key'." }
+    $value = [string]$Marker[$Key]
+    if ([string]::Equals($value, "true", [StringComparison]::OrdinalIgnoreCase)) { return "true" }
+    if ([string]::Equals($value, "false", [StringComparison]::OrdinalIgnoreCase)) { return "false" }
+    throw "Curtain P11 marker '$Key' is not a sanitized boolean."
+}
+
+function Read-UndoFailureCode {
+    param([Parameter(Mandatory = $true)]$Marker, [Parameter(Mandatory = $true)][string]$Key)
+    if (-not $Marker.ContainsKey($Key)) { throw "Curtain P11 marker is missing '$Key'." }
+    $value = [string]$Marker[$Key]
+    foreach ($allowed in @("NONE", "UNDO_AFTER_GENERATED_STILL_PRESENT", "UNDO_NATIVE_REMOVED_SEMANTIC_NOT_RESTORED", "UNDO_SOURCE_SENTINEL_DRIFT")) {
+        if ([string]::Equals($value, $allowed, [StringComparison]::Ordinal)) { return $allowed }
+    }
+    throw "Curtain P11 marker '$Key' is not an allowlisted Undo branch code."
+}
+
 function Restore-EnvironmentValue {
     param([Parameter(Mandatory = $true)][string]$Name, [AllowNull()][string]$Value)
     if ($null -eq $Value) { Remove-Item -LiteralPath ("Env:" + $Name) -ErrorAction SilentlyContinue }
@@ -200,7 +219,11 @@ $environmentNames = @(
     "QS3D_CURTAIN_P11_EXPECTED_FRAMES",
     "QS3D_CURTAIN_P11_EXPECTED_PANELS",
     "QS3D_CURTAIN_P11_UNDO_COHERENT",
-    "QS3D_CURTAIN_P11_REDO_COHERENT"
+    "QS3D_CURTAIN_P11_REDO_COHERENT",
+    "QS3D_CURTAIN_P11_UNDO_AFTER_GENERATED_ABSENT",
+    "QS3D_CURTAIN_P11_UNDO_SEMANTIC_BEFORE_RESTORED",
+    "QS3D_CURTAIN_P11_UNDO_SOURCE_SENTINEL_PRESERVED",
+    "QS3D_CURTAIN_P11_UNDO_FAILURE_CODE"
 )
 $oldEnvironment = @{}
 foreach ($name in $environmentNames) { $oldEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, "Process") }
@@ -232,10 +255,16 @@ try {
         "0,0", "5000,0", "",
         "QS3DCURTAINP11PREPARE",
         "QS3DCURTAINP11SELECT",
+        "_.UNDO", "_Mark",
         "QS3DCURTAIN3D", "P", "",
         "QS3DCURTAINP11BASELINE",
-        "_.UNDO", "1",
+        "_.UNDO", "_Back",
         "QS3DCURTAINP11CHECKUNDO",
+        "QS3DCURTAINP11SELECT",
+        "_.UNDO", "_Mark",
+        "QS3DCURTAIN3D", "P", "",
+        "QS3DCURTAINP11BASELINE",
+        "_.UNDO", "_Back",
         "_.REDO",
         "QS3DCURTAINP11CHECKREDO",
         "QS3DSAVE",
@@ -258,8 +287,14 @@ try {
     Require-Qs3dValue -Marker $phaseMarker -Key "nonce" -Expected $nonce
     Require-Qs3dValue -Marker $phaseMarker -Key "schema" -Expected "QS3D_CURTAIN_PANEL_UNDO_REOPEN_RUNTIME_V1"
     Require-Qs3dValue -Marker $phaseMarker -Key "health_issue_count" -Expected "0"
-    Require-Qs3dValue -Marker $phaseMarker -Key "source_preserved" -Expected "true"
-    Require-Qs3dValue -Marker $phaseMarker -Key "sentinel_preserved" -Expected "true"
+    $undoCoherent = Read-Qs3dBoolean -Marker $phaseMarker -Key "undo_coherent"
+    $redoCoherent = Read-Qs3dBoolean -Marker $phaseMarker -Key "redo_coherent"
+    $undoAfterGeneratedAbsent = Read-Qs3dBoolean -Marker $phaseMarker -Key "undo_after_generated_absent"
+    $undoSemanticBeforeRestored = Read-Qs3dBoolean -Marker $phaseMarker -Key "undo_semantic_before_restored"
+    $undoSourceSentinelPreserved = Read-Qs3dBoolean -Marker $phaseMarker -Key "undo_source_sentinel_preserved"
+    $undoFailureCode = Read-UndoFailureCode -Marker $phaseMarker -Key "undo_failure_code"
+    $null = Read-Qs3dBoolean -Marker $phaseMarker -Key "source_preserved"
+    $null = Read-Qs3dBoolean -Marker $phaseMarker -Key "sentinel_preserved"
     $hostCount = Read-PositiveMarkerInt -Marker $phaseMarker -Key "host_solid_count"
     $frameCount = Read-PositiveMarkerInt -Marker $phaseMarker -Key "frame_solid_count"
     $panelCount = Read-PositiveMarkerInt -Marker $phaseMarker -Key "panel_solid_count"
@@ -276,8 +311,12 @@ try {
     $env:QS3D_CURTAIN_P11_EXPECTED_HOSTS = $hostCount.ToString([Globalization.CultureInfo]::InvariantCulture)
     $env:QS3D_CURTAIN_P11_EXPECTED_FRAMES = $frameCount.ToString([Globalization.CultureInfo]::InvariantCulture)
     $env:QS3D_CURTAIN_P11_EXPECTED_PANELS = $panelCount.ToString([Globalization.CultureInfo]::InvariantCulture)
-    $env:QS3D_CURTAIN_P11_UNDO_COHERENT = [string]$phaseMarker["undo_coherent"]
-    $env:QS3D_CURTAIN_P11_REDO_COHERENT = [string]$phaseMarker["redo_coherent"]
+    $env:QS3D_CURTAIN_P11_UNDO_COHERENT = $undoCoherent
+    $env:QS3D_CURTAIN_P11_REDO_COHERENT = $redoCoherent
+    $env:QS3D_CURTAIN_P11_UNDO_AFTER_GENERATED_ABSENT = $undoAfterGeneratedAbsent
+    $env:QS3D_CURTAIN_P11_UNDO_SEMANTIC_BEFORE_RESTORED = $undoSemanticBeforeRestored
+    $env:QS3D_CURTAIN_P11_UNDO_SOURCE_SENTINEL_PRESERVED = $undoSourceSentinelPreserved
+    $env:QS3D_CURTAIN_P11_UNDO_FAILURE_CODE = $undoFailureCode
 
     $scriptTwo = @(
         "FILEDIA", "0",
@@ -310,9 +349,10 @@ try {
     $rebuiltDrawingHash = (Get-FileHash -LiteralPath $DrawingCopy -Algorithm SHA256).Hash.ToUpperInvariant()
 
     if ([string]::Equals([string]$finalMarker["status"], "PASS", [StringComparison]::OrdinalIgnoreCase)) {
-        foreach ($key in @("undo_coherent", "redo_coherent", "reopen_coherent", "rebuild_coherent", "source_preserved", "sentinel_preserved", "old_generated_removed", "new_generated_disjoint", "rebuild_counts_stable", "p11_qualified")) {
+        foreach ($key in @("undo_coherent", "redo_coherent", "undo_after_generated_absent", "undo_semantic_before_restored", "undo_source_sentinel_preserved", "reopen_coherent", "rebuild_coherent", "source_preserved", "sentinel_preserved", "old_generated_removed", "new_generated_disjoint", "rebuild_counts_stable", "p11_qualified")) {
             Require-Qs3dValue -Marker $finalMarker -Key $key -Expected "true"
         }
+        Require-Qs3dValue -Marker $finalMarker -Key "undo_failure_code" -Expected "NONE"
         Require-Qs3dValue -Marker $finalMarker -Key "health_issue_count" -Expected "0"
         $reopenedHostCount = Read-PositiveMarkerInt -Marker $finalMarker -Key "reopened_host_count"
         $reopenedFrameCount = Read-PositiveMarkerInt -Marker $finalMarker -Key "reopened_frame_count"

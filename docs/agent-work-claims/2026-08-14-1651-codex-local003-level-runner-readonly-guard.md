@@ -1,8 +1,9 @@
 # Work claim — LOCAL-003 Level runner read-only DWG guard
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `/root/fix_level_curtain_frame_z`
 - Registered: `2026-08-14T16:51:28+07:00`
+- Completed: `2026-08-15T07:49:10+07:00`
 - Baseline main SHA: `87d9ef2e35d0baa2b99d4d19c820115e339c939a`
 - Parent authorization: `/root`, bounded follow-up within the active LOCAL-003 claim
 
@@ -34,3 +35,15 @@ The runner must preserve the disposable drawing's original file attributes, enfo
 ## Completion condition
 
 A merged runner-only guard prevents persistence to the disposable DWG instead of masking it with pre-verification restoration, static coverage locks the ordering and attribute lifecycle, and an exact merged SHA is handed to `/root` for licensed rerun.
+
+## Completion record
+
+- Implementation commit: `ff736bf2882215b9709bb93018d912d4a4e52832`.
+- Implementation PR: `#1420`; merged to `main` as `b49834f960965b75fb6a4ed20a48829ed8ededfc`.
+- The runner now snapshots the disposable DWG's exact original file attributes, creates its backup, sets and verifies the OS read-only bit before launch, retains/verifies that bit through owned-host exit, and compares the pre-restore SHA-256 before the only restoration call.
+- Idempotent cleanup clears read-only only while copying the backup, removes the consumed backup, restores the exact original attributes from an inner `finally`, verifies restored bytes/attributes, and restores the private process environment from the outer cleanup path.
+- The focused preflight locks original-attribute capture, backup-before-guard ordering, pre-launch verification, host-exit verification, hash-before-restore ordering, one restoration call under `finally`, backup consumption and exact attribute restoration.
+- Validation passed on synchronized implementation source: Windows PowerShell 5.1 parser; all nine focused Level/Beam static gates; `QS3D.Core`, `QS3D.Core.SmokeTests`, and installed-reference `QS3D.BricsCAD.V25` `Release|x64` builds, each with zero warnings and zero errors.
+- No BricsCAD process, GitHub Actions workflow, private DWG/data, production probe, builder, Core, adapter or marker-schema surface was used or changed.
+
+This bounded harness reservation is complete and released. The parent LOCAL-003 claim remains `ACTIVE`, and LOCAL-003 remains `PENDING_LOCAL`; `/root` still must rebuild and execute the licensed disposable Level probe against the final exact merged `main` SHA before recording any new runtime result.

@@ -68,3 +68,15 @@ The claim is visible on `origin/main`; the guarded probe/runner/gate are merged;
 - The unchanged runner sequence now surrounds final reconcile and guarded native Undo/Redo with private snapshot captures, then publishes only four bounded fields into the existing session-one marker: `post_undo_marker_vs_pre_final_state`, `post_undo_marker_vs_post_final_state`, `post_redo_marker_vs_pre_final_state`, and `post_redo_marker_vs_post_final_state`.
 - Each field is allowlisted to `ADVANCED`, `UNCHANGED`, or `MISSING_OR_INVALID`; the runner keeps the sanitized session-one marker in local metadata so the local owner can hand the tuple back even when the unchanged cold-reopen acceptance still reports `NATIVE_UNDO_SEMANTIC_DIVERGENCE`.
 - No licensed BricsCAD execution or acceptance conclusion is transferred to the delegated lane. After merge, this root claim should rerun the unchanged exact-SHA matrix and publish the four-field discriminator tuple to issue `#1005`.
+
+## 2026-08-15 post-Undo marker classification continuation
+
+- Exact clean candidate `8a5fbb2ca6b406a5ad4776da1b110b4d863af37b` retained the licensed result `undo_coherent=false` / `redo_coherent=true`; generated native entities participated in Undo, while reconciled semantics remained after-state. The predecessor discriminator did not retain a decisive post-Undo marker class on that failure path.
+- `/root` explicitly delegated one automation-only continuation to `/root/local004_postundo_marker` under claim `2026-08-15-codex-local004-post-undo-marker-classification.md`. That successor owns only probe/runner/focused-gate capture of the post-Undo native marker relative to the private before/after tokens and may publish only `BEFORE`, `AFTER`, or `OTHER_OR_INVALID` (plus the same optional post-Redo class).
+- This root claim retains licensed execution, private evidence, complete LOCAL-004 acceptance and result publication. Production Source Reconcile coordinator/service/native-marker behavior remains excluded from the delegated lane. If a later licensed run returns post-Undo `AFTER`, the bounded non-local production handoff is explicit ModelSpace block-table-record undo recording; this delegation does not implement it.
+
+### Classification source handoff
+
+- Exact implementation commit `eea8822bcb962dd01fc126d1fd046c5b67e07170` captures the post-Undo marker before the semantic coherence check and persists it in a dedicated exact-key diagnostic. Only `BEFORE`, `AFTER`, or `OTHER_OR_INVALID` may be published; an optional post-Redo class uses the same allowlist.
+- All six focused Source Reconcile gates and the PowerShell parser passed. The installed-reference V25 `Release|x64` adapter/Core build completed with `0 warnings / 0 errors`, and both ProductVersion values identify exact commit `eea8822bcb962dd01fc126d1fd046c5b67e07170`.
+- The root LOCAL-004 owner should run the licensed matrix on an exact clean descendant containing that commit. A post-Undo `AFTER` receipt bounds the next production lane to explicit ModelSpace block-table-record undo recording; this source handoff does not promote LOCAL-004 or alter production behavior.
