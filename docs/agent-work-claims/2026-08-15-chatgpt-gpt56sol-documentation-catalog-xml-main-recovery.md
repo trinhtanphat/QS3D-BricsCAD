@@ -1,6 +1,6 @@
 # Work claim — Semantic Documentation catalog XML current-main recovery
 
-- Status: `RELEASED` — implementation complete; pending authorized review/integration on current main
+- Status: `COMPLETED`
 - Agent: `chatgpt-gpt56sol-documentation-catalog-xml-main-recovery-20260815`
 - Registered: `2026-08-15T10:04+07:00`
 - Exact main baseline: `5ddd99af06bd209c562cd2c60cb22563ef565528`
@@ -46,3 +46,15 @@
 ## Handoff / release
 
 All recovery source/regression state is represented by ready PR #1539 against `main`. Reservation ownership is released from this session. Keep Issue #1500 open until an authorized coordinator integrates #1539; only then may the issue/claim be closed as completed after remote ancestry/readback verification.
+
+## Integration closeout
+
+- Authorized integration PR `#1539` merged at exact main SHA
+  `88f83db19ed5dfd85606d5a5e00adfc28f4fd99c`; issue `#1500` closed through
+  that merge.
+- Exact-merge validation: documentation catalog schema, bounded-save,
+  structural-freshness, and smoke-registration gates PASS;
+  `QS3D.Core.SmokeTests` Release build completed with 0 warnings / 0 errors;
+  full deterministic Core smoke reported `ALL PASS`.
+- No BricsCAD/native runtime or GitHub Actions operation was performed during
+  integration.
