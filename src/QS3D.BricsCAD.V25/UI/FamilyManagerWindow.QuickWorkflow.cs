@@ -478,9 +478,9 @@ namespace QS3D.BricsCAD.V25.UI
 
         private ElementCategory? ResolveQuickCategory()
         {
-            if (!_creatingNew && FamilyList.SelectedItem is ProjectFamily selected)
-                return selected.Category;
-            return (NewCategoryCombo.SelectedItem as CategoryChoice)?.Category;
+            if (_creatingNew)
+                return (NewCategoryCombo.SelectedItem as CategoryChoice)?.Category;
+            return (FamilyList.SelectedItem as ProjectFamily)?.Category;
         }
 
         private ProjectFamily? ResolveQuickFamily(ProjectState project)
