@@ -78,69 +78,75 @@ namespace QS3D.BricsCAD.V25
                 }
 
                 var reviewProjectId = project.ProjectId;
-                var batch = new ProjectRecognitionService().SuggestBatch(project, snapshots); var applied = 0; var skipped = 0;
-                Action<RecognitionResult> apply = result =>
+                var batch = new ProjectRecognitionService().SuggestBatch(project, snapshots);
+                var applied = 0;
+                var skipped = 0;
+
+                Func<IReadOnlyList<RecognitionResult>, bool, int> apply = (results, requireLiveConfidence) =>
                 {
-                    var expectedCandidate = result.TopCandidate; if (expectedCandidate == null) return;
-                    if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, doc))
-                        throw new InvalidOperationException("Recognition Apply: hãy kích hoạt lại đúng bản vẽ nguồn trước khi áp dụng.");
-
-                    var liveSnapshots = EntitySnapshotReader.ReadHandles(doc, new[] { result.Handle });
-                    if (liveSnapshots.Count != 1)
-                        throw new InvalidOperationException("Recognition Apply: CAD handle " + result.Handle + " không còn tồn tại. Hãy chạy lại Recognition.");
-
-                    if (!ExistingProjectMutationContext.TryGet(doc, out var currentProject))
-                        throw new InvalidOperationException("Recognition Apply: QS3D project hiện hành không còn khả dụng. Hãy chạy lại Recognition.");
-                    if (!string.Equals(currentProject.ProjectId, reviewProjectId, StringComparison.OrdinalIgnoreCase))
-                        throw new InvalidOperationException("Recognition Apply: QS3D project đã bị thay thế từ khi mở cửa sổ Review. Hãy chạy lại Recognition.");
-                    var refreshed = new ProjectRecognitionService().Suggest(currentProject, liveSnapshots[0]);
-                    var candidate = refreshed.TopCandidate
-                        ?? throw new InvalidOperationException("Recognition Apply: đối tượng " + result.Handle + " không còn candidate hợp lệ. Hãy chạy lại Recognition.");
-                    if (candidate.Category != expectedCandidate.Category)
-                        throw new InvalidOperationException("Recognition Apply: kết quả của " + result.Handle + " đã đổi từ " + expectedCandidate.Category + " sang " + candidate.Category + ". Hãy chạy lại Recognition trước khi áp dụng.");
-                    if (!refreshed.IsCaptureReady)
-                        throw new InvalidOperationException("Recognition Apply: CAD handle " + result.Handle + " hiện không đủ điều kiện capture: " + refreshed.CaptureReadinessReason);
-
-                    var collision = SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(currentProject, result.Handle);
-                    if (collision != null && collision.Category == candidate.Category) collision = null;
-                    if (collision != null) throw new InvalidOperationException("CAD handle " + result.Handle + " đã thuộc " + collision.Category + ".");
-                    if (!SemanticCaptureService.CaptureSnapshot(doc, refreshed.Snapshot, candidate.Category)) return;
-                    var captured = SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(currentProject, result.Handle);
-                    if (captured == null || captured.Category != candidate.Category)
-                        throw new InvalidOperationException("Recognition capture did not produce one matching semantic owner for CAD handle " + result.Handle + ".");
-                    applied++;
-                    AuditTrail.ForProject(currentProject).Record("recognition.apply", captured.Id, candidate.RuleId + " • confidence " + candidate.Confidence.ToString("0.000") + " • " + candidate.EvidenceText);
-                    try
+                    var plan = RecognitionApplyBatchService.PrepareStrict(
+                        doc,
+                        reviewProjectId,
+                        results,
+                        requireAutoAcceptance: requireLiveConfidence);
+                    var committed = RecognitionApplyBatchService.Commit(doc, reviewProjectId, plan);
+                    applied += committed;
+                    if (committed > 0)
                     {
-                        PaletteCoordinator.RefreshProject();
-                        PaletteCoordinator.SetStatus("Nhận dạng → " + candidate.Category + " • " + result.Handle);
+                        try
+                        {
+                            PaletteCoordinator.RefreshProject();
+                            PaletteCoordinator.SetStatus(
+                                requireLiveConfidence
+                                    ? "Nhận dạng chắc chắn: đã áp dụng atomically " + committed + " đối tượng sau live confidence recheck."
+                                    : "Nhận dạng: đã áp dụng atomically " + committed + " đối tượng.");
+                        }
+                        catch (System.Exception uiError)
+                        {
+                            doc.Editor.WriteMessage("\nQS3D Recognition batch đã commit; UI refresh warning: " + uiError.Message);
+                        }
                     }
-                    catch (System.Exception uiError)
-                    {
-                        doc.Editor.WriteMessage("\nQS3D Recognition " + result.Handle + " đã commit; UI refresh warning: " + uiError.Message);
-                    }
+                    return committed;
                 };
+
                 Action<RecognitionResult> locate = result =>
                 {
                     var count = CadHandleService.Select(doc, new[] { result.Handle });
                     if (count == 0) throw new InvalidOperationException("Recognition Locate: CAD handle " + result.Handle + " không còn tồn tại. Hãy chạy lại Recognition.");
                     doc.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
                 };
+
                 if (autoApply)
                 {
-                    foreach (var result in batch.AutoAccepted)
+                    var autoPlan = RecognitionApplyBatchService.PrepareBestEffort(doc, reviewProjectId, batch.AutoAccepted);
+                    skipped = autoPlan.SkippedCount;
+                    foreach (var skip in autoPlan.Skips)
+                        doc.Editor.WriteMessage("\nQS3D Recognition skip " + skip.Handle + ": " + skip.Reason);
+
+                    try
                     {
-                        try { apply(result); }
-                        catch (System.Exception ex)
+                        var autoCommitted = RecognitionApplyBatchService.Commit(doc, reviewProjectId, autoPlan);
+                        applied += autoCommitted;
+                        if (autoCommitted > 0)
                         {
-                            skipped++;
-                            if (ExistingProjectMutationContext.TryGet(doc, out var auditProject) &&
-                                string.Equals(auditProject.ProjectId, reviewProjectId, StringComparison.OrdinalIgnoreCase))
-                                AuditTrail.ForProject(auditProject).Record("recognition.skip", result.Handle, ex.Message);
-                            doc.Editor.WriteMessage("\nQS3D Recognition skip " + result.Handle + ": " + ex.Message);
+                            try
+                            {
+                                PaletteCoordinator.RefreshProject();
+                                PaletteCoordinator.SetStatus("Nhận dạng auto: đã áp dụng atomically " + autoCommitted + " đối tượng; preflight skip " + skipped + ".");
+                            }
+                            catch (System.Exception uiError)
+                            {
+                                doc.Editor.WriteMessage("\nQS3D Recognition auto batch đã commit; UI refresh warning: " + uiError.Message);
+                            }
                         }
                     }
+                    catch (System.Exception ex)
+                    {
+                        doc.Editor.WriteMessage("\nQS3D Recognition auto batch rolled back: " + ex.Message);
+                        PaletteCoordinator.SetStatus("Nhận dạng auto: batch đã rollback, không giữ partial semantic capture. " + ex.Message);
+                    }
                 }
+
                 Application.ShowModelessWindow(IntPtr.Zero, new RecognitionWindow(doc, batch.Results, apply, locate), true);
                 doc.Editor.WriteMessage("\nQS3D " + (scanCurrentSpace ? "B4D" : "Recognition") + ": scanned=" + snapshots.Count + ", auto=" + applied + ", review=" + batch.ReviewRequired.Count + ", skipped=" + skipped + ".");
             });
