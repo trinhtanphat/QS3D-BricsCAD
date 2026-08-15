@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Xml;
 
 namespace QS3D.Core.Domain
 {
@@ -244,6 +245,14 @@ namespace QS3D.Core.Domain
         {
             var normalized = value?.Trim() ?? string.Empty;
             if (normalized.Length > maxLength) throw new ArgumentException("Value exceeds " + maxLength + " characters.", name);
+            try
+            {
+                XmlConvert.VerifyXmlChars(normalized);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException("Grid naming prefix/suffix contains characters that are invalid in XML.", name, ex);
+            }
             return normalized;
         }
     }
