@@ -1,39 +1,51 @@
 # Work claim — BCF timestamp canonical UTC current-main recovery
 
-- Status: `ACTIVE`
+- Status: `RELEASED` — implementation complete; pending authorized review/integration on current main
 - Agent: `chatgpt-gpt56sol-bcf-timestamp-main-recovery-20260815`
 - Registered: `2026-08-15T10:04+07:00`
 - Exact main baseline: `e73c39a25deb427d81ba66fe08418e60e73bd6f6`
+- Latest reconciled main: `7dbe90ee27b3e22dfdcf2163a248109151dbac13`
 - Issue: `#1512`
-- Superseded integration-v2 PR: `#1513`
+- Replacement current-main PR: `#1563` (`ready for review`, latest readback `mergeable=true`)
+- Superseded integration-v2 PR: `#1513` (`closed`, not merged)
 - Branch: `agent/chatgpt-gpt56sol/bcf-timestamp-main-recovery-20260815`
 - Priority: Core P1 interoperability / canonical reader integrity
 
 ## Confirmed current-main defect
 
-`BcfIssueExchangeSerializer.ParseUtc(...)` still uses tolerant `DateTimeOffset.Parse(... AssumeUniversal | AdjustToUniversal)` and returns normalized UTC. It therefore accepts offset or otherwise non-canonical timestamp text that the canonical serializer does not emit.
+`BcfIssueExchangeSerializer.ParseUtc(...)` accepted offset/non-canonical timestamp text through tolerant `DateTimeOffset.Parse(... AdjustToUniversal)` and normalized it into UTC even though the canonical writer only emits exact UTC round-trip `O` text.
 
-## Reserved recovery surfaces
+## Recovered implementation
 
-- `src/QS3D.Core/Export/BcfIssueExchangeSerializer.cs`
-- focused BCF timestamp canonicality smoke
-- focused smoke registration
-- this claim file
+- exact `DateTime.TryParseExact(..., "O", RoundtripKind)` parsing;
+- `DateTimeKind.Utc` required;
+- byte-for-byte equality with canonical `parsed.ToString("O", InvariantCulture)` required;
+- focused smoke rejects topic/comment explicit offsets and shortened UTC text;
+- canonical serializer-emitted UTC payload deserializes and reserializes exactly;
+- unrelated BCF schema/GUID/numeric/collection/camera/ordering semantics unchanged.
 
-## Recovery contract
+## Evidence
 
-- require exact `DateTime` round-trip `O` timestamp text;
-- require `DateTimeKind.Utc`;
-- require exact equality with canonical serializer output;
-- reject topic/comment explicit offsets and shortened/non-canonical UTC text as `InvalidDataException`;
-- preserve exact canonical serializer round-trip and all unrelated BCF semantics;
-- no `BcfIssueExchange.cs`, `BcfZipPackage.cs`, global IFC contract, adapter/native, workflow/release, schema or product-boundary changes;
-- no direct main merge and no manual GitHub Actions dispatch/rerun.
+- claim-only: `bf0fa9b28c62872c7db7f3ccd5dffdf4567385ff`
+- implementation: `a054f5d886fa1132e5ae8b82876d06364a8dfc89`
+- reconciliation onto `88f83db19ed5dfd85606d5a5e00adfc28f4fd99c`: `93dede0fbae7b6362283f580e5ad4b50019a4caf`
+- latest reconciliation onto `7dbe90ee27b3e22dfdcf2163a248109151dbac13`: `4106e526f4a269965c1a2ef5163427a96e4ce4e1`
+- replacement PR: `#1563`
+- task diff: exactly four files; production source delta `+5/-2`
+- exact GitHub source/diff readback: PASS
+- prior v2 source/smoke/registration: `5be56fe971c2f79226bd4f75662d6e4ae7d908a2` / `a596db471fc0fcd78ca6bf14931b6e0a6f55c48e` / `f3e37cf30b031bdfc734134c52225d1a1e969a28`
+- managed build/smoke in this recovery session: NOT_RUN; no `dotnet` execution available and no PASS claimed
+- BricsCAD runtime: not applicable to this Core-only lane
+- GitHub Actions: not manually dispatched/rerun
 
-## Prior reviewed evidence
+## Coordination / exclusions
 
-- v2 source: `5be56fe971c2f79226bd4f75662d6e4ae7d908a2`
-- v2 smoke: `a596db471fc0fcd78ca6bf14931b6e0a6f55c48e`
-- v2 registration: `f3e37cf30b031bdfc734134c52225d1a1e969a28`
+- #1513 was closed only after #1563 was verified clean/mergeable; old branch/history remains intact.
+- #1506/#1559 remains the separate BCF model XML representability lane.
+- #1444 remains the separate BCF package structural-integrity lane.
+- No BCF model, ZIP/package, IFC contract, adapter/native, workflow/release, schema or product-boundary changes.
+- No direct main merge by this normal-agent session.
 
-Implementation begins only after this claim is published.
+## Handoff / release
+
+All recovery source/regression state is represented by ready PR #1563 against `main`. Reservation ownership is released from this session. Keep Issue #1512 open until an authorized coordinator integrates #1563 and remote ancestry/source readback confirms the fix on `main`.
