@@ -50,3 +50,16 @@ The ownership/invalidation source contract, native revision bridge and static pr
 The probe covers LINE plus open POLYLINE source edits, two successful reconcile cycles, ownership-scoped generated-solid invalidation/rebuild, generated-output and ambiguous-source refusal, a post-invalidation/pre-commit rollback forced by temporarily mismatching native `INSUNITS` with the canonical project binding, and a second-document unknown-source refusal. Probe code may edit/select/inspect synthetic native state, but it must not call `SourceReconcileService` or generated-output builders directly.
 
 The runner retains only sanitized aggregate markers. It removes both scripts and every exact sidecar/backup/lock file, restores both disposable drawings to the repository fixture hash, and deletes the copies before reporting. A native Undo/Redo versus in-memory semantic divergence is an allowlisted `NATIVE_UNDO_SEMANTIC_DIVERGENCE` failure requiring a remote production fix and exact-SHA rerun; it is never converted into a local pass by the probe.
+
+### Database Undo lifecycle diagnostic result
+
+The bounded diagnostic `scripts/test-bricscad-v25-source-reconcile-undo-lifecycle.ps1` passed all four fresh-process variants in licensed BricsCAD V25.2.10 x64 on exact pushed SHA `745fb3649463a43d577e5042d8595a4e6f09238f`. Matching adapter/Core ProductVersion loaded adapter SHA-256 `C9052C3A16AFC7D863021B60735A2BBE6F3C36ED4AFB07EB2B118DE7377DD5DF`; focused Source Reconcile gates, full Core smoke and the installed-reference V25 build passed first.
+
+Every variant restored the existing BlockBegin XData marker to `BEFORE` and removed the newly appended topology sentinel. Database Undo recording was `ON` at each mutation entry. It stayed `ON` when the diagnostic optionally called database-wide `DisableUndoRecording(false)`, `StartUndoRecord()`, or both, so the four outcomes were identical:
+
+- `OBJECT_ONLY`: entry `ON`, database transitions `NOT_RUN / NOT_RUN`, marker `BEFORE`, topology `UNDONE`;
+- `DB_ENABLE_OBJECT`: entry/after-enable `ON / ON`, start `NOT_RUN`, marker `BEFORE`, topology `UNDONE`;
+- `DB_START_OBJECT`: entry `ON`, enable `NOT_RUN`, after-start `ON`, marker `BEFORE`, topology `UNDONE`;
+- `DB_ENABLE_DB_START_OBJECT`: entry/after-enable/after-start `ON / ON / ON`, marker `BEFORE`, topology `UNDONE`.
+
+This proves the installed host can group the existing-object mutation and appended topology without database-wide enable/start calls. It does not qualify production Source Reconcile and does not justify adding those database APIs to production. Issue `#1005` remains a production-specific transaction/command-grouping defect for a non-local source owner. The diagnostic retained only allowlisted markers/metadata; process, private script/state and drawing cleanup passed, and the repository fixture remained byte-identical.
