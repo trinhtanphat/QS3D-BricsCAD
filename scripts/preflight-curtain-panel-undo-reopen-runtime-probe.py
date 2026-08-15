@@ -116,6 +116,9 @@ if RUNNER.is_file():
         '"QS3DCURTAINP11BASELINE"',
         '"_.UNDO", "_Mark"',
         '"_.UNDO", "_Back"',
+        '"_.UNDO", "_Begin"',
+        '"_.UNDO", "_End"',
+        '"_.U"',
         '"QS3DCURTAINP11CHECKUNDO"',
         '"_.REDO"',
         '"QS3DCURTAINP11CHECKREDO"',
@@ -160,32 +163,36 @@ if RUNNER.is_file():
     first_undo_back = text.find('"_.UNDO", "_Back"', first_baseline)
     check_undo = text.find('"QS3DCURTAINP11CHECKUNDO"', first_undo_back)
     second_select = text.find('"QS3DCURTAINP11SELECT"', check_undo)
-    second_undo_mark = text.find('"_.UNDO", "_Mark"', second_select)
-    second_build = text.find('"QS3DCURTAIN3D", "P", ""', second_undo_mark)
+    undo_group_begin = text.find('"_.UNDO", "_Begin"', second_select)
+    second_build = text.find('"QS3DCURTAIN3D", "P", ""', undo_group_begin)
     second_baseline = text.find('"QS3DCURTAINP11BASELINE"', second_build)
-    second_undo_back = text.find('"_.UNDO", "_Back"', second_baseline)
-    redo = text.find('"_.REDO"', second_undo_back)
+    undo_group_end = text.find('"_.UNDO", "_End"', second_baseline)
+    single_undo = text.find('"_.U"', undo_group_end)
+    redo = text.find('"_.REDO"', single_undo)
     check_redo = text.find('"QS3DCURTAINP11CHECKREDO"', redo)
     reopen = text.find('"QS3DCURTAINP11REOPEN"')
     third_select = text.find('"QS3DCURTAINP11SELECT"', reopen)
     third_build = text.find('"QS3DCURTAIN3D", "P", ""', third_select)
     if not (
         first_prepare < first_select < first_undo_mark < first_build < first_baseline < first_undo_back < check_undo
-        < second_select < second_undo_mark < second_build < second_baseline < second_undo_back < redo < check_redo
+        < second_select < undo_group_begin < second_build < second_baseline < undo_group_end < single_undo < redo < check_redo
         and reopen < third_select < third_build
     ):
         errors.append("Curtain P11 runner must isolate one Undo-check build, one immediate-Redo build and one cold-reopen rebuild")
     compact = ''.join(text.split())
     if (
         text.count('"_.UNDO"') != 4
-        or text.count('"_Mark"') != 2
-        or text.count('"_Back"') != 2
+        or text.count('"_Mark"') != 1
+        or text.count('"_Back"') != 1
+        or text.count('"_Begin"') != 1
+        or text.count('"_End"') != 1
+        or text.count('"_.U"') != 1
         or text.count('"_.REDO"') != 1
         or '"_.UNDO","1"' in compact
         or '"QS3DCURTAINP11SELECT","_.UNDO","_Mark","QS3DCURTAIN3D","P",""' not in compact
-        or '"QS3DCURTAINP11BASELINE","_.UNDO","_Back","QS3DCURTAINP11CHECKUNDO","QS3DCURTAINP11SELECT","_.UNDO","_Mark","QS3DCURTAIN3D","P","","QS3DCURTAINP11BASELINE","_.UNDO","_Back","_.REDO","QS3DCURTAINP11CHECKREDO"' not in compact
+        or '"QS3DCURTAINP11BASELINE","_.UNDO","_Back","QS3DCURTAINP11CHECKUNDO","QS3DCURTAINP11SELECT","_.UNDO","_Begin","QS3DCURTAIN3D","P","","QS3DCURTAINP11BASELINE","_.UNDO","_End","_.U","_.REDO","QS3DCURTAINP11CHECKREDO"' not in compact
     ):
-        errors.append("Curtain P11 runner must use two native Undo Mark/Back pairs and let the second Back immediately precede Redo")
+        errors.append("Curtain P11 runner must preserve one Mark/Back Undo diagnostic and use one Begin/End group with direct U/Redo adjacency")
     if text.find('"QS3DCURTAINP11REOPEN"') > text.rfind('"QS3DCURTAIN3D"'):
         errors.append("Curtain P11 second session must validate cold reopen before rebuild")
     if text.find('Copy-Item -LiteralPath $originalCopyPath -Destination $DrawingCopy -Force') < text.find('Stop-Qs3dLaunchedProcess -Process $processTwo'):
@@ -207,4 +214,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: P11 probe keeps handles/IDs private, isolates separate Undo-check and immediate-Redo builds with native Undo Mark/Back, retains cold QSDB reopen and ownership-scoped rebuild across two exact-SHA V25 sessions, restores the disposable DWG, removes private sidecars/scripts and keeps broader LOCAL-002 pending.")
+print("PASS: P11 probe keeps handles/IDs private, preserves the Mark/Back Undo diagnostic, proves Redo against one explicit Begin/End group with direct U/Redo adjacency, retains cold QSDB reopen and ownership-scoped rebuild across two exact-SHA V25 sessions, restores the disposable DWG, removes private sidecars/scripts and keeps broader LOCAL-002 pending.")
