@@ -362,11 +362,14 @@ namespace QS3D.Core.Cost
             if (projectEntries == null) throw new ArgumentNullException(nameof(projectEntries));
             var merged = new Dictionary<string, BqLibraryEntry>(StringComparer.OrdinalIgnoreCase);
             for (var i = 0; i < _entries.Count; i++) merged.Add(_entries[i].ItemCode, _entries[i]);
+            var incomingIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var entry in projectEntries)
             {
                 if (entry == null)
                     throw new ArgumentException("Project import contains a null BQ entry at index " + index + ".", nameof(projectEntries));
+                if (!incomingIds.Add(entry.ItemCode))
+                    throw new ArgumentException("Project import contains duplicate BQ item code: " + entry.ItemCode + ".", nameof(projectEntries));
                 if (merged.ContainsKey(entry.ItemCode) && !replaceExisting)
                     throw new InvalidOperationException("BQ library import would overwrite existing item " + entry.ItemCode + ".");
                 merged[entry.ItemCode] = entry;
