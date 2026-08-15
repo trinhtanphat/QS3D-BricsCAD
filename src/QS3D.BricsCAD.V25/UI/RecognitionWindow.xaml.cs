@@ -12,11 +12,11 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class RecognitionWindow : Window
     {
         private readonly IReadOnlyList<RecognitionResult> _rows;
-        private readonly Action<RecognitionResult>? _apply;
+        private readonly Func<IReadOnlyList<RecognitionResult>, int>? _apply;
         private readonly Action<RecognitionResult>? _locate;
         private readonly Document _document;
 
-        public RecognitionWindow(Document document, IReadOnlyList<RecognitionResult> rows, Action<RecognitionResult>? apply = null, Action<RecognitionResult>? locate = null)
+        public RecognitionWindow(Document document, IReadOnlyList<RecognitionResult> rows, Func<IReadOnlyList<RecognitionResult>, int>? apply = null, Action<RecognitionResult>? locate = null)
         {
             _document = document ?? throw new ArgumentNullException(nameof(document));
             _rows = rows ?? throw new ArgumentNullException(nameof(rows));
@@ -50,34 +50,28 @@ namespace QS3D.BricsCAD.V25.UI
         private void Apply(IEnumerable<RecognitionResult> rows)
         {
             if (_apply == null) return;
+            IReadOnlyList<RecognitionResult> batch;
             try
             {
                 EnsureActiveDocument();
+                batch = rows.Where(x => x != null && x.TopCandidate != null).ToList().AsReadOnly();
             }
             catch (Exception ex)
             {
                 RefreshStatus(0, 1, ex.Message);
                 return;
             }
+            if (batch.Count == 0) return;
 
-            var applied = 0;
-            var failed = 0;
-            string? firstError = null;
-            foreach (var row in rows)
+            try
             {
-                if (row.TopCandidate == null) continue;
-                try
-                {
-                    _apply(row);
-                    applied++;
-                }
-                catch (Exception ex)
-                {
-                    failed++;
-                    if (firstError == null) firstError = ex.Message;
-                }
+                var applied = _apply(batch);
+                RefreshStatus(applied, 0, null);
             }
-            RefreshStatus(applied, failed, firstError);
+            catch (Exception ex)
+            {
+                RefreshStatus(0, batch.Count, "Apply batch: " + ex.Message);
+            }
         }
 
         private void EnsureActiveDocument()
