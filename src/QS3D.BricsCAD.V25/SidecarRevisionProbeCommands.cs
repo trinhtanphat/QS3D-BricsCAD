@@ -20,11 +20,48 @@ namespace QS3D.BricsCAD.V25
         private const string DrawingVariable = "QS3D_SIDECAR_REVISION_DWG";
         private const string ResultFileName = "sidecar-revision-result.txt";
         private const string ProbeMetadataKey = "QS3D.SidecarRevisionProbe";
+        private static readonly HashSet<string> FailureStages = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "scope_validation",
+            "baseline_bind",
+            "baseline_save",
+            "baseline_snapshot",
+            "backup_appearance_prepare",
+            "backup_appearance_read_only",
+            "backup_appearance_canonical_bind",
+            "backup_appearance_existing_mutation",
+            "backup_appearance_interchange_confirmation",
+            "backup_appearance_save",
+            "backup_appearance_semantic_integrity",
+            "backup_appearance_restore",
+            "backup_appearance_recovery",
+            "primary_replacement_prepare",
+            "primary_replacement_read_only",
+            "primary_replacement_canonical_bind",
+            "primary_replacement_existing_mutation",
+            "primary_replacement_interchange_confirmation",
+            "primary_replacement_save",
+            "primary_replacement_semantic_integrity",
+            "primary_replacement_restore",
+            "primary_replacement_recovery",
+            "primary_removal_prepare",
+            "primary_removal_read_only",
+            "primary_removal_canonical_bind",
+            "primary_removal_existing_mutation",
+            "primary_removal_interchange_confirmation",
+            "primary_removal_save",
+            "primary_removal_semantic_integrity",
+            "primary_removal_restore",
+            "primary_removal_recovery",
+            "final_recovery",
+            "marker_write"
+        };
 
         [CommandMethod("QS3DSIDECARREVISIONPROBE", CommandFlags.Modal)]
         public void Run()
         {
             var rawResult = Environment.GetEnvironmentVariable(ResultVariable);
+            var progress = new ProbeProgress();
             if (string.IsNullOrWhiteSpace(rawResult))
             {
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
@@ -34,6 +71,7 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
+                progress.Stage = "scope_validation";
                 var nonce = RequiredNonce();
                 var resultPath = RequiredResultPath(rawResult);
                 var drawingPath = RequiredDrawingPath();
@@ -49,20 +87,25 @@ namespace QS3D.BricsCAD.V25
                 if (File.Exists(sidecar) || File.Exists(sidecar + ".bak"))
                     throw new InvalidOperationException("The sidecar revision probe requires a drawing copy without a sidecar.");
 
+                progress.Stage = "baseline_bind";
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 project.Metadata[ProbeMetadataKey] = nonce;
                 project.Touch();
+                progress.Stage = "baseline_save";
                 ProjectContextCoordinator.Save(document);
                 if (ProjectContextCoordinator.HasPendingChanges(document) || !File.Exists(sidecar) || File.Exists(sidecar + ".bak"))
                     throw new InvalidOperationException("The probe could not establish one clean primary-only sidecar baseline.");
 
                 var scratchRoot = Path.GetDirectoryName(resultPath) ?? throw new InvalidOperationException("The probe scratch root is unavailable.");
+                progress.Stage = "baseline_snapshot";
                 var baseline = ProjectStateProbeStamp.Capture(project, scratchRoot, nonce);
-                TestBackupAppearance(document, project, sidecar, baseline);
-                TestPrimaryReplacement(document, project, sidecar, nonce, baseline);
-                TestPrimaryRemoval(document, project, sidecar, nonce, baseline);
+                TestBackupAppearance(document, project, sidecar, baseline, progress);
+                TestPrimaryReplacement(document, project, sidecar, nonce, baseline, progress);
+                TestPrimaryRemoval(document, project, sidecar, nonce, baseline, progress);
+                progress.Stage = "final_recovery";
                 EnsureRecovered(document, project, baseline);
 
+                progress.Stage = "marker_write";
                 WriteMarkerAtomic(resultPath, new[]
                 {
                     "status=PASS",
@@ -85,7 +128,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (System.Exception)
             {
-                TryWriteFailure(rawResult, "SIDECAR_REVISION_PROBE_FAILED");
+                TryWriteFailure(rawResult, "SIDECAR_REVISION_PROBE_FAILED", progress.Stage);
                 throw;
             }
         }
@@ -94,13 +137,20 @@ namespace QS3D.BricsCAD.V25
             Document document,
             ProjectState project,
             string sidecar,
-            ProjectStateProbeStamp baseline)
+            ProjectStateProbeStamp baseline,
+            ProbeProgress progress)
         {
+            progress.Stage = "backup_appearance_prepare";
             var backup = sidecar + ".bak";
             if (File.Exists(backup)) throw new IOException("Unexpected backup exists before the backup-appearance phase.");
             File.Copy(sidecar, backup, false);
-            try { AssertAllBoundariesReject(document, project, baseline); }
-            finally { if (File.Exists(backup)) File.Delete(backup); }
+            try { AssertAllBoundariesReject(document, project, baseline, progress, "backup_appearance"); }
+            finally
+            {
+                try { if (File.Exists(backup)) File.Delete(backup); }
+                catch { progress.Stage = "backup_appearance_restore"; throw; }
+            }
+            progress.Stage = "backup_appearance_recovery";
             EnsureRecovered(document, project, baseline);
         }
 
@@ -109,8 +159,10 @@ namespace QS3D.BricsCAD.V25
             ProjectState project,
             string sidecar,
             string nonce,
-            ProjectStateProbeStamp baseline)
+            ProjectStateProbeStamp baseline,
+            ProbeProgress progress)
         {
+            progress.Stage = "primary_replacement_prepare";
             var original = sidecar + "." + nonce + ".original";
             var replacement = sidecar + "." + nonce + ".replacement";
             try
@@ -119,17 +171,22 @@ namespace QS3D.BricsCAD.V25
                 File.AppendAllText(replacement, Environment.NewLine, new UTF8Encoding(false));
                 File.Move(sidecar, original);
                 File.Move(replacement, sidecar);
-                AssertAllBoundariesReject(document, project, baseline);
+                AssertAllBoundariesReject(document, project, baseline, progress, "primary_replacement");
             }
             finally
             {
-                if (File.Exists(original))
+                try
                 {
-                    if (File.Exists(sidecar)) File.Delete(sidecar);
-                    File.Move(original, sidecar);
+                    if (File.Exists(original))
+                    {
+                        if (File.Exists(sidecar)) File.Delete(sidecar);
+                        File.Move(original, sidecar);
+                    }
+                    if (File.Exists(replacement)) File.Delete(replacement);
                 }
-                if (File.Exists(replacement)) File.Delete(replacement);
+                catch { progress.Stage = "primary_replacement_restore"; throw; }
             }
+            progress.Stage = "primary_replacement_recovery";
             EnsureRecovered(document, project, baseline);
         }
 
@@ -138,33 +195,48 @@ namespace QS3D.BricsCAD.V25
             ProjectState project,
             string sidecar,
             string nonce,
-            ProjectStateProbeStamp baseline)
+            ProjectStateProbeStamp baseline,
+            ProbeProgress progress)
         {
+            progress.Stage = "primary_removal_prepare";
             var quarantine = sidecar + "." + nonce + ".removed";
             File.Move(sidecar, quarantine);
-            try { AssertAllBoundariesReject(document, project, baseline); }
+            try { AssertAllBoundariesReject(document, project, baseline, progress, "primary_removal"); }
             finally
             {
-                if (File.Exists(quarantine))
+                try
                 {
-                    if (File.Exists(sidecar)) File.Delete(sidecar);
-                    File.Move(quarantine, sidecar);
+                    if (File.Exists(quarantine))
+                    {
+                        if (File.Exists(sidecar)) File.Delete(sidecar);
+                        File.Move(quarantine, sidecar);
+                    }
                 }
+                catch { progress.Stage = "primary_removal_restore"; throw; }
             }
+            progress.Stage = "primary_removal_recovery";
             EnsureRecovered(document, project, baseline);
         }
 
         private static void AssertAllBoundariesReject(
             Document document,
             ProjectState project,
-            ProjectStateProbeStamp baseline)
+            ProjectStateProbeStamp baseline,
+            ProbeProgress progress,
+            string phase)
         {
             var reviewedVersion = project.ChangeVersion;
+            progress.Stage = phase + "_read_only";
             ExpectInvalid(() => ProjectContextCoordinator.TryGetReadOnly(document, out _));
+            progress.Stage = phase + "_canonical_bind";
             ExpectInvalid(() => ProjectContextCoordinator.GetOrCreate(document));
+            progress.Stage = phase + "_existing_mutation";
             ExpectInvalid(() => ExistingProjectMutationContext.Require(document, "Sidecar revision probe"));
+            progress.Stage = phase + "_interchange_confirmation";
             ExpectInvalid(() => InterchangeConfirmationGuard.RequireFresh(document, project, reviewedVersion, "Sidecar revision probe"));
+            progress.Stage = phase + "_save";
             ExpectInvalid(() => ProjectContextCoordinator.Save(document));
+            progress.Stage = phase + "_semantic_integrity";
             baseline.EnsureUnchanged(project);
         }
 
@@ -232,7 +304,7 @@ namespace QS3D.BricsCAD.V25
             catch (System.Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException) { return false; }
         }
 
-        private static void TryWriteFailure(string? rawResult, string errorCode)
+        private static void TryWriteFailure(string? rawResult, string errorCode, string stage)
         {
             try
             {
@@ -246,11 +318,15 @@ namespace QS3D.BricsCAD.V25
                     "schema=QS3D_SIDECAR_REVISION_V1",
                     "command=QS3DSIDECARREVISIONPROBE",
                     "nonce=" + (Environment.GetEnvironmentVariable(NonceVariable) ?? string.Empty).Trim(),
-                    "error_code=" + errorCode
+                    "error_code=" + errorCode,
+                    "stage=" + SafeFailureStage(stage)
                 });
             }
             catch { }
         }
+
+        private static string SafeFailureStage(string stage) =>
+            FailureStages.Contains(stage ?? string.Empty) ? stage : "unknown";
 
         private static void WriteMarkerAtomic(string path, IEnumerable<string> lines)
         {
@@ -272,6 +348,11 @@ namespace QS3D.BricsCAD.V25
                 try { if (File.Exists(temp)) File.Delete(temp); }
                 catch { }
             }
+        }
+
+        private sealed class ProbeProgress
+        {
+            public string Stage { get; set; } = "scope_validation";
         }
 
         private sealed class ProjectStateProbeStamp

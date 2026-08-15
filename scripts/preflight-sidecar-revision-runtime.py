@@ -34,6 +34,8 @@ if COMMAND.is_file():
         'SHA256.Create()',
         'path + ".lock"',
         '"error_code=" + errorCode',
+        '"stage=" + SafeFailureStage(stage)',
+        'FailureStages.Contains(stage ?? string.Empty) ? stage : "unknown"',
     ):
         if token not in text:
             errors.append("SidecarRevisionProbeCommands missing runtime/privacy token: " + token)
@@ -58,6 +60,9 @@ if RUNNER.is_file():
         'Get-FileHash -LiteralPath $FixtureDwg -Algorithm SHA256',
         'Restore-EnvironmentValue -Name $name',
         'Stop-LaunchedProcess -Process $process',
+        '$Process.WaitForExit()',
+        'Private sidecar revision cleanup refuses directory targets.',
+        'BricsCAD sidecar revision probe returned sanitized failure stage',
         'Remove-PrivateProbeArtifacts -ArtifactDir $ArtifactDir',
         '$scratchPrefix = "sidecar-project-state-" + $Nonce + "-"',
         '$sidecarPath + "." + $Nonce + ".original"',
