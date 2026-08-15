@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Xml;
 using QS3D.Core.Audit;
 using QS3D.Core.Mapping;
 using QS3D.Core.Rules;
@@ -31,6 +32,14 @@ namespace QS3D.Core.Domain
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Value is required.", name);
             var normalized = value.Trim();
             if (normalized.Any(char.IsControl)) throw new ArgumentException("Value cannot contain control characters.", name);
+            try
+            {
+                XmlConvert.VerifyXmlChars(normalized);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException("Value contains characters that are invalid in XML.", name, ex);
+            }
             return normalized;
         }
     }
