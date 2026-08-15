@@ -26,6 +26,11 @@ namespace QS3D.BricsCAD.V25
             "baseline_bind",
             "baseline_save",
             "baseline_snapshot",
+            "baseline_snapshot_detach",
+            "baseline_snapshot_save",
+            "baseline_snapshot_load",
+            "baseline_snapshot_normalize",
+            "baseline_snapshot_digest",
             "backup_appearance_prepare",
             "backup_appearance_read_only",
             "backup_appearance_canonical_bind",
@@ -98,7 +103,7 @@ namespace QS3D.BricsCAD.V25
 
                 var scratchRoot = Path.GetDirectoryName(resultPath) ?? throw new InvalidOperationException("The probe scratch root is unavailable.");
                 progress.Stage = "baseline_snapshot";
-                var baseline = ProjectStateProbeStamp.Capture(project, scratchRoot, nonce);
+                var baseline = ProjectStateProbeStamp.Capture(project, scratchRoot, nonce, progress);
                 TestBackupAppearance(document, project, sidecar, baseline, progress);
                 TestPrimaryReplacement(document, project, sidecar, nonce, baseline, progress);
                 TestPrimaryRemoval(document, project, sidecar, nonce, baseline, progress);
@@ -371,7 +376,7 @@ namespace QS3D.BricsCAD.V25
             private readonly string _nonce;
             private readonly byte[] _digest;
 
-            private ProjectStateProbeStamp(ProjectState project, string scratchRoot, string nonce)
+            private ProjectStateProbeStamp(ProjectState project, string scratchRoot, string nonce, ProbeProgress progress)
             {
                 _changeVersion = project.ChangeVersion;
                 _updatedUtc = project.UpdatedUtc;
@@ -381,11 +386,11 @@ namespace QS3D.BricsCAD.V25
                 _metadataCount = project.Metadata.Count;
                 _scratchRoot = scratchRoot;
                 _nonce = nonce;
-                _digest = ComputeDigest(project, scratchRoot, nonce);
+                _digest = ComputeDigest(project, scratchRoot, nonce, progress);
             }
 
-            public static ProjectStateProbeStamp Capture(ProjectState project, string scratchRoot, string nonce) =>
-                new ProjectStateProbeStamp(project, scratchRoot, nonce);
+            public static ProjectStateProbeStamp Capture(ProjectState project, string scratchRoot, string nonce, ProbeProgress progress) =>
+                new ProjectStateProbeStamp(project, scratchRoot, nonce, progress);
 
             public void EnsureUnchanged(ProjectState project)
             {
@@ -393,7 +398,7 @@ namespace QS3D.BricsCAD.V25
                     project.AuditEvents.Count != _auditCount || project.Elements.Count != _elementCount ||
                     project.Families.Count != _familyCount || project.Metadata.Count != _metadataCount)
                     throw new InvalidOperationException("A rejected sidecar freshness boundary mutated semantic project state.");
-                var current = ComputeDigest(project, _scratchRoot, _nonce);
+                var current = ComputeDigest(project, _scratchRoot, _nonce, null);
                 if (current.Length != _digest.Length)
                     throw new InvalidOperationException("A rejected sidecar freshness boundary changed serialized project state.");
                 var difference = 0;
@@ -402,17 +407,22 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("A rejected sidecar freshness boundary changed serialized project state.");
             }
 
-            private static byte[] ComputeDigest(ProjectState project, string scratchRoot, string nonce)
+            private static byte[] ComputeDigest(ProjectState project, string scratchRoot, string nonce, ProbeProgress? progress)
             {
                 var path = Path.Combine(scratchRoot, "sidecar-project-state-" + nonce + "-" + Guid.NewGuid().ToString("N") + ".qsdb");
                 try
                 {
+                    if (progress != null) progress.Stage = "baseline_snapshot_detach";
                     var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
+                    if (progress != null) progress.Stage = "baseline_snapshot_save";
                     Store.Save(detached, path);
+                    if (progress != null) progress.Stage = "baseline_snapshot_load";
                     var document = XDocument.Load(path, LoadOptions.None);
                     var root = document.Root ?? throw new InvalidDataException("Probe QSDB digest has no root element.");
+                    if (progress != null) progress.Stage = "baseline_snapshot_normalize";
                     root.SetAttributeValue("updatedUtc", "<normalized-by-sidecar-probe>");
                     var payload = Encoding.UTF8.GetBytes(document.ToString(SaveOptions.DisableFormatting));
+                    if (progress != null) progress.Stage = "baseline_snapshot_digest";
                     using (var sha = SHA256.Create()) return sha.ComputeHash(payload);
                 }
                 finally
