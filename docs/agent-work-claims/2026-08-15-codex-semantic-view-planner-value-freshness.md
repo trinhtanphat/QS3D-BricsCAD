@@ -1,8 +1,9 @@
 # Work claim — Semantic View catalog planner-value freshness
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `Codex /root/audit_docs_next`
 - Registered: `2026-08-15T10:34:00+07:00`
+- Completed: `2026-08-15T10:42:00+07:00`
 - Baseline main SHA: `7e9dfadc9151b3fd2585d15ad25ed0d5146b7deb`
 - Issue: `#77`
 - Priority: remote-safe Core documentation correctness
@@ -42,3 +43,14 @@ Concrete counterexample: `E-01` starts as a Beam. Definition enumeration changes
 - Build `QS3D.Core` and `QS3D.Core.SmokeTests` in Release and run the full deterministic Core smoke suite.
 - Run aggregate remote-safe preflight and report any independent blocker without expanding scope.
 - Re-fetch `origin/main` before push and final handoff, preserve concurrent work, and stop before merge.
+
+## Completion evidence
+
+- Claim commit `6acc01b537f24f5b90e91f32d3bfc5cc56ecf171` merged first through PR `#1542` at `d73420a2dce589fd74e220efdcca3071b828b335` before implementation began.
+- Implementation commit `f54919e95e3915f0799ba70e4c5b115f10dcc74b` merged through PR `#1552` at exact main SHA `ca8b2b38557c169c12526d89c0513c601f70a1db`.
+- `SemanticViewPlanner.BuildCatalog(...)` now snapshots and rechecks each ordered element's `Id`, `Category`, `FloorId`, and `ZoneId` values alongside the existing revision and reference-identity snapshot at both established freshness boundaries.
+- The existing auto-registered structural-freshness smoke now proves same-instance category drift and combined Floor/Zone relation drift fail closed while the stable deterministic/read-only control remains intact.
+- On the refreshed implementation candidate, all `27` focused Documentation/View/Sheet/Schedule/TitleBlock static gates passed; `QS3D.Core` and `QS3D.Core.SmokeTests` Release builds completed with `0` warnings and `0` errors; full deterministic Core smoke reported `ALL PASS`; `scripts/preflight.py` passed.
+- Aggregate feature preflight passed `812/814` gates. The only failures were unrelated existing release-sync and Wall Quantity Locate ordering gates; this lane did not modify either surface.
+- Root revalidated exact merged main `ca8b2b38557c169c12526d89c0513c601f70a1db`: the focused structural-freshness gate passed, both Release builds completed with `0` warnings and `0` errors, and full Core smoke reported `ALL PASS`.
+- No BricsCAD/native/UI/runtime/private-data operation or GitHub Actions dispatch/rerun was performed. Broad issue `#77` remains open for its larger native documentation scope.

@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             ExplicitUnmatchedState();
             SnapshotIsolationAndReadOnlyView();
             DuplicateAndAmbiguousRatesFailClosed();
+            LargeSingleScopeUsesIndexedTimestampUniqueness();
             InvalidInputsFailClosed();
         }
 
@@ -114,6 +115,36 @@ namespace QS3D.Core.SmokeTests
                 Item("RATE-A", "CONC", "m3", "VND", 100m, jan, "v1"),
                 Item("RATE-B", "conc", "m3", "VND", 110m, jan, "v2")
             }));
+        }
+
+        private static void LargeSingleScopeUsesIndexedTimestampUniqueness()
+        {
+            const int count = 4096;
+            var start = Utc(2026, 1, 1);
+            var items = new List<RateItem>(count);
+            for (var i = count - 1; i >= 0; i--)
+            {
+                items.Add(Item(
+                    "RATE-LARGE-" + i.ToString("D4", CultureInfo.InvariantCulture),
+                    "CONC",
+                    "m3",
+                    "VND",
+                    i,
+                    start.AddTicks(i),
+                    "v1"));
+            }
+
+            var book = new RateBook("BOOK-LARGE", items);
+            Equal(count, book.Items.Count, "Large single-scope RateBook count mismatch.");
+            Equal("RATE-LARGE-0000", book.Items[0].RateItemId, "Large scope ordering must remain effective-time deterministic.");
+            Equal("RATE-LARGE-4095", book.Items[count - 1].RateItemId, "Large scope final ordering mismatch.");
+
+            var resolved = book.Resolve(new CostCode("CONC"), "m3", "VND", start.AddTicks(count));
+            True(resolved.IsMatched, "Large scope latest lookup should remain matched.");
+            Equal("RATE-LARGE-4095", resolved.Item!.RateItemId, "Large scope latest lookup semantics changed.");
+
+            items.Add(Item("RATE-LARGE-DUP", "conc", "m3", "VND", 1m, start.AddTicks(count - 1), "v2"));
+            Throws<ArgumentException>(() => new RateBook("BOOK-LARGE-DUP", items));
         }
 
         private static void InvalidInputsFailClosed()
