@@ -1,6 +1,6 @@
 # KeepTarget interchange indexed resolution claim
 
-- Status: ACTIVE
+- Status: COMPLETED
 - Agent: Codex `/root/audit_performance_next`
 - Registered: 2026-08-15 10:51 +07:00
 - Baseline `main`: `c5fbe4af9fb98383679f279e33d9b93eb2ec737d`
@@ -9,6 +9,9 @@
 - Claim merge: `79f9be8c0ed018a93dd4eedb516b4d5f2580c930`
 - Implementation baseline `main`: `1660c817f7d376357453744e79a95ebe1830cd4d`
 - Implementation branch: `agent/codex/issue81-keeptarget-resolution-index-impl-20260815`
+- Implementation commit: `794f8016062a2c2ecc1f4cdf0aefc0c1ac1c422e`
+- Implementation PR: #1570
+- Implementation merge: `911d5b8bbc7ef8f92ea5a6b5f2c7a3b44cf07d1a`
 
 ## Defect
 
@@ -43,3 +46,18 @@ Do not modify V25/V26/native adapters, UI, licensed runtime evidence, LOCAL/priv
 - Full Core smoke executable: `ALL PASS`.
 - Aggregate remote-safe preflight: PASS, all 817 discovered gates.
 - No GitHub Actions, native/BricsCAD runtime, LOCAL/private data, release, or workflow operation was used.
+
+## Completion
+
+`COMPLETED`: PR #1570 merged normally at exact `main` SHA `911d5b8bbc7ef8f92ea5a6b5f2c7a3b44cf07d1a`. The merged source builds one case-insensitive resolution-action index and uses it for the Zone, Floor, Family, and Element mutation selections instead of repeating a full resolution-plan scan for every identity. The approved ordering, Add/Keep decisions, counts, metadata, audit, active context, target validation, rollback, capacity limits, and public interchange contracts remain covered.
+
+Independent validation on the exact merge reported:
+
+- focused KeepTarget resolution-index preflight: PASS;
+- existing KeepTarget import preflight: PASS;
+- interchange import-resolution preflight: PASS;
+- `QS3D.Core` Release build: PASS, 0 warnings / 0 errors;
+- `QS3D.Core.SmokeTests` Release build: PASS, 0 warnings / 0 errors;
+- full Core smoke executable: `ALL PASS`.
+
+This narrow claim is released. Broad issue #81 remains **OPEN** for its other performance qualification and optimization work. No native timing, BricsCAD runtime, LOCAL/private-data, release, workflow, or GitHub Actions result is claimed by this closeout.
