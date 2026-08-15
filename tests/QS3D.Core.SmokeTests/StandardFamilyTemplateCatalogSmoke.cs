@@ -67,11 +67,17 @@ namespace QS3D.Core.SmokeTests
             Property(wall, "IsLoadBearing", "Yes");
             Property(wall, "CustomKeep", "YES");
 
+            var versionBeforeSecondApply = project.ChangeVersion;
+            var auditsBeforeSecondApply = project.AuditEvents.Count;
+            var updatedBeforeSecondApply = project.UpdatedUtc;
             var second = StandardFamilyTemplateCatalog.ApplyVietnamStandard01(project);
             Equal(0, second.FamiliesAdded, "Second apply must not add duplicate Families.");
             Equal(0, second.FamiliesUpdated, "Second apply must not rewrite already-standard Families.");
             Equal(0, second.PropertiesApplied, "Second apply must not rewrite already-standard properties.");
             Equal(18, project.Families.Count, "Second apply changed Family count.");
+            Equal(versionBeforeSecondApply, project.ChangeVersion, "Second apply must not bump project ChangeVersion.");
+            Equal(auditsBeforeSecondApply, project.AuditEvents.Count, "Second apply must not append a no-op audit event.");
+            Equal(updatedBeforeSecondApply, project.UpdatedUtc, "Second apply must not change project UpdatedUtc.");
         }
 
         private static void Property(ProjectFamily family, string key, string expected)
