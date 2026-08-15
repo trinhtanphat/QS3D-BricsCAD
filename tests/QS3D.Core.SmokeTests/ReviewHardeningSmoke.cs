@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
@@ -249,10 +250,16 @@ namespace QS3D.Core.SmokeTests
             {
                 var project = NewRevisionProject(); var store = new QsdbProjectStore(); store.Save(project, path);
                 var original = File.ReadAllText(path);
-                project.Metadata[string.Empty] = "invalid";
+                Throws<ArgumentException>(() => project.Metadata[string.Empty] = "invalid");
+                var metadataItemsField = project.Metadata.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?? throw new InvalidOperationException("Project metadata backing dictionary field is unavailable.");
+                var metadataItems = metadataItemsField.GetValue(project.Metadata) as IDictionary<string, string>
+                    ?? throw new InvalidOperationException("Project metadata backing dictionary is unavailable.");
+                metadataItems[string.Empty] = "invalid";
+                Equal("invalid", project.Metadata[string.Empty]);
                 Throws<InvalidDataException>(() => store.Save(project, path));
                 Equal(original, File.ReadAllText(path));
-                project.Metadata.Remove(string.Empty);
+                metadataItems.Remove(string.Empty);
                 var zone = project.Zones.Single(); var originalZoneName = zone.Name;
                 Throws<ArgumentException>(() => zone.Name = string.Empty);
                 Equal(originalZoneName, zone.Name);
