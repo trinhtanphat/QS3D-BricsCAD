@@ -77,7 +77,9 @@ namespace QS3D.BricsCAD.V25.UI
             _quantityGeometryScroll.Visibility = Visibility.Visible;
 
             var title = CaptionText();
-            title.Text = "DIỄN GIẢI HÌNH HỌC • BREP EXACT";
+            title.Text = geometry == null
+                ? "DIỄN GIẢI HÌNH HỌC"
+                : "DIỄN GIẢI HÌNH HỌC • BREP EXACT";
             title.FontWeight = FontWeights.SemiBold;
             _quantityGeometryPanel.Children.Add(title);
 
