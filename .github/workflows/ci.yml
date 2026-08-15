@@ -43,7 +43,7 @@ jobs:
       - name: CI policy gate
         run: python scripts/preflight-ci-manual-only.py
       - name: Generic source guard
-        run: python scripts/preflight.py
+        run: python scripts/source-guard-current-ci.py
       - name: All discovered feature source guards
         run: python scripts/preflight-all.py
       - name: Validate release PowerShell syntax
