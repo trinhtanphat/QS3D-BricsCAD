@@ -59,6 +59,7 @@ namespace QS3D.BricsCAD.V25.UI
                     // SourceHandleResolver intentionally prefers source geometry. For this detached,
                     // read-only BREP view we instead route it to the already-owned generated Solid3d.
                     detachedElement.SourceHandles.Clear();
+                    detachedElement.SourceHandles.Add(generatedHandle);
                     continue;
                 }
 
@@ -71,16 +72,15 @@ namespace QS3D.BricsCAD.V25.UI
                     }
 
                     // A configured generated handle is authoritative. If it is stale/foreign, do not
-                    // silently fall back to an unrelated 2D source while explaining exact BREP.
+                    // silently fall back to unrelated source geometry while explaining exact BREP.
                     detachedElement.SourceHandles.Clear();
                     detachedElement.SourceHandles.Add(QuarantinedGeometryHandle);
                     continue;
                 }
 
-                if (!targets.Contains(liveElement.Id)) continue;
-
-                // Legacy/recovered projects may have valid owner XData but no configured property.
-                // Recover only exact owner-matched live solids for the selected target.
+                // Legacy/recovered projects can carry valid owner XData without a configured
+                // GeneratedSolidHandle. Prefer only exact owner-matched live solids; this applies to
+                // both the selected target and candidate elements used for boolean deductions.
                 var owned = GeneratedGeometryService.FindMatchingOwnedHandles(
                     document,
                     liveProject.ProjectId,
