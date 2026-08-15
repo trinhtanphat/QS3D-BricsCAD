@@ -1,6 +1,6 @@
 # Work claim — LOCAL-003 Level runner read-only open sequence
 
-- Status: `ACTIVE`
+- Status: `COMPLETED` (implementation handed to the existing owner of overlapping PR `#1432`)
 - Agent: `/root/local003_readonly_guard`
 - Registered: `2026-08-15T08:08:00+07:00`
 - Baseline main SHA: `a8c0632c13dcece41c8d407582397fe29bc0b405`
@@ -23,7 +23,7 @@ The correction must preserve exact-SHA/worktree/assembly guards, the zero-proces
 
 - No production probe, builder, Core, adapter, marker schema, shared interop helper, profile mutation, release workflow or GitHub Actions change.
 - Do not launch or interact with BricsCAD and do not use private drawing data.
-- Do not mark issue `#1125` or LOCAL-003 complete; they remain open / `PENDING_LOCAL` until `/root` performs a fresh licensed exact-merge-SHA rerun.
+- Do not reopen historical issue `#1125`; it was closed on 2026-08-14. LOCAL-003 remains `PENDING_LOCAL` until `/root` performs a fresh licensed exact-merge-SHA rerun.
 
 ## Validation plan
 
@@ -36,6 +36,14 @@ The correction must preserve exact-SHA/worktree/assembly guards, the zero-proces
 
 The parent LOCAL-003 claim retains licensed runtime execution and evidence. The completed read-only DWG-guard claim owns no remaining implementation. Active P11/LOCAL-004/native-readiness lanes are disjoint and are not modified.
 
+## Handoff closeout
+
+- Diagnosis: the runner supplied both a positional DWG and a `/B` script at startup, while the responsive host remained on `[Start]` and never emitted the marker. The bounded correction starts BricsCAD with the documented `/Automation` batch switch and has the private script execute `FILEDIA=0` followed by `_.OPEN` for the already OS-read-only disposable drawing before `NETLOAD` and the probe command.
+- Prepared implementation commit: `05f57301f45ec1819b9748fed23101b6aa8d92f1`. It changes only `scripts/test-bricscad-v25-level-z.ps1` and `scripts/preflight-level-z-runtime-probe.py`; the read-only-through-host-exit check, pre-restore hash comparison and idempotent attribute/backup restoration remain intact.
+- Collision audit found draft PR `#1432` already owns and modifies both files for the separate Millimeter/Meter runtime matrix. No overlapping implementation PR was opened. `/root` posted the exact cherry-pick handoff to `#1432` at `https://github.com/trinhtanphat/QS3D-BricsCAD/pull/1432#issuecomment-5299751090` for integration by that owner.
+- Validation on the handed-off commit: Windows PowerShell 5.1 parser `PASS`; the nine established Level/Beam focused gates `PASS`; installed-reference BricsCAD V25 `Release|x64` build `PASS` with zero warnings and zero errors.
+- No BricsCAD process or GitHub Actions workflow was started, and no private drawing or evidence data was used. This claim closes only the duplicate implementation lane; it records no runtime verdict. LOCAL-003 remains `PENDING_LOCAL`, and open issue `#1431` plus draft PR `#1432` retain the licensed Millimeter/Meter qualification work.
+
 ## Completion condition
 
-A merged runner-only launch correction uses an official/noninteractive read-only open sequence while retaining every read-only/hash/cleanup proof, and the exact final `main` SHA is handed to `/root` for the licensed rerun.
+The bounded correction and its validation are handed to the existing overlapping PR owner without a competing PR or scope overwrite. Runtime completion remains owned by `#1431` / `#1432`; only their exact merged SHA may be used for the next licensed rerun.
