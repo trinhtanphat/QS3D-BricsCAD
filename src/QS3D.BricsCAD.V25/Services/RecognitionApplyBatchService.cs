@@ -67,24 +67,26 @@ namespace QS3D.BricsCAD.V25.Services
         public static RecognitionApplyBatchPlan PrepareStrict(
             Document document,
             string expectedProjectId,
-            IEnumerable<RecognitionResult> results)
+            IEnumerable<RecognitionResult> results,
+            bool requireAutoAcceptance = false)
         {
             var rows = Materialize(results);
-            var project = RequireCurrentProject(document, expectedProjectId, "Recognition Apply");
+            var operation = requireAutoAcceptance ? "Recognition Confident Apply" : "Recognition Apply";
+            var project = RequireCurrentProject(document, expectedProjectId, operation);
             var version = project.ChangeVersion;
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var items = new List<RecognitionApplyItem>(rows.Count);
 
             foreach (var result in rows)
             {
-                if (result == null) throw new InvalidOperationException("Recognition Apply: batch contains a null review row.");
+                if (result == null) throw new InvalidOperationException(operation + ": batch contains a null review row.");
                 if (result.TopCandidate == null) continue;
                 if (!seen.Add(result.Handle))
-                    throw new InvalidOperationException("Recognition Apply: duplicate CAD handle in review batch: " + result.Handle + ".");
-                items.Add(PrepareOne(document, project, result, requireAutoAcceptance: false));
+                    throw new InvalidOperationException(operation + ": duplicate CAD handle in review batch: " + result.Handle + ".");
+                items.Add(PrepareOne(document, project, result, requireAutoAcceptance));
             }
 
-            EnsureProjectUnchanged(document, project, expectedProjectId, version, "Recognition Apply preflight");
+            EnsureProjectUnchanged(document, project, expectedProjectId, version, operation + " preflight");
             return new RecognitionApplyBatchPlan(version, items.AsReadOnly(), Array.Empty<RecognitionApplySkip>());
         }
 
