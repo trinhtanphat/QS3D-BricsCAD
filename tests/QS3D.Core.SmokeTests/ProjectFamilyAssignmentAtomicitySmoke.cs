@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Xml.Linq;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using QS3D.Core.Services;
 
 namespace QS3D.Core.SmokeTests
@@ -9,6 +12,8 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
+            ActiveFamilyMutationAdvancesExactlyOnce();
+            SetActiveUsesLastAvailableRevision();
             DuplicatePreviousFamilyBlocksWholeAssignmentBatch();
             DuplicatePreviousFamilyBlocksBulkEditBatch();
             DanglingPreviousFamilyBlocksWholeAssignmentBatch();
@@ -20,6 +25,72 @@ namespace QS3D.Core.SmokeTests
             CorruptProjectElementListBlocksFamilyDeleteBeforeMutation();
             UndefinedProjectFamilyCategoryFailsClosed();
             UndefinedFamilyDefinitionCategoryFailsClosed();
+        }
+
+        private static void ActiveFamilyMutationAdvancesExactlyOnce()
+        {
+            var project = new ProjectState("family-activation-revision", "Family activation revision");
+            var family = new ProjectFamily("F1", "Family", ElementCategory.ArchitecturalWall);
+            project.Families.Add(family);
+
+            var beforeSetVersion = project.ChangeVersion;
+            ProjectFamilyActivationService.SetActive(project, family.Id);
+            if (project.ChangeVersion != beforeSetVersion + 1L)
+                throw new Exception("Setting the active Family must advance project ChangeVersion exactly once.");
+            Equal(family.Id, project.Metadata["ActiveFamilyId"], "Active Family metadata mismatch after SetActive.");
+
+            var afterSetVersion = project.ChangeVersion;
+            var afterSetUpdatedUtc = project.UpdatedUtc;
+            ProjectFamilyActivationService.SetActive(project, family.Id);
+            if (project.ChangeVersion != afterSetVersion || project.UpdatedUtc != afterSetUpdatedUtc)
+                throw new Exception("Setting the already-active Family must remain revision-neutral.");
+
+            project.Families.Clear();
+            var beforeClearVersion = project.ChangeVersion;
+            ProjectFamilyActivationService.ClearIfMissing(project);
+            if (project.ChangeVersion != beforeClearVersion + 1L)
+                throw new Exception("Clearing a missing active Family must advance project ChangeVersion exactly once.");
+            if (project.Metadata.ContainsKey("ActiveFamilyId"))
+                throw new Exception("ClearIfMissing retained stale active Family metadata.");
+        }
+
+        private static void SetActiveUsesLastAvailableRevision()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-family-activation-revision-" + Guid.NewGuid().ToString("N") + ".qsdb");
+            try
+            {
+                var project = new ProjectState("family-activation-ceiling", "Family activation ceiling");
+                project.Families.Add(new ProjectFamily("F1", "Family", ElementCategory.ArchitecturalWall));
+                var store = new QsdbProjectStore();
+                store.Save(project, path);
+
+                var document = XDocument.Load(path, LoadOptions.None);
+                var root = document.Root ?? throw new Exception("Serialized QSDB root was not found for Family activation revision-ceiling fixture.");
+                root.SetAttributeValue(
+                    "changeVersion",
+                    (long.MaxValue - 1L).ToString(System.Globalization.CultureInfo.InvariantCulture));
+                document.Save(path, SaveOptions.DisableFormatting);
+
+                var loaded = store.Load(path);
+                if (loaded.ChangeVersion != long.MaxValue - 1L)
+                    throw new Exception("Family activation revision-ceiling fixture did not restore the persisted ChangeVersion.");
+                if (loaded.Metadata.ContainsKey("ActiveFamilyId"))
+                    throw new Exception("Family activation revision-ceiling fixture unexpectedly started with active Family metadata.");
+
+                ProjectFamilyActivationService.SetActive(loaded, "F1");
+
+                if (loaded.ChangeVersion != long.MaxValue)
+                    throw new Exception("SetActive did not consume exactly the final available project revision.");
+                Equal("F1", loaded.Metadata["ActiveFamilyId"], "SetActive did not persist active Family metadata at the revision ceiling.");
+                var active = ProjectFamilyActivationService.GetActive(loaded);
+                if (active == null || !string.Equals(active.Id, "F1", StringComparison.Ordinal))
+                    throw new Exception("SetActive did not resolve the persisted active Family at the revision ceiling.");
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+                try { if (File.Exists(path + ".bak")) File.Delete(path + ".bak"); } catch { }
+            }
         }
 
         private static void DuplicatePreviousFamilyBlocksWholeAssignmentBatch()
