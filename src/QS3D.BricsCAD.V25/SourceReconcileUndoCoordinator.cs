@@ -175,6 +175,7 @@ namespace QS3D.BricsCAD.V25
                 {
                     EnsureRegApp(_database, _transaction);
                     _modelSpace.DisableUndoRecording(false);
+                    _modelSpace.UpgradeOpen();
                     _modelSpace.XData = marker;
                 }
             }
@@ -519,7 +520,7 @@ namespace QS3D.BricsCAD.V25
             ProjectContextCoordinator.RequireBackingStoreUnchanged(document, project, "Source Reconcile Undo registration");
             Attach(document);
 
-            var modelSpace = OpenModelSpace(document.Database, transaction, OpenMode.ForWrite);
+            var modelSpace = OpenModelSpace(document.Database, transaction, OpenMode.ForRead);
             var previousRevision = ReadRevision(modelSpace);
             DocumentHistory history;
             HistoryEntry beforeEntry;
