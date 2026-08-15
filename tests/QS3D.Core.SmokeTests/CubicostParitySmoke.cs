@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             MepAggregation();
             ClashDetection();
+            ClashDetectionLargeFiniteClearance();
             RateBuildUp();
             HistoricalBenchmark();
             TenderEvaluation();
@@ -49,6 +50,22 @@ namespace QS3D.Core.SmokeTests
             Equal(ClashKind.Hard, clashes[0].Kind, "hard clash classification");
             Equal(ClashKind.Clearance, clashes[1].Kind, "clearance clash classification");
             Near(Math.Sqrt(1.01d), clashes[1].SeparationM, 1e-12, "clearance distance");
+        }
+
+        private static void ClashDetectionLargeFiniteClearance()
+        {
+            const double largeGap = 1e200d;
+            var clashes = new ClashDetectionService().Detect(new[]
+            {
+                new CoordinationElement("S-LARGE", "STRUCTURE", "BEAM", "STRUCT", "ZONE-A", new AxisAlignedBox(0d, 0d, 0d, 1d, 1d, 1d)),
+                new CoordinationElement("M-LARGE", "MEP", "DUCT", "SA", "ZONE-A", new AxisAlignedBox(largeGap, 0d, 0d, 1.01e200d, 1d, 1d))
+            }, 1.1e200d);
+
+            Equal(1, clashes.Count, "large finite clearance result count");
+            Equal(ClashKind.Clearance, clashes[0].Kind, "large finite clearance classification");
+            if (double.IsNaN(clashes[0].SeparationM) || double.IsInfinity(clashes[0].SeparationM))
+                throw new InvalidOperationException("large finite clearance separation must stay finite.");
+            Near(largeGap, clashes[0].SeparationM, 1e185d, "large finite clearance distance");
         }
 
         private static void RateBuildUp()
