@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             ImportUsesCategoryNameAndLocalIds();
             RepeatedImportIsTrueNoOp();
+            FailedImportRestoresWholeProject();
         }
 
         private static void ImportUsesCategoryNameAndLocalIds()
@@ -106,6 +107,39 @@ namespace QS3D.Core.SmokeTests
             Equal(updatedBeforeSecond, project.UpdatedUtc, "Second import must not change UpdatedUtc.");
         }
 
+        private static void FailedImportRestoresWholeProject()
+        {
+            var project = new ProjectState("P-FAMILY-IMPORT-ROLLBACK", "Family template rollback smoke");
+            var beam = new ProjectFamily("local-beam", "D300x500", ElementCategory.Beam);
+            beam.Properties["WidthM"] = "0.300";
+            project.Families.Add(beam);
+            var member = new ProjectElement("beam-member", ElementCategory.Beam, beam.Id, string.Empty, string.Empty);
+            member.Properties["WidthM"] = "0.300";
+            project.Elements.Add(member);
+
+            var profile = new TemplateProfile("USER-FAMILY-ROLLBACK", "Rollback Family Template");
+            var updatedBeam = new ProjectFamily("foreign-beam", "D300x500", ElementCategory.Beam);
+            updatedBeam.Properties["WidthM"] = "0.350";
+            profile.Families.Add(updatedBeam);
+            var invalidSlab = new ProjectFamily("foreign-slab", "S120", ElementCategory.Slab);
+            invalidSlab.Properties[string.Empty] = "invalid";
+            profile.Families.Add(invalidSlab);
+
+            var versionBefore = project.ChangeVersion;
+            var auditsBefore = project.AuditEvents.Count;
+            var updatedBefore = project.UpdatedUtc;
+            Throws<ArgumentException>(() => FamilyTemplateImportService.Apply(project, profile));
+
+            beam = project.FindFamily("local-beam") ?? throw new Exception("Rollback lost the original Beam Family.");
+            Property(beam, "WidthM", "0.300");
+            member = project.FindElement("beam-member") ?? throw new Exception("Rollback lost the original Beam member.");
+            Equal("0.300", member.Properties["WidthM"], "Rollback did not restore inherited member properties.");
+            Equal(1, project.Families.Count, "Rollback left a partially-created imported Family.");
+            Equal(versionBefore, project.ChangeVersion, "Rollback did not restore ChangeVersion.");
+            Equal(auditsBefore, project.AuditEvents.Count, "Rollback appended an audit event.");
+            Equal(updatedBefore, project.UpdatedUtc, "Rollback did not restore UpdatedUtc.");
+        }
+
         private static void Property(ProjectFamily family, string key, string expected)
         {
             if (!family.Properties.TryGetValue(key, out var actual))
@@ -117,6 +151,13 @@ namespace QS3D.Core.SmokeTests
         {
             if (!Equals(expected, actual))
                 throw new Exception(message + " Expected=" + expected + ", actual=" + actual + ".");
+        }
+
+        private static void Throws<T>(Action action) where T : Exception
+        {
+            try { action(); }
+            catch (T) { return; }
+            throw new Exception("Expected exception " + typeof(T).Name + ".");
         }
     }
 }
