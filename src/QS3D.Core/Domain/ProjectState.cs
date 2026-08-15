@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Xml;
 using QS3D.Core.Audit;
 using QS3D.Core.Mapping;
 using QS3D.Core.Rules;
@@ -290,6 +291,14 @@ namespace QS3D.Core.Domain
             var normalized = value.Trim();
             if (normalized.Any(char.IsControl))
                 throw new ArgumentException("Project name cannot contain control characters.", nameof(value));
+            try
+            {
+                XmlConvert.VerifyXmlChars(normalized);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException("Project name contains characters that are invalid in XML.", nameof(value), ex);
+            }
             return normalized;
         }
 
