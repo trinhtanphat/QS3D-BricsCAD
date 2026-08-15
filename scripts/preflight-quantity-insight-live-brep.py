@@ -5,7 +5,9 @@ ROOT = Path(__file__).resolve().parents[1]
 LIVE = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.LiveGeometry.cs"
 GEOMETRY = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.Geometry.cs"
 LOCATE = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.Locate.cs"
+TRANSIENT = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.TransientGeometry.cs"
 BREP = ROOT / "src/QS3D.BricsCAD.V25/Reporting/QuantityGeometryExplanationService.cs"
+REGION = ROOT / "src/QS3D.BricsCAD.V25/Reporting/QuantityGeometryRegionPreviewService.cs"
 
 
 def read(path):
@@ -28,7 +30,9 @@ def main():
     live = read(LIVE)
     geometry = read(GEOMETRY)
     locate = read(LOCATE)
+    transient = read(TRANSIENT)
     brep = read(BREP)
+    region = read(REGION)
     failures = []
 
     require(live, "PrepareQuantityGeometrySnapshot", "detached geometry snapshot", failures)
@@ -60,13 +64,33 @@ def main():
     require(brep, "brep.GetVolume()", "native BREP volume", failures)
     require(brep, "face.GetArea()", "native BREP face area", failures)
 
+    require(region, "QuantityGeometryRegionPreviewService", "deduction region preview service", failures)
+    require(region, "SourceHandleResolver.Resolve(geometryProject", "preview uses detached current routing", failures)
+    require(region, "BooleanOperationType.BoolIntersect", "preview exact native intersection", failures)
+    require(region, "OffsetBody(distanceCad)", "preview contact probe", failures)
+    require(region, "OpenMode.ForRead", "preview read-only CAD inspection", failures)
+    forbid(region, "OpenMode.ForWrite", "preview CAD mutation", failures)
+    forbid(region, "AppendEntity", "preview database persistence", failures)
+
+    require(transient, "TransientManager.CurrentTransientManager", "BricsCAD transient manager", failures)
+    require(transient, "AddTransient(region, TransientDrawingMode.Highlight", "transient exact-region highlight", failures)
+    require(transient, "EraseTransient(solid", "transient cleanup", failures)
+    require(transient, "FrameworkElement.UnloadedEvent", "panel unload cleanup", failures)
+    require(transient, "TreeView.SelectedItemChangedEvent", "selection-change cleanup", failures)
+    require(transient, "TryRevalidateQuantityGeometry", "transient click-time revalidation", failures)
+    require(transient, "PrepareQuantityGeometrySnapshot", "transient current owned geometry snapshot", failures)
+    require(transient, "QuantityGeometryRegionPreviewService.Build", "transient native region build", failures)
+    require(transient, "TryZoomQuantityRegion", "exact-region zoom", failures)
+    forbid(transient, "OpenMode.ForWrite", "transient CAD mutation", failures)
+    forbid(transient, "AppendEntity", "transient database persistence", failures)
+
     if failures:
         print("QS3D Quantity Insight live-BREP preflight FAILED")
         for failure in failures:
             print(" -", failure)
         return 1
 
-    print("PASS: Quantity Insight routes BREP/detail/deduction locate through current owned live geometry.")
+    print("PASS: Quantity Insight routes BREP/detail/deduction locate through current owned live geometry and transient exact-region display.")
     print("NOTE: this is a static source guard; licensed BricsCAD V25 graphics/BREP runtime qualification remains separate.")
     return 0
 
