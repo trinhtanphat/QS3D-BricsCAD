@@ -151,7 +151,8 @@ function Restore-Qs3dLevelDrawingAndPrivateState {
         [Parameter(Mandatory = $true)][string]$scriptPath,
         [Parameter(Mandatory = $true)][string]$projectSidecar,
         [Parameter(Mandatory = $true)][string]$DrawingCopy,
-        [Parameter(Mandatory = $true)][string]$drawingBackupPath
+        [Parameter(Mandatory = $true)][string]$drawingBackupPath,
+        [Parameter(Mandatory = $true)][IO.FileAttributes]$originalDrawingAttributes
     )
 
     if (Test-Path -LiteralPath $scriptPath -PathType Leaf) {
@@ -168,9 +169,21 @@ function Restore-Qs3dLevelDrawingAndPrivateState {
             Remove-Item -LiteralPath $privatePath -Force -ErrorAction SilentlyContinue
         }
     }
-    if (Test-Path -LiteralPath $drawingBackupPath -PathType Leaf) {
-        Copy-Item -LiteralPath $drawingBackupPath -Destination $DrawingCopy -Force -ErrorAction Stop
-        Remove-Item -LiteralPath $drawingBackupPath -Force -ErrorAction SilentlyContinue
+    try {
+        if (Test-Path -LiteralPath $drawingBackupPath -PathType Leaf) {
+            if (Test-Path -LiteralPath $DrawingCopy -PathType Leaf) {
+                $currentDrawingAttributes = [IO.File]::GetAttributes($DrawingCopy)
+                $writableDrawingAttributes = [IO.FileAttributes](([int]$currentDrawingAttributes) -band (-bnot [int][IO.FileAttributes]::ReadOnly))
+                [IO.File]::SetAttributes($DrawingCopy, $writableDrawingAttributes)
+            }
+            Copy-Item -LiteralPath $drawingBackupPath -Destination $DrawingCopy -Force -ErrorAction Stop
+            Remove-Item -LiteralPath $drawingBackupPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $DrawingCopy -PathType Leaf) {
+            [IO.File]::SetAttributes($DrawingCopy, $originalDrawingAttributes)
+        }
     }
 }
 
@@ -232,6 +245,7 @@ foreach ($output in @($resultPath, $scriptPath, $metadataPath, $drawingBackupPat
     if (Test-Path -LiteralPath $output) { throw "Level Z runtime output must not already exist: $output" }
 }
 
+$originalDrawingAttributes = [IO.File]::GetAttributes($DrawingCopy)
 $drawingHashBefore = (Get-FileHash -LiteralPath $DrawingCopy -Algorithm SHA256).Hash.ToUpperInvariant()
 Copy-Item -LiteralPath $DrawingCopy -Destination $drawingBackupPath -ErrorAction Stop
 $pluginHash = (Get-FileHash -LiteralPath $PluginDll -Algorithm SHA256).Hash.ToUpperInvariant()
@@ -242,9 +256,18 @@ $oldSourceSha = [Environment]::GetEnvironmentVariable("QS3D_LEVEL_Z_SOURCE_SHA",
 $process = $null
 $proxyInformationDialogsDismissed = 0
 $gracefulExit = $false
+$drawingReadOnlyGuardVerified = $false
+$drawingUnwrittenVerified = $false
+$drawingAttributesRestored = $false
 $startedAt = Get-Date
 
 try {
+    $guardedDrawingAttributes = [IO.FileAttributes](([int]$originalDrawingAttributes) -bor [int][IO.FileAttributes]::ReadOnly)
+    [IO.File]::SetAttributes($DrawingCopy, $guardedDrawingAttributes)
+    $observedDrawingAttributes = [IO.File]::GetAttributes($DrawingCopy)
+    $drawingReadOnlyGuardVerified = (([int]$observedDrawingAttributes -band [int][IO.FileAttributes]::ReadOnly) -ne 0)
+    if (-not $drawingReadOnlyGuardVerified) { throw "The disposable Level Z drawing could not be guarded read-only." }
+
     $env:QS3D_LEVEL_Z_RESULT = $resultPath
     $env:QS3D_LEVEL_Z_NONCE = $nonce
     $env:QS3D_LEVEL_Z_SOURCE_SHA = $ExpectedSourceSha
@@ -319,9 +342,18 @@ try {
     if ($rebarCount -ne 4) { throw "Level Z runtime expected exactly four Beam longitudinal bars." }
 
     Stop-Qs3dLevelProcess -Process $process
-    Restore-Qs3dLevelDrawingAndPrivateState -ScriptPath $scriptPath -ProjectSidecar $projectSidecar -DrawingCopy $DrawingCopy -DrawingBackupPath $drawingBackupPath
     $processCleanupVerified = @(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -eq 0
     if (-not $processCleanupVerified) { throw "Level Z runtime left a BricsCAD process after cleanup." }
+    $observedDrawingAttributes = [IO.File]::GetAttributes($DrawingCopy)
+    $drawingReadOnlyGuardVerified = (([int]$observedDrawingAttributes -band [int][IO.FileAttributes]::ReadOnly) -ne 0)
+    if (-not $drawingReadOnlyGuardVerified) { throw "The disposable Level Z drawing lost its read-only guard before verification." }
+    $drawingHashAfter = (Get-FileHash -LiteralPath $DrawingCopy -Algorithm SHA256).Hash.ToUpperInvariant()
+    $drawingUnwrittenVerified = [string]::Equals($drawingHashBefore, $drawingHashAfter, [StringComparison]::Ordinal)
+    if (-not $drawingUnwrittenVerified) {
+        throw "The disposable Level Z drawing was written despite its read-only guard."
+    }
+
+    Restore-Qs3dLevelDrawingAndPrivateState -ScriptPath $scriptPath -ProjectSidecar $projectSidecar -DrawingCopy $DrawingCopy -DrawingBackupPath $drawingBackupPath -OriginalDrawingAttributes $originalDrawingAttributes
     $scriptCleanupVerified = -not (Test-Path -LiteralPath $scriptPath)
     if (-not $scriptCleanupVerified) { throw "Level Z runtime left its private script after cleanup." }
     $privateStateCleanupVerified = -not (
@@ -332,11 +364,15 @@ try {
         (Test-Path -LiteralPath ([IO.Path]::ChangeExtension($DrawingCopy, ".dwl2")))
     )
     if (-not $privateStateCleanupVerified) { throw "Level Z runtime left private drawing state after cleanup." }
-    $drawingHashAfter = (Get-FileHash -LiteralPath $DrawingCopy -Algorithm SHA256).Hash.ToUpperInvariant()
-    $drawingRestoreVerified = [string]::Equals($drawingHashBefore, $drawingHashAfter, [StringComparison]::Ordinal)
+    $drawingRestoreVerified = [string]::Equals(
+        $drawingHashBefore,
+        (Get-FileHash -LiteralPath $DrawingCopy -Algorithm SHA256).Hash.ToUpperInvariant(),
+        [StringComparison]::Ordinal)
     if (-not $drawingRestoreVerified) {
-        throw "The disposable Level Z drawing was written unexpectedly."
+        throw "The disposable Level Z drawing backup restoration failed."
     }
+    $drawingAttributesRestored = [IO.File]::GetAttributes($DrawingCopy) -eq $originalDrawingAttributes
+    if (-not $drawingAttributesRestored) { throw "The disposable Level Z drawing attributes were not restored." }
 
     $metadata = [ordered]@{
         status = "PASS"
@@ -353,7 +389,10 @@ try {
         process_cleanup_verified = $processCleanupVerified
         script_cleanup_verified = $scriptCleanupVerified
         private_state_cleanup_verified = $privateStateCleanupVerified
+        drawing_read_only_guard_verified = $drawingReadOnlyGuardVerified
+        drawing_unwritten_verified = $drawingUnwrittenVerified
         drawing_restore_verified = $drawingRestoreVerified
+        drawing_attributes_restored = $drawingAttributesRestored
         curtain_frame_count = $frameCount
         curtain_panel_count = $panelCount
         beam_rebar_count = $rebarCount
@@ -370,7 +409,7 @@ try {
 }
 finally {
     Stop-Qs3dLevelProcess -Process $process
-    Restore-Qs3dLevelDrawingAndPrivateState -ScriptPath $scriptPath -ProjectSidecar $projectSidecar -DrawingCopy $DrawingCopy -DrawingBackupPath $drawingBackupPath
+    Restore-Qs3dLevelDrawingAndPrivateState -ScriptPath $scriptPath -ProjectSidecar $projectSidecar -DrawingCopy $DrawingCopy -DrawingBackupPath $drawingBackupPath -OriginalDrawingAttributes $originalDrawingAttributes
     Restore-EnvironmentValue -Name "QS3D_LEVEL_Z_RESULT" -Value $oldResult
     Restore-EnvironmentValue -Name "QS3D_LEVEL_Z_NONCE" -Value $oldNonce
     Restore-EnvironmentValue -Name "QS3D_LEVEL_Z_SOURCE_SHA" -Value $oldSourceSha
