@@ -9,10 +9,44 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
+            CategoriesAcceptExactLimit();
+            CategoriesStopAtFirstOverBoundItem();
             IncludeIdsStopAtFirstOverBoundItem();
             ExcludeIdsStopAtFirstOverBoundItem();
             ColumnsStopAtFirstOverBoundItem();
             AcceptedCollectionsRemainDefensiveSnapshots();
+        }
+
+        private static void CategoriesAcceptExactLimit()
+        {
+            var definition = new SemanticScheduleDefinition(
+                "S-CATEGORY-LIMIT",
+                "Category limit",
+                "CATEGORY LIMIT",
+                RepeatCategories(5000),
+                string.Empty,
+                string.Empty,
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                OneColumn());
+
+            Equal(5000, definition.Categories.Count);
+        }
+
+        private static void CategoriesStopAtFirstOverBoundItem()
+        {
+            MustFailCapacity(
+                () => new SemanticScheduleDefinition(
+                    "S-CATEGORY-OVER",
+                    "Category bound",
+                    "CATEGORY BOUND",
+                    OverBoundedCategories(),
+                    string.Empty,
+                    string.Empty,
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    OneColumn()),
+                "Semantic schedule category list exceeds 5000 entries.");
         }
 
         private static void IncludeIdsStopAtFirstOverBoundItem()
@@ -65,6 +99,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void AcceptedCollectionsRemainDefensiveSnapshots()
         {
+            var categories = new List<ElementCategory> { ElementCategory.Beam };
             var include = new List<string> { "E-1" };
             var exclude = new List<string> { "E-2" };
             var columns = new List<SemanticDocumentationColumn> { new SemanticDocumentationColumn("Id", "{Id}") };
@@ -72,17 +107,20 @@ namespace QS3D.Core.SmokeTests
                 "S-SNAPSHOT",
                 "Snapshot",
                 "SNAPSHOT",
-                new[] { ElementCategory.Beam },
+                categories,
                 string.Empty,
                 string.Empty,
                 include,
                 exclude,
                 columns);
 
+            categories.Clear();
             include.Clear();
             exclude.Clear();
             columns.Clear();
 
+            Equal(1, definition.Categories.Count);
+            Equal(ElementCategory.Beam, definition.Categories[0]);
             Equal(1, definition.IncludeElementIds.Count);
             Equal("E-1", definition.IncludeElementIds[0]);
             Equal(1, definition.ExcludeElementIds.Count);
@@ -95,6 +133,17 @@ namespace QS3D.Core.SmokeTests
         {
             for (var i = 0; i <= 5000; i++) yield return prefix + i;
             throw new ApplicationException(sentinelMessage);
+        }
+
+        private static IEnumerable<ElementCategory> RepeatCategories(int count)
+        {
+            for (var i = 0; i < count; i++) yield return ElementCategory.Beam;
+        }
+
+        private static IEnumerable<ElementCategory> OverBoundedCategories()
+        {
+            for (var i = 0; i <= 5000; i++) yield return ElementCategory.Beam;
+            throw new ApplicationException("Category source enumerated beyond the first over-bound item.");
         }
 
         private static IEnumerable<SemanticDocumentationColumn> OverBoundedColumns()

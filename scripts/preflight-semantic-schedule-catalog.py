@@ -42,7 +42,7 @@ for token in (
     "FindZone",
     "IncludeElementIds",
     "ExcludeElementIds",
-    "new List<ElementCategory>",
+    "Categories = SnapshotBounded(",
     ".AsReadOnly()",
     "Project contains a null semantic element.",
     "allowEmpty: true",
