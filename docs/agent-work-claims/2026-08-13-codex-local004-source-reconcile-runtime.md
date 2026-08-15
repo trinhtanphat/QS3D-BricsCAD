@@ -119,3 +119,10 @@ Source Reconcile marker/history/event guards, infer `LOCAL_PASS`, or close issue
 database lifecycle that records the existing-object mutation in the same Undo group
 as the topology sentinel. The current operator-owned BricsCAD process is out of
 scope; execution waits for the mandatory zero-process boundary.
+
+### Diagnostic implementation handoff
+
+- Claim expansion commit `8dbf11da3ba09f875a926e115b19b8543ef4a608` merged first through PR `#1498` at `de7aba1295abbc113cd548a6f86b8c6462172b2a`.
+- Implementation commit `5e319c34b8b9d125c0985784f4263591bbb2f518` merged through PR `#1507` at `3e5bb15b6f55968234bcc2c784c07e770f88439a`. The production Source Reconcile coordinator/service and existing LOCAL-004 runner/probe remain unchanged.
+- Exact implementation validation passed: PowerShell AST; seven focused Source Reconcile/manual-policy gates; aggregate preflight `809/809`; Core Release build `0 warnings / 0 errors`; Core smoke `ALL PASS`; installed-reference V25 `Release|x64` build `0 warnings / 0 errors`; adapter/Core ProductVersion suffix `+5e319c34b8b9d125c0985784f4263591bbb2f518`.
+- Licensed execution was intentionally not attempted because an operator-owned BricsCAD process was active. The claim remains `ACTIVE / PENDING_LOCAL`; issue `#1005` and LOCAL-004 remain open until a clean exact-SHA, zero-process matrix run returns the four sanitized variant tuples.

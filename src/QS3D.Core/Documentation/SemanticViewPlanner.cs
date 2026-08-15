@@ -29,7 +29,7 @@ namespace QS3D.Core.Documentation
             Kind = kind;
             FloorId = floorId;
             ZoneId = zoneId;
-            Categories = categories == null ? new List<ElementCategory>().AsReadOnly() : new List<ElementCategory>(categories).AsReadOnly();
+            Categories = SnapshotCategories(categories);
             IncludeElementIds = SnapshotFilterIds(includeElementIds, "includeElementIds");
             ExcludeElementIds = SnapshotFilterIds(excludeElementIds, "excludeElementIds");
         }
@@ -42,6 +42,22 @@ namespace QS3D.Core.Documentation
         public IReadOnlyList<ElementCategory> Categories { get; }
         public IReadOnlyList<string> IncludeElementIds { get; }
         public IReadOnlyList<string> ExcludeElementIds { get; }
+
+        private static IReadOnlyList<ElementCategory> SnapshotCategories(IEnumerable<ElementCategory>? values)
+        {
+            if (values == null) return Array.Empty<ElementCategory>();
+            var result = new List<ElementCategory>(Math.Min(SemanticViewPlanner.MaxFilterIds, 256));
+            using (var enumerator = values.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= SemanticViewPlanner.MaxFilterIds)
+                        throw new InvalidOperationException("Semantic view supports at most " + SemanticViewPlanner.MaxFilterIds + " categories.");
+                    result.Add(enumerator.Current);
+                }
+            }
+            return result.AsReadOnly();
+        }
 
         private static IReadOnlyList<string> SnapshotFilterIds(IEnumerable<string>? values, string label)
         {
