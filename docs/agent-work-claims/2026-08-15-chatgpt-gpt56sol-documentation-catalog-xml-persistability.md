@@ -1,9 +1,10 @@
 # Work claim — Semantic Documentation catalog XML persistability
 
-- Status: `ACTIVE` — implementation complete, ready for authorized integration
+- Status: `RELEASED` — implementation complete; pending authorized coordinator integration
 - Agent: `chatgpt-gpt56sol-documentation-catalog-xml-20260815`
 - Registered: `2026-08-15T09:21:37+07:00`
-- Current main SHA at latest status refresh: `3e5bb15b6f55968234bcc2c784c07e770f88439a`
+- Released: `2026-08-15T10:04+07:00`
+- Current main SHA at release: `aab8806e92673114c3a12a9d2c5dfe7ed14869d2`
 - Integration-v2 baseline/latest observed SHA: `df6c50276e74684a9041305bd3db6a966d327105`
 - Issue: `#1500`
 - PR: `#1502` (ready for review)
@@ -30,8 +31,8 @@ Serialization occurs before `project.Touch()`, so the prior behavior remained st
 - smoke: `6693460abb4036741894de33e6e1f08b1bcd2959`
 - registration: `60c20f46d0817325ccaadd3a02bfd07689506ef7`
 - first handoff claim: `d648408bbd47d6f32f876392cb482273649e3726`
-- PR: `#1502`; latest status `open`, `draft=false`, `mergeable=true`
-- pre-PR compare: ahead 4, behind 0; exactly four task files
+- ready-state refresh: `b9416065c9be6c90a60e0e5bf07f245a4ea1fe7c`
+- PR: `#1502`; latest status before release `open`, `draft=false`, `mergeable=true`
 - production source delta: +15/-2, limited to the centralized canonical text helpers
 - exact GitHub source/diff readback: PASS
 - managed build/smoke: NOT_RUN because this session has no `dotnet`; no LOCAL_PASS claimed
@@ -43,10 +44,11 @@ Serialization occurs before `project.Touch()`, so the prior behavior remained st
 - #1490/#1492 owns the separate Semantic Schedule catalog and is already imported into v2.
 - #1503 owns a separate `SemanticViewPlanner` category-input-bound lane; no planner overlap here.
 - #77 remains only the broad Documentation umbrella.
-- Current main movement after the task baseline is unrelated LOCAL-004/runtime work; this PR targets integration-v2 and is not stale against that target.
+- Current main has advanced independently to `aab8806e92673114c3a12a9d2c5dfe7ed14869d2`; integration-v2 remains at `df6c50276e74684a9041305bd3db6a966d327105`.
+- Direct retargeting of #1502 to `main` is unsafe because the task branch contains integration-v2 ancestry not represented on current main.
 - No `SemanticViewPlanner`, `SemanticSheetPlanner`, native documentation runtime, ProjectState, schema version, adapter/native, workflow/release or product-boundary changes.
 - No direct integration/main merge by this normal-agent session.
 
-## Handoff
+## Handoff / release
 
-Implementation/regression are fully represented by ready PR #1502 against the owner-authorized integration-v2 branch. No session-only source change remains. Claim stays ACTIVE until coordinator import/release; do not open a second live task from this normal-agent lane before that release.
+Implementation/regression are fully represented by ready PR #1502 against the owner-authorized integration-v2 branch. Current `main` still contains the pre-fix `CanonicalRequiredText(...)` / `CanonicalOptionalText(...)` implementation, so the defect is not yet landed there. This reservation is released from this normal-agent session after complete handoff; the authorized coordinator owns any future integration/rebase/cherry-pick decision. PR #1502 and Issue #1500 remain open until that integration occurs.
