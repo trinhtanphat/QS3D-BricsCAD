@@ -74,11 +74,10 @@ namespace QS3D.BricsCAD.V25.Updates
                     ? " Update khi đóng đang bật; QS3D sẽ lên lịch bản đã xác minh khi bạn đóng BricsCAD bình thường. Run QS3DUPDATE để xem hoặc cập nhật ngay."
                     : " Run QS3DUPDATE to review/update.";
                 document?.Editor.WriteMessage("\nQS3D: " + result.Message + suffix);
-                UpdateCenterWindowHost.Show(result, false);
             }
             catch
             {
-                // Update notification must never break plugin initialization or drawing work.
+                // Automatic update discovery remains non-modal and must never interrupt plugin initialization or drawing work.
             }
         }
     }
