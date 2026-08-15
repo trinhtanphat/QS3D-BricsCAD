@@ -7,9 +7,31 @@ on:
       - "agent/**"
       - "recovery/**"
       - "integration/**"
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".gitignore"
+      - ".gitattributes"
+      - ".editorconfig"
+      - "LICENSE*"
+      - "NOTICE*"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE*"
+      - ".github/PULL_REQUEST_TEMPLATE/**"
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".gitignore"
+      - ".gitattributes"
+      - ".editorconfig"
+      - "LICENSE*"
+      - "NOTICE*"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE*"
+      - ".github/PULL_REQUEST_TEMPLATE/**"
   workflow_dispatch:
 
 permissions:
