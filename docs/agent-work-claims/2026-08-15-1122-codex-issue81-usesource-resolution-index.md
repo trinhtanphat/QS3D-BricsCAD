@@ -1,0 +1,35 @@
+# UseSource interchange indexed resolution claim
+
+- Status: ACTIVE
+- Agent: Codex `/root/audit_performance_next`
+- Registered: 2026-08-15 11:22 +07:00
+- Baseline `main`: `54b43af253a4b22565e41d0dece86f0ecf307d75`
+- Issue: #81
+- Claim branch: `agent/codex/issue81-usesource-resolution-index-claim-20260815`
+- Implementation branch: `agent/codex/issue81-usesource-resolution-index-impl-20260815` (planned after claim integration)
+
+## Defect
+
+`ProjectInterchangeUseSourceSemanticImporter.Import(...)` iterates every validated source Zone, Floor, Family, and Element. For each identity, its private `ShouldAdd(...)` runs `plan.Items.Single(...)` over the complete resolution plan. A valid 20,000-Element same-category source/target collision import with no generated handles stays within the 100,000 Element, 250,000 total-identity, and 16 MiB JSON snapshot bounds, yet its executable UseSource decisions require roughly `N(N+1)/2 = 200,010,000` resolution-item predicate checks. Planning has already authorized and validated exactly one executable resolution item per source identity, so rescanning the full plan during each mutation is unnecessary quadratic work.
+
+## Reserved scope
+
+- `src/QS3D.Core/Export/ProjectInterchangeUseSourceSemanticImporter.cs`: after existing plan/cleanup authorization and validation, build one private case-insensitive `(kind, id)` resolution-action index and replace only the four Zone/Floor/Family/Element per-identity full-plan scans with indexed lookup.
+- `tests/QS3D.Core.SmokeTests/ProjectInterchangeUseSourceSemanticImporterSmoke.cs` or one separate auto-registered focused smoke: preserve mixed-case Add/UseSource behavior and resulting state.
+- One focused remote-safe structural preflight under `scripts/` may pin the private index, its placement after authorization/validation, and removal of the four mutation-loop scans.
+- This claim record.
+
+## Preservation and exclusions
+
+Preserve cleanup authorization and requirements, valid-plan exception behavior, deterministic source ordering, UseSource/Add choices, plan/result counts, active context, affected closure/invalidation, metadata/audit, target validation, atomic rollback, public APIs, and all existing messages. The index is private to `ProjectInterchangeUseSourceSemanticImporter` and consumes only the already-authorized/validated plan.
+
+Do not modify the shared planner, KeepTarget importer, FieldMerge planner/importer, any other importer, V25/V26/native adapters, UI, licensed runtime evidence, LOCAL/private data, release surfaces, workflows, GitHub Actions, PR #1543/#1556 lanes, or the completed RateBook/KeepTarget/Schedule/Rebar-bounds lanes. Do not claim native or end-to-end timing improvement from remote structural evidence.
+
+## Validation plan
+
+- Run the focused structural preflight and focused UseSource semantic smoke coverage.
+- Run existing UseSource semantic and interchange resolution-contract gates.
+- Build `QS3D.Core` and `QS3D.Core.SmokeTests` in Release with zero warnings/errors.
+- Run the full Core smoke executable.
+- Run the repository remote-safe preflight aggregate without dispatching or modifying GitHub Actions.
+- Refresh `origin/main`, re-audit collisions, inspect the final diff, push the implementation branch, and open a PR; stop before merge and keep broad issue #81 open.
