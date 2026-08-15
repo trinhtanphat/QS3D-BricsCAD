@@ -6,7 +6,9 @@ param(
     [Parameter(Mandatory = $true)][string]$ArtifactDir,
     [Parameter(Mandatory = $true)][ValidatePattern("^[0-9a-fA-F]{40}$")][string]$ExpectedSourceSha,
     [Parameter(Mandatory = $true)][switch]$ConfirmDisposableCopy,
-    [ValidateRange(30, 900)][int]$StartupTimeoutSeconds = 240
+    [ValidateSet("Millimeter", "Meter")][string]$NativeDrawingUnit = "Millimeter",
+    [ValidateRange(30, 900)][int]$StartupTimeoutSeconds = 240,
+    [ValidateRange(15, 120)][int]$GracefulExitTimeoutSeconds = 15
 )
 
 $ErrorActionPreference = "Stop"
@@ -266,6 +268,11 @@ $drawingRestoreVerified = $false
 $drawingAttributesRestored = $false
 $drawingHashAfter = $null
 $startedAt = Get-Date
+$nativeInsunits = switch ($NativeDrawingUnit) {
+    "Millimeter" { "4" }
+    "Meter" { "6" }
+    default { throw "Unsupported native drawing unit: $NativeDrawingUnit" }
+}
 
 try {
     $guardedDrawingAttributes = [IO.FileAttributes](([int]$originalDrawingAttributes) -bor [int][IO.FileAttributes]::ReadOnly)
@@ -279,18 +286,20 @@ try {
     $env:QS3D_LEVEL_Z_SOURCE_SHA = $ExpectedSourceSha
     $script = @(
         "FILEDIA", "0",
+        "_.OPEN", ('"' + $DrawingCopy + '"'),
         "CMDECHO", "1",
         "TILEMODE", "1",
-        "INSUNITS", "4",
+        "INSUNITS", $nativeInsunits,
         "UCS", "W",
         "NETLOAD", ('"' + $PluginDll + '"'),
         "QS3DLEVELZPROBE",
+        "_.CLOSE", "_N",
         "_.QUIT", "_N"
     )
     Set-Content -LiteralPath $scriptPath -Value $script -Encoding ASCII
 
     $argumentParts = New-Object System.Collections.Generic.List[string]
-    $argumentParts.Add('"' + $DrawingCopy + '"')
+    $argumentParts.Add('/Automation')
     $argumentParts.Add('/P')
     $argumentParts.Add('"' + $Profile + '"')
     $argumentParts.Add('/B')
@@ -311,7 +320,7 @@ try {
 
     $process.Refresh()
     if (-not $process.HasExited) {
-        $gracefulExit = $process.WaitForExit(15000)
+        $gracefulExit = $process.WaitForExit($GracefulExitTimeoutSeconds * 1000)
     }
     else {
         $gracefulExit = $true
@@ -328,6 +337,7 @@ try {
     Require-Qs3dLevelValue -Marker $marker -Key "source_sha" -Expected $ExpectedSourceSha
     Require-Qs3dLevelValue -Marker $marker -Key "schema" -Expected "QS3D_LEVEL_Z_RUNTIME_V1"
     Require-Qs3dLevelValue -Marker $marker -Key "is_64bit" -Expected "true"
+    Require-Qs3dLevelValue -Marker $marker -Key "native_drawing_unit" -Expected $NativeDrawingUnit
     Require-Qs3dLevelValue -Marker $marker -Key "physical_opening_volume_reduced" -Expected "true"
     Require-Qs3dLevelValue -Marker $marker -Key "level_edit_invalidation" -Expected "true"
     Require-Qs3dLevelValue -Marker $marker -Key "top_only_fail_closed" -Expected "true"
@@ -338,7 +348,7 @@ try {
     Require-Qs3dLevelNumber -Marker $marker -Key "bounded_wall_top_m" -Expected 6.8
     Require-Qs3dLevelNumber -Marker $marker -Key "bottom_beam_bottom_m" -Expected 3.25
     Require-Qs3dLevelNumber -Marker $marker -Key "bottom_beam_top_m" -Expected 3.85
-    if (-not $gracefulExit) { throw "BricsCAD did not exit gracefully after the Level Z marker." }
+    if (-not $gracefulExit) { throw "BricsCAD did not exit gracefully within $GracefulExitTimeoutSeconds seconds after the Level Z marker." }
 
     $frameCount = Read-PositiveLevelInt -Marker $marker -Key "curtain_frame_count"
     $panelCount = Read-PositiveLevelInt -Marker $marker -Key "curtain_panel_count"
@@ -396,11 +406,14 @@ $metadata = [ordered]@{
     completed_at = (Get-Date).ToUniversalTime().ToString("O")
     profile = $Profile
     bricscad_file_version = (Get-Item -LiteralPath $bricscadExe).VersionInfo.FileVersion
+    native_drawing_unit = $NativeDrawingUnit
+    native_insunits = $nativeInsunits
     plugin_sha256 = $pluginHash
     drawing_copy_sha256_before = $drawingHashBefore
     drawing_copy_sha256_after = $drawingHashAfter
     proxy_information_dialogs_dismissed = $proxyInformationDialogsDismissed
     graceful_exit = $gracefulExit
+    graceful_exit_timeout_seconds = $GracefulExitTimeoutSeconds
     process_cleanup_verified = $processCleanupVerified
     script_cleanup_verified = $scriptCleanupVerified
     private_state_cleanup_verified = $privateStateCleanupVerified
@@ -419,6 +432,7 @@ $metadata = [ordered]@{
 $metadata | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
 
 Write-Host "QS3D BricsCAD V25 Level Z runtime PASS"
+Write-Host "Native drawing unit: $NativeDrawingUnit (INSUNITS=$nativeInsunits)"
 Write-Host "Curtain frames: $frameCount; panels: $panelCount; Beam bars: $rebarCount; stirrups: $stirrupCount"
 Write-Host "Marker: $resultPath"
 Write-Host "Metadata: $metadataPath"
