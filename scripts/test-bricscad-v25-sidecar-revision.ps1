@@ -42,12 +42,17 @@ function Remove-PrivateProbeFile {
 function Remove-PrivateProbeArtifacts {
     param([string]$ArtifactDir, [string]$ScriptPath, [string]$DrawingCopy, [string]$Nonce)
     $sidecarPath = [IO.Path]::ChangeExtension($DrawingCopy, ".qsdb")
-    foreach ($privatePath in @(
-        $ScriptPath, $sidecarPath, $sidecarPath + ".bak", $sidecarPath + ".lock",
-        $sidecarPath + "." + $Nonce + ".original",
-        $sidecarPath + "." + $Nonce + ".replacement",
-        $sidecarPath + "." + $Nonce + ".removed"
-    )) {
+    $privatePaths = @(
+        $ScriptPath
+        $sidecarPath
+        ($sidecarPath + ".bak")
+        ($sidecarPath + ".lock")
+        ($sidecarPath + "." + $Nonce + ".original")
+        ($sidecarPath + "." + $Nonce + ".replacement")
+        ($sidecarPath + "." + $Nonce + ".removed")
+    )
+    if ($privatePaths.Count -ne 7) { throw "Private sidecar revision cleanup path inventory is invalid." }
+    foreach ($privatePath in $privatePaths) {
         Remove-PrivateProbeFile -Path $privatePath
     }
 
@@ -164,6 +169,8 @@ try {
         [string]::Equals([string]$marker["status"], "FAIL", [StringComparison]::OrdinalIgnoreCase)) {
         $allowedFailureStages = @(
             "scope_validation", "baseline_bind", "baseline_save", "baseline_snapshot",
+            "baseline_snapshot_detach", "baseline_snapshot_save", "baseline_snapshot_load",
+            "baseline_snapshot_normalize", "baseline_snapshot_digest",
             "backup_appearance_prepare", "backup_appearance_read_only", "backup_appearance_canonical_bind",
             "backup_appearance_existing_mutation", "backup_appearance_interchange_confirmation",
             "backup_appearance_save", "backup_appearance_semantic_integrity", "backup_appearance_restore",
