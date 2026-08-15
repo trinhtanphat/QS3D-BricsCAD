@@ -3,9 +3,11 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using System.Xml.Linq;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
+using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
 using QS3D.Core.Revisions;
 using QS3D.Core.Services;
@@ -16,6 +18,8 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
+            MaterialCatalogRevisionSemantics();
+            MaterialCatalogUsesLastAvailableRevision();
             StructuralQuantities();
             StructuralOpeningDeduction();
             FixedPointRegeneration();
@@ -25,6 +29,79 @@ namespace QS3D.Core.SmokeTests
             RebarXlsxExport();
             DetailedRevision();
             AdvancedHealth();
+        }
+
+        private static void MaterialCatalogRevisionSemantics()
+        {
+            var project = new ProjectState("material-catalog-revision", "Material catalog revision");
+            var beforeUpsertVersion = project.ChangeVersion;
+            ProjectMaterialCatalog.UpsertCustom(project, "custom-1", "Custom One", "m2", "Initial");
+            Equal(beforeUpsertVersion + 1L, project.ChangeVersion);
+            Equal(1, ProjectMaterialCatalog.GetCustom(project).Count);
+            Equal("Custom One", ProjectMaterialCatalog.GetCustom(project)[0].Name);
+
+            var afterUpsertVersion = project.ChangeVersion;
+            var afterUpsertUpdatedUtc = project.UpdatedUtc;
+            ProjectMaterialCatalog.UpsertCustom(project, "custom-1", "Custom One", "m2", "Initial");
+            Equal(afterUpsertVersion, project.ChangeVersion);
+            Equal(afterUpsertUpdatedUtc, project.UpdatedUtc);
+
+            var beforeDeleteVersion = project.ChangeVersion;
+            True(ProjectMaterialCatalog.DeleteCustom(project, "custom-1"));
+            Equal(beforeDeleteVersion + 1L, project.ChangeVersion);
+            Equal(0, ProjectMaterialCatalog.GetCustom(project).Count);
+            True(!project.Metadata.ContainsKey(ProjectMaterialCatalog.MetadataKey));
+        }
+
+        private static void MaterialCatalogUsesLastAvailableRevision()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-material-catalog-revision-" + Guid.NewGuid().ToString("N") + ".qsdb");
+            try
+            {
+                var store = new QsdbProjectStore();
+                store.Save(new ProjectState("material-catalog-ceiling", "Material catalog ceiling"), path);
+
+                var document = XDocument.Load(path, LoadOptions.None);
+                var root = document.Root ?? throw new Exception("Serialized QSDB root was not found for material catalog revision-ceiling fixture.");
+                root.SetAttributeValue(
+                    "changeVersion",
+                    (long.MaxValue - 1L).ToString(System.Globalization.CultureInfo.InvariantCulture));
+                document.Save(path, SaveOptions.DisableFormatting);
+
+                var project = store.Load(path);
+                Equal(long.MaxValue - 1L, project.ChangeVersion);
+                True(!project.Metadata.ContainsKey(ProjectMaterialCatalog.MetadataKey));
+
+                ProjectMaterialCatalog.UpsertCustom(project, "custom-ceiling", "Ceiling material", "m2", "Initial");
+
+                Equal(long.MaxValue, project.ChangeVersion);
+                Equal(1, ProjectMaterialCatalog.GetCustom(project).Count);
+                Equal("Ceiling material", ProjectMaterialCatalog.GetCustom(project)[0].Name);
+                True(project.Metadata.ContainsKey(ProjectMaterialCatalog.MetadataKey));
+
+                var beforeRejectedUpdatedUtc = project.UpdatedUtc;
+                var beforeRejectedMetadata = project.Metadata[ProjectMaterialCatalog.MetadataKey];
+                var rejected = false;
+                try
+                {
+                    ProjectMaterialCatalog.UpsertCustom(project, "custom-ceiling", "Ceiling material", "m2", "Changed description");
+                }
+                catch (OverflowException)
+                {
+                    rejected = true;
+                }
+
+                True(rejected);
+                Equal(long.MaxValue, project.ChangeVersion);
+                Equal(beforeRejectedUpdatedUtc, project.UpdatedUtc);
+                Equal(beforeRejectedMetadata, project.Metadata[ProjectMaterialCatalog.MetadataKey]);
+                Equal("Initial", ProjectMaterialCatalog.GetCustom(project)[0].Description);
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+                try { if (File.Exists(path + ".bak")) File.Delete(path + ".bak"); } catch { }
+            }
         }
 
         private static void StructuralQuantities()
