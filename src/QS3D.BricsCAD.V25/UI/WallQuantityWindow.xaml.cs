@@ -385,13 +385,14 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 var currentProject = EnsureCurrentProject("định vị Tường trong View 3D");
                 var currentRow = ResolveCurrentRow(currentProject, displayedView);
-                var handles = SourceHandleResolver.Resolve(currentProject, currentRow.ElementIds);
-                if (handles.Count == 0)
-                    throw new InvalidOperationException("Tường hiện hành không còn CAD Handle nguồn để định vị an toàn.");
+                var elementId = currentRow.ElementIds[0];
+                var currentElement = currentProject.FindElement(elementId)
+                    ?? throw new InvalidOperationException("Tường đã bị xóa hoặc semantic identity vừa thay đổi. Tính lại trước khi định vị.");
+                var handles = Resolve3DLocateHandles(currentProject, currentElement, currentRow);
 
                 var count = QS3D.BricsCAD.V25.Cad.CadHandleService.Select(_document, handles);
                 if (count <= 0)
-                    throw new InvalidOperationException("Không resolve được CAD object hiện hành từ Handle của Tường.");
+                    throw new InvalidOperationException("Không resolve được CAD object hiện hành từ Handle đã xác thực của Tường.");
 
                 SetStatus("Bám 3D • " + trigger + ": đã chọn " + count + " đối tượng CAD cho " + displayedView.ElementId + ".");
                 _document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
@@ -400,6 +401,44 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 SetStatus("Định vị Tường lỗi: " + ex.Message);
             }
+        }
+
+        private IReadOnlyList<string> Resolve3DLocateHandles(ProjectState currentProject, ProjectElement currentElement, QuantityReportRow currentRow)
+        {
+            const string generatedSolidHandleKey = "GeneratedSolidHandle";
+            if (!currentElement.Properties.TryGetValue(generatedSolidHandleKey, out var rawGeneratedHandle))
+            {
+                var sourceHandles = SourceHandleResolver.Resolve(currentProject, currentRow.ElementIds);
+                if (sourceHandles.Count == 0)
+                    throw new InvalidOperationException("Tường chưa có Solid3d generated và cũng không còn CAD Handle nguồn để định vị an toàn.");
+                return sourceHandles;
+            }
+
+            if (currentElement.IsGeneratedSolidStale())
+                throw new InvalidOperationException("Solid3d generated của Tường đang stale; hãy regenerate trước khi Định vị 3D.");
+
+            var normalized = QS3D.BricsCAD.V25.Cad.CadHandleService.NormalizeHexHandle(rawGeneratedHandle);
+            if (normalized == null)
+                throw new InvalidOperationException("GeneratedSolidHandle của Tường tồn tại nhưng rỗng hoặc không phải handle hex hợp lệ; từ chối fallback sang hình học nguồn.");
+
+            var liveSolidHandles = QS3D.BricsCAD.V25.Cad.CadHandleService.GetLiveSolidHandles(_document, new[] { normalized });
+            if (!liveSolidHandles.Contains(normalized))
+                throw new InvalidOperationException("GeneratedSolidHandle của Tường không còn resolve tới Solid3d sống; từ chối fallback sang hình học nguồn.");
+
+            var ownedHandles = QS3D.BricsCAD.V25.Cad.GeneratedGeometryService.FindMatchingOwnedHandles(
+                _document,
+                currentProject.ProjectId,
+                currentElement.Id,
+                currentElement.Category);
+            var ownershipMatches = ownedHandles.Any(handle =>
+                string.Equals(
+                    QS3D.BricsCAD.V25.Cad.CadHandleService.NormalizeHexHandle(handle),
+                    normalized,
+                    StringComparison.OrdinalIgnoreCase));
+            if (!ownershipMatches)
+                throw new InvalidOperationException("GeneratedSolidHandle trỏ tới Solid3d sống nhưng QS3D ownership không khớp project/element/category; từ chối fallback sang hình học nguồn.");
+
+            return new[] { normalized };
         }
 
         private QuantityReportRow ResolveCurrentRow(ProjectState currentProject, WallRowView displayedView)
@@ -461,7 +500,6 @@ namespace QS3D.BricsCAD.V25.UI
             if (string.Equals(category, ElementCategory.WallPier.ToString(), StringComparison.OrdinalIgnoreCase)) return "Trụ tường";
             return FirstNonEmpty(category, "Tường");
         }
-
         private static double? ResolveThicknessMm(ProjectState? project, ProjectElement? element)
         {
             if (element == null) return null;
