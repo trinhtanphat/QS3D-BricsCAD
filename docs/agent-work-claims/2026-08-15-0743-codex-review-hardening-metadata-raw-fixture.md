@@ -1,6 +1,6 @@
 # Work claim — Review hardening raw metadata fixture
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local-worker` (`/root`)
 - Registered: `2026-08-15T07:43:00+07:00`
 - Baseline main SHA: `d06328d6ea8a6f385031b7e786116b7eefce270e`
@@ -25,3 +25,11 @@
 - Merge this claim before implementation and re-fetch current claims/open PRs.
 - Build `QS3D.Core` and `QS3D.Core.SmokeTests` in Release, run the full registered Core smoke suite, relevant QSDB/static gates, and `git diff --check`.
 - Publish/merge the bounded test-only implementation normally, then mark this claim `COMPLETED` with exact SHAs and the next independently observed blocker, if any.
+
+## Completion evidence
+
+- Claim-only PR `#1414` merged as `40106bccefa0c570d2da37540f0c7d59bdca3e6f` before the test edit.
+- Test-only PR `#1418` merged as exact implementation SHA `89a3a3390c04670b6598c6d3c1e3881b2055e3cd` (source commit `c8f10ea19896c93be60e4d957447058c22b87772`).
+- `QS3D.Core` and `QS3D.Core.SmokeTests` Release builds passed with zero warnings and zero errors. QSDB relation-identity, free-text, map-integrity and generic preflights passed.
+- The full registered smoke suite advanced past `ReviewHardeningSmoke.QsdbRejectsUnsavableMutableState` and next stopped independently at `QsdbCanonicalPersistenceSmoke.PaddedMapKeyFailsBeforePersistence`, whose public padded-key setup is outside this claim.
+- Production metadata and persistence code remained unchanged; no BricsCAD, private data or GitHub Actions were used.
