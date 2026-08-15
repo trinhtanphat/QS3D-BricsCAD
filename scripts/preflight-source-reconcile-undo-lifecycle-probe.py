@@ -121,10 +121,17 @@ if RUNNER.is_file():
         'script_cleanup_verified',
         'private_state_cleanup_verified',
         'drawing_cleanup_verified',
+        '$metadataVariants = @($results | ForEach-Object { $_ })',
+        '$metadataError = $_',
+        'variants = $metadataVariants',
+        'LOCAL-004 Undo lifecycle metadata publication failed.',
     )
     for token in required:
         if token not in text:
             errors.append("Undo lifecycle runner missing contract token: " + token)
+
+    if 'variants = @($results)' in text:
+        errors.append("Undo lifecycle runner regressed to Windows PowerShell 5.1-incompatible generic-list array materialization")
 
     sequence = (
         '"QS3DSRULPREPARE", "QS3DSRULMUTATE"',
@@ -141,6 +148,25 @@ if RUNNER.is_file():
     for forbidden in ('profile =', 'drawing_path', 'plugin_path', 'artifact_path', 'handle', 'project_id'):
         if forbidden in metadata:
             errors.append("Undo lifecycle metadata contains a private/identity field: " + forbidden)
+
+    materialize_position = text.find('$metadataVariants = @($results | ForEach-Object { $_ })')
+    metadata_build_position = text.find('$metadata = [ordered]@{')
+    metadata_write_position = text.find('$metadata | ConvertTo-Json', metadata_build_position)
+    metadata_catch_position = text.find('$metadataError = $_', metadata_write_position)
+    if min(materialize_position, metadata_build_position, metadata_write_position, metadata_catch_position) < 0 or not (
+        materialize_position < metadata_build_position < metadata_write_position < metadata_catch_position
+    ):
+        errors.append("Undo lifecycle runner metadata materialization/publication error boundary drifted")
+
+    error_priority = (
+        'if ($null -ne $cleanupError) { throw "LOCAL-004 Undo lifecycle cleanup failed." }',
+        'if ($null -ne $qualificationError) { throw $qualificationError }',
+        'if ($null -ne $metadataError) { throw "LOCAL-004 Undo lifecycle metadata publication failed." }',
+    )
+    positions = [text.find(token) for token in error_priority]
+    if any(position < 0 for position in positions) or positions != sorted(positions):
+        errors.append("Undo lifecycle runner must preserve cleanup then qualification then metadata error precedence")
+
     for forbidden in ('Get-Process -Name "*"', 'Process.GetProcesses', 'SendKeys', 'SetForegroundWindow'):
         if forbidden in text:
             errors.append("Undo lifecycle runner contains a broad process/window action: " + forbidden)
@@ -174,4 +200,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: four fresh-process database/object Undo variants are statically bound to an existing XData mutation plus topology sentinel, publish only sanitized recording/existing/topology classes, preserve exact-SHA/disposable-copy/cleanup guards, and leave production Source Reconcile database Undo lifecycle untouched.")
+print("PASS: four fresh-process database/object Undo variants are statically bound to an existing XData mutation plus topology sentinel, generic result metadata is materialized through the Windows PowerShell 5.1-safe pipeline path without masking qualification errors, sanitized evidence/cleanup guards are preserved, and production Source Reconcile database Undo lifecycle remains untouched.")
