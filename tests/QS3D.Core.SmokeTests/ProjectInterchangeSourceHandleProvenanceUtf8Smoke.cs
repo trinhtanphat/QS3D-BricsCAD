@@ -41,7 +41,7 @@ namespace QS3D.Core.SmokeTests
             target.Metadata[key] = "v1." +
                 Field(sourceElementId) + "." +
                 Field("Bản-vẽ") + "." +
-                Field("Project") + "." +
+                Field("drawing-local") + "." +
                 Field("1") + "." +
                 Field(sourceHandle);
 
