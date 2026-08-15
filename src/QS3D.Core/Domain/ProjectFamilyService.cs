@@ -354,6 +354,14 @@ namespace QS3D.Core.Domain
             var text = (value ?? string.Empty).Trim();
             if (text.Length == 0 || text.Length > maxLength) throw new ArgumentException(parameterName + " must contain 1.." + maxLength + " characters.", parameterName);
             if (text.Any(char.IsControl)) throw new ArgumentException(parameterName + " cannot contain control characters.", parameterName);
+            try
+            {
+                XmlConvert.VerifyXmlChars(text);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException(parameterName + " contains characters that are invalid in XML.", parameterName, ex);
+            }
             return text;
         }
 
