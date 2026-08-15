@@ -19,6 +19,7 @@ The deterministic counterexample is 128 canonical schedules followed by a malfor
 - `src/QS3D.Core/Documentation/SemanticScheduleCatalog.cs`: load-side schedule-node materialization and validation ordering only.
 - `tests/QS3D.Core.SmokeTests/SemanticScheduleCatalogSmoke.cs`: extend the already registered catalog smoke for exact-cap acceptance, capacity-first excess rejection, and within-cap schema non-regression.
 - `scripts/preflight-semantic-schedule-catalog.py`: pin the bounded load contract and reject the legacy unbounded definition materialization.
+- `scripts/preflight-semantic-schedule-catalog-schema.py`: align the existing strict XML gate with the bounded node snapshot while preserving every within-cap schema allowlist assertion. Added after aggregate preflight exposed the superseded literal `ValidateSchema(root);` requirement; reservation amendment: <https://github.com/trinhtanphat/QS3D-BricsCAD/issues/81#issuecomment-5299845645>.
 - This claim record.
 
 ## Exclusions
@@ -33,4 +34,3 @@ The deterministic counterexample is 128 canonical schedules followed by a malfor
 - Preserve detailed schema rejection for malformed nodes inside the accepted capacity.
 - Run Core Release build, full Core smoke, focused Semantic Schedule catalog/save-bound/definition-bound preflights, and aggregate remote-safe preflight.
 - Do not operate GitHub Actions.
-
