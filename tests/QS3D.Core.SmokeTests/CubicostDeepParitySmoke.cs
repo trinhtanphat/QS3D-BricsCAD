@@ -109,6 +109,12 @@ namespace QS3D.Core.SmokeTests
             Equal(2, imported.Entries.Count, "BQ library project import count");
             Equal("BQ-A", imported.Entries[0].ItemCode, "BQ library deterministic category sort first");
             Equal("BQ-B", imported.Entries[1].ItemCode, "BQ library deterministic category sort second");
+
+            Throws<ArgumentException>(() => library.ImportFromProject(new[]
+            {
+                new BqLibraryEntry("BQ-C", "Formwork", "m2", "Structure/Formwork", 3m),
+                new BqLibraryEntry("BQ-C", "Formwork duplicate", "m2", "Structure/Formwork", 4m)
+            }, replaceExisting: true), "BQ library duplicate project payload");
         }
 
         private static void True(bool condition, string label)
@@ -126,6 +132,20 @@ namespace QS3D.Core.SmokeTests
         {
             if (Math.Abs(expected - actual) > tolerance)
                 throw new InvalidOperationException(label + ": expected " + expected + ", actual " + actual + ".");
+        }
+
+        private static void Throws<TException>(Action action, string label)
+            where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException)
+            {
+                return;
+            }
+            throw new InvalidOperationException(label + " did not throw " + typeof(TException).Name + ".");
         }
     }
 }
