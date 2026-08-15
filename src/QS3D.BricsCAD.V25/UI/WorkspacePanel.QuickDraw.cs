@@ -18,6 +18,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             PreviewKeyDown += OnQuickDrawPreviewKeyDown;
             FamilyList.MouseDoubleClick += OnFamilyQuickDrawDoubleClick;
+            EnsureSlabOpeningWorkspaceRoute();
 
             var menu = FamilyList.ContextMenu;
             if (menu == null) return;
@@ -102,9 +103,11 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                if (!(FamilyList.SelectedItem is ProjectFamily family))
+                var family = ResolveWorkspaceDrawFamily();
+                if (family == null)
                 {
-                    SetStatus("Chọn một Family / Type trước khi vẽ.");
+                    if (!IsSlabOpeningWorkspaceRouteSelected())
+                        SetStatus("Chọn một Family / Type trước khi vẽ.");
                     return;
                 }
 
@@ -127,6 +130,12 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                if (IsSlabOpeningWorkspaceRouteSelected())
+                {
+                    SetStatus("Lỗ Mở Sàn chỉ dùng Vẽ Nhanh / Vẽ tùy chỉnh để giữ exact slabOpen, hướng -Z và Auto BoolSubtract.");
+                    return;
+                }
+
                 if (!(FamilyList.SelectedItem is ProjectFamily family))
                 {
                     SetStatus("Chọn một Family / Type trước khi dùng Vẽ cơ bản.");

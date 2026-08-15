@@ -17,6 +17,23 @@ def discover():
     ]
 
 
+def escape_actions_data(value):
+    return str(value).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def escape_actions_property(value):
+    return escape_actions_data(value).replace(":", "%3A").replace(",", "%2C")
+
+
+def emit_failure_annotation(path, reason):
+    if os.environ.get("GITHUB_ACTIONS", "").lower() != "true":
+        return
+    rel = str(path).replace("\\", "/")
+    file_property = escape_actions_property(rel)
+    message = escape_actions_data("Feature preflight failed: " + rel + " (" + str(reason) + ")")
+    print("::error file=" + file_property + "::" + message)
+
+
 def main():
     gates = discover()
     if not gates:
@@ -59,6 +76,7 @@ def main():
         print("\nAggregate preflight FAILED:")
         for path, reason in failed:
             print(" -", path, reason)
+            emit_failure_annotation(path, reason)
         print("FAILED with", len(failed), "feature gate failure(s).")
         return 1
 

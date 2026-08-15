@@ -21,7 +21,7 @@ namespace QS3D.Core.Revisions
                 }
             }
 
-            ValidateElement(root, "qs3dRevision", new[] { "id", "createdUtc" }, new[] { "elements" });
+            ValidateElement(root, "qs3dRevision", new[] { "id", "createdUtc", "schemaVersion", "projectId" }, new[] { "elements" });
             RequireExactlyOne(root, "elements");
 
             foreach (var elements in root.Elements("elements"))

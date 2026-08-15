@@ -26,6 +26,15 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
+                QuantityContextMenuCoordinator.Start();
+            }
+            catch (Exception ex)
+            {
+                ReportOptionalStartupFailure("Quantity context menu", ex);
+            }
+
+            try
+            {
                 UpdateBootstrapper.Start();
             }
             catch (Exception ex)
@@ -42,11 +51,13 @@ namespace QS3D.BricsCAD.V25
         private static void TeardownHostServices()
         {
             TryCleanup(UpdateBootstrapper.Stop);
+            TryCleanup(QuantityContextMenuCoordinator.Stop);
             TryCleanup(RibbonInitializationCoordinator.Stop);
             TryCleanup(DocumentLifecycleCoordinator.Stop);
             TryCleanup(PaletteCoordinator.Dispose);
             TryCleanup(UpdateRibbonAugmenter.Reset);
             TryCleanup(QuantityReferenceRibbonAugmenter.Reset);
+            TryCleanup(RaftFoundationRibbonAugmenter.Reset);
             TryCleanup(QuickWorkflowRibbonAugmenter.Reset);
             TryCleanup(ReferenceWallRibbonAugmenter.Reset);
             TryCleanup(ProjectRibbonAugmenter.Reset);

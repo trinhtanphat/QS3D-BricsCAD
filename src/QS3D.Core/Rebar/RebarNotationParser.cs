@@ -59,8 +59,10 @@ namespace QS3D.Core.Rebar
 
         private static double PositiveDouble(string value, string label)
         {
-            var result = double.Parse(value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture);
-            if (result <= 0d || double.IsNaN(result) || double.IsInfinity(result)) throw new FormatException("Rebar " + label + " must be greater than zero.");
+            if (!double.TryParse(value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var result) ||
+                double.IsNaN(result) || double.IsInfinity(result))
+                throw new FormatException("Rebar " + label + " is too large.");
+            if (result <= 0d) throw new FormatException("Rebar " + label + " must be greater than zero.");
             return result;
         }
 

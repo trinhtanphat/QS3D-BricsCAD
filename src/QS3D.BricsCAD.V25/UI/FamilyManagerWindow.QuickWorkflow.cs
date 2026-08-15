@@ -15,33 +15,38 @@ namespace QS3D.BricsCAD.V25.UI
     {
         private bool _quickWorkflowEventsAttached;
 
-        private sealed class QuickFamilyDefaults
-        {
-            public double? WidthM { get; set; }
-            public double? DepthM { get; set; }
-            public double? HeightM { get; set; }
-            public double? ThicknessM { get; set; }
-            public double? BottomOffsetM { get; set; }
-        }
-
         private void OnQuickWorkflowContentRendered(object sender, EventArgs e)
         {
             if (_quickWorkflowEventsAttached) return;
             _quickWorkflowEventsAttached = true;
 
-            // Attach after the XAML handlers so this narrow guard repairs the existing New-mode
-            // ordering race: OnNewClick clears FamilyList.SelectedItem, the original selection
-            // handler runs first and resets _creatingNew=false, then this handler restores draft
-            // mode when the resulting selection is actually empty.
+            // The XAML selection handler runs before this attached handler. It preserves
+            // _creatingNew only when OnNewClick intentionally clears selection; this handler
+            // exits draft mode only when a real Family is selected, then refreshes the QS form.
             FamilyList.SelectionChanged += OnQuickFamilySelectionChanged;
             NewCategoryCombo.SelectionChanged += OnQuickCategorySelectionChanged;
+            ConfigureQuickMaterialChoices();
             RefreshQuickWorkflow();
+        }
+
+        private void ConfigureQuickMaterialChoices()
+        {
+            QuickMaterialCombo.ItemsSource = new[]
+            {
+                "Bê tông",
+                "Gạch",
+                "Thép",
+                "Gỗ",
+                "Kính",
+                "Hoàn thiện",
+                "Chống thấm"
+            };
         }
 
         private void OnQuickFamilySelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_loading) return;
-            _creatingNew = FamilyList.SelectedItem == null;
+            if (FamilyList.SelectedItem != null) _creatingNew = false;
             RefreshQuickWorkflow();
         }
 
@@ -51,23 +56,102 @@ namespace QS3D.BricsCAD.V25.UI
             RefreshQuickWorkflow();
         }
 
+        private void OnQuickCreateClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                EnsureActive("Tạo nhanh Family");
+                ElementCategory? preferredCategory = null;
+                if (FamilyList.SelectedItem is ProjectFamily selected) preferredCategory = selected.Category;
+                if (!preferredCategory.HasValue) preferredCategory = (NewCategoryCombo.SelectedItem as CategoryChoice)?.Category;
+
+                OnNewClick(sender, e);
+                if (preferredCategory.HasValue)
+                {
+                    var choice = (NewCategoryCombo.ItemsSource as IEnumerable<CategoryChoice>)?
+                        .FirstOrDefault(x => x.Category == preferredCategory.Value);
+                    if (choice != null) NewCategoryCombo.SelectedItem = choice;
+                }
+
+                var category = ResolveQuickCategory()
+                    ?? throw new InvalidOperationException("Chọn Category trước khi Tạo nhanh Family.");
+                var schema = ProjectFamilyQuickSchemaService.GetSchema(category);
+                if (!schema.SupportsQuickForm)
+                    throw new InvalidOperationException(category + " chưa có QS quick form; dùng Thuộc tính nâng cao cho category này.");
+
+                PopulateQuickFields(category, null, overwriteWithDefaults: true);
+                var quickValues = ReadQuickValues(category);
+                FamilyNameBox.Text = ProjectFamilyQuickSchemaService.SuggestName(category, quickValues);
+                QuickMaterialCombo.Text = schema.DefaultMaterial;
+                SetStatus("Tạo nhanh " + category + ": nhập thông số quen thuộc theo mm rồi chọn Lưu, Tạo & sử dụng, Auto Family hoặc Lưu & Vẽ.");
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Tạo nhanh Family lỗi: " + ex.Message);
+            }
+        }
+
         private void OnAutoFamilyClick(object sender, RoutedEventArgs e)
         {
             try
             {
-                EnsureActive("tạo Auto Family");
+                EnsureActive("Auto Family");
+                var project = ExistingProjectMutationContext.Require(_document, "Auto Family");
                 var category = ResolveQuickCategory()
                     ?? throw new InvalidOperationException("Chọn Family hoặc Category trước khi Auto Family.");
-                var project = ExistingProjectMutationContext.Require(_document, "Auto Family");
-                var family = ResolveQuickFamily(project);
+                var schema = ProjectFamilyQuickSchemaService.GetSchema(category);
+                if (!schema.SupportsQuickForm)
+                    throw new InvalidOperationException(category + " chưa có QS Auto Family schema.");
 
-                PopulateQuickFields(category, family, overwriteWithDefaults: true);
-                if (_creatingNew && string.IsNullOrWhiteSpace(FamilyNameBox.Text))
-                    FamilyNameBox.Text = NextQuickFamilyName(project, category);
+                var quickValues = ReadQuickValues(category);
+                var material = ReadQuickMaterial(schema);
+                var matches = ProjectFamilyQuickSchemaService.FindIdentityMatches(project, category, quickValues, material);
+                if (matches.Count > 1)
+                    throw new InvalidOperationException(
+                        "Có nhiều Family " + category + " trùng kích thước và vật liệu. Hãy chọn Family cụ thể hoặc đổi tên/thông số trước khi Auto Family.");
 
-                SetStatus(
-                    "Auto Family đã điền các tham số QS chuẩn cho " + category +
-                    ". Chưa có dữ liệu nào được commit; bấm Tạo & sử dụng hoặc Lưu & Vẽ để áp dụng.");
+                var created = false;
+                var previousActive = ProjectFamilyActivationService.GetActive(project);
+                var family = ExecuteAtomic(project, () =>
+                {
+                    ProjectFamily target;
+                    if (matches.Count == 1)
+                    {
+                        target = project.FindFamily(matches[0].Id)
+                            ?? throw new InvalidOperationException("Family phù hợp đã thay đổi trước khi Auto Family commit.");
+                    }
+                    else
+                    {
+                        var suggested = ProjectFamilyQuickSchemaService.SuggestName(category, quickValues);
+                        var requested = _creatingNew ? (FamilyNameBox.Text ?? string.Empty).Trim() : string.Empty;
+                        var baseName = requested.Length > 0 ? requested : suggested;
+                        var uniqueName = ProjectFamilyQuickSchemaService.MakeUniqueName(project, category, baseName);
+                        target = ProjectFamilyService.Create(
+                            project,
+                            "family-" + Guid.NewGuid().ToString("N"),
+                            uniqueName,
+                            category);
+                        created = true;
+                        AuditTrail.ForProject(project).Record(
+                            "family.create",
+                            string.Empty,
+                            target.Id + " • " + target.Category + " • " + target.Name + " • auto-family");
+                    }
+
+                    ApplyQuickFamilyValues(project, target, quickValues, material, "auto-family");
+                    ActivateQuickFamily(project, target, previousActive, "auto-family");
+                    AuditTrail.ForProject(project).Record(
+                        "family.quick.auto",
+                        string.Empty,
+                        target.Id + " • " + target.Category + " • " + target.Name + " • " + (created ? "created" : "reused"));
+                    return target;
+                }, "Auto Family");
+
+                _creatingNew = false;
+                RefreshAfterCommit(
+                    () => RefreshAll(family.Id),
+                    "Auto Family " + (created ? "đã tạo" : "đã dùng lại") + " “" + family.Name + "” • đã đặt Active.",
+                    "Auto Family");
             }
             catch (Exception ex)
             {
@@ -75,25 +159,32 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
+        private void OnQuickSaveClick(object sender, RoutedEventArgs e)
+        {
+            SaveQuickFamily(activateAfterSave: false, drawAfterSave: false, operation: "Lưu");
+        }
+
         private void OnCreateAndUseClick(object sender, RoutedEventArgs e)
         {
-            SaveQuickFamily(drawAfterSave: false);
+            SaveQuickFamily(activateAfterSave: true, drawAfterSave: false, operation: "Tạo & sử dụng");
         }
 
         private void OnSaveAndDrawClick(object sender, RoutedEventArgs e)
         {
-            SaveQuickFamily(drawAfterSave: true);
+            SaveQuickFamily(activateAfterSave: true, drawAfterSave: true, operation: "Lưu & Vẽ");
         }
 
-        private void SaveQuickFamily(bool drawAfterSave)
+        private void SaveQuickFamily(bool activateAfterSave, bool drawAfterSave, string operation)
         {
-            var operation = drawAfterSave ? "Lưu & Vẽ" : "Tạo & sử dụng";
             try
             {
                 EnsureActive(operation);
                 var project = ExistingProjectMutationContext.Require(_document, operation);
                 var category = ResolveQuickCategory()
                     ?? throw new InvalidOperationException("Chọn Family hoặc Category trước khi " + operation + ".");
+                var schema = ProjectFamilyQuickSchemaService.GetSchema(category);
+                if (!schema.SupportsQuickForm)
+                    throw new InvalidOperationException(category + " chưa có QS quick form; dùng workflow chuyên biệt hoặc Thuộc tính nâng cao.");
                 var creating = _creatingNew || !(FamilyList.SelectedItem is ProjectFamily);
 
                 if (drawAfterSave)
@@ -105,11 +196,17 @@ namespace QS3D.BricsCAD.V25.UI
                 }
 
                 var quickValues = ReadQuickValues(category);
+                var material = ReadQuickMaterial(schema);
                 var requestedName = (FamilyNameBox.Text ?? string.Empty).Trim();
                 if (creating && requestedName.Length == 0)
-                    requestedName = NextQuickFamilyName(project, category);
+                {
+                    requestedName = ProjectFamilyQuickSchemaService.MakeUniqueName(
+                        project,
+                        category,
+                        ProjectFamilyQuickSchemaService.SuggestName(category, quickValues));
+                }
 
-                var previousActive = ProjectFamilyActivationService.GetActive(project);
+                var previousActive = activateAfterSave ? ProjectFamilyActivationService.GetActive(project) : null;
                 var family = ExecuteAtomic(project, () =>
                 {
                     ProjectFamily target;
@@ -141,34 +238,23 @@ namespace QS3D.BricsCAD.V25.UI
                                 target.Id + " • " + beforeName + " -> " + target.Name + " • quick-workflow");
                     }
 
-                    foreach (var pair in quickValues)
-                    {
-                        ProjectFamilyService.SetProperty(project, target.Id, pair.Key, pair.Value);
-                        AuditTrail.ForProject(project).Record(
-                            "family.property.set",
-                            string.Empty,
-                            target.Id + " • " + pair.Key + "=" + pair.Value + " • quick-workflow");
-                    }
-
-                    ProjectFamilyActivationService.SetActive(project, target.Id);
-                    if (previousActive == null || !string.Equals(previousActive.Id, target.Id, StringComparison.OrdinalIgnoreCase))
-                        AuditTrail.ForProject(project).Record(
-                            "family.activate",
-                            string.Empty,
-                            (previousActive?.Id ?? string.Empty) + " -> " + target.Id + " • " + target.Name + " • quick-workflow");
-
+                    ApplyQuickFamilyValues(project, target, quickValues, material, "quick-workflow");
+                    if (activateAfterSave)
+                        ActivateQuickFamily(project, target, previousActive, "quick-workflow");
                     AuditTrail.ForProject(project).Record(
-                        drawAfterSave ? "family.quick.save-and-draw" : "family.quick.create-and-use",
+                        drawAfterSave ? "family.quick.save-and-draw" :
+                        activateAfterSave ? "family.quick.create-and-use" : "family.quick.save",
                         string.Empty,
-                        target.Id + " • " + target.Category + " • " + target.Name + " • qs=" + quickValues.Count);
+                        target.Id + " • " + target.Category + " • " + target.Name + " • qs=" + quickValues.Count + " • material=" + material);
                     return target;
                 }, operation);
 
                 _creatingNew = false;
                 RefreshAfterCommit(
                     () => RefreshAll(family.Id),
-                    "Đã lưu và đặt active Family “" + family.Name + "” • " + family.Category +
-                    " • " + quickValues.Count + " tham số QS.",
+                    activateAfterSave
+                        ? "Đã lưu và đặt active Family “" + family.Name + "” • " + family.Category + " • UI mm → internal m • vật liệu “" + material + "”."
+                        : "Đã lưu Family “" + family.Name + "” • " + family.Category + " • không đổi Family Active • UI mm → internal m.",
                     operation);
 
                 if (!drawAfterSave) return;
@@ -187,6 +273,49 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
+        private static void ApplyQuickFamilyValues(
+            ProjectState project,
+            ProjectFamily target,
+            IReadOnlyDictionary<string, string> quickValues,
+            string material,
+            string auditSource)
+        {
+            foreach (var pair in quickValues)
+                SetQuickPropertyWithAudit(project, target, pair.Key, pair.Value, auditSource);
+            SetQuickPropertyWithAudit(project, target, "Material", material, auditSource);
+        }
+
+        private static void SetQuickPropertyWithAudit(
+            ProjectState project,
+            ProjectFamily target,
+            string key,
+            string value,
+            string auditSource)
+        {
+            var beforeVersion = project.ChangeVersion;
+            var update = ProjectFamilyService.SetProperty(project, target.Id, key, value);
+            if (project.ChangeVersion == beforeVersion) return;
+            AuditTrail.ForProject(project).Record(
+                "family.property.set",
+                string.Empty,
+                target.Id + " • " + key + "=" + value + " • inherited=" + update.InheritedInstancesUpdated +
+                " • overrides=" + update.OverridesPreserved + " • " + auditSource);
+        }
+
+        private static void ActivateQuickFamily(
+            ProjectState project,
+            ProjectFamily target,
+            ProjectFamily? previousActive,
+            string auditSource)
+        {
+            ProjectFamilyActivationService.SetActive(project, target.Id);
+            if (previousActive != null && string.Equals(previousActive.Id, target.Id, StringComparison.OrdinalIgnoreCase)) return;
+            AuditTrail.ForProject(project).Record(
+                "family.activate",
+                string.Empty,
+                (previousActive?.Id ?? string.Empty) + " -> " + target.Id + " • " + target.Name + " • " + auditSource);
+        }
+
         private void RefreshQuickWorkflow()
         {
             try
@@ -198,12 +327,15 @@ namespace QS3D.BricsCAD.V25.UI
 
                 if (!category.HasValue)
                 {
+                    CollapseQuickFields();
                     SetQuickField(QuickWidthBox, false, string.Empty);
                     SetQuickField(QuickDepthBox, false, string.Empty);
                     SetQuickField(QuickHeightBox, false, string.Empty);
                     SetQuickField(QuickThicknessBox, false, string.Empty);
                     SetQuickField(QuickBottomOffsetBox, false, string.Empty);
-                    QuickCategoryHintText.Text = "Chọn Family hoặc Category để mở form QS phù hợp. Đơn vị: mét.";
+                    QuickMaterialCombo.IsEnabled = false;
+                    QuickMaterialCombo.Text = string.Empty;
+                    QuickCategoryHintText.Text = "Chọn cấu kiện hoặc Family để mở form QS phù hợp. Nhập theo mm; QS3D tự lưu schema nội bộ.";
                     return;
                 }
 
@@ -217,29 +349,60 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void PopulateQuickFields(ElementCategory category, ProjectFamily? family, bool overwriteWithDefaults)
         {
-            var keys = QuickKeys(category);
-            var defaults = DefaultsFor(category);
+            var schema = ProjectFamilyQuickSchemaService.GetSchema(category);
+            ApplyQuickFieldVisibility(schema);
+            PopulateQuickField(QuickWidthBox, "WidthM", schema, family, overwriteWithDefaults);
+            PopulateQuickField(QuickDepthBox, "DepthM", schema, family, overwriteWithDefaults);
+            PopulateQuickField(QuickHeightBox, "HeightM", schema, family, overwriteWithDefaults);
+            PopulateQuickField(QuickThicknessBox, "ThicknessM", schema, family, overwriteWithDefaults);
+            PopulateQuickField(QuickBottomOffsetBox, "BottomOffsetM", schema, family, overwriteWithDefaults);
 
-            PopulateQuickField(QuickWidthBox, "WidthM", keys, family, defaults.WidthM, overwriteWithDefaults);
-            PopulateQuickField(QuickDepthBox, "DepthM", keys, family, defaults.DepthM, overwriteWithDefaults);
-            PopulateQuickField(QuickHeightBox, "HeightM", keys, family, defaults.HeightM, overwriteWithDefaults);
-            PopulateQuickField(QuickThicknessBox, "ThicknessM", keys, family, defaults.ThicknessM, overwriteWithDefaults);
-            PopulateQuickField(QuickBottomOffsetBox, "BottomOffsetM", keys, family, defaults.BottomOffsetM, overwriteWithDefaults);
+            QuickMaterialCombo.IsEnabled = schema.SupportsQuickForm;
+            if (!schema.SupportsQuickForm)
+            {
+                QuickMaterialCombo.Text = string.Empty;
+                QuickCategoryHintText.Text = category + ": chưa có QS quick schema; mở Thuộc tính nâng cao nếu cần chỉnh Key/Value kỹ thuật.";
+                return;
+            }
 
-            QuickCategoryHintText.Text = keys.Count == 0
-                ? category + ": Direct Draw giữ nguyên raw Family properties; category này chưa có structural QS quick-template riêng."
-                : category + " • QS keys: " + string.Join(" • ", keys) + " • đơn vị mét.";
+            if (!overwriteWithDefaults && family != null &&
+                family.Properties.TryGetValue("Material", out var existingMaterial) &&
+                !string.IsNullOrWhiteSpace(existingMaterial))
+                QuickMaterialCombo.Text = existingMaterial;
+            else
+                QuickMaterialCombo.Text = schema.DefaultMaterial;
+
+            QuickCategoryHintText.Text = FriendlyCategory(category) + " • chỉ hiện field phù hợp • nhập theo mm • QS3D tự đổi sang m và quản lý schema phía sau.";
+        }
+
+        private void ApplyQuickFieldVisibility(ProjectFamilyQuickSchema schema)
+        {
+            QuickWidthField.Visibility = schema.Contains("WidthM") ? Visibility.Visible : Visibility.Collapsed;
+            QuickDepthField.Visibility = schema.Contains("DepthM") ? Visibility.Visible : Visibility.Collapsed;
+            QuickHeightField.Visibility = schema.Contains("HeightM") ? Visibility.Visible : Visibility.Collapsed;
+            QuickThicknessField.Visibility = schema.Contains("ThicknessM") ? Visibility.Visible : Visibility.Collapsed;
+            QuickBottomOffsetField.Visibility = schema.Contains("BottomOffsetM") ? Visibility.Visible : Visibility.Collapsed;
+            QuickMaterialField.Visibility = schema.SupportsQuickForm ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void CollapseQuickFields()
+        {
+            QuickWidthField.Visibility = Visibility.Collapsed;
+            QuickDepthField.Visibility = Visibility.Collapsed;
+            QuickHeightField.Visibility = Visibility.Collapsed;
+            QuickThicknessField.Visibility = Visibility.Collapsed;
+            QuickBottomOffsetField.Visibility = Visibility.Collapsed;
+            QuickMaterialField.Visibility = Visibility.Collapsed;
         }
 
         private static void PopulateQuickField(
             TextBox box,
             string key,
-            ISet<string> keys,
+            ProjectFamilyQuickSchema schema,
             ProjectFamily? family,
-            double? fallback,
             bool overwriteWithDefaults)
         {
-            if (!keys.Contains(key))
+            if (!schema.Contains(key))
             {
                 SetQuickField(box, false, string.Empty);
                 return;
@@ -250,14 +413,14 @@ namespace QS3D.BricsCAD.V25.UI
                 family.Properties.TryGetValue(key, out var existing) &&
                 !string.IsNullOrWhiteSpace(existing))
             {
-                value = existing;
+                value = ProjectFamilyQuickSchemaService.FormatInternalMetersAsMillimeters(key, existing, CultureInfo.CurrentCulture);
             }
-            else
+            else if (schema.DefaultsM.TryGetValue(key, out var fallback))
             {
-                value = fallback.HasValue
-                    ? fallback.Value.ToString("0.###", CultureInfo.InvariantCulture)
-                    : string.Empty;
+                value = (fallback * ProjectFamilyQuickSchemaService.MillimetersPerMeter)
+                    .ToString("0.###", CultureInfo.CurrentCulture);
             }
+            else value = string.Empty;
             SetQuickField(box, true, value);
         }
 
@@ -269,46 +432,54 @@ namespace QS3D.BricsCAD.V25.UI
 
         private Dictionary<string, string> ReadQuickValues(ElementCategory category)
         {
-            var keys = QuickKeys(category);
+            var schema = ProjectFamilyQuickSchemaService.GetSchema(category);
+            if (!schema.SupportsQuickForm)
+                throw new InvalidOperationException(category + " chưa có QS quick schema.");
+
             var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            ReadQuickValue(values, keys, "WidthM", QuickWidthBox.Text, positive: true);
-            ReadQuickValue(values, keys, "DepthM", QuickDepthBox.Text, positive: true);
-            ReadQuickValue(values, keys, "HeightM", QuickHeightBox.Text, positive: true);
-            ReadQuickValue(values, keys, "ThicknessM", QuickThicknessBox.Text, positive: true);
-            ReadQuickValue(values, keys, "BottomOffsetM", QuickBottomOffsetBox.Text, positive: false);
+            foreach (var key in schema.FormKeys)
+            {
+                var box = QuickBox(key);
+                var raw = box.Text;
+                if (string.IsNullOrWhiteSpace(raw))
+                    throw new InvalidOperationException(FriendlyField(key) + " là bắt buộc cho " + FriendlyCategory(category) + ".");
+                var positive = !string.Equals(key, "BottomOffsetM", StringComparison.OrdinalIgnoreCase);
+                var meters = ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters(
+                    FriendlyField(key),
+                    raw,
+                    CultureInfo.CurrentCulture,
+                    positive);
+                values[key] = meters.ToString("R", CultureInfo.InvariantCulture);
+            }
             return values;
         }
 
-        private static void ReadQuickValue(
-            IDictionary<string, string> values,
-            ISet<string> keys,
-            string key,
-            string text,
-            bool positive)
+        private string ReadQuickMaterial(ProjectFamilyQuickSchema schema)
         {
-            if (!keys.Contains(key) || string.IsNullOrWhiteSpace(text)) return;
-            var value = ParseQuickNumber(key, text, positive);
-            values[key] = value.ToString("R", CultureInfo.InvariantCulture);
+            var material = (QuickMaterialCombo.Text ?? string.Empty).Trim();
+            if (material.Length == 0) material = schema.DefaultMaterial;
+            if (material.Length == 0) throw new InvalidOperationException("Chọn hoặc nhập Vật liệu trước khi lưu Family.");
+            return material;
         }
 
-        private static double ParseQuickNumber(string key, string text, bool positive)
+        private TextBox QuickBox(string key)
         {
-            var raw = (text ?? string.Empty).Trim();
-            double value;
-            var parsed = double.TryParse(raw, NumberStyles.Float, CultureInfo.CurrentCulture, out value) ||
-                         double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
-            if (!parsed || double.IsNaN(value) || double.IsInfinity(value))
-                throw new InvalidOperationException(key + " phải là số hữu hạn hợp lệ (m). Giá trị hiện tại: “" + raw + "”.");
-            if (positive && value <= 0d)
-                throw new InvalidOperationException(key + " phải lớn hơn 0 m.");
-            return value;
+            switch (key)
+            {
+                case "WidthM": return QuickWidthBox;
+                case "DepthM": return QuickDepthBox;
+                case "HeightM": return QuickHeightBox;
+                case "ThicknessM": return QuickThicknessBox;
+                case "BottomOffsetM": return QuickBottomOffsetBox;
+                default: throw new InvalidOperationException("QS quick schema chứa field không được UI hỗ trợ: " + key + ".");
+            }
         }
 
         private ElementCategory? ResolveQuickCategory()
         {
-            if (!_creatingNew && FamilyList.SelectedItem is ProjectFamily selected)
-                return selected.Category;
-            return (NewCategoryCombo.SelectedItem as CategoryChoice)?.Category;
+            if (_creatingNew)
+                return (NewCategoryCombo.SelectedItem as CategoryChoice)?.Category;
+            return (FamilyList.SelectedItem as ProjectFamily)?.Category;
         }
 
         private ProjectFamily? ResolveQuickFamily(ProjectState project)
@@ -317,64 +488,33 @@ namespace QS3D.BricsCAD.V25.UI
             return project.FindFamily(selected.Id);
         }
 
-        private static HashSet<string> QuickKeys(ElementCategory category)
+        private static string FriendlyField(string key)
         {
-            switch (category)
+            switch (key)
             {
-                case ElementCategory.ArchitecturalWall:
-                case ElementCategory.GlassWall:
-                case ElementCategory.WallPier:
-                case ElementCategory.StructuralWall:
-                    return new HashSet<string>(new[] { "ThicknessM", "HeightM", "BottomOffsetM" }, StringComparer.OrdinalIgnoreCase);
-                case ElementCategory.Beam:
-                    return new HashSet<string>(new[] { "WidthM", "HeightM", "BottomOffsetM" }, StringComparer.OrdinalIgnoreCase);
-                case ElementCategory.Column:
-                    return new HashSet<string>(new[] { "WidthM", "DepthM", "HeightM", "BottomOffsetM" }, StringComparer.OrdinalIgnoreCase);
-                case ElementCategory.Slab:
-                case ElementCategory.Foundation:
-                    return new HashSet<string>(new[] { "ThicknessM", "BottomOffsetM" }, StringComparer.OrdinalIgnoreCase);
-                default:
-                    return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                case "WidthM": return "Bề rộng";
+                case "DepthM": return "Bề sâu";
+                case "HeightM": return "Chiều cao";
+                case "ThicknessM": return "Bề dày";
+                case "BottomOffsetM": return "Offset đáy";
+                default: return key;
             }
         }
 
-        private static QuickFamilyDefaults DefaultsFor(ElementCategory category)
+        private static string FriendlyCategory(ElementCategory category)
         {
             switch (category)
             {
+                case ElementCategory.Beam: return "Dầm";
+                case ElementCategory.Column: return "Cột";
                 case ElementCategory.ArchitecturalWall:
-                    return new QuickFamilyDefaults { ThicknessM = 0.2d, HeightM = 3.6d, BottomOffsetM = 0d };
-                case ElementCategory.Beam:
-                    return new QuickFamilyDefaults { WidthM = 0.3d, HeightM = 0.5d, BottomOffsetM = 0d };
-                case ElementCategory.Column:
-                    return new QuickFamilyDefaults { WidthM = 0.4d, DepthM = 0.4d, HeightM = 3.6d, BottomOffsetM = 0d };
-                case ElementCategory.Slab:
-                    return new QuickFamilyDefaults { ThicknessM = 0.12d, BottomOffsetM = 0d };
-                case ElementCategory.GlassWall:
-                    return new QuickFamilyDefaults { ThicknessM = 0.012d, HeightM = 3.6d, BottomOffsetM = 0d };
-                case ElementCategory.WallPier:
                 case ElementCategory.StructuralWall:
-                    return new QuickFamilyDefaults { ThicknessM = 0.2d, HeightM = 3.6d, BottomOffsetM = 0d };
-                case ElementCategory.Foundation:
-                    return new QuickFamilyDefaults { ThicknessM = 0.5d, BottomOffsetM = 0d };
-                default:
-                    return new QuickFamilyDefaults();
+                case ElementCategory.WallPier:
+                case ElementCategory.GlassWall: return "Tường";
+                case ElementCategory.Slab: return "Sàn";
+                case ElementCategory.Foundation: return "Móng";
+                default: return category.ToString();
             }
-        }
-
-        private static string NextQuickFamilyName(ProjectState project, ElementCategory category)
-        {
-            var prefix = category + " Auto";
-            if (!project.Families.Any(x => x.Category == category && string.Equals(x.Name, prefix, StringComparison.OrdinalIgnoreCase)))
-                return prefix;
-
-            for (var index = 2; index <= 10000; index++)
-            {
-                var candidate = prefix + " " + index.ToString(CultureInfo.InvariantCulture);
-                if (!project.Families.Any(x => x.Category == category && string.Equals(x.Name, candidate, StringComparison.OrdinalIgnoreCase)))
-                    return candidate;
-            }
-            throw new InvalidOperationException("Không tìm được tên Auto Family duy nhất cho " + category + ".");
         }
     }
 }

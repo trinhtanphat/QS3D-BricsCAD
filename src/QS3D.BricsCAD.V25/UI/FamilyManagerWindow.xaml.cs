@@ -64,6 +64,11 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnFamilySelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_loading) return;
+            if (_creatingNew && FamilyList.SelectedItem == null)
+            {
+                RefreshQuickWorkflow();
+                return;
+            }
             _creatingNew = false;
             LoadFamily();
         }
@@ -83,6 +88,7 @@ namespace QS3D.BricsCAD.V25.UI
             PropertyValueBox.Text = string.Empty;
             ReferenceCountText.Text = "0";
             FamilyNameBox.Focus();
+            RefreshQuickWorkflow();
             SetStatus("Tạo Family mới: chọn Category, nhập tên rồi bấm Lưu tên. Custom property là tùy chọn.");
         }
 

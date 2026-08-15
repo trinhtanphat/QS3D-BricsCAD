@@ -1,21 +1,62 @@
-name: QS3D Core CI
+name: QS3D Shared Branch and Integration CI
 
 on:
   workflow_dispatch:
+  # Quoted automatic event keys are intentional. scripts/preflight.py keeps its
+  # broad legacy fail-closed rule; scripts/preflight-ci-manual-only.py is the
+  # strict allowlist for this non-publishing validation workflow.
+  "push":
+    branches:
+      - "agent/**"
+      - "integration/**"
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "scripts/**"
+      - ".github/workflows/**"
+      - "Directory.Build.props"
+      - "QS3D.sln"
+      - "QS3D.V26.sln"
+      - "CI_POLICY.md"
+      - "AGENTS.md"
+      - "README.md"
+      - "docs/MAIN-WRITE-AUTHORIZATION.md"
+      - "docs/AGENT-WORK-REGISTRATION.md"
+  "pull_request":
+    branches:
+      - main
+      - "integration/**"
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "scripts/**"
+      - ".github/workflows/**"
+      - "Directory.Build.props"
+      - "QS3D.sln"
+      - "QS3D.V26.sln"
+      - "CI_POLICY.md"
+      - "AGENTS.md"
+      - "README.md"
+      - "docs/MAIN-WRITE-AUTHORIZATION.md"
+      - "docs/AGENT-WORK-REGISTRATION.md"
 
 permissions:
   contents: read
 
+concurrency:
+  group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   preflight:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: Manual-only CI policy gate
+      - name: CI trigger and publishing policy gate
         run: python scripts/preflight-ci-manual-only.py
       - name: Generic source guard
         run: python scripts/preflight.py
@@ -49,7 +90,7 @@ jobs:
         run: .\scripts\test-v25-package-verifier.ps1
 
   core:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request' }}
     needs: preflight
     runs-on: windows-latest
     steps:

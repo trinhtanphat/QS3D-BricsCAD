@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             MeasurementTraceContractSmoke.Run();
             TakeoffMeasurementTraceSmoke.Run();
             RateBookSmoke.Run();
+            TbqProjectWorkspaceSmoke.Run();
             QuantityMathUnderflowSmoke.Run();
             WallQuantityOpeningBoundSmoke.Run();
             WallQuantityMeasurementTraceSmoke.Run();
@@ -44,6 +45,7 @@ namespace QS3D.Core.SmokeTests
             FormulaFiniteSafetySmoke.Run();
             FormulaVariableCaseSmoke.Run();
             FormulaVariableNameNormalizationSmoke.Run();
+            RebarNotationOverflowSmoke.Run();
             RoomBoundaryRegressionSmoke.Run();
             GeometryCompletionSmoke.Run();
             AutoRoomLifecycleSmoke.Run();
@@ -94,7 +96,9 @@ namespace QS3D.Core.SmokeTests
             SemanticViewNullReferenceSmoke.Run();
             SemanticSheetAutoLayoutSmoke.Run();
             SemanticSchedulePlacementSmoke.Run();
+            SemanticScheduleCatalogRevisionSmoke.Run();
             SemanticDocumentationCatalogStoreSmoke.Run();
+            SemanticDocumentationCatalogRevisionSmoke.Run();
             SemanticDocumentationCatalogEditorSmoke.Run();
             SemanticDocumentationCanonicalIdSmoke.Run();
             ProjectBrowserPlannerSmoke.Run();
@@ -128,6 +132,10 @@ namespace QS3D.Core.SmokeTests
             SemanticMutationAtomicitySmoke.Run();
             DomainMutationAtomicitySmoke.Run();
             TemplateApplyAtomicitySmoke.Run();
+            StandardFamilyTemplateCatalogSmoke.Run();
+            FamilyTemplateImportSmoke.Run();
+            ProjectFamilyQuickSchemaSmoke.Run();
+            ProjectFamilyActivationRevisionSmoke.Run();
             RegenerationAtomicitySmoke.Run();
             HostLinkCanonicalizationSmoke.Run();
             ProjectFamilyAssignmentAtomicitySmoke.Run();

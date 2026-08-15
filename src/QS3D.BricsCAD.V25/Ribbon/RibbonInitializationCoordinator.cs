@@ -45,6 +45,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             try { documents.DocumentCreated -= OnDocumentAvailable; } catch { }
             try { documents.DocumentActivated -= OnDocumentAvailable; } catch { }
             StopTimedRetry();
+            Qs3dRibbonTabGroupCoordinator.Reset();
         }
 
         private static void OnDocumentAvailable(object sender, DocumentCollectionEventArgs e)
@@ -105,8 +106,13 @@ namespace QS3D.BricsCAD.V25.Ribbon
             ready = ReferenceWallRibbonAugmenter.TryInitialize() && ready;
             ready = ProjectRibbonAugmenter.TryInitialize() && ready;
             ready = QuickWorkflowRibbonAugmenter.TryInitialize() && ready;
+            ready = RaftFoundationRibbonAugmenter.TryInitialize() && ready;
             ready = QuantityReferenceRibbonAugmenter.TryInitialize() && ready;
             ready = UpdateRibbonAugmenter.TryInitialize() && ready;
+
+            // Run ownership/layout last: native BricsCAD tabs keep their objects and relative
+            // order, while every QS3D_* tab becomes one contiguous group on the same tab row.
+            ready = Qs3dRibbonTabGroupCoordinator.TryInitialize() && ready;
             return ready;
         }
     }

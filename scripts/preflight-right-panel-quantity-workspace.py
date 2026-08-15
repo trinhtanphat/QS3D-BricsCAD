@@ -98,7 +98,9 @@ for needle in (
     "_quantityInsightPanel?.SetInspectionReadOnly(snapshots, project);",
     "_quantityInsightPanel?.RefreshQuantityInsights();",
     "_quantityInsightPanel?.ClearQuantityInsights(status);",
-    "if (_quantityInsight != null) _quantityInsight.Visible = true;",
+    "SetVisibility(workspace: false, right: false, quantityInsight: true);",
+    "private static void SetVisibility(bool workspace, bool right, bool quantityInsight)",
+    "if (_quantityInsight != null) _quantityInsight.Visible = quantityInsight;",
 ):
     if needle not in palette:
         errors.append("PaletteCoordinator missing quantity workspace integration: " + needle)
@@ -131,6 +133,6 @@ if errors:
 
 print(
     "PASS: the BLT-inspired far-right quantity workspace is backed by live read-only QS3D reporting, "
-    "selection highlighting, direct CAD locate/zoom, QS3DREGEN/QS3DBQ dispatch, project totals, and the existing "
+    "selection highlighting, direct CAD locate/zoom, QS3DREGEN/QS3DBQ dispatch, project totals, centralized palette visibility, and the existing "
     "drawing/Xref/layer manager remains wired to its real handlers."
 )

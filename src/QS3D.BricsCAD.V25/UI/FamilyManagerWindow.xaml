@@ -39,7 +39,7 @@
                                        FontWeight="SemiBold" FontSize="9"/>
                         </Border>
                     </StackPanel>
-                    <TextBlock Text="Tạo • nhân bản • đổi tên • thuộc tính • gán semantic selection"
+                    <TextBlock Text="Chọn cấu kiện • nhập thông số QS • tạo và vẽ nhanh"
                                Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
                 </StackPanel>
                 <Button Grid.Column="1" Content="Làm mới" Click="OnRefreshClick"
@@ -138,7 +138,7 @@
                             </Grid>
                             <WrapPanel>
                                 <Button Content="Mới" Click="OnNewClick"/>
-                                <Button Content="Duplicate" Click="OnDuplicateClick"/>
+                                <Button Content="Nhân bản" Click="OnDuplicateClick"/>
                                 <Button Content="Lưu tên" Style="{StaticResource AccentButton}" Click="OnRenameClick"/>
                                 <Button Content="Xóa" Style="{StaticResource DangerButton}" Click="OnDeleteClick"/>
                             </WrapPanel>
@@ -152,7 +152,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="QS FORM • QUICK FAMILY" Style="{StaticResource PanelTitle}"/>
+                                <TextBlock Text="QS FORM • TẠO NHANH FAMILY" Style="{StaticResource PanelTitle}"/>
                                 <Border Grid.Column="1" Background="{StaticResource AccentSoftBrush}"
                                         BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1"
                                         CornerRadius="7" Padding="6,1">
@@ -161,7 +161,7 @@
                                 </Border>
                             </Grid>
                             <TextBlock x:Name="QuickCategoryHintText"
-                                       Text="Chọn Family hoặc Category; chỉ tham số phù hợp category mới được lưu. Đơn vị: mét."
+                                       Text="Chọn cấu kiện hoặc Family; QS3D tự quản lý schema kỹ thuật phía sau."
                                        Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,8"/>
 
                             <Grid>
@@ -173,37 +173,43 @@
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
-                                <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,6,7">
-                                    <TextBlock Text="Rộng • WidthM (m)" Style="{StaticResource Caption}"/>
-                                    <TextBox x:Name="QuickWidthBox" ToolTip="WidthM • mét"/>
+                                <StackPanel x:Name="QuickWidthField" Grid.Row="0" Grid.Column="0" Margin="0,0,6,7">
+                                    <TextBlock Text="Bề rộng (mm)" Style="{StaticResource Caption}"/>
+                                    <TextBox x:Name="QuickWidthBox" ToolTip="Nhập bề rộng theo mm"/>
                                 </StackPanel>
-                                <StackPanel Grid.Row="0" Grid.Column="1" Margin="6,0,6,7">
-                                    <TextBlock Text="Sâu • DepthM (m)" Style="{StaticResource Caption}"/>
-                                    <TextBox x:Name="QuickDepthBox" ToolTip="DepthM • mét"/>
+                                <StackPanel x:Name="QuickDepthField" Grid.Row="0" Grid.Column="1" Margin="6,0,6,7">
+                                    <TextBlock Text="Bề sâu (mm)" Style="{StaticResource Caption}"/>
+                                    <TextBox x:Name="QuickDepthBox" ToolTip="Nhập bề sâu theo mm"/>
                                 </StackPanel>
-                                <StackPanel Grid.Row="0" Grid.Column="2" Margin="6,0,0,7">
-                                    <TextBlock Text="Cao • HeightM (m)" Style="{StaticResource Caption}"/>
-                                    <TextBox x:Name="QuickHeightBox" ToolTip="HeightM • mét"/>
+                                <StackPanel x:Name="QuickHeightField" Grid.Row="0" Grid.Column="2" Margin="6,0,0,7">
+                                    <TextBlock Text="Chiều cao (mm)" Style="{StaticResource Caption}"/>
+                                    <TextBox x:Name="QuickHeightBox" ToolTip="Nhập chiều cao theo mm"/>
                                 </StackPanel>
-                                <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,6,0">
-                                    <TextBlock Text="Dày • ThicknessM (m)" Style="{StaticResource Caption}"/>
-                                    <TextBox x:Name="QuickThicknessBox" ToolTip="ThicknessM • mét"/>
+                                <StackPanel x:Name="QuickThicknessField" Grid.Row="1" Grid.Column="0" Margin="0,0,6,0">
+                                    <TextBlock Text="Bề dày (mm)" Style="{StaticResource Caption}"/>
+                                    <TextBox x:Name="QuickThicknessBox" ToolTip="Nhập bề dày theo mm"/>
                                 </StackPanel>
-                                <StackPanel Grid.Row="1" Grid.Column="1" Margin="6,0,6,0">
-                                    <TextBlock Text="Offset đáy • BottomOffsetM (m)" Style="{StaticResource Caption}"/>
-                                    <TextBox x:Name="QuickBottomOffsetBox" ToolTip="BottomOffsetM • mét; có thể âm"/>
+                                <StackPanel x:Name="QuickBottomOffsetField" Grid.Row="1" Grid.Column="1" Margin="6,0,6,0">
+                                    <TextBlock Text="Offset đáy (mm)" Style="{StaticResource Caption}"/>
+                                    <TextBox x:Name="QuickBottomOffsetBox" ToolTip="Nhập offset đáy theo mm; có thể âm"/>
                                 </StackPanel>
-                                <StackPanel Grid.Row="1" Grid.Column="2" Margin="6,0,0,0">
-                                    <TextBlock Text="Workflow" Style="{StaticResource Caption}"/>
-                                    <TextBlock Text="Auto → Tạo &amp; sử dụng / Lưu &amp; Vẽ"
-                                               Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                                <StackPanel x:Name="QuickMaterialField" Grid.Row="1" Grid.Column="2" Margin="6,0,0,0">
+                                    <TextBlock Text="Vật liệu" Style="{StaticResource Caption}"/>
+                                    <ComboBox x:Name="QuickMaterialCombo" IsEditable="True"
+                                              ToolTip="Chọn hoặc nhập vật liệu quen thuộc"/>
                                 </StackPanel>
+                                <TextBlock Grid.Row="2" Grid.ColumnSpan="3"
+                                           Text="QS3D tự đổi mm → m, tự đặt tên theo cấu kiện và giữ Key kỹ thuật trong mục nâng cao."
+                                           Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,7,0,0"/>
                             </Grid>
 
                             <WrapPanel Margin="0,9,0,0">
+                                <Button Content="+ Tạo nhanh" Click="OnQuickCreateClick"/>
                                 <Button Content="Auto Family" Click="OnAutoFamilyClick"/>
+                                <Button Content="Lưu" Click="OnQuickSaveClick"/>
                                 <Button Content="Tạo &amp; sử dụng" Style="{StaticResource AccentButton}"
                                         Click="OnCreateAndUseClick"/>
                                 <Button Content="Lưu &amp; Vẽ" Style="{StaticResource AccentButton}"
@@ -213,53 +219,59 @@
                     </Border>
 
                     <Border Style="{StaticResource ManagerCard}" Margin="0,0,0,10">
-                        <StackPanel>
-                            <Grid x:Name="FamilyPropertyHeaderGrid">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0"
-                                           Text="PROPERTY CỦA FAMILY"
-                                           Style="{StaticResource PanelTitle}"
-                                           MinWidth="0"
-                                           Margin="0,0,8,0"
-                                           TextWrapping="NoWrap"
-                                           TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Grid.Column="1"
-                                           Text="KEY / VALUE"
-                                           Foreground="{StaticResource LuxuryBrush}"
-                                           FontSize="9" FontWeight="SemiBold"
-                                           HorizontalAlignment="Right"
-                                           VerticalAlignment="Center"
-                                           TextWrapping="NoWrap"/>
-                            </Grid>
-                            <ListView x:Name="PropertyList" Height="270"
-                                      SelectionChanged="OnPropertySelectionChanged">
-                                <ListView.View>
-                                    <GridView>
-                                        <GridViewColumn Header="Key" Width="210" DisplayMemberBinding="{Binding Key}"/>
-                                        <GridViewColumn Header="Value" Width="300" DisplayMemberBinding="{Binding Value}"/>
-                                    </GridView>
-                                </ListView.View>
-                            </ListView>
-                            <Grid Margin="0,8,0,8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="210"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBox x:Name="PropertyKeyBox" Grid.Column="0" Margin="0,0,8,0"
-                                         ToolTip="Property key"/>
-                                <TextBox x:Name="PropertyValueBox" Grid.Column="1" Margin="8,0,0,0"
-                                         ToolTip="Property value"/>
-                            </Grid>
-                            <WrapPanel>
-                                <Button Content="Lưu property" Style="{StaticResource AccentButton}"
-                                        Click="OnSavePropertyClick"/>
-                                <Button Content="Xóa property" Style="{StaticResource DangerButton}"
-                                        Click="OnRemovePropertyClick"/>
-                            </WrapPanel>
-                        </StackPanel>
+                        <Expander x:Name="AdvancedPropertyExpander" IsExpanded="False"
+                                  Background="Transparent" Foreground="{StaticResource TextBrush}">
+                            <Expander.Header>
+                                <TextBlock Text="Thuộc tính nâng cao (Key/Value)" Style="{StaticResource PanelTitle}"/>
+                            </Expander.Header>
+                            <StackPanel Margin="0,8,0,0">
+                                <Grid x:Name="FamilyPropertyHeaderGrid">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0"
+                                               Text="PROPERTY CỦA FAMILY"
+                                               Style="{StaticResource PanelTitle}"
+                                               MinWidth="0"
+                                               Margin="0,0,8,0"
+                                               TextWrapping="NoWrap"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="KEY / VALUE"
+                                               Foreground="{StaticResource LuxuryBrush}"
+                                               FontSize="9" FontWeight="SemiBold"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center"
+                                               TextWrapping="NoWrap"/>
+                                </Grid>
+                                <ListView x:Name="PropertyList" Height="270"
+                                          SelectionChanged="OnPropertySelectionChanged">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Key" Width="210" DisplayMemberBinding="{Binding Key}"/>
+                                            <GridViewColumn Header="Value" Width="300" DisplayMemberBinding="{Binding Value}"/>
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                                <Grid Margin="0,8,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="210"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="PropertyKeyBox" Grid.Column="0" Margin="0,0,8,0"
+                                             ToolTip="Property key"/>
+                                    <TextBox x:Name="PropertyValueBox" Grid.Column="1" Margin="8,0,0,0"
+                                             ToolTip="Property value"/>
+                                </Grid>
+                                <WrapPanel>
+                                    <Button Content="Lưu property" Style="{StaticResource AccentButton}"
+                                            Click="OnSavePropertyClick"/>
+                                    <Button Content="Xóa property" Style="{StaticResource DangerButton}"
+                                            Click="OnRemovePropertyClick"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Expander>
                     </Border>
 
                     <Border Style="{StaticResource ManagerCard}">

@@ -1,8 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Xml.Linq;
+using QS3D.Core.Domain;
 using QS3D.Core.Revisions;
 
 namespace QS3D.Core.SmokeTests
@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
             SaveRequiresUtcAndCanonicalDefinedCategory();
             FreeTextRoundTripsAndInvalidSavePreservesExistingFile();
             MalformedMapsAndSourceHandlesFailClosed();
+            V2RoundTripsProjectIdentityAndLegacyV1LoadsWithoutIdentity();
+            V2SchemaRequiresIdentityAndVersionPairing();
         }
 
         private static void CanonicalUtcLoadsAndNonCanonicalTimestampsFailClosed()
@@ -156,6 +158,86 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void V2RoundTripsProjectIdentityAndLegacyV1LoadsWithoutIdentity()
+        {
+            var directory = TempDirectory();
+            try
+            {
+                var project = new ProjectState("revision-store-v2-project", "Revision Store V2 Project");
+                var element = new ProjectElement("E1", ElementCategory.Beam);
+                project.Elements.Add(element);
+                var snapshot = new RevisionService().Capture(project, "v2");
+
+                var v2Path = Path.Combine(directory, "v2.qsrev");
+                var store = new RevisionSnapshotStore();
+                store.Save(snapshot, v2Path);
+
+                var document = XDocument.Load(v2Path);
+                Equal("2", document.Root?.Attribute("schemaVersion")?.Value);
+                Equal(project.ProjectId, document.Root?.Attribute("projectId")?.Value);
+
+                var loaded = store.Load(v2Path);
+                Equal(project.ProjectId, loaded.ProjectId);
+
+                var legacyPath = Path.Combine(directory, "legacy.qsrev");
+                RevisionDocument("2026-08-10T05:00:00.0000000Z", "Beam").Save(legacyPath, SaveOptions.DisableFormatting);
+                var legacy = store.Load(legacyPath);
+                Equal(string.Empty, legacy.ProjectId);
+                Throws<InvalidOperationException>(() => new RevisionService().Compare(legacy, snapshot));
+            }
+            finally
+            {
+                DeleteDirectory(directory);
+            }
+        }
+
+        private static void V2SchemaRequiresIdentityAndVersionPairing()
+        {
+            var directory = TempDirectory();
+            try
+            {
+                var store = new RevisionSnapshotStore();
+
+                var missingIdentity = Path.Combine(directory, "missing-identity.qsrev");
+                RevisionDocument("2026-08-10T05:00:00.0000000Z", "Beam", null, null, "2", null)
+                    .Save(missingIdentity, SaveOptions.DisableFormatting);
+                Throws<InvalidDataException>(() => store.Load(missingIdentity));
+
+                var missingVersion = Path.Combine(directory, "missing-version.qsrev");
+                RevisionDocument("2026-08-10T05:00:00.0000000Z", "Beam", null, null, null, "PROJECT-A")
+                    .Save(missingVersion, SaveOptions.DisableFormatting);
+                Throws<InvalidDataException>(() => store.Load(missingVersion));
+
+                var v1WithIdentity = Path.Combine(directory, "v1-with-identity.qsrev");
+                RevisionDocument("2026-08-10T05:00:00.0000000Z", "Beam", null, null, "1", "PROJECT-A")
+                    .Save(v1WithIdentity, SaveOptions.DisableFormatting);
+                Throws<InvalidDataException>(() => store.Load(v1WithIdentity));
+
+                var unsupportedVersion = Path.Combine(directory, "unsupported-version.qsrev");
+                RevisionDocument("2026-08-10T05:00:00.0000000Z", "Beam", null, null, "3", null)
+                    .Save(unsupportedVersion, SaveOptions.DisableFormatting);
+                Throws<InvalidDataException>(() => store.Load(unsupportedVersion));
+
+                var protectedPath = Path.Combine(directory, "protected.qsrev");
+                var project = new ProjectState("revision-store-protected", "Revision Store Protected");
+                project.Elements.Add(new ProjectElement("E1", ElementCategory.Beam));
+                store.Save(new RevisionService().Capture(project, "valid"), protectedPath);
+                var before = File.ReadAllBytes(protectedPath);
+                var invalid = new RevisionSnapshot
+                {
+                    Id = "invalid",
+                    CreatedUtc = new DateTime(2026, 8, 10, 5, 0, 0, DateTimeKind.Utc),
+                    ProjectId = " PROJECT-A "
+                };
+                Throws<InvalidDataException>(() => store.Save(invalid, protectedPath));
+                True(before.SequenceEqual(File.ReadAllBytes(protectedPath)), "invalid project identity replaced an existing valid baseline");
+            }
+            finally
+            {
+                DeleteDirectory(directory);
+            }
+        }
+
         private static RevisionSnapshot Snapshot(string id, string category)
         {
             var snapshot = new RevisionSnapshot
@@ -171,7 +253,9 @@ namespace QS3D.Core.SmokeTests
             string createdUtc,
             string? category = null,
             XElement? properties = null,
-            XElement? sourceHandles = null)
+            XElement? sourceHandles = null,
+            string? schemaVersion = null,
+            string? projectId = null)
         {
             var elements = new XElement("elements");
             if (category != null)
@@ -181,12 +265,21 @@ namespace QS3D.Core.SmokeTests
                     new XAttribute("category", category),
                     properties ?? new XElement("properties"),
                     new XElement("quantities"),
-                    sourceHandles ?? new XElement("sourceHandles")));
+                    sourceHandles ?? new XElement("sourceHandles"),
+                    new XElement("dependencies")));
             }
-            return new XDocument(new XElement("qs3dRevision",
+
+            var root = new XElement("qs3dRevision",
                 new XAttribute("id", "revision"),
-                new XAttribute("createdUtc", createdUtc),
-                elements));
+                new XAttribute("createdUtc", createdUtc));
+
+            if (schemaVersion != null)
+                root.Add(new XAttribute("schemaVersion", schemaVersion));
+            if (projectId != null)
+                root.Add(new XAttribute("projectId", projectId));
+
+            root.Add(elements);
+            return new XDocument(root);
         }
 
         private static string TempDirectory()

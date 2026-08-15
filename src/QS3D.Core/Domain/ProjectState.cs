@@ -257,6 +257,42 @@ namespace QS3D.Core.Domain
             ChangeVersion = changeVersion;
         }
 
+        internal void RestoreSnapshotScalars(
+            string name,
+            string? drawingPath,
+            string? drawingFingerprint,
+            string? activeZoneId,
+            string? activeFloorId)
+        {
+            var restoredName = RequireProjectName(name);
+
+            var restoredDrawingPath = drawingPath ?? string.Empty;
+            if (restoredDrawingPath.Any(char.IsControl))
+                throw new ArgumentException("Drawing path cannot contain control characters.", nameof(drawingPath));
+            restoredDrawingPath = PersistedTextXml.Verify(restoredDrawingPath, nameof(drawingPath), "Drawing path");
+
+            var restoredDrawingFingerprint = drawingFingerprint ?? string.Empty;
+            if (restoredDrawingFingerprint.Any(char.IsControl))
+                throw new ArgumentException("Drawing fingerprint cannot contain control characters.", nameof(drawingFingerprint));
+            restoredDrawingFingerprint = PersistedTextXml.Verify(restoredDrawingFingerprint.Trim(), nameof(drawingFingerprint), "Drawing fingerprint");
+
+            var restoredActiveZoneId = (activeZoneId ?? string.Empty).Trim();
+            if (restoredActiveZoneId.Any(char.IsControl))
+                throw new ArgumentException("Active context id cannot contain control characters.", nameof(activeZoneId));
+            restoredActiveZoneId = PersistedTextXml.Verify(restoredActiveZoneId, nameof(activeZoneId), "Active context id");
+
+            var restoredActiveFloorId = (activeFloorId ?? string.Empty).Trim();
+            if (restoredActiveFloorId.Any(char.IsControl))
+                throw new ArgumentException("Active context id cannot contain control characters.", nameof(activeFloorId));
+            restoredActiveFloorId = PersistedTextXml.Verify(restoredActiveFloorId, nameof(activeFloorId), "Active context id");
+
+            _name = restoredName;
+            _drawingPath = restoredDrawingPath;
+            _drawingFingerprint = restoredDrawingFingerprint;
+            _activeZoneId = restoredActiveZoneId;
+            _activeFloorId = restoredActiveFloorId;
+        }
+
         private void SetActiveContextId(ref string field, string? value)
         {
             var normalizedValue = (value ?? string.Empty).Trim();

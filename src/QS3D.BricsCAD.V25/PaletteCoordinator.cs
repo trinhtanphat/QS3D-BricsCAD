@@ -79,14 +79,17 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        public static void Show()
+        // Compatibility entry point used by the QS3D command. The primary authoring flow is now
+        // Ribbon-first, so opening Workspace must not also consume the CAD viewport with the
+        // drawing/layer and quantity palettes.
+        public static void Show() => ShowWorkspace();
+
+        public static void ShowWorkspace()
         {
             try
             {
                 EnsureCreated();
-                if (_workspace != null) _workspace.Visible = true;
-                if (_right != null) _right.Visible = true;
-                if (_quantityInsight != null) _quantityInsight.Visible = true;
+                SetVisibility(workspace: true, right: false, quantityInsight: false);
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
             }
             catch (Exception)
@@ -95,12 +98,36 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        public static void ShowDrawingManagement()
+        {
+            try
+            {
+                EnsureCreated();
+                SetVisibility(workspace: false, right: true, quantityInsight: false);
+            }
+            catch (Exception)
+            {
+                ReportPaletteFailure("Bản vẽ & Lớp");
+            }
+        }
+
+        public static void ShowQuantityInsight()
+        {
+            try
+            {
+                EnsureCreated();
+                SetVisibility(workspace: false, right: false, quantityInsight: true);
+            }
+            catch (Exception)
+            {
+                ReportPaletteFailure("Diễn giải khối lượng");
+            }
+        }
+
         public static void Hide()
         {
             PersistPaletteLayout();
-            if (_workspace != null) _workspace.Visible = false;
-            if (_right != null) _right.Visible = false;
-            if (_quantityInsight != null) _quantityInsight.Visible = false;
+            SetVisibility(workspace: false, right: false, quantityInsight: false);
         }
 
         public static void ShowSafeMode()
@@ -108,9 +135,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 EnsureCreated();
-                if (_workspace != null) _workspace.Visible = true;
-                if (_right != null) _right.Visible = false;
-                if (_quantityInsight != null) _quantityInsight.Visible = false;
+                SetVisibility(workspace: true, right: false, quantityInsight: false);
                 _workspacePanel?.SetStatus("Safe Mode: panel bản vẽ/layer và diễn giải khối lượng đang tắt.");
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
             }
@@ -173,9 +198,7 @@ namespace QS3D.BricsCAD.V25
             var quantityVisible = IsQuantityInsightVisible;
             Dispose();
             EnsureCreated();
-            if (_workspace != null) _workspace.Visible = workspaceVisible;
-            if (_right != null) _right.Visible = rightVisible;
-            if (_quantityInsight != null) _quantityInsight.Visible = quantityVisible;
+            SetVisibility(workspaceVisible, rightVisible, quantityVisible);
         }
 
         public static void Dispose()
@@ -204,6 +227,13 @@ namespace QS3D.BricsCAD.V25
             {
                 // Native palette teardown is best-effort; one failed palette must not block the others.
             }
+        }
+
+        private static void SetVisibility(bool workspace, bool right, bool quantityInsight)
+        {
+            if (_workspace != null) _workspace.Visible = workspace;
+            if (_right != null) _right.Visible = right;
+            if (_quantityInsight != null) _quantityInsight.Visible = quantityInsight;
         }
 
         private static void ReportPaletteFailure(string operation)

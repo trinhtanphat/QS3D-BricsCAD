@@ -163,7 +163,7 @@ namespace QS3D.Core.Coordination
                     var gapX = Gap(left.Bounds.MinX, left.Bounds.MaxX, right.Bounds.MinX, right.Bounds.MaxX);
                     var gapY = Gap(left.Bounds.MinY, left.Bounds.MaxY, right.Bounds.MinY, right.Bounds.MaxY);
                     var gapZ = Gap(left.Bounds.MinZ, left.Bounds.MaxZ, right.Bounds.MinZ, right.Bounds.MaxZ);
-                    var distance = Math.Sqrt((gapX * gapX) + (gapY * gapY) + (gapZ * gapZ));
+                    var distance = EuclideanDistance(gapX, gapY, gapZ);
                     if (distance <= clearanceM)
                     {
                         results.Add(new ClashResult(
@@ -185,6 +185,20 @@ namespace QS3D.Core.Coordination
         {
             var compare = StringComparer.OrdinalIgnoreCase.Compare(left.ElementId, right.ElementId);
             return compare != 0 ? compare : StringComparer.Ordinal.Compare(left.ElementId, right.ElementId);
+        }
+
+        private static double EuclideanDistance(double x, double y, double z)
+        {
+            var scale = Math.Max(x, Math.Max(y, z));
+            if (scale <= 0d) return 0d;
+
+            var scaledX = x / scale;
+            var scaledY = y / scale;
+            var scaledZ = z / scale;
+            return scale * Math.Sqrt(
+                (scaledX * scaledX) +
+                (scaledY * scaledY) +
+                (scaledZ * scaledZ));
         }
 
         private static double Overlap(double aMin, double aMax, double bMin, double bMax) =>

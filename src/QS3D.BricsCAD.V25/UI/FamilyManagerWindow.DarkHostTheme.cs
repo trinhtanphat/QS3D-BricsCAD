@@ -26,7 +26,10 @@ namespace QS3D.BricsCAD.V25.UI
         private static void OnFamilyManagerDarkHostLoaded(object sender, RoutedEventArgs e)
         {
             if (sender is FamilyManagerWindow window)
+            {
                 window.ApplyFamilyManagerDarkHostTheme();
+                window.ConfigureFamilyTemplateUiAndCatalog();
+            }
         }
 
         private void ApplyFamilyManagerDarkHostTheme()

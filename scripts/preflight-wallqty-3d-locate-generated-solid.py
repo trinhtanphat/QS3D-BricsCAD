@@ -20,12 +20,18 @@ else:
     if not locate:
         errors.append("WallQuantityWindow missing LocateSelected before Resolve3DLocateHandles.")
     else:
+        current_project = locate.find('var currentProject = EnsureCurrentProject("định vị Tường trong View 3D");')
+        current_row = locate.find("var currentRow = ResolveCurrentRow(currentProject, displayedView);")
         resolve_call = locate.find("var handles = Resolve3DLocateHandles(currentProject, currentElement, currentRow);")
         select_call = locate.find("CadHandleService.Select(_document, handles)")
-        if resolve_call < 0 or select_call < 0 or resolve_call >= select_call:
-            errors.append("LocateSelected must resolve validated 3D handles before selecting CAD objects.")
+        zoom_call = locate.find('_document.SendStringToExecute("QS3DZOOMSELECTED ", false, false, false);')
+        positions = (current_project, current_row, resolve_call, select_call, zoom_call)
+        if min(positions) < 0 or not (current_project < current_row < resolve_call < select_call < zoom_call):
+            errors.append("LocateSelected must revalidate the active project/semantic row and validated handles before selecting CAD objects, then queue QS3DZOOMSELECTED without reactivating the document.")
         if "SourceHandleResolver.Resolve" in locate:
             errors.append("LocateSelected must not bypass Resolve3DLocateHandles with direct source-handle fallback.")
+        if '_document.SendStringToExecute("QS3DZOOMSELECTED ", true,' in locate:
+            errors.append("LocateSelected must not reactivate the already-current document when queuing QS3DZOOMSELECTED because that can clear the implied selection.")
 
     if not helper:
         errors.append("WallQuantityWindow missing Resolve3DLocateHandles helper.")
@@ -91,4 +97,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3DWALLQTY 3D locate prefers the owned live generated Solid3d, fails closed when its stored handle is invalid/stale/unowned, and falls back to source geometry only when no GeneratedSolidHandle property exists.")
+print("PASS: QS3DWALLQTY 3D locate revalidates the live semantic/CAD identity, preserves implied selection while queuing QS3DZOOMSELECTED, prefers the owned live generated Solid3d, and falls back to source geometry only when no GeneratedSolidHandle property exists.")

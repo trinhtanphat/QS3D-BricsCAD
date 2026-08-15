@@ -185,8 +185,8 @@ namespace QS3D.BricsCAD.V25
                 project.Touch();
 
                 // At this point native CAD + semantic ownership already committed successfully.
-                // Palette/selection/regen/view dispatch are convenience UI and must never turn a
-                // completed rebuild into a false QS3DBUILD3D failure report.
+                // Palette/selection/regen are convenience UI and must never turn a completed rebuild
+                // into a false QS3DBUILD3D failure report or replace the user's current viewport.
                 FinalizeUi(document, elementIds, sourceHandles, built, regenerated, category, project);
             }
             catch (Exception ex)
@@ -372,7 +372,6 @@ namespace QS3D.BricsCAD.V25
 
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status);
-                document.SendStringToExecute("QS3DVIEW3D ", true, false, false);
             }
             catch (Exception ex)
             {

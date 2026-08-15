@@ -77,7 +77,14 @@ namespace QS3D.BricsCAD.V25.Cad
                         HostThicknessM = hostPlacement.HeightM,
                         ClearanceM = clearanceM
                     });
-                    var fingerprint = Fingerprint(opening, host, currentSolidHandle, openingSourceId.Handle.ToString(), plan);
+                    var sourceGeometryFingerprint = PolylineFingerprint(openingSource);
+                    var fingerprint = Fingerprint(
+                        opening,
+                        host,
+                        currentSolidHandle,
+                        openingSourceId.Handle.ToString(),
+                        sourceGeometryFingerprint,
+                        plan);
 
                     if (opening.Properties.TryGetValue(SlabOpeningContract.AppliedSolidHandleKey, out var appliedHandle) &&
                         !string.IsNullOrWhiteSpace(appliedHandle) &&
@@ -161,20 +168,47 @@ namespace QS3D.BricsCAD.V25.Cad
                 string.Equals((appliedHandle ?? string.Empty).Trim(), solidHandle, StringComparison.OrdinalIgnoreCase));
         }
 
+        private static string PolylineFingerprint(Polyline polyline)
+        {
+            if (polyline == null) throw new ArgumentNullException(nameof(polyline));
+            var parts = new List<string>
+            {
+                "polyline-v1",
+                polyline.Closed ? "closed" : "open",
+                polyline.NumberOfVertices.ToString(CultureInfo.InvariantCulture),
+                Number(polyline.Elevation),
+                Number(polyline.Normal.X),
+                Number(polyline.Normal.Y),
+                Number(polyline.Normal.Z)
+            };
+            for (var index = 0; index < polyline.NumberOfVertices; index++)
+            {
+                var point = polyline.GetPoint2dAt(index);
+                parts.Add(
+                    index.ToString(CultureInfo.InvariantCulture) + ":" +
+                    Number(point.X) + ":" +
+                    Number(point.Y) + ":" +
+                    Number(polyline.GetBulgeAt(index)));
+            }
+            return string.Join(";", parts);
+        }
+
         private static string Fingerprint(
             ProjectElement opening,
             ProjectElement host,
             string solidHandle,
             string sourceHandle,
+            string sourceGeometryFingerprint,
             SlabOpeningCutPlan plan)
         {
             return string.Join("|", new[]
             {
-                "slabOpen-v1",
+                "slabOpen-v2",
                 opening.Id,
                 host.Id,
                 solidHandle,
                 sourceHandle,
+                sourceGeometryFingerprint,
                 Number(plan.CutterTopM),
                 Number(plan.CutterBottomM),
                 Number(plan.CutterHeightM),
