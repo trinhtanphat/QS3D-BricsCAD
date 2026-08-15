@@ -50,27 +50,31 @@ Refresh `main` before final task-branch push/PR handoff and reconcile relevant c
 
 ## Mandatory CI-before-stop rule
 
-Every normal task must receive automatic remote validation for its **exact current branch/PR head SHA** through `.github/workflows/ci.yml`.
+Implementation-relevant tasks must receive automatic remote validation for their **exact current branch/PR head SHA** through `.github/workflows/ci.yml`.
 
-The workflow runs automatically for pushes to `agent/**`, `recovery/**`, `integration/**`, pull requests targeting `main`, and pushes to `main`.
+The workflow runs automatically for implementation-relevant pushes to `agent/**`, `recovery/**`, `integration/**`, pull requests targeting `main`, and pushes to `main`.
 
-A normal agent **must not report the task completed, mark the reservation `COMPLETED`, or stop as completed** until the required CI run for the exact current head SHA is `success`. A green run for an older SHA, another branch, another PR, or `main` does not count.
+A task is **CI-neutral-only** only when every changed path is in the ignore set documented by `CI_POLICY.md` and encoded in `.github/workflows/ci.yml`: docs/Markdown plus non-executable housekeeping such as `.gitignore`, `.gitattributes`, `.editorconfig`, `LICENSE*`, `NOTICE*`, and Issue/PR templates. Such tasks do not run the full Core/build workflow and do not require an artificial CI result before completion; perform relevant lightweight checks instead.
 
-If CI fails, the task remains active: diagnose the exact failing run, fix the real defect on the same task branch, push a new SHA, and wait for the replacement exact-SHA CI result. Do not weaken guards/tests merely to make CI green.
+The exemption is path-based, never label-based. A commit named `chore: ...` still requires full CI if it touches source, tests, project/build files, dependencies, scripts, workflows, packaging, runtime-affecting configuration, or any other non-ignored file. Any mixed change requires CI. `.github/workflows/**` is intentionally not ignored.
+
+For tasks that are not CI-neutral-only, a normal agent **must not report the task completed, mark the reservation `COMPLETED`, or stop as completed** until the required CI run for the exact current head SHA is `success`. A green run for an older SHA, another branch, another PR, or `main` does not count.
+
+If required CI fails, the task remains active: diagnose the exact failing run, fix the real defect on the same task branch, push a new SHA, and wait for the replacement exact-SHA CI result. Do not weaken guards/tests merely to make CI green.
 
 If native/licensed BricsCAD, UI, private-DWG, signing or other LOCAL_ONLY evidence is required, remote CI success is necessary but not sufficient. The task remains `BLOCKED`/handed off until the required environment-specific evidence exists; remote agents must never claim native/runtime PASS from source/Core CI.
 
-Issues themselves do not run builds because they have no source tree. The Issue must reference the branch/PR SHA whose CI evidence proves the task.
+Issues themselves do not run builds because they have no source tree. When CI is required, the Issue must reference the branch/PR SHA whose CI evidence proves the task.
 
 ## Normal agent stopping point
 
-The successful endpoint for a normal source-safe task is:
+The successful endpoint for a normal implementation task is:
 
 ```text
 latest main read
   -> issue/reservation checked
   -> agent/<agent-id>/<scope>
-  -> implementation/docs/chore commits
+  -> implementation commits
   -> local/static validation
   -> branch pushed
   -> PR opened/updated
@@ -79,19 +83,19 @@ latest main read
   -> STOP BEFORE MERGE
 ```
 
-A pushed branch or open PR without exact-head green CI is not a completed task. Passing CI never grants merge permission.
+For a CI-neutral-only docs/Markdown/housekeeping task, replace the CI step with path-classification evidence plus relevant lightweight validation. A pushed implementation branch or open implementation PR without exact-head green CI is not a completed task. Passing CI never grants merge permission.
 
 ## Owner-authorized integration coordinator
 
 Only a session explicitly authorized by the owner may integrate/merge a named batch into `main`.
 
-For multi-agent work, prefer `integration/<batch-id>`. The coordinator must refresh current `origin/main`, identify exact participating Issues/PRs/branches, integrate all required commits without silently dropping work, resolve semantic/API/test conflicts deliberately, verify no required task remains only off-candidate, require automatic CI `success` for the exact integration head SHA, inspect for accidental reversions/duplicate implementations, merge to `main` only within explicit authorization, then fetch `main` again and record the exact resulting SHA.
+For multi-agent implementation work, prefer `integration/<batch-id>`. The coordinator must refresh current `origin/main`, identify exact participating Issues/PRs/branches, integrate all required commits without silently dropping work, resolve semantic/API/test conflicts deliberately, verify no required task remains only off-candidate, require automatic CI `success` for the exact integration head SHA when implementation-relevant paths changed, inspect for accidental reversions/duplicate implementations, merge to `main` only within explicit authorization, then fetch `main` again and record the exact resulting SHA.
 
-After the landing, exact-main CI must also be green for the final current `main` SHA before reporting `ALL MERGED TO MAIN`.
+After the landing, exact-main CI must also be green for the final current `main` SHA when implementation-relevant paths changed before reporting `ALL MERGED TO MAIN`.
 
 ## Definition of ALL MERGED TO MAIN
 
-State **ALL MERGED TO MAIN** only after an authorized integration reviewer verifies against current `main` that every required Issue/reservation is terminal or explicitly excluded/superseded, every required change is represented in current `main`, no required work exists only off-main, the combined tree has no known merge/semantic collisions, required remote-safe CI passed for the exact current `main` SHA, environment-gated evidence is explicitly classified, and the exact current `main` SHA is recorded.
+State **ALL MERGED TO MAIN** only after an authorized integration reviewer verifies against current `main` that every required Issue/reservation is terminal or explicitly excluded/superseded, every required change is represented in current `main`, no required work exists only off-main, the combined tree has no known merge/semantic collisions, required remote-safe CI passed for the exact current `main` SHA when applicable, environment-gated evidence is explicitly classified, and the exact current `main` SHA is recorded.
 
 Branch deletion, Issue/PR UI state or stale CI is not sufficient proof.
 
@@ -117,7 +121,7 @@ If required proof depends on unavailable licensed runtime, private fixtures, Win
 
 Follow `CI_POLICY.md` strictly.
 
-- `.github/workflows/ci.yml` is the automatic per-agent/task validation workflow and must stay read-only.
+- `.github/workflows/ci.yml` is the automatic per-agent/task validation workflow for implementation-relevant changes and must stay read-only; documented CI-neutral-only paths are excluded from the full build.
 - `.github/workflows/release-v25-cloud.yml` is **not** agent CI. It is a confirmed main-only preview release workflow with write permission.
 - `.github/workflows/dispatch-v25-cloud-after-main-integration.yml` is the sole approved automatic release dispatcher and runs only after eligible `main` integration landings.
 - BricsCAD V25/V26 native/runtime and other release workflows remain capability-specific/manual lanes unless the owner explicitly changes policy.
@@ -125,4 +129,4 @@ Follow `CI_POLICY.md` strictly.
 
 ## GitHub hard protection
 
-Repository policy should be backed by GitHub branch protection/rulesets where available: protect `main` from force-push/deletion, require PR-based changes for normal writers, require the stable automatic task-CI status on PRs to `main`, and keep owner/admin bypass narrow and deliberate.
+Repository policy should be backed by GitHub branch protection/rulesets where available: protect `main` from force-push/deletion, require PR-based changes for normal writers, require the stable automatic task-CI status on implementation PRs to `main`, and keep owner/admin bypass narrow and deliberate. If a future ruleset requires a status on docs-only PRs, use a lightweight status/ruleset condition rather than forcing the full build workflow for CI-neutral changes.
