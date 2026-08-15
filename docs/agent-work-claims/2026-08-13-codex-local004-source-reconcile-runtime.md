@@ -196,3 +196,19 @@ This discriminator tests the only remaining source-visible operation difference 
 Before any further production edit, the same diagnostic surfaces above may add exactly one `OBJECT_INSPECTED` fresh-process variant and one automation-only `QS3DSRULINSPECT` command. It must reuse the `OBJECT_ERASE` prepare/mutate transaction, execute the inspection command exactly twice between mutate and `UNDO 1`, and only verify the already-committed `AFTER` marker plus erased sentinel without mutation. The existing `OBJECT_ERASE` direct-Undo control remains in the same matrix. Output schema and allowlists do not change.
 
 This continuation remains diagnostic-only and preserves every exact-SHA/disposable-copy/privacy/cleanup boundary. It must not change production Source Reconcile, use `UNDO Mark/Back` yet, infer LOCAL-004 PASS, close `#1005`, or operate Actions. Only a reproduced marker `AFTER` in `OBJECT_INSPECTED` may authorize a bounded runner correction that targets the reconcile command explicitly.
+
+### Intervening-command result and explicit Undo/Redo boundary correction
+
+- Diagnostic implementation `3fe3178a0faf8dd4984d02554b2f139f0f1552d1` merged through PR `#1616`. The exact licensed six-process matrix passed every cleanup boundary. Direct `OBJECT_ERASE` again returned marker `BEFORE` / topology `PRESENT`; otherwise-identical `OBJECT_INSPECTED`, with exactly two read-only modal inspections before `UNDO 1`, returned marker `AFTER` / topology `UNDONE`. This reproduces the production tuple and proves `UNDO 1` consumed an intervening command instead of the reconcile mutation.
+- Issue `#1005` comment `#issuecomment-5300698065` records the sanitized conclusion. No further production marker/coordinator/carrier edit is justified from this failure.
+
+Before implementation, this active root claim expands to reserve only the automation boundary correction:
+
+- `scripts/test-bricscad-v25-source-reconcile.ps1`;
+- `src/QS3D.BricsCAD.V25/SourceReconcileRuntimeProbeCommands.cs` only for the exact successful-reconcile count emitted/validated by the existing marker schema;
+- `scripts/preflight-source-reconcile-runtime-probe.py`;
+- this claim and sanitized issue/result handoff.
+
+Cycle A must select the final sources, set native `UNDO Mark`, run production `QS3DSYNCSOURCE`, capture the existing after-state/marker evidence, then use `UNDO Back` before the existing marker and semantic Undo checks. Cycle B must reselect the same sources, wrap a second production `QS3DSYNCSOURCE` plus existing after-state/marker capture in `UNDO Begin`/`UNDO End`, then execute `UNDO 1` and `REDO` immediately adjacent before the existing Redo marker/semantic checks. The session/cold-reopen marker must report exactly three successful reconciles (initial success plus cycles A/B). The focused gate must lock the two-cycle order, one Mark/Back pair, one Begin/End pair, direct End -> `UNDO 1` -> REDO adjacency, three successful production syncs, and unchanged privacy/cleanup/failure contracts. Single-letter `U` remains forbidden because the Source Reconcile coordinator deliberately refuses that ambiguous V25 command token; both grouped `UNDO 1` and `REDO` must pass through the existing observed-command path.
+
+Production coordinator/service/invalidation/history behavior, lifecycle diagnostic, marker schema/allowlists, source edits, rebuild/save/reopen phases and refusal/rollback/multi-DWG checks remain unchanged. No Actions/private data. LOCAL-004 and `#1005` may become `LOCAL_PASS`/closed only after the complete unchanged-scope runner passes on an exact integrated SHA with zero process and all cleanup guards.

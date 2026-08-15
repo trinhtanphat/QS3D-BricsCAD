@@ -20,10 +20,11 @@ if COMMAND.is_file():
     required = (
         'CommandMethod("QS3DSRULPREPARE", CommandFlags.Modal)',
         'CommandMethod("QS3DSRULMUTATE", CommandFlags.Modal)',
+        'CommandMethod("QS3DSRULINSPECT", CommandFlags.Modal)',
         'CommandMethod("QS3DSRULCHECKUNDO", CommandFlags.Modal)',
         'Schema = "QS3D_SOURCE_UNDO_LIFECYCLE_V1"',
         'Boundary = "LOCAL_004_DIAGNOSTIC_ONLY"',
-        'ObjectOnly', 'ObjectErase', 'DbEnableObject', 'DbStartObject', 'DbEnableDbStartObject',
+        'ObjectOnly', 'ObjectErase', 'ObjectInspected', 'DbEnableObject', 'DbStartObject', 'DbEnableDbStartObject',
         'database.DisableUndoRecording(false)',
         'database.StartUndoRecord()',
         'state.DatabaseRecordingAtEntry = BooleanClass(database.UndoRecording)',
@@ -32,7 +33,7 @@ if COMMAND.is_file():
         'carrier.DisableUndoRecording(false)',
         'carrier.UpgradeOpen()',
         'WriteMarker(carrier, AfterToken)',
-        'context.Variant == MatrixVariant.ObjectErase',
+        'UsesEraseTopology(context.Variant)',
         'transaction.GetObject(state.SentinelId, OpenMode.ForWrite, false)',
         'sentinel.Erase()',
         'state.SentinelId = modelSpace.AppendEntity(sentinel)',
@@ -76,6 +77,22 @@ if COMMAND.is_file():
     ):
         errors.append("Undo lifecycle OBJECT_ERASE must write the marker before erasing the existing sentinel in the same transaction")
 
+    inspect_start = text.find('public void InspectCommittedMutation()')
+    inspect_end = text.find('[CommandMethod("QS3DSRULCHECKUNDO"', inspect_start)
+    inspect = text[inspect_start:inspect_end]
+    for token in (
+        'context.Variant != MatrixVariant.ObjectInspected',
+        'ReadMarker(context.Document)',
+        'ClassifyTopology(context.Document, state.SentinelId)',
+        'state.InspectionCount = checked(state.InspectionCount + 1)',
+        'state.InspectionCount > 2',
+    ):
+        if token not in inspect:
+            errors.append("Undo lifecycle read-only inspection missing contract: " + token)
+    for forbidden in ('WriteMarker(', '.Erase()', 'AppendEntity(', 'StartTransaction()', 'transaction.Commit()'):
+        if forbidden in inspect:
+            errors.append("Undo lifecycle inspection must remain read-only: " + forbidden)
+
     for forbidden in (
         'SourceReconcileService.',
         'SourceReconcileUndoCoordinator.',
@@ -114,11 +131,13 @@ if RUNNER.is_file():
         'function Wait-Qs3dExit',
         'function Stop-Qs3dLaunchedProcess',
         'ParentProcessId = " + $LauncherId',
-        '$variants = @("OBJECT_ONLY", "OBJECT_ERASE", "DB_ENABLE_OBJECT", "DB_START_OBJECT", "DB_ENABLE_DB_START_OBJECT")',
+        '$variants = @("OBJECT_ONLY", "OBJECT_ERASE", "OBJECT_INSPECTED", "DB_ENABLE_OBJECT", "DB_START_OBJECT", "DB_ENABLE_DB_START_OBJECT")',
         'source-undo-lifecycle-probe-copy.dwg',
         'source-undo-lifecycle-result.txt',
         'source-undo-lifecycle.private.scr',
         '"QS3DSRULPREPARE", "QS3DSRULMUTATE"',
+        'if ([string]::Equals($variant, "OBJECT_INSPECTED", [StringComparison]::Ordinal))',
+        '$script += @("QS3DSRULINSPECT", "QS3DSRULINSPECT")',
         '"_.UNDO", "1", "QS3DSRULCHECKUNDO"',
         '"_.CLOSE", "_N"',
         '"_.QUIT", "_N"',
@@ -161,6 +180,7 @@ if RUNNER.is_file():
 
     sequence = (
         '"QS3DSRULPREPARE", "QS3DSRULMUTATE"',
+        '$script += @("QS3DSRULINSPECT", "QS3DSRULINSPECT")',
         '"_.UNDO", "1", "QS3DSRULCHECKUNDO"',
         '"_.CLOSE", "_N"',
         '"_.QUIT", "_N"',
@@ -205,7 +225,7 @@ if CLAIM.is_file():
         'SourceReconcileUndoLifecycleProbeCommands.cs',
         'test-bricscad-v25-source-reconcile-undo-lifecycle.ps1',
         'preflight-source-reconcile-undo-lifecycle-probe.py',
-        '`OBJECT_ONLY`', '`OBJECT_ERASE`', '`DB_ENABLE_OBJECT`', '`DB_START_OBJECT`', '`DB_ENABLE_DB_START_OBJECT`',
+        '`OBJECT_ONLY`', '`OBJECT_ERASE`', '`OBJECT_INSPECTED`', '`DB_ENABLE_OBJECT`', '`DB_START_OBJECT`', '`DB_ENABLE_DB_START_OBJECT`',
         'current operator-owned BricsCAD process is out of',
         'scope; execution waits for the mandatory zero-process boundary',
     ):
@@ -227,4 +247,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: five fresh-process database/object Undo variants are statically bound to an existing XData mutation plus appended/erased topology sentinel, close the synthetic DWG explicitly without saving, finalize each exact exited host process before the next variant, materialize generic result metadata through the Windows PowerShell 5.1-safe pipeline path without masking qualification errors, preserve sanitized evidence/cleanup guards, and leave production Source Reconcile database Undo lifecycle untouched.")
+print("PASS: six fresh-process database/object Undo variants are statically bound to an existing XData mutation plus appended/erased topology sentinel, including an exact two-command read-only inspection boundary before Undo; they close the synthetic DWG without saving, finalize each exact exited host process before the next variant, preserve sanitized evidence/cleanup guards, and leave production Source Reconcile database Undo lifecycle untouched.")
