@@ -37,9 +37,15 @@ if SOURCE.is_file():
         "project.Zones.ToArray());",
         "if (project.ChangeVersion != snapshot.ChangeVersion)",
         "EnsureSameReferences(project.Elements, snapshot.Elements);",
+        "EnsureSameElementPlanningValues(project.Elements, snapshot.ElementPlanningValues);",
         "EnsureSameReferences(project.Floors, snapshot.Floors);",
         "EnsureSameReferences(project.Zones, snapshot.Zones);",
         "if (!ReferenceEquals(current[i], expected[i]))",
+        "ElementPlanningValues = elements.Select(x => new ProjectElementPlanningValues(x)).ToArray();",
+        "!string.Equals(element.Id, values.Id, StringComparison.Ordinal)",
+        "element.Category != values.Category",
+        "!string.Equals(element.FloorId, values.FloorId, StringComparison.Ordinal)",
+        "!string.Equals(element.ZoneId, values.ZoneId, StringComparison.Ordinal)",
     ):
         if token not in source:
             errors.append("SemanticViewPlanner missing structural freshness token: " + token)
@@ -48,9 +54,14 @@ if SMOKE.is_file():
     smoke = SMOKE.read_text(encoding="utf-8")
     for token in (
         "SameIdElementReplacementFailsClosed();",
+        "SameInstanceCategoryDriftFailsClosed();",
+        "SameInstanceRelationDriftFailsClosed();",
         "RevisionDriftFailsClosed();",
         "StableCatalogRemainsDeterministicAndReadOnly();",
         'project.Elements[0] = new ProjectElement("E-01", ElementCategory.Column',
+        "project.Elements[0].Category = ElementCategory.Column;",
+        'project.Elements[0].FloorId = "F-02";',
+        'project.Elements[0].ZoneId = "Z-02";',
         "project.Touch();",
         "Throws<InvalidOperationException>(() => SemanticViewPlanner.BuildCatalog(",
         "Throws<NotSupportedException>(() => mutable[0] = catalog[1]);",
@@ -69,4 +80,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: SemanticViewPlanner.BuildCatalog rejects project revision or ordered reference drift across caller-controlled definition enumeration.")
+print("PASS: SemanticViewPlanner.BuildCatalog rejects project revision, ordered reference, or planner-value drift across caller-controlled definition enumeration.")

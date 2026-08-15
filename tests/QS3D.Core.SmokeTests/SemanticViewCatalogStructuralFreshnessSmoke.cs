@@ -10,6 +10,8 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             SameIdElementReplacementFailsClosed();
+            SameInstanceCategoryDriftFailsClosed();
+            SameInstanceRelationDriftFailsClosed();
             RevisionDriftFailsClosed();
             StableCatalogRemainsDeterministicAndReadOnly();
         }
@@ -27,6 +29,39 @@ namespace QS3D.Core.SmokeTests
             Equal(beforeVersion, project.ChangeVersion);
             if (ReferenceEquals(original, project.Elements[0]))
                 throw new InvalidOperationException("Structural-freshness fixture did not replace the semantic element instance.");
+        }
+
+        private static void SameInstanceCategoryDriftFailsClosed()
+        {
+            var project = BuildProject();
+            var beforeVersion = project.ChangeVersion;
+            var element = project.Elements[0];
+
+            Throws<InvalidOperationException>(() => SemanticViewPlanner.BuildCatalog(
+                project,
+                ChangeCategoryWhileEnumerating(project)));
+
+            Equal(beforeVersion, project.ChangeVersion);
+            Same(element, project.Elements[0]);
+            Equal(ElementCategory.Column, element.Category);
+        }
+
+        private static void SameInstanceRelationDriftFailsClosed()
+        {
+            var project = BuildProject();
+            project.Floors.Add(new FloorDefinition("F-02", "Floor 02", 3.6d));
+            project.Zones.Add(new ZoneDefinition("Z-02", "Zone 02"));
+            var beforeVersion = project.ChangeVersion;
+            var element = project.Elements[0];
+
+            Throws<InvalidOperationException>(() => SemanticViewPlanner.BuildCatalog(
+                project,
+                ChangeRelationsWhileEnumerating(project)));
+
+            Equal(beforeVersion, project.ChangeVersion);
+            Same(element, project.Elements[0]);
+            Equal("F-02", element.FloorId);
+            Equal("Z-02", element.ZoneId);
         }
 
         private static void RevisionDriftFailsClosed()
@@ -85,6 +120,28 @@ namespace QS3D.Core.SmokeTests
         {
             project.Touch();
             yield return new SemanticViewDefinition("VIEW-ALL", "All elements");
+        }
+
+        private static IEnumerable<SemanticViewDefinition> ChangeCategoryWhileEnumerating(ProjectState project)
+        {
+            project.Elements[0].Category = ElementCategory.Column;
+            yield return new SemanticViewDefinition(
+                "VIEW-COLUMN",
+                "Column view",
+                SemanticViewKind.Model,
+                categories: new[] { ElementCategory.Column });
+        }
+
+        private static IEnumerable<SemanticViewDefinition> ChangeRelationsWhileEnumerating(ProjectState project)
+        {
+            project.Elements[0].FloorId = "F-02";
+            project.Elements[0].ZoneId = "Z-02";
+            yield return new SemanticViewDefinition(
+                "VIEW-F02-Z02",
+                "Floor 02 Zone 02",
+                SemanticViewKind.Plan,
+                "F-02",
+                "Z-02");
         }
 
         private static ProjectState BuildProject()
