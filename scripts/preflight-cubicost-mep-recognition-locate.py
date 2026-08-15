@@ -51,7 +51,7 @@ for token in (
 ):
     require(core, token, "Core recognition contract")
 
-require(adapter, "MepRecognitionProfiles.CreateDefault()", "adapter shared profile")
+require(adapter, "MepRecognitionProfileProvider.Current", "adapter shared profile")
 require(adapter, "RecognitionProfile.Recognize(snapshot.Layer, blockName)", "adapter profile invocation")
 require(adapter, '[CommandMethod("QS3DMEPCLASHLOCATE", CommandFlags.UsePickSet)]', "Locate command")
 require(adapter, "new PromptIntegerOptions(", "native pair-number prompt")
@@ -60,6 +60,7 @@ require(adapter, "CadHandleService.Resolve(document, new[] { clash.LeftElementId
 require(adapter, "if (liveIds.Count != 2)", "exact pair guard")
 require(adapter, "document.Editor.SetImpliedSelection(new List<ObjectId>(liveIds).ToArray())", "all-or-nothing implied selection")
 require(adapter, "MaxLocateReviewPairs = 200", "bounded Locate review")
+forbid(adapter, "MepRecognitionProfiles.CreateDefault()", "adapter shared profile")
 
 for removed_private_classifier in (
     "private static bool TryClassifyMep",

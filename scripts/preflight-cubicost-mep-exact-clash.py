@@ -35,7 +35,7 @@ for token in (
     '[CommandMethod("QS3DMEPEXACTCLASH", CommandFlags.UsePickSet)]',
     "EntitySnapshotReader.ReadCurrentSelection(document)",
     "CadHandleService.Resolve(document, snapshotByHandle.Keys)",
-    "MepRecognitionProfiles.CreateDefault()",
+    "MepRecognitionProfileProvider.Current",
     "recognition.Status != MepRecognitionStatus.Matched",
     "as Solid3d",
     "solid.GeometricExtents",
@@ -49,6 +49,7 @@ for token in (
     require(source, token, "exact clash source contract")
 
 for forbidden in (
+    "MepRecognitionProfiles.CreateDefault()",
     "OpenMode.ForWrite",
     "BooleanOperation(",
     "AppendEntity",
