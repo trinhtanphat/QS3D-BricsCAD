@@ -47,9 +47,12 @@ for token in ("GetOrCreate(", "Build3D", "TransactionManager", "AppendEntity", "
 context = read("src/QS3D.BricsCAD.V25/QuantityContextMenuCoordinator.cs")
 require(context, '"Diễn giải khối lượng"', "context menu label")
 require(context, 'private const string QuantityCommand = "QS3DQUANTITYINSIGHT";', "context command")
-require(context, '"AddDefaultContextMenuExtension"', "context registration")
-require(context, '"RemoveDefaultContextMenuExtension"', "context teardown")
+require(context, "RXObject.GetClass(typeof(Entity))", "entity context class")
+require(context, '"AddObjectContextMenuExtension"', "object context registration")
+require(context, '"RemoveObjectContextMenuExtension"', "object context teardown")
 require(context, "document.SendStringToExecute(QuantityCommand + \" \", true, false, false);", "context dispatch")
+for token in ("AddDefaultContextMenuExtension", "RemoveDefaultContextMenuExtension"):
+    forbid(context, token, "quantity action must use selected-object context")
 for token in ("GetOrCreate(", "Build3D", "TransactionManager", "AppendEntity", "ProjectRepository"):
     forbid(context, token, "native context-menu callback must be read-only")
 
@@ -76,4 +79,4 @@ for command in ("QS3DQUANTITYINSIGHT", "QS3DDRAWRAFTFOUNDATION"):
     if registrations != 1:
         fail(f"{command}: expected exactly one CommandMethod registration, found {registrations}")
 
-print("PASS: ribbon-first palettes, Móng Bè quick draw, and right-click quantity explanation source contracts")
+print("PASS: ribbon-first palettes, Móng Bè quick draw, and selected-object quantity explanation source contracts")
