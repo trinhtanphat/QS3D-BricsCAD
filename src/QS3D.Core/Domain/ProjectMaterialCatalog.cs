@@ -123,7 +123,6 @@ namespace QS3D.Core.Domain
             if (renaming)
                 referenceScope = ResolveReferenceScope(project);
 
-            project.Touch();
             WriteCustom(project, custom);
             if (renaming)
                 RenameReferences(referenceScope!, previousName!, material.Name);
@@ -141,7 +140,6 @@ namespace QS3D.Core.Domain
             if (ReferencedMaterialNames(project).Any(x => string.Equals(x, material.Name, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Material '" + material.Name + "' is still referenced by a Family or Instance and cannot be deleted.");
             custom.RemoveAll(x => string.Equals(x.Id, normalized, StringComparison.OrdinalIgnoreCase));
-            project.Touch();
             WriteCustom(project, custom);
             return true;
         }
