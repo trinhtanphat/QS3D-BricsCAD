@@ -3,12 +3,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src" / "QS3D.Core" / "Documentation" / "SemanticScheduleCatalog.cs"
+METADATA = ROOT / "src" / "QS3D.Core" / "Domain" / "ProjectMetadataDictionary.cs"
 SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "SemanticScheduleSaveBoundedEnumerationSmoke.cs"
 REGISTRATION = ROOT / "tests" / "QS3D.Core.SmokeTests" / "SemanticScheduleSaveBoundedEnumerationSmokeRegistration.cs"
 
 
 def main():
     source = SOURCE.read_text(encoding="utf-8")
+    metadata = METADATA.read_text(encoding="utf-8")
     smoke = SMOKE.read_text(encoding="utf-8")
     registration = REGISTRATION.read_text(encoding="utf-8")
 
@@ -26,7 +28,8 @@ def main():
         'throw new InvalidOperationException("Semantic schedule catalog exceeds the supported 128 definitions.");',
         "list.Add(definition);",
         "ValidateCatalog(list);",
-        "project.Touch();",
+        "project.Metadata.Remove(MetadataKey);",
+        "project.Metadata[MetadataKey] = payload;",
     ]
     for token in required:
         if token not in save:
@@ -36,20 +39,33 @@ def main():
     legacy = [
         "definitions.ToList()",
         "if (list.Count > MaxSchedules)",
+        "project.Touch();",
     ]
     for token in legacy:
         if token in save:
-            print("ERROR: legacy post-materialization semantic schedule capacity path returned: " + token)
+            print("ERROR: legacy semantic schedule save mutation path returned: " + token)
             return 1
 
     loop = save.find("foreach (var definition in definitions)")
     cap = save.find("if (list.Count >= MaxSchedules)", loop)
     add = save.find("list.Add(definition);", loop)
     validate = save.find("ValidateCatalog(list);")
-    touch = save.find("project.Touch();")
-    if min(loop, cap, add, validate, touch) < 0 or not (loop < cap < add < validate < touch):
-        print("ERROR: Semantic schedule save capacity guard must run during enumeration before validation or persistence mutation.")
+    remove = save.find("project.Metadata.Remove(MetadataKey);", validate)
+    persist = save.find("project.Metadata[MetadataKey] = payload;", remove)
+    if min(loop, cap, add, validate, remove, persist) < 0 or not (loop < cap < add < validate < remove < persist):
+        print("ERROR: Semantic schedule save capacity guard must run during enumeration before validation or either metadata persistence mutation.")
         return 1
+
+    metadata_tokens = [
+        "public string this[string key] { get => _items[key]; set => SetPublic(key, value, false); }",
+        "public bool Remove(string key) => Remove(key, true);",
+        "if (touchMutation) TouchProject();",
+        "project.Touch();",
+    ]
+    for token in metadata_tokens:
+        if token not in metadata:
+            print("ERROR: ProjectMetadataDictionary no longer owns the semantic schedule revision boundary: " + token)
+            return 1
 
     smoke_tokens = [
         "OversizeLazyCatalogStopsAtFirstItemBeyondCapacity();",
@@ -70,7 +86,7 @@ def main():
         print("ERROR: semantic schedule save bound smoke is not module-registered.")
         return 1
 
-    print("PASS: SemanticScheduleCatalog.Save bounds lazy definition enumeration at the first item beyond the 128-definition capacity before validation or project mutation.")
+    print("PASS: SemanticScheduleCatalog.Save bounds lazy definition enumeration before public metadata persistence; ProjectMetadataDictionary owns the exact-once revision mutation boundary.")
     return 0
 
 
