@@ -61,7 +61,7 @@ namespace QS3D.Core.SmokeTests
             var builder = new StringBuilder("v1.")
                 .Append(Field("E1")).Append('.')
                 .Append(Field("FP")).Append('.')
-                .Append(Field("Project")).Append('.')
+                .Append(Field("drawing-local")).Append('.')
                 .Append(Field(handles.Length.ToString(System.Globalization.CultureInfo.InvariantCulture)));
             foreach (var handle in handles) builder.Append('.').Append(Field(handle));
             return builder.ToString();
