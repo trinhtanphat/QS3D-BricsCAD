@@ -20,10 +20,9 @@ namespace QS3D.BricsCAD.V25.UI
             if (_quickWorkflowEventsAttached) return;
             _quickWorkflowEventsAttached = true;
 
-            // Attach after the XAML handlers so this narrow guard repairs the existing New-mode
-            // ordering race: OnNewClick clears FamilyList.SelectedItem, the original selection
-            // handler runs first and resets _creatingNew=false, then this handler restores draft
-            // mode when the resulting selection is actually empty.
+            // The XAML selection handler runs before this attached handler. It preserves
+            // _creatingNew only when OnNewClick intentionally clears selection; this handler
+            // exits draft mode only when a real Family is selected, then refreshes the QS form.
             FamilyList.SelectionChanged += OnQuickFamilySelectionChanged;
             NewCategoryCombo.SelectionChanged += OnQuickCategorySelectionChanged;
             ConfigureQuickMaterialChoices();
