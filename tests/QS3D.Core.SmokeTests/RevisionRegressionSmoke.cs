@@ -21,6 +21,10 @@ namespace QS3D.Core.SmokeTests
             PaddedElementIdsAreRejected();
             CompareRejectsPaddedReferenceIds();
             CompareRejectsMalformedElementPayload();
+            CaptureRecordsProjectIdentity();
+            CompareAllowsSameProjectCapturedSnapshots();
+            CompareRejectsLegacyBaselineAgainstCapturedRevision();
+            CompareRejectsCrossProjectBaseline();
         }
 
         private static void CaptureRejectsNonFiniteQuantities()
@@ -208,6 +212,49 @@ namespace QS3D.Core.SmokeTests
             duplicateDependency.Elements[0].Dependencies.Add("D1");
             duplicateDependency.Elements[0].Dependencies.Add("d1");
             Throws<InvalidOperationException>(() => new RevisionService().Compare(empty, duplicateDependency));
+        }
+
+        private static void CaptureRecordsProjectIdentity()
+        {
+            var project = NewProject();
+            var snapshot = new RevisionService().Capture(project, "project-identity");
+            if (!string.Equals(project.ProjectId, snapshot.ProjectId, StringComparison.Ordinal))
+                throw new Exception("Captured revision did not preserve ProjectId.");
+        }
+
+        private static void CompareAllowsSameProjectCapturedSnapshots()
+        {
+            var project = NewProject();
+            project.Elements.Add(new ProjectElement("E1", ElementCategory.Beam, string.Empty, "f", "z"));
+            var service = new RevisionService();
+            var before = service.Capture(project, "before");
+            var after = service.Capture(project, "after");
+            var deltas = service.Compare(before, after);
+            if (deltas.Count != 0)
+                throw new Exception("Expected same-project revisions to compare without deltas.");
+        }
+
+        private static void CompareRejectsLegacyBaselineAgainstCapturedRevision()
+        {
+            var project = NewProject();
+            var current = new RevisionService().Capture(project, "current");
+            var legacyBaseline = new RevisionSnapshot { Id = "legacy", CreatedUtc = DateTime.UtcNow };
+
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(legacyBaseline, current));
+        }
+
+        private static void CompareRejectsCrossProjectBaseline()
+        {
+            var beforeProject = NewProject();
+            var afterProject = new ProjectState("revision-regression-other", "Revision Regression Other");
+            afterProject.Zones.Add(new ZoneDefinition("z", "Zone"));
+            afterProject.Floors.Add(new FloorDefinition("f", "Floor", 0d));
+            afterProject.ActiveZoneId = "z";
+            afterProject.ActiveFloorId = "f";
+
+            var before = new RevisionService().Capture(beforeProject, "before-project");
+            var after = new RevisionService().Capture(afterProject, "after-project");
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(before, after));
         }
 
         private static RevisionSnapshot Snapshot(string id, string elementId, double quantity)
