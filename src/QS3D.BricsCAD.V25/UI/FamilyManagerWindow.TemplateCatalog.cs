@@ -174,16 +174,31 @@ namespace QS3D.BricsCAD.V25.UI
                 };
                 if (dialog.ShowDialog(this) != true) return;
 
-                var store = new TemplateProfileStore();
                 var id = "QS3D_USER_" + DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
-                var profile = store.ExportProject(project, id, Path.GetFileNameWithoutExtension(dialog.FileName));
-                store.Save(profile, dialog.FileName);
-                SetStatus("Đã lưu Family Template: " + dialog.FileName);
+                var profile = CreateFamilyOnlyTemplateProfile(project, id, Path.GetFileNameWithoutExtension(dialog.FileName));
+                new TemplateProfileStore().Save(profile, dialog.FileName);
+                SetStatus(
+                    "Đã lưu Family Template • " + profile.Families.Count.ToString(CultureInfo.InvariantCulture) +
+                    " Family • không kèm rule/layer mapping/BQ layout của project: " + dialog.FileName);
             }
             catch (Exception ex)
             {
                 SetStatus("Lưu Family Template lỗi: " + ex.Message);
             }
+        }
+
+        private static TemplateProfile CreateFamilyOnlyTemplateProfile(ProjectState project, string id, string name)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var profile = new TemplateProfile(id, name);
+            foreach (var family in project.Families.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+            {
+                var copy = new ProjectFamily(family.Id, family.Name, family.Category);
+                foreach (var property in family.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+                    copy.Properties[property.Key] = property.Value;
+                profile.Families.Add(copy);
+            }
+            return profile;
         }
 
         private sealed class FamilyCategoryGroupConverter : IValueConverter
