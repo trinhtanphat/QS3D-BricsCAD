@@ -40,9 +40,11 @@ Every candidate to be committed is revalidated against the current drawing and c
 - duplicate handles inside one apply batch are rejected/filtered;
 - the batch is bounded to the same 250,000-row ceiling used by recognition input.
 
-Manual review uses strict preflight: one invalid requested row rejects the requested batch before mutation.
+Manual selected review uses strict preflight: one invalid requested row rejects the requested batch before mutation, while the QS may still deliberately apply a low-confidence row if its live category/readiness/ownership remain valid.
 
-AUTO/B4D uses best-effort preflight: stale or conflicting candidates can be classified as skips before mutation, while valid candidates form the accepted mutation set.
+The `Áp dụng chắc chắn` path uses the same strict batch boundary but additionally revalidates the live confidence/margin gate (`0.92 / 0.15`) before mutation. A row that was confident when the window opened cannot remain “confident apply” merely because its category stayed the same after the source changed.
+
+AUTO/B4D uses best-effort preflight with the same live `0.92 / 0.15` gate: stale, conflicting or no-longer-confident candidates can be classified as skips before mutation, while valid candidates form the accepted mutation set.
 
 ### 2. Commit phase — one semantic transaction
 
@@ -55,7 +57,7 @@ Immediately before the first semantic capture, QS3D captures one `ProjectStateSn
 
 Any exception in capture, ownership verification or audit restores the outer pre-batch snapshot. This means a mutation-stage failure cannot leave earlier rows from the same accepted batch committed.
 
-`RecognitionWindow` now receives one `Func<IReadOnlyList<RecognitionResult>, int>` batch callback. It no longer loops a per-row mutation callback, so selected/confident apply cannot accidentally recreate the old partial-success semantics in the UI layer.
+`RecognitionWindow` now receives one `Func<IReadOnlyList<RecognitionResult>, bool, int>` batch callback. The boolean distinguishes explicit manual selected apply from the confident live-gated path. The window no longer loops a per-row mutation callback, so selected/confident apply cannot accidentally recreate the old partial-success semantics in the UI layer.
 
 ## What this does not claim
 
@@ -80,9 +82,10 @@ python scripts/preflight-recognition-atomic-batch.py
 The guard verifies that:
 
 - `RecognitionWindow` uses one batch callback and has no `_apply(row)` loop;
+- manual selected and confident apply remain distinct, with confident apply requesting a live threshold recheck;
 - review, AUTO and B4D route through the batch coordinator;
 - preflight contains no semantic capture call;
 - the commit ordering remains outer snapshot -> semantic capture -> audit -> restore-on-error;
-- project-version, live-handle and semantic-ownership gates remain present.
+- project-version, live-handle, live-confidence/margin and semantic-ownership gates remain present.
 
-Licensed BricsCAD V25 runtime behavior is not inferred from source inspection. The existing LOCAL-013 B4D/recognition qualification remains the matching local runtime lane; this change introduces no new native API or proprietary-data requirement. A future exact-SHA local run should additionally inject or reproduce a late accepted-row failure and verify that pre/post project semantic state and audit state are identical after the reported batch rollback.
+Licensed BricsCAD V25 runtime behavior is not inferred from source inspection. LOCAL-013 is the matching local runtime lane and now contains the exact batch-rollback, confidence-drift and cross-DWG/project-replacement evidence required for the final merged SHA. Source/static completion remains `REMOTE_DONE`; runtime qualification remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`.
