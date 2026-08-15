@@ -100,15 +100,16 @@ namespace QS3D.BricsCAD.V25
                         }
 
                         candidates.Add(new SolidCandidate(handle, discipline, solid, extents));
-                        if (candidates.Count > MaxRecognizedSolids)
-                            throw new InvalidOperationException(
-                                "QS3DMEPEXACTCLASH giới hạn " + MaxRecognizedSolids +
-                                " Solid3d đã nhận diện mỗi lần; hãy thu hẹp selection.");
                     }
                     catch (System.Exception ex) when (IsRecoverableEntityFailure(ex))
                     {
                         skipped++;
                     }
+
+                    if (candidates.Count > MaxRecognizedSolids)
+                        throw new InvalidOperationException(
+                            "QS3DMEPEXACTCLASH giới hạn " + MaxRecognizedSolids +
+                            " Solid3d đã nhận diện mỗi lần; hãy thu hẹp selection.");
                 }
 
                 candidates.Sort(CompareCandidates);
