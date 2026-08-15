@@ -183,6 +183,7 @@ namespace QS3D.Core.SmokeTests
                 RevisionDocument("2026-08-10T05:00:00.0000000Z", "Beam").Save(legacyPath, SaveOptions.DisableFormatting);
                 var legacy = store.Load(legacyPath);
                 Equal(string.Empty, legacy.ProjectId);
+                Throws<InvalidOperationException>(() => new RevisionService().Compare(legacy, snapshot));
             }
             finally
             {
