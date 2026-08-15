@@ -42,6 +42,8 @@ function Remove-PrivateProbeFile {
 function Remove-PrivateProbeArtifacts {
     param([string]$ArtifactDir, [string]$ScriptPath, [string]$DrawingCopy, [string]$Nonce)
     $sidecarPath = [IO.Path]::ChangeExtension($DrawingCopy, ".qsdb")
+    $drawingLockPath = [IO.Path]::ChangeExtension($DrawingCopy, ".dwl")
+    $drawingLock2Path = [IO.Path]::ChangeExtension($DrawingCopy, ".dwl2")
     $privatePaths = @(
         $ScriptPath
         $sidecarPath
@@ -50,8 +52,10 @@ function Remove-PrivateProbeArtifacts {
         ($sidecarPath + "." + $Nonce + ".original")
         ($sidecarPath + "." + $Nonce + ".replacement")
         ($sidecarPath + "." + $Nonce + ".removed")
+        $drawingLockPath
+        $drawingLock2Path
     )
-    if ($privatePaths.Count -ne 7) { throw "Private sidecar revision cleanup path inventory is invalid." }
+    if ($privatePaths.Count -ne 9) { throw "Private sidecar revision cleanup path inventory is invalid." }
     foreach ($privatePath in $privatePaths) {
         Remove-PrivateProbeFile -Path $privatePath
     }
@@ -186,7 +190,10 @@ try {
         )
         $failureStage = if ($marker.ContainsKey("stage")) { [string]$marker["stage"] } else { "unknown" }
         if ($allowedFailureStages -notcontains $failureStage) { $failureStage = "unknown" }
-        throw "BricsCAD sidecar revision probe returned sanitized failure stage '$failureStage'."
+        $allowedFailureKinds = @("invalid_data", "unauthorized", "io", "xml", "argument", "invalid_operation", "other")
+        $failureKind = if ($marker.ContainsKey("failure_kind")) { [string]$marker["failure_kind"] } else { "other" }
+        if ($allowedFailureKinds -notcontains $failureKind) { $failureKind = "other" }
+        throw "BricsCAD sidecar revision probe returned sanitized failure stage '$failureStage' and kind '$failureKind'."
     }
     foreach ($key in @(
         "backup_appearance_refused", "primary_replacement_refused", "primary_removal_refused",
