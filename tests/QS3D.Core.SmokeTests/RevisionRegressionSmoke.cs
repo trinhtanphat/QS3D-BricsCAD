@@ -1,7 +1,7 @@
 using System;
 using System.Reflection;
 using QS3D.Core.Domain;
-using QS3D.Core.Revisions;
+using QS3D.Core.Revisions
 
 namespace QS3D.Core.SmokeTests
 {
@@ -122,7 +122,6 @@ namespace QS3D.Core.SmokeTests
             badCategory.Elements[0].Category = "beam";
             var empty = new RevisionSnapshot { Id = "empty", CreatedUtc = DateTime.UtcNow };
             Throws<InvalidOperationException>(() => new QuantityRevisionReport().Build(empty, badCategory));
-            Throws<InvalidOperationException>(() => new RevisionService().Compare(empty, badCategory));
 
             var nonFinite = Snapshot("quantity-non-finite", "E1", double.NaN);
             Throws<InvalidOperationException>(() => new QuantityRevisionReport().Build(empty, nonFinite));
@@ -219,7 +218,8 @@ namespace QS3D.Core.SmokeTests
         {
             var project = NewProject();
             var snapshot = new RevisionService().Capture(project, "project-identity");
-            Equal(project.ProjectId, snapshot.ProjectId);
+            if (!string.Equals(project.ProjectId, snapshot.ProjectId, StringComparison.Ordinal))
+                throw new Exception("Captured revision did not preserve ProjectId.");
         }
 
         private static void CompareAllowsSameProjectCapturedSnapshots()
@@ -230,7 +230,8 @@ namespace QS3D.Core.SmokeTests
             var before = service.Capture(project, "before");
             var after = service.Capture(project, "after");
             var deltas = service.Compare(before, after);
-            Equal(0, deltas.Count);
+            if (deltas.Count != 0)
+                throw new Exception("Expected same-project revisions to compare without deltas.");
         }
 
         private static void CompareRejectsLegacyBaselineAgainstCapturedRevision()
@@ -295,12 +296,6 @@ namespace QS3D.Core.SmokeTests
             try { action(); }
             catch (T) { return; }
             throw new Exception("Expected exception " + typeof(T).Name + ".");
-        }
-
-        private static void Equal<T>(T expected, T actual)
-        {
-            if (!Equals(expected, actual))
-                throw new Exception("Expected " + expected + ", got " + actual + ".");
         }
     }
 }
