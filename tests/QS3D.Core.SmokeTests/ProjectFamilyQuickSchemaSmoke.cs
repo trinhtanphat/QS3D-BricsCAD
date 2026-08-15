@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             MillimeterConversionIsCanonical();
             SuggestedNamesMatchQsConventions();
             AutoIdentityMatchingIsDeterministic();
+            AutoIdentityIncludesSizeDefiningHeight();
         }
 
         private static void SchemasMatchQsForms()
@@ -27,11 +28,11 @@ namespace QS3D.Core.SmokeTests
 
             var column = ProjectFamilyQuickSchemaService.GetSchema(ElementCategory.Column);
             Sequence(new[] { "WidthM", "DepthM", "HeightM", "BottomOffsetM" }, column.FormKeys, "Column form keys mismatch.");
-            Sequence(new[] { "WidthM", "DepthM" }, column.IdentityKeys, "Column identity keys mismatch.");
+            Sequence(new[] { "WidthM", "DepthM", "HeightM" }, column.IdentityKeys, "Column identity keys mismatch.");
 
             var wall = ProjectFamilyQuickSchemaService.GetSchema(ElementCategory.ArchitecturalWall);
             Sequence(new[] { "ThicknessM", "HeightM", "BottomOffsetM" }, wall.FormKeys, "Wall form keys mismatch.");
-            Sequence(new[] { "ThicknessM" }, wall.IdentityKeys, "Wall identity keys mismatch.");
+            Sequence(new[] { "ThicknessM", "HeightM" }, wall.IdentityKeys, "Wall identity keys mismatch.");
             Equal("Gạch", wall.DefaultMaterial, "Wall default material mismatch.");
 
             var slab = ProjectFamilyQuickSchemaService.GetSchema(ElementCategory.Slab);
@@ -82,6 +83,45 @@ namespace QS3D.Core.SmokeTests
             Equal("beam-concrete", matches[0].Id, "Auto Family matched the wrong Beam.");
 
             Equal("D300x500 2", ProjectFamilyQuickSchemaService.MakeUniqueName(project, ElementCategory.Beam, "D300x500"), "Collision-safe suggested name mismatch.");
+        }
+
+        private static void AutoIdentityIncludesSizeDefiningHeight()
+        {
+            var project = new ProjectState("P-QUICK-HEIGHT", "Quick schema height identity smoke");
+
+            var column = new ProjectFamily("column-3600", "C400x400", ElementCategory.Column);
+            column.Properties["WidthM"] = "0.4";
+            column.Properties["DepthM"] = "0.4";
+            column.Properties["HeightM"] = "3.6";
+            column.Properties["BottomOffsetM"] = "0";
+            column.Properties["Material"] = "Bê tông";
+            project.Families.Add(column);
+
+            var columnDifferentHeight = Values(
+                ("WidthM", "0.4"),
+                ("DepthM", "0.4"),
+                ("HeightM", "3.0"),
+                ("BottomOffsetM", "0"));
+            Equal(
+                0,
+                ProjectFamilyQuickSchemaService.FindIdentityMatches(project, ElementCategory.Column, columnDifferentHeight, "Bê tông").Count,
+                "Auto Family must not reuse a Column with a different height and then mutate inherited instances.");
+
+            var wall = new ProjectFamily("wall-3600", "T200", ElementCategory.ArchitecturalWall);
+            wall.Properties["ThicknessM"] = "0.2";
+            wall.Properties["HeightM"] = "3.6";
+            wall.Properties["BottomOffsetM"] = "0";
+            wall.Properties["Material"] = "Gạch";
+            project.Families.Add(wall);
+
+            var wallDifferentHeight = Values(
+                ("ThicknessM", "0.2"),
+                ("HeightM", "3.0"),
+                ("BottomOffsetM", "0"));
+            Equal(
+                0,
+                ProjectFamilyQuickSchemaService.FindIdentityMatches(project, ElementCategory.ArchitecturalWall, wallDifferentHeight, "Gạch").Count,
+                "Auto Family must not reuse a Wall with a different height and then mutate inherited instances.");
         }
 
         private static IReadOnlyDictionary<string, string> Values(params (string Key, string Value)[] items)
