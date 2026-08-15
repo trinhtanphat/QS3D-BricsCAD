@@ -21,6 +21,9 @@ namespace QS3D.Core.SmokeTests
             PaddedElementIdsAreRejected();
             CompareRejectsPaddedReferenceIds();
             CompareRejectsMalformedElementPayload();
+            CaptureRecordsProjectIdentity();
+            CompareRejectsLegacyBaselineAgainstCapturedRevision();
+            CompareRejectsCrossProjectBaseline();
         }
 
         private static void CaptureRejectsNonFiniteQuantities()
@@ -118,6 +121,7 @@ namespace QS3D.Core.SmokeTests
             badCategory.Elements[0].Category = "beam";
             var empty = new RevisionSnapshot { Id = "empty", CreatedUtc = DateTime.UtcNow };
             Throws<InvalidOperationException>(() => new QuantityRevisionReport().Build(empty, badCategory));
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(empty, badCategory));
 
             var nonFinite = Snapshot("quantity-non-finite", "E1", double.NaN);
             Throws<InvalidOperationException>(() => new QuantityRevisionReport().Build(empty, nonFinite));
@@ -210,6 +214,36 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => new RevisionService().Compare(empty, duplicateDependency));
         }
 
+        private static void CaptureRecordsProjectIdentity()
+        {
+            var project = NewProject();
+            var snapshot = new RevisionService().Capture(project, "project-identity");
+            Equal(project.ProjectId, snapshot.ProjectId);
+        }
+
+        private static void CompareRejectsLegacyBaselineAgainstCapturedRevision()
+        {
+            var project = NewProject();
+            var current = new RevisionService().Capture(project, "current");
+            var legacyBaseline = new RevisionSnapshot { Id = "legacy", CreatedUtc = DateTime.UtcNow };
+
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(legacyBaseline, current));
+        }
+
+        private static void CompareRejectsCrossProjectBaseline()
+        {
+            var beforeProject = NewProject();
+            var afterProject = new ProjectState("revision-regression-other", "Revision Regression Other");
+            afterProject.Zones.Add(new ZoneDefinition("z", "Zone"));
+            afterProject.Floors.Add(new FloorDefinition("f", "Floor", 0d));
+            afterProject.ActiveZoneId = "z";
+            afterProject.ActiveFloorId = "f";
+
+            var before = new RevisionService().Capture(beforeProject, "before-project");
+            var after = new RevisionService().Capture(afterProject, "after-project");
+            Throws<InvalidOperationException>(() => new RevisionService().Compare(before, after));
+        }
+
         private static RevisionSnapshot Snapshot(string id, string elementId, double quantity)
         {
             var snapshot = new RevisionSnapshot { Id = id, CreatedUtc = DateTime.UtcNow };
@@ -249,6 +283,12 @@ namespace QS3D.Core.SmokeTests
             try { action(); }
             catch (T) { return; }
             throw new Exception("Expected exception " + typeof(T).Name + ".");
+        }
+
+        private static void Equal<T>(T expected, T actual)
+        {
+            if (!Equals(expected, actual))
+                throw new Exception("Expected " + expected + ", got " + actual + ".");
         }
     }
 }
