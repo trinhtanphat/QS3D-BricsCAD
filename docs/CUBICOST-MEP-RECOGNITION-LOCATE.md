@@ -1,98 +1,83 @@
-# Cubicost-style MEP recognition and clash Locate — BricsCAD V25
+# Cubicost-style MEP recognition profiles and clash Locate
 
 Updated: 2026-08-15 (UTC+7)
 Issue: #1636
 Upstream adapter: #1619 / PR #1635
 
-## Scope
+## Purpose
 
-This lane removes the first-wave adapter's private hard-coded classification methods and moves recognition policy into host-neutral `QS3D.Core`.
+The first V25 Cubicost-style MEP adapter proved selected-DWG takeoff and broad-phase clash detection. This follow-up removes adapter-owned hard-coded recognition policy and adds a read-only Locate workflow for reviewing a specific clash pair.
 
-Delivered surfaces:
+## Configurable Core recognition
 
-- `MepRecognitionRule` — configurable token rule with explicit priority, source scope, discipline/category and optional MEP kind.
-- `MepRecognitionProfile` — deterministic rule evaluation with fail-closed `Unmatched` and `Ambiguous` outcomes.
-- `MepRecognitionProfiles.CreateDefault()` — canonical compatibility profile for the first V25 adapter conventions.
-- `QS3DMEPTAKEOFF` and `QS3DMEPCLASH` now consume the Core profile instead of owning private classification tables.
-- `QS3DMEPCLASHLOCATE` recomputes the current read-only clash review, lets the operator choose a pair, resolves the two live handles and places only those entities into the BricsCAD implied selection.
+`QS3D.Core.Mep.MepRecognitionRule` defines:
 
-No project/DWG semantic mutation, exact-solid boolean interference, modeless palette, issue persistence, V26, OCR or RVT work is introduced by this lane.
-
-## Recognition contract
-
-A rule contains:
-
-- stable `Id`;
-- integer `Priority`;
-- `Mep`, `Structure` or `Architecture` discipline;
-- category;
+- stable rule id;
+- explicit priority;
+- MEP / Structure / Architecture discipline;
+- semantic category;
 - one or more case-insensitive tokens;
-- source scope: layer, block name, or either;
-- MEP kind for MEP rules.
+- source scope: Layer, BlockName or both;
+- required `MepElementKind` for MEP rules.
 
-Evaluation is deterministic:
+`MepRecognitionProfile.Recognize(layer, blockName)` returns `Matched`, `Unmatched` or `Ambiguous`.
 
-1. matching rules are considered in descending priority order;
-2. only rules at the highest matching priority participate in the decision;
-3. if those top rules resolve to the same semantic classification, the result is `Matched`;
-4. if top rules disagree, the result is `Ambiguous` and no discipline/category/MEP kind is returned;
-5. if no rule matches, the result is `Unmatched`.
+Rules are ordered by descending priority. Only highest-priority matches participate in the final classification. If highest-priority matches disagree on discipline/category/MEP kind, the result is `Ambiguous` and no classification is guessed.
 
-The adapter accepts only `Matched`. `Ambiguous` and `Unmatched` are skipped instead of guessed.
+`MepRecognitionProfiles.CreateDefault()` provides the compatibility profile used by the V25 adapter. Specific classes such as CableTray outrank broader embedded tokens such as Cable. The contract is host-neutral, so future company/project profiles can replace the default without changing quantity or clash math.
 
-## Default profile compatibility
+## Adapter behavior
 
-The default profile preserves the first adapter's precedence, including:
+`MepTakeoffCommands` delegates both MEP and building-discipline classification to the shared Core profile. Unknown and ambiguous results are skipped fail-closed.
 
-- CableTray before the embedded `CABLE` token;
-- Conduit, Duct, Pipe, Cable, Fitting, Accessory, Equipment and Fixture conventions;
-- Structure before Architecture;
-- Beam, Column, Foundation and generic Structure categories;
-- Wall, Slab/Floor, Ceiling, Roof and generic Architecture categories.
+All first-wave integrity rules remain:
 
-The default profile is a compatibility baseline, not a universal BIM/CAD naming standard. Project-specific profiles can construct different `MepRecognitionRule` sets without adding BricsCAD dependencies to Core.
+- native snapshot curve length is the quantity-length source;
+- bounding-box diagonals are never quantity lengths;
+- `CadUnitService` owns drawing-unit conversion;
+- `GeometricExtents` are broad-phase clash envelopes only;
+- CAD entities are opened read-only on the document thread;
+- no project bootstrap, sidecar write, semantic mutation or CAD geometry mutation.
 
-## Clash Locate flow
+## `QS3DMEPCLASHLOCATE`
 
-`QS3DMEPCLASHLOCATE` is intentionally read-only with respect to DWG/project data:
+The command:
 
-1. consume PICKFIRST or interactive source selection through `EntitySnapshotReader`;
-2. prompt for the same non-negative clearance used by `QS3DMEPCLASH`;
-3. resolve live handles and read native `GeometricExtents` `ForRead`;
-4. run Core broad-phase hard/clearance clash detection;
-5. keep pairs with at least one recognized MEP participant;
-6. display at most the first 200 deterministic review pairs to avoid unbounded command-line output;
-7. prompt for one pair index;
-8. call `CadHandleService.SelectIfAny` for the two handles.
+1. reads PICKFIRST/interactive candidate selection;
+2. asks for non-negative clash clearance;
+3. runs the same recognition + Core broad-phase clash calculation as `QS3DMEPCLASH`;
+4. prints at most 200 numbered MEP-relevant clash pairs per review pass;
+5. asks for a pair number using BricsCAD `Editor.GetInteger(PromptIntegerOptions)`;
+6. re-resolves both stable Handles immediately before selection;
+7. changes implied selection only when **both** pair members still resolve live.
 
-Changing the implied selection is transient editor state. The command does not open entities `ForWrite`, append/erase/transform geometry, create a sidecar, or mutate QS3D semantic state.
+The two-live-object check is deliberate. A stale pair must not partially replace PICKFIRST with one surviving object.
 
-## Remote-safe validation
+This is Locate/Select, not exact-solid interference. Zoom, transient highlighting, modeless clash palette, issue persistence and Solid3d narrow-phase verification remain later scopes.
 
-Deterministic Core smoke coverage verifies:
+## Regression coverage
 
-- case-insensitive default recognition;
-- CableTray priority over embedded Cable;
-- block-name recognition;
+`MepRecognitionSmoke` covers:
+
+- specific-over-generic default priority and case-insensitive matching;
+- BlockName recognition;
 - explicit custom priority;
-- same-priority conflicting rules return `Ambiguous` with no guessed classification;
-- unmatched content returns `Unmatched` with no guessed classification.
+- equal-priority conflicting matches -> `Ambiguous`;
+- unmatched content -> no guessed discipline/category.
 
-The feature source guard is `scripts/preflight-cubicost-mep-recognition-locate.py`, automatically discovered by `scripts/preflight-all.py`.
+The smoke is registered directly in `SmokeTestRegistration`.
 
-## LOCAL_ONLY qualification
+## LOCAL_ONLY handoff
 
-Final V25 interaction truth remains local-only because a licensed BricsCAD V25 runtime is required.
+Core recognition is host-neutral. V25 Locate still needs licensed runtime evidence on the exact integrated SHA:
 
-On a disposable DWG, validate the exact integrated SHA with:
+1. representative sanitized layer and BlockName matches for each supported MEP/building class;
+2. deliberately unknown and deliberately ambiguous names fail closed;
+3. `QS3DMEPCLASH` and `QS3DMEPCLASHLOCATE` return the same pair order for an unchanged selection and clearance;
+4. selecting pair N produces exactly two PICKFIRST objects;
+5. stale/deleted pair member before final selection leaves the previous selection unchanged instead of partially selecting one object;
+6. cancellation at selection, clearance and pair-number prompts causes no project/sidecar/CAD/audit mutation;
+7. two-DWG runs do not leak Handle/ObjectId state;
+8. existing mm/m unit controls continue to match native quantities.
 
-1. case-insensitive layer and block names for each default MEP kind;
-2. an overlap token such as `CABLETRAY` proving CableTray priority;
-3. unknown naming proving fail-closed skip;
-4. `QS3DMEPCLASHLOCATE` with known hard clash and clearance pairs;
-5. pair selection proving exactly the two live handles become implied selection;
-6. one stale/deleted handle control proving partial/zero live selection is reported safely;
-7. two DWGs proving no cross-document handle/selection leakage;
-8. no sidecar/project/DWG mutation attributable to the commands.
-
-Status: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`. Source review or Core smoke coverage must not be reported as licensed V25 runtime PASS.
+Status: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` until licensed BricsCAD V25 evidence is tied to the exact integrated SHA.

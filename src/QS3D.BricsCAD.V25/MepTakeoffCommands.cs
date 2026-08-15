@@ -166,11 +166,16 @@ namespace QS3D.BricsCAD.V25
                 if (selected.Status != PromptStatus.OK) return;
 
                 var clash = relevant[selected.Value - 1];
-                var selectedCount = CadHandleService.SelectIfAny(document, new[] { clash.LeftElementId, clash.RightElementId });
+                var liveIds = CadHandleService.Resolve(document, new[] { clash.LeftElementId, clash.RightElementId });
+                if (liveIds.Count != 2)
+                {
+                    document.Editor.WriteMessage(
+                        "\nQS3DMEPCLASHLOCATE: pair đã stale/không resolve đủ 2 live entity; selection hiện tại được giữ nguyên.");
+                    return;
+                }
+                document.Editor.SetImpliedSelection(new List<ObjectId>(liveIds).ToArray());
                 document.Editor.WriteMessage(
-                    "\nQS3DMEPCLASHLOCATE: selected=" + selectedCount + "/2 • " +
-                    clash.LeftElementId + " ↔ " + clash.RightElementId +
-                    (selectedCount == 2 ? "." : " • một hoặc nhiều Handle không còn live."));
+                    "\nQS3DMEPCLASHLOCATE: selected=2/2 • " + clash.LeftElementId + " ↔ " + clash.RightElementId + ".");
             }
             catch (System.Exception ex)
             {
