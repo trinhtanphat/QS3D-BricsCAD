@@ -1,21 +1,46 @@
-name: QS3D Core CI
+name: QS3D Task / Core CI
 
 on:
+  push:
+    branches:
+      - main
+      - "agent/**"
+      - "recovery/**"
+      - "integration/**"
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   preflight:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: Manual-only CI policy gate
+      - name: Verify exact checkout SHA
+        shell: pwsh
+        run: |
+          $expected = '${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}'.ToLowerInvariant()
+          $actual = (& git rev-parse HEAD).Trim().ToLowerInvariant()
+          if ($actual -ne $expected) {
+            throw "Checkout SHA mismatch: expected $expected, actual $actual"
+          }
+          Write-Host "Exact source SHA: $actual"
+      - name: CI policy gate
         run: python scripts/preflight-ci-manual-only.py
       - name: Generic source guard
         run: python scripts/preflight.py
@@ -49,11 +74,13 @@ jobs:
         run: .\scripts\test-v25-package-verifier.ps1
 
   core:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
     needs: preflight
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
