@@ -32,6 +32,14 @@ namespace QS3D.Core.Domain
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Value is required.", name);
             var normalized = value.Trim();
             if (normalized.Any(char.IsControl)) throw new ArgumentException("Value cannot contain control characters.", name);
+            try
+            {
+                XmlConvert.VerifyXmlChars(normalized);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException("Value contains characters that are invalid in XML.", name, ex);
+            }
             return normalized;
         }
     }
