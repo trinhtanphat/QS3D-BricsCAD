@@ -233,7 +233,8 @@ namespace QS3D.Core.Cost
         {
             ItemCode = RateBookContract.RequireToken(itemCode, nameof(itemCode));
             if (cost < 0m) throw new ArgumentOutOfRangeException(nameof(cost));
-            TradeCode = string.IsNullOrWhiteSpace(tradeCode) ? "Unclassified" : tradeCode.Trim();
+            var normalizedTradeCode = tradeCode?.Trim();
+            TradeCode = normalizedTradeCode == null || normalizedTradeCode.Length == 0 ? "Unclassified" : normalizedTradeCode;
             Cost = cost;
         }
 
