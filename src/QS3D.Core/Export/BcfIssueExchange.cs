@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml;
 
 namespace QS3D.Core.Export
 {
@@ -8,7 +9,7 @@ namespace QS3D.Core.Export
     {
         public BcfComponentReference(string qs3dElementId, string ifcGlobalId)
         {
-            Qs3dElementId = IfcRoundTripProjectionContract.RequireCanonicalToken(qs3dElementId, nameof(qs3dElementId));
+            Qs3dElementId = BcfIssueExchangeContract.RequireToken(qs3dElementId, nameof(qs3dElementId));
             IfcGlobalId = BcfIssueExchangeContract.RequireIfcGuid(ifcGlobalId, nameof(ifcGlobalId));
         }
 
@@ -129,8 +130,8 @@ namespace QS3D.Core.Export
         {
             Id = BcfIssueExchangeContract.RequireBcfGuid(id, nameof(id));
             Title = BcfIssueExchangeContract.RequireText(title, nameof(title), false);
-            Status = IfcRoundTripProjectionContract.RequireCanonicalToken(status, nameof(status));
-            Type = IfcRoundTripProjectionContract.RequireCanonicalToken(type, nameof(type));
+            Status = BcfIssueExchangeContract.RequireToken(status, nameof(status));
+            Type = BcfIssueExchangeContract.RequireToken(type, nameof(type));
             Description = BcfIssueExchangeContract.RequireText(description, nameof(description), true);
             CreationAuthor = BcfIssueExchangeContract.RequireText(creationAuthor, nameof(creationAuthor), false);
             CreationDateUtc = BcfIssueExchangeContract.RequireUtc(creationDateUtc, nameof(creationDateUtc));
@@ -248,6 +249,12 @@ namespace QS3D.Core.Export
             return token;
         }
 
+        internal static string RequireToken(string value, string parameterName)
+        {
+            var token = IfcRoundTripProjectionContract.RequireCanonicalToken(value, parameterName);
+            return RequireXmlText(token, parameterName);
+        }
+
         internal static DateTime RequireUtc(DateTime value, string parameterName)
         {
             if (value.Kind != DateTimeKind.Utc) throw new ArgumentException("BCF timestamps must be UTC.", parameterName);
@@ -271,6 +278,19 @@ namespace QS3D.Core.Export
                 var character = value[index];
                 if (char.IsControl(character) && character != '\r' && character != '\n' && character != '\t')
                     throw new ArgumentException("Value must not contain unsupported control characters.", parameterName);
+            }
+            return RequireXmlText(value, parameterName);
+        }
+
+        private static string RequireXmlText(string value, string parameterName)
+        {
+            try
+            {
+                XmlConvert.VerifyXmlChars(value);
+            }
+            catch (XmlException exception)
+            {
+                throw new ArgumentException("Value contains characters that are invalid in XML.", parameterName, exception);
             }
             return value;
         }
