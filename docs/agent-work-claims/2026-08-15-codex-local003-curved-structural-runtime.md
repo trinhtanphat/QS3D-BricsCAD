@@ -1,6 +1,6 @@
 # LOCAL-003 curved and round structural runtime qualification
 
-Status: ACTIVE
+Status: COMPLETED
 Agent: codex-local003-curved-structural-20260815
 Issue: #72 (source capability lineage: #1443)
 Branch: `agent/local003/local003-curved-structural-runtime-20260815`
@@ -41,3 +41,16 @@ Generated licensed-runtime evidence remains under ignored `artifacts/` or anothe
 5. Create two fresh guarded disposable copies outside tracked source and run the licensed V25 harness once with `NativeDrawingUnit=Millimeter` and once with `NativeDrawingUnit=Meter`.
 6. Verify exact-process cleanup, unchanged/restored disposable drawing bytes, no sidecar/backup/lock/script/private-state residue, no tracked artifacts, and sanitized markers only.
 7. Publish exact evidence to issue #72 and the draft PR, update the canonical LOCAL-003 status narrowly, and stop before merge.
+
+## Exact licensed evidence
+
+- Tested candidate: committed and pushed SHA `f3640ebbb35ecdda7a68c85e12d57f4fa717612d` on draft PR #1614.
+- Host: licensed BricsCAD V25.2.10 Windows x64; adapter/Core ProductVersion `0.1.0-preview.10041+f3640ebbb35ecdda7a68c85e12d57f4fa717612d`.
+- Adapter SHA-256: `FE2201BEF17D08EC79FC791546E7AA8FB1C0E56256F285BADE65523FFA52D910`; Core SHA-256: `26024B4F7D4B839ED89A4742674C679029C0402871952DB0160FF55473352431`.
+- The focused curved-structural gate, PowerShell AST parse, strict manual-CI/local-handoff guards, full Core smoke (`ALL PASS`) and installed-reference V25 `Release|x64` build (`0 warnings / 0 errors`) passed before licensed execution.
+- Fresh Millimeter (`INSUNITS=4`) and Meter (`INSUNITS=6`) runs each passed all seven positive cases and seven stale-rebuild replacements. Beam LINE/ARC/CIRCLE/straight-open-POLYLINE/curved-open-POLYLINE reported the expected Length, positive owned `Solid3d` volume and `0..0.5 m` Z span; CIRCLE Slab/Column reported the expected Area, positive owned volume and `0..0.2 m` / `0..3 m` Z spans. Old generated handles were retired by the automation probe before replacement ownership was accepted.
+- Closed Beam POLYLINE and non-WCS Beam CIRCLE failed closed in both units. Sixty-six common marker fields matched across mm/m within the guarded tolerance.
+- Both hosts exited gracefully; exact process, script and private-state cleanup passed. Both guarded synthetic copies remained read-only through host exit, unwritten/restored, and retained SHA-256 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`. Retained ignored artifacts contain only the synthetic copy plus sanitized marker/metadata; forbidden marker fields and `.qsdb/.bak/.dwl/.dwl2/.scr` residue are absent.
+- No runner/probe or production source correction was needed. No GitHub Actions, release or merge was run.
+
+This completes only the dedicated curved/round capture-to-build harness row. Representative Undo/Redo, explicit save/cold reopen, broader stale-rebuild lifecycle, multi-DWG isolation and authorized private-DWG coverage remain `PENDING_LOCAL`; overall LOCAL-003 remains `IN_PROGRESS` and customer-release qualification remains false.
