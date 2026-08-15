@@ -295,14 +295,14 @@ namespace QS3D.Core.Domain
         {
             var normalized = (value ?? string.Empty).Trim();
             if (normalized.Any(char.IsControl)) throw new ArgumentException("Element relation id cannot contain control characters.", nameof(value));
-            return normalized;
+            return RequireXmlText(normalized, nameof(value), "Element relation id");
         }
 
         private static string NormalizeDrawingFingerprint(string? value)
         {
             var rawValue = value ?? string.Empty;
             if (rawValue.Any(char.IsControl)) throw new ArgumentException("Element drawing fingerprint cannot contain control characters.", nameof(value));
-            return rawValue.Trim();
+            return RequireXmlText(rawValue.Trim(), nameof(value), "Element drawing fingerprint");
         }
 
         private static string RequireId(string id)
@@ -310,7 +310,7 @@ namespace QS3D.Core.Domain
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Element id is required.", nameof(id));
             var normalized = id.Trim();
             if (normalized.Any(char.IsControl)) throw new ArgumentException("Element id cannot contain control characters.", nameof(id));
-            return normalized;
+            return RequireXmlText(normalized, nameof(id), "Element id");
         }
 
         private static string RequireXmlText(string value, string parameterName, string label)
