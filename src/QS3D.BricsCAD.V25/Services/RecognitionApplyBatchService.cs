@@ -61,6 +61,8 @@ namespace QS3D.BricsCAD.V25.Services
     internal static class RecognitionApplyBatchService
     {
         private const int MaxBatchItems = 250000;
+        private const double AutoAcceptConfidence = 0.92d;
+        private const double AutoAcceptMinimumMargin = 0.15d;
 
         public static RecognitionApplyBatchPlan PrepareStrict(
             Document document,
@@ -79,7 +81,7 @@ namespace QS3D.BricsCAD.V25.Services
                 if (result.TopCandidate == null) continue;
                 if (!seen.Add(result.Handle))
                     throw new InvalidOperationException("Recognition Apply: duplicate CAD handle in review batch: " + result.Handle + ".");
-                items.Add(PrepareOne(document, project, result));
+                items.Add(PrepareOne(document, project, result, requireAutoAcceptance: false));
             }
 
             EnsureProjectUnchanged(document, project, expectedProjectId, version, "Recognition Apply preflight");
@@ -105,20 +107,14 @@ namespace QS3D.BricsCAD.V25.Services
                     skips.Add(new RecognitionApplySkip(string.Empty, "Recognition batch contains a null review row."));
                     continue;
                 }
-                if (result.TopCandidate == null)
-                {
-                    skips.Add(new RecognitionApplySkip(result.Handle, "No recognition candidate is available."));
-                    continue;
-                }
-                if (!seen.Add(result.Handle))
-                {
-                    skips.Add(new RecognitionApplySkip(result.Handle, "Duplicate CAD handle in recognition batch."));
-                    continue;
-                }
 
                 try
                 {
-                    items.Add(PrepareOne(document, project, result));
+                    if (result.TopCandidate == null)
+                        throw new InvalidOperationException("No recognition candidate is available.");
+                    if (!seen.Add(result.Handle))
+                        throw new InvalidOperationException("Duplicate CAD handle in recognition batch.");
+                    items.Add(PrepareOne(document, project, result, requireAutoAcceptance: true));
                 }
                 catch (Exception ex)
                 {
@@ -182,7 +178,11 @@ namespace QS3D.BricsCAD.V25.Services
             }
         }
 
-        private static RecognitionApplyItem PrepareOne(Document document, ProjectState project, RecognitionResult result)
+        private static RecognitionApplyItem PrepareOne(
+            Document document,
+            ProjectState project,
+            RecognitionResult result,
+            bool requireAutoAcceptance)
         {
             var expectedCandidate = result.TopCandidate
                 ?? throw new InvalidOperationException("Recognition Apply: review row has no candidate for CAD handle " + result.Handle + ".");
@@ -199,6 +199,9 @@ namespace QS3D.BricsCAD.V25.Services
                     "Recognition Apply: result for " + result.Handle + " changed from " + expectedCandidate.Category + " to " + candidate.Category + ". Run Recognition again before applying.");
             if (!refreshed.IsCaptureReady)
                 throw new InvalidOperationException("Recognition Apply: CAD handle " + result.Handle + " is no longer capture-ready: " + refreshed.CaptureReadinessReason);
+            if (requireAutoAcceptance && (candidate.Confidence < AutoAcceptConfidence || refreshed.Margin < AutoAcceptMinimumMargin))
+                throw new InvalidOperationException(
+                    "Recognition Auto Apply: live confidence/margin for CAD handle " + result.Handle + " fell below the auto-accept gate. Review it manually.");
 
             var collision = SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, result.Handle);
             if (collision != null && collision.Category == candidate.Category) collision = null;
