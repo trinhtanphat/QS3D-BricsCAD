@@ -35,13 +35,23 @@ def validate_raw_map_hydration(store_text, metadata_text):
         errors.append("ReadStringMap must not trim-normalize free-text map values.")
 
     persistence = "internal void SetPersistenceValue(string key, string value) => Set(key, value, false, false);"
-    set_start = metadata_text.find("private void Set(string key, string value, bool addOnly, bool touchReserved)")
-    set_end = metadata_text.find("private void TouchReserved()", set_start)
+    set_start = metadata_text.find("private void Set(string key, string value, bool addOnly, bool touchMutation)")
+    set_end = metadata_text.find("private static bool IsReservedKey(", set_start)
     set_method = metadata_text[set_start:set_end] if set_start >= 0 and set_end > set_start else ""
-    validate = set_method.find("ProjectMeasurementWorkItemMappingCodec.Read(next);")
+    validate = set_method.find("ValidateReserved(next);")
     mutate = set_method.find("if (addOnly) _items.Add(key, normalizedValue); else _items[key] = normalizedValue;")
     if persistence not in metadata_text or validate < 0 or mutate < 0 or validate >= mutate:
         errors.append("SetPersistenceValue must validate reserved metadata before hydrating the backing map without touching semantics.")
+
+    validate_start = metadata_text.find("private static void ValidateReserved(")
+    validate_end = metadata_text.find("private static string RequirePublicKey(", validate_start)
+    validate_method = metadata_text[validate_start:validate_end] if validate_start >= 0 and validate_end > validate_start else ""
+    for codec in (
+        "ProjectMeasurementWorkItemMappingCodec.Read(metadata);",
+        "ProjectTbqWorkspaceCodec.Read(metadata);",
+    ):
+        if codec not in validate_method:
+            errors.append("ValidateReserved must validate every registered reserved metadata codec before mutation: " + codec)
 
 if SOURCE.is_file():
     text = SOURCE.read_text(encoding="utf-8")
