@@ -8,9 +8,10 @@ errors = []
 capture = ROOT / "src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs"
 policy = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs"
 review = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
+apply_service = ROOT / "src/QS3D.BricsCAD.V25/Services/RecognitionApplyBatchService.cs"
 snapshot = ROOT / "src/QS3D.Core/Persistence/ProjectStateSnapshot.cs"
 
-for path in (capture, policy, review, snapshot):
+for path in (capture, policy, review, apply_service, snapshot):
     if not path.is_file():
         errors.append("missing semantic-capture safety file: " + str(path.relative_to(ROOT)))
 
@@ -62,11 +63,34 @@ if policy.is_file():
 if review.is_file():
     text = review.read_text(encoding="utf-8")
     for needle in (
-        "var refreshed = new ProjectRecognitionService().Suggest(currentProject, liveSnapshots[0]);",
-        "SemanticCaptureService.CaptureSnapshot(doc, refreshed.Snapshot, candidate.Category)",
+        "RecognitionApplyBatchService.PrepareStrict(",
+        "RecognitionApplyBatchService.PrepareBestEffort(doc, reviewProjectId, batch.AutoAccepted)",
+        "RecognitionApplyBatchService.Commit(doc, reviewProjectId, plan)",
+        "RecognitionApplyBatchService.Commit(doc, reviewProjectId, autoPlan)",
     ):
         if needle not in text:
-            errors.append("Recognition/B4D apply must re-read live source state and flow the refreshed snapshot through guarded CaptureSnapshot: " + needle)
+            errors.append("Recognition/B4D review must route mutation through the atomic batch service: " + needle)
+
+if apply_service.is_file():
+    text = apply_service.read_text(encoding="utf-8")
+    for needle in (
+        "EntitySnapshotReader.ReadHandles(document, new[] { result.Handle })",
+        "new ProjectRecognitionService().Suggest(project, liveSnapshots[0])",
+        "candidate.Category != expectedCandidate.Category",
+        "!refreshed.IsCaptureReady",
+        "var rollback = ProjectStateSnapshot.Capture(project);",
+        "SemanticCaptureService.CaptureSnapshot(document, item.Snapshot, item.Category)",
+        "SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, item.Handle)",
+        "rollback.Restore(project)",
+    ):
+        if needle not in text:
+            errors.append("Recognition batch capture missing live-state/transaction token: " + needle)
+
+    reread = text.find("EntitySnapshotReader.ReadHandles(document, new[] { result.Handle })")
+    suggest = text.find("new ProjectRecognitionService().Suggest(project, liveSnapshots[0])", reread)
+    capture_call = text.find("SemanticCaptureService.CaptureSnapshot(document, item.Snapshot, item.Category)")
+    if min(reread, suggest, capture_call) < 0 or not reread < suggest < capture_call:
+        errors.append("Recognition batch must live re-read/re-suggest before guarded semantic capture")
 
 if snapshot.is_file():
     text = snapshot.read_text(encoding="utf-8")
@@ -89,4 +113,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: semantic capture rejects generated output before mutation; recognition captures refreshed live snapshots and room-finish batches restore full project state on failure.")
+print("PASS: semantic capture rejects generated output before mutation; Recognition/B4D live-revalidate through the atomic batch service; capture and room-finish batches restore full project state on failure.")
