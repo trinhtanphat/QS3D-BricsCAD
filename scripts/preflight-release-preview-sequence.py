@@ -46,9 +46,13 @@ def validate_sequence(existing_tags: list[str], requested: str) -> None:
         raise ValueError(f"requested ordinal outside Int64 range: {requested}")
     if ordinals and max(ordinals) == 2**63 - 1:
         raise ValueError("series exhausted Int64 ordinal range")
-    expected = max(ordinals, default=0) + 1
-    if requested_ordinal != expected:
-        raise ValueError(f"expected {prefix}{expected}, got {requested}")
+    if not ordinals:
+        if requested_ordinal != 1:
+            raise ValueError(f"expected {prefix}1 for a new series, got {requested}")
+    elif requested_ordinal <= max(ordinals):
+        raise ValueError(
+            f"requested ordinal must be greater than published max {max(ordinals)}, got {requested}"
+        )
 
 
 def expect_ok(existing: list[str], requested: str) -> None:
@@ -76,7 +80,8 @@ def main() -> int:
         "git fetch --force --tags origin",
         "git tag --list",
         "Matching-series Git tag is not canonical",
-        "ReleaseTag must use the next preview ordinal for its exact series",
+        "ReleaseTag preview ordinal must be greater than the highest published ordinal",
+        "ReleaseTag must start a new preview series at ordinal 1",
         "[long]::MaxValue",
     ):
         if token not in helper:
@@ -105,25 +110,34 @@ def main() -> int:
         'git tag --list "${series_prefix}*"',
         "preview=$((max_preview + 1))",
         "max_preview >= 65535",
+        'reservation_issue=1441',
+        'reservation_prefix="QS3D_V25_PREVIEW_RESERVATION"',
         '-f release_tag="${tag}"',
     ):
         if token not in dispatcher:
-            fail(f"automatic preview dispatcher is missing required history-derived token: {token}")
+            fail(f"automatic preview dispatcher is missing required reservation/history token: {token}")
 
     expect_ok([], "v0.1.1-preview.1")
+    expect_fail([], "v0.1.1-preview.2")
     expect_ok(["v0.1.1-preview.1"], "v0.1.1-preview.2")
     expect_ok(["v0.1.1-preview.1", "v0.1.1-preview.2"], "v0.1.1-preview.3")
+    expect_ok(["v0.1.1-preview.1", "v0.1.1-preview.2"], "v0.1.1-preview.4")
     expect_fail(["v0.1.1-preview.1", "v0.1.1-preview.2"], "v0.1.1-preview.2")
     expect_fail(["v0.1.1-preview.1", "v0.1.1-preview.2"], "v0.1.1-preview.1")
-    expect_fail(["v0.1.1-preview.1", "v0.1.1-preview.2"], "v0.1.1-preview.4")
 
-    expect_ok(["v0.1.0-preview.10014"], "v0.1.0-preview.10015")
-    expect_fail(["v0.1.0-preview.10014"], "v0.1.0-preview.1")
-    expect_fail(["v0.1.0-preview.10014"], "v0.1.0-preview.10014")
-    expect_fail(["v0.1.0-preview.10014"], "v0.1.0-preview.10016")
+    expect_ok(["v0.1.0-preview.10018"], "v0.1.0-preview.10019")
+    expect_ok(["v0.1.0-preview.10018"], "v0.1.0-preview.10021")
+    expect_fail(
+        ["v0.1.0-preview.10018", "v0.1.0-preview.10021"],
+        "v0.1.0-preview.10020",
+    )
+    expect_fail(
+        ["v0.1.0-preview.10018", "v0.1.0-preview.10021"],
+        "v0.1.0-preview.10021",
+    )
 
     expect_ok(
-        ["v0.1.0-preview.10014", "v0.2.0-preview.9", "v0.1.1-beta.7"],
+        ["v0.1.0-preview.10018", "v0.2.0-preview.9", "v0.1.1-beta.7"],
         "v0.1.1-preview.1",
     )
     expect_fail(["v0.1.1-preview.01"], "v0.1.1-preview.1")
