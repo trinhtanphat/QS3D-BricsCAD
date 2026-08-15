@@ -216,7 +216,7 @@ namespace QS3D.Core.Export
             // model. Canonicalizing before encoding keeps provenance lookup stable when caller casing
             // differs from the snapshot while leaving the original identity preserved inside records.
             var canonicalIdentity = (value ?? string.Empty).Trim().ToUpperInvariant();
-            var bytes = Encoding.UTF8.GetBytes(canonicalIdentity);
+            var bytes = StrictUtf8.GetBytes(canonicalIdentity);
             return Convert.ToBase64String(bytes)
                 .TrimEnd('=')
                 .Replace('+', '-')
