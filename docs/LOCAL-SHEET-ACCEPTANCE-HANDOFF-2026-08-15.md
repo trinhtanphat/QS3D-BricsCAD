@@ -29,6 +29,8 @@ Local acceptance:
 
 PASS evidence: exact SHA/ProductVersion, process exit code, sanitized stdout/stderr summary, confirmation of no Windows Application Error dialog/process residue.
 
+Current local result (2026-08-15): `BLOCKED_SOURCE / NOT RUN`. Exact committed/pushed candidate `baff1291962560449f215b730428c25f5eb2ffcc` passed the focused entrypoint/failure-containment and policy/handoff guards, but the Release build stopped before executable launch with CAD-independent `CS8602` at `src/QS3D.Core/Cost/DeepCostWorkflows.cs:236`. Issue #1634 owns the non-local fix. The local worker did not edit Core/tests; no smoke/WER/BricsCAD process remained. Rebuild and perform the actual popup/exit/stdout/stderr acceptance only on a new committed/pushed exact descendant containing the fix.
+
 ## Row 2 — Direct Draw preserves current view and continues drawing
 
 Remote status: current-view preservation source guard is integrated.

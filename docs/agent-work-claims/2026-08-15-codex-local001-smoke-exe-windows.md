@@ -1,6 +1,6 @@
 # LOCAL-001 Windows smoke executable acceptance
 
-Status: ACTIVE
+Status: BLOCKED
 Agent: codex-local003-smoke-exe-windows-20260815
 Issue: #72
 Branch: `agent/local003/local001-smoke-exe-windows-20260815`
@@ -33,3 +33,10 @@ Generated logs remain under ignored `artifacts/` and contain no project/drawing/
 5. Start the built executable with redirected ignored stdout/stderr, monitor its process and relevant error-reporting windows/processes, and require exit code `0`, `ALL PASS`, empty stderr, no popup and no residue.
 6. If no approved failure injection exists, record that negative-path execution was not run instead of inventing it.
 7. Commit/push only sanitized documentation, rerun documentation/policy guards on that exact pushed evidence head, and stop before merge.
+
+## Current source blocker
+
+- Exact committed/pushed candidate `baff1291962560449f215b730428c25f5eb2ffcc` passed the two focused containment guards, manual-CI policy and local-handoff preflight on interactive Windows x64.
+- The portable .NET SDK 8.0.423 Release build failed before executable launch with `CS8602` at `src/QS3D.Core/Cost/DeepCostWorkflows.cs:236`; the nullable compiler does not narrow `tradeCode` through the `string.IsNullOrWhiteSpace(...)` conditional before `tradeCode.Trim()`.
+- Non-local source-fix issue #1634 owns the CAD-independent repair. The local worker did not edit Core/tests and did not run the executable, so popup/exit/stdout/stderr acceptance remains `NOT RUN`.
+- No `QS3D.Core.SmokeTests`, Windows Error Reporting or BricsCAD process remained, and no GitHub Actions ran. Resume only on a new clean committed/pushed exact descendant after issue #1634 lands.
