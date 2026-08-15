@@ -231,7 +231,7 @@ if (Test-Path -LiteralPath $ArtifactDir) {
 }
 else { New-Item -ItemType Directory -Path $ArtifactDir | Out-Null }
 
-$variants = @("OBJECT_ONLY", "DB_ENABLE_OBJECT", "DB_START_OBJECT", "DB_ENABLE_DB_START_OBJECT")
+$variants = @("OBJECT_ONLY", "OBJECT_ERASE", "DB_ENABLE_OBJECT", "DB_START_OBJECT", "DB_ENABLE_DB_START_OBJECT")
 $fixtureHash = (Get-FileHash -LiteralPath $FixtureDwg -Algorithm SHA256).Hash.ToUpperInvariant()
 $pluginHash = (Get-FileHash -LiteralPath $PluginDll -Algorithm SHA256).Hash.ToUpperInvariant()
 $environmentNames = @(

@@ -23,7 +23,7 @@ if COMMAND.is_file():
         'CommandMethod("QS3DSRULCHECKUNDO", CommandFlags.Modal)',
         'Schema = "QS3D_SOURCE_UNDO_LIFECYCLE_V1"',
         'Boundary = "LOCAL_004_DIAGNOSTIC_ONLY"',
-        'ObjectOnly', 'DbEnableObject', 'DbStartObject', 'DbEnableDbStartObject',
+        'ObjectOnly', 'ObjectErase', 'DbEnableObject', 'DbStartObject', 'DbEnableDbStartObject',
         'database.DisableUndoRecording(false)',
         'database.StartUndoRecord()',
         'state.DatabaseRecordingAtEntry = BooleanClass(database.UndoRecording)',
@@ -32,6 +32,9 @@ if COMMAND.is_file():
         'carrier.DisableUndoRecording(false)',
         'carrier.UpgradeOpen()',
         'WriteMarker(carrier, AfterToken)',
+        'context.Variant == MatrixVariant.ObjectErase',
+        'transaction.GetObject(state.SentinelId, OpenMode.ForWrite, false)',
+        'sentinel.Erase()',
         'state.SentinelId = modelSpace.AppendEntity(sentinel)',
         'transaction.AddNewlyCreatedDBObject(sentinel, true)',
         'transaction.Commit()',
@@ -63,6 +66,15 @@ if COMMAND.is_file():
     positions = [mutate.find(token) for token in ordered]
     if any(position < 0 for position in positions) or positions != sorted(positions):
         errors.append("Undo lifecycle mutation order drifted")
+
+    marker_position = mutate.find('WriteMarker(carrier, AfterToken)')
+    erase_open_position = mutate.find('transaction.GetObject(state.SentinelId, OpenMode.ForWrite, false)', marker_position)
+    erase_position = mutate.find('sentinel.Erase()', erase_open_position)
+    commit_position = mutate.find('transaction.Commit()', erase_position)
+    if min(marker_position, erase_open_position, erase_position, commit_position) < 0 or not (
+        marker_position < erase_open_position < erase_position < commit_position
+    ):
+        errors.append("Undo lifecycle OBJECT_ERASE must write the marker before erasing the existing sentinel in the same transaction")
 
     for forbidden in (
         'SourceReconcileService.',
@@ -102,7 +114,7 @@ if RUNNER.is_file():
         'function Wait-Qs3dExit',
         'function Stop-Qs3dLaunchedProcess',
         'ParentProcessId = " + $LauncherId',
-        '$variants = @("OBJECT_ONLY", "DB_ENABLE_OBJECT", "DB_START_OBJECT", "DB_ENABLE_DB_START_OBJECT")',
+        '$variants = @("OBJECT_ONLY", "OBJECT_ERASE", "DB_ENABLE_OBJECT", "DB_START_OBJECT", "DB_ENABLE_DB_START_OBJECT")',
         'source-undo-lifecycle-probe-copy.dwg',
         'source-undo-lifecycle-result.txt',
         'source-undo-lifecycle.private.scr',
@@ -193,7 +205,7 @@ if CLAIM.is_file():
         'SourceReconcileUndoLifecycleProbeCommands.cs',
         'test-bricscad-v25-source-reconcile-undo-lifecycle.ps1',
         'preflight-source-reconcile-undo-lifecycle-probe.py',
-        '`OBJECT_ONLY`', '`DB_ENABLE_OBJECT`', '`DB_START_OBJECT`', '`DB_ENABLE_DB_START_OBJECT`',
+        '`OBJECT_ONLY`', '`OBJECT_ERASE`', '`DB_ENABLE_OBJECT`', '`DB_START_OBJECT`', '`DB_ENABLE_DB_START_OBJECT`',
         'current operator-owned BricsCAD process is out of',
         'scope; execution waits for the mandatory zero-process boundary',
     ):
@@ -215,4 +227,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: four fresh-process database/object Undo variants are statically bound to an existing XData mutation plus topology sentinel, close the synthetic DWG explicitly without saving, finalize each exact exited host process before the next variant, materialize generic result metadata through the Windows PowerShell 5.1-safe pipeline path without masking qualification errors, preserve sanitized evidence/cleanup guards, and leave production Source Reconcile database Undo lifecycle untouched.")
+print("PASS: five fresh-process database/object Undo variants are statically bound to an existing XData mutation plus appended/erased topology sentinel, close the synthetic DWG explicitly without saving, finalize each exact exited host process before the next variant, materialize generic result metadata through the Windows PowerShell 5.1-safe pipeline path without masking qualification errors, preserve sanitized evidence/cleanup guards, and leave production Source Reconcile database Undo lifecycle untouched.")
