@@ -84,7 +84,7 @@ namespace QS3D.BricsCAD.V25.UI
                 var quickValues = ReadQuickValues(category);
                 FamilyNameBox.Text = ProjectFamilyQuickSchemaService.SuggestName(category, quickValues);
                 QuickMaterialCombo.Text = schema.DefaultMaterial;
-                SetStatus("Tạo nhanh " + category + ": nhập thông số quen thuộc theo mm rồi bấm Tạo & sử dụng, Auto Family hoặc Lưu & Vẽ.");
+                SetStatus("Tạo nhanh " + category + ": nhập thông số quen thuộc theo mm rồi chọn Lưu, Tạo & sử dụng, Auto Family hoặc Lưu & Vẽ.");
             }
             catch (Exception ex)
             {
@@ -160,19 +160,23 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
+        private void OnQuickSaveClick(object sender, RoutedEventArgs e)
+        {
+            SaveQuickFamily(activateAfterSave: false, drawAfterSave: false, operation: "Lưu");
+        }
+
         private void OnCreateAndUseClick(object sender, RoutedEventArgs e)
         {
-            SaveQuickFamily(drawAfterSave: false);
+            SaveQuickFamily(activateAfterSave: true, drawAfterSave: false, operation: "Tạo & sử dụng");
         }
 
         private void OnSaveAndDrawClick(object sender, RoutedEventArgs e)
         {
-            SaveQuickFamily(drawAfterSave: true);
+            SaveQuickFamily(activateAfterSave: true, drawAfterSave: true, operation: "Lưu & Vẽ");
         }
 
-        private void SaveQuickFamily(bool drawAfterSave)
+        private void SaveQuickFamily(bool activateAfterSave, bool drawAfterSave, string operation)
         {
-            var operation = drawAfterSave ? "Lưu & Vẽ" : "Tạo & sử dụng";
             try
             {
                 EnsureActive(operation);
@@ -203,7 +207,7 @@ namespace QS3D.BricsCAD.V25.UI
                         ProjectFamilyQuickSchemaService.SuggestName(category, quickValues));
                 }
 
-                var previousActive = ProjectFamilyActivationService.GetActive(project);
+                var previousActive = activateAfterSave ? ProjectFamilyActivationService.GetActive(project) : null;
                 var family = ExecuteAtomic(project, () =>
                 {
                     ProjectFamily target;
@@ -236,9 +240,11 @@ namespace QS3D.BricsCAD.V25.UI
                     }
 
                     ApplyQuickFamilyValues(project, target, quickValues, material, "quick-workflow");
-                    ActivateQuickFamily(project, target, previousActive, "quick-workflow");
+                    if (activateAfterSave)
+                        ActivateQuickFamily(project, target, previousActive, "quick-workflow");
                     AuditTrail.ForProject(project).Record(
-                        drawAfterSave ? "family.quick.save-and-draw" : "family.quick.create-and-use",
+                        drawAfterSave ? "family.quick.save-and-draw" :
+                        activateAfterSave ? "family.quick.create-and-use" : "family.quick.save",
                         string.Empty,
                         target.Id + " • " + target.Category + " • " + target.Name + " • qs=" + quickValues.Count + " • material=" + material);
                     return target;
@@ -247,8 +253,9 @@ namespace QS3D.BricsCAD.V25.UI
                 _creatingNew = false;
                 RefreshAfterCommit(
                     () => RefreshAll(family.Id),
-                    "Đã lưu và đặt active Family “" + family.Name + "” • " + family.Category +
-                    " • UI mm → internal m • vật liệu “" + material + "”.",
+                    activateAfterSave
+                        ? "Đã lưu và đặt active Family “" + family.Name + "” • " + family.Category + " • UI mm → internal m • vật liệu “" + material + "”."
+                        : "Đã lưu Family “" + family.Name + "” • " + family.Category + " • không đổi Family Active • UI mm → internal m.",
                     operation);
 
                 if (!drawAfterSave) return;
