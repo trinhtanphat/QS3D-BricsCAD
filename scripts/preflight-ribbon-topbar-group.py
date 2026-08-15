@@ -59,13 +59,27 @@ if not errors:
         'private const string OwnedTabPrefix = "QS3D_";',
         'id.StartsWith(OwnedTabPrefix, StringComparison.OrdinalIgnoreCase)',
         'var ownedTabs = snapshot.Where(IsOwnedTab).ToList();',
-        'foreach (var tab in ownedTabs)\n                        Remove(tabs, tab);',
-        'foreach (var tab in orderedOwnedTabs)\n                        Add(tabs, tab);',
+        'TryGroupOwnedTabs(tabs, ownedTabs, orderedOwnedTabs)',
+        'foreach (var tab in ownedTabs)\n                    Remove(tabs, tab);',
+        'foreach (var tab in orderedOwnedTabs)\n                    Add(tabs, tab);',
+        'RecoverMissingOwnedTabs(tabs, ownedTabs);',
+        'current.Any(candidate => ReferenceEquals(candidate, tab))',
         'return snapshot.Count(IsOwnedTab) == orderedOwnedTabs.Count;',
     )
     for token in required_layout_contracts:
         if token not in layout:
             errors.append(f"QS3D/native Ribbon ownership contract missing: {token}")
+
+    # Recovery may re-add a missing QS3D object, but it must never remove/reinsert the
+    # entire host collection because that would risk disturbing native/third-party tabs.
+    recover_start = layout.find("private static void RecoverMissingOwnedTabs")
+    recover_end = layout.find("private static List<object> OrderOwnedTabs", recover_start)
+    if recover_start < 0 or recover_end < 0:
+        errors.append("QS3D Ribbon grouping failure recovery is missing")
+    else:
+        recover_body = layout[recover_start:recover_end]
+        if "Remove(tabs" in recover_body or "Remove(collection" in recover_body:
+            errors.append("Ribbon grouping recovery must not remove native/third-party tab objects")
 
     # This coordinator must not mutate tab titles/names/panels. It only repositions QS3D tabs.
     for forbidden in ('SetProperty(', '"Title"', '"Name"', '"Panels"'):
@@ -103,4 +117,5 @@ if errors:
 print("RIBBON TOPBAR GROUP PREFLIGHT: PASS")
 print("- Native/third-party tab objects remain untouched and preserve relative order.")
 print("- QS3D_* tabs are grouped at the end of the same RibbonControl.Tabs row.")
+print("- Failed grouping attempts recover missing QS3D-owned tabs without removing host tabs.")
 print("- Primary QS3D navigation follows the requested BLT3D-familiar menu order.")
