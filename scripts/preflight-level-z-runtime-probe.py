@@ -43,6 +43,7 @@ if COMMAND.is_file():
         'ProjectFloorService.Update(project, "L1"',
         'LevelReferenceHealthService().Inspect(project)',
         'schema=QS3D_LEVEL_Z_RUNTIME_V1',
+        '"native_drawing_unit=" + nativeUnit.ToString()',
         'LEVEL_Z_RUNTIME_CONTEXT_FAILED',
         'LEVEL_Z_RUNTIME_SOURCE_FAILED',
         'LEVEL_Z_RUNTIME_HOST_BUILD_FAILED',
@@ -119,6 +120,8 @@ if RUNNER.is_file():
     for token in (
         '[ValidatePattern("^[0-9a-fA-F]{40}$")][string]$ExpectedSourceSha',
         '[switch]$ConfirmDisposableCopy',
+        '[ValidateSet("Millimeter", "Meter")][string]$NativeDrawingUnit = "Millimeter"',
+        '[ValidateRange(15, 120)][int]$GracefulExitTimeoutSeconds = 15',
         '*.level-z-probe-copy.dwg',
         'QS3D_LEVEL_Z_RESULT',
         'QS3D_LEVEL_Z_NONCE',
@@ -130,17 +133,24 @@ if RUNNER.is_file():
         'Assembly was not built from ExpectedSourceSha',
         '. $windowInteropPath',
         'Close-Qs3dProxyInformationDialog -Process $process',
+        '"_.OPEN", (\'"\' + $DrawingCopy + \'"\')',
         '"QS3DLEVELZPROBE"',
+        '"Millimeter" { "4" }',
+        '"Meter" { "6" }',
+        '"INSUNITS", $nativeInsunits',
+        '"_.CLOSE", "_N"',
         '"_.QUIT", "_N"',
         'Start-Process -FilePath $bricscadExe',
+        "$argumentParts.Add('/Automation')",
         '-WindowStyle Hidden',
         'Stop-Qs3dLevelProcess -Process $process',
         'function Restore-Qs3dLevelDrawingAndPrivateState {',
         'Restore-Qs3dLevelDrawingAndPrivateState -ScriptPath $scriptPath -ProjectSidecar $projectSidecar -DrawingCopy $DrawingCopy -DrawingBackupPath $drawingBackupPath -OriginalDrawingAttributes $originalDrawingAttributes',
         'Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue',
-        '$gracefulExit = $process.WaitForExit(15000)',
-        'BricsCAD did not exit gracefully after the Level Z marker.',
+        '$gracefulExit = $process.WaitForExit($GracefulExitTimeoutSeconds * 1000)',
+        'BricsCAD did not exit gracefully within $GracefulExitTimeoutSeconds seconds after the Level Z marker.',
         'graceful_exit = $gracefulExit',
+        'graceful_exit_timeout_seconds = $GracefulExitTimeoutSeconds',
         'drawing_copy_sha256_before',
         'drawing_copy_sha256_after',
         'process_cleanup_verified = $processCleanupVerified',
@@ -165,6 +175,9 @@ if RUNNER.is_file():
         '[IO.Path]::ChangeExtension($DrawingCopy, ".dwl")',
         '[IO.Path]::ChangeExtension($DrawingCopy, ".dwl2")',
         'physical_opening_volume_reduced',
+        'Require-Qs3dLevelValue -Marker $marker -Key "native_drawing_unit" -Expected $NativeDrawingUnit',
+        'native_drawing_unit = $NativeDrawingUnit',
+        'native_insunits = $nativeInsunits',
         'curtain_frame_count',
         'curtain_panel_count',
         'beam_rebar_count',
@@ -188,13 +201,24 @@ if RUNNER.is_file():
             errors.append("Level-Z runner contains broad process/window action: " + forbidden)
     if "rev-parse HEAD 2>$null | Select-Object -First 1" in text:
         errors.append("Level-Z runner must not pipe rev-parse through Select-Object because early pipeline closure can corrupt LASTEXITCODE")
+    if '$argumentParts.Add(\'"\' + $DrawingCopy + \'"\')' in text:
+        errors.append("Level-Z runner must open its read-only DWG from the automation script instead of passing competing startup files")
     restore_call = 'Restore-Qs3dLevelDrawingAndPrivateState -ScriptPath $scriptPath -ProjectSidecar $projectSidecar -DrawingCopy $DrawingCopy -DrawingBackupPath $drawingBackupPath -OriginalDrawingAttributes $originalDrawingAttributes'
     original_attributes = text.find('$originalDrawingAttributes = [IO.File]::GetAttributes($DrawingCopy)')
     hash_before = text.find('$drawingHashBefore =', original_attributes)
     backup = text.find('Copy-Item -LiteralPath $DrawingCopy -Destination $drawingBackupPath -ErrorAction Stop', hash_before)
     guard_set = text.find('[IO.File]::SetAttributes($DrawingCopy, $guardedDrawingAttributes)', backup)
     guard_before_launch = text.find('$drawingReadOnlyBeforeLaunchVerified =', guard_set)
-    launch = text.find('$process = Start-Process', guard_before_launch)
+    filedia = text.find('"FILEDIA", "0"', guard_before_launch)
+    scripted_open = text.find('"_.OPEN", (\'"\' + $DrawingCopy + \'"\')', filedia)
+    netload = text.find('"NETLOAD", (\'"\' + $PluginDll + \'"\')', scripted_open)
+    probe = text.find('"QS3DLEVELZPROBE"', netload)
+    close = text.find('"_.CLOSE", "_N"', probe)
+    quit_host = text.find('"_.QUIT", "_N"', close)
+    automation = text.find("$argumentParts.Add('/Automation')", quit_host)
+    profile = text.find("$argumentParts.Add('/P')", automation)
+    batch = text.find("$argumentParts.Add('/B')", profile)
+    launch = text.find('$process = Start-Process', batch)
     validation = text.find('if ($rebarCount -ne 4)', launch)
     finalizer = text.find('finally {', validation)
     stop = text.find('Stop-Qs3dLevelProcess -Process $process', finalizer)
@@ -202,10 +226,10 @@ if RUNNER.is_file():
     drawing_hash = text.find('$drawingHashAfter =', guard_through_exit)
     restore = text.find(restore_call, drawing_hash)
     metadata = text.find('$metadata =', restore)
-    if min(original_attributes, hash_before, backup, guard_set, guard_before_launch, launch, validation, finalizer, stop, guard_through_exit, drawing_hash, restore, metadata) < 0 or not (
-        original_attributes < hash_before < backup < guard_set < guard_before_launch < launch < validation < finalizer < stop < guard_through_exit < drawing_hash < restore < metadata
+    if min(original_attributes, hash_before, backup, guard_set, guard_before_launch, filedia, scripted_open, netload, probe, close, quit_host, automation, profile, batch, launch, validation, finalizer, stop, guard_through_exit, drawing_hash, restore, metadata) < 0 or not (
+        original_attributes < hash_before < backup < guard_set < guard_before_launch < filedia < scripted_open < netload < probe < close < quit_host < automation < profile < batch < launch < validation < finalizer < stop < guard_through_exit < drawing_hash < restore < metadata
     ):
-        errors.append("Level-Z runner must verify read-only before launch, keep it through host exit, hash before restoration, and restore only from finally")
+        errors.append("Level-Z runner must verify read-only, script-open before NETLOAD/probe, close the disposable DWG without saving before host quit under /Automation /P /B, keep read-only through exit, hash before restoration, and restore only from finally")
     if text.count(restore_call) != 1:
         errors.append("Level-Z runner must perform its one idempotent drawing/private-state restoration from finally")
 
