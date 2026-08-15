@@ -27,6 +27,16 @@ The approved successor is limited to two isolated session-one cycles in the exis
 
 Session two retains its existing third production build for cold reopen/rebuild proof. The focused gate must require exactly two Mark/Back pairs, exactly three total production builds across both sessions, and direct second `UNDO Back` → `REDO` adjacency. This successor owns only `scripts/test-bricscad-v25-curtain-panel-undo-reopen.ps1`, `scripts/preflight-curtain-panel-undo-reopen-runtime-probe.py`, and this claim amendment. It explicitly excludes `CurtainPanelUndoReopenRuntimeProbeCommands.cs` and every production Curtain/Undo/view surface.
 
+## Approved successor — explicit single Undo group
+
+- Approved: `2026-08-15T08:12:52+07:00` by parent `/root` after the second licensed exact-SHA follow-up.
+- Successor baseline main SHA: `a30569b8a3eefac9a2ae388bdae75a9136e3386e`.
+- Trigger evidence: licensed P11 at exact merged SHA `a8c0632c13dcece41c8d407582397fe29bc0b405` again proved the separate cycle-A Undo fully coherent, while cycle B's direct `UNDO Back` → `REDO` still left Redo incoherent and cold reopen then failed closed. Counts, Health, source/sentinel, cleanup and disposable-drawing restoration remained coherent.
+
+This result proves the production Curtain Undo path and bounds the remaining failure to the runner's assumption that `UNDO Back` creates the one redoable unit required by native `REDO`. BricsCAD's documented explicit single-unit mechanism is `UNDO Begin` / commands / `UNDO End`; one native `U` then undoes that group, and an immediately following `REDO` reverses that `U`.
+
+The approved successor preserves cycle A unchanged for the existing Mark/Back Undo diagnostics. Cycle B changes only to source reselect → `UNDO Begin` → production build → baseline → `UNDO End` → native `U` → immediate native Redo → `QS3DCURTAINP11CHECKREDO`. Session two retains the third production build and cold-reopen/rebuild proof. The focused gate must require exactly one Mark/Back pair, one Begin/End pair, exactly one `U`, exactly one Redo, exactly three total production builds, and direct `UNDO End` → `U` → `REDO` adjacency. This successor remains limited to the runner, its focused gate and this claim amendment; the runtime probe and every production Curtain/Undo/view surface are excluded.
+
 ## Reserved scope
 
 - `scripts/test-bricscad-v25-curtain-panel-undo-reopen.ps1`: place an explicit native Undo mark after P11 prepare/source selection and use Undo Back after the Curtain baseline so queued post-build view commands cannot steal the intended boundary; retain the existing Redo proof.
