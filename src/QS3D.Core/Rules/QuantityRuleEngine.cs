@@ -31,7 +31,15 @@ namespace QS3D.Core.Rules
         {
             var normalized = Required(value, name);
             if (normalized.Any(char.IsControl)) throw new ArgumentException("Value cannot contain control characters.", name);
-            return normalized;
+            try
+            {
+                XmlConvert.VerifyXmlChars(normalized);
+                return normalized;
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException("Value contains characters that are invalid in XML.", name, ex);
+            }
         }
 
         private static string RequiredXmlText(string value, string name)
