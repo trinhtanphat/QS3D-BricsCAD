@@ -47,7 +47,7 @@ namespace QS3D.BricsCAD.V25
                     carrier.UpgradeOpen();
                     WriteMarker(carrier, BeforeToken);
 
-                    if (context.Variant == MatrixVariant.ObjectErase)
+                    if (UsesEraseTopology(context.Variant))
                     {
                         var modelSpace = OpenModelSpace(context.Document.Database, transaction, OpenMode.ForWrite);
                         var sentinel = new DBPoint(Point3d.Origin);
@@ -59,7 +59,7 @@ namespace QS3D.BricsCAD.V25
 
                 if (!string.Equals(ReadMarker(context.Document), BeforeToken, StringComparison.Ordinal))
                     throw new InvalidOperationException("LOCAL-004 Undo lifecycle baseline marker was not committed.");
-                if (context.Variant == MatrixVariant.ObjectErase &&
+                if (UsesEraseTopology(context.Variant) &&
                     !string.Equals(ClassifyTopology(context.Document, sentinelId), "PRESENT", StringComparison.Ordinal))
                     throw new InvalidOperationException("LOCAL-004 Undo lifecycle erase sentinel was not committed.");
 
@@ -108,7 +108,7 @@ namespace QS3D.BricsCAD.V25
                     carrier.UpgradeOpen();
                     WriteMarker(carrier, AfterToken);
 
-                    if (context.Variant == MatrixVariant.ObjectErase)
+                    if (UsesEraseTopology(context.Variant))
                     {
                         var sentinel = transaction.GetObject(state.SentinelId, OpenMode.ForWrite, false) as Entity;
                         if (sentinel == null || sentinel.IsErased)
@@ -125,12 +125,32 @@ namespace QS3D.BricsCAD.V25
                     transaction.Commit();
                 }
 
-                var expectedTopology = context.Variant == MatrixVariant.ObjectErase ? "UNDONE" : "PRESENT";
+                var expectedTopology = UsesEraseTopology(context.Variant) ? "UNDONE" : "PRESENT";
                 if (!string.Equals(ReadMarker(context.Document), AfterToken, StringComparison.Ordinal) ||
                     !string.Equals(ClassifyTopology(context.Document, state.SentinelId), expectedTopology, StringComparison.Ordinal))
                     throw new InvalidOperationException("LOCAL-004 Undo lifecycle mutation did not commit.");
 
                 state.MutationCommitted = true;
+            });
+        }
+
+        [CommandMethod("QS3DSRULINSPECT", CommandFlags.Modal)]
+        public void InspectCommittedMutation()
+        {
+            Execute("INSPECT", () =>
+            {
+                var context = RequireContext();
+                if (context.Variant != MatrixVariant.ObjectInspected)
+                    throw new InvalidOperationException("LOCAL-004 Undo lifecycle inspection variant rejected.");
+                var state = RequireState(context);
+                if (!state.MutationCommitted)
+                    throw new InvalidOperationException("LOCAL-004 Undo lifecycle mutation is missing before inspection.");
+                if (!string.Equals(ReadMarker(context.Document), AfterToken, StringComparison.Ordinal) ||
+                    !string.Equals(ClassifyTopology(context.Document, state.SentinelId), "UNDONE", StringComparison.Ordinal))
+                    throw new InvalidOperationException("LOCAL-004 Undo lifecycle inspected mutation drifted.");
+                state.InspectionCount = checked(state.InspectionCount + 1);
+                if (state.InspectionCount > 2)
+                    throw new InvalidOperationException("LOCAL-004 Undo lifecycle inspection count exceeded its exact bound.");
             });
         }
 
@@ -143,6 +163,8 @@ namespace QS3D.BricsCAD.V25
                 var state = RequireState(context);
                 if (!state.MutationCommitted)
                     throw new InvalidOperationException("LOCAL-004 Undo lifecycle mutation is missing.");
+                if (context.Variant == MatrixVariant.ObjectInspected && state.InspectionCount != 2)
+                    throw new InvalidOperationException("LOCAL-004 Undo lifecycle inspection sequence is incomplete.");
 
                 var existingClass = ClassifyMarker(ReadMarker(context.Document));
                 var topologyClass = ClassifyTopology(context.Document, state.SentinelId);
@@ -212,6 +234,7 @@ namespace QS3D.BricsCAD.V25
             {
                 case "OBJECT_ONLY": return MatrixVariant.ObjectOnly;
                 case "OBJECT_ERASE": return MatrixVariant.ObjectErase;
+                case "OBJECT_INSPECTED": return MatrixVariant.ObjectInspected;
                 case "DB_ENABLE_OBJECT": return MatrixVariant.DbEnableObject;
                 case "DB_START_OBJECT": return MatrixVariant.DbStartObject;
                 case "DB_ENABLE_DB_START_OBJECT": return MatrixVariant.DbEnableDbStartObject;
@@ -225,6 +248,7 @@ namespace QS3D.BricsCAD.V25
             {
                 case MatrixVariant.ObjectOnly: return "OBJECT_ONLY";
                 case MatrixVariant.ObjectErase: return "OBJECT_ERASE";
+                case MatrixVariant.ObjectInspected: return "OBJECT_INSPECTED";
                 case MatrixVariant.DbEnableObject: return "DB_ENABLE_OBJECT";
                 case MatrixVariant.DbStartObject: return "DB_START_OBJECT";
                 case MatrixVariant.DbEnableDbStartObject: return "DB_ENABLE_DB_START_OBJECT";
@@ -233,6 +257,9 @@ namespace QS3D.BricsCAD.V25
         }
 
         private static string BooleanClass(bool value) => value ? "ON" : "OFF";
+
+        private static bool UsesEraseTopology(MatrixVariant variant) =>
+            variant == MatrixVariant.ObjectErase || variant == MatrixVariant.ObjectInspected;
 
         private static string ClassifyMarker(string marker)
         {
@@ -382,6 +409,7 @@ namespace QS3D.BricsCAD.V25
         {
             ObjectOnly,
             ObjectErase,
+            ObjectInspected,
             DbEnableObject,
             DbStartObject,
             DbEnableDbStartObject,
@@ -418,6 +446,7 @@ namespace QS3D.BricsCAD.V25
             public string DatabaseRecordingAfterEnable { get; set; } = "NOT_RUN";
             public string DatabaseRecordingAfterStart { get; set; } = "NOT_RUN";
             public bool MutationCommitted { get; set; }
+            public int InspectionCount { get; set; }
         }
     }
 }
