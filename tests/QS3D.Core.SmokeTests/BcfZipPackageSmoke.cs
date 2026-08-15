@@ -110,6 +110,14 @@ namespace QS3D.Core.SmokeTests
 
         private static void MalformedLeafStructureFailsClosed()
         {
+            var attributedExtensionLeaf = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bcf.version"] = "<Version VersionId=\"3.0\" />",
+                ["extensions.xml"] = "<Extensions><TopicTypes><TopicType data-extra=\"1\">Coordination</TopicType></TopicTypes><TopicStatuses><TopicStatus>Open</TopicStatus></TopicStatuses></Extensions>",
+                [TopicA + "/markup.bcf"] = "<Markup><Topic Guid=\"" + TopicA + "\" TopicType=\"Coordination\" TopicStatus=\"Open\"><Title>Unsafe extension leaf</Title><CreationDate>2026-08-14T09:00:00Z</CreationDate><CreationAuthor>qa@qs3d</CreationAuthor></Topic></Markup>"
+            });
+            ThrowsInvalidData(() => BcfZipPackage.Read(attributedExtensionLeaf), "BCF extension value leaves with attributes must fail closed.");
+
             var attributedLeaf = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["bcf.version"] = "<Version VersionId=\"3.0\" />",

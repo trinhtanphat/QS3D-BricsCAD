@@ -203,8 +203,7 @@ namespace QS3D.Core.Export
             foreach (var child in container.Elements())
             {
                 if (!string.Equals(child.Name.LocalName, itemName, StringComparison.Ordinal) || child.Name.NamespaceName.Length != 0) throw new InvalidDataException("Unsupported BCF extensions.xml element: " + child.Name.LocalName);
-                EnsureNoChildElements(child);
-                var token = IfcRoundTripProjectionContract.RequireCanonicalToken(child.Value, itemName);
+                var token = IfcRoundTripProjectionContract.RequireCanonicalToken(ReadLeafValue(child), itemName);
                 if (!result.Add(token)) throw new InvalidDataException("Duplicate BCF extension token: " + token);
             }
             return result;
