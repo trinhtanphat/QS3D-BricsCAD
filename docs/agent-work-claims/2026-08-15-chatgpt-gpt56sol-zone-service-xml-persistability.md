@@ -4,7 +4,7 @@
 - Agent: `chatgpt-gpt56sol-zone-service-xml-20260815`
 - Registered: `2026-08-15T08:53:13+07:00`
 - Baseline main SHA: `0542131348e6393a4d28d6e0945ec60c2ee3bff6`
-- Latest reconciled main SHA: `6838001b837338ca70025f07aca57a7652251511`
+- Latest reconciled main SHA: `631c8ea4d4796777a37cc470040ffbade404fe7e`
 - Issue: `#1469`
 - PR: `#1470` (draft)
 - Branch: `agent/chatgpt-gpt56sol/zone-service-xml-persistability-20260815`
@@ -28,9 +28,11 @@
 - Registration commit: `de7f8315e7de4cb939314bfb58ec6487c7b3cf63`
 - First non-force reconciliation: `9a43d14c8c70026bce059897c01a06fbf2491f2a` onto `9830104ae780c7a827c78e8d8290986ff04880dc`.
 - Initial handoff claim update: `fe91f883ff9d331531bc3e8d8555e3bdb6d8cb0a`.
-- Latest non-force reconciliation: `00c0c0c3a9392fb5c7c63254f1d73e7b324002e5` onto `6838001b837338ca70025f07aca57a7652251511`; intervening main delta was LOCAL-003 evidence docs only.
+- Second non-force reconciliation: `00c0c0c3a9392fb5c7c63254f1d73e7b324002e5` onto `6838001b837338ca70025f07aca57a7652251511`.
+- Second handoff claim update: `cd3e7891e1ad1b9a3381d6c5c6dd09d506dd2616`.
+- Latest non-force reconciliation: `20e415ed2190aba736def8c6319d6d043d9b89d4` onto `631c8ea4d4796777a37cc470040ffbade404fe7e`; intervening main delta was Source Reconcile claim docs only.
 - PR: `#1470`.
-- Latest branch-vs-main compare: ahead 7, behind 0; exactly four changed files.
+- Latest branch-vs-main compare: ahead 9, behind 0; exactly four changed files.
 - Production source delta: +9/-0, limited to `System.Xml` import + XML preflight.
 - GitHub source/commit/diff readback: PASS.
 - Managed `dotnet` build/smoke: NOT_RUN because this execution environment has no `dotnet` command; no `LOCAL_PASS` is claimed.
