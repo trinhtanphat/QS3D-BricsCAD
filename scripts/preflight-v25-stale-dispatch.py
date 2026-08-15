@@ -46,9 +46,12 @@ workflow_tokens = (
     "release_relevant_drift=0",
     "release_relevant_drift=1",
     "if (( release_relevant_drift != 0 )); then",
-    "superseded dispatcher ${source_sha} exits before reservation/dispatch",
+    "superseded dispatcher ${source_sha} exits before release dispatch",
     "main advanced only through non-release paths",
-    'reservation="${reservation_prefix} ordinal=${preview} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"',
+    'actions/workflows/release-v25-cloud.yml/runs?per_page=100',
+    'select(.status != "completed")',
+    "if (( active_runs == 0 )); then",
+    "git fetch --force --tags origin",
     "gh workflow run release-v25-cloud.yml",
     '-f source_sha="${source_sha}"',
 )
@@ -80,15 +83,42 @@ if workflow:
     relevant_exit_guard = workflow.find("if (( release_relevant_drift != 0 )); then", drift_guard)
     exit_index = workflow.find("exit 0", relevant_exit_guard)
     inert_continue = workflow.find("main advanced only through non-release paths", exit_index)
-    reservation = workflow.find('reservation="${reservation_prefix} ordinal=${preview} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"')
-    dispatch = workflow.find("gh workflow run release-v25-cloud.yml")
-    indexes = (drift_guard, relevant_exit_guard, exit_index, inert_continue, reservation, dispatch)
+    wait_index = workflow.find('actions/workflows/release-v25-cloud.yml/runs?per_page=100', inert_continue)
+    no_active_index = workflow.find("if (( active_runs == 0 )); then", wait_index)
+    tag_refresh_index = workflow.find("git fetch --force --tags origin", no_active_index)
+    dispatch = workflow.find("gh workflow run release-v25-cloud.yml", tag_refresh_index)
+    indexes = (
+        drift_guard,
+        relevant_exit_guard,
+        exit_index,
+        inert_continue,
+        wait_index,
+        no_active_index,
+        tag_refresh_index,
+        dispatch,
+    )
     if min(indexes) < 0 or not (
-        drift_guard < relevant_exit_guard < exit_index < inert_continue < reservation < dispatch
+        drift_guard
+        < relevant_exit_guard
+        < exit_index
+        < inert_continue
+        < wait_index
+        < no_active_index
+        < tag_refresh_index
+        < dispatch
     ):
         errors.append(
-            "dispatcher ordering must classify drift, exit only for release-relevant drift, continue inert drift, then reserve and dispatch"
+            "dispatcher ordering must classify drift, exit only for release-relevant drift, continue inert drift, "
+            "wait for prior V25 children, refresh published tags, then dispatch"
         )
+
+    for forbidden in (
+        "QS3D_V25_PREVIEW_RESERVATION",
+        "reservation_issue=",
+        "reservation_prefix=",
+    ):
+        if forbidden in workflow:
+            errors.append("stale-dispatch contract must not depend on burned ordinal reservations: " + forbidden)
 
 if prepare:
     checkout_index = prepare.find("git checkout --detach $releaseBase")
@@ -111,5 +141,6 @@ if errors:
 
 print(
     "PASS: V25 automation preserves triggering source provenance, skips superseded release-relevant dispatches, "
-    "absorbs only non-release main drift, and retries release preparation without overwriting concurrent work."
+    "waits for prior release children before published-tag allocation, absorbs only non-release main drift, "
+    "and retries release preparation without overwriting concurrent work."
 )
