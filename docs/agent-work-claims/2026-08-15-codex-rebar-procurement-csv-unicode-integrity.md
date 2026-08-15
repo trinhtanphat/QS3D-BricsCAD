@@ -1,12 +1,16 @@
 # Work claim — Rebar procurement CSV Unicode integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `audit-interchange-gap-next-20260815-r2`
 - Registered: `2026-08-15T10:26:53+07:00`
+- Completed: `2026-08-15T10:44:35+07:00`
 - Baseline main SHA: `d521a3f95ee0ed80f12335e2f6affa59ce21fa9d`
 - Related issue: `#84`
 - Priority: remote-safe export/interchange correctness
 - Claim branch: `agent/audit-interchange-gap-next/issue84-rebar-procurement-csv-unicode-claim-20260815`
+- Claim PR / merge: `#1540` / `03fe8e4b2cfb9295ac4175852166821a6d277412`
+- Implementation branch: `agent/audit-interchange-gap-next/issue84-rebar-procurement-csv-unicode-impl-20260815`
+- Implementation PR / source / merge: `#1554` / `2b7d68acf1272c6c079806046b233f3c05ce17ee` / `c126bda58d1e226f2199e35f628b20ec9aef946c`
 
 ## Confirmed defect
 
@@ -39,4 +43,15 @@ At baseline `d521a3f95ee0ed80f12335e2f6affa59ce21fa9d`, issue `#84`, current sou
 
 ## Completion condition
 
-Malformed UTF-16 is rejected before any filesystem side effect, valid supplementary Unicode remains ordinally identical in the BOM-bearing procurement CSV, existing formula/schema/order/numeric/10,000-row/atomic-publication contracts remain intact, remote-safe validation evidence is recorded, and the implementation is handed off in an unmerged PR while broad issue `#84` remains open.
+Malformed UTF-16 is rejected before any filesystem side effect, valid supplementary Unicode remains ordinally identical in the BOM-bearing procurement CSV, existing formula/schema/order/numeric/10,000-row/atomic-publication contracts remain intact, remote-safe validation evidence is recorded, and the implementation is represented in current `main` while broad issue `#84` remains open.
+
+## Completion evidence
+
+- The claim-first reservation reached `main` through PR `#1540` at `03fe8e4b2cfb9295ac4175852166821a6d277412` before implementation edits.
+- Implementation commit `2b7d68acf1272c6c079806046b233f3c05ce17ee` changed only `RebarProcurementCsvExporter`, its new self-registering Unicode smoke, and its focused auto-discovered preflight. PR `#1554` merged at exact main SHA `c126bda58d1e226f2199e35f628b20ec9aef946c`.
+- The exporter now validates the completed CSV string with strict BOM-bearing UTF-8 before returning it and uses the same strict encoder for publication. Because `Export` projects before path resolution, directory creation, and temporary-file allocation, malformed input fails without destination-side effects.
+- Regression coverage proves rejection of lone high and low surrogates, no absent-directory creation, no existing-destination replacement or temporary-file residue, exact supplementary-Unicode preservation, and the existing UTF-8 BOM. The focused source guard also pins formula neutralization, the 10,000-row bound, and atomic replacement calls.
+- On exact implementation commit `2b7d68acf1272c6c079806046b233f3c05ce17ee`: focused procurement Unicode, full-domain, repository, interchange export/validation, and smoke-registration gates passed; QS3D.Core and Core-smoke Release builds completed with zero warnings and zero errors; full deterministic Core smoke reported `ALL PASS`.
+- Aggregate discovery on that exact commit passed `813/814` gates. The sole unrelated failure was `preflight-v25-preview-release-sync.py`, which still expected an obsolete release-helper token; this lane did not edit release or workflow surfaces.
+- The integration coordinator independently revalidated exact merge `c126bda58d1e226f2199e35f628b20ec9aef946c`: focused gate PASS, both Release builds zero warnings/errors, and full Core smoke `ALL PASS`.
+- Issue comment handoff: `https://github.com/trinhtanphat/QS3D-BricsCAD/issues/84#issuecomment-5300368873`. Broad issue `#84` remains open for its native/runtime/format/policy scope. No GitHub Actions, BricsCAD/native runtime, or private data was used.
