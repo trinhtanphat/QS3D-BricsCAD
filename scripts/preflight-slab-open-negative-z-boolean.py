@@ -48,6 +48,17 @@ def main():
                 "host.IsGeneratedSolidStale()",
                 "Build 3D again before slabOpen subtraction.",
                 "SlabOpeningCutPlanner.Plan",
+                "var sourceGeometryFingerprint = PolylineFingerprint(openingSource);",
+                "sourceGeometryFingerprint,",
+                '"slabOpen-v2"',
+                '"polyline-v1"',
+                "polyline.NumberOfVertices",
+                "polyline.GetPoint2dAt(index)",
+                "polyline.GetBulgeAt(index)",
+                "polyline.Elevation",
+                "polyline.Normal.X",
+                "polyline.Normal.Y",
+                "polyline.Normal.Z",
                 "plan.ExtrusionZM",
                 "extrusionDrawing < 0d",
                 "new Vector3d(0d, 0d, extrusionDrawing)",
@@ -119,6 +130,20 @@ def main():
         return fail("existing wall OpeningBooleanService must remain slabOpen-independent")
     if "Finite(cutterHeight" in planner or "ExtrusionZM = cutterHeight" in planner:
         return fail("slabOpen planner must not regress to positive-Z extrusion")
+    if '"slabOpen-v1"' in boolean:
+        return fail("slabOpen applied fingerprint must stay on the live-footprint-aware v2 contract")
+
+    geometry = boolean.find("var sourceGeometryFingerprint = PolylineFingerprint(openingSource);")
+    fingerprint = boolean.find("var fingerprint = Fingerprint(", geometry)
+    same_solid = boolean.find("AppliedSolidHandleKey", fingerprint)
+    no_op = boolean.find("return 0;", same_solid)
+    if min(geometry, fingerprint, same_solid, no_op) < 0 or not (geometry < fingerprint < same_solid < no_op):
+        return fail("slabOpen must fingerprint live footprint geometry before the same-solid idempotence decision")
+
+    vertex = boolean.find("polyline.GetPoint2dAt(index)")
+    bulge = boolean.find("polyline.GetBulgeAt(index)", vertex)
+    if vertex < 0 or bulge < 0 or vertex > bulge:
+        return fail("slabOpen footprint fingerprint must include live vertices and bulges")
 
     auto_build = direct.find("EnsureFirstUseHostSolid(document, project, host, selectedHostHandle);")
     rollback = direct.find("var rollback = ProjectStateSnapshot.Capture(project);")
@@ -130,9 +155,9 @@ def main():
         return fail("slabOpen must preserve an existing generated host and auto-build only the first-use missing-solid case")
 
     print(
-        "PASS: slabOpen exact-family routing, first-use host auto-build, HostSlabId semantics, negative-Z cutter, "
-        "automatic BoolSubtract, stale-existing-host fail-closed behavior, and ordinary wall-host preservation are pinned. "
-        "NATIVE_RUNTIME=LOCAL_ONLY"
+        "PASS: slabOpen exact-family routing, first-use host auto-build, HostSlabId semantics, live footprint-aware "
+        "physical-cut freshness, negative-Z cutter, automatic BoolSubtract, stale-existing-host fail-closed behavior, "
+        "and ordinary wall-host preservation are pinned. NATIVE_RUNTIME=LOCAL_ONLY"
     )
     return 0
 
