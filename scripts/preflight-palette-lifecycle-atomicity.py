@@ -86,17 +86,22 @@ else:
         if forbidden in text:
             errors.append("palette teardown must remain isolated through DisposePalette, found direct dispose: " + forbidden)
 
-    # Existing behavior boundaries that this lifecycle hardening must not change.
+    # Existing behavior boundaries now flow through one visibility helper so Show/Reset cannot drift.
     for token in (
         "PersistPaletteLayout();",
         "ResetPreservingVisibility();",
-        "_workspace.Visible = workspaceVisible;",
-        "_right.Visible = rightVisible;",
-        "_quantityInsight.Visible = quantityVisible;",
+        "var workspaceVisible = IsWorkspaceVisible;",
+        "var rightVisible = IsRightPanelVisible;",
+        "var quantityVisible = IsQuantityInsightVisible;",
+        "SetVisibility(workspaceVisible, rightVisible, quantityVisible);",
+        "private static void SetVisibility(bool workspace, bool right, bool quantityInsight)",
+        "if (_workspace != null) _workspace.Visible = workspace;",
+        "if (_right != null) _right.Visible = right;",
+        "if (_quantityInsight != null) _quantityInsight.Visible = quantityInsight;",
         "UserUiLayoutStore.Update(layout =>",
     ):
         if token not in text:
-            errors.append("palette lifecycle hardening lost existing layout/visibility behavior: " + token)
+            errors.append("palette lifecycle hardening lost centralized layout/visibility behavior: " + token)
 
 print("QS3D palette lifecycle atomicity preflight")
 if errors:
@@ -105,4 +110,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: palette creation rolls back partial ownership without persisting incomplete dimensions; teardown isolates each native PaletteSet dispose and deterministically clears all published palette/panel references.")
+print("PASS: palette creation rolls back partial ownership without persisting incomplete dimensions; teardown isolates native Dispose and reset visibility flows through one centralized helper.")
