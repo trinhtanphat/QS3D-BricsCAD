@@ -22,6 +22,7 @@ namespace QS3D.Core.SmokeTests
             CompareRejectsPaddedReferenceIds();
             CompareRejectsMalformedElementPayload();
             CaptureRecordsProjectIdentity();
+            CompareAllowsSameProjectCapturedSnapshots();
             CompareRejectsLegacyBaselineAgainstCapturedRevision();
             CompareRejectsCrossProjectBaseline();
         }
@@ -219,6 +220,17 @@ namespace QS3D.Core.SmokeTests
             var project = NewProject();
             var snapshot = new RevisionService().Capture(project, "project-identity");
             Equal(project.ProjectId, snapshot.ProjectId);
+        }
+
+        private static void CompareAllowsSameProjectCapturedSnapshots()
+        {
+            var project = NewProject();
+            project.Elements.Add(new ProjectElement("E1", ElementCategory.Beam, string.Empty, "f", "z"));
+            var service = new RevisionService();
+            var before = service.Capture(project, "before");
+            var after = service.Capture(project, "after");
+            var deltas = service.Compare(before, after);
+            Equal(0, deltas.Count);
         }
 
         private static void CompareRejectsLegacyBaselineAgainstCapturedRevision()
