@@ -13,6 +13,7 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class FamilyManagerWindow
     {
+        private const double QuickMillimetersPerMeter = 1000d;
         private bool _quickWorkflowEventsAttached;
 
         private sealed class QuickFamilyDefaults
@@ -35,7 +36,25 @@ namespace QS3D.BricsCAD.V25.UI
             // mode when the resulting selection is actually empty.
             FamilyList.SelectionChanged += OnQuickFamilySelectionChanged;
             NewCategoryCombo.SelectionChanged += OnQuickCategorySelectionChanged;
+            ConfigureQuickWorkflowMillimeterDisplay();
             RefreshQuickWorkflow();
+        }
+
+        private void ConfigureQuickWorkflowMillimeterDisplay()
+        {
+            SetQuickFieldPresentation(QuickWidthBox, "Rộng • WidthM (mm)", "WidthM • nhập mm; QS3D lưu nội bộ theo mét");
+            SetQuickFieldPresentation(QuickDepthBox, "Sâu • DepthM (mm)", "DepthM • nhập mm; QS3D lưu nội bộ theo mét");
+            SetQuickFieldPresentation(QuickHeightBox, "Cao • HeightM (mm)", "HeightM • nhập mm; QS3D lưu nội bộ theo mét");
+            SetQuickFieldPresentation(QuickThicknessBox, "Dày • ThicknessM (mm)", "ThicknessM • nhập mm; QS3D lưu nội bộ theo mét");
+            SetQuickFieldPresentation(QuickBottomOffsetBox, "Offset đáy • BottomOffsetM (mm)", "BottomOffsetM • nhập mm; có thể âm; QS3D lưu nội bộ theo mét");
+        }
+
+        private static void SetQuickFieldPresentation(TextBox box, string label, string tooltip)
+        {
+            box.ToolTip = tooltip;
+            if (!(box.Parent is StackPanel panel)) return;
+            var text = panel.Children.OfType<TextBlock>().FirstOrDefault();
+            if (text != null) text.Text = label;
         }
 
         private void OnQuickFamilySelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -67,7 +86,7 @@ namespace QS3D.BricsCAD.V25.UI
 
                 SetStatus(
                     "Auto Family đã điền các tham số QS chuẩn cho " + category +
-                    ". Chưa có dữ liệu nào được commit; bấm Tạo & sử dụng hoặc Lưu & Vẽ để áp dụng.");
+                    " theo mm. Chưa có dữ liệu nào được commit; bấm Tạo & sử dụng hoặc Lưu & Vẽ để áp dụng.");
             }
             catch (Exception ex)
             {
@@ -168,7 +187,7 @@ namespace QS3D.BricsCAD.V25.UI
                 RefreshAfterCommit(
                     () => RefreshAll(family.Id),
                     "Đã lưu và đặt active Family “" + family.Name + "” • " + family.Category +
-                    " • " + quickValues.Count + " tham số QS.",
+                    " • " + quickValues.Count + " tham số QS (UI mm → internal m).",
                     operation);
 
                 if (!drawAfterSave) return;
@@ -203,7 +222,7 @@ namespace QS3D.BricsCAD.V25.UI
                     SetQuickField(QuickHeightBox, false, string.Empty);
                     SetQuickField(QuickThicknessBox, false, string.Empty);
                     SetQuickField(QuickBottomOffsetBox, false, string.Empty);
-                    QuickCategoryHintText.Text = "Chọn Family hoặc Category để mở form QS phù hợp. Đơn vị: mét.";
+                    QuickCategoryHintText.Text = "Chọn Family hoặc Category để mở form QS phù hợp. Nhập: mm • lưu nội bộ: m.";
                     return;
                 }
 
@@ -228,7 +247,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             QuickCategoryHintText.Text = keys.Count == 0
                 ? category + ": Direct Draw giữ nguyên raw Family properties; category này chưa có structural QS quick-template riêng."
-                : category + " • QS keys: " + string.Join(" • ", keys) + " • đơn vị mét.";
+                : category + " • QS keys: " + string.Join(" • ", keys) + " • nhập mm → lưu nội bộ m.";
         }
 
         private static void PopulateQuickField(
@@ -250,15 +269,26 @@ namespace QS3D.BricsCAD.V25.UI
                 family.Properties.TryGetValue(key, out var existing) &&
                 !string.IsNullOrWhiteSpace(existing))
             {
-                value = existing;
+                value = FormatQuickMillimeters(key, existing);
             }
             else
             {
                 value = fallback.HasValue
-                    ? fallback.Value.ToString("0.###", CultureInfo.InvariantCulture)
+                    ? (fallback.Value * QuickMillimetersPerMeter).ToString("0.###", CultureInfo.CurrentCulture)
                     : string.Empty;
             }
             SetQuickField(box, true, value);
+        }
+
+        private static string FormatQuickMillimeters(string key, string internalMeters)
+        {
+            var raw = (internalMeters ?? string.Empty).Trim();
+            double meters;
+            var parsed = double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out meters) ||
+                         double.TryParse(raw, NumberStyles.Float, CultureInfo.CurrentCulture, out meters);
+            if (!parsed || double.IsNaN(meters) || double.IsInfinity(meters))
+                throw new InvalidOperationException(key + " đang có giá trị nội bộ không hợp lệ: “" + raw + "”.");
+            return (meters * QuickMillimetersPerMeter).ToString("0.###", CultureInfo.CurrentCulture);
         }
 
         private static void SetQuickField(TextBox box, bool enabled, string value)
@@ -287,21 +317,21 @@ namespace QS3D.BricsCAD.V25.UI
             bool positive)
         {
             if (!keys.Contains(key) || string.IsNullOrWhiteSpace(text)) return;
-            var value = ParseQuickNumber(key, text, positive);
-            values[key] = value.ToString("R", CultureInfo.InvariantCulture);
+            var valueMeters = ParseQuickMillimeterNumber(key, text, positive);
+            values[key] = valueMeters.ToString("R", CultureInfo.InvariantCulture);
         }
 
-        private static double ParseQuickNumber(string key, string text, bool positive)
+        private static double ParseQuickMillimeterNumber(string key, string text, bool positive)
         {
             var raw = (text ?? string.Empty).Trim();
-            double value;
-            var parsed = double.TryParse(raw, NumberStyles.Float, CultureInfo.CurrentCulture, out value) ||
-                         double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
-            if (!parsed || double.IsNaN(value) || double.IsInfinity(value))
-                throw new InvalidOperationException(key + " phải là số hữu hạn hợp lệ (m). Giá trị hiện tại: “" + raw + "”.");
-            if (positive && value <= 0d)
-                throw new InvalidOperationException(key + " phải lớn hơn 0 m.");
-            return value;
+            double valueMm;
+            var parsed = double.TryParse(raw, NumberStyles.Float, CultureInfo.CurrentCulture, out valueMm) ||
+                         double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out valueMm);
+            if (!parsed || double.IsNaN(valueMm) || double.IsInfinity(valueMm))
+                throw new InvalidOperationException(key + " phải là số hữu hạn hợp lệ (mm). Giá trị hiện tại: “" + raw + "”.");
+            if (positive && valueMm <= 0d)
+                throw new InvalidOperationException(key + " phải lớn hơn 0 mm.");
+            return valueMm / QuickMillimetersPerMeter;
         }
 
         private ElementCategory? ResolveQuickCategory()
