@@ -12,11 +12,11 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class RecognitionWindow : Window
     {
         private readonly IReadOnlyList<RecognitionResult> _rows;
-        private readonly Func<IReadOnlyList<RecognitionResult>, int>? _apply;
+        private readonly Func<IReadOnlyList<RecognitionResult>, bool, int>? _apply;
         private readonly Action<RecognitionResult>? _locate;
         private readonly Document _document;
 
-        public RecognitionWindow(Document document, IReadOnlyList<RecognitionResult> rows, Func<IReadOnlyList<RecognitionResult>, int>? apply = null, Action<RecognitionResult>? locate = null)
+        public RecognitionWindow(Document document, IReadOnlyList<RecognitionResult> rows, Func<IReadOnlyList<RecognitionResult>, bool, int>? apply = null, Action<RecognitionResult>? locate = null)
         {
             _document = document ?? throw new ArgumentNullException(nameof(document));
             _rows = rows ?? throw new ArgumentNullException(nameof(rows));
@@ -43,11 +43,14 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
-        private void OnApplyClick(object sender, RoutedEventArgs e) => Apply(Grid.SelectedItems.Cast<RecognitionResult>().ToList());
-        private void OnGridDoubleClick(object sender, MouseButtonEventArgs e) { if (Grid.SelectedItem is RecognitionResult row) Apply(new[] { row }); }
-        private void OnApplyConfidentClick(object sender, RoutedEventArgs e) => Apply(_rows.Where(x => x.TopCandidate != null && x.Confidence >= .92d && x.Margin >= .15d && x.IsCaptureReady).ToList());
+        private void OnApplyClick(object sender, RoutedEventArgs e) => Apply(Grid.SelectedItems.Cast<RecognitionResult>().ToList(), requireLiveConfidence: false);
+        private void OnGridDoubleClick(object sender, MouseButtonEventArgs e) { if (Grid.SelectedItem is RecognitionResult row) Apply(new[] { row }, requireLiveConfidence: false); }
+        private void OnApplyConfidentClick(object sender, RoutedEventArgs e) =>
+            Apply(
+                _rows.Where(x => x.TopCandidate != null && x.Confidence >= .92d && x.Margin >= .15d && x.IsCaptureReady).ToList(),
+                requireLiveConfidence: true);
 
-        private void Apply(IEnumerable<RecognitionResult> rows)
+        private void Apply(IEnumerable<RecognitionResult> rows, bool requireLiveConfidence)
         {
             if (_apply == null) return;
             IReadOnlyList<RecognitionResult> batch;
@@ -65,7 +68,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             try
             {
-                var applied = _apply(batch);
+                var applied = _apply(batch, requireLiveConfidence);
                 RefreshStatus(applied, 0, null);
             }
             catch (Exception ex)
