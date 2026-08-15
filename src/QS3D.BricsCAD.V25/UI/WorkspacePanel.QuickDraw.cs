@@ -115,9 +115,11 @@ namespace QS3D.BricsCAD.V25.UI
                 SetStatus((advanced ? "Vẽ tùy chỉnh → " : "Vẽ Nhanh → ") + family.Name + " • " + family.Category);
                 Send(command);
             }
-            catch (Exception ex)
+            catch
             {
-                SetStatus((advanced ? "Vẽ tùy chỉnh lỗi: " : "Vẽ Nhanh lỗi: ") + ex.Message);
+                SetStatus(advanced
+                    ? "Không thể bắt đầu Vẽ tùy chỉnh. Hãy thử lại hoặc chọn lại Family / Type."
+                    : "Không thể bắt đầu Vẽ Nhanh. Hãy thử lại hoặc chọn lại Family / Type.");
             }
         }
 
@@ -138,9 +140,9 @@ namespace QS3D.BricsCAD.V25.UI
                 SetStatus("Vẽ cơ bản " + label + " → " + family.Name + " • " + family.Category);
                 Send(command);
             }
-            catch (Exception ex)
+            catch
             {
-                SetStatus("Vẽ cơ bản " + label + " lỗi: " + ex.Message);
+                SetStatus("Không thể bắt đầu Vẽ cơ bản " + label + ". Hãy thử lại hoặc chọn lại Family / Type.");
             }
         }
     }
