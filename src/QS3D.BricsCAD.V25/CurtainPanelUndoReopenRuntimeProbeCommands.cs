@@ -32,11 +32,26 @@ namespace QS3D.BricsCAD.V25
         private const string ExpectedPanelVariable = "QS3D_CURTAIN_P11_EXPECTED_PANELS";
         private const string UndoCoherentVariable = "QS3D_CURTAIN_P11_UNDO_COHERENT";
         private const string RedoCoherentVariable = "QS3D_CURTAIN_P11_REDO_COHERENT";
+        private const string UndoAfterGeneratedAbsentVariable = "QS3D_CURTAIN_P11_UNDO_AFTER_GENERATED_ABSENT";
+        private const string UndoSemanticBeforeRestoredVariable = "QS3D_CURTAIN_P11_UNDO_SEMANTIC_BEFORE_RESTORED";
+        private const string UndoSourceSentinelPreservedVariable = "QS3D_CURTAIN_P11_UNDO_SOURCE_SENTINEL_PRESERVED";
+        private const string UndoFailureCodeVariable = "QS3D_CURTAIN_P11_UNDO_FAILURE_CODE";
+        private const string NoUndoFailureCode = "NONE";
+        private const string AfterGeneratedStillPresentCode = "UNDO_AFTER_GENERATED_STILL_PRESENT";
+        private const string NativeRemovedSemanticNotRestoredCode = "UNDO_NATIVE_REMOVED_SEMANTIC_NOT_RESTORED";
+        private const string SourceSentinelDriftCode = "UNDO_SOURCE_SENTINEL_DRIFT";
         private const string ResultFileName = "curtain-panel-undo-reopen-result.txt";
         private const string PhaseResultFileName = "curtain-panel-undo-reopen-session1.txt";
         private const string SentinelRegApp = "QS3D_CURTAIN_P11_SENTINEL";
         private const string SentinelVersion = "1";
         private const string Schema = "QS3D_CURTAIN_PANEL_UNDO_REOPEN_RUNTIME_V1";
+        private static readonly ISet<string> UndoFailureCodes = new HashSet<string>(StringComparer.Ordinal)
+        {
+            NoUndoFailureCode,
+            AfterGeneratedStillPresentCode,
+            NativeRemovedSemanticNotRestoredCode,
+            SourceSentinelDriftCode
+        };
         private static readonly object Sync = new object();
         private static SessionOneState? _sessionOne;
         private static SessionTwoState? _sessionTwo;
@@ -113,10 +128,15 @@ namespace QS3D.BricsCAD.V25
                 var after = state.After ?? throw new InvalidOperationException("Curtain P11 baseline was not captured.");
                 var owner = RequireOwner(context.Project, state.OwnerId);
                 var current = Capture(context.Document, context.Project, owner, state.Before.SentinelHandle, false, false);
-                state.UndoCoherent = SameSemanticAndNative(state.Before, current) &&
-                                     AllPresent(context.Document, GeneratedHandles(state.Before)) &&
-                                     AllAbsent(context.Document, GeneratedHandles(after)) &&
-                                     SameSourceAndSentinel(state.Before, current);
+                state.UndoAfterGeneratedAbsent = AllAbsent(context.Document, GeneratedHandles(after));
+                state.UndoSemanticBeforeRestored = SameSemanticAndNative(state.Before, current) &&
+                                                   AllPresent(context.Document, GeneratedHandles(state.Before));
+                state.UndoSourceSentinelPreserved = SameSourceAndSentinel(state.Before, current);
+                state.UndoFailureCode = ClassifyUndoFailure(
+                    state.UndoAfterGeneratedAbsent,
+                    state.UndoSemanticBeforeRestored,
+                    state.UndoSourceSentinelPreserved);
+                state.UndoCoherent = string.Equals(state.UndoFailureCode, NoUndoFailureCode, StringComparison.Ordinal);
                 state.UndoChecked = true;
             });
         }
@@ -160,13 +180,17 @@ namespace QS3D.BricsCAD.V25
                     "qualification_boundary=LOCAL_002_P11_ONLY",
                     "undo_coherent=" + Boolean(state.UndoCoherent),
                     "redo_coherent=" + Boolean(state.RedoCoherent),
+                    "undo_after_generated_absent=" + Boolean(state.UndoAfterGeneratedAbsent),
+                    "undo_semantic_before_restored=" + Boolean(state.UndoSemanticBeforeRestored),
+                    "undo_source_sentinel_preserved=" + Boolean(state.UndoSourceSentinelPreserved),
+                    "undo_failure_code=" + state.UndoFailureCode,
                     "host_solid_count=" + after.HostHandles.Count.ToString(CultureInfo.InvariantCulture),
                     "frame_solid_count=" + after.FrameHandles.Count.ToString(CultureInfo.InvariantCulture),
                     "panel_solid_count=" + after.PanelHandles.Count.ToString(CultureInfo.InvariantCulture),
                     "change_version=" + after.ChangeVersion.ToString(CultureInfo.InvariantCulture),
                     "health_issue_count=0",
-                    "source_preserved=true",
-                    "sentinel_preserved=true"
+                    "source_preserved=" + Boolean(state.UndoSourceSentinelPreserved),
+                    "sentinel_preserved=" + Boolean(state.UndoSourceSentinelPreserved)
                 });
             });
         }
@@ -226,6 +250,17 @@ namespace QS3D.BricsCAD.V25
                 var rebuilt = state.Rebuilt ?? throw new InvalidOperationException("Curtain P11 rebuild was not captured.");
                 var undoCoherent = RequiredBooleanEnvironment(UndoCoherentVariable);
                 var redoCoherent = RequiredBooleanEnvironment(RedoCoherentVariable);
+                var undoAfterGeneratedAbsent = RequiredBooleanEnvironment(UndoAfterGeneratedAbsentVariable);
+                var undoSemanticBeforeRestored = RequiredBooleanEnvironment(UndoSemanticBeforeRestoredVariable);
+                var undoSourceSentinelPreserved = RequiredBooleanEnvironment(UndoSourceSentinelPreservedVariable);
+                var undoFailureCode = RequiredUndoFailureCodeEnvironment();
+                var classifiedUndoFailure = ClassifyUndoFailure(
+                    undoAfterGeneratedAbsent,
+                    undoSemanticBeforeRestored,
+                    undoSourceSentinelPreserved);
+                if (!string.Equals(undoFailureCode, classifiedUndoFailure, StringComparison.Ordinal) ||
+                    undoCoherent != string.Equals(undoFailureCode, NoUndoFailureCode, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Curtain P11 sanitized Undo diagnostics are inconsistent.");
                 var pass = undoCoherent && redoCoherent && state.OldGeneratedRemoved && state.NewGeneratedDisjoint &&
                            state.CountsStable && state.SourcePreserved && state.SentinelPreserved && rebuilt.HealthIssueCount == 0;
                 var resultPath = RequiredPath(Environment.GetEnvironmentVariable(ResultVariable), ResultFileName);
@@ -241,6 +276,10 @@ namespace QS3D.BricsCAD.V25
                     "is_64bit=" + Boolean(Environment.Is64BitProcess),
                     "undo_coherent=" + Boolean(undoCoherent),
                     "redo_coherent=" + Boolean(redoCoherent),
+                    "undo_after_generated_absent=" + Boolean(undoAfterGeneratedAbsent),
+                    "undo_semantic_before_restored=" + Boolean(undoSemanticBeforeRestored),
+                    "undo_source_sentinel_preserved=" + Boolean(undoSourceSentinelPreserved),
+                    "undo_failure_code=" + undoFailureCode,
                     "reopen_coherent=true",
                     "rebuild_coherent=true",
                     "source_preserved=" + Boolean(state.SourcePreserved),
@@ -263,7 +302,7 @@ namespace QS3D.BricsCAD.V25
                 {
                     lines.Add("error_code=CURTAIN_PANEL_UNDO_REOPEN_RUNTIME_FAILED");
                     lines.Add("failure_phase=" + (!undoCoherent ? "native_undo" : "rebuild"));
-                    lines.Add("failure_code=" + (!undoCoherent ? "SEMANTIC_NATIVE_DIVERGENCE" : "STATE_REJECTED"));
+                    lines.Add("failure_code=" + (!undoCoherent ? undoFailureCode : "STATE_REJECTED"));
                 }
                 WriteMarkerAtomic(resultPath, lines);
             });
@@ -613,6 +652,25 @@ namespace QS3D.BricsCAD.V25
             throw new InvalidOperationException("Curtain P11 boolean environment state is invalid.");
         }
 
+        private static string RequiredUndoFailureCodeEnvironment()
+        {
+            var code = (Environment.GetEnvironmentVariable(UndoFailureCodeVariable) ?? string.Empty).Trim();
+            if (!UndoFailureCodes.Contains(code))
+                throw new InvalidOperationException("Curtain P11 Undo failure code is not allowlisted.");
+            return code;
+        }
+
+        private static string ClassifyUndoFailure(
+            bool afterGeneratedAbsent,
+            bool semanticBeforeRestored,
+            bool sourceSentinelPreserved)
+        {
+            if (!afterGeneratedAbsent) return AfterGeneratedStillPresentCode;
+            if (!sourceSentinelPreserved) return SourceSentinelDriftCode;
+            if (!semanticBeforeRestored) return NativeRemovedSemanticNotRestoredCode;
+            return NoUndoFailureCode;
+        }
+
         private static void Append(StringBuilder builder, string? value)
         {
             var text = value ?? string.Empty;
@@ -742,6 +800,10 @@ namespace QS3D.BricsCAD.V25
             public Snapshot? After { get; set; }
             public bool UndoChecked { get; set; }
             public bool UndoCoherent { get; set; }
+            public bool UndoAfterGeneratedAbsent { get; set; }
+            public bool UndoSemanticBeforeRestored { get; set; }
+            public bool UndoSourceSentinelPreserved { get; set; }
+            public string UndoFailureCode { get; set; } = NoUndoFailureCode;
             public bool RedoChecked { get; set; }
             public bool RedoCoherent { get; set; }
         }
