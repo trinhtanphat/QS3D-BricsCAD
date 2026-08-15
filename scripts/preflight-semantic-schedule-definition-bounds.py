@@ -13,6 +13,7 @@ registration = REGISTRATION.read_text(encoding="utf-8")
 required_source = [
     "internal const int MaxIds = 5000;",
     "internal const int MaxColumns = 32;",
+    "Categories = SnapshotBounded(",
     "IncludeElementIds = SnapshotBounded(",
     "ExcludeElementIds = SnapshotBounded(",
     "Columns = SnapshotBounded(",
@@ -28,6 +29,7 @@ for marker in required_source:
         raise SystemExit(f"missing source contract: {marker}")
 
 legacy = [
+    "Categories = new List<ElementCategory>(categories ?? Array.Empty<ElementCategory>()).AsReadOnly();",
     "IncludeElementIds = new List<string>(includeElementIds ?? Array.Empty<string>()).AsReadOnly();",
     "ExcludeElementIds = new List<string>(excludeElementIds ?? Array.Empty<string>()).AsReadOnly();",
     "Columns = new List<SemanticDocumentationColumn>(columns ?? throw new ArgumentNullException(nameof(columns))).AsReadOnly();",
@@ -42,10 +44,15 @@ if guard > add:
     raise SystemExit("bounded snapshot guard must execute before adding the over-bound item")
 
 required_smoke = [
+    "CategoriesAcceptExactLimit();",
+    "CategoriesStopAtFirstOverBoundItem();",
     "IncludeIdsStopAtFirstOverBoundItem();",
     "ExcludeIdsStopAtFirstOverBoundItem();",
     "ColumnsStopAtFirstOverBoundItem();",
     "for (var i = 0; i <= 5000; i++)",
+    "RepeatCategories(5000)",
+    "Category source enumerated beyond the first over-bound item.",
+    "Semantic schedule category list exceeds 5000 entries.",
     "for (var i = 0; i <= 32; i++)",
     "Include source enumerated beyond the first over-bound id.",
     "Exclude source enumerated beyond the first over-bound id.",

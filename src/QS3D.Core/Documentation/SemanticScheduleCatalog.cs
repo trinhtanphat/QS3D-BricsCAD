@@ -24,7 +24,10 @@ namespace QS3D.Core.Documentation
             Id = id ?? string.Empty;
             Name = name ?? string.Empty;
             Title = title ?? string.Empty;
-            Categories = new List<ElementCategory>(categories ?? Array.Empty<ElementCategory>()).AsReadOnly();
+            Categories = SnapshotBounded(
+                categories ?? Array.Empty<ElementCategory>(),
+                SemanticScheduleCatalog.MaxIds,
+                "Semantic schedule category list exceeds 5000 entries.");
             FloorId = floorId ?? string.Empty;
             ZoneId = zoneId ?? string.Empty;
             IncludeElementIds = SnapshotBounded(
