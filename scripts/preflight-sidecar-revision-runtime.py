@@ -21,9 +21,9 @@ if COMMAND.is_file():
         'EndsWith(".reference-copy.dwg"',
         'ProjectContextCoordinator.GetProjectPath(document)',
         'ProjectContextCoordinator.Save(document)',
-        'TestBackupAppearance(document, project, sidecar, baseline)',
-        'TestPrimaryReplacement(document, project, sidecar, nonce, baseline)',
-        'TestPrimaryRemoval(document, project, sidecar, nonce, baseline)',
+        'TestBackupAppearance(document, project, sidecar, baseline, progress)',
+        'TestPrimaryReplacement(document, project, sidecar, nonce, baseline, progress)',
+        'TestPrimaryRemoval(document, project, sidecar, nonce, baseline, progress)',
         'ProjectContextCoordinator.TryGetReadOnly(document, out _)',
         'ExistingProjectMutationContext.Require(document, "Sidecar revision probe")',
         'InterchangeConfirmationGuard.RequireFresh(document, project, reviewedVersion',
@@ -34,6 +34,9 @@ if COMMAND.is_file():
         'SHA256.Create()',
         'path + ".lock"',
         '"error_code=" + errorCode',
+        '"stage=" + SafeFailureStage(stage)',
+        'var candidate = stage ?? string.Empty;',
+        'FailureStages.Contains(candidate) ? candidate : "unknown"',
     ):
         if token not in text:
             errors.append("SidecarRevisionProbeCommands missing runtime/privacy token: " + token)
@@ -58,6 +61,9 @@ if RUNNER.is_file():
         'Get-FileHash -LiteralPath $FixtureDwg -Algorithm SHA256',
         'Restore-EnvironmentValue -Name $name',
         'Stop-LaunchedProcess -Process $process',
+        '$Process.WaitForExit()',
+        'Private sidecar revision cleanup refuses directory targets.',
+        'BricsCAD sidecar revision probe returned sanitized failure stage',
         'Remove-PrivateProbeArtifacts -ArtifactDir $ArtifactDir',
         '$scratchPrefix = "sidecar-project-state-" + $Nonce + "-"',
         '$sidecarPath + "." + $Nonce + ".original"',

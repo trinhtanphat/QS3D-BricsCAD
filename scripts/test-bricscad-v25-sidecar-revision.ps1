@@ -26,12 +26,15 @@ function Stop-LaunchedProcess {
         Stop-Process -Id $Process.Id -Force -ErrorAction Stop
         if (-not $Process.WaitForExit(10000)) { throw "Launched BricsCAD process did not exit during probe cleanup." }
     }
+    $Process.WaitForExit()
     $Process.Refresh()
     if (-not $Process.HasExited) { throw "Launched BricsCAD process remains active after probe cleanup." }
 }
 
 function Remove-PrivateProbeFile {
     param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { throw "Private sidecar revision cleanup path is missing." }
+    if (Test-Path -LiteralPath $Path -PathType Container) { throw "Private sidecar revision cleanup refuses directory targets." }
     if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Force -ErrorAction Stop }
     if (Test-Path -LiteralPath $Path) { throw "Private sidecar revision probe artifact was not removed." }
 }
@@ -157,6 +160,27 @@ try {
     if (-not (Test-Path -LiteralPath $resultPath -PathType Leaf)) { throw "Timed out waiting for the sidecar revision marker." }
 
     $marker = Read-Marker -Path $resultPath
+    if ($marker.ContainsKey("status") -and
+        [string]::Equals([string]$marker["status"], "FAIL", [StringComparison]::OrdinalIgnoreCase)) {
+        $allowedFailureStages = @(
+            "scope_validation", "baseline_bind", "baseline_save", "baseline_snapshot",
+            "backup_appearance_prepare", "backup_appearance_read_only", "backup_appearance_canonical_bind",
+            "backup_appearance_existing_mutation", "backup_appearance_interchange_confirmation",
+            "backup_appearance_save", "backup_appearance_semantic_integrity", "backup_appearance_restore",
+            "backup_appearance_recovery", "primary_replacement_prepare", "primary_replacement_read_only",
+            "primary_replacement_canonical_bind", "primary_replacement_existing_mutation",
+            "primary_replacement_interchange_confirmation", "primary_replacement_save",
+            "primary_replacement_semantic_integrity", "primary_replacement_restore",
+            "primary_replacement_recovery", "primary_removal_prepare", "primary_removal_read_only",
+            "primary_removal_canonical_bind", "primary_removal_existing_mutation",
+            "primary_removal_interchange_confirmation", "primary_removal_save",
+            "primary_removal_semantic_integrity", "primary_removal_restore",
+            "primary_removal_recovery", "final_recovery", "marker_write", "unknown"
+        )
+        $failureStage = if ($marker.ContainsKey("stage")) { [string]$marker["stage"] } else { "unknown" }
+        if ($allowedFailureStages -notcontains $failureStage) { $failureStage = "unknown" }
+        throw "BricsCAD sidecar revision probe returned sanitized failure stage '$failureStage'."
+    }
     foreach ($key in @(
         "backup_appearance_refused", "primary_replacement_refused", "primary_removal_refused",
         "read_only_boundary_refused", "canonical_bind_refused", "existing_mutation_refused",
