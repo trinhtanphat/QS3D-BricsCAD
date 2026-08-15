@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
         {
             ViewEnumerationElementReplacementFailsClosed();
             SheetEnumerationElementReplacementFailsClosed();
+            ViewEnumerationSameInstancePlannerValueDriftFailsClosed();
+            SheetEnumerationSameInstancePlannerValueDriftFailsClosed();
             ViewEnumerationRevisionDriftFailsClosed();
             SheetEnumerationRevisionDriftFailsClosed();
             StableSaveRemainsDeterministic();
@@ -30,6 +32,45 @@ namespace QS3D.Core.SmokeTests
 
             Equal(beforeVersion, project.ChangeVersion);
             NotSame(original, project.Elements[0]);
+            MetadataAbsent(project);
+        }
+
+        private static void ViewEnumerationSameInstancePlannerValueDriftFailsClosed()
+        {
+            var project = BuildProject("DOC-SAVE-VIEW-VALUES");
+            var beforeVersion = project.ChangeVersion;
+            var element = project.Elements[0];
+            var store = new SemanticDocumentationCatalogStore();
+
+            Throws<InvalidOperationException>(() => store.Save(
+                project,
+                ChangeCategoryWhileEnumeratingViews(project),
+                Array.Empty<SemanticSheetDefinition>()));
+
+            Equal(beforeVersion, project.ChangeVersion);
+            Same(element, project.Elements[0]);
+            Equal(ElementCategory.Column, element.Category);
+            MetadataAbsent(project);
+        }
+
+        private static void SheetEnumerationSameInstancePlannerValueDriftFailsClosed()
+        {
+            var project = BuildProject("DOC-SAVE-SHEET-VALUES");
+            project.Floors.Add(new FloorDefinition("F-02", "Floor 02", 3.6d));
+            project.Zones.Add(new ZoneDefinition("Z-02", "Zone 02"));
+            var beforeVersion = project.ChangeVersion;
+            var element = project.Elements[0];
+            var store = new SemanticDocumentationCatalogStore();
+
+            Throws<InvalidOperationException>(() => store.Save(
+                project,
+                StableViews(),
+                ChangeRelationsWhileEnumeratingSheets(project)));
+
+            Equal(beforeVersion, project.ChangeVersion);
+            Same(element, project.Elements[0]);
+            Equal("F-02", element.FloorId);
+            Equal("Z-02", element.ZoneId);
             MetadataAbsent(project);
         }
 
@@ -116,6 +157,25 @@ namespace QS3D.Core.SmokeTests
             yield return StableSheet();
         }
 
+        private static IEnumerable<SemanticViewDefinition> ChangeCategoryWhileEnumeratingViews(ProjectState project)
+        {
+            project.Elements[0].Category = ElementCategory.Column;
+            yield return new SemanticViewDefinition(
+                "VIEW-01",
+                "Plan 01",
+                SemanticViewKind.Plan,
+                "F-01",
+                "Z-01",
+                new[] { ElementCategory.Column });
+        }
+
+        private static IEnumerable<SemanticSheetDefinition> ChangeRelationsWhileEnumeratingSheets(ProjectState project)
+        {
+            project.Elements[0].FloorId = "F-02";
+            project.Elements[0].ZoneId = "Z-02";
+            yield return StableSheet();
+        }
+
         private static IEnumerable<SemanticViewDefinition> TouchProjectWhileEnumeratingViews(ProjectState project)
         {
             project.Touch();
@@ -167,6 +227,12 @@ namespace QS3D.Core.SmokeTests
         {
             if (ReferenceEquals(left, right))
                 throw new InvalidOperationException("Structural-freshness fixture did not replace the project entry.");
+        }
+
+        private static void Same(object left, object right)
+        {
+            if (!ReferenceEquals(left, right))
+                throw new InvalidOperationException("Planner-value freshness fixture replaced the project entry.");
         }
 
         private static void Equal<T>(T expected, T actual)
