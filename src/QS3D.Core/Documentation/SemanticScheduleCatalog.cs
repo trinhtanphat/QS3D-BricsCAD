@@ -390,14 +390,27 @@ namespace QS3D.Core.Documentation
             if (normalized.Length == 0) throw new ArgumentException("Semantic schedule " + label + " is required.");
             if (normalized.Length > maxLength) throw new ArgumentException("Semantic schedule " + label + " exceeds supported length.");
             if (normalized.Any(char.IsControl)) throw new ArgumentException("Semantic schedule " + label + " contains control characters.");
-            return normalized;
+            return RequireXmlText(normalized, label);
         }
 
         private static string Optional(string value, int maxLength)
         {
             var normalized = (value ?? string.Empty).Trim();
             if (normalized.Length > maxLength || normalized.Any(char.IsControl)) throw new ArgumentException("Semantic schedule optional id is invalid.");
-            return normalized;
+            return RequireXmlText(normalized, "optional id");
+        }
+
+        private static string RequireXmlText(string value, string label)
+        {
+            try
+            {
+                XmlConvert.VerifyXmlChars(value);
+                return value;
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException("Semantic schedule " + label + " contains characters that are invalid in XML.", ex);
+            }
         }
     }
 }
