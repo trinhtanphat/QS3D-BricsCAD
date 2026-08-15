@@ -114,6 +114,7 @@ namespace QS3D.BricsCAD.V25
             private readonly bool _rebase;
             private readonly bool _registeredHistory;
             private Dictionary<string, HistoryEntry>? _stagedEntries;
+            private bool _markerStaged;
             private bool _staged;
             private bool _committed;
             private bool _disposed;
@@ -142,6 +143,40 @@ namespace QS3D.BricsCAD.V25
                 _registeredHistory = registeredHistory;
             }
 
+            public void StageNativeMarker()
+            {
+                lock (Gate)
+                {
+                    ThrowIfDisposed();
+                    if (_markerStaged)
+                        throw new InvalidOperationException("Source Reconcile Undo native marker is already staged.");
+                    _markerStaged = true;
+                }
+
+                try
+                {
+                    // Enroll and modify the existing carrier before generated
+                    // topology changes touch the same native Undo group. The
+                    // transaction still hides and rolls back this marker until
+                    // the complete reconcile commits.
+                    using (var marker = new ResultBuffer(
+                        new TypedValue((int)DxfCode.ExtendedDataRegAppName, RegAppName),
+                        new TypedValue((int)DxfCode.ExtendedDataAsciiString, MarkerVersion),
+                        new TypedValue((int)DxfCode.ExtendedDataAsciiString, _nextRevision)))
+                    {
+                        EnsureRegApp(_database, _transaction);
+                        _markerCarrier.DisableUndoRecording(false);
+                        _markerCarrier.UpgradeOpen();
+                        _markerCarrier.XData = marker;
+                    }
+                }
+                catch
+                {
+                    lock (Gate) _markerStaged = false;
+                    throw;
+                }
+            }
+
             public void StageAfter(ProjectState project, ProjectStateSnapshot snapshot)
             {
                 if (project == null) throw new ArgumentNullException(nameof(project));
@@ -150,6 +185,8 @@ namespace QS3D.BricsCAD.V25
                 lock (Gate)
                 {
                     ThrowIfDisposed();
+                    if (!_markerStaged)
+                        throw new InvalidOperationException("Source Reconcile Undo native marker must be staged before topology changes.");
                     if (_staged) throw new InvalidOperationException("Source Reconcile Undo transition is already staged.");
                     RequireCurrentHistory(_document, _history, project, _previousRevision);
 
@@ -164,27 +201,12 @@ namespace QS3D.BricsCAD.V25
                     _stagedEntries = stagedEntries;
                     _staged = true;
                 }
-
-                // Every managed allocation and history validation is complete
-                // before touching the native marker. The staged dictionary is
-                // private until ConfirmCommitted publishes it after CAD commit.
-                using (var marker = new ResultBuffer(
-                    new TypedValue((int)DxfCode.ExtendedDataRegAppName, RegAppName),
-                    new TypedValue((int)DxfCode.ExtendedDataAsciiString, MarkerVersion),
-                    new TypedValue((int)DxfCode.ExtendedDataAsciiString, _nextRevision)))
-                {
-                    EnsureRegApp(_database, _transaction);
-                    _markerCarrier.DisableUndoRecording(false);
-                    _markerCarrier.UpgradeOpen();
-                    _markerCarrier.XData = marker;
-                }
             }
 
             public void ConfirmCommitted()
             {
-                // StageAfter performs every allocation/validation before the CAD
-                // commit. Publish the already-built dictionary only after the
-                // native marker and CAD changes have committed together.
+                // Publish the already-built dictionary only after the native
+                // marker and CAD changes have committed together.
                 lock (Gate)
                 {
                     if (_disposed || !_staged || _stagedEntries == null) return;
