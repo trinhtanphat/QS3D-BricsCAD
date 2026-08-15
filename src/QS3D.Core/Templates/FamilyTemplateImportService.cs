@@ -22,7 +22,7 @@ namespace QS3D.Core.Templates
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (profile == null) throw new ArgumentNullException(nameof(profile));
             ValidateSourceFamilies(profile);
-            ValidateTargetFamilies(project);
+            ValidateTargetFamilies(project, profile);
 
             var rollback = ProjectStateSnapshot.Capture(project);
             try
@@ -103,30 +103,40 @@ namespace QS3D.Core.Templates
             {
                 if (source == null)
                     throw new InvalidOperationException("Family template contains a null Family entry.");
-                var key = source.Category + "\u001f" + (source.Name ?? string.Empty).Trim();
+                var key = FamilyKey(source.Category, source.Name);
                 if (!keys.Add(key))
                     throw new InvalidOperationException(
                         "Family template contains duplicate Category + Name: " + source.Category + " / " + source.Name + ".");
             }
         }
 
-        private static void ValidateTargetFamilies(ProjectState project)
+        private static void ValidateTargetFamilies(ProjectState project, TemplateProfile profile)
         {
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var sourceKeys = new HashSet<string>(
+                profile.Families.Select(x => FamilyKey(x.Category, x.Name)),
+                StringComparer.OrdinalIgnoreCase);
+            var relevantKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var family in project.Families)
             {
                 if (family == null)
                     throw new InvalidOperationException("Project family collection contains a null Family entry.");
                 if (!ids.Add(family.Id))
                     throw new InvalidOperationException("Project contains duplicate Family id: " + family.Id + ".");
-                var key = family.Category + "\u001f" + (family.Name ?? string.Empty).Trim();
-                if (!keys.Add(key))
+
+                var key = FamilyKey(family.Category, family.Name);
+                if (!sourceKeys.Contains(key))
+                    continue;
+                if (!relevantKeys.Add(key))
                     throw new InvalidOperationException(
-                        "Project contains multiple Families with the same Category + Name: " +
+                        "Project contains multiple Families with the same Category + Name required by this template: " +
                         family.Category + " / " + family.Name + ".");
             }
         }
+
+        private static string FamilyKey(ElementCategory category, string name) =>
+            category + "\u001f" + (name ?? string.Empty).Trim();
 
         private static string NextLocalId(ProjectState project)
         {
