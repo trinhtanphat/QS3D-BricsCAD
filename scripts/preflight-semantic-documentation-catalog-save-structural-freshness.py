@@ -61,9 +61,15 @@ if SOURCE.is_file():
         "project.Zones.ToArray());",
         "if (project.ChangeVersion != snapshot.ChangeVersion)",
         "EnsureSameReferences(project.Elements, snapshot.Elements);",
+        "EnsureSameElementPlanningValues(project.Elements, snapshot.ElementPlanningValues);",
         "EnsureSameReferences(project.Floors, snapshot.Floors);",
         "EnsureSameReferences(project.Zones, snapshot.Zones);",
         "if (!ReferenceEquals(current[i], expected[i]))",
+        "ElementPlanningValues = elements.Select(x => new ProjectElementPlanningValues(x)).ToArray();",
+        "!string.Equals(element.Id, values.Id, StringComparison.Ordinal)",
+        "element.Category != values.Category",
+        "!string.Equals(element.FloorId, values.FloorId, StringComparison.Ordinal)",
+        "!string.Equals(element.ZoneId, values.ZoneId, StringComparison.Ordinal)",
     ):
         if token not in source:
             errors.append("SemanticDocumentationCatalogStore missing structural freshness token: " + token)
@@ -73,10 +79,15 @@ if SMOKE.is_file():
     for token in (
         "ViewEnumerationElementReplacementFailsClosed();",
         "SheetEnumerationElementReplacementFailsClosed();",
+        "ViewEnumerationSameInstancePlannerValueDriftFailsClosed();",
+        "SheetEnumerationSameInstancePlannerValueDriftFailsClosed();",
         "ViewEnumerationRevisionDriftFailsClosed();",
         "SheetEnumerationRevisionDriftFailsClosed();",
         "StableSaveRemainsDeterministic();",
         "project.Elements[0] = ReplacementElement();",
+        "project.Elements[0].Category = ElementCategory.Column;",
+        'project.Elements[0].FloorId = "F-02";',
+        'project.Elements[0].ZoneId = "Z-02";',
         "project.Touch();",
         "MetadataAbsent(project);",
         "store.Save(project, views, sheets);",
@@ -96,4 +107,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: SemanticDocumentationCatalogStore.Save rejects project revision or ordered reference drift across caller-controlled view/sheet enumeration before persistence mutation.")
+print("PASS: SemanticDocumentationCatalogStore.Save rejects project revision, ordered reference, or planner-value drift across caller-controlled view/sheet enumeration before persistence mutation.")
