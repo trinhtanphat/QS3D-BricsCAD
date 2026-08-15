@@ -1,6 +1,6 @@
 # QS3D LOCAL-003 — exact-SHA Level Z-chain qualification
 
-Updated: 2026-08-14 (UTC+7)
+Updated: 2026-08-15 (UTC+7)
 
 This is the focused local runbook for the shared native Level vertical-placement chain. It supplements `docs/LOCAL-V25-QUALIFICATION.md`; it does not create a second live queue. Current priority and status remain in `docs/LOCAL-AGENT-INBOX.md` under `LOCAL-003`.
 
@@ -90,6 +90,16 @@ For both unit modes, process/script/private-state cleanup, read-only-before-laun
 This is a bounded `LOCAL_PASS` for **representative native unit parity only**. It does not replace the complete-family matrix in both units and does not qualify Undo/Redo, save/reopen, cold-cache rebind, multi-DWG or private-DWG behavior. LOCAL-003 remains `IN_PROGRESS / PENDING_LOCAL`, and a final integrated/release SHA still requires its own applicable exact-SHA rerun.
 
 The integrated-main rerun completed on exact merge SHA `44195df7acf5db6ea06605090384410367cf95f2` after PR `#1466` restored the PR `#1432` unit-parity diff that had been lost during a concurrent stale-base merge. The focused Level-Z gate, full Core smoke and installed-reference V25 `Release|x64` build passed first. Matching adapter/Core ProductVersion and adapter SHA-256 `52669B6120A99422C357E25AF1D6343C324B598853C76D0D088FC3D6A30DE747` then passed separate BricsCAD V25.2.10 x64 Millimeter and Meter runs with the same complete representative marker contract. Both hosts exited gracefully; process/script/private-state/read-only-through-exit/unwritten-DWG/restoration/attribute checks passed; the synthetic drawing stayed at SHA-256 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`. This removes the integrated-SHA caveat only for representative mm/m parity; the wider LOCAL-003 matrix remains pending.
+
+## Exact representative Level lifecycle result
+
+Draft PR `#1522` adds a bounded lifecycle probe without changing production Level, builder, Undo or persistence code. Clean exact branch SHA `189bd34eb2e5795cf90acbc275b0d43b642cd1be` passed `scripts/preflight-level-z-lifecycle-runtime-probe.py`, the existing Curtain P11 and representative Level gates, full Core smoke `ALL PASS`, and the installed-reference BricsCAD V25 `Release|x64` build with zero warnings/errors. Plugin/Core ProductVersion ended in the exact SHA. Adapter SHA-256 was `C947C814DD124744FBF140361BFB67C44C1B49583BD2824FC77E34BBD44818FA`; Core SHA-256 was `B3FCF2BFE2D2380E936BE2A7D41D7F4E0F967F8290F8484AD537BCD5C6F4F352`.
+
+The licensed BricsCAD V25.2.10 x64 Millimeter run configured one Direct Draw GlassWall with Bottom Level `3 m + 0.1 m` and Top Level `7 m - 0.2 m`. Native Undo preserved the Level configuration, restored the pre-build host and removed the generated set. Redo restored coherent Level-bound host/frame/panel output with counts `1/10/15` and host span `3.1..6.8 m`. Explicit save/close followed by a second BricsCAD process cold-reopened the project with coherent Level configuration and output. Rebuild removed the old generated set, produced a disjoint new set with stable `1/10/15` counts, retained the same span and reported zero Level/P11 Health issues.
+
+The runner emitted `status=PASS`, `level_lifecycle_qualified=true` and `p11_qualified=true`, then verified zero BricsCAD processes, removal of transient scripts/private restore copy/sidecar/lock/backup files, restoration of every process environment variable and exact restoration of the disposable drawing to SHA-256 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`. Only sanitized markers and metadata were retained outside the repository.
+
+This is a bounded `LOCAL_PASS` for one representative GlassWall/Curtain Level lifecycle row. It does not establish complete-family dual-unit lifecycle behavior, multi-DWG isolation, representative private-DWG support or customer-release readiness. `production_local003_qualified=false`; LOCAL-003 remains `IN_PROGRESS / PENDING_LOCAL`, and no GitHub Actions were run.
 
 ## Required follow-on interactive matrix
 

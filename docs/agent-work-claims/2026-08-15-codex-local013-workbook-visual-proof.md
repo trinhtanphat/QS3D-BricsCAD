@@ -1,0 +1,52 @@
+# Work claim — LOCAL-013 exact-current workbook visual proof
+
+- Status: `BLOCKED`
+- Agent: `codex-local-019ff0c5` (`/root`, local Windows + licensed BricsCAD V25 agent / local003 role)
+- Registered: `2026-08-15T09:17:26+07:00`
+- Baseline `origin/main`: `1eb5a757845ac1e978b3a9dccb33f439f9dfa46f`
+- Issue: `#1494`
+- Branch: `agent/local003/local013-workbook-visual-20260815`
+- Pull request: `#1496`
+- Priority: `LOCAL-013 / P0`
+
+## Reserved scope
+
+Close only the remaining exact-current workbook-rendering gap in the existing clean-room BRC public-capability and eligible-CAD B4D/ED2 round-trip lane. Because the earlier private runtime workbook was removed after its sanitized qualification, run the existing licensed BricsCAD V25 round-trip runner once against a fresh ordinary disposable `*.reference-copy.dwg`, preserving its positive locate plus four typed refusal matrix. Inspect the newly generated workbook read-only with the repository-approved spreadsheet artifact tool, scan key ranges/formulas and spreadsheet error tokens, render every sheet, and visually verify `CHI_TIET` and `TONG_HOP`.
+
+## Expected surfaces
+
+- Gitignored private runtime material under one fresh local artifact root only.
+- Existing `scripts/test-bricscad-v25-brc-quantity-roundtrip.ps1` without modification.
+- `docs/LOCAL-AGENT-INBOX.md` and this claim for sanitized exact-SHA evidence and close-out.
+
+## Excluded scope
+
+- No product source, test, script, workbook-format, quantity-formula or resolver changes.
+- No proprietary BLT/BRC source, binary or internal API inspection, and no inference from opaque proxy geometry.
+- No modification of any owner/reference original; no private DWG/workbook/path or raw Handle list may be committed.
+- No LOCAL-003/004, release/signing/installer, V26 or GitHub Actions work.
+- No merge or direct write to `main`; this session stops at its pushed task branch and PR.
+
+## Validation plan
+
+- Refresh current `origin/main`, require a clean exact pushed task SHA, and verify zero BricsCAD processes before launch.
+- Resolve the previously authorized reference only through existing local history/evidence, create a new disposable copy, and verify reference/copy hashes remain stable.
+- Use the exact candidate adapter built from the pushed task SHA and require the existing runner's positive locate plus four typed refusals, PICKFIRST preservation and semantic non-mutation evidence.
+- Import the generated workbook read-only with the approved artifact tool, inspect both sheet structures/key ranges/formulas, scan for formula-error tokens, render every sheet, and visually inspect both render outputs.
+- Remove private runtime material and prove no sidecar, probe environment or BricsCAD process remains.
+- Commit only sanitized aggregate evidence and truthfully retain any unqualified product boundary.
+
+## Completion condition
+
+The newly generated exact-candidate workbook passes structural/formula-error inspection and both-sheet visual rendering, the existing licensed runtime matrix remains green, originals/copies are hash-stable, private artifacts and processes are cleaned, sanitized evidence is pushed on the task branch/PR, and `LOCAL-013` is updated without claiming opaque-proxy quantity parity.
+
+## Blocked record — 2026-08-15
+
+- The task branch was pushed and synchronized through `origin/main@de7aba1295abbc113cd548a6f86b8c6462172b2a`; exact runtime candidate `7e9c7886e1801226ade7dda34a501d71479bd761` passed the focused BRC round-trip preflight and the installed-reference V25 adapter build with `0 warnings / 0 errors`.
+- Exact-candidate assembly identity was verified before runtime: plugin ProductVersion ended in `7e9c7886e1801226ade7dda34a501d71479bd761` with SHA-256 `0C9DEFF8ECD1D80ABB1088988F739BBD7C6591D542A4C5F293BBFE62655A6390`; Core had the same revision with SHA-256 `4DAB56C92DCDA46157278564AE2705561BCA25E1FD3D75A3A7E267719141005E`.
+- The previously qualified drawing hash `7B5D54E620500564ADA20B8DDDE0FCA129E6A687644CE07D0BFB2B4A0D8B4B66` and its generated workbook are no longer present locally. The only two exact-name local references now hash to `B013A4B1F87E69A5249EB8C23422DDF7A6A0AC042A18CEB3D0D1186A11DA2372` and `B2B080D14E6AB0296BA72DDF0B3400BBF23B353D85F4EF235D0440DE3720334C`.
+- Fresh disposable copies of both current references failed closed on the exact runtime candidate with only the privacy-safe marker `status=FAIL`, `command=QS3DBRCROUNDTRIPPROBE`, `error_code=ROUNDTRIP_FAILED`; neither produced a workbook. A detached historical control at previously passing SHA `813c51ffe6b357c86a1e2a3c93d7f2d515c057b2` also built `0 warnings / 0 errors` and failed with the same marker on the older current reference.
+- Because the historical control also rejects the available changed reference, no current-source regression is inferred from these runs. Artifact-tool structural/formula inspection and both-sheet rendering remain `NOT_RUN` because no exact-current workbook exists.
+- Every disposable copy retained its before/after hash; no `.qsdb`, workbook, metadata, BricsCAD process or probe environment remained. Both private runtime roots were permanently removed after sanitized evidence capture; no original was modified.
+- Resume only after the owner provides/restores the previously qualified `7B5D54...` reference or another explicitly authorized BRC-containing reference that can produce the current B4D/ED2 workbook. Re-sync/build the newest exact pushed candidate, run one fresh disposable round-trip, then inspect and render every generated sheet with the approved artifact tool.
+- GitHub Actions were not dispatched, and this session did not edit product source, tests, scripts or workbook formulas.

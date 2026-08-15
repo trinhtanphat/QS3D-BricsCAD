@@ -206,9 +206,14 @@ namespace QS3D.Core.Documentation
             var id = Required(raw.Id, "schedule id", 80);
             var name = Required(raw.Name, "schedule name", 160);
             var title = Required(raw.Title, "schedule title", 160);
-            var categories = raw.Categories.Distinct().OrderBy(x => x.ToString(), StringComparer.Ordinal).ToArray();
+            var categories = raw.Categories.ToArray();
+            var uniqueCategories = new HashSet<ElementCategory>();
             foreach (var category in categories)
+            {
                 if (!Enum.IsDefined(typeof(ElementCategory), category)) throw new InvalidOperationException("Semantic schedule contains unsupported category " + category + ".");
+                if (!uniqueCategories.Add(category)) throw new InvalidOperationException("Semantic schedule contains duplicate category " + category + ".");
+            }
+            categories = uniqueCategories.OrderBy(x => x.ToString(), StringComparer.Ordinal).ToArray();
             var include = NormalizeIds(raw.IncludeElementIds, "include");
             var exclude = NormalizeIds(raw.ExcludeElementIds, "exclude");
             if (include.Intersect(exclude, StringComparer.OrdinalIgnoreCase).Any())
