@@ -40,10 +40,10 @@ namespace QS3D.Core.Domain
         public void Clear()
         {
             if (_items.Count == 0) return;
-            var hasReserved = _items.Keys.Any(ProjectMeasurementWorkItemMappingCodec.IsReservedKey);
+            var hasReserved = _items.Keys.Any(IsReservedKey);
             if (hasReserved)
             {
-                ProjectMeasurementWorkItemMappingCodec.Read(_items);
+                ValidateReserved(_items);
                 TouchReserved();
             }
             _items.Clear();
@@ -56,9 +56,9 @@ namespace QS3D.Core.Domain
         {
             var collection = (ICollection<KeyValuePair<string, string>>)_items;
             if (!collection.Contains(item)) return false;
-            if (ProjectMeasurementWorkItemMappingCodec.IsReservedKey(item.Key))
+            if (IsReservedKey(item.Key))
             {
-                ProjectMeasurementWorkItemMappingCodec.Read(_items);
+                ValidateReserved(_items);
                 TouchReserved();
             }
             return collection.Remove(item);
@@ -68,13 +68,14 @@ namespace QS3D.Core.Domain
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
         internal void AddOwned(string key, string value) => Set(key, value, true, false);
+        internal void SetOwned(string key, string value) => Set(key, value, false, false);
         internal bool RemoveOwned(string key) => Remove(key, false);
 
         internal void ClearReservedOwned()
         {
             var keys = _items.Keys.Where(ProjectMeasurementWorkItemMappingCodec.IsReservedKey).ToArray();
             if (keys.Length == 0) return;
-            ProjectMeasurementWorkItemMappingCodec.Read(_items);
+            ValidateReserved(_items);
             foreach (var key in keys) _items.Remove(key);
         }
 
@@ -90,7 +91,7 @@ namespace QS3D.Core.Domain
                 if (next.ContainsKey(item.Key)) throw new ArgumentException("Project metadata contains a duplicate key: " + item.Key + ".", nameof(values));
                 next.Add(item.Key, item.Value ?? string.Empty);
             }
-            ProjectMeasurementWorkItemMappingCodec.Read(next);
+            ValidateReserved(next);
             _items.Clear();
             foreach (var item in next) _items.Add(item.Key, item.Value);
         }
@@ -98,9 +99,9 @@ namespace QS3D.Core.Domain
         private bool Remove(string key, bool touchReserved)
         {
             if (!_items.ContainsKey(key)) return false;
-            if (ProjectMeasurementWorkItemMappingCodec.IsReservedKey(key))
+            if (IsReservedKey(key))
             {
-                ProjectMeasurementWorkItemMappingCodec.Read(_items);
+                ValidateReserved(_items);
                 if (touchReserved) TouchReserved();
             }
             return _items.Remove(key);
@@ -118,16 +119,27 @@ namespace QS3D.Core.Domain
             if (key == null) throw new ArgumentNullException(nameof(key));
             if (addOnly && _items.ContainsKey(key)) throw new ArgumentException("An item with the same key has already been added.", nameof(key));
             var normalizedValue = value ?? string.Empty;
-            var reserved = ProjectMeasurementWorkItemMappingCodec.IsReservedKey(key);
+            var reserved = IsReservedKey(key);
             if (reserved)
             {
                 var next = new Dictionary<string, string>(_items, StringComparer.OrdinalIgnoreCase);
                 next[key] = normalizedValue;
-                ProjectMeasurementWorkItemMappingCodec.Read(next);
+                ValidateReserved(next);
                 if (!addOnly && _items.TryGetValue(key, out var existing) && string.Equals(existing, normalizedValue, StringComparison.Ordinal)) return;
                 if (touchReserved) TouchReserved();
             }
             if (addOnly) _items.Add(key, normalizedValue); else _items[key] = normalizedValue;
+        }
+
+        private static bool IsReservedKey(string key)
+        {
+            return ProjectMeasurementWorkItemMappingCodec.IsReservedKey(key) || ProjectTbqWorkspaceCodec.IsReservedKey(key);
+        }
+
+        private static void ValidateReserved(IEnumerable<KeyValuePair<string, string>> metadata)
+        {
+            ProjectMeasurementWorkItemMappingCodec.Read(metadata);
+            ProjectTbqWorkspaceCodec.Read(metadata);
         }
 
         private static string RequirePublicKey(string key)
@@ -155,7 +167,7 @@ namespace QS3D.Core.Domain
 
         private void TouchReserved()
         {
-            var project = _project ?? throw new InvalidOperationException("Project metadata must be bound before reserved mapping metadata can be mutated.");
+            var project = _project ?? throw new InvalidOperationException("Project metadata must be bound before reserved metadata can be mutated.");
             project.Touch();
         }
     }
