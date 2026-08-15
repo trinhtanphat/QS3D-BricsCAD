@@ -421,7 +421,7 @@ namespace QS3D.BricsCAD.V25
 
             private static byte[] ComputeDigest(ProjectState project, string scratchRoot, string nonce, ProbeProgress? progress)
             {
-                var path = Path.Combine(scratchRoot, "sidecar-project-state-" + nonce + "-" + Guid.NewGuid().ToString("N") + ".qsdb");
+                var path = Path.Combine(scratchRoot, "sr-" + nonce.Substring(0, 8) + "-" + Guid.NewGuid().ToString("N") + ".qsdb");
                 try
                 {
                     if (progress != null) progress.Stage = "baseline_snapshot_detach";

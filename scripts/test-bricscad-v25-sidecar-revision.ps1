@@ -60,7 +60,7 @@ function Remove-PrivateProbeArtifacts {
         Remove-PrivateProbeFile -Path $privatePath
     }
 
-    $scratchPrefix = "sidecar-project-state-" + $Nonce + "-"
+    $scratchPrefix = "sr-" + $Nonce.Substring(0, 8) + "-"
     foreach ($item in @(Get-ChildItem -LiteralPath $ArtifactDir -File -Force -ErrorAction Stop)) {
         if (-not $item.Name.StartsWith($scratchPrefix, [StringComparison]::Ordinal)) { continue }
         if (-not ($item.Name.EndsWith(".qsdb", [StringComparison]::OrdinalIgnoreCase) -or
@@ -204,6 +204,12 @@ try {
     Require-Value -Marker $marker -Key "status" -Expected "PASS"
     Require-Value -Marker $marker -Key "nonce" -Expected $nonce
 
+    Stop-LaunchedProcess -Process $process
+    $process = $null
+    if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
+        throw "BricsCAD process cleanup could not be verified."
+    }
+
     $drawingHashAfter = (Get-FileHash -LiteralPath $drawingCopy -Algorithm SHA256).Hash.ToUpperInvariant()
     $fixtureHashAfter = (Get-FileHash -LiteralPath $FixtureDwg -Algorithm SHA256).Hash.ToUpperInvariant()
     if (-not [string]::Equals($drawingHashBefore, $drawingHashAfter, [StringComparison]::Ordinal) -or
@@ -211,12 +217,7 @@ try {
         throw "The disposable/reference DWG changed during the sidecar revision probe."
     }
 
-    Stop-LaunchedProcess -Process $process
-    $process = $null
     Remove-PrivateProbeArtifacts -ArtifactDir $ArtifactDir -ScriptPath $scriptPath -DrawingCopy $drawingCopy -Nonce $nonce
-    if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
-        throw "BricsCAD process cleanup could not be verified."
-    }
 
     [ordered]@{
         schema = 1
