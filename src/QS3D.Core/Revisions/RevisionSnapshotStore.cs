@@ -85,10 +85,14 @@ namespace QS3D.Core.Revisions
             var root = LoadDocument(path).Root ?? throw new InvalidDataException("Revision file has no root.");
             RevisionSnapshotXmlSchemaValidator.Validate(root);
             if (!string.Equals(root.Name.LocalName, "qs3dRevision", StringComparison.Ordinal)) throw new InvalidDataException("Invalid QS3D revision root.");
+            var schemaVersion = ReadSchemaVersion(root);
             var snapshot = new RevisionSnapshot
             {
                 Id = CanonicalRequired(root, "id", "revision id"),
-                CreatedUtc = Date(root.Attribute("createdUtc")?.Value)
+                CreatedUtc = Date(root.Attribute("createdUtc")?.Value),
+                ProjectId = schemaVersion == 2
+                    ? CanonicalRequired(root, "projectId", "revision project id")
+                    : string.Empty
             };
             foreach (var node in root.Element("elements")?.Elements("element") ?? Enumerable.Empty<XElement>())
             {
@@ -130,6 +134,39 @@ namespace QS3D.Core.Revisions
             }
             if (snapshot.Elements.GroupBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase).Any(x => x.Count() > 1)) throw new InvalidDataException("Revision contains duplicate element ids.");
             return snapshot;
+        }
+
+        private static int ReadSchemaVersion(XElement root)
+        {
+            var versionAttribute = root.Attribute("schemaVersion");
+            var projectIdAttribute = root.Attribute("projectId");
+            if (versionAttribute == null)
+            {
+                if (projectIdAttribute != null)
+                    throw new InvalidDataException("QS3D revision project identity requires schemaVersion=2.");
+                return 1;
+            }
+
+            var raw = versionAttribute.Value;
+            if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal) ||
+                !int.TryParse(raw, NumberStyles.None, CultureInfo.InvariantCulture, out var version))
+                throw new InvalidDataException("QS3D revision schemaVersion must be a canonical integer.");
+
+            if (version == 1)
+            {
+                if (projectIdAttribute != null)
+                    throw new InvalidDataException("QS3D revision schemaVersion=1 cannot contain projectId.");
+                return 1;
+            }
+
+            if (version == 2)
+            {
+                if (projectIdAttribute == null)
+                    throw new InvalidDataException("QS3D revision schemaVersion=2 requires projectId.");
+                return 2;
+            }
+
+            throw new InvalidDataException("Unsupported QS3D revision schemaVersion: " + raw + ".");
         }
 
         private static XDocument LoadDocument(string path)
@@ -193,8 +230,16 @@ namespace QS3D.Core.Revisions
             }
         }
 
-        private static XDocument Serialize(RevisionSnapshot snapshot) => new XDocument(
-            new XElement("qs3dRevision",
+        private static XDocument Serialize(RevisionSnapshot snapshot)
+        {
+            var root = new XElement("qs3dRevision");
+            if (!string.IsNullOrEmpty(snapshot.ProjectId))
+            {
+                root.Add(
+                    new XAttribute("schemaVersion", "2"),
+                    new XAttribute("projectId", snapshot.ProjectId));
+            }
+            root.Add(
                 new XAttribute("id", snapshot.Id ?? string.Empty),
                 new XAttribute("createdUtc", snapshot.CreatedUtc.ToString("O", CultureInfo.InvariantCulture)),
                 new XElement("elements", snapshot.Elements.OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase).Select(x =>
@@ -204,12 +249,15 @@ namespace QS3D.Core.Revisions
                         new XElement("properties", x.Properties.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase).Select(p => new XElement("p", new XAttribute("name", p.Key), new XAttribute("value", p.Value ?? string.Empty)))),
                         new XElement("quantities", x.Quantities.OrderBy(q => q.Key, StringComparer.OrdinalIgnoreCase).Select(q => new XElement("q", new XAttribute("name", q.Key), new XAttribute("value", Finite(q.Value).ToString("R", CultureInfo.InvariantCulture))))),
                         new XElement("sourceHandles", x.SourceHandles.OrderBy(h => h, StringComparer.OrdinalIgnoreCase).Select(h => new XElement("h", new XAttribute("value", h)))),
-                        new XElement("dependencies", x.Dependencies.OrderBy(d => d, StringComparer.OrdinalIgnoreCase).Select(d => new XElement("d", new XAttribute("value", d)))))))));
+                        new XElement("dependencies", x.Dependencies.OrderBy(d => d, StringComparer.OrdinalIgnoreCase).Select(d => new XElement("d", new XAttribute("value", d))))))));
+            return new XDocument(root);
+        }
 
         private static void ValidateSnapshot(RevisionSnapshot snapshot)
         {
             ValidateCanonicalRequired(snapshot.Id, "revision id");
             ValidateUtcTimestamp(snapshot.CreatedUtc, "revision CreatedUtc");
+            ValidateOptionalCanonicalValue(snapshot.ProjectId, "revision project id");
 
             var elementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in snapshot.Elements)
