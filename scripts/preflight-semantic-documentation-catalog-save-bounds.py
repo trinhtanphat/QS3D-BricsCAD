@@ -51,11 +51,17 @@ def main():
             return 1
 
     save = method_slice(source, "public void Save(", "public SemanticDocumentationCatalog Load")
-    first_touch = save.find("project.Touch();")
     view_materialize = save.find("MaterializeViews(views)")
     sheet_materialize = save.find("MaterializeSheets(sheets)")
-    if min(view_materialize, sheet_materialize, first_touch) < 0 or not (view_materialize < sheet_materialize < first_touch):
-        print("ERROR: documentation catalog bounded materialization must complete before persistence mutation.")
+    empty_mutation = save.find("project.Metadata.Remove(MetadataKey);", sheet_materialize)
+    normal_mutation = save.find("project.Metadata[MetadataKey] = payload;", empty_mutation + 1)
+    if min(view_materialize, sheet_materialize, empty_mutation, normal_mutation) < 0 or not (
+        view_materialize < sheet_materialize < empty_mutation < normal_mutation
+    ):
+        print("ERROR: documentation catalog bounded materialization must complete before either metadata persistence mutation.")
+        return 1
+    if "project.Touch();" in save:
+        print("ERROR: documentation catalog Save must not directly Touch before public metadata Set/Remove; the metadata dictionary owns revision advancement.")
         return 1
 
     smoke_tokens = [
@@ -77,7 +83,7 @@ def main():
         print("ERROR: documentation catalog save bound smoke is not module-registered.")
         return 1
 
-    print("PASS: SemanticDocumentationCatalogStore.Save bounds lazy view/sheet enumeration at the first item beyond the existing 10,000-item planner capacities before planner or project mutation.")
+    print("PASS: SemanticDocumentationCatalogStore.Save bounds lazy view/sheet enumeration before planner or public metadata persistence mutation without redundant direct project touches.")
     return 0
 
 
