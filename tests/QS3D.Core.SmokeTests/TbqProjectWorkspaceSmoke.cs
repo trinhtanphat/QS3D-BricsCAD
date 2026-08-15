@@ -73,6 +73,13 @@ namespace QS3D.Core.SmokeTests
             Equal(400m, current.BaseTotal, "TBQ base total");
             Equal(462m, current.PreviewAdjustment().AdjustedTotal, "TBQ adjusted total");
 
+            var beforePreviewVersion = project.ChangeVersion;
+            var alternativePreview = workspace.PreviewAdjustment(20m, 0m);
+            Equal(480m, alternativePreview.AdjustedTotal, "TBQ alternative preview total");
+            Equal(beforePreviewVersion, project.ChangeVersion, "TBQ preview must not mutate project");
+            Equal(10m, (workspace.Current ?? throw new InvalidOperationException()).AdjustmentRatioPercent, "TBQ preview must not replace adjustment ratio");
+            Equal(5m, (workspace.Current ?? throw new InvalidOperationException()).MarkupRatioPercent, "TBQ preview must not replace markup ratio");
+
             var trades = current.AnalyzeTrades();
             Equal(1, trades.Count, "TBQ trade row count");
             Equal("Structure", trades[0].TradeCode, "TBQ trade code");
@@ -81,7 +88,17 @@ namespace QS3D.Core.SmokeTests
 
             var buildUps = current.AnalyzeBuildUps();
             Equal(2, buildUps.Count, "TBQ adopted build-up count");
+            var mark = current.RateReferences.GetMark("R-CONC");
+            Equal(true, mark.UsedInBillItems, "TBQ rate mark bill references");
+            Equal(true, mark.UsedInUnitRates, "TBQ rate mark unit-rate references");
+            Equal(false, mark.IsUnused, "TBQ adopted rate must not be marked unused");
             Equal("A", current.RateReferences.GetReverseReferences("R-CONC", RateReferenceTargetKind.BillItem)[0], "TBQ reverse reference");
+
+            Equal("PROJECT", current.Library.LibraryId, "TBQ library id");
+            Equal(1, current.Library.Entries.Count, "TBQ library entry count");
+            Equal("A", current.Library.Entries[0].ItemCode, "TBQ library item code");
+            Equal("m3", current.Library.Entries[0].Unit, "TBQ library unit");
+            Equal(100m, current.Library.Entries[0].ReferenceUnitRate ?? -1m, "TBQ library reference rate");
         }
 
         private static void SnapshotRollback()
@@ -121,7 +138,12 @@ namespace QS3D.Core.SmokeTests
                 Equal(2, current.BillItems.Count, "TBQ QSDB bill item count");
                 Equal(2, current.BuildUpRates.Count, "TBQ QSDB build-up count");
                 Equal(3, current.RateReferences.Edges.Count, "TBQ QSDB reference count");
+                Equal(true, current.RateReferences.GetMark("R-CONC").UsedInBillItems, "TBQ QSDB bill reference mark");
+                Equal(true, current.RateReferences.GetMark("R-CONC").UsedInUnitRates, "TBQ QSDB unit-rate reference mark");
+                Equal("PROJECT", current.Library.LibraryId, "TBQ QSDB library id");
                 Equal(1, current.Library.Entries.Count, "TBQ QSDB library count");
+                Equal("A", current.Library.Entries[0].ItemCode, "TBQ QSDB library item code");
+                Equal(100m, current.Library.Entries[0].ReferenceUnitRate ?? -1m, "TBQ QSDB library reference rate");
             }
             finally
             {
