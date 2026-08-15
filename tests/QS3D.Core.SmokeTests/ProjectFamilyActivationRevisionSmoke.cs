@@ -69,7 +69,7 @@ namespace QS3D.Core.SmokeTests
             project.Metadata["ActiveFamilyId"] = "missing-family";
             SetChangeVersion(project, long.MaxValue);
 
-            Throws<InvalidOperationException>(() => ProjectFamilyActivationService.ClearIfMissing(project));
+            Throws<OverflowException>(() => ProjectFamilyActivationService.ClearIfMissing(project));
 
             Equal(long.MaxValue, project.ChangeVersion, "Revision-ceiling failure changed ChangeVersion.");
             True(project.Metadata.TryGetValue("ActiveFamilyId", out var value), "Revision-ceiling failure partially removed ActiveFamilyId.");
