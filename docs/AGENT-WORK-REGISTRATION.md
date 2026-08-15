@@ -27,6 +27,32 @@ A reservation should identify:
 
 `ACTIVE` and `BLOCKED` reservations remain owned until completed, released, superseded, or explicitly reassigned by the owner/coordinator.
 
+## Mandatory defect provenance before source-lane registration
+
+A reported bug/regression/error name is not sufficient evidence that the named source/test surface exists. Before a normal agent creates or adopts a **source-fix** reservation, it must run `docs/DEFECT-PROVENANCE-TRIAGE.md` and classify the report as:
+
+- `REPRODUCED`;
+- `SOURCE_PRESENT`;
+- `ENVIRONMENT_GATED`;
+- `EXTERNAL_REFERENCE`;
+- `SPEC_ONLY / MISSING_SURFACE`.
+
+The required fast path is:
+
+```text
+exact failure producer/log
+  -> exact current tree
+  -> smallest focused reproducer
+  -> history/refs only if needed
+  -> justified product-boundary sibling repo
+  -> docs/spec/handoff provenance
+  -> public web only when external provenance is plausible
+```
+
+Only `REPRODUCED`, `SOURCE_PRESENT`, or a known `ENVIRONMENT_GATED` defect surface authorizes a normal source-fix lane. `EXTERNAL_REFERENCE` may become a source lane only when the owner explicitly assigns it as a new implementation/specification task. `SPEC_ONLY / MISSING_SURFACE` must remain a provenance/blocker lane until the real source/test/artifact appears or the owner explicitly changes the task into implementation work.
+
+If an existing owner-created Issue already names a defect that cannot be found in the exact failure producer or expected source surfaces, preserve the Issue but update its provenance state rather than inventing a class/test/method to satisfy the wording. Record the exact repository/SHA, searched evidence boundary, and the specific missing artifact needed to resume safely.
+
 ## Strict lane non-interference — highest priority for normal agents
 
 A normal AI agent/chat session owns **only its assigned/reserved lane**. Work owned by another agent/session—including local agents—is out of scope unless the repository owner explicitly expands this session's role.
@@ -52,22 +78,23 @@ The only normal exception is a **minimal collision check** against visible reser
 
 1. Fetch/read current `origin/main` and record the exact SHA.
 2. Read `AGENTS.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, `CI_POLICY.md`, this file, and the Issue/claim/runbook for **this lane**.
-3. Perform only the minimal reservation/collision check needed to verify that this lane is not already owned; do not audit other agents' work.
-4. Choose a non-overlapping lane.
-5. Create or update a GitHub Issue to register the lane, unless an existing owner-created issue already uniquely identifies it.
-6. Create a dedicated branch from the latest valid baseline, normally:
+3. For a reported bug/regression/quoted failure, complete `docs/DEFECT-PROVENANCE-TRIAGE.md` **before** choosing or adopting a source-fix lane; if the result is `SPEC_ONLY / MISSING_SURFACE`, keep the work as provenance/blocker investigation instead of source mutation.
+4. Perform only the minimal reservation/collision check needed to verify that this lane is not already owned; do not audit other agents' work.
+5. Choose a non-overlapping lane whose scope matches the proven provenance state.
+6. Create or update a GitHub Issue to register the lane, unless an existing owner-created issue already uniquely identifies it.
+7. Create a dedicated branch from the latest valid baseline, normally:
 
    ```text
    agent/<agent-id>/<scope>
    ```
 
-7. Put every repository change for the task on that branch, including docs/Markdown/claims/chores.
-8. Implement only the reserved lane.
-9. Run relevant local/static/unit/smoke validation available to this lane.
-10. Push the task branch; when watched integration-relevant paths changed, the shared branch/PR CI should automatically validate the branch SHA.
-11. Re-fetch `origin/main`; if it moved, reconcile against current `main` safely without inspecting or overwriting another agent's unmerged work, then obtain fresh branch/PR CI evidence for the reconciled candidate when applicable.
-12. Open/update a PR targeting the intended integration branch or `main`. PR CI validates GitHub's merge candidate against that target when the watched paths apply.
-13. Stop before merge unless the owner explicitly authorized this session to merge/integrate.
+8. Put every repository change for the task on that branch, including docs/Markdown/claims/chores.
+9. Implement only the reserved lane.
+10. Run relevant local/static/unit/smoke validation available to this lane.
+11. Push the task branch; when watched integration-relevant paths changed, the shared branch/PR CI should automatically validate the branch SHA.
+12. Re-fetch `origin/main`; if it moved, reconcile against current `main` safely without inspecting or overwriting another agent's unmerged work, then obtain fresh branch/PR CI evidence for the reconciled candidate when applicable.
+13. Open/update a PR targeting the intended integration branch or `main`. PR CI validates GitHub's merge candidate against that target when the watched paths apply.
+14. Stop before merge unless the owner explicitly authorized this session to merge/integrate.
 
 A chat message, local patch, or unpushed branch is not a visible reservation. An Issue plus pushed task branch/PR is the preferred coordination surface.
 
