@@ -29,6 +29,8 @@ Local acceptance:
 
 PASS evidence: exact SHA/ProductVersion, process exit code, sanitized stdout/stderr summary, confirmation of no Windows Application Error dialog/process residue.
 
+Current local result (2026-08-15): `LOCAL_PASS / BOUNDED_ROW_1`. Exact committed/pushed candidate `9b25be9df47459f72acecfa96443d94204410f2f`, containing the #1634-equivalent source recovery, passed the four focused policy/containment/handoff guards and Release build with `0 warnings / 0 errors` on interactive Windows x64 using portable .NET SDK 8.0.423. Apphost ProductVersion was `1.0.0+9b25be9df47459f72acecfa96443d94204410f2f` with SHA-256 `C65D39BAD9BDBB8F61671478EDA47A182C16C1061F110C8E42E0CDD3E2192606`; Core ProductVersion was `0.1.0-preview.10045+9b25be9df47459f72acecfa96443d94204410f2f` with SHA-256 `82786A401B2315AD18783B92F476D998B55B02690E3A1EE98BC34D1D58D5E377`. A direct `QS3D.Core.SmokeTests.exe` process exited `0` in about 19.63 seconds with 30 stdout lines, one `ALL PASS`, zero failure tokens and empty stderr; no matching Application Error/.NET window, WerFault process, Application log event, timeout or process residue appeared. Controlled negative injection remains `NOT_RUN` because the existing repository exposes no approved external trigger; both containment guards passed and no injection code was added. Logs are ignored/local. This closes only Sheet row 1; overall `LOCAL-001` remains `IN_PROGRESS`.
+
 ## Row 2 — Direct Draw preserves current view and continues drawing
 
 Remote status: current-view preservation source guard is integrated.
