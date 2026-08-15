@@ -3,9 +3,9 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>QS3D.Core</AssemblyName>
     <RootNamespace>QS3D.Core</RootNamespace>
-    <Version>0.1.0-preview.10049</Version>
+    <Version>0.1.0-preview.10050</Version>
     <AssemblyVersion>0.1.0.0</AssemblyVersion>
-    <FileVersion>0.1.0.10049</FileVersion>
-    <InformationalVersion>0.1.0-preview.10049</InformationalVersion>
+    <FileVersion>0.1.0.10050</FileVersion>
+    <InformationalVersion>0.1.0-preview.10050</InformationalVersion>
   </PropertyGroup>
 </Project>
