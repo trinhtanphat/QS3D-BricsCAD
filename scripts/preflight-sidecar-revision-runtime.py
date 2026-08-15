@@ -35,7 +35,8 @@ if COMMAND.is_file():
         'path + ".lock"',
         '"error_code=" + errorCode',
         '"stage=" + SafeFailureStage(stage)',
-        'FailureStages.Contains(stage ?? string.Empty) ? stage : "unknown"',
+        'var candidate = stage ?? string.Empty;',
+        'FailureStages.Contains(candidate) ? candidate : "unknown"',
     ):
         if token not in text:
             errors.append("SidecarRevisionProbeCommands missing runtime/privacy token: " + token)

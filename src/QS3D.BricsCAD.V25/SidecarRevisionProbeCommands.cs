@@ -325,8 +325,11 @@ namespace QS3D.BricsCAD.V25
             catch { }
         }
 
-        private static string SafeFailureStage(string stage) =>
-            FailureStages.Contains(stage ?? string.Empty) ? stage : "unknown";
+        private static string SafeFailureStage(string? stage)
+        {
+            var candidate = stage ?? string.Empty;
+            return FailureStages.Contains(candidate) ? candidate : "unknown";
+        }
 
         private static void WriteMarkerAtomic(string path, IEnumerable<string> lines)
         {
