@@ -395,7 +395,9 @@ namespace QS3D.BricsCAD.V25.UI
                     throw new InvalidOperationException("Không resolve được CAD object hiện hành từ Handle đã xác thực của Tường.");
 
                 SetStatus("Bám 3D • " + trigger + ": đã chọn " + count + " đối tượng CAD cho " + displayedView.ElementId + ".");
-                _document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
+                // EnsureCurrentProject already requires this document to be active. Reactivating it here can
+                // clear the implied selection before QS3DZOOMSELECTED consumes it.
+                _document.SendStringToExecute("QS3DZOOMSELECTED ", false, false, false);
             }
             catch (Exception ex)
             {
