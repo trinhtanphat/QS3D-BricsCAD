@@ -174,6 +174,7 @@ namespace QS3D.BricsCAD.V25
                     new TypedValue((int)DxfCode.ExtendedDataAsciiString, _nextRevision)))
                 {
                     EnsureRegApp(_database, _transaction);
+                    _modelSpace.DisableUndoRecording(false);
                     _modelSpace.XData = marker;
                 }
             }

@@ -67,6 +67,7 @@ for token in (
     "targetEntry.Snapshot.Restore(project);",
     "restoreRollback.Restore(project);",
     "modelSpace.GetXDataForApplication(RegAppName)",
+    "_modelSpace.DisableUndoRecording(false);",
     "modelSpace.XData = marker",
     "OpenModelSpace(document.Database, transaction, OpenMode.ForWrite)",
     "MaxSnapshotsPerDocument = 128",
@@ -260,6 +261,14 @@ else:
         errors.append("BeginTransition must not pair the before snapshot with a live post-mutation project stamp")
     if "modelSpace.XData = marker" not in stage_body or "_stagedEntries = stagedEntries;" not in stage_body:
         errors.append("native marker must be written only after the private shadow history is fully staged")
+    enable_undo = stage_body.find("_modelSpace.DisableUndoRecording(false);")
+    marker_write = stage_body.find("_modelSpace.XData = marker;", enable_undo)
+    if min(enable_undo, marker_write) < 0 or stage_body[
+        enable_undo + len("_modelSpace.DisableUndoRecording(false);"):marker_write
+    ].strip():
+        errors.append("the already-open ModelSpace BTR must enable native Undo recording immediately before revision XData assignment")
+    if coordinator.count(".DisableUndoRecording(") != 1 or "DisableUndoRecording" in begin_body:
+        errors.append("explicit Undo recording must remain isolated to the staged ModelSpace revision marker write")
     if "modelSpace.XData = marker" in begin_body or "EnsureRegApp" in begin_body:
         errors.append("BeginTransition must not mutate the native marker before fallible reconcile work completes")
     if "_history.Publish(_stagedEntries, _nextRevision);" not in confirm_body:
