@@ -6,36 +6,17 @@ This repository is expected to have multiple agents working concurrently. Every 
 
 `docs/MAIN-WRITE-AUTHORIZATION.md` is authoritative for who may change `main`.
 
-**Default:** every normal AI agent/chat session treats `origin/main` as read-only.
+**Default:** every normal AI agent/chat session treats `origin/main` as read-only. Source, tests, scripts, workflows, docs, Markdown, claims, handoffs, status files and chores all go through a dedicated task branch/PR.
 
-The following requests do **not** grant permission to push or merge to `main` by themselves:
+Requests such as `fix bug`, `update code`, `implement all`, `continue all`, `commit`, `commit push git`, `review and fix`, `update docs`, `chore`, `run CI`, or `fix CI` do not by themselves grant permission to push or merge to `main`.
 
-- `fix bug`
-- `update code`
-- `implement all`
-- `continue all`
-- `commit`
-- `commit push git`
-- `review and fix`
-- `update docs`
-- `update md`
-- `chore`
-- `run CI`
-- `fix CI`
-
-A session may change `main` only when the repository owner explicitly grants a merge/integration role for the named PR/batch/task, for example `merge all về main`, `bạn là integration coordinator`, or `cho phép merge PR này vào main`.
-
-Authorization is scope-specific and does not automatically carry forward.
-
-There is **no docs/Markdown/chore exception**. Source, tests, scripts, workflows, docs, Markdown, claims, handoffs, status files and chores all go to a dedicated task branch/PR. Normal agents must not use direct contents writes, ref updates, merge APIs, force pushes, or equivalent operations against `main`.
+A session may change `main` only when the repository owner explicitly grants a merge/integration role for the named PR/batch/task. Authorization is scope-specific and does not automatically carry forward.
 
 ## Locked product form: BricsCAD plugin
 
 QS3D is a **BricsCAD V25 + V26 Windows x64 hosted plugin**, not a standalone CAD desktop executable. A matching licensed BricsCAD host is required at runtime; the native BricsCAD viewport/database/editor remain the CAD host.
 
-V25 loads the `QS3D.BricsCAD.V25` Library/DLL built for `net48`; V26 loads the `QS3D.BricsCAD.V26` Library/DLL built for `net8.0-windows`. Each host-major assembly is loaded by the matching BricsCAD host through DemandLoad or `NETLOAD` and must never be relabeled across majors.
-
-`BLT-like`, `BLT-style`, `BLT3D-familiar`, “giống BLT” and similar wording refer to clean-room workflow/UX familiarity only. Do not reinterpret them as a requirement for `QS3D.exe` or a QS3D-owned CAD engine.
+V25 loads `QS3D.BricsCAD.V25` built for `net48`; V26 loads `QS3D.BricsCAD.V26` built for `net8.0-windows`. Each host-major assembly is loaded only by the matching BricsCAD host through DemandLoad or `NETLOAD` and must never be relabeled across majors.
 
 `docs/PRODUCT-BOUNDARY.md` is authoritative unless the owner explicitly changes the product boundary.
 
@@ -47,203 +28,101 @@ Before substantive work, read:
 2. `docs/MAIN-WRITE-AUTHORIZATION.md`;
 3. `docs/PRODUCT-BOUNDARY.md`;
 4. `CI_POLICY.md`;
-5. fetch/read the latest `origin/main` and record its exact SHA;
+5. latest `origin/main` and record its exact SHA;
 6. `docs/AGENT-WORK-REGISTRATION.md`;
-7. relevant open Issues/PRs plus `ACTIVE`/`BLOCKED` historical claims under `docs/agent-work-claims/`;
+7. relevant open Issues/PRs plus `ACTIVE`/`BLOCKED` claims;
 8. `docs/REMOTE-AGENT-SCOPE.md`;
-9. the newest current handoff/status docs relevant to the task;
+9. current handoff/status documents relevant to the task;
 10. `docs/LOCAL-AGENT-INBOX.md` for LOCAL_ONLY work;
-11. the exact feature/runbook documents required by the assigned lane.
+11. exact feature/runbook documents required by the lane.
 
-Current source wins over stale historical handoffs for implementation truth. `docs/LOCAL-AGENT-INBOX.md` is the live LOCAL_ONLY priority index when older local documents disagree on status/priority.
+Current source wins over stale historical handoffs for implementation truth.
 
-## Mandatory work registration
+## Mandatory task registration and branch discipline
 
-Before implementation, every normal agent must:
+Before implementation, every normal agent must refresh `origin/main`, inspect overlapping Issues/PRs/claims, register the lane with an Issue when practical, and create a dedicated branch normally named `agent/<agent-id>/<scope>`.
 
-1. fetch/read current `origin/main`;
-2. inspect relevant Issues, PRs, branches and active/blocking claims;
-3. choose a non-overlapping lane;
-4. create/update a GitHub Issue for the lane when practical, unless an existing owner-created issue already uniquely identifies the task;
-5. create a dedicated branch from the latest valid baseline, normally `agent/<agent-id>/<scope>`;
-6. put **all** task changes on that branch, including source, tests, scripts, workflows, docs, Markdown, claim/handoff/status files and chores;
-7. validate, commit and push only that branch;
-8. open/update a PR;
-9. stop before merge unless this session has explicit owner merge/integration authorization.
+Use `recovery/<agent-id>/<scope>` for a dedicated CI-repair lane and `integration/<batch-id>` for an owner-authorized multi-agent combined candidate.
 
-Historical Markdown work claims may still be used, but new/updated claim files belong on the task branch/PR. A claim does not need to be pushed to `main` before implementation starts.
+All task changes remain on the task branch. Never force-push/reset `main`, silently overwrite concurrent work, use direct contents/ref writes to bypass the PR path, or merge your own PR without explicit owner authorization.
 
-An Issue plus pushed task branch/PR is the preferred visible coordination surface.
+Refresh `main` before final task-branch push/PR handoff and reconcile relevant concurrent changes deliberately.
 
-## Mandatory sync discipline
+## Mandatory CI-before-stop rule
 
-Before starting a code or documentation change:
+Every normal task must receive automatic remote validation for its **exact current branch/PR head SHA** through `.github/workflows/ci.yml`.
 
-1. refresh/fetch the latest `origin/main`;
-2. inspect relevant recent commits and concurrent PRs;
-3. base work on the current valid task-branch baseline, not on an old conversation snapshot.
+The workflow runs automatically for pushes to `agent/**`, `recovery/**`, `integration/**`, pull requests targeting `main`, and pushes to `main`.
 
-Before each branch push and before PR handoff:
+A normal agent **must not report the task completed, mark the reservation `COMPLETED`, or stop as completed** until the required CI run for the exact current head SHA is `success`. A green run for an older SHA, another branch, another PR, or `main` does not count.
 
-1. refresh `origin/main` again;
-2. verify whether relevant concurrent work moved;
-3. if needed, rebase/reapply/merge safely on the task branch without discarding newer work;
-4. review the final diff so it contains only intended changes.
+If CI fails, the task remains active: diagnose the exact failing run, fix the real defect on the same task branch, push a new SHA, and wait for the replacement exact-SHA CI result. Do not weaken guards/tests merely to make CI green.
 
-Never force-push `main`, reset it backwards, silently overwrite another agent's work, or use `ours`/`theirs` blindly to hide semantic conflicts.
+If native/licensed BricsCAD, UI, private-DWG, signing or other LOCAL_ONLY evidence is required, remote CI success is necessary but not sufficient. The task remains `BLOCKED`/handed off until the required environment-specific evidence exists; remote agents must never claim native/runtime PASS from source/Core CI.
 
-## Request-scoped commit batching
-
-The repository owner prefers coherent commits scoped to the owner request/lane rather than a stream of tiny file-by-file commits.
-
-- Treat one owner request or `continue all` lane as the default commit unit on the task branch.
-- Accumulate related implementation, regression/static guards, docs and handoff updates into coherent commits.
-- Split only when parts are genuinely independent or separately risky/revertable.
-- If another agent lands overlapping work, review and reuse the winning implementation instead of committing a duplicate.
-- Refresh `main` before final branch handoff/PR update.
+Issues themselves do not run builds because they have no source tree. The Issue must reference the branch/PR SHA whose CI evidence proves the task.
 
 ## Normal agent stopping point
 
-For a normal agent, the successful endpoint is generally:
+The successful endpoint for a normal source-safe task is:
 
 ```text
 latest main read
   -> issue/reservation checked
   -> agent/<agent-id>/<scope>
   -> implementation/docs/chore commits
-  -> validation
+  -> local/static validation
   -> branch pushed
   -> PR opened/updated
+  -> exact head SHA recorded
+  -> automatic task CI SUCCESS for that exact SHA
   -> STOP BEFORE MERGE
 ```
 
-An open PR, pushed branch, passing branch tests or completed task does not authorize merging it.
+A pushed branch or open PR without exact-head green CI is not a completed task. Passing CI never grants merge permission.
 
 ## Owner-authorized integration coordinator
 
-Only an agent/session explicitly authorized by the owner may integrate/merge a named batch into `main`.
+Only a session explicitly authorized by the owner may integrate/merge a named batch into `main`.
 
-For multi-agent work, prefer:
+For multi-agent work, prefer `integration/<batch-id>`. The coordinator must refresh current `origin/main`, identify exact participating Issues/PRs/branches, integrate all required commits without silently dropping work, resolve semantic/API/test conflicts deliberately, verify no required task remains only off-candidate, require automatic CI `success` for the exact integration head SHA, inspect for accidental reversions/duplicate implementations, merge to `main` only within explicit authorization, then fetch `main` again and record the exact resulting SHA.
 
-```text
-integration/<batch-id>
-```
+After the landing, exact-main CI must also be green for the final current `main` SHA before reporting `ALL MERGED TO MAIN`.
 
-The authorized coordinator must:
+## Definition of ALL MERGED TO MAIN
 
-1. refresh current `origin/main`;
-2. identify the exact authorized participating Issues/PRs/branches;
-3. integrate all required commits without silently dropping work;
-4. resolve semantic/API/test conflicts deliberately;
-5. verify no required task remains only on an agent branch/unmerged PR;
-6. run relevant combined-tree remote-safe validation;
-7. inspect the combined diff for accidental reversions and duplicate implementations;
-8. freeze and record the integration candidate SHA;
-9. merge to `main` only within explicit owner authorization;
-10. fetch `main` again and record the exact resulting SHA.
+State **ALL MERGED TO MAIN** only after an authorized integration reviewer verifies against current `main` that every required Issue/reservation is terminal or explicitly excluded/superseded, every required change is represented in current `main`, no required work exists only off-main, the combined tree has no known merge/semantic collisions, required remote-safe CI passed for the exact current `main` SHA, environment-gated evidence is explicitly classified, and the exact current `main` SHA is recorded.
 
-Authorization to merge one batch is not standing authorization for later batches.
+Branch deletion, Issue/PR UI state or stale CI is not sufficient proof.
 
-## Definition of `ALL MERGED TO MAIN`
+## Local-machine agents
 
-State **ALL MERGED TO MAIN** only after an authorized integration reviewer verifies against current `main` that:
+Agents with real/local access should prioritize work that genuinely requires licensed BricsCAD V25/V26 runtime access, real `NETLOAD`/DemandLoad, Windows desktop/UI interaction, proprietary dependencies, private DWG fixtures, signing credentials or machine-specific behavior.
 
-- every required Issue/reservation is terminal or explicitly excluded/superseded;
-- every required implementation/docs commit is represented in current `main`;
-- no required work exists only on an agent branch, local worktree, stash, draft patch or unmerged PR;
-- current `main` was refreshed after the authorized landing;
-- the combined tree contains the intended behavior without unresolved merge markers, accidental reversions, duplicate competing implementations or known semantic/API/test collisions;
-- required remote-safe validation passed or environment-gated evidence is explicitly handed off;
-- the exact current `main` SHA is recorded.
+`agent/local002`, `agent/local003` and successor sessions in those roles are restricted to LOCAL_ONLY/local-agent-only work unless the owner explicitly assigns otherwise. They must not take broad remote-safe source/CI work from ordinary agents, must not fabricate source fixes solely to satisfy local failures, and must not promote local evidence across host majors.
 
-Branch deletion, Issue state, PR UI state or stale CI is not sufficient proof.
+If local validation exposes a repository-safe source bug, hand it to a normal source agent with the smallest sanitized evidence; the local worker may later resume qualification against the corrected exact SHA.
 
-## Divide work by execution capability
+## Remote / hybrid online agents
 
-### Local-machine agents
+Remote/hybrid agents handle repository-safe source review, implementation, Core/domain/persistence/reporting/test code, deterministic regressions, static analysis, docs/planning, workflow/policy maintenance, CI repair and integration preparation.
 
-Agents with real/local access should prioritize work that genuinely requires that environment, such as:
-
-- licensed BricsCAD V25/V26 runtime access;
-- real `NETLOAD` / DemandLoad and interactive validation;
-- Windows desktop/UI interaction and screenshots;
-- proprietary SDK/runtime dependencies unavailable in GitHub;
-- private DWG fixtures/assets;
-- machine-specific crashes, DPI/layout behavior, file locks, signing credentials or hardware-specific behavior.
-
-### Hard scope lock for `agent/local002` / `agent/local003`
-
-The two local workers and successor sessions in those roles are restricted to **LOCAL_ONLY / local-agent-only** work.
-
-They may implement/qualify only an item explicitly marked `LOCAL_ONLY`, `PENDING_LOCAL`, assigned in `docs/LOCAL-AGENT-INBOX.md`, assigned in a relevant reservation, or directly assigned by the owner as that exact local task.
-
-Even for a LOCAL_ONLY item, local workers may edit implementation code only when the code change genuinely requires local/proprietary BricsCAD/AutoCAD/BLT3D/private-DWG/UI/runtime resources that remote agents cannot reproduce from repository source alone.
-
-General source-safe bug fixing, tests, docs, refactors, source guards, packaging logic and ordinary adapter fixes belong to non-local agents unless the owner explicitly assigns otherwise.
-
-If local validation discovers a normal source bug, capture the smallest sanitized evidence, hand off the defect, and stop coding at that boundary. A remote/source agent fixes it; the local worker may later resume LOCAL_ONLY validation against the new exact SHA.
-
-Local workers must not:
-
-- perform broad general bug hunting or opportunistic repository cleanup;
-- treat GitHub Actions failures as their default backlog;
-- dispatch/re-run/cancel GitHub Actions unless the owner explicitly assigns that exact CI operation to that local worker;
-- broaden scope into remote-safe work when no compatible LOCAL_ONLY item exists.
-
-Start permitted local passes from `docs/LOCAL-AGENT-INBOX.md`, then follow the linked exact runbook such as `docs/LOCAL-V25-QUALIFICATION.md` or the relevant preview/runtime document. Keep raw/private evidence under gitignored `artifacts/` and commit only sanitized summaries when allowed.
-
-### Remote / hybrid online agents
-
-Remote/hybrid agents handle repository-safe work including:
-
-- source review and implementation;
-- core/domain/persistence/reporting/test code;
-- static analysis and code-quality fixes;
-- general bug fixing, including source defects reported by local agents;
-- Markdown/documentation/planning;
-- workflow/policy review without unauthorized Actions dispatch;
-- Git history inspection and multi-agent integration preparation;
-- scripts/tests/probes for later local execution.
-
-`docs/REMOTE-AGENT-SCOPE.md` is authoritative for remote backlog filtering. Remote agents must skip execution gates already classified LOCAL_ONLY rather than repeatedly rechecking them.
-
-Remote agents may strengthen source contracts, deterministic tests and local probes around LOCAL_ONLY areas. If source changes alter a required local scenario, update `docs/LOCAL-AGENT-INBOX.md` **on the same task branch/PR** with the minimum exact local evidence requirement.
-
-Remote/static evidence must never be reported as `LOCAL_PASS`.
+Remote agents may strengthen source contracts and probes around LOCAL_ONLY areas but must never report remote/static evidence as licensed BricsCAD runtime PASS.
 
 ## Unavailable-work handoff
 
-If an agent cannot complete/prove work because it lacks local licensed runtime, private fixtures, Windows UI, signing credentials, hardware or another non-repository resource:
-
-1. classify the blocked part as LOCAL_ONLY when appropriate;
-2. update the matching `docs/LOCAL-AGENT-INBOX.md` item on the task branch/PR with the exact scenario, prerequisite, expected result and minimum evidence;
-3. reference existing detailed runbooks instead of creating competing live queues;
-4. leave source-safe implementation/tests/probes ready when possible;
-5. continue other remote-safe work instead of repeatedly retrying the same unavailable gate.
-
-Lack of local capability is a handoff condition, not a reason for repeated remote attempts.
+If required proof depends on unavailable licensed runtime, private fixtures, Windows UI, signing credentials, hardware or another non-repository resource, classify the gate accurately, update the relevant LOCAL_ONLY handoff/runbook on the task branch/PR, leave repository-safe implementation/tests ready where possible, and keep the task `BLOCKED` rather than falsely completing it.
 
 ## GitHub Actions / release
 
 Follow `CI_POLICY.md` strictly.
 
-- Workflows are manual-only by default.
-- The sole owner-approved automatic exception is `.github/workflows/dispatch-v25-cloud-after-main-integration.yml` after an authorized integration-relevant `main` landing.
-- Normal task authorization does not authorize manual workflow dispatch/re-run/cancel.
-- Manual CI authorization does not imply `main` merge authorization.
-- `main` merge authorization does not imply unrelated manual CI/release authorization.
-- Ordinary docs/Markdown-only landings outside the dispatcher's watched paths must not trigger the V25 cloud release path.
-- Changed paths, not `docs:`/`chore:` commit-message prefixes, determine automatic-dispatch eligibility.
-
-For approved release operations, follow the applicable manual build/release runbook and resolve the exact commit/tag before dispatching.
+- `.github/workflows/ci.yml` is the automatic per-agent/task validation workflow and must stay read-only.
+- `.github/workflows/release-v25-cloud.yml` is **not** agent CI. It is a confirmed main-only preview release workflow with write permission.
+- `.github/workflows/dispatch-v25-cloud-after-main-integration.yml` is the sole approved automatic release dispatcher and runs only after eligible `main` integration landings.
+- BricsCAD V25/V26 native/runtime and other release workflows remain capability-specific/manual lanes unless the owner explicitly changes policy.
+- CI success does not imply merge authorization; merge authorization does not imply unrelated release authorization.
 
 ## GitHub hard protection
 
-Repository policy should be backed by GitHub branch protection/rulesets:
-
-- protect `main` from force-push/deletion;
-- require PR-based changes for normal writers;
-- keep owner/admin bypass narrow and deliberate;
-- require stable status checks when appropriate.
-
-Until GitHub reports `main` protected/ruleset-enforced, these repository rules remain mandatory but cannot physically stop a credential with write permission from bypassing them. Track hard-enforcement work in the repository governance issue for `main` protection.
+Repository policy should be backed by GitHub branch protection/rulesets where available: protect `main` from force-push/deletion, require PR-based changes for normal writers, require the stable automatic task-CI status on PRs to `main`, and keep owner/admin bypass narrow and deliberate.
