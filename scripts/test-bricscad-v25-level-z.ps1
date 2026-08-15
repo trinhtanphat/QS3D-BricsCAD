@@ -279,6 +279,7 @@ try {
     $env:QS3D_LEVEL_Z_SOURCE_SHA = $ExpectedSourceSha
     $script = @(
         "FILEDIA", "0",
+        "_.OPEN", ('"' + $DrawingCopy + '"'),
         "CMDECHO", "1",
         "TILEMODE", "1",
         "INSUNITS", "4",
@@ -290,7 +291,7 @@ try {
     Set-Content -LiteralPath $scriptPath -Value $script -Encoding ASCII
 
     $argumentParts = New-Object System.Collections.Generic.List[string]
-    $argumentParts.Add('"' + $DrawingCopy + '"')
+    $argumentParts.Add('/Automation')
     $argumentParts.Add('/P')
     $argumentParts.Add('"' + $Profile + '"')
     $argumentParts.Add('/B')
