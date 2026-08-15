@@ -110,6 +110,10 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 try { var area = Math.Abs(polyline.Area); if (!double.IsNaN(area) && !double.IsInfinity(area)) snapshot.AreaDrawingUnitsSquared = area; } catch { }
             }
+            if (entity is Circle circle)
+            {
+                try { var area = Math.PI * circle.Radius * circle.Radius; if (!double.IsNaN(area) && !double.IsInfinity(area) && area >= 0d) snapshot.AreaDrawingUnitsSquared = area; } catch { }
+            }
             if (entity is Region region)
             {
                 try { var area = Math.Abs(region.Area); if (!double.IsNaN(area) && !double.IsInfinity(area)) snapshot.AreaDrawingUnitsSquared = area; } catch { }

@@ -124,6 +124,7 @@ namespace QS3D.Core.Domain
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Property name is required.", nameof(name));
             var key = name.Trim();
             if (key.Any(char.IsControl)) throw new ArgumentException("Property name cannot contain control characters.", nameof(name));
+            key = RequireXmlText(key, nameof(name), "Property name");
             var normalized = RequireXmlText(value ?? string.Empty, nameof(value), "Property value");
             if (Properties.TryGetValue(key, out var existing) && string.Equals(existing, normalized, StringComparison.Ordinal)) return;
             Properties[key] = normalized;
@@ -154,6 +155,7 @@ namespace QS3D.Core.Domain
             value = value == 0d ? 0d : value;
             var key = name.Trim();
             if (key.Any(char.IsControl)) throw new ArgumentException("Quantity name cannot contain control characters.", nameof(name));
+            key = RequireXmlText(key, nameof(name), "Quantity name");
             if (Quantities.TryGetValue(key, out var existing) && existing.Equals(value)) return;
             Quantities[key] = value;
             MarkDirtyCore(ElementDirtyFlags.Quantity, false);
