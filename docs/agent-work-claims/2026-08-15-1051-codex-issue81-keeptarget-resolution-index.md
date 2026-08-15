@@ -6,7 +6,9 @@
 - Baseline `main`: `c5fbe4af9fb98383679f279e33d9b93eb2ec737d`
 - Issue: #81
 - Claim branch: `agent/codex/issue81-keeptarget-resolution-index-claim-20260815`
-- Implementation branch: TBD after claim integration
+- Claim merge: `79f9be8c0ed018a93dd4eedb516b4d5f2580c930`
+- Implementation baseline `main`: `f10c1fed5af58e2a0f3be1d63637c190696eb605`
+- Implementation branch: `agent/codex/issue81-keeptarget-resolution-index-impl-20260815`
 
 ## Defect
 
@@ -32,3 +34,12 @@ Do not modify V25/V26/native adapters, UI, licensed runtime evidence, LOCAL/priv
 - Run the full Core smoke executable.
 - Run the repository remote-safe preflight aggregate without dispatching or modifying GitHub Actions.
 - Refresh `origin/main`, re-audit collisions, inspect the final diff, push the task branch, and open an implementation PR; stop before merge.
+
+## Implementation branch evidence
+
+- Focused `preflight-interchange-keeptarget-resolution-index.py`: PASS.
+- `QS3D.Core` Release build: PASS, 0 warnings / 0 errors.
+- `QS3D.Core.SmokeTests` Release build: PASS, 0 warnings / 0 errors.
+- Full Core smoke executable: `ALL PASS`.
+- Aggregate remote-safe preflight: PASS, all 817 discovered gates.
+- No GitHub Actions, native/BricsCAD runtime, LOCAL/private data, release, or workflow operation was used.
