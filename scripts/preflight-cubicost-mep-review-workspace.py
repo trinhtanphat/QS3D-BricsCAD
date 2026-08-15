@@ -61,6 +61,7 @@ required = {
         "entity.GeometricExtents",
         "GetCurrentView()",
         "Matrix3d.PlaneToWorld(view.ViewDirection)",
+        ".TransformBy(worldToDisplay)",
         "view.CenterPoint",
         "view.Width",
         "view.Height",
@@ -91,7 +92,7 @@ for label in ("provider", "workspace", "zoom"):
         "AppendEntity",
         "AppendEntityToModelSpace",
         "Erase(",
-        "TransformBy(",
+        "entity.TransformBy(",
         "BooleanOperation(",
         "ProjectContextCoordinator.GetOrCreate",
         "ProjectContextCoordinator.SetCurrent",
@@ -102,7 +103,6 @@ for label in ("provider", "workspace", "zoom"):
         if forbidden in texts[label]:
             errors.append(f"{label}: forbidden native/project mutation or threading token {forbidden!r}")
 
-# The modeless workspace must not retain native document/object state in fields.
 for forbidden in (
     "private readonly Document",
     "private Document",
@@ -116,7 +116,6 @@ for forbidden in (
     if forbidden in texts["workspace"]:
         errors.append(f"workspace: forbidden retained native field {forbidden!r}")
 
-# Runtime recognition must be centralized instead of recreating independent defaults in commands.
 for label in ("takeoff", "exact", "highlight"):
     if "private static readonly MepRecognitionProfile RecognitionProfile = MepRecognitionProfiles.CreateDefault();" in texts[label]:
         errors.append(f"{label}: stale independent default recognition profile")
