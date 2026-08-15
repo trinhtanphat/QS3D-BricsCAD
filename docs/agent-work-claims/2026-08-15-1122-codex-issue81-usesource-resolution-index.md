@@ -6,7 +6,9 @@
 - Baseline `main`: `54b43af253a4b22565e41d0dece86f0ecf307d75`
 - Issue: #81
 - Claim branch: `agent/codex/issue81-usesource-resolution-index-claim-20260815`
-- Implementation branch: `agent/codex/issue81-usesource-resolution-index-impl-20260815` (planned after claim integration)
+- Claim merge: `82c19d8d51f0035425e29b7b1043d94760316b8f`
+- Implementation baseline `main`: `079e0e760cc0eac8704909ab042228641c703f4d`
+- Implementation branch: `agent/codex/issue81-usesource-resolution-index-impl-20260815`
 
 ## Defect
 
@@ -33,3 +35,13 @@ Do not modify the shared planner, KeepTarget importer, FieldMerge planner/import
 - Run the full Core smoke executable.
 - Run the repository remote-safe preflight aggregate without dispatching or modifying GitHub Actions.
 - Refresh `origin/main`, re-audit collisions, inspect the final diff, push the implementation branch, and open a PR; stop before merge and keep broad issue #81 open.
+
+## Implementation branch evidence
+
+- Focused `preflight-interchange-usesource-resolution-index.py`: PASS.
+- Existing UseSource-all, UseSource-semantic, import-resolution, and resolution-contract preflights: PASS.
+- `QS3D.Core` Release build: PASS, 0 warnings / 0 errors.
+- `QS3D.Core.SmokeTests` Release build: PASS, 0 warnings / 0 errors.
+- The full smoke executable is currently blocked before the UseSource registration by baseline `FloorGeneratedIdentityUnicodeSmoke.MalformedNamesAreRejected`: current `FloorDefinition` rejects the malformed name in its constructor, outside this branch diff, before the smoke's later exception assertion.
+- Aggregate remote-safe preflight includes and passes the new focused gate, then reports four current-baseline failures outside this branch diff: Direct Draw, Level native-host placement, drawing-identity touch order, and Floor/Zone mutation-integrity token checks.
+- No GitHub Actions, native/BricsCAD runtime, LOCAL/private data, release, or workflow operation was used.
