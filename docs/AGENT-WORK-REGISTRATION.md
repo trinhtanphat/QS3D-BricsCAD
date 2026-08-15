@@ -2,7 +2,7 @@
 
 **Owner rule:** normal AI agents/chat sessions treat `origin/main` as read-only. Every task—including source, tests, scripts, workflows, documentation, Markdown, claim/handoff/status and chores—must be done on a dedicated issue/branch/PR. Only an agent/session explicitly authorized by the repository owner as an integration/merge coordinator may change `main`.
 
-`docs/MAIN-WRITE-AUTHORIZATION.md` is authoritative for `main` write permission. This file is the canonical work-registration and batch-integration protocol. `CI_POLICY.md` is authoritative for CI behavior.
+`docs/MAIN-WRITE-AUTHORIZATION.md` is authoritative for `main` write permission. This file is the canonical work-registration and batch-integration protocol. `CI_POLICY.md` is authoritative for CI behavior. `docs/GITHUB-MAIN-PROTECTION.md` records the current hard-protection contract.
 
 ## Source of truth for reservations
 
@@ -64,12 +64,13 @@ The only normal exception is a **minimal collision check** against visible reser
 7. Put every repository change for the task on that branch, including docs/Markdown/claims/chores.
 8. Implement only the reserved lane.
 9. Run relevant local/static/unit/smoke validation available to this lane.
-10. Push the task branch; when watched integration-relevant paths changed, the shared branch/PR CI should automatically validate the branch SHA.
-11. Re-fetch `origin/main`; if it moved, reconcile against current `main` safely without inspecting or overwriting another agent's unmerged work, then obtain fresh branch/PR CI evidence for the reconciled candidate when applicable.
-12. Open/update a PR targeting the intended integration branch or `main`. PR CI validates GitHub's merge candidate against that target when the watched paths apply.
-13. Stop before merge unless the owner explicitly authorized this session to merge/integrate.
+10. Push the task branch. When watched integration-relevant paths changed, the shared branch CI must automatically validate the exact branch SHA.
+11. **Before opening a new PR for watched/integration-relevant work, wait for the exact current branch SHA to reach terminal branch-CI `SUCCESS`.** A PR or draft PR must not be used as the first CI attempt. If the branch run fails, fix it on the branch and obtain a new green run first.
+12. Re-fetch `origin/main`. If it moved, reconcile against current `main` safely without inspecting or overwriting another agent's unmerged work, push the reconciled branch, and obtain fresh branch-CI `SUCCESS` again before opening the PR.
+13. Open/update a PR targeting the intended integration branch or `main`. GitHub's PR CI and protected-main rules validate the merge candidate/freshness when applicable.
+14. Stop before merge unless the owner explicitly authorized this session to merge/integrate.
 
-A chat message, local patch, or unpushed branch is not a visible reservation. An Issue plus pushed task branch/PR is the preferred coordination surface.
+A chat message, local patch, or unpushed branch is not a visible reservation. An Issue plus pushed task branch is the preferred coordination surface before PR creation; after branch CI is green, the PR becomes the handoff/review surface.
 
 ## No implicit `main` authorization
 
@@ -92,7 +93,7 @@ A session may change `main` only after explicit owner authorization such as `mer
 
 Authorization is limited to the named PR/batch/task. It does not carry forward automatically to later work.
 
-Automatic CI is validation infrastructure, not merge authorization.
+Automatic CI is validation infrastructure, not merge authorization. GitHub ruleset eligibility is also not merge authorization.
 
 ## Branch discipline
 
@@ -105,8 +106,9 @@ Every normal agent must:
 5. never force-push or reset shared `main`;
 6. never update the `main` ref directly;
 7. never use the GitHub contents API against `main` for docs, claims, chores or code;
-8. never merge its own PR unless explicit owner merge authorization was granted;
-9. record its branch/commit/PR and actual validation evidence in the Issue or task handoff.
+8. for watched/integration-relevant work, obtain green branch CI on the exact current branch SHA before opening a new PR;
+9. never merge its own PR unless explicit owner merge authorization was granted;
+10. record its branch/commit/PR and actual validation evidence in the Issue or task handoff.
 
 A pushed branch, open PR, or green branch CI run is **not** `ALL MERGED TO MAIN`.
 
@@ -116,13 +118,30 @@ The repository uses one common `.github/workflows/ci.yml`; agents do not create 
 
 For watched integration-relevant paths:
 
-- push to `agent/**` validates the exact branch tree before merge;
-- a PR targeting `main` or `integration/**` validates GitHub's merge candidate against that target;
+- push to `agent/**` validates the exact branch tree and is the mandatory pre-PR gate;
+- a PR targeting `main` or `integration/**` validates GitHub's merge candidate against that target when the workflow applies;
 - push to `integration/**` validates the exact combined tree assembled by an authorized coordinator.
 
 Shared CI is non-publishing: it has read-only repository permission and must not create tags/releases, sign packages, dispatch release workflows, mutate Issues, or write `main`.
 
-A green agent branch does not prove multi-agent compatibility. A green PR merge candidate does not prove a later integration tree. Use each evidence class for the tree it actually tested.
+A green agent branch proves only the exact tested branch SHA. A green PR merge candidate proves only that merge candidate. A green integration branch proves only the combined integration tree. Use each evidence class for the tree it actually tested.
+
+The pre-PR rule does not mean the repository conceptually requires two arbitrary identical full runs. Branch CI is the isolated-candidate admission gate. PR CI / required checks are merge-candidate and freshness evidence. If `main` moves or the candidate tree changes, fresh applicable evidence is mandatory.
+
+## Active `main` hard protection
+
+GitHub ruleset `protectedMain` (ruleset ID `20890901`) is active on the default branch. The expected effective `main` rules are:
+
+- deletion protection;
+- non-fast-forward / force-push protection;
+- require pull request;
+- require status checks `preflight` and `core`;
+- strict required-status freshness;
+- empty bypass list.
+
+Repository Markdown cannot prove that an external GitHub setting is still active. When hard-protection state matters, verify GitHub's effective branch rules. If `main` loses protection, required checks, target matching, or unexpectedly gains a bypass actor, treat it as a governance defect rather than silently continuing as if protection still existed.
+
+The hard ruleset prevents many invalid writes, but it does not decide which agent is authorized by the owner to merge. The owner-authorization policy remains authoritative.
 
 ## Documentation, Markdown, claims and chores
 
@@ -139,7 +158,7 @@ release-note preparation
 non-functional chores
 ```
 
-Canonical CI/governance files are watched by shared branch CI. Ordinary docs-only files may skip heavy Actions unless another watched path changed.
+Canonical CI/governance files are watched by shared branch CI. For those watched files, branch CI must be green before opening the PR. Ordinary docs-only files outside the watch set may skip heavy pre-PR branch CI, but they still require a branch/PR and must satisfy the protected-main merge gate without bypassing it.
 
 ## Multi-agent integration branch
 
@@ -155,15 +174,16 @@ The coordinator must:
 
 1. refresh latest `origin/main`;
 2. identify the exact authorized participating Issues/PRs/branches;
-3. merge/cherry-pick/rebase required agent branches into the integration branch without silently dropping commits;
-4. resolve semantic/API/test conflicts deliberately rather than choosing `ours`/`theirs` blindly;
-5. verify no required work remains only on an unmerged branch/PR;
-6. obtain green **combined-tree CI** on the exact frozen `integration/**` SHA when watched paths changed;
-7. inspect the final diff for accidental reversions, duplicate implementations and contract mismatches;
-8. freeze and record the integration candidate SHA;
-9. merge to `main` only within the owner's explicit authorization;
-10. fetch `main` again and record the exact resulting SHA;
-11. require the applicable **exact-main release CI** before claiming cloud/release completion.
+3. verify participating watched lanes had green branch CI before their PRs were opened under the current policy, unless they predate the policy and are explicitly handled as legacy candidates;
+4. merge/cherry-pick/rebase required agent branches into the integration branch without silently dropping commits;
+5. resolve semantic/API/test conflicts deliberately rather than choosing `ours`/`theirs` blindly;
+6. verify no required work remains only on an unmerged branch/PR;
+7. obtain green **combined-tree CI** on the exact frozen `integration/**` SHA when watched paths changed;
+8. inspect the final diff for accidental reversions, duplicate implementations and contract mismatches;
+9. freeze and record the integration candidate SHA;
+10. merge to `main` only within the owner's explicit authorization and only when GitHub protected-main requirements are satisfied;
+11. fetch `main` again and record the exact resulting SHA;
+12. require the applicable **exact-main release CI** before claiming cloud/release completion.
 
 Do not assemble a multi-agent batch by independently landing each agent PR on `main` unless the owner explicitly requests that specific integration strategy.
 
@@ -173,16 +193,17 @@ The normal evidence ladder is:
 
 ```text
 agent/** push
-  -> shared branch/PR CI on branch SHA
+  -> shared branch CI on exact branch SHA
+  -> SUCCESS required before opening PR for watched work
 PR -> main or integration/**
-  -> shared branch/PR CI on merge candidate
+  -> protected candidate / required-check freshness evidence
 integration/** push
   -> combined-tree CI on frozen integration SHA
-owner-authorized main landing
+owner-authorized protected-main landing
   -> exact-main release CI through dispatch-v25-cloud-after-main-integration.yml
 ```
 
-A failure should be fixed at the earliest stage that reproduces it. Do not intentionally land a known-red branch on `main` merely to obtain diagnostics.
+A failure should be fixed at the earliest stage that reproduces it. Do not intentionally open a new PR with a known-red watched branch merely to obtain diagnostics, and do not intentionally land a known-red branch on `main`.
 
 The final main release run is still required when the task's acceptance includes cloud packaging/release because earlier branch/integration runs do not prove the exact landed SHA or release side effects.
 
@@ -195,9 +216,10 @@ For a specific owner request, state **ALL MERGED TO MAIN** only after an **owner
 - every required Issue/reservation in the explicitly authorized batch is terminal or explicitly excluded/superseded;
 - every required implementation/docs commit is represented in the integrated result and reachable from current `main`;
 - no required work for that authorized batch exists only on an agent branch, worktree, stash, draft patch or unmerged PR;
-- required participating branch/PR CI evidence is green when applicable;
+- required participating branch/PR CI evidence is green and fresh where applicable;
 - the exact frozen integration candidate has green combined-tree CI when applicable;
 - current `main` was refreshed after the authorized landing;
+- GitHub still reports the intended protected-main effective rules or an explicitly owner-approved replacement;
 - applicable exact-main release CI is green for the landed SHA;
 - the combined tree contains the intended behavior without unresolved merge markers, accidental reversions, duplicate competing implementations or known semantic/API/test collisions;
 - environment-gated evidence is explicitly handed off rather than falsely reported as PASS;
@@ -228,7 +250,8 @@ Before an authorized merge, update the Issue/PR with:
 - branch name;
 - implementation/docs commit SHA(s);
 - validation actually executed;
-- branch/PR CI run identity and tested SHA when applicable;
+- mandatory pre-PR branch-CI run identity and exact tested SHA when applicable;
+- PR/integration CI evidence and freshness when applicable;
 - known LOCAL_ONLY/policy gates belonging to this lane;
 - intended integration batch when known.
 
@@ -241,6 +264,7 @@ After the authorized merge, the coordinator may close/update the Issue and, when
 - Never inspect/manage another agent's work beyond the minimum collision metadata unless the owner explicitly authorizes that cross-agent role.
 - Normal task authorization never implies `main` merge authorization.
 - Automatic branch/PR CI never implies `main` merge authorization.
+- Protected-main eligibility never implies owner merge authorization.
 - `main` merge authorization never implies unrelated manual release authorization.
 - Local/private evidence stays under gitignored `artifacts/`; commit only sanitized summaries allowed by the local runbooks.
-- GitHub branch protection/rulesets should enforce this policy where possible; track hard-enforcement work in the repository governance issue for `main` protection.
+- GitHub ruleset `protectedMain` is the current hard-enforcement layer, while repository Markdown remains the behavioral/authorization layer.
