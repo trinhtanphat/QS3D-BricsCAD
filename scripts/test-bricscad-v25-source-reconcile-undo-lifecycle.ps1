@@ -374,26 +374,34 @@ finally {
     }
 }
 
-$metadata = [ordered]@{
-    status = if ($null -eq $qualificationError -and $null -eq $cleanupError -and $processCleanupVerified -and $scriptCleanupVerified -and $privateStateCleanupVerified -and $drawingCleanupVerified) { "PASS" } else { "FAIL" }
-    schema = "QS3D_SOURCE_UNDO_LIFECYCLE_RUNNER_V1"
-    qualification_boundary = "LOCAL_004_DIAGNOSTIC_ONLY"
-    production_local004_qualified = $false
-    exact_sha = $gitHead
-    plugin_sha256 = $pluginHash
-    bricscad_major = 25
-    launcher_handoff_observed = [bool]$handoffObserved
-    process_cleanup_verified = [bool]$processCleanupVerified
-    script_cleanup_verified = [bool]$scriptCleanupVerified
-    private_state_cleanup_verified = [bool]$privateStateCleanupVerified
-    drawing_cleanup_verified = [bool]$drawingCleanupVerified
-    variants = @($results)
-}
+$metadataError = $null
 $metadataPath = Join-Path $ArtifactDir "source-undo-lifecycle-metadata.json"
-$metadata | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
+try {
+    $metadataVariants = @($results | ForEach-Object { $_ })
+    $metadata = [ordered]@{
+        status = if ($null -eq $qualificationError -and $null -eq $cleanupError -and $processCleanupVerified -and $scriptCleanupVerified -and $privateStateCleanupVerified -and $drawingCleanupVerified) { "PASS" } else { "FAIL" }
+        schema = "QS3D_SOURCE_UNDO_LIFECYCLE_RUNNER_V1"
+        qualification_boundary = "LOCAL_004_DIAGNOSTIC_ONLY"
+        production_local004_qualified = $false
+        exact_sha = $gitHead
+        plugin_sha256 = $pluginHash
+        bricscad_major = 25
+        launcher_handoff_observed = [bool]$handoffObserved
+        process_cleanup_verified = [bool]$processCleanupVerified
+        script_cleanup_verified = [bool]$scriptCleanupVerified
+        private_state_cleanup_verified = [bool]$privateStateCleanupVerified
+        drawing_cleanup_verified = [bool]$drawingCleanupVerified
+        variants = $metadataVariants
+    }
+    $metadata | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
+}
+catch {
+    $metadataError = $_
+}
 
 if ($null -ne $cleanupError) { throw "LOCAL-004 Undo lifecycle cleanup failed." }
 if ($null -ne $qualificationError) { throw $qualificationError }
+if ($null -ne $metadataError) { throw "LOCAL-004 Undo lifecycle metadata publication failed." }
 if (-not $processCleanupVerified -or -not $scriptCleanupVerified -or -not $privateStateCleanupVerified -or -not $drawingCleanupVerified) {
     throw "LOCAL-004 Undo lifecycle cleanup verification failed."
 }
