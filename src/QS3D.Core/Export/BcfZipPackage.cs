@@ -203,8 +203,7 @@ namespace QS3D.Core.Export
             foreach (var child in container.Elements())
             {
                 if (!string.Equals(child.Name.LocalName, itemName, StringComparison.Ordinal) || child.Name.NamespaceName.Length != 0) throw new InvalidDataException("Unsupported BCF extensions.xml element: " + child.Name.LocalName);
-                EnsureNoChildElements(child);
-                var token = IfcRoundTripProjectionContract.RequireCanonicalToken(child.Value, itemName);
+                var token = IfcRoundTripProjectionContract.RequireCanonicalToken(ReadLeafValue(child), itemName);
                 if (!result.Add(token)) throw new InvalidDataException("Duplicate BCF extension token: " + token);
             }
             return result;
@@ -391,8 +390,21 @@ namespace QS3D.Core.Export
             return elements.Count == 0 ? null : elements[0];
         }
 
-        private static string RequiredSingleValue(XElement parent, string name) => RequiredSingle(parent, name).Value;
-        private static string? OptionalSingleValue(XElement parent, string name) => OptionalSingle(parent, name)?.Value;
+        private static string RequiredSingleValue(XElement parent, string name) => ReadLeafValue(RequiredSingle(parent, name));
+
+        private static string? OptionalSingleValue(XElement parent, string name)
+        {
+            var element = OptionalSingle(parent, name);
+            return element == null ? null : ReadLeafValue(element);
+        }
+
+        private static string ReadLeafValue(XElement element)
+        {
+            if (element.HasAttributes)
+                throw new InvalidDataException("BCF XML value element must not contain attributes: " + element.Name.LocalName);
+            EnsureNoChildElements(element);
+            return element.Value;
+        }
 
         private static string RequiredAttribute(XElement element, string name)
         {
