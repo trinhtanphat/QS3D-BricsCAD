@@ -94,7 +94,10 @@ namespace QS3D.Core.Domain
         {
             if (!_items.ContainsKey(key)) return false;
             if (IsReservedKey(key)) ValidateReserved(_items);
-            if (touchMutation && TracksSemanticDirtyState(key)) TouchProject();
+            if (TracksSemanticDirtyState(key))
+            {
+                if (touchMutation) TouchProject();
+            }
             return _items.Remove(key);
         }
 
@@ -119,7 +122,10 @@ namespace QS3D.Core.Domain
                 ValidateReserved(next);
             }
 
-            if (touchMutation && TracksSemanticDirtyState(key)) TouchProject();
+            if (TracksSemanticDirtyState(key))
+            {
+                if (touchMutation) TouchProject();
+            }
             if (addOnly) _items.Add(key, normalizedValue); else _items[key] = normalizedValue;
         }
 
