@@ -170,3 +170,20 @@ Before production edits, this existing active root claim expands to reserve only
 - this claim record and sanitized issue handoff.
 
 The bounded correction will allocate/validate the transition and stage its native marker immediately before `GeneratedDependentGeometryInvalidator.Prepare(...)` inside the same existing transaction. Semantic/native work, after-snapshot capture and private history staging remain afterward; native commit still precedes managed history publication. A failed command still aborts the transaction and removes only a newly registered unpublished history. No `Database.StartUndoRecord`, database-wide recording toggle, new carrier/entity, event-policy relaxation, runner/probe/private-data change or broader Source Reconcile behavior is permitted. LOCAL-004 and `#1005` remain `ACTIVE / PENDING_LOCAL` until the exact corrected production SHA passes the unchanged full runner.
+
+### Exact marker-before-topology result and erase-existing discriminator
+
+- The bounded production change merged through PR `#1606` at exact main SHA `2bb380e343aafdf2d64d23f280858aff7b8ab602`. Exact-merge Source Reconcile gates, Core/Smoke Release build and full smoke, installed-reference V25 `Release|x64` build, and aggregate `824/824` all passed; the adapter ProductVersion matched that SHA.
+- The unchanged licensed LOCAL-004 runner still returned `NATIVE_UNDO_SEMANTIC_DIVERGENCE` with post-Undo marker `AFTER`, post-Redo marker `AFTER`, Undo incoherent, Redo coherent and history `SYNCED / MULTIPLE`. Cold reopen and all process/script/private-state/drawing cleanup guards passed. Issue `#1005` comment `#issuecomment-5300651160` records the sanitized receipt.
+- `final_generated_state=REMOVED_ALL` is captured by `QS3DSRTAFTERFINALSYNC` before native Undo; it does not classify topology after Undo and must not be used as such. The exact rerun disproves marker ordering alone, without proving a replacement carrier or database lifecycle.
+
+Before further production edits, this active root claim reserves one additive diagnostic-only continuation in the already-owned lifecycle harness:
+
+- `src/QS3D.BricsCAD.V25/SourceReconcileUndoLifecycleProbeCommands.cs`;
+- `scripts/test-bricscad-v25-source-reconcile-undo-lifecycle.ps1`;
+- `scripts/preflight-source-reconcile-undo-lifecycle-probe.py`;
+- this claim and sanitized issue handoff only.
+
+Add exactly one fresh-process `OBJECT_ERASE` variant. Its prepare command must create and commit the existing topology sentinel plus the `BEFORE` marker. Its mutate command must write the same existing BlockBegin marker to `AFTER` first, then erase that existing sentinel in the same transaction. Native Undo must classify only marker `BEFORE|AFTER|OTHER_OR_INVALID` and topology `PRESENT|UNDONE|OTHER_OR_INVALID`; native Redo may use the same allowlists if required. Existing append variants and their results remain unchanged. The runner must keep its repository-sample disposable-copy, zero-process, close-without-save, exact-SHA, privacy and cleanup boundaries.
+
+This discriminator tests the only remaining source-visible operation difference between the successful diagnostic transaction (append) and production invalidation (erase). It must not modify production coordinator/service/invalidation code, introduce an Xrecord/new carrier, infer LOCAL-004 PASS, close `#1005`, publish IDs/Handles/paths/messages/counts, or operate GitHub Actions. A subsequent production change requires the erase result first.
