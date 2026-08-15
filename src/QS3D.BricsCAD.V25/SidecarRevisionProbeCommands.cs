@@ -131,9 +131,9 @@ namespace QS3D.BricsCAD.V25
                 });
                 document.Editor.WriteMessage("\nQS3D sidecar revision probe PASS.");
             }
-            catch (System.Exception)
+            catch (System.Exception ex)
             {
-                TryWriteFailure(rawResult, "SIDECAR_REVISION_PROBE_FAILED", progress.Stage);
+                TryWriteFailure(rawResult, "SIDECAR_REVISION_PROBE_FAILED", progress.Stage, SafeFailureKind(ex));
                 throw;
             }
         }
@@ -309,7 +309,7 @@ namespace QS3D.BricsCAD.V25
             catch (System.Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException) { return false; }
         }
 
-        private static void TryWriteFailure(string? rawResult, string errorCode, string stage)
+        private static void TryWriteFailure(string? rawResult, string errorCode, string stage, string failureKind)
         {
             try
             {
@@ -324,7 +324,8 @@ namespace QS3D.BricsCAD.V25
                     "command=QS3DSIDECARREVISIONPROBE",
                     "nonce=" + (Environment.GetEnvironmentVariable(NonceVariable) ?? string.Empty).Trim(),
                     "error_code=" + errorCode,
-                    "stage=" + SafeFailureStage(stage)
+                    "stage=" + SafeFailureStage(stage),
+                    "failure_kind=" + failureKind
                 });
             }
             catch { }
@@ -334,6 +335,17 @@ namespace QS3D.BricsCAD.V25
         {
             var candidate = stage ?? string.Empty;
             return FailureStages.Contains(candidate) ? candidate : "unknown";
+        }
+
+        private static string SafeFailureKind(System.Exception exception)
+        {
+            if (exception is InvalidDataException) return "invalid_data";
+            if (exception is UnauthorizedAccessException) return "unauthorized";
+            if (exception is IOException) return "io";
+            if (exception is System.Xml.XmlException) return "xml";
+            if (exception is ArgumentException) return "argument";
+            if (exception is InvalidOperationException) return "invalid_operation";
+            return "other";
         }
 
         private static void WriteMarkerAtomic(string path, IEnumerable<string> lines)
@@ -409,7 +421,7 @@ namespace QS3D.BricsCAD.V25
 
             private static byte[] ComputeDigest(ProjectState project, string scratchRoot, string nonce, ProbeProgress? progress)
             {
-                var path = Path.Combine(scratchRoot, "sidecar-project-state-" + nonce + "-" + Guid.NewGuid().ToString("N") + ".qsdb");
+                var path = Path.Combine(scratchRoot, "sr-" + nonce.Substring(0, 8) + "-" + Guid.NewGuid().ToString("N") + ".qsdb");
                 try
                 {
                     if (progress != null) progress.Stage = "baseline_snapshot_detach";

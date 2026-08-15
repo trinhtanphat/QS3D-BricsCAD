@@ -42,6 +42,8 @@ function Remove-PrivateProbeFile {
 function Remove-PrivateProbeArtifacts {
     param([string]$ArtifactDir, [string]$ScriptPath, [string]$DrawingCopy, [string]$Nonce)
     $sidecarPath = [IO.Path]::ChangeExtension($DrawingCopy, ".qsdb")
+    $drawingLockPath = [IO.Path]::ChangeExtension($DrawingCopy, ".dwl")
+    $drawingLock2Path = [IO.Path]::ChangeExtension($DrawingCopy, ".dwl2")
     $privatePaths = @(
         $ScriptPath
         $sidecarPath
@@ -50,13 +52,15 @@ function Remove-PrivateProbeArtifacts {
         ($sidecarPath + "." + $Nonce + ".original")
         ($sidecarPath + "." + $Nonce + ".replacement")
         ($sidecarPath + "." + $Nonce + ".removed")
+        $drawingLockPath
+        $drawingLock2Path
     )
-    if ($privatePaths.Count -ne 7) { throw "Private sidecar revision cleanup path inventory is invalid." }
+    if ($privatePaths.Count -ne 9) { throw "Private sidecar revision cleanup path inventory is invalid." }
     foreach ($privatePath in $privatePaths) {
         Remove-PrivateProbeFile -Path $privatePath
     }
 
-    $scratchPrefix = "sidecar-project-state-" + $Nonce + "-"
+    $scratchPrefix = "sr-" + $Nonce.Substring(0, 8) + "-"
     foreach ($item in @(Get-ChildItem -LiteralPath $ArtifactDir -File -Force -ErrorAction Stop)) {
         if (-not $item.Name.StartsWith($scratchPrefix, [StringComparison]::Ordinal)) { continue }
         if (-not ($item.Name.EndsWith(".qsdb", [StringComparison]::OrdinalIgnoreCase) -or
@@ -186,7 +190,10 @@ try {
         )
         $failureStage = if ($marker.ContainsKey("stage")) { [string]$marker["stage"] } else { "unknown" }
         if ($allowedFailureStages -notcontains $failureStage) { $failureStage = "unknown" }
-        throw "BricsCAD sidecar revision probe returned sanitized failure stage '$failureStage'."
+        $allowedFailureKinds = @("invalid_data", "unauthorized", "io", "xml", "argument", "invalid_operation", "other")
+        $failureKind = if ($marker.ContainsKey("failure_kind")) { [string]$marker["failure_kind"] } else { "other" }
+        if ($allowedFailureKinds -notcontains $failureKind) { $failureKind = "other" }
+        throw "BricsCAD sidecar revision probe returned sanitized failure stage '$failureStage' and kind '$failureKind'."
     }
     foreach ($key in @(
         "backup_appearance_refused", "primary_replacement_refused", "primary_removal_refused",
@@ -197,6 +204,12 @@ try {
     Require-Value -Marker $marker -Key "status" -Expected "PASS"
     Require-Value -Marker $marker -Key "nonce" -Expected $nonce
 
+    Stop-LaunchedProcess -Process $process
+    $process = $null
+    if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
+        throw "BricsCAD process cleanup could not be verified."
+    }
+
     $drawingHashAfter = (Get-FileHash -LiteralPath $drawingCopy -Algorithm SHA256).Hash.ToUpperInvariant()
     $fixtureHashAfter = (Get-FileHash -LiteralPath $FixtureDwg -Algorithm SHA256).Hash.ToUpperInvariant()
     if (-not [string]::Equals($drawingHashBefore, $drawingHashAfter, [StringComparison]::Ordinal) -or
@@ -204,12 +217,7 @@ try {
         throw "The disposable/reference DWG changed during the sidecar revision probe."
     }
 
-    Stop-LaunchedProcess -Process $process
-    $process = $null
     Remove-PrivateProbeArtifacts -ArtifactDir $ArtifactDir -ScriptPath $scriptPath -DrawingCopy $drawingCopy -Nonce $nonce
-    if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
-        throw "BricsCAD process cleanup could not be verified."
-    }
 
     [ordered]@{
         schema = 1

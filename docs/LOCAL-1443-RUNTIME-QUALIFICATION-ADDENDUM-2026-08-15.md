@@ -10,6 +10,12 @@
 **Original reviewed implementation:** PR #1472 / `067ec63931a7a4c48849ddb87958155964bb6b3e`  
 **Original reviewed harness:** PR #1528 / `687ea56d66e5a3359c3107e66c4f97a319a49587`
 
+## Current bounded licensed result (2026-08-15)
+
+The recovery/integration checkpoints below are retained as history. The production source and dedicated harness are now integrated, and the exact committed/pushed candidate `f3640ebbb35ecdda7a68c85e12d57f4fa717612d` passed the dedicated licensed BricsCAD V25.2.10 x64 matrix in both Millimeter and Meter drawings. Matching adapter/Core ProductVersion and SHA-256 identities were recorded; all seven positive capture-to-build cases, all seven stale-rebuild replacements, expected Length/Area/Z/positive-volume checks, and both guarded fail-closed controls passed in each unit. Both synthetic copies stayed read-only/unwritten and were restored to the canonical fixture hash with zero process/private-state residue.
+
+This is bounded evidence for the recovered `QS3DCURVEDSTRUCTURALPROBE` row only. It does not close the representative curved/round Undo/Redo, explicit save/cold reopen, broader lifecycle, multi-DWG or authorized private-DWG matrix. `docs/LOCAL-AGENT-INBOX.md` remains canonical; LOCAL-003 stays `IN_PROGRESS`, and no production/customer-release qualification is inferred.
+
 This file is a qualification addendum, not a second live LOCAL queue. The original #1472 and #1528 work targeted the now-stale `integration/20260815-merge-all-v2`. Fresh-base PR #1556 recovers the exact reviewed production/guard blobs on current-main ancestry, and stacked PR #1548 recovers the exact reviewed additive runtime-harness blobs on top of #1556. Recovery PR #1544 and stale harness PR #1528 are superseded; no implementation was discarded.
 
 The repository is highly concurrent. These SHAs are verified recovery checkpoints, not permission to merge a stale base later. The authorized coordinator must refetch current `main`, re-check reserved-path overlap, and preserve the same four-file source delta plus three-file stacked harness delta immediately before landing. The collision audit through `88f83db19ed5dfd85606d5a5e00adfc28f4fd99c` found no changes to any of those seven reserved source/harness paths or this addendum path.

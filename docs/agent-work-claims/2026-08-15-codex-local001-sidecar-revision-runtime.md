@@ -1,6 +1,6 @@
 # LOCAL-001 warm-cache sidecar revision runtime claim
 
-Status: ACTIVE
+Status: COMPLETED
 Agent: codex-local003-sidecar-revision-20260815
 Issue: #1574
 Branch: `agent/local003/local001-sidecar-revision-20260815`
@@ -44,3 +44,14 @@ Generated licensed-runtime evidence remains under ignored `artifacts/` or an ext
 6. Publish sanitized result documentation and issue/PR evidence; leave the PR draft and stop before merge.
 
 The 2026-08-15 first exact-SHA attempt returned only `SIDECAR_REVISION_PROBE_FAILED` and the host was already zero-process after runner cleanup. The instrumentation expansion is therefore reserved before touching the automation-only command; it is diagnostic evidence work, not authority to absorb a production source defect.
+
+## Completion evidence
+
+- Exact tested source and pushed branch SHA: `cfc80fe80f1bf866fdec27111eb5fdf1977a3305`.
+- BricsCAD V25.2.10 x64; plugin/Core ProductVersion `0.1.0-preview.10040+cfc80fe80f1bf866fdec27111eb5fdf1977a3305`.
+- Adapter SHA-256 `E06C477F04DC18546D89B8DC0C291783D4FFDF82820F2E8D0F68D8EC9C68CA68`; Core SHA-256 `6F7220CF5318A1E70A1F09B59E449E64A16FF744A4DAF82A35CECB66CAFF0685`.
+- Focused sidecar/Save/static/manual-CI/handoff gates and PowerShell AST passed; full Core smoke reported `ALL PASS`; installed-reference V25 `Release|x64` build completed with zero warnings and zero errors.
+- Licensed marker reported PASS for backup appearance, primary replacement and primary removal; read, bind, existing mutation, Interchange confirmation and Save all refused stale authority; project state was unchanged and same-session byte restoration recovered canonical authority.
+- Fixture and disposable drawing hashes remained `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`.
+- Final inventory contained only the synthetic drawing copy plus sanitized marker/metadata. BricsCAD process count was zero; probe environment, script, QSDB, backup, project lock and drawing lock residue were absent; the Git worktree remained clean.
+- GitHub Actions, release and merge were not operated by this local worker. PR #1577 was merged by another actor at the earlier head `54adaf53e92fea0209caf4755cfadc610580bc7f` while qualification was still running; draft follow-up PR #1608 is the owner-review boundary for the remaining fixes and final evidence. This completes only the claimed warm-cache revision row, not overall LOCAL-001 or customer-release qualification.
