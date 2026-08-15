@@ -293,6 +293,7 @@ try {
         "UCS", "W",
         "NETLOAD", ('"' + $PluginDll + '"'),
         "QS3DLEVELZPROBE",
+        "_.CLOSE", "_N",
         "_.QUIT", "_N"
     )
     Set-Content -LiteralPath $scriptPath -Value $script -Encoding ASCII

@@ -138,6 +138,7 @@ if RUNNER.is_file():
         '"Millimeter" { "4" }',
         '"Meter" { "6" }',
         '"INSUNITS", $nativeInsunits',
+        '"_.CLOSE", "_N"',
         '"_.QUIT", "_N"',
         'Start-Process -FilePath $bricscadExe',
         "$argumentParts.Add('/Automation')",
@@ -211,7 +212,10 @@ if RUNNER.is_file():
     filedia = text.find('"FILEDIA", "0"', guard_before_launch)
     scripted_open = text.find('"_.OPEN", (\'"\' + $DrawingCopy + \'"\')', filedia)
     netload = text.find('"NETLOAD", (\'"\' + $PluginDll + \'"\')', scripted_open)
-    automation = text.find("$argumentParts.Add('/Automation')", netload)
+    probe = text.find('"QS3DLEVELZPROBE"', netload)
+    close = text.find('"_.CLOSE", "_N"', probe)
+    quit_host = text.find('"_.QUIT", "_N"', close)
+    automation = text.find("$argumentParts.Add('/Automation')", quit_host)
     profile = text.find("$argumentParts.Add('/P')", automation)
     batch = text.find("$argumentParts.Add('/B')", profile)
     launch = text.find('$process = Start-Process', batch)
@@ -222,10 +226,10 @@ if RUNNER.is_file():
     drawing_hash = text.find('$drawingHashAfter =', guard_through_exit)
     restore = text.find(restore_call, drawing_hash)
     metadata = text.find('$metadata =', restore)
-    if min(original_attributes, hash_before, backup, guard_set, guard_before_launch, filedia, scripted_open, netload, automation, profile, batch, launch, validation, finalizer, stop, guard_through_exit, drawing_hash, restore, metadata) < 0 or not (
-        original_attributes < hash_before < backup < guard_set < guard_before_launch < filedia < scripted_open < netload < automation < profile < batch < launch < validation < finalizer < stop < guard_through_exit < drawing_hash < restore < metadata
+    if min(original_attributes, hash_before, backup, guard_set, guard_before_launch, filedia, scripted_open, netload, probe, close, quit_host, automation, profile, batch, launch, validation, finalizer, stop, guard_through_exit, drawing_hash, restore, metadata) < 0 or not (
+        original_attributes < hash_before < backup < guard_set < guard_before_launch < filedia < scripted_open < netload < probe < close < quit_host < automation < profile < batch < launch < validation < finalizer < stop < guard_through_exit < drawing_hash < restore < metadata
     ):
-        errors.append("Level-Z runner must verify read-only, script-open the DWG before NETLOAD under /Automation /P /B, keep read-only through host exit, hash before restoration, and restore only from finally")
+        errors.append("Level-Z runner must verify read-only, script-open before NETLOAD/probe, close the disposable DWG without saving before host quit under /Automation /P /B, keep read-only through exit, hash before restoration, and restore only from finally")
     if text.count(restore_call) != 1:
         errors.append("Level-Z runner must perform its one idempotent drawing/private-state restoration from finally")
 
