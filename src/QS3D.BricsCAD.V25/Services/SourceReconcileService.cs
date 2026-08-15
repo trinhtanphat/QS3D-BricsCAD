@@ -74,7 +74,18 @@ namespace QS3D.BricsCAD.V25.Services
             {
                 using (document.LockDocument())
                 using (var transaction = document.Database.TransactionManager.StartTransaction())
+                using (var undoTransition = SourceReconcileUndoCoordinator.BeginTransition(
+                    document,
+                    transaction,
+                    project,
+                    rollback,
+                    rollbackStamp))
                 {
+                    // The exact licensed discriminator proves the existing
+                    // BlockBegin marker participates in Undo only when written
+                    // before topology mutation. It remains transaction-private
+                    // until this complete reconcile commits.
+                    undoTransition.StageNativeMarker();
                     var invalidation = GeneratedDependentGeometryInvalidator.Prepare(document, transaction, project, invalidationTargets);
                     if (!CadUnitService.TryGetPolicy(document, out var units, out var unitResolution))
                         throw new InvalidOperationException("Drawing units are unresolved. Run QS3DUNITS before source reconcile.");
@@ -99,22 +110,14 @@ namespace QS3D.BricsCAD.V25.Services
                         GridAnnotationBuilder.RebuildInTransaction(document, transaction, project, grid);
 
                     // Complete every fallible reconcile/refusal check and allocate
-                    // the Redo snapshot before staging the native marker. A failed
-                    // command therefore cannot expose an uncommitted revision to
-                    // CommandEnded or alter the published semantic history.
+                    // the Redo snapshot before staging private semantic history.
+                    // A failed command aborts the native transaction and leaves
+                    // no published semantic revision.
                     var afterSnapshot = ProjectStateSnapshot.Capture(project);
-                    using (var undoTransition = SourceReconcileUndoCoordinator.BeginTransition(
-                        document,
-                        transaction,
-                        project,
-                        rollback,
-                        rollbackStamp))
-                    {
-                        undoTransition.StageAfter(project, afterSnapshot);
-                        transaction.Commit();
-                        undoTransition.ConfirmCommitted();
-                        cadCommitted = true;
-                    }
+                    undoTransition.StageAfter(project, afterSnapshot);
+                    transaction.Commit();
+                    undoTransition.ConfirmCommitted();
+                    cadCommitted = true;
                 }
             }
             catch (Exception operationError)
