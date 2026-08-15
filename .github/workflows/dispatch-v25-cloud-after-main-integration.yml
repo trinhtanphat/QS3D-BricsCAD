@@ -103,7 +103,7 @@ jobs:
             if [[ "${reservation}" =~ ${reservation_regex} ]]; then
               consider_preview "${BASH_REMATCH[1]}" "Reserved"
             fi
-          done < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments" --jq '.[] | .body')
+          done < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments" --jq '.[] | select(.user.login == "github-actions[bot]") | .body')
 
           if (( found_preview == 0 )); then
             preview=1
