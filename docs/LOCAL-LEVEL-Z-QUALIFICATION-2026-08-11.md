@@ -89,6 +89,8 @@ For both unit modes, process/script/private-state cleanup, read-only-before-laun
 
 This is a bounded `LOCAL_PASS` for **representative native unit parity only**. It does not replace the complete-family matrix in both units and does not qualify Undo/Redo, save/reopen, cold-cache rebind, multi-DWG or private-DWG behavior. LOCAL-003 remains `IN_PROGRESS / PENDING_LOCAL`, and a final integrated/release SHA still requires its own applicable exact-SHA rerun.
 
+The integrated-main rerun completed on exact merge SHA `44195df7acf5db6ea06605090384410367cf95f2` after PR `#1466` restored the PR `#1432` unit-parity diff that had been lost during a concurrent stale-base merge. The focused Level-Z gate, full Core smoke and installed-reference V25 `Release|x64` build passed first. Matching adapter/Core ProductVersion and adapter SHA-256 `52669B6120A99422C357E25AF1D6343C324B598853C76D0D088FC3D6A30DE747` then passed separate BricsCAD V25.2.10 x64 Millimeter and Meter runs with the same complete representative marker contract. Both hosts exited gracefully; process/script/private-state/read-only-through-exit/unwritten-DWG/restoration/attribute checks passed; the synthetic drawing stayed at SHA-256 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`. This removes the integrated-SHA caveat only for representative mm/m parity; the wider LOCAL-003 matrix remains pending.
+
 ## Required follow-on interactive matrix
 
 Use the exact same SHA and built DLL. Cover at minimum:
