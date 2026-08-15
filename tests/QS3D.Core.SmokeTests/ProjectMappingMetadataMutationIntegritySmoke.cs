@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Xml.Linq;
 using QS3D.Core.Domain;
@@ -19,7 +20,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             DirectReservedMutationsAdvanceRevision();
-            GenericMetadataRemainsRevisionNeutral();
+            GenericMetadataTracksPublicRevision();
             InvalidAndOverflowMutationsFailBeforeWrite();
             QsdbHydrationPreservesPersistedMaxRevision();
             SnapshotRestoreBypassesSyntheticRevision();
@@ -74,18 +75,32 @@ namespace QS3D.Core.SmokeTests
             Equal(0, project.MeasurementWorkItemMappings.Count, "reserved metadata clear mapping count");
         }
 
-        private static void GenericMetadataRemainsRevisionNeutral()
+        private static void GenericMetadataTracksPublicRevision()
         {
             var project = NewProject("generic");
-            var baseline = project.ChangeVersion;
-            var updated = project.UpdatedUtc;
+            var baselineVersion = project.ChangeVersion;
+            var baselineUpdated = new DateTime(2026, 8, 14, 0, 0, 0, DateTimeKind.Utc);
+            project.UpdatedUtc = baselineUpdated;
+
             project.Metadata["UI.State"] = "expanded";
+            Equal(baselineVersion + 1L, project.ChangeVersion, "generic metadata first set revision");
+            True(project.UpdatedUtc > baselineUpdated, "generic metadata first set timestamp");
+
+            var afterFirstSetVersion = project.ChangeVersion;
+            var afterFirstSetUpdated = project.UpdatedUtc;
+            project.Metadata["UI.State"] = "expanded";
+            Equal(afterFirstSetVersion, project.ChangeVersion, "generic metadata same-value set revision");
+            Equal(afterFirstSetUpdated, project.UpdatedUtc, "generic metadata same-value set timestamp");
+
             project.Metadata["UI.State"] = "collapsed";
+            Equal(baselineVersion + 2L, project.ChangeVersion, "generic metadata changed set revision");
             project.Metadata.Add("UI.Filter", "walls");
-            project.Metadata.Remove("UI.Filter");
+            Equal(baselineVersion + 3L, project.ChangeVersion, "generic metadata add revision");
+            True(project.Metadata.Remove("UI.Filter"), "generic metadata remove");
+            Equal(baselineVersion + 4L, project.ChangeVersion, "generic metadata remove revision");
             project.Metadata.Clear();
-            Equal(baseline, project.ChangeVersion, "generic metadata revision neutrality");
-            Equal(updated, project.UpdatedUtc, "generic metadata timestamp neutrality");
+            Equal(baselineVersion + 5L, project.ChangeVersion, "generic metadata clear revision");
+            Equal(0, project.Metadata.Count, "generic metadata clear count");
         }
 
         private static void InvalidAndOverflowMutationsFailBeforeWrite()
@@ -110,9 +125,10 @@ namespace QS3D.Core.SmokeTests
             Equal(beforeOverflowUpdated, overflow.UpdatedUtc, "reserved overflow timestamp");
             False(overflow.Metadata.ContainsKey(entry.Key), "reserved overflow backing write");
 
-            overflow.Metadata["UI.Safe"] = "allowed";
-            Equal(long.MaxValue, overflow.ChangeVersion, "generic metadata at max revision");
-            Equal("allowed", overflow.Metadata["UI.Safe"], "generic metadata at max state");
+            Throws<OverflowException>(() => overflow.Metadata["UI.Safe"] = "blocked");
+            Equal(long.MaxValue, overflow.ChangeVersion, "generic metadata overflow revision");
+            Equal(beforeOverflowUpdated, overflow.UpdatedUtc, "generic metadata overflow timestamp");
+            False(overflow.Metadata.ContainsKey("UI.Safe"), "generic metadata overflow backing write");
         }
 
         private static void QsdbHydrationPreservesPersistedMaxRevision()
@@ -149,13 +165,24 @@ namespace QS3D.Core.SmokeTests
             AtVersion(project, long.MaxValue);
             var snapshot = ProjectStateSnapshot.Capture(project);
 
-            project.Metadata["UI.Transient"] = "temporary";
+            SetPersistenceMetadataWithoutRevision(project, "UI.Transient", "temporary");
+            Equal(long.MaxValue, project.ChangeVersion, "snapshot fixture no-touch metadata revision");
+            True(project.Metadata.ContainsKey("UI.Transient"), "snapshot fixture transient generic metadata");
             snapshot.Restore(project);
 
             Equal(long.MaxValue, project.ChangeVersion, "snapshot restored max revision");
             Equal(1, project.MeasurementWorkItemMappings.Count, "snapshot restored mapping count");
             False(project.Metadata.ContainsKey("UI.Transient"), "snapshot removed transient generic metadata");
             Equal("class-room", Resolve(project).ClassificationId, "snapshot restored mapping state");
+        }
+
+        private static void SetPersistenceMetadataWithoutRevision(ProjectState project, string key, string value)
+        {
+            var method = project.Metadata.GetType().GetMethod(
+                "SetPersistenceValue",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("Project metadata persistence setter is unavailable.");
+            method.Invoke(project.Metadata, new object[] { key, value });
         }
 
         private static KeyValuePair<string, string> Entry(
