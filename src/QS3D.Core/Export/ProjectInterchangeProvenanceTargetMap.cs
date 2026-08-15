@@ -139,7 +139,7 @@ namespace QS3D.Core.Export
         private static string Token(string value)
         {
             var canonical = Required(value, "identity").ToUpperInvariant();
-            return Convert.ToBase64String(Encoding.UTF8.GetBytes(canonical))
+            return Convert.ToBase64String(StrictUtf8.GetBytes(canonical))
                 .TrimEnd('=')
                 .Replace('+', '-')
                 .Replace('/', '_');
@@ -147,7 +147,7 @@ namespace QS3D.Core.Export
 
         private static string EncodeRecord(IEnumerable<string> fields)
         {
-            var encoded = fields.Select(x => Convert.ToBase64String(Encoding.UTF8.GetBytes(x ?? string.Empty))).ToArray();
+            var encoded = fields.Select(x => Convert.ToBase64String(StrictUtf8.GetBytes(x ?? string.Empty))).ToArray();
             return RecordVersion + "." + string.Join(".", encoded);
         }
 

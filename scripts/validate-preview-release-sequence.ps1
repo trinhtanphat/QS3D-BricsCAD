@@ -69,11 +69,14 @@ foreach ($rawSeriesTag in $seriesTags) {
 if ($foundAny -and $maxOrdinal -eq [long]::MaxValue) {
     throw "Preview series $seriesPrefix exhausted the supported Int64 ordinal range. Start a new release base version."
 }
-$expectedOrdinal = if ($foundAny) { $maxOrdinal + [long]1 } else { [long]1 }
-if ($requestedOrdinal -ne $expectedOrdinal) {
-    $expectedTag = "$seriesPrefix$expectedOrdinal"
-    $history = if ($foundAny) { "highest published ordinal is $maxOrdinal" } else { 'no prior tag exists' }
-    throw "ReleaseTag must use the next preview ordinal for its exact series. Expected $expectedTag because $history; got $tag."
+
+if (-not $foundAny) {
+    if ($requestedOrdinal -ne [long]1) {
+        throw "ReleaseTag must start a new preview series at ordinal 1. Expected ${seriesPrefix}1 because no prior tag exists; got $tag."
+    }
+}
+elseif ($requestedOrdinal -le $maxOrdinal) {
+    throw "ReleaseTag preview ordinal must be greater than the highest published ordinal for its exact series. Highest published is $maxOrdinal; got $requestedOrdinal in $tag."
 }
 
-Write-Host "Preview release sequence validated: $tag is the next tag for $seriesPrefix"
+Write-Host "Preview release sequence validated: $tag is newer than published history for $seriesPrefix"

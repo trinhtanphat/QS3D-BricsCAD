@@ -99,6 +99,39 @@ namespace QS3D.Core.Export
             public ProjectInterchangeKeepTargetImportPlan Plan { get; }
         }
 
+        private sealed class ResolutionActionIndex
+        {
+            private readonly Dictionary<InterchangeIdentityKind, Dictionary<string, InterchangeImportResolutionAction>> _actionsByKind =
+                new Dictionary<InterchangeIdentityKind, Dictionary<string, InterchangeImportResolutionAction>>();
+
+            public ResolutionActionIndex(ProjectInterchangeImportResolutionPlan plan)
+            {
+                if (plan == null) throw new ArgumentNullException(nameof(plan));
+                foreach (var item in plan.Items)
+                {
+                    if (!_actionsByKind.TryGetValue(item.Kind, out var actionsById))
+                    {
+                        actionsById = new Dictionary<string, InterchangeImportResolutionAction>(StringComparer.OrdinalIgnoreCase);
+                        _actionsByKind.Add(item.Kind, actionsById);
+                    }
+
+                    if (actionsById.ContainsKey(item.Id))
+                        throw new InvalidOperationException("Sequence contains more than one matching element");
+                    actionsById.Add(item.Id, item.Action);
+                }
+            }
+
+            public bool ShouldAdd(InterchangeIdentityKind kind, string id)
+            {
+                if (!_actionsByKind.TryGetValue(kind, out var actionsById) ||
+                    !actionsById.TryGetValue(id ?? string.Empty, out var action))
+                    throw new InvalidOperationException("Sequence contains no matching element");
+                if (action == InterchangeImportResolutionAction.AddSourceSemanticData) return true;
+                if (action == InterchangeImportResolutionAction.KeepTarget) return false;
+                throw new InvalidOperationException("KeepTarget interchange mutation reached a non-executable resolution for " + kind + " " + id + ".");
+            }
+        }
+
         public const string ImportMode = "KeepTarget";
         public const string LastSemanticIdentitiesAddedKey = "Interchange.LastImport.SemanticIdentitiesAdded";
         public const string LastTargetIdentitiesKeptKey = "Interchange.LastImport.TargetIdentitiesKept";
@@ -115,7 +148,7 @@ namespace QS3D.Core.Export
 
             var prepared = Prepare(target, json);
             var source = prepared.Source;
-            var resolution = prepared.Resolution;
+            var resolutionActions = new ResolutionActionIndex(prepared.Resolution);
             var plan = prepared.Plan;
             var snapshot = ProjectStateSnapshot.Capture(target);
 
@@ -130,16 +163,16 @@ namespace QS3D.Core.Export
             try
             {
                 foreach (var zone in source.Zones.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
-                    if (ShouldAdd(resolution, InterchangeIdentityKind.Zone, zone.Id))
+                    if (resolutionActions.ShouldAdd(InterchangeIdentityKind.Zone, zone.Id))
                         ProjectZoneService.Create(target, zone.Id, zone.Name);
 
                 foreach (var floor in source.Floors.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
-                    if (ShouldAdd(resolution, InterchangeIdentityKind.Floor, floor.Id))
+                    if (resolutionActions.ShouldAdd(InterchangeIdentityKind.Floor, floor.Id))
                         ProjectFloorService.Create(target, floor.Id, floor.Name, floor.ElevationM);
 
                 foreach (var familySnapshot in source.Families.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                 {
-                    if (!ShouldAdd(resolution, InterchangeIdentityKind.Family, familySnapshot.Id)) continue;
+                    if (!resolutionActions.ShouldAdd(InterchangeIdentityKind.Family, familySnapshot.Id)) continue;
                     var family = ProjectFamilyService.Create(target, familySnapshot.Id, familySnapshot.Name, familySnapshot.Category);
                     foreach (var property in familySnapshot.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
                         family.Properties[property.Key] = property.Value ?? string.Empty;
@@ -147,7 +180,7 @@ namespace QS3D.Core.Export
 
                 foreach (var elementSnapshot in source.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                 {
-                    if (!ShouldAdd(resolution, InterchangeIdentityKind.Element, elementSnapshot.Id)) continue;
+                    if (!resolutionActions.ShouldAdd(InterchangeIdentityKind.Element, elementSnapshot.Id)) continue;
                     var element = new ProjectElement(
                         elementSnapshot.Id,
                         elementSnapshot.Category,
@@ -279,14 +312,6 @@ namespace QS3D.Core.Export
         private static int Count(ProjectInterchangeImportResolutionPlan plan, InterchangeIdentityKind kind, InterchangeImportResolutionAction action)
         {
             return plan.Items.Count(x => x.Kind == kind && x.Action == action);
-        }
-
-        private static bool ShouldAdd(ProjectInterchangeImportResolutionPlan plan, InterchangeIdentityKind kind, string id)
-        {
-            var item = plan.Items.Single(x => x.Kind == kind && string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
-            if (item.Action == InterchangeImportResolutionAction.AddSourceSemanticData) return true;
-            if (item.Action == InterchangeImportResolutionAction.KeepTarget) return false;
-            throw new InvalidOperationException("KeepTarget interchange mutation reached a non-executable resolution for " + kind + " " + id + ".");
         }
 
         private static void RestoreExistingActiveContext(
