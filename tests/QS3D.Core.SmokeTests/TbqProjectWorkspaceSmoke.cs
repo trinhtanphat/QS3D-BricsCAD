@@ -11,10 +11,47 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
+            PublicMetadataTracksChangeVersion();
             ProjectBoundMutationAndAnalysis();
             SnapshotRollback();
             QsdbRoundTrip();
             ReservedMetadataFailsClosed();
+        }
+
+        private static void PublicMetadataTracksChangeVersion()
+        {
+            var project = new ProjectState("TBQ-METADATA", "TBQ metadata");
+            Equal(0L, project.ChangeVersion, "metadata initial change version");
+
+            project.Metadata["Client"] = "Alpha";
+            Equal(1L, project.ChangeVersion, "metadata setter change version");
+            project.Metadata["Client"] = "Alpha";
+            Equal(1L, project.ChangeVersion, "metadata setter no-op change version");
+            project.Metadata["Client"] = "Beta";
+            Equal(2L, project.ChangeVersion, "metadata setter replacement change version");
+
+            project.Metadata.Add("Package", "Structure");
+            Equal(3L, project.ChangeVersion, "metadata add change version");
+            Throws<ArgumentException>(() => project.Metadata.Add("Package", "Duplicate"), "duplicate metadata add");
+            Equal(3L, project.ChangeVersion, "duplicate metadata add must not touch project");
+
+            Equal(false, project.Metadata.Remove("Missing"), "missing metadata removal");
+            Equal(3L, project.ChangeVersion, "missing metadata removal must not touch project");
+            Equal(true, project.Metadata.Remove("Package"), "metadata removal");
+            Equal(4L, project.ChangeVersion, "metadata removal change version");
+
+            var collection = (ICollection<KeyValuePair<string, string>>)project.Metadata;
+            collection.Add(new KeyValuePair<string, string>("Discipline", "MEP"));
+            Equal(5L, project.ChangeVersion, "metadata key/value add change version");
+            Equal(false, collection.Remove(new KeyValuePair<string, string>("Discipline", "Structure")), "non-matching key/value removal");
+            Equal(5L, project.ChangeVersion, "non-matching key/value removal must not touch project");
+            Equal(true, collection.Remove(new KeyValuePair<string, string>("Discipline", "MEP")), "matching key/value removal");
+            Equal(6L, project.ChangeVersion, "matching key/value removal change version");
+
+            project.Metadata.Clear();
+            Equal(7L, project.ChangeVersion, "metadata clear change version");
+            project.Metadata.Clear();
+            Equal(7L, project.ChangeVersion, "empty metadata clear must not touch project");
         }
 
         private static void ProjectBoundMutationAndAnalysis()
