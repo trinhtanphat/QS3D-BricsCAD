@@ -68,6 +68,7 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithElement(invalidFloorElement), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithElement(invalidZoneElement), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.Properties["P-\u0001-1"] = "ok"), "REV-XML"));
+            Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.Properties["Note"] = "bad-\u0001-value"), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.Quantities["Q-\u0001-1"] = 1d), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.SourceHandles.Add("H-\u0001-1")), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.DependsOn.Add("D-\u0001-1")), "REV-XML"));
