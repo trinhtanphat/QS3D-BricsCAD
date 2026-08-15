@@ -1,8 +1,9 @@
 # Work claim — IFC exchange-result Unicode integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-audit-interchange-gap-20260815`
 - Registered: `2026-08-15T00:00:00+07:00`
+- Completed: `2026-08-15T08:39:00+07:00`
 - Baseline main SHA: `b0fe2bb88206ddab1cb99ae1c1154838f6eaa6b3`
 - Related issue: `#84`
 - Priority: remote-safe IFC interoperability correctness
@@ -37,3 +38,13 @@ At baseline `b0fe2bb88206ddab1cb99ae1c1154838f6eaa6b3`, current source, issue `#
 ## Completion condition
 
 The result envelope rejects malformed UTF-16 before exposing canonical evidence, valid supplementary Unicode remains byte-for-byte equivalent at the managed-string boundary, focused and full remote-safe validation passes, the implementation and claim closeout are merged, and issue `#84` remains open for its broader format/native/runtime scope.
+
+## Completion evidence
+
+- Claim-only PR `#1439` merged as `4a8866c19b8fe2aa501e2db30da5ae072d55ec30` before implementation edits.
+- Source implementation commit: `a06f2c232327273a0170cbfffe621135a51abffb`.
+- Implementation PR `#1449` squash-merged to `main` as `4d91901156ba01710c1ee62bf7ba75892def218c` with exactly the reserved production file and new self-registering smoke.
+- Exact merged SHA `4d91901156ba01710c1ee62bf7ba75892def218c` passed QS3D.Core and Core-smoke Release builds with `0 warnings / 0 errors`, full Core smoke `ALL PASS`, all `49` interchange preflights, and all `808` discovered aggregate feature preflights.
+- Lone high and low surrogates now fail at the result canonical-token boundary; valid supplementary Unicode remains ordinally identical in external identity, state detail, and classification evidence.
+- No GitHub Actions were manually dispatched or otherwise operated. No BCF, FieldMerge, native/runtime, LOCAL, private-data, release, or signing surface was changed.
+- Issue `#84` deliberately remains open; this claim closes only the bounded IFC exchange-result Unicode contract.
