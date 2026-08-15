@@ -249,10 +249,9 @@ namespace QS3D.Core.SmokeTests
             {
                 var project = NewRevisionProject(); var store = new QsdbProjectStore(); store.Save(project, path);
                 var original = File.ReadAllText(path);
-                project.Metadata[string.Empty] = "invalid";
-                Throws<InvalidDataException>(() => store.Save(project, path));
+                Throws<ArgumentException>(() => project.Metadata[string.Empty] = "invalid");
+                True(!project.Metadata.ContainsKey(string.Empty));
                 Equal(original, File.ReadAllText(path));
-                project.Metadata.Remove(string.Empty);
                 var zone = project.Zones.Single(); var originalZoneName = zone.Name;
                 Throws<ArgumentException>(() => zone.Name = string.Empty);
                 Equal(originalZoneName, zone.Name);
