@@ -1,12 +1,16 @@
 # Work claim — Interchange provenance target-map Unicode integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `audit-interchange-gap-next-20260815-r3`
 - Registered: `2026-08-15T10:50:13+07:00`
+- Completed: `2026-08-15T11:07:47+07:00`
 - Baseline main SHA: `88f83db19ed5dfd85606d5a5e00adfc28f4fd99c`
 - Related issue: `#84`
 - Priority: remote-safe interchange provenance correctness
 - Claim branch: `agent/audit-interchange-gap-next/issue84-target-map-unicode-claim-20260815`
+- Claim PR / commit / merge: `#1561` / `d2c1cc9cfb368095a1e49990a97d7dc3f0f9757a` / `c5fbe4af9fb98383679f279e33d9b93eb2ec737d`
+- Implementation branch: `agent/audit-interchange-gap-next/issue84-target-map-unicode-impl-20260815`
+- Implementation PR / source / merge: `#1567` / `63b5183abc2f983a0d826001ae70ad79b84654a2` / `6b686a32934ef9fd750f3ff5ade6508cc14259c9`
 
 ## Confirmed defect
 
@@ -39,4 +43,14 @@ At baseline `88f83db19ed5dfd85606d5a5e00adfc28f4fd99c`, current issue `#84`, sou
 
 ## Completion condition
 
-Malformed UTF-16 fails before target metadata/audit/revision mutation; valid supplementary Unicode remains ordinally identical through token/record storage and public readback; all existing target-map contracts remain intact; remote-safe validation is recorded; and the implementation is handed off in an unmerged PR while broad issue `#84` remains open.
+Malformed UTF-16 fails before target metadata/audit/revision mutation; valid supplementary Unicode remains ordinally identical through token/record storage and public readback; all existing target-map contracts remain intact; remote-safe validation is recorded; and the implementation is represented in current `main` while broad issue `#84` remains open.
+
+## Completion evidence
+
+- Claim-first reservation commit `d2c1cc9cfb368095a1e49990a97d7dc3f0f9757a` reached `main` through PR `#1561` at `c5fbe4af9fb98383679f279e33d9b93eb2ec737d` before implementation edits.
+- Implementation commit `63b5183abc2f983a0d826001ae70ad79b84654a2` changed only the target-map writer plus one new self-registering Unicode smoke and one focused auto-discovered preflight. PR `#1567` merged normally at exact main SHA `6b686a32934ef9fd750f3ff5ade6508cc14259c9`.
+- `Token` and `EncodeRecord` now reuse the existing `UTF8Encoding(false, true)` instance. Strict token/record construction remains before `ProjectStateSnapshot` capture and every target metadata removal/write, audit append, and `Touch`, so malformed text cannot partially mutate canonical target state.
+- Regression coverage proves lone high/low surrogate rejection across source project identity, drawing fingerprint, and source Element identity; rejected writes preserve metadata, audit count, and `ChangeVersion`; valid supplementary Unicode remains ordinally identical through result identity, project/element record decoding, and public target-id readback.
+- On exact implementation commit `63b5183abc2f983a0d826001ae70ad79b84654a2`: focused target-map Unicode, remap/source provenance, remap append, interchange validation, smoke registration, and repository gates passed; QS3D.Core and Core-smoke Release builds completed with zero warnings/errors; full deterministic Core smoke reported `ALL PASS`; all `817/817` discovered feature gates passed.
+- The integration coordinator independently revalidated exact merge `6b686a32934ef9fd750f3ff5ade6508cc14259c9`: target-map Unicode, remap provenance, provenance lifecycle, and smoke-registration gates passed; both Release builds completed with zero warnings/errors; full Core smoke reported `ALL PASS`.
+- Issue comment handoff: `https://github.com/trinhtanphat/QS3D-BricsCAD/issues/84#issuecomment-5300427567`. Broad issue `#84` remains open for native/runtime/format/policy scope. No GitHub Actions, BricsCAD/native/LOCAL runtime, release/workflow, or private data was used.
