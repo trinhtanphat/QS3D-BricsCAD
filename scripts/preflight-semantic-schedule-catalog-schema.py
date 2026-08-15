@@ -13,8 +13,17 @@ def require(text, token, label):
 def main():
     text = SOURCE.read_text(encoding="utf-8")
 
-    require(text, "ValidateSchema(root);", "load must validate the schema before materializing definitions")
+    require(text, "var scheduleNodes = MaterializeScheduleNodesBounded(root);", "load must bound schedule nodes before detailed validation")
+    require(text, "ValidateSchema(root, scheduleNodes);", "load must validate the bounded schedule-node snapshot")
+    require(text, "var definitions = scheduleNodes.Select(ReadDefinition).ToList();", "load must materialize definitions from the bounded node snapshot")
+    materialize = text.index("var scheduleNodes = MaterializeScheduleNodesBounded(root);")
+    validate = text.index("ValidateSchema(root, scheduleNodes);")
+    definitions = text.index("var definitions = scheduleNodes.Select(ReadDefinition).ToList();")
+    if not materialize < validate < definitions:
+        raise AssertionError("load must enforce capacity before detailed schema and definition parsing")
     require(text, "root.Name.NamespaceName.Length != 0", "root namespaces must fail closed")
+    require(text, "private static void ValidateSchema(XElement root, IReadOnlyList<XElement> schedules)", "schema must validate the bounded schedule-node snapshot")
+    require(text, "foreach (var schedule in schedules)", "schema must traverse only the bounded schedule-node snapshot")
     require(text, 'ValidateElement(root, "semanticSchedules", new[] { "version" }, new[] { "schedule" });', "root schema allowlist")
     require(text, 'ValidateElement(schedule, "schedule", new[] { "id", "name", "title", "floorId", "zoneId" }, new[] { "categories", "include", "exclude", "columns" });', "schedule schema allowlist")
 
