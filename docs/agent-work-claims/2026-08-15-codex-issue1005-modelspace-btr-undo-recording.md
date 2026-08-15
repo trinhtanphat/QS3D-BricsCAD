@@ -39,3 +39,12 @@ The active production claim `2026-08-13-codex-issue1005-source-reconcile-undo.md
 ## Completion condition
 
 The minimal production call and focused guard are merged to a current-main descendant with an exact implementation SHA and source/build validation handoff. This bounded claim remains `ACTIVE` and issue `#1005` / LOCAL-004 remain `OPEN / PENDING_LOCAL` until `/root` reruns the unchanged licensed matrix on that exact descendant; source/static/build evidence alone does not close or promote the claim.
+
+## Exact implementation handoff
+
+- Implementation commit `86afdf93b58169ef8ce755de459a3e4beedbbe29` is merged on `origin/main`.
+- Installed `TD_Mgd.dll` identifies V25 managed assembly version `25.9.0.0`. Reflection confirmed public instance signature `Void DisableUndoRecording(Boolean disable)` on `Teigha.DatabaseServices.DBObject`; the related `AssertWriteEnabled(Boolean autoUndo, Boolean recordModified)` member is protected and was not used.
+- `PendingTransition.StageAfter` now calls `_modelSpace.DisableUndoRecording(false);` exactly once, immediately before `_modelSpace.XData = marker;`. The object is the existing ModelSpace BTR already opened `ForWrite` by `BeginTransition`; no additional object, transaction, history or service path was introduced.
+- The focused guard requires exact adjacency, requires the call exactly once, and rejects moving it into `BeginTransition`. All six focused Source Reconcile gates passed.
+- Core `Release` build passed with `0 warnings / 0 errors`; Core smoke reported `ALL PASS`. Installed-reference V25 `Release|x64` adapter/Core build passed with `0 warnings / 0 errors`, and both ProductVersion values end in `+86afdf93b58169ef8ce755de459a3e4beedbbe29`.
+- No BricsCAD process, private data or GitHub Actions were used. This claim remains `ACTIVE`; issue `#1005` and LOCAL-004 remain `OPEN / PENDING_LOCAL` for `/root` to rerun the unchanged licensed discriminator/matrix on an exact clean descendant.
