@@ -22,12 +22,12 @@ The command:
 4. opens both objects `ForRead` and requires two live `Solid3d` objects;
 5. re-runs native `Solid3d.CheckInterference` so a stale/non-interfering pair is not highlighted;
 6. calls `Highlight()` on both solids inside a short native transaction;
-7. changes implied selection only after both highlights succeed;
+7. changes implied selection only after both highlight calls succeed;
 8. waits for operator Enter/Esc review without keeping the highlight transaction open;
 9. in `finally`, re-resolves the pair and calls `Unhighlight()` best-effort;
-10. performs outer cleanup only when this command successfully acquired ownership of both highlights.
+10. performs outer cleanup only after this command successfully applied both highlight calls.
 
-The ownership rule matters: if exact verification fails before this command highlights the pair, it must not blindly call `Unhighlight()` and potentially clear graphics state created by another tool.
+`Entity.Highlight()` / `Entity.Unhighlight()` do not provide an ownership token in this implementation. The command can therefore prove only that it applied both highlight calls and later attempted cleanup; it cannot prove that an entity had no pre-existing highlight from another tool. If an entity was already highlighted externally, the later `Unhighlight()` may also clear that visual state. Preservation of unrelated pre-existing highlight state is **not** claimed by this implementation.
 
 ## Failure atomicity
 
@@ -36,8 +36,9 @@ The ownership rule matters: if exact verification fails before this command high
 - Stale Handle or non-Solid3d replacement: no highlight.
 - `CheckInterference == false`: no highlight.
 - First highlight succeeds and second fails: first highlight is removed immediately inside the same transaction while both DBObjects are still valid.
-- `SetImpliedSelection`, prompt, cancel or later command exception after both highlights succeed: outer `finally` attempts to remove both owned highlights through fresh Handle resolution.
+- `SetImpliedSelection`, prompt, cancel or later command exception after both highlight calls succeed: outer `finally` attempts to unhighlight both reviewed entities through fresh Handle resolution.
 - If a reviewed object is deleted before cleanup, cleanup remains best-effort and must not mutate another object as a substitute.
+- Pre-existing external highlight preservation is outside this Entity.Highlight/Unhighlight contract; a future ownership-aware transient implementation is required if that guarantee becomes a product requirement.
 
 ## Read-only boundary
 
@@ -50,7 +51,7 @@ The source must not use:
 - semantic mutation/audit events;
 - `Task.Run`, `Parallel.For`, or native DBObjects across worker threads.
 
-PICKFIRST and transient graphics highlight are interactive editor state, not persisted project/DWG semantic content.
+PICKFIRST and graphics highlight are interactive editor state, not persisted project/DWG semantic content.
 
 ## Why camera zoom is not in this lane
 
@@ -61,14 +62,14 @@ BricsCAD exposes `Editor.GetCurrentView` / `SetCurrentView` and `ViewTableRecord
 Run on the exact integrated SHA with licensed BricsCAD V25:
 
 1. Create/choose two recognized Solid3d objects with known native interference. Select exactly the pair and run `QS3DMEPEXACTCLASHHIGHLIGHT`.
-2. Confirm both become visibly highlighted, PICKFIRST contains exactly two objects, and both highlights disappear after Enter.
-3. Repeat and press Esc; both highlights must disappear.
+2. Confirm both become visibly highlighted, PICKFIRST contains exactly two objects, and both reviewed highlights disappear after Enter.
+3. Repeat and press Esc; both reviewed highlights must disappear.
 4. Use a recognized non-interfering pair; command must refuse highlight and preserve existing selection.
 5. Use one MEP + one Structure exact clash and an MEP + MEP exact clash.
 6. Use a pair with no MEP participant; command must refuse.
 7. Exercise unknown/ambiguous recognition and non-Solid3d selection; no highlight.
-8. Where a controlled probe can cause second-highlight failure, verify first-highlight cleanup happens immediately with no residual highlight.
-9. Verify a failure before highlight ownership does not clear a pre-existing highlight created outside this command.
+8. Where a controlled probe can cause second-highlight failure, verify first-highlight cleanup happens immediately with no residual command-applied highlight.
+9. Observe and record behavior when one reviewed entity is already highlighted by another tool. This is diagnostic evidence only: preservation of that external highlight is not a PASS requirement for the current Entity.Highlight/Unhighlight implementation.
 10. Run across two DWGs and verify Handle/document affinity with no cross-document cleanup.
 11. Verify no project, sidecar, audit, geometry, save/reopen or DWG-content mutation occurs.
 
@@ -76,4 +77,4 @@ Status: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`. Remote source/static review is no
 
 ## Official API basis
 
-Bricsys developer documentation exposes native `Solid3d.CheckInterference`, `Entity.Highlight`, `Entity.Unhighlight`, and `Editor.GetString` APIs. Licensed runtime behavior and graphics cleanup remain subject to the local qualification matrix above.
+Bricsys developer documentation exposes native `Solid3d.CheckInterference`, `Entity.Highlight`, `Entity.Unhighlight`, and `Editor.GetString` APIs. This implementation does not use an ownership-aware transient drawable manager, so licensed runtime behavior and graphics cleanup remain subject to the local qualification matrix above.

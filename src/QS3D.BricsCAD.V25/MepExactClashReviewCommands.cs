@@ -12,7 +12,9 @@ namespace QS3D.BricsCAD.V25
     /// <summary>
     /// Transient review for an already-isolated exact MEP clash pair.
     /// Requires exactly two selected recognized Solid3d entities, rechecks native interference,
-    /// highlights both for review, and removes only highlight state owned by this command.
+    /// highlights both for review, and best-effort removes highlight state after the review.
+    /// Entity.Highlight/Unhighlight does not provide an ownership token in this implementation,
+    /// so pre-existing external highlight preservation is not claimed.
     /// </summary>
     public sealed class MepExactClashReviewCommands
     {
@@ -26,7 +28,7 @@ namespace QS3D.BricsCAD.V25
 
             string? leftHandle = null;
             string? rightHandle = null;
-            var highlightOwned = false;
+            var highlightApplied = false;
             try
             {
                 var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
@@ -61,7 +63,7 @@ namespace QS3D.BricsCAD.V25
                     document.Editor.WriteMessage("\nQS3DMEPEXACTCLASHHIGHLIGHT: " + error);
                     return;
                 }
-                highlightOwned = true;
+                highlightApplied = true;
 
                 document.Editor.SetImpliedSelection(new List<ObjectId>(ids).ToArray());
                 document.Editor.WriteMessage(
@@ -75,7 +77,7 @@ namespace QS3D.BricsCAD.V25
             }
             finally
             {
-                if (highlightOwned && !string.IsNullOrWhiteSpace(leftHandle) && !string.IsNullOrWhiteSpace(rightHandle))
+                if (highlightApplied && !string.IsNullOrWhiteSpace(leftHandle) && !string.IsNullOrWhiteSpace(rightHandle))
                     UnhighlightBestEffort(document, leftHandle!, rightHandle!);
             }
         }
