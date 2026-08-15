@@ -90,6 +90,11 @@ namespace QS3D.BricsCAD.V25
         private const int MaxTokensPerRule = 100;
         private const string RootName = "qs3dMepRecognitionProfile";
         private const string Version = "1";
+#if BRICSCAD_V26
+        private const string HostVersion = "V26";
+#else
+        private const string HostVersion = "V25";
+#endif
 
         internal static string ProfilePath
         {
@@ -98,7 +103,7 @@ namespace QS3D.BricsCAD.V25
                 var root = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
                 if (string.IsNullOrWhiteSpace(root))
                     throw new InvalidOperationException("Windows application-data directory is unavailable.");
-                return Path.Combine(root, "QS3D", "BricsCAD", "V25", "mep-recognition-profile.xml");
+                return Path.Combine(root, "QS3D", "BricsCAD", HostVersion, "mep-recognition-profile.xml");
             }
         }
 
