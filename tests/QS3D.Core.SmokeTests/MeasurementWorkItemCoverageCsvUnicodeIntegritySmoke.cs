@@ -146,7 +146,7 @@ namespace QS3D.Core.SmokeTests
         {
             try
             {
-                if (Directory.Exists(path)) Directory.DeleteDirectory(path, true);
+                if (Directory.Exists(path)) Directory.Delete(path, true);
             }
             catch
             {
