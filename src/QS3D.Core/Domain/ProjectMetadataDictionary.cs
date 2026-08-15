@@ -40,12 +40,8 @@ namespace QS3D.Core.Domain
         public void Clear()
         {
             if (_items.Count == 0) return;
-            var hasReserved = _items.Keys.Any(IsReservedKey);
-            if (hasReserved)
-            {
-                ValidateReserved(_items);
-                TouchReserved();
-            }
+            if (_items.Keys.Any(IsReservedKey)) ValidateReserved(_items);
+            TouchProject();
             _items.Clear();
         }
 
@@ -56,11 +52,8 @@ namespace QS3D.Core.Domain
         {
             var collection = (ICollection<KeyValuePair<string, string>>)_items;
             if (!collection.Contains(item)) return false;
-            if (IsReservedKey(item.Key))
-            {
-                ValidateReserved(_items);
-                TouchReserved();
-            }
+            if (IsReservedKey(item.Key)) ValidateReserved(_items);
+            TouchProject();
             return collection.Remove(item);
         }
 
@@ -96,14 +89,11 @@ namespace QS3D.Core.Domain
             foreach (var item in next) _items.Add(item.Key, item.Value);
         }
 
-        private bool Remove(string key, bool touchReserved)
+        private bool Remove(string key, bool touchMutation)
         {
             if (!_items.ContainsKey(key)) return false;
-            if (IsReservedKey(key))
-            {
-                ValidateReserved(_items);
-                if (touchReserved) TouchReserved();
-            }
+            if (IsReservedKey(key)) ValidateReserved(_items);
+            if (touchMutation) TouchProject();
             return _items.Remove(key);
         }
 
@@ -114,20 +104,21 @@ namespace QS3D.Core.Domain
             Set(canonicalKey, xmlValue, addOnly, true);
         }
 
-        private void Set(string key, string value, bool addOnly, bool touchReserved)
+        private void Set(string key, string value, bool addOnly, bool touchMutation)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
             if (addOnly && _items.ContainsKey(key)) throw new ArgumentException("An item with the same key has already been added.", nameof(key));
             var normalizedValue = value ?? string.Empty;
-            var reserved = IsReservedKey(key);
-            if (reserved)
+            if (!addOnly && _items.TryGetValue(key, out var existing) && string.Equals(existing, normalizedValue, StringComparison.Ordinal)) return;
+
+            if (IsReservedKey(key))
             {
                 var next = new Dictionary<string, string>(_items, StringComparer.OrdinalIgnoreCase);
                 next[key] = normalizedValue;
                 ValidateReserved(next);
-                if (!addOnly && _items.TryGetValue(key, out var existing) && string.Equals(existing, normalizedValue, StringComparison.Ordinal)) return;
-                if (touchReserved) TouchReserved();
             }
+
+            if (touchMutation) TouchProject();
             if (addOnly) _items.Add(key, normalizedValue); else _items[key] = normalizedValue;
         }
 
@@ -165,9 +156,9 @@ namespace QS3D.Core.Domain
             }
         }
 
-        private void TouchReserved()
+        private void TouchProject()
         {
-            var project = _project ?? throw new InvalidOperationException("Project metadata must be bound before reserved metadata can be mutated.");
+            var project = _project ?? throw new InvalidOperationException("Project metadata must be bound before metadata can be mutated.");
             project.Touch();
         }
     }
