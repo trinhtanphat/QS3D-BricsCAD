@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             MeasurementTraceContractSmoke.Run();
             TakeoffMeasurementTraceSmoke.Run();
             RateBookSmoke.Run();
+            TbqProjectWorkspaceSmoke.Run();
             QuantityMathUnderflowSmoke.Run();
             WallQuantityOpeningBoundSmoke.Run();
             WallQuantityMeasurementTraceSmoke.Run();
