@@ -47,6 +47,10 @@ def main():
 
     require(geometry, "PrepareQuantityGeometrySnapshot(document, project, ids", "BREP refresh uses owned snapshot", failures)
     require(geometry, "QuantityGeometryExplanationService.Build(document, geometryProject, ids[0])", "BREP build uses detached snapshot", failures)
+    require(geometry, "title.Text = geometry == null", "BREP exact title is conditional on live geometry", failures)
+    require(geometry, "? \"DIỄN GIẢI HÌNH HỌC\"", "unavailable geometry title omits exact claim", failures)
+    require(geometry, ": \"DIỄN GIẢI HÌNH HỌC • BREP EXACT\";", "confirmed geometry title may claim exact BREP", failures)
+    forbid(geometry, "title.Text = \"DIỄN GIẢI HÌNH HỌC • BREP EXACT\";", "unconditional BREP exact title", failures)
     require(geometry, "OnQuantityGeometryTargetClick", "gross/net row locate", failures)
     require(geometry, "LocateQuantityGeometryTarget", "target highlight/zoom", failures)
     require(geometry, "OnQuantityGeometryDeductionClick", "deduction row locate", failures)
