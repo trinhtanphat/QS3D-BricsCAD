@@ -1,8 +1,9 @@
 # Work claim — Semantic Schedule duplicate category integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `Codex /root/audit_docs_next`
 - Registered: `2026-08-15T11:20:09+07:00`
+- Completed: `2026-08-15T11:46:44+07:00`
 - Baseline main SHA: `5a13195e2b49a64c5b2d728bf4af668d1b9bff88`
 - Issue: `#77`
 - Priority: remote-safe Core documentation correctness
@@ -39,3 +40,13 @@ A malformed v1 payload containing two identical canonical nodes such as `<catego
 - Build `QS3D.Core` and `QS3D.Core.SmokeTests` in Release and run the full deterministic Core smoke suite.
 - Run repository and aggregate remote-safe preflights; report independent blockers without expanding scope.
 - Re-fetch `origin/main` before push and final handoff, preserve concurrent work, and stop before merge.
+
+## Completion evidence
+
+- The claim was published and merged first through PR `#1581` at `0bef69ca3f8312cf891956cb7d7fa2b2c1d02e1a` before source, smoke, or gate edits began.
+- Implementation commit `3afa7f1fd341d9795caff9b999f19ac4a74b65a5` was reviewed through PR `#1587` and landed on the integration branch as `85b3138280565208f125974d1f05cd053df54432`.
+- Integration PR `#1597` then carried that implementation to exact main SHA `e2dbb1e03748047f69a556240f8f85b2e7ccc17e`.
+- `SemanticScheduleCatalog.Normalize(...)` now validates every raw category for defined enum membership and duplicate identity before deterministically ordering the accepted distinct values; the existing 5,000-entry raw category snapshot bound is unchanged.
+- The extended existing smoke covers in-memory duplicate Save/Build rejection without project mutation, duplicate persisted canonical nodes failing Load, and stable deterministic round-trip of valid Beam/Column filters. The focused static gate pins those contracts.
+- Root independently validated exact merged main `e2dbb1e03748047f69a556240f8f85b2e7ccc17e`: the focused Semantic Schedule gate passed; `QS3D.Core` and `QS3D.Core.SmokeTests` Release builds completed with `0` warnings and `0` errors; full Core smoke reported `ALL PASS`; the V25 installed-reference build completed with `0` warnings and `0` errors; and aggregate remote-safe validation passed `824/824` gates.
+- No BricsCAD runtime, UI, native Table, LOCAL/private-data, workflow, GitHub Actions, release, signing, or packaging operation was performed by this lane. Broad issue `#77` remains open.
