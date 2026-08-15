@@ -19,7 +19,10 @@ The deterministic counterexample yields 5,001 category entries and then throws a
 - `src/QS3D.Core/Documentation/SemanticScheduleCatalog.cs`: category snapshot materialization in the `SemanticScheduleDefinition` constructor only.
 - `tests/QS3D.Core.SmokeTests/SemanticScheduleDefinitionBoundedSnapshotSmoke.cs`: extend the existing registered smoke for exact-cap acceptance, first-over-cap rejection without sentinel over-read, and category defensive-snapshot preservation.
 - `scripts/preflight-semantic-schedule-definition-bounds.py`: extend the existing focused gate to pin the category snapshot bound.
+- `scripts/preflight-semantic-schedule-catalog.py`: reconcile its stale requirement for the removed unbounded `new List<ElementCategory>` materialization with the bounded `Categories = SnapshotBounded(...)` contract. No other catalog token changes.
 - This claim record.
+
+The catalog-gate scope was added after the first aggregate run on implementation merge `ec69723cb1e20fce8effeff31e394527d791e09c` exposed exactly one directly related stale literal. The production implementation and focused bounded-definition gate were already passing; this amendment is merged before editing the adjacent catalog gate.
 
 ## Intended contract
 
