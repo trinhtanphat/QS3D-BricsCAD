@@ -1,7 +1,7 @@
 using System;
 using System.Reflection;
 using QS3D.Core.Domain;
-using QS3D.Core.Revisions
+using QS3D.Core.Revisions;
 
 namespace QS3D.Core.SmokeTests
 {
