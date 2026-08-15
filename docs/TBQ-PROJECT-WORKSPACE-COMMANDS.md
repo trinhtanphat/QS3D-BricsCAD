@@ -49,13 +49,37 @@ If snapshot restoration itself fails, the cache is still discarded and the comma
 - Metadata version smoke coverage: commit `887db1b43bea269885bb4eb8981f4fd9616623bf`.
 - Core smoke coverage includes project-bound mutation/analysis, adjustment preview/apply semantics, snapshot rollback, `.qsdb` round-trip, and fail-closed reserved metadata handling.
 
+## Integration and CI truth
+
+- PR #1701 landed the TBQ workspace/commands on `main` at merge commit `a8b881f05f2378c822bba41e862343add9eb908f`.
+- The automatic dispatcher for that exact integration SHA was workflow run `31876172345`.
+- Run `31876172345` was **cancelled during the integration debounce** while its `sleep 60` step was active. Checkout and the V25 cloud dispatch step were skipped because adjacent integrations superseded that candidate.
+- Therefore `a8b881f05f2378c822bba41e862343add9eb908f` does **not** have exact-SHA V25 PASS evidence from that run, but the cancellation is also not evidence of a TBQ source/build failure.
+- Issue #1674 was closed automatically when PR #1701 merged. That repository state must not be confused with qualification evidence; exact-SHA CI and licensed-host truth remain separate gates.
+- Follow-up issue #1707 adds a source-safe regression guard and stronger Core smoke assertions so future aggregate preflight/release runs pin the TBQ transaction invariants explicitly.
+
+## Source guard contract
+
+`preflight-tbq-project-workspace.py` is intended to be discovered automatically by `scripts/preflight-all.py`. It protects the implemented command surface against the most dangerous source regressions:
+
+- all seven TBQ V25 entry points remain present;
+- existing-project bind remains mandatory;
+- backing-store freshness checks remain wired;
+- preview remains read-only and does not capture a mutation snapshot or save;
+- apply ordering remains freshness -> snapshot -> mutation -> coordinator save -> rollback/cache discard on failure;
+- project auto-create and detached/ad-hoc file persistence are forbidden in the command surface;
+- smoke coverage pins preview non-mutation, rate-reference marks and project-bound BQ library semantics.
+
+The source guard is deliberately not a substitute for licensed BricsCAD execution.
+
 ## Qualification status
 
-- Core source/smoke contract: implemented in source.
-- BricsCAD V25 command source: implemented in this lane.
+- Core source/smoke contract: implemented in source and strengthened by follow-up issue #1707.
+- BricsCAD V25 command source: integrated on `main` through PR #1701.
+- Exact integration-SHA V25 evidence for `a8b881f05f2378c822bba41e862343add9eb908f`: **NOT PASS — dispatcher superseded/cancelled before dispatch**.
 - Licensed BricsCAD V25 runtime execution for these new commands: **PENDING_LOCAL** until run against an actual licensed BricsCAD V25 host.
-- Do not convert `PENDING_LOCAL` into `PASS` from source review, cloud compile, or Core-only smoke tests.
+- Do not convert `PENDING_LOCAL` into `PASS` from source review, cloud compile, Core-only smoke tests, issue closure, or a cancelled dispatcher.
 
 ## Remaining qualification
 
-Before declaring issue #1674 production-complete, run the repository's applicable source guards/build/smoke checks on the exact integration SHA, then exercise the command set in licensed BricsCAD V25 against an existing project containing a bound TBQ workspace. The local qualification should verify read commands, preview non-mutation, apply persistence across reopen, stale-sidecar rejection, and recovery behavior after an induced save failure.
+For remote qualification, use a fresh exact integration SHA that contains the TBQ source guard and strengthened smoke coverage, then require the repository's aggregate preflight, Core build/smoke, V25 compile/package gates to reach terminal success on that exact candidate. For native qualification, exercise the command set in licensed BricsCAD V25 against an existing project containing a bound TBQ workspace and verify read commands, preview non-mutation, apply persistence across reopen, stale-sidecar rejection, and recovery behavior after an induced save failure.
