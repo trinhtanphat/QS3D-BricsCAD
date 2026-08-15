@@ -15,16 +15,17 @@ using Teigha.Runtime;
 namespace QS3D.BricsCAD.V25
 {
     /// <summary>
-    /// Read-only first-wave MEP takeoff and coordination adapter.
+    /// Read-only MEP takeoff and coordination adapter.
     ///
-    /// It deliberately does not create a QS3D project, persist semantic elements, mutate the DWG,
-    /// infer length from bounding boxes, or guess unclassified layers/blocks. Native selection and
-    /// metrics are captured on the document thread, converted to meters through the canonical CAD
-    /// unit policy, and then passed to host-neutral QS3D.Core services.
+    /// Native selection and metrics stay on the document thread, classification is delegated to the
+    /// host-neutral configurable Core recognition profile, and quantity/clash math is delegated to
+    /// QS3D.Core. Unknown or ambiguous recognition results fail closed instead of being guessed.
     /// </summary>
     public sealed class MepTakeoffCommands
     {
         private const string DefaultRegion = "DRAWING";
+        private const int MaxLocateReviewPairs = 200;
+        private static readonly MepRecognitionProfile RecognitionProfile = MepRecognitionProfiles.CreateDefault();
 
         [CommandMethod("QS3DMEPTAKEOFF", CommandFlags.UsePickSet)]
         public void MepTakeoff()
@@ -57,8 +58,7 @@ namespace QS3D.BricsCAD.V25
                 if (captured.Count == 0)
                 {
                     document.Editor.WriteMessage(
-                        "\nQS3DMEPTAKEOFF: không có entity nào được phân loại MEP. " +
-                        "Dùng layer/block name có token rõ như DUCT, PIPE, CABLETRAY, CONDUIT, CABLE, EQUIP, FIXTURE, FITTING, VALVE hoặc DAMPER.");
+                        "\nQS3DMEPTAKEOFF: không có entity nào được profile nhận diện rõ là MEP; unknown/ambiguous đều bị bỏ qua an toàn.");
                     return;
                 }
 
@@ -93,60 +93,135 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                var clearancePrompt = new PromptDistanceOptions("\nQS3D MEP Clash - nhập clearance kiểm tra (drawing units; 0 = hard clash only): ")
-                {
-                    AllowNegative = false,
-                    AllowZero = true,
-                    AllowNone = false
-                };
-                var clearanceResult = document.Editor.GetDistance(clearancePrompt);
-                if (clearanceResult.Status != PromptStatus.OK) return;
-
+                if (!TryPromptClearance(document, out var clearanceDrawingUnits)) return;
                 var units = CadUnitService.GetPolicy(document);
-                var clearanceM = units.ToMeters(clearanceResult.Value);
-                var selectedByHandle = BuildSnapshotIndex(snapshots);
-                var coordination = ReadCoordinationElements(document, selectedByHandle, units, out var skipped);
-                if (coordination.Count < 2)
+                var clearanceM = units.ToMeters(clearanceDrawingUnits);
+                var relevant = DetectRelevantClashes(document, snapshots, units, clearanceM, out var candidateCount, out var skipped);
+                if (candidateCount < 2)
                 {
                     document.Editor.WriteMessage(
                         "\nQS3DMEPCLASH: cần ít nhất hai entity có classification rõ và geometric extents hợp lệ; skipped=" + skipped + ".");
                     return;
                 }
 
-                var disciplineById = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                for (var i = 0; i < coordination.Count; i++)
-                    disciplineById[coordination[i].ElementId] = coordination[i].Discipline;
-
-                var detected = new ClashDetectionService().Detect(coordination, clearanceM, includeSameDiscipline: true);
-                var relevant = new List<ClashResult>();
-                for (var i = 0; i < detected.Count; i++)
-                {
-                    var clash = detected[i];
-                    if (IsMep(disciplineById, clash.LeftElementId) || IsMep(disciplineById, clash.RightElementId))
-                        relevant.Add(clash);
-                }
-
                 document.Editor.WriteMessage(
-                    "\nQS3DMEPCLASH: candidates=" + coordination.Count +
+                    "\nQS3DMEPCLASH: candidates=" + candidateCount +
                     " • clashes=" + relevant.Count +
                     " • skipped=" + skipped +
                     " • clearance=" + clearanceM.ToString("0.###", CultureInfo.InvariantCulture) + " m.");
 
                 for (var i = 0; i < relevant.Count; i++)
-                {
-                    var clash = relevant[i];
-                    document.Editor.WriteMessage(
-                        "\n  " + clash.Kind + " • " + clash.LeftElementId + " ↔ " + clash.RightElementId +
-                        " • gap=" + clash.SeparationM.ToString("0.###", CultureInfo.InvariantCulture) + " m" +
-                        " • overlap=" + clash.OverlapXM.ToString("0.###", CultureInfo.InvariantCulture) + "×" +
-                        clash.OverlapYM.ToString("0.###", CultureInfo.InvariantCulture) + "×" +
-                        clash.OverlapZM.ToString("0.###", CultureInfo.InvariantCulture) + " m");
-                }
+                    WriteClashRow(document, relevant[i], null);
             }
             catch (System.Exception ex)
             {
                 document.Editor.WriteMessage("\nQS3DMEPCLASH lỗi: " + ex.Message);
             }
+        }
+
+        [CommandMethod("QS3DMEPCLASHLOCATE", CommandFlags.UsePickSet)]
+        public void MepClashLocate()
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null) return;
+
+            try
+            {
+                var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
+                if (snapshots.Count < 2)
+                {
+                    document.Editor.WriteMessage("\nQS3DMEPCLASHLOCATE: chọn tập entity cần review clash trước.");
+                    return;
+                }
+
+                if (!TryPromptClearance(document, out var clearanceDrawingUnits)) return;
+                var units = CadUnitService.GetPolicy(document);
+                var clearanceM = units.ToMeters(clearanceDrawingUnits);
+                var relevant = DetectRelevantClashes(document, snapshots, units, clearanceM, out var candidateCount, out var skipped);
+                if (candidateCount < 2 || relevant.Count == 0)
+                {
+                    document.Editor.WriteMessage(
+                        "\nQS3DMEPCLASHLOCATE: không có clash MEP phù hợp để locate; candidates=" + candidateCount + " • skipped=" + skipped + ".");
+                    return;
+                }
+
+                var reviewCount = Math.Min(relevant.Count, MaxLocateReviewPairs);
+                document.Editor.WriteMessage(
+                    "\nQS3DMEPCLASHLOCATE: clashes=" + relevant.Count +
+                    " • hiển thị=" + reviewCount +
+                    (relevant.Count > reviewCount ? " (hãy thu hẹp selection để review phần còn lại)." : "."));
+                for (var i = 0; i < reviewCount; i++)
+                    WriteClashRow(document, relevant[i], i + 1);
+
+                var prompt = new PromptIntegerOptions(
+                    "\nChọn số clash cần Locate [1-" + reviewCount.ToString(CultureInfo.InvariantCulture) + "]: ")
+                {
+                    AllowNegative = false,
+                    AllowZero = false,
+                    AllowNone = false,
+                    LowerLimit = 1,
+                    UpperLimit = reviewCount
+                };
+                var selected = document.Editor.GetInteger(prompt);
+                if (selected.Status != PromptStatus.OK) return;
+
+                var clash = relevant[selected.Value - 1];
+                var selectedCount = CadHandleService.SelectIfAny(document, new[] { clash.LeftElementId, clash.RightElementId });
+                document.Editor.WriteMessage(
+                    "\nQS3DMEPCLASHLOCATE: selected=" + selectedCount + "/2 • " +
+                    clash.LeftElementId + " ↔ " + clash.RightElementId +
+                    (selectedCount == 2 ? "." : " • một hoặc nhiều Handle không còn live."));
+            }
+            catch (System.Exception ex)
+            {
+                document.Editor.WriteMessage("\nQS3DMEPCLASHLOCATE lỗi: " + ex.Message);
+            }
+        }
+
+        private static bool TryPromptClearance(Document document, out double clearanceDrawingUnits)
+        {
+            var prompt = new PromptDistanceOptions("\nQS3D MEP Clash - nhập clearance kiểm tra (drawing units; 0 = hard clash only): ")
+            {
+                AllowNegative = false,
+                AllowZero = true,
+                AllowNone = false
+            };
+            var result = document.Editor.GetDistance(prompt);
+            if (result.Status != PromptStatus.OK)
+            {
+                clearanceDrawingUnits = 0d;
+                return false;
+            }
+            clearanceDrawingUnits = result.Value;
+            return true;
+        }
+
+        private static IReadOnlyList<ClashResult> DetectRelevantClashes(
+            Document document,
+            IReadOnlyList<EntitySnapshot> snapshots,
+            ProjectUnitPolicy units,
+            double clearanceM,
+            out int candidateCount,
+            out int skipped)
+        {
+            var selectedByHandle = BuildSnapshotIndex(snapshots);
+            var coordination = ReadCoordinationElements(document, selectedByHandle, units, out skipped);
+            candidateCount = coordination.Count;
+            if (coordination.Count < 2) return Array.Empty<ClashResult>();
+
+            var disciplineById = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < coordination.Count; i++)
+                disciplineById[coordination[i].ElementId] = coordination[i].Discipline;
+
+            var detected = new ClashDetectionService().Detect(coordination, clearanceM, includeSameDiscipline: true);
+            var relevant = new List<ClashResult>();
+            for (var i = 0; i < detected.Count; i++)
+            {
+                var clash = detected[i];
+                if (IsMep(disciplineById, clash.LeftElementId) || IsMep(disciplineById, clash.RightElementId))
+                    relevant.Add(clash);
+            }
+            return new ReadOnlyCollection<ClashResult>(relevant.ToArray());
         }
 
         private static IReadOnlyList<CoordinationElement> ReadCoordinationElements(
@@ -214,12 +289,16 @@ namespace QS3D.BricsCAD.V25
 
         private static bool TryCreateMepElement(EntitySnapshot snapshot, ProjectUnitPolicy units, out MepElement element)
         {
-            if (!TryClassifyMep(snapshot, out var kind))
+            var recognition = Recognize(snapshot);
+            if (recognition.Status != MepRecognitionStatus.Matched ||
+                recognition.Discipline != MepRecognitionDiscipline.Mep ||
+                !recognition.MepKind.HasValue)
             {
                 element = null!;
                 return false;
             }
 
+            var kind = recognition.MepKind.Value;
             var lengthM = snapshot.LengthDrawingUnits.HasValue
                 ? units.ToMeters(snapshot.LengthDrawingUnits.Value)
                 : 0d;
@@ -228,7 +307,7 @@ namespace QS3D.BricsCAD.V25
             var volumeM3 = snapshot.VolumeDrawingUnitsCubed.HasValue
                 ? units.VolumeToCubicMeters(snapshot.VolumeDrawingUnitsCubed.Value)
                 : 0d;
-            var system = CanonicalOrFallback(snapshot.Layer, kind.ToString());
+            var system = CanonicalOrFallback(snapshot.Layer, recognition.Category ?? kind.ToString());
             var specification = SnapshotSpecification(snapshot);
             element = new MepElement(snapshot.Handle, kind, system, specification, DefaultRegion, 1, lengthM, areaM2, volumeM3);
             return true;
@@ -240,56 +319,27 @@ namespace QS3D.BricsCAD.V25
             out string category,
             out string system)
         {
-            if (TryClassifyMep(snapshot, out var kind))
+            var recognition = Recognize(snapshot);
+            if (recognition.Status != MepRecognitionStatus.Matched ||
+                !recognition.Discipline.HasValue ||
+                string.IsNullOrWhiteSpace(recognition.Category))
             {
-                discipline = "MEP";
-                category = kind.ToString();
-                system = CanonicalOrFallback(snapshot.Layer, kind.ToString());
-                return true;
+                discipline = string.Empty;
+                category = string.Empty;
+                system = string.Empty;
+                return false;
             }
 
-            var text = ClassificationText(snapshot);
-            if (ContainsAny(text, "STRUCT", "BEAM", "COLUMN", "FOOTING", "FOUNDATION", "PILE", "RC_", "RC-"))
-            {
-                discipline = "STRUCTURE";
-                category = StructuralCategory(text);
-                system = CanonicalOrFallback(snapshot.Layer, category);
-                return true;
-            }
-            if (ContainsAny(text, "ARCH", "WALL", "SLAB", "CEILING", "FLOOR", "ROOF"))
-            {
-                discipline = "ARCHITECTURE";
-                category = ArchitecturalCategory(text);
-                system = CanonicalOrFallback(snapshot.Layer, category);
-                return true;
-            }
-
-            discipline = string.Empty;
-            category = string.Empty;
-            system = string.Empty;
-            return false;
+            discipline = DisciplineText(recognition.Discipline.Value);
+            category = recognition.Category!;
+            system = CanonicalOrFallback(snapshot.Layer, category);
+            return true;
         }
 
-        private static bool TryClassifyMep(EntitySnapshot snapshot, out MepElementKind kind)
-        {
-            var text = ClassificationText(snapshot);
-            if (ContainsAny(text, "CABLETRAY", "CABLE_TRAY", "CABLE-TRAY", "TRAY")) { kind = MepElementKind.CableTray; return true; }
-            if (ContainsAny(text, "CONDUIT")) { kind = MepElementKind.Conduit; return true; }
-            if (ContainsAny(text, "DUCT")) { kind = MepElementKind.Duct; return true; }
-            if (ContainsAny(text, "PIPE", "PIPING")) { kind = MepElementKind.Pipe; return true; }
-            if (ContainsAny(text, "CABLE", "WIRE")) { kind = MepElementKind.Cable; return true; }
-            if (ContainsAny(text, "FITTING", "ELBOW", "REDUCER", "COUPLING", "TEE_", "TEE-")) { kind = MepElementKind.Fitting; return true; }
-            if (ContainsAny(text, "VALVE", "DAMPER", "ACCESSORY")) { kind = MepElementKind.Accessory; return true; }
-            if (ContainsAny(text, "EQUIP", "AHU", "FCU", "PUMP", "FAN", "CHILLER", "BOILER")) { kind = MepElementKind.Equipment; return true; }
-            if (ContainsAny(text, "FIXTURE", "LUMINAIRE", "LIGHTING", "LIGHT_", "LIGHT-", "SOCKET", "OUTLET", "SWITCH", "SANITARY", "SPRINKLER")) { kind = MepElementKind.Fixture; return true; }
-            kind = default(MepElementKind);
-            return false;
-        }
-
-        private static string ClassificationText(EntitySnapshot snapshot)
+        private static MepRecognitionResult Recognize(EntitySnapshot snapshot)
         {
             snapshot.Metadata.TryGetValue("BlockName", out var blockName);
-            return (snapshot.Layer + "|" + (blockName ?? string.Empty)).ToUpperInvariant();
+            return RecognitionProfile.Recognize(snapshot.Layer, blockName);
         }
 
         private static string SnapshotSpecification(EntitySnapshot snapshot)
@@ -299,28 +349,15 @@ namespace QS3D.BricsCAD.V25
             return CanonicalOrFallback(snapshot.EntityType, "Entity");
         }
 
-        private static string StructuralCategory(string text)
+        private static string DisciplineText(MepRecognitionDiscipline discipline)
         {
-            if (ContainsAny(text, "BEAM")) return "Beam";
-            if (ContainsAny(text, "COLUMN")) return "Column";
-            if (ContainsAny(text, "FOOTING", "FOUNDATION", "PILE")) return "Foundation";
-            return "Structure";
-        }
-
-        private static string ArchitecturalCategory(string text)
-        {
-            if (ContainsAny(text, "WALL")) return "Wall";
-            if (ContainsAny(text, "SLAB", "FLOOR")) return "Slab";
-            if (ContainsAny(text, "CEILING")) return "Ceiling";
-            if (ContainsAny(text, "ROOF")) return "Roof";
-            return "Architecture";
-        }
-
-        private static bool ContainsAny(string source, params string[] tokens)
-        {
-            for (var i = 0; i < tokens.Length; i++)
-                if (source.IndexOf(tokens[i], StringComparison.OrdinalIgnoreCase) >= 0) return true;
-            return false;
+            switch (discipline)
+            {
+                case MepRecognitionDiscipline.Mep: return "MEP";
+                case MepRecognitionDiscipline.Structure: return "STRUCTURE";
+                case MepRecognitionDiscipline.Architecture: return "ARCHITECTURE";
+                default: throw new ArgumentOutOfRangeException(nameof(discipline));
+            }
         }
 
         private static string CanonicalOrFallback(string? value, string fallback)
@@ -347,6 +384,17 @@ namespace QS3D.BricsCAD.V25
                 " • L=" + row.LengthM.ToString("0.###", CultureInfo.InvariantCulture) + " m" +
                 " • A=" + row.AreaM2.ToString("0.###", CultureInfo.InvariantCulture) + " m²" +
                 " • V=" + row.VolumeM3.ToString("0.###", CultureInfo.InvariantCulture) + " m³");
+        }
+
+        private static void WriteClashRow(Document document, ClashResult clash, int? index)
+        {
+            document.Editor.WriteMessage(
+                "\n  " + (index.HasValue ? index.Value.ToString(CultureInfo.InvariantCulture) + ". " : string.Empty) +
+                clash.Kind + " • " + clash.LeftElementId + " ↔ " + clash.RightElementId +
+                " • gap=" + clash.SeparationM.ToString("0.###", CultureInfo.InvariantCulture) + " m" +
+                " • overlap=" + clash.OverlapXM.ToString("0.###", CultureInfo.InvariantCulture) + "×" +
+                clash.OverlapYM.ToString("0.###", CultureInfo.InvariantCulture) + "×" +
+                clash.OverlapZM.ToString("0.###", CultureInfo.InvariantCulture) + " m");
         }
     }
 }
