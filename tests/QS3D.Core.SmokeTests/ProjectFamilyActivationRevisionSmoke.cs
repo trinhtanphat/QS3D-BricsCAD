@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             BlankActiveFamilyRepairTouchesOnce();
             ValidActiveFamilyIsNoOp();
             MissingActiveFamilyKeyIsNoOp();
+            NearRevisionCeilingRepairsOnce();
             RevisionCeilingFailsBeforeRemoval();
         }
 
@@ -61,6 +62,18 @@ namespace QS3D.Core.SmokeTests
             ProjectFamilyActivationService.ClearIfMissing(project);
 
             Equal(before, project.ChangeVersion, "Missing ActiveFamilyId key must be a no-op.");
+        }
+
+        private static void NearRevisionCeilingRepairsOnce()
+        {
+            var project = NewProject("active-family-near-ceiling");
+            project.Metadata["ActiveFamilyId"] = "missing-family";
+            SetChangeVersion(project, long.MaxValue - 1L);
+
+            ProjectFamilyActivationService.ClearIfMissing(project);
+
+            Equal(long.MaxValue, project.ChangeVersion, "Near-ceiling repair must consume exactly the final supported revision.");
+            False(project.Metadata.ContainsKey("ActiveFamilyId"), "Near-ceiling repair failed to remove the dangling ActiveFamilyId.");
         }
 
         private static void RevisionCeilingFailsBeforeRemoval()
