@@ -140,11 +140,12 @@ namespace QS3D.Core.Persistence
             ValidateCollectionEntries(source);
 
             target.SchemaVersion = source.SchemaVersion;
-            target.Name = source.Name;
-            target.DrawingPath = source.DrawingPath;
-            target.DrawingFingerprint = source.DrawingFingerprint;
-            target.ActiveZoneId = source.ActiveZoneId;
-            target.ActiveFloorId = source.ActiveFloorId;
+            target.RestoreSnapshotScalars(
+                source.Name,
+                source.DrawingPath,
+                source.DrawingFingerprint,
+                source.ActiveZoneId,
+                source.ActiveFloorId);
 
             target.Zones.Clear();
             foreach (var zone in source.Zones)

@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Xml.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
 
@@ -8,9 +10,46 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
+            RestoreAtRevisionCeilingDoesNotOverflow();
             RestorePreservesCapturedElementIdentity();
             RestoreIntoDifferentSameIdProjectNeverInjectsCapturedElements();
             DetachedCopyNeverAliasesCanonicalElements();
+        }
+
+        private static void RestoreAtRevisionCeilingDoesNotOverflow()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-snapshot-revision-ceiling-" + Guid.NewGuid().ToString("N") + ".qsdb");
+            try
+            {
+                var store = new QsdbProjectStore();
+                store.Save(new ProjectState("snapshot-revision-ceiling", "Captured name"), path);
+
+                var document = XDocument.Load(path, LoadOptions.None);
+                var root = document.Root ?? throw new Exception("Serialized QSDB root was not found for revision-ceiling fixture.");
+                root.SetAttributeValue(
+                    "changeVersion",
+                    (long.MaxValue - 1L).ToString(System.Globalization.CultureInfo.InvariantCulture));
+                document.Save(path, SaveOptions.DisableFormatting);
+
+                var project = store.Load(path);
+                Require(project.ChangeVersion == long.MaxValue - 1L, "Revision-ceiling fixture did not restore the persisted ChangeVersion.");
+                var capturedUpdatedUtc = project.UpdatedUtc;
+                var rollback = ProjectStateSnapshot.Capture(project);
+
+                project.Name = "Mutated name";
+                Require(project.ChangeVersion == long.MaxValue, "Revision-ceiling mutation did not reach long.MaxValue.");
+
+                rollback.Restore(project);
+
+                Require(project.Name == "Captured name", "Revision-ceiling rollback did not restore the captured project name.");
+                Require(project.ChangeVersion == long.MaxValue - 1L, "Revision-ceiling rollback did not restore the captured ChangeVersion exactly.");
+                Require(project.UpdatedUtc == capturedUpdatedUtc, "Revision-ceiling rollback did not restore the captured UpdatedUtc exactly.");
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+                try { if (File.Exists(path + ".bak")) File.Delete(path + ".bak"); } catch { }
+            }
         }
 
         private static void RestorePreservesCapturedElementIdentity()
