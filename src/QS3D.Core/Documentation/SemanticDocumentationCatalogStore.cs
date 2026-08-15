@@ -53,7 +53,6 @@ namespace QS3D.Core.Documentation
             {
                 if (!project.Metadata.ContainsKey(MetadataKey)) return;
                 EnsureProjectStructureUnchanged(project, projectSnapshot);
-                project.Touch();
                 project.Metadata.Remove(MetadataKey);
                 return;
             }
@@ -64,7 +63,6 @@ namespace QS3D.Core.Documentation
             if (project.Metadata.TryGetValue(MetadataKey, out var current) && string.Equals(current, payload, StringComparison.Ordinal)) return;
 
             EnsureProjectStructureUnchanged(project, projectSnapshot);
-            project.Touch();
             project.Metadata[MetadataKey] = payload;
         }
 
