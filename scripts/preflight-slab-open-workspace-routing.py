@@ -40,6 +40,11 @@ def main():
                 "SlabOpeningContract.IsSlabOpenFamily",
                 "ApplySlabOpeningWorkspaceFamilyFilter()",
                 "FindOrCreateExactSlabOpeningFamily()",
+                "FindUniqueExactSlabOpeningFamily",
+                ".Where(SlabOpeningContract.IsSlabOpenFamily)",
+                ".Take(2)",
+                "matches.Count > 1",
+                "Project có nhiều Family cùng thỏa exact slabOpen",
                 "ExistingProjectMutationContext.Require",
                 "ProjectFamilyService.Create",
                 "SlabOpeningContract.FamilyKey",
@@ -58,11 +63,24 @@ def main():
         return fail("slabOpen workspace route must not accept a generic Slab family")
     if "GetOrCreate" in route:
         return fail("selecting Lỗ Mở Sàn must not silently create a QS3D project")
-    create = route.find("ProjectFamilyService.Create(")
+    if "FirstOrDefault(SlabOpeningContract.IsSlabOpenFamily)" in route:
+        return fail("slabOpen workspace must not silently choose the first of multiple exact-family candidates")
+
+    unique = route.find("FindUniqueExactSlabOpeningFamily")
+    bounded = route.find(".Take(2)", unique)
+    ambiguous = route.find("matches.Count > 1", unique)
+    if unique < 0 or bounded < 0 or ambiguous < 0 or not (unique < bounded < ambiguous):
+        return fail("exact slabOpen resolution must use a bounded uniqueness check and reject ambiguity")
+
+    canonical_reread = route.find("family = FindUniqueExactSlabOpeningFamily(project.Families);")
+    create = route.find("ProjectFamilyService.Create(", canonical_reread)
     family_key = route.find("SlabOpeningContract.FamilyKey", create)
     wall_opening = route.find("ElementCategory.WallOpening", create)
-    if create < 0 or family_key < 0 or wall_opening < 0:
-        return fail("missing exact slabOpen provisioning as WallOpening")
+    if canonical_reread < 0 or create < 0 or family_key < 0 or wall_opening < 0:
+        return fail("missing unique canonical re-read before exact slabOpen provisioning as WallOpening")
+    if not canonical_reread < create:
+        return fail("workspace must reject canonical-project ambiguity before provisioning slabOpen")
+
     if 'Send("QS3DDRAWSLABOPEN")' in quick or 'Send("QS3DDRAWSLABOPENADV")' in quick:
         return fail("workspace must retain active-family dispatch freshness instead of bypassing QS3DDRAWACTIVE")
     if "_viewModel.SetActiveFamily(family);" not in quick:
@@ -80,9 +98,10 @@ def main():
         return fail("quick draw must resolve exact slabOpen, activate it, then dispatch")
 
     print(
-        "PASS: V25 Sàn > Lỗ Mở Sàn provisions/resolves only exact slabOpen, activates it before "
-        "QS3DDRAWACTIVE dispatch, blocks generic basic draw fallback, and preserves the "
-        "dedicated negative-Z/BoolSubtract command boundary. NATIVE_RUNTIME=LOCAL_ONLY"
+        "PASS: V25 Sàn > Lỗ Mở Sàn uniquely resolves/provisions exact slabOpen, rejects ambiguous "
+        "exact-family candidates, activates before QS3DDRAWACTIVE dispatch, blocks generic basic draw "
+        "fallback, and preserves the dedicated negative-Z/BoolSubtract command boundary. "
+        "NATIVE_RUNTIME=LOCAL_ONLY"
     )
     return 0
 

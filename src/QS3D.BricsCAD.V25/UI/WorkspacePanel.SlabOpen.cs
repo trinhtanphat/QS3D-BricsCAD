@@ -156,7 +156,21 @@ namespace QS3D.BricsCAD.V25.UI
 
         private ProjectFamily? FindExactSlabOpeningFamily()
         {
-            return _viewModel.Families.FirstOrDefault(SlabOpeningContract.IsSlabOpenFamily);
+            return FindUniqueExactSlabOpeningFamily(_viewModel.Families);
+        }
+
+        private static ProjectFamily? FindUniqueExactSlabOpeningFamily(
+            System.Collections.Generic.IEnumerable<ProjectFamily> families)
+        {
+            if (families == null) throw new ArgumentNullException(nameof(families));
+            var matches = families
+                .Where(SlabOpeningContract.IsSlabOpenFamily)
+                .Take(2)
+                .ToList();
+            if (matches.Count > 1)
+                throw new InvalidOperationException(
+                    "Project có nhiều Family cùng thỏa exact slabOpen. Hãy giữ đúng một Family slabOpen trước khi vẽ Lỗ Mở Sàn.");
+            return matches.Count == 1 ? matches[0] : null;
         }
 
         private ProjectFamily? FindOrCreateExactSlabOpeningFamily()
@@ -169,7 +183,7 @@ namespace QS3D.BricsCAD.V25.UI
                 throw new InvalidOperationException("Không có bản vẽ BricsCAD đang active để khởi tạo slabOpen.");
 
             var project = ExistingProjectMutationContext.Require(document, "Khởi tạo Family slabOpen từ Lỗ Mở Sàn");
-            family = project.Families.FirstOrDefault(SlabOpeningContract.IsSlabOpenFamily);
+            family = FindUniqueExactSlabOpeningFamily(project.Families);
             if (family == null)
             {
                 family = ProjectFamilyService.Create(

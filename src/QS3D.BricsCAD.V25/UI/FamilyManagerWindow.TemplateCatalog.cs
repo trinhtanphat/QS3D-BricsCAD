@@ -103,7 +103,18 @@ namespace QS3D.BricsCAD.V25.UI
             FamilyList.GroupStyle.Add(groupStyle);
         }
 
-        private void OnFamilyCatalogItemsSourceChanged(object? sender, EventArgs e) => ApplyFamilyCatalogGrouping();
+        private void OnFamilyCatalogItemsSourceChanged(object? sender, EventArgs e)
+        {
+            ApplyFamilyCatalogGrouping();
+
+            // RefreshAll rebinds ItemsSource and selects the preferred Family while _loading is true,
+            // intentionally suppressing SelectionChanged handlers. Defer one Quick Form refresh until
+            // that synchronous rebind is complete so dimensions/material never remain from the old Family.
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (!_loading) RefreshQuickWorkflow();
+            }));
+        }
 
         private void ApplyFamilyCatalogGrouping()
         {
