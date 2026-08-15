@@ -108,7 +108,7 @@ required = {
         "category == ElementCategory.Slab",
         "category == ElementCategory.Column",
         "BuildLinePrism",
-        "BuildClosedPolylinePrism",
+        "BuildClosedProfilePrism",
         "GeneratedGeometryService.PrepareReplacement",
         "GeneratedGeometryService.CommitReplacement",
         'CadGeometryGuard.Subtract(line.EndPoint.Z, line.StartPoint.Z',

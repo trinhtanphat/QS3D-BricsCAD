@@ -213,16 +213,18 @@ namespace QS3D.BricsCAD.V25
             double? observedLengthM = null;
             double? observedAreaM2 = null;
             var unitsPerMeter = CadGeometryGuard.ToDrawingUnits(document, 1d, source.Name + "/meter scale");
+            var capturedLengthDrawing = snapshot.LengthDrawingUnits;
             if (source.ExpectedLengthM.HasValue)
             {
-                Require(snapshot.LengthDrawingUnits.HasValue, source.Name + " captured Length");
-                observedLengthM = CadGeometryGuard.ToMeters(document, snapshot.LengthDrawingUnits.Value, source.Name + "/captured Length");
+                Require(capturedLengthDrawing.HasValue, source.Name + " captured Length");
+                observedLengthM = CadGeometryGuard.ToMeters(document, capturedLengthDrawing.GetValueOrDefault(), source.Name + "/captured Length");
                 RequireNear(source.ExpectedLengthM.Value, observedLengthM.Value, source.Name + " captured Length");
             }
+            var capturedAreaDrawing = snapshot.AreaDrawingUnitsSquared;
             if (source.ExpectedAreaM2.HasValue)
             {
-                Require(snapshot.AreaDrawingUnitsSquared.HasValue, source.Name + " captured Area");
-                observedAreaM2 = snapshot.AreaDrawingUnitsSquared.Value / (unitsPerMeter * unitsPerMeter);
+                Require(capturedAreaDrawing.HasValue, source.Name + " captured Area");
+                observedAreaM2 = capturedAreaDrawing.GetValueOrDefault() / (unitsPerMeter * unitsPerMeter);
                 RequireFinitePositive(observedAreaM2.Value, source.Name + " captured Area");
                 RequireNear(source.ExpectedAreaM2.Value, observedAreaM2.Value, source.Name + " captured Area");
             }

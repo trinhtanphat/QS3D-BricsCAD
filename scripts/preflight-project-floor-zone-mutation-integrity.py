@@ -68,7 +68,7 @@ def main():
         'var normalizedValue = (value ?? string.Empty).Trim();',
         'if (normalizedValue.Any(char.IsControl))',
         'throw new ArgumentException("Active context id cannot contain control characters.", nameof(value));',
-        'SetPersistedScalar(ref field, normalizedValue);',
+        'SetPersistedScalar(ref field, PersistedTextXml.Verify(normalizedValue, nameof(value), "Active context id"));',
         'var nextChangeVersion = checked(ChangeVersion + 1L);',
     ], "project state", missing)
     require(smoke, [

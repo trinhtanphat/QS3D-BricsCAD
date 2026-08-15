@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
@@ -20,12 +21,12 @@ namespace QS3D.Core.SmokeTests
 
         private static void RejectsLoneHighSurrogate()
         {
-            Throws<InvalidDataException>(() => ProjectInterchangeJsonExporter.Build(CreateProject("P-\uD800")));
+            Throws<InvalidDataException>(() => ProjectInterchangeJsonExporter.Build(CreateMalformedProjectId("P-\uD800")));
         }
 
         private static void RejectsLoneLowSurrogate()
         {
-            Throws<InvalidDataException>(() => ProjectInterchangeJsonExporter.Build(CreateProject("P-\uDC00")));
+            Throws<InvalidDataException>(() => ProjectInterchangeJsonExporter.Build(CreateMalformedProjectId("P-\uDC00")));
         }
 
         private static void PreservesValidSurrogatePair()
@@ -44,6 +45,20 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState(projectId, "Surrogate integrity");
             project.UpdatedUtc = new DateTime(2026, 8, 12, 0, 0, 0, DateTimeKind.Utc);
+            return project;
+        }
+
+        private static ProjectState CreateMalformedProjectId(string projectId)
+        {
+            Throws<ArgumentException>(() => CreateProject(projectId));
+            var project = CreateProject("P-SURROGATE-LEGACY");
+            var projectIdField = typeof(ProjectState).GetField(
+                "<ProjectId>k__BackingField",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectState raw ProjectId fixture field was not found.");
+            projectIdField.SetValue(project, projectId);
+            if (!string.Equals(project.ProjectId, projectId, StringComparison.Ordinal))
+                throw new InvalidOperationException("ProjectState malformed legacy ProjectId fixture was not injected.");
             return project;
         }
 
