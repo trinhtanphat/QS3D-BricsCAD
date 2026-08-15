@@ -56,10 +56,10 @@ if not PROJECT_STATE.is_file():
 else:
     project_state = PROJECT_STATE.read_text(encoding="utf-8")
     required_state = (
-        "SetPersistedScalar(ref _drawingPath, rawValue);",
+        "SetPersistedScalar(ref _drawingPath, PersistedTextXml.Verify(rawValue, nameof(value), \"Drawing path\"));",
         "set => SetCanonicalOptionalIdentity(ref _drawingFingerprint, value, \"Drawing fingerprint\");",
         "private void SetCanonicalOptionalIdentity(ref string field, string? value, string label)",
-        "SetPersistedScalar(ref field, rawValue.Trim());",
+        "SetPersistedScalar(ref field, PersistedTextXml.Verify(normalizedValue, nameof(value), label));",
         "private void SetPersistedScalar(ref string field, string value)",
         "var nextChangeVersion = checked(ChangeVersion + 1L);",
     )

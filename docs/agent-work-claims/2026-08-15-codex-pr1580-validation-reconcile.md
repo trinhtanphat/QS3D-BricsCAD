@@ -1,6 +1,6 @@
 # PR #1580 validation reconciliation claim
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: Codex `/root`
 - Registered: `2026-08-15T11:22+07:00`
 - Exact baseline `main`: `5a13195e2b49a64c5b2d728bf4af668d1b9bff88`
@@ -41,3 +41,10 @@ No production source, runtime probe/runner, BricsCAD execution, native geometry 
 ## Validation
 
 Run the Floor/Direct Draw/Level/Sheet-residual focused gates, Core and Smoke Release builds, full Core smoke, installed-reference V25 Release|x64 build, generic preflight, aggregate preflight, and diff-check. Do not operate the already-running external BricsCAD process.
+
+## Closeout
+
+- Claim PR `#1582` merged at `54b43af253a4b22565e41d0dece86f0ecf307d75`; scope amendments `#1585` and `#1588` merged at `079e0e760cc0eac8704909ab042228641c703f4d` and `0bf036c49fa7efdc04745f8a2af57e390d2b8cd7` before the corresponding edits.
+- Implementation commits `3321eb495b7ad644e730cc719003dfda123dfc92` and `44eecb7ab67ff68c92e02fb369e002b6869b6b9b` merged through PR `#1591` at exact main SHA `c79cc0e64c9e79244c9805d0904acf7d0ad7d827`.
+- Independent exact-merge validation passed all focused reconciliation gates, Core/Smoke Release build with 0 warnings and 0 errors, full registered Core smoke `ALL PASS`, installed-reference V25 Release|x64 build with 0 warnings and 0 errors, and aggregate preflight `820/820 PASS`.
+- No BricsCAD process was launched, stopped, or controlled; no GitHub Actions, release/workflow, private-data, native-geometry, production XML-policy, or LOCAL runner changes were made.
