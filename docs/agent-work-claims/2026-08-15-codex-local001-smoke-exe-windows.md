@@ -1,6 +1,6 @@
 # LOCAL-001 Windows smoke executable acceptance
 
-Status: BLOCKED
+Status: ACTIVE
 Agent: codex-local003-smoke-exe-windows-20260815
 Issue: #72
 Branch: `agent/local003/local001-smoke-exe-windows-20260815`
@@ -34,9 +34,10 @@ Generated logs remain under ignored `artifacts/` and contain no project/drawing/
 6. If no approved failure injection exists, record that negative-path execution was not run instead of inventing it.
 7. Commit/push only sanitized documentation, rerun documentation/policy guards on that exact pushed evidence head, and stop before merge.
 
-## Current source blocker
+## Source blocker resolution and resumed candidate
 
 - Exact committed/pushed candidate `baff1291962560449f215b730428c25f5eb2ffcc` passed the two focused containment guards, manual-CI policy and local-handoff preflight on interactive Windows x64.
 - The portable .NET SDK 8.0.423 Release build failed before executable launch with `CS8602` at `src/QS3D.Core/Cost/DeepCostWorkflows.cs:236`; the nullable compiler does not narrow `tradeCode` through the `string.IsNullOrWhiteSpace(...)` conditional before `tradeCode.Trim()`.
-- Non-local source-fix issue #1634 owns the CAD-independent repair. The local worker did not edit Core/tests and did not run the executable, so popup/exit/stdout/stderr acceptance remains `NOT RUN`.
-- No `QS3D.Core.SmokeTests`, Windows Error Reporting or BricsCAD process remained, and no GitHub Actions ran. Resume only on a new clean committed/pushed exact descendant after issue #1634 lands.
+- Non-local source-fix issue #1634 produced the reviewed repair. Current release-prepared `origin/main@1489ec2dcff55e4ca0e0011b9703a7bac6d46e17` contains the equivalent recovered fix through `5781ae666`; the local worker did not edit Core/tests.
+- This branch is being merged non-force with that exact current `main`. Build and executable execution begin only after the resulting claim/candidate commit is pushed and local/remote heads match.
+- Popup/exit/stdout/stderr acceptance remains `NOT RUN` until that exact pushed candidate is exercised. The earlier failed attempt left no `QS3D.Core.SmokeTests`, Windows Error Reporting or BricsCAD process, and no GitHub Actions ran.

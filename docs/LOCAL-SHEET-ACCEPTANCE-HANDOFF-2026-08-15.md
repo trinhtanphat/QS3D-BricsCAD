@@ -29,7 +29,7 @@ Local acceptance:
 
 PASS evidence: exact SHA/ProductVersion, process exit code, sanitized stdout/stderr summary, confirmation of no Windows Application Error dialog/process residue.
 
-Current local result (2026-08-15): `BLOCKED_SOURCE / NOT RUN`. Exact committed/pushed candidate `baff1291962560449f215b730428c25f5eb2ffcc` passed the focused entrypoint/failure-containment and policy/handoff guards, but the Release build stopped before executable launch with CAD-independent `CS8602` at `src/QS3D.Core/Cost/DeepCostWorkflows.cs:236`. Issue #1634 owns the non-local fix. The local worker did not edit Core/tests; no smoke/WER/BricsCAD process remained. Rebuild and perform the actual popup/exit/stdout/stderr acceptance only on a new committed/pushed exact descendant containing the fix.
+Current local result (2026-08-15): `RESUMED / PENDING_EXECUTION`. Exact candidate `baff1291962560449f215b730428c25f5eb2ffcc` previously stopped before executable launch on CAD-independent `CS8602` at `src/QS3D.Core/Cost/DeepCostWorkflows.cs:236`; issue #1634 owned that non-local repair. Current release-prepared `origin/main@1489ec2dcff55e4ca0e0011b9703a7bac6d46e17` contains the recovered fix through `5781ae666`. The local lane is merging that exact current `main` non-force into its task branch and will build/run only after the resulting candidate is committed, pushed and verified. Popup/exit/stdout/stderr acceptance remains `NOT RUN` until then.
 
 ## Row 2 — Direct Draw preserves current view and continues drawing
 
