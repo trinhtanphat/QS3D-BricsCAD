@@ -105,6 +105,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             ready = ReferenceWallRibbonAugmenter.TryInitialize() && ready;
             ready = ProjectRibbonAugmenter.TryInitialize() && ready;
             ready = QuickWorkflowRibbonAugmenter.TryInitialize() && ready;
+            ready = RaftFoundationRibbonAugmenter.TryInitialize() && ready;
             ready = QuantityReferenceRibbonAugmenter.TryInitialize() && ready;
             ready = UpdateRibbonAugmenter.TryInitialize() && ready;
             return ready;
