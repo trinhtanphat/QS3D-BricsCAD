@@ -3,8 +3,8 @@
 **Date:** 2026-08-15 (UTC+7)  
 **Disposition:** `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`  
 **Canonical queues:** `docs/LOCAL-AGENT-INBOX.md` entries `LOCAL-001` and `LOCAL-003`; issue #72 for LOCAL-003 evidence  
-**Source recovery:** PR #1544, exact head `9f4d28d6951a03e3084759d913e85c07c6f87564`  
-**Curved/round runtime harness recovery:** stacked PR #1548, exact head `0b44b69677f3c5cb8b6787bd30fee6027ecb2c7a`  
+**Source recovery:** PR #1544, exact head `ea660524dba1f45c72be20ea5c959e31be471500`  
+**Curved/round runtime harness recovery:** stacked PR #1548, exact head `bcbaec9f7e6ed60fd67308be19a20c66a74691ae`  
 **Original reviewed implementation:** PR #1472 / `067ec63931a7a4c48849ddb87958155964bb6b3e`  
 **Original reviewed harness:** PR #1528 / `687ea56d66e5a3359c3107e66c4f97a319a49587`
 
@@ -98,7 +98,7 @@ No duplicate guard is justified unless current source materially changes the gua
 - PR #1544 recovers exactly the four reviewed #1472 production/guard files onto current-main ancestry.
 - PR #1548 is intentionally stacked on #1544 and recovers exactly the three reviewed #1528 runtime-harness files.
 - The stale-base PR #1528 is superseded by #1548; no harness code was discarded.
-- The old docs PR #1499 is superseded by the replacement PR for this file once opened.
+- The old docs PR #1499 is superseded by PR #1550.
 - `docs/LOCAL-AGENT-INBOX.md` remains a shared coordination surface and is deliberately not edited by this recovery lane.
 
 This addendum does not authorize a `main` merge, manual GitHub Actions dispatch/rerun, release publication, or production qualification. An authorized coordinator must reconcile/land the recovery PRs, lock the intended exact SHA, and then a licensed local worker must execute the required matrices before the canonical LOCAL status can advance.
