@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Xml;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
 using QS3D.Core.Mapping;
@@ -23,9 +24,9 @@ namespace QS3D.Core.SmokeTests
 
         private static void LoneSurrogatesFailClosed()
         {
-            Throws<EncoderFallbackException>(() =>
+            ThrowsXmlInvalidMappingId(() =>
                 MeasurementWorkItemCoverageCsvExporter.ToCsv(BuildMatrix("map-high-\uD800")));
-            Throws<EncoderFallbackException>(() =>
+            ThrowsXmlInvalidMappingId(() =>
                 MeasurementWorkItemCoverageCsvExporter.ToCsv(BuildMatrix("map-low-\uDC00")));
         }
 
@@ -37,7 +38,7 @@ namespace QS3D.Core.SmokeTests
             var absentPath = Path.Combine(absentRoot, "nested", "coverage.csv");
             try
             {
-                Throws<EncoderFallbackException>(() =>
+                ThrowsXmlInvalidMappingId(() =>
                     MeasurementWorkItemCoverageCsvExporter.Export(absentPath, BuildMatrix("map-high-\uD800")));
                 True(!Directory.Exists(absentRoot),
                     "Malformed coverage CSV input must fail before creating the destination directory.");
@@ -57,7 +58,7 @@ namespace QS3D.Core.SmokeTests
             var beforeFiles = Directory.GetFiles(existingRoot).OrderBy(x => x, StringComparer.Ordinal).ToArray();
             try
             {
-                Throws<EncoderFallbackException>(() =>
+                ThrowsXmlInvalidMappingId(() =>
                     MeasurementWorkItemCoverageCsvExporter.Export(existingPath, BuildMatrix("map-low-\uDC00")));
                 True(File.ReadAllBytes(existingPath).SequenceEqual(sentinel),
                     "Malformed coverage CSV input must not replace an existing destination.");
@@ -124,17 +125,20 @@ namespace QS3D.Core.SmokeTests
             return MeasurementWorkItemCoverageMatrix.Create(report);
         }
 
-        private static void Throws<TException>(Action action) where TException : Exception
+        private static void ThrowsXmlInvalidMappingId(Action action)
         {
             try
             {
                 action();
             }
-            catch (TException)
+            catch (ArgumentException ex) when (
+                string.Equals(ex.ParamName, "mappingId", StringComparison.Ordinal) &&
+                ex.InnerException is XmlException)
             {
                 return;
             }
-            throw new InvalidOperationException("Expected exception " + typeof(TException).Name + ".");
+            throw new InvalidOperationException(
+                "Expected canonical mappingId XML validation to reject malformed Unicode before CSV publication.");
         }
 
         private static void True(bool condition, string message)
