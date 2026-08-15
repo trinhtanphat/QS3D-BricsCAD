@@ -231,7 +231,7 @@ if (Test-Path -LiteralPath $ArtifactDir) {
 }
 else { New-Item -ItemType Directory -Path $ArtifactDir | Out-Null }
 
-$variants = @("OBJECT_ONLY", "OBJECT_ERASE", "DB_ENABLE_OBJECT", "DB_START_OBJECT", "DB_ENABLE_DB_START_OBJECT")
+$variants = @("OBJECT_ONLY", "OBJECT_ERASE", "OBJECT_INSPECTED", "DB_ENABLE_OBJECT", "DB_START_OBJECT", "DB_ENABLE_DB_START_OBJECT")
 $fixtureHash = (Get-FileHash -LiteralPath $FixtureDwg -Algorithm SHA256).Hash.ToUpperInvariant()
 $pluginHash = (Get-FileHash -LiteralPath $PluginDll -Algorithm SHA256).Hash.ToUpperInvariant()
 $environmentNames = @(
@@ -296,7 +296,12 @@ try {
         $script = @(
             "FILEDIA", "0", "CMDECHO", "1", "TILEMODE", "1",
             "NETLOAD", ('"' + $PluginDll + '"'),
-            "QS3DSRULPREPARE", "QS3DSRULMUTATE",
+            "QS3DSRULPREPARE", "QS3DSRULMUTATE"
+        )
+        if ([string]::Equals($variant, "OBJECT_INSPECTED", [StringComparison]::Ordinal)) {
+            $script += @("QS3DSRULINSPECT", "QS3DSRULINSPECT")
+        }
+        $script += @(
             "_.UNDO", "1", "QS3DSRULCHECKUNDO",
             "_.CLOSE", "_N",
             "_.QUIT", "_N"
