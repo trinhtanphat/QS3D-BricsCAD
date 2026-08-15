@@ -30,12 +30,15 @@ if COMMAND.is_file():
         'baseline.EnsureUnchanged(project)',
         'ProjectStateSnapshot.CreateDetachedCopy(project)',
         'Store.Save(detached, path)',
+        '"sr-" + nonce.Substring(0, 8) + "-"',
         'progress.Stage = "baseline_snapshot_save"',
         'root.SetAttributeValue("updatedUtc", "<normalized-by-sidecar-probe>")',
         'SHA256.Create()',
         'path + ".lock"',
         '"error_code=" + errorCode',
         '"stage=" + SafeFailureStage(stage)',
+        '"failure_kind=" + failureKind',
+        'if (exception is InvalidDataException) return "invalid_data";',
         'var candidate = stage ?? string.Empty;',
         'FailureStages.Contains(candidate) ? candidate : "unknown"',
     ):
@@ -65,14 +68,17 @@ if RUNNER.is_file():
         '$Process.WaitForExit()',
         'Private sidecar revision cleanup refuses directory targets.',
         'BricsCAD sidecar revision probe returned sanitized failure stage',
+        '$allowedFailureKinds = @("invalid_data", "unauthorized", "io", "xml", "argument", "invalid_operation", "other")',
         'Remove-PrivateProbeArtifacts -ArtifactDir $ArtifactDir',
-        '$scratchPrefix = "sidecar-project-state-" + $Nonce + "-"',
+        '$scratchPrefix = "sr-" + $Nonce.Substring(0, 8) + "-"',
         '($sidecarPath + ".bak")',
         '($sidecarPath + ".lock")',
         '($sidecarPath + "." + $Nonce + ".original")',
         '($sidecarPath + "." + $Nonce + ".replacement")',
         '($sidecarPath + "." + $Nonce + ".removed")',
-        'if ($privatePaths.Count -ne 7)',
+        '$drawingLockPath = [IO.Path]::ChangeExtension($DrawingCopy, ".dwl")',
+        '$drawingLock2Path = [IO.Path]::ChangeExtension($DrawingCopy, ".dwl2")',
+        'if ($privatePaths.Count -ne 9)',
         '[IO.Path]::ChangeExtension($DrawingCopy, ".qsdb")',
         'Get-Process -Name "bricscad"',
         'cleanupVerified = $true',
@@ -84,6 +90,11 @@ if RUNNER.is_file():
     metadata = text.find('[ordered]@{', cleanup)
     if cleanup < 0 or metadata < 0 or cleanup >= metadata:
         errors.append("sidecar revision runner must verify process/private-artifact cleanup before publishing PASS metadata")
+    marker = text.find('$marker = Read-Marker')
+    hash_after = text.find('$drawingHashAfter =', marker)
+    stop_after_marker = text.find('Stop-LaunchedProcess -Process $process', marker)
+    if min(marker, hash_after, stop_after_marker) < 0 or not marker < stop_after_marker < hash_after:
+        errors.append("sidecar revision runner must finalize the exact BricsCAD process before hashing the disposable DWG")
 
 if DOC.is_file() and "QS3DSIDECARREVISIONPROBE" not in DOC.read_text(encoding="utf-8"):
     errors.append("COMMANDS.md does not identify the automation-only sidecar revision probe")
