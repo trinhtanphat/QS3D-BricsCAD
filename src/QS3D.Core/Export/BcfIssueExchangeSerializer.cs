@@ -172,8 +172,11 @@ namespace QS3D.Core.Export
 
         private static DateTime ParseUtc(string value)
         {
-            var parsed = DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
-            return parsed.UtcDateTime;
+            if (!DateTime.TryParseExact(value, "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed) ||
+                parsed.Kind != DateTimeKind.Utc ||
+                !string.Equals(value, parsed.ToString("O", CultureInfo.InvariantCulture), StringComparison.Ordinal))
+                throw new InvalidDataException("BCF timestamp must use canonical UTC round-trip format.");
+            return parsed;
         }
 
         private static string Number(double value) => value.ToString("R", CultureInfo.InvariantCulture);
