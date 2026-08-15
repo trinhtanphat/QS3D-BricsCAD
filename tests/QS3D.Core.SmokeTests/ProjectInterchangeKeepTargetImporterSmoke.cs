@@ -12,9 +12,37 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             PlanIsReadOnlyAndClassifiesAddVersusKeep();
+            CaseInsensitiveCollisionsKeepTargetAndAddDistinctItems();
             ImportKeepsExistingAndAddsPortableState();
             NameAndCategoryConflictsFailBeforeMutation();
             InvalidSnapshotFailsBeforeMutation();
+        }
+
+        private static void CaseInsensitiveCollisionsKeepTargetAndAddDistinctItems()
+        {
+            var target = LowercaseIdentityTargetProject();
+            var existingFamily = target.Families.Single();
+            var existingElement = target.Elements.Single();
+
+            var result = ProjectInterchangeKeepTargetImporter.Import(
+                target,
+                ProjectInterchangeJsonExporter.Build(SourceProject()));
+
+            Equal(1, result.ZonesAdded);
+            Equal(1, result.FloorsAdded);
+            Equal(1, result.FamiliesAdded);
+            Equal(1, result.ElementsAdded);
+            Equal(4, result.TargetIdentitiesKept);
+            Equal(2, target.Zones.Count);
+            Equal(2, target.Floors.Count);
+            Equal(2, target.Families.Count);
+            Equal(2, target.Elements.Count);
+            True(ReferenceEquals(existingFamily, target.Families.Single(x => x.Id == "fam1")));
+            True(ReferenceEquals(existingElement, target.Elements.Single(x => x.Id == "e1")));
+            Equal("z1", target.ActiveZoneId);
+            Equal("f1", target.ActiveFloorId);
+            Equal("fam1", target.Metadata["ActiveFamilyId"]);
+            True(target.FindElement("E2") != null);
         }
 
         private static void PlanIsReadOnlyAndClassifiesAddVersusKeep()
@@ -193,6 +221,28 @@ namespace QS3D.Core.SmokeTests
             project.Families.Add(family);
             project.Metadata["ActiveFamilyId"] = family.Id;
             var element = new ProjectElement("E1", ElementCategory.Beam, family.Id, "F1", "Z1");
+            element.Properties["Mark"] = "TARGET-B-01";
+            element.Quantities["LengthM"] = 4d;
+            project.Elements.Add(element);
+            return project;
+        }
+
+        private static ProjectState LowercaseIdentityTargetProject()
+        {
+            var project = new ProjectState("TARGET-P", "Target Project")
+            {
+                DrawingPath = "target.dwg",
+                DrawingFingerprint = "target-fingerprint",
+                ActiveZoneId = "z1",
+                ActiveFloorId = "f1"
+            };
+            project.Zones.Add(new ZoneDefinition("z1", "Target Zone"));
+            project.Floors.Add(new FloorDefinition("f1", "Target Floor", 0d));
+            var family = new ProjectFamily("fam1", "Target Beam Family", ElementCategory.Beam);
+            family.Properties["Material"] = "C30";
+            project.Families.Add(family);
+            project.Metadata["ActiveFamilyId"] = family.Id;
+            var element = new ProjectElement("e1", ElementCategory.Beam, family.Id, "f1", "z1");
             element.Properties["Mark"] = "TARGET-B-01";
             element.Quantities["LengthM"] = 4d;
             project.Elements.Add(element);
