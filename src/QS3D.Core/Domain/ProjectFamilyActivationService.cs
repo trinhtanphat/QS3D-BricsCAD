@@ -32,7 +32,6 @@ namespace QS3D.Core.Domain
             ValidateUniqueFamilyIds(project);
             if (!project.Metadata.TryGetValue("ActiveFamilyId", out var current)) return;
             if (!string.IsNullOrWhiteSpace(current) && project.FindFamily(current.Trim()) != null) return;
-            project.Touch();
             project.Metadata.Remove("ActiveFamilyId");
         }
 
