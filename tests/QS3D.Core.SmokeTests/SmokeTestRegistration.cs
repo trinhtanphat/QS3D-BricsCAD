@@ -143,6 +143,7 @@ namespace QS3D.Core.SmokeTests
             DrawingUnitResolutionSmoke.Run();
             ProxyCaptureEligibilitySmoke.Run();
             MeasuredSolidQuantityPolicySmoke.Run();
+            CubicostParitySmoke.Run();
         }
     }
 }
