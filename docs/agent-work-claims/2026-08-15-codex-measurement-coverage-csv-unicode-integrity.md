@@ -1,6 +1,6 @@
 # Work claim — Measurement coverage CSV Unicode integrity
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `audit-interchange-gap-next-20260815`
 - Registered: `2026-08-15T09:45:00+07:00`
 - Baseline main SHA: `1c5cc0a00ff8612102f63036d9d50f21cd0b1d75`
@@ -39,3 +39,11 @@ At baseline `1c5cc0a00ff8612102f63036d9d50f21cd0b1d75`, issue `#84`, current sou
 ## Completion condition
 
 Malformed UTF-16 is rejected before any filesystem side effect, valid supplementary Unicode remains ordinally identical in the BOM-bearing UTF-8 CSV, existing CSV/formula/atomic publication contracts remain intact, all remote-safe validation passes, implementation and claim closeout reach `main`, and issue `#84` remains open for its broader native/runtime/format scope.
+
+## Completion evidence
+
+- Claim PR `#1516` merged as `017f96803b373955adda72239ad0b6b86cb9ca1b` before implementation.
+- Source commit `bcd755a58b4478a80be785987b0bae0a4d48ba06` merged through PR `#1532` as `10110d652d2fbb25ce7f79a9574ff35ecc459dd7`.
+- Exact descendant validation at `309dff81ed3d7f18b9b32ac60cbd44167a40fa8f`: focused Unicode/publication gate PASS; Core/Smoke Release build 0 warnings/0 errors; full Core smoke `ALL PASS`.
+- Aggregate discovered 813 gates: every #76/#81/#84 gate passed; only the unrelated release-sync gate failed on an old release-helper token. No other exporter, release, workflow, Actions, native runtime, or LOCAL surface was changed.
+- Broad issue `#84` remains open.

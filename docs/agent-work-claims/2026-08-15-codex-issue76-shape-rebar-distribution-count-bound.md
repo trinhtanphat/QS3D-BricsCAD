@@ -1,6 +1,6 @@
 # Work claim — Shape Rebar distribution count bound
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex/issue76-rebar-next-gap`
 - Registered: `2026-08-15T09:50:38+07:00`
 - Baseline main SHA: `017f96803b373955adda72239ad0b6b86cb9ca1b`
@@ -41,3 +41,11 @@
 ## Completion condition
 
 The claim is visible on `main` before implementation starts; the bounded source, deterministic regression and focused gate merge normally; latest-main validation passes; then this narrow claim is marked `COMPLETED` with exact SHAs while issue `#76` stays open.
+
+## Completion evidence
+
+- Claim PR `#1517` merged as `d77139c56ab6abc5c999f9e440b02b617d06e105` before implementation.
+- Source commit `39f3fe7a8249dfbd84541bafa34f7014dba72b52` merged through PR `#1531` as `763346cab1c0d15e7dc67f27e44abf8d3083fee2`.
+- Exact descendant validation at `309dff81ed3d7f18b9b32ac60cbd44167a40fa8f`: focused count-bound gate PASS; Core/Smoke Release build 0 warnings/0 errors; full Core smoke `ALL PASS`.
+- Aggregate discovered 813 gates: every #76/#81/#84 gate passed; the only remaining failure was the unrelated release-sync gate requiring an old release-helper token. No release, workflow, Actions, native runtime, or LOCAL surface was changed.
+- Broad issue `#76` remains open.

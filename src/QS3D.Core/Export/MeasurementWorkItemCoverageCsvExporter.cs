@@ -11,6 +11,7 @@ namespace QS3D.Core.Export
     public static class MeasurementWorkItemCoverageCsvExporter
     {
         private const string Header = "Category,MeasurementItemId,MappingId,ClassificationId,WorkItemId,IsReady,Issues,FindingCount,AffectedElementCount,AffectedElementIds";
+        private static readonly UTF8Encoding StrictUtf8WithBom = new UTF8Encoding(true, true);
 
         public static void Export(string path, MeasurementWorkItemCoverageMatrix matrix)
         {
@@ -24,7 +25,7 @@ namespace QS3D.Core.Export
             try
             {
                 using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                using (var writer = new StreamWriter(stream, new UTF8Encoding(true)))
+                using (var writer = new StreamWriter(stream, StrictUtf8WithBom))
                 {
                     writer.Write(content);
                     writer.Flush();
@@ -64,7 +65,9 @@ namespace QS3D.Core.Export
                     .Append("\r\n");
             }
 
-            return sb.ToString();
+            var content = sb.ToString();
+            StrictUtf8WithBom.GetByteCount(content);
+            return content;
         }
 
         private static string Q(string? value)

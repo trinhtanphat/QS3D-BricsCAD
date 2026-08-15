@@ -1,6 +1,6 @@
 # Work claim — Semantic Schedule category snapshot bound
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `Codex /root/issue81_performance_next_gap`
 - Registered: `2026-08-15T09:51:01+07:00`
 - Baseline main SHA: `017f96803b373955adda72239ad0b6b86cb9ca1b`
@@ -19,7 +19,10 @@ The deterministic counterexample yields 5,001 category entries and then throws a
 - `src/QS3D.Core/Documentation/SemanticScheduleCatalog.cs`: category snapshot materialization in the `SemanticScheduleDefinition` constructor only.
 - `tests/QS3D.Core.SmokeTests/SemanticScheduleDefinitionBoundedSnapshotSmoke.cs`: extend the existing registered smoke for exact-cap acceptance, first-over-cap rejection without sentinel over-read, and category defensive-snapshot preservation.
 - `scripts/preflight-semantic-schedule-definition-bounds.py`: extend the existing focused gate to pin the category snapshot bound.
+- `scripts/preflight-semantic-schedule-catalog.py`: reconcile its stale requirement for the removed unbounded `new List<ElementCategory>` materialization with the bounded `Categories = SnapshotBounded(...)` contract. No other catalog token changes.
 - This claim record.
+
+The catalog-gate scope was added after the first aggregate run on implementation merge `ec69723cb1e20fce8effeff31e394527d791e09c` exposed exactly one directly related stale literal. The production implementation and focused bounded-definition gate were already passing; this amendment is merged before editing the adjacent catalog gate.
 
 ## Intended contract
 
@@ -41,3 +44,12 @@ The deterministic counterexample yields 5,001 category entries and then throws a
 - Run aggregate remote-safe preflight and require every discovered gate to pass.
 - Run `git diff --check` and review the exact branch diff.
 - Do not operate GitHub Actions or BricsCAD/native runtime.
+
+## Completion evidence
+
+- Claim PR `#1519` merged as `21cd2f26ed2e8b9b817cd8bd22bf4d44958d10af` before implementation.
+- Source commit `635e46c4c4069a5a4b88ac31c3d721c6d6d7429c` merged through PR `#1533` as `ec69723cb1e20fce8effeff31e394527d791e09c`.
+- The directly related stale catalog-gate scope was claimed first through PR `#1536` (`c1c117a57a1ce9c41aa7d17bd4180f2ddc525af7`), then gate commit `ee71c08a846ae72a8eed3af7016d7c1bcbb35005` merged through PR `#1537` as `309dff81ed3d7f18b9b32ac60cbd44167a40fa8f`.
+- Exact `309dff81...` validation: definition-bounds and catalog gates PASS; Core/Smoke Release build 0 warnings/0 errors; full Core smoke `ALL PASS`.
+- Aggregate discovered 813 gates: all Semantic Schedule and other #76/#81/#84 gates passed; only the unrelated release-sync gate failed on an old release-helper token. Release, workflows, Actions, native runtime, and LOCAL surfaces remained untouched.
+- Broad issue `#81` remains open.
