@@ -4,6 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 review = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
+apply_service = ROOT / "src/QS3D.BricsCAD.V25/Services/RecognitionApplyBatchService.cs"
 build3d = ROOT / "src/QS3D.BricsCAD.V25/Build3DCommands.cs"
 errors = []
 
@@ -12,9 +13,8 @@ if not review.is_file():
 else:
     text = review.read_text(encoding="utf-8")
     required = (
-        "ExistingProjectMutationContext.TryGet(doc, out var auditProject)",
-        "string.Equals(auditProject.ProjectId, reviewProjectId, StringComparison.OrdinalIgnoreCase)",
-        'AuditTrail.ForProject(auditProject).Record("recognition.skip"',
+        "var autoPlan = RecognitionApplyBatchService.PrepareBestEffort(doc, reviewProjectId, batch.AutoAccepted);",
+        "RecognitionApplyBatchService.Commit(doc, reviewProjectId, autoPlan);",
         "QS3D Recognition skip",
         "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)",
     )
@@ -25,6 +25,24 @@ else:
         errors.append("auto recognition must not silently swallow failed semantic captures")
     if 'AuditTrail.ForProject(ProjectContextCoordinator.GetOrCreate(doc)).Record("recognition.skip"' in text:
         errors.append("recognition.skip audit must not create/cache replacement project state")
+
+if not apply_service.is_file():
+    errors.append("missing RecognitionApplyBatchService.cs")
+else:
+    text = apply_service.read_text(encoding="utf-8")
+    required = (
+        "ExistingProjectMutationContext.TryGet(document, out var project)",
+        "string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase)",
+        "if (project.ChangeVersion != plan.ProjectChangeVersion)",
+        "var rollback = ProjectStateSnapshot.Capture(project);",
+        'audit.Record("recognition.skip", skip.Handle, skip.Reason);',
+        "rollback.Restore(project)",
+    )
+    for token in required:
+        if token not in text:
+            errors.append("Recognition batch safety contract missing: " + token)
+    if "ProjectContextCoordinator.GetOrCreate" in text:
+        errors.append("Recognition batch service must not create/cache replacement project state")
 
 if not build3d.is_file():
     errors.append("missing Build3DCommands.cs")
@@ -53,4 +71,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Build3D fails closed on partial/mixed semantic selections and auto-recognition failures are audited only against canonically re-resolved existing project state.")
+print("PASS: Build3D fails closed on partial/mixed selections and auto-recognition validation skips are committed/audited only through the current existing-project/version-guarded atomic batch service.")

@@ -53,14 +53,19 @@ if bq.is_file():
 recognition = windows["Recognition"]
 if recognition.is_file():
     text = recognition.read_text(encoding="utf-8")
-    if "EnsureActiveDocument();" not in text:
-        errors.append("Recognition apply/locate must verify its source DWG")
-    first_error = text.find("string? firstError = null;")
-    catch_error = text.find("catch (Exception ex)", first_error)
-    capture_error = text.find("if (firstError == null) firstError = ex.Message;", catch_error)
-    status_error = text.find("RefreshStatus(applied, failed, firstError);", capture_error)
-    if min(first_error, catch_error, capture_error, status_error) < 0 or not first_error < catch_error < capture_error < status_error:
-        errors.append("Recognition review must retain and surface the first manual apply failure instead of swallowing it")
+    for needle in (
+        "EnsureActiveDocument();",
+        "Func<IReadOnlyList<RecognitionResult>, bool, int>? _apply",
+        "Apply(IEnumerable<RecognitionResult> rows, bool requireLiveConfidence)",
+        "batch = rows.Where(x => x != null && x.TopCandidate != null).ToList().AsReadOnly();",
+        "var applied = _apply(batch, requireLiveConfidence);",
+        "RefreshStatus(applied, 0, null);",
+        'RefreshStatus(0, batch.Count, "Apply batch: " + ex.Message);',
+    ):
+        if needle not in text:
+            errors.append("Recognition atomic review UI missing bound-DWG/batch error token: " + needle)
+    if "catch {" in text:
+        errors.append("Recognition review must not silently swallow apply/locate failures")
 
 bbs = windows["BBS"]
 if bbs.is_file():
@@ -92,4 +97,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Recognition/BQ/BBS/Revision/Health modeless CAD/project/export actions are bound to their source DWG; BQ verifies current project identity and refreshes before XLSX while Recognition/BBS failures and totals remain checked.")
+print("PASS: Recognition/BQ/BBS/Revision/Health modeless actions stay bound to their source DWG; Recognition surfaces atomic batch failures, BQ refreshes before export, and BBS totals remain checked.")

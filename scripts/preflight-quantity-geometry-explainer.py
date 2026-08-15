@@ -49,13 +49,17 @@ REQUIRED = {
         "S gộp",
         "S còn",
         "OnQuantityGeometryDeductionClick",
+        "PrepareQuantityGeometrySnapshot(document, project, ids, out var geometryError)",
+        "TryRevalidateQuantityGeometry(",
         "ProjectStateSnapshot.CreateDetachedCopy(project)",
         "RegenerateDirty(preview)",
-        "ProjectQuantityReportBuilder.Detail(preview, ids)",
+        "ProjectQuantityReportBuilder.Detail(preview, elementIds)",
+        "SameElementIdentity(elementIds, x)",
         "SameRow(option.Row, matches[0])",
-        "SourceHandleResolver.Resolve(project, semanticIds)",
+        "ResolveQuantityPreferredLiveHandles(document, project, semanticIds, out var resolutionError)",
         "ViewportCommands.TryZoomSelection(document)",
         "GeometryFingerprint",
+        "!string.Equals(fresh.GeometryFingerprint, _quantityGeometryCurrent.GeometryFingerprint, StringComparison.Ordinal)",
     ],
     "render": [
         "RefreshQuantityGeometry(option)",
@@ -106,6 +110,27 @@ def main():
     if "ProjectQuantityReportBuilder.Detail(project, option.Row.ElementIds)" in ui:
         failures.append("geometry deduction locate must validate against regenerated detached preview, not dirty live semantic detail")
 
+    revalidate_start = ui.find("private bool TryRevalidateQuantityGeometry(")
+    face_sort_start = ui.find("private static int FaceSort", revalidate_start)
+    revalidate = ui[revalidate_start:face_sort_start] if revalidate_start >= 0 and face_sort_start > revalidate_start else ""
+    ordered = (
+        "ProjectStateSnapshot.CreateDetachedCopy(project)",
+        "RegenerateDirty(preview)",
+        "ProjectQuantityReportBuilder.Detail(preview, elementIds)",
+        "SameRow(option.Row, matches[0])",
+        "PrepareQuantityGeometrySnapshot(document, project, elementIds, out var geometryError)",
+        "QuantityGeometryExplanationService.Build(document, geometryProject, elementIds[0])",
+        "fresh.GeometryFingerprint",
+        "_quantityGeometryCurrent.GeometryFingerprint",
+    )
+    cursor = 0
+    for token in ordered:
+        pos = revalidate.find(token, cursor)
+        if pos < 0:
+            failures.append("geometry revalidation missing ordered freshness token: " + token)
+            break
+        cursor = pos + len(token)
+
     if failures:
         print("Quantity geometry explainer preflight FAILED")
         for failure in failures:
@@ -117,8 +142,8 @@ def main():
     print(" - Residual subtraction prevents double volume deduction")
     print(" - Multi-Solid3d face identities are component-scoped")
     print(" - Contact-probe cut planes cannot masquerade as original target faces")
-    print(" - Deduction locate validates regenerated preview provenance and resolves live CAD handles")
-    print(" - Per-face formwork/contact explanation and direct clickable CAD locate/zoom UI")
+    print(" - Locate regenerates a detached semantic preview, rebuilds live geometry, and requires the same BREP fingerprint")
+    print(" - Preferred live handles + direct CAD select/zoom are used for target/deduction locate")
     print(" - BREP compile reference and SI unit normalization")
     return 0
 

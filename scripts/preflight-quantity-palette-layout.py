@@ -58,7 +58,9 @@ if COORDINATOR.is_file():
         "layout.QuantityPaletteHeight = checked((int)Math.Round(quantitySize.Value.Height, MidpointRounding.AwayFromZero));",
         "if (_workspace == null && _right == null && _quantityInsight == null) return;",
         "var quantityVisible = IsQuantityInsightVisible;",
-        "if (_quantityInsight != null) _quantityInsight.Visible = quantityVisible;",
+        "SetVisibility(workspaceVisible, rightVisible, quantityVisible);",
+        "private static void SetVisibility(bool workspace, bool right, bool quantityInsight)",
+        "if (_quantityInsight != null) _quantityInsight.Visible = quantityInsight;",
     )
     for needle in required:
         if needle not in text:
@@ -83,4 +85,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Quantity Insight has independent per-user width/height defaults, optional backward-compatible loading, clamps/minimums, serialization/clone/equality coverage, and coordinator restore/persist wiring without QSDB mutation.")
+print("PASS: Quantity Insight has independent per-user dimensions and centralized visibility restore/persist wiring without QSDB mutation.")
