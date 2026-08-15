@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             PresentationStateDoesNotDirtySemanticProject();
+            PresentationMetadataExemptionPreservesSemanticMetadataTracking();
             SaveAtMaximumVersionSucceeds();
             ClearAtMaximumVersionSucceeds();
         }
@@ -63,6 +64,37 @@ namespace QS3D.Core.SmokeTests
             Equal(clearedVersion, project.ChangeVersion, "second workspace clear semantic version");
             Equal(initialUpdatedUtc, project.UpdatedUtc, "second workspace clear UpdatedUtc");
             False(stamp.RequiresSave(project), "second workspace clear should keep semantic project clean");
+        }
+
+        private static void PresentationMetadataExemptionPreservesSemanticMetadataTracking()
+        {
+            var project = new ProjectState("workspace-metadata-policy", "Workspace Metadata Policy");
+            var initialVersion = project.ChangeVersion;
+
+            project.Metadata[ProjectBrowserWorkspaceStateStore.MetadataKey] = "ui-state";
+            Equal(initialVersion, project.ChangeVersion, "direct presentation metadata set semantic version");
+            project.Metadata[ProjectBrowserWorkspaceStateStore.MetadataKey] = "ui-state";
+            Equal(initialVersion, project.ChangeVersion, "direct presentation metadata no-op semantic version");
+            True(project.Metadata.Remove(ProjectBrowserWorkspaceStateStore.MetadataKey), "direct presentation metadata remove");
+            Equal(initialVersion, project.ChangeVersion, "direct presentation metadata remove semantic version");
+
+            project.Metadata[ProjectBrowserWorkspaceStateStore.MetadataKey] = "ui-state";
+            var beforePresentationClear = project.ChangeVersion;
+            project.Metadata.Clear();
+            Equal(beforePresentationClear, project.ChangeVersion, "presentation-only metadata clear semantic version");
+
+            project.Metadata["Semantic.Note"] = "one";
+            Equal(initialVersion + 1, project.ChangeVersion, "semantic metadata set semantic version");
+            project.Metadata["Semantic.Note"] = "one";
+            Equal(initialVersion + 1, project.ChangeVersion, "semantic metadata no-op semantic version");
+            True(project.Metadata.Remove("Semantic.Note"), "semantic metadata remove");
+            Equal(initialVersion + 2, project.ChangeVersion, "semantic metadata remove semantic version");
+
+            project.Metadata[ProjectBrowserWorkspaceStateStore.MetadataKey] = "ui-state";
+            project.Metadata["Semantic.Note"] = "two";
+            var beforeMixedClear = project.ChangeVersion;
+            project.Metadata.Clear();
+            Equal(beforeMixedClear + 1, project.ChangeVersion, "mixed metadata clear semantic version");
         }
 
         private static void SaveAtMaximumVersionSucceeds()
