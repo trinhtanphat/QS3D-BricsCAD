@@ -66,11 +66,12 @@ for token in (
     "var restoreRollback = ProjectStateSnapshot.Capture(project);",
     "targetEntry.Snapshot.Restore(project);",
     "restoreRollback.Restore(project);",
-    "modelSpace.GetXDataForApplication(RegAppName)",
-    "_modelSpace.DisableUndoRecording(false);",
-    "_modelSpace.UpgradeOpen();",
-    "modelSpace.XData = marker",
-    "OpenModelSpace(document.Database, transaction, OpenMode.ForRead)",
+    "markerCarrier.GetXDataForApplication(RegAppName)",
+    "_markerCarrier.DisableUndoRecording(false);",
+    "_markerCarrier.UpgradeOpen();",
+    "markerCarrier.XData = marker",
+    "OpenMarkerCarrier(document.Database, transaction, OpenMode.ForRead)",
+    "transaction.GetObject(modelSpace.BlockBeginId, mode)",
     "MaxSnapshotsPerDocument = 128",
     "history.MarkDesynchronized(DesynchronizationCause.RestoreRecoveryFailed)",
     "_history.MarkDesynchronized(DesynchronizationCause.CommitHistoryLost)",
@@ -260,33 +261,40 @@ else:
         errors.append("the before history entry must pair the rollback snapshot with its captured pre-mutation stamp")
     if "new HistoryEntry(beforeSnapshot, ProjectRevisionStamp.Capture(project))" in begin_body:
         errors.append("BeginTransition must not pair the before snapshot with a live post-mutation project stamp")
-    model_space_read = begin_body.find(
-        "OpenModelSpace(document.Database, transaction, OpenMode.ForRead)"
+    marker_carrier_read = begin_body.find(
+        "OpenMarkerCarrier(document.Database, transaction, OpenMode.ForRead)"
     )
-    previous_revision = begin_body.find("var previousRevision = ReadRevision(modelSpace);", model_space_read)
-    if min(model_space_read, previous_revision) < 0 or "OpenMode.ForWrite" in begin_body:
-        errors.append("BeginTransition must keep the ModelSpace BTR read-only while capturing its prior revision")
-    if "modelSpace.XData = marker" not in stage_body or "_stagedEntries = stagedEntries;" not in stage_body:
+    previous_revision = begin_body.find("var previousRevision = ReadRevision(markerCarrier);", marker_carrier_read)
+    if min(marker_carrier_read, previous_revision) < 0 or "OpenMode.ForWrite" in begin_body:
+        errors.append("BeginTransition must keep the existing ModelSpace BlockBegin marker carrier read-only while capturing its prior revision")
+    if "markerCarrier.XData = marker" not in stage_body or "_stagedEntries = stagedEntries;" not in stage_body:
         errors.append("native marker must be written only after the private shadow history is fully staged")
-    enable_undo = stage_body.find("_modelSpace.DisableUndoRecording(false);")
-    upgrade_write = stage_body.find("_modelSpace.UpgradeOpen();", enable_undo)
-    marker_write = stage_body.find("_modelSpace.XData = marker;", upgrade_write)
-    enable_end = enable_undo + len("_modelSpace.DisableUndoRecording(false);")
-    upgrade_end = upgrade_write + len("_modelSpace.UpgradeOpen();")
+    enable_undo = stage_body.find("_markerCarrier.DisableUndoRecording(false);")
+    upgrade_write = stage_body.find("_markerCarrier.UpgradeOpen();", enable_undo)
+    marker_write = stage_body.find("_markerCarrier.XData = marker;", upgrade_write)
+    enable_end = enable_undo + len("_markerCarrier.DisableUndoRecording(false);")
+    upgrade_end = upgrade_write + len("_markerCarrier.UpgradeOpen();")
     if (
         min(enable_undo, upgrade_write, marker_write) < 0
         or stage_body[enable_end:upgrade_write].strip()
         or stage_body[upgrade_end:marker_write].strip()
     ):
-        errors.append("the read-only ModelSpace BTR must enable native Undo recording, upgrade open, then assign revision XData")
+        errors.append("the read-only ModelSpace BlockBegin carrier must enable native Undo recording, upgrade open, then assign revision XData")
     if (
         coordinator.count(".DisableUndoRecording(") != 1
-        or coordinator.count("_modelSpace.UpgradeOpen(") != 1
+        or coordinator.count("_markerCarrier.UpgradeOpen(") != 1
         or "DisableUndoRecording" in begin_body
-        or "_modelSpace.UpgradeOpen" in begin_body
+        or "_markerCarrier.UpgradeOpen" in begin_body
     ):
-        errors.append("explicit Undo recording and write upgrade must remain isolated to the staged ModelSpace revision marker write")
-    if "modelSpace.XData = marker" in begin_body or "EnsureRegApp" in begin_body:
+        errors.append("explicit Undo recording and write upgrade must remain isolated to the staged BlockBegin revision marker write")
+    if (
+        coordinator.count("modelSpace.BlockBeginId") != 1
+        or "new BlockBegin" in coordinator
+        or "StartUndoRecord" in coordinator
+        or "_modelSpace" in coordinator
+    ):
+        errors.append("the revision carrier must be the existing geometry-free ModelSpace BlockBegin without creating an entity or a database undo record")
+    if "markerCarrier.XData = marker" in begin_body or "EnsureRegApp" in begin_body:
         errors.append("BeginTransition must not mutate the native marker before fallible reconcile work completes")
     if "_history.Publish(_stagedEntries, _nextRevision);" not in confirm_body:
         errors.append("published semantic revision must advance only in post-CAD-commit confirmation")
