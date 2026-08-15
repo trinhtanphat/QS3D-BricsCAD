@@ -5,6 +5,10 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 COMMAND = ROOT / "src" / "QS3D.BricsCAD.V25" / "CurvedStructuralRuntimeProbeCommands.cs"
 RUNNER = ROOT / "scripts" / "test-bricscad-v25-curved-structural.ps1"
+CAPTURE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Services" / "SemanticCaptureService.cs"
+ELIGIBILITY = ROOT / "src" / "QS3D.Core" / "Recognition" / "EntitySnapshotCaptureEligibility.cs"
+SNAPSHOT_READER = ROOT / "src" / "QS3D.BricsCAD.V25" / "Cad" / "EntitySnapshotReader.cs"
+STRUCTURAL_BUILDER = ROOT / "src" / "QS3D.BricsCAD.V25" / "Cad" / "StructuralSolidBuilder.cs"
 
 
 def fail(message: str) -> None:
@@ -22,13 +26,23 @@ def forbid(text: str, token: str, label: str) -> None:
         fail(f"{label} contains forbidden token: {token}")
 
 
-if not COMMAND.is_file():
-    fail(f"missing command source: {COMMAND.relative_to(ROOT)}")
-if not RUNNER.is_file():
-    fail(f"missing runtime runner: {RUNNER.relative_to(ROOT)}")
+for required_path, label in (
+    (COMMAND, "command source"),
+    (RUNNER, "runtime runner"),
+    (CAPTURE, "semantic capture service"),
+    (ELIGIBILITY, "semantic capture eligibility"),
+    (SNAPSHOT_READER, "entity snapshot reader"),
+    (STRUCTURAL_BUILDER, "structural builder"),
+):
+    if not required_path.is_file():
+        fail(f"missing {label}: {required_path.relative_to(ROOT)}")
 
 command = COMMAND.read_text(encoding="utf-8")
 runner = RUNNER.read_text(encoding="utf-8")
+capture = CAPTURE.read_text(encoding="utf-8")
+eligibility = ELIGIBILITY.read_text(encoding="utf-8")
+snapshot_reader = SNAPSHOT_READER.read_text(encoding="utf-8")
+structural_builder = STRUCTURAL_BUILDER.read_text(encoding="utf-8")
 
 for token in (
     '[CommandMethod("QS3DCURVEDSTRUCTURALPROBE", CommandFlags.Modal)]',
@@ -71,6 +85,44 @@ for case_name in (
     'non_wcs_beam_circle',
 ):
     require(command, f'"{case_name}"', "command source")
+
+# Keep the runtime harness attached to the same production semantic boundary that #1472 uses.
+# Native ARC/CIRCLE/POLYLINE snapshots are not ProxyEntity metric-gated by EnsureReady, so the
+# runtime command separately asserts finite positive native Length/Area while this source contract
+# prevents the production capture route or ProxyEntity fallback eligibility from drifting away.
+for token in (
+    'EntitySnapshotReader.ReadCurrentSelection(document)',
+    'EntitySnapshotCaptureEligibility.EnsureReady(snapshot, category)',
+    'CaptureSnapshotCore(document, project, snapshot, category)',
+):
+    require(capture, token, "semantic capture service")
+
+for token in (
+    'public static bool IsReady(EntitySnapshot snapshot, ElementCategory category, out string reason)',
+    'if (snapshot.HasQs3dGeneratedOwnershipMarker)',
+    'case ElementCategory.Beam:',
+    'ready = hasLength || hasVolume;',
+    'case ElementCategory.Column:',
+    'case ElementCategory.Slab:',
+    'ready = hasArea || hasVolume;',
+    'public static void EnsureReady(EntitySnapshot snapshot, ElementCategory category)',
+):
+    require(eligibility, token, "semantic capture eligibility")
+
+for token in (
+    'if (entity is Circle circle)',
+    'Math.PI * circle.Radius * circle.Radius',
+):
+    require(snapshot_reader, token, "entity snapshot reader")
+
+for token in (
+    'if (category == ElementCategory.Beam)',
+    'entity is Arc arc',
+    'entity is Circle circle',
+    'CadPolylinePathReader.ReadOpenWcsXy',
+    'BuildClosedProfilePrism(document, project, circle',
+):
+    require(structural_builder, token, "structural builder")
 
 for token in (
     '[Parameter(Mandatory = $true)][switch]$ConfirmDisposableCopy',
