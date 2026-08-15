@@ -88,6 +88,7 @@ namespace QS3D.BricsCAD.V25.UI
             PropertyValueBox.Text = string.Empty;
             ReferenceCountText.Text = "0";
             FamilyNameBox.Focus();
+            RefreshQuickWorkflow();
             SetStatus("Tạo Family mới: chọn Category, nhập tên rồi bấm Lưu tên. Custom property là tùy chọn.");
         }
 
