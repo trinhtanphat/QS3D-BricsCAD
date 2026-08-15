@@ -10,6 +10,23 @@ using QS3D.Core.Rules;
 
 namespace QS3D.Core.Domain
 {
+    internal static class PersistedTextXml
+    {
+        internal static string Verify(string value, string parameterName, string label)
+        {
+            try
+            {
+                XmlConvert.VerifyXmlChars(value);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException(label + " contains characters that are invalid in XML.", parameterName, ex);
+            }
+
+            return value;
+        }
+    }
+
     public sealed class ZoneDefinition
     {
         private string _name;
@@ -32,15 +49,7 @@ namespace QS3D.Core.Domain
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Value is required.", name);
             var normalized = value.Trim();
             if (normalized.Any(char.IsControl)) throw new ArgumentException("Value cannot contain control characters.", name);
-            try
-            {
-                XmlConvert.VerifyXmlChars(normalized);
-            }
-            catch (XmlException ex)
-            {
-                throw new ArgumentException("Value contains characters that are invalid in XML.", name, ex);
-            }
-            return normalized;
+            return PersistedTextXml.Verify(normalized, name, "Value");
         }
     }
 
@@ -77,7 +86,7 @@ namespace QS3D.Core.Domain
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Value is required.", name);
             var normalized = value.Trim();
             if (normalized.Any(char.IsControl)) throw new ArgumentException("Value cannot contain control characters.", name);
-            return normalized;
+            return PersistedTextXml.Verify(normalized, name, "Value");
         }
     }
 
@@ -127,14 +136,14 @@ namespace QS3D.Core.Domain
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Family id is required.", nameof(value));
             var normalized = value.Trim();
             if (normalized.Any(char.IsControl)) throw new ArgumentException("Family id cannot contain control characters.", nameof(value));
-            return normalized;
+            return PersistedTextXml.Verify(normalized, nameof(value), "Family id");
         }
         private static string RequireName(string value)
         {
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Family name is required.", nameof(value));
             var normalized = value.Trim();
             if (normalized.Any(char.IsControl)) throw new ArgumentException("Family name cannot contain control characters.", nameof(value));
-            return normalized;
+            return PersistedTextXml.Verify(normalized, nameof(value), "Family name");
         }
         private static ElementCategory RequireCategory(ElementCategory value)
         {
@@ -193,7 +202,7 @@ namespace QS3D.Core.Domain
                 var rawValue = value ?? string.Empty;
                 if (rawValue.Any(char.IsControl))
                     throw new ArgumentException("Drawing path cannot contain control characters.", nameof(value));
-                SetPersistedScalar(ref _drawingPath, rawValue);
+                SetPersistedScalar(ref _drawingPath, PersistedTextXml.Verify(rawValue, nameof(value), "Drawing path"));
             }
         }
         public string DrawingFingerprint
@@ -253,7 +262,7 @@ namespace QS3D.Core.Domain
             var normalizedValue = (value ?? string.Empty).Trim();
             if (normalizedValue.Any(char.IsControl))
                 throw new ArgumentException("Active context id cannot contain control characters.", nameof(value));
-            SetPersistedScalar(ref field, normalizedValue);
+            SetPersistedScalar(ref field, PersistedTextXml.Verify(normalizedValue, nameof(value), "Active context id"));
         }
 
         private void SetCanonicalOptionalIdentity(ref string field, string? value, string label)
@@ -261,7 +270,8 @@ namespace QS3D.Core.Domain
             var rawValue = value ?? string.Empty;
             if (rawValue.Any(char.IsControl))
                 throw new ArgumentException(label + " cannot contain control characters.", nameof(value));
-            SetPersistedScalar(ref field, rawValue.Trim());
+            var normalizedValue = rawValue.Trim();
+            SetPersistedScalar(ref field, PersistedTextXml.Verify(normalizedValue, nameof(value), label));
         }
 
         private void SetPersistedScalar(ref string field, string value)
@@ -289,7 +299,7 @@ namespace QS3D.Core.Domain
             var normalized = value.Trim();
             if (normalized.Any(char.IsControl))
                 throw new ArgumentException("Project id cannot contain control characters.", nameof(value));
-            return normalized;
+            return PersistedTextXml.Verify(normalized, nameof(value), "Project id");
         }
 
         private static string RequireProjectName(string value)
@@ -299,15 +309,7 @@ namespace QS3D.Core.Domain
             var normalized = value.Trim();
             if (normalized.Any(char.IsControl))
                 throw new ArgumentException("Project name cannot contain control characters.", nameof(value));
-            try
-            {
-                XmlConvert.VerifyXmlChars(normalized);
-            }
-            catch (XmlException ex)
-            {
-                throw new ArgumentException("Project name contains characters that are invalid in XML.", nameof(value), ex);
-            }
-            return normalized;
+            return PersistedTextXml.Verify(normalized, nameof(value), "Project name");
         }
 
         private static string NormalizeLookupId(string id) => (id ?? string.Empty).Trim();
