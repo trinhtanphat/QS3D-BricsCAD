@@ -1,9 +1,10 @@
 # Agent work claim — RateBook effective-time uniqueness index
 
-Status: ACTIVE
+Status: COMPLETED
 Agent: Codex `/root/audit_performance_next`
 Baseline: `d521a3f95ee0ed80f12335e2f6affa59ce21fa9d`
 Branch: `agent/codex/issue81-ratebook-timestamp-index-20260815`
+Implementation branch: `agent/codex/issue81-ratebook-timestamp-index-impl-20260815`
 Related issue: #81
 
 ## Defect
@@ -49,3 +50,22 @@ Expected files:
 - Run the focused RateBook effective-time index preflight.
 - Run the aggregate remote-safe preflight and report unrelated blockers
   separately without operating GitHub Actions.
+
+## Completion
+
+- Claim PR: #1541; claim merge:
+  `563db5ceedb829689e7b33caace82d953cc77e24`.
+- Implementation commit:
+  `60202d507065dbb167d3ab0e0bebe7b3a72d81b0`.
+- Implementation PR: #1546; exact `main` merge:
+  `8e99e2a44f1ae9cebf67ca7c165d267cc47ee1e6`.
+- Exact-merge root revalidation: focused RateBook effective-time index gate
+  PASS; `QS3D.Core` Release build PASS with 0 warnings / 0 errors;
+  `QS3D.Core.SmokeTests` Release build PASS with 0 warnings / 0 errors; full
+  Core smoke `ALL PASS`.
+- The completed slice replaces the quadratic per-scope effective-time scan
+  with indexed uniqueness while retaining every reserved exception, snapshot,
+  ordering, identity, and `Resolve` boundary.
+- Broad performance issue #81 intentionally remains OPEN for its other
+  source/runtime work. No GitHub Actions, BricsCAD/native runtime, release, or
+  private-data operation was performed by this lane.
