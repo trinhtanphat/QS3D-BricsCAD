@@ -23,9 +23,9 @@ namespace QS3D.Core.SmokeTests
 
         private static void LoneSurrogatesFailClosed()
         {
-            Throws<EncoderFallbackException>(() =>
+            Throws<ArgumentException>(() =>
                 MeasurementWorkItemCoverageCsvExporter.ToCsv(BuildMatrix("map-high-\uD800")));
-            Throws<EncoderFallbackException>(() =>
+            Throws<ArgumentException>(() =>
                 MeasurementWorkItemCoverageCsvExporter.ToCsv(BuildMatrix("map-low-\uDC00")));
         }
 
@@ -37,7 +37,7 @@ namespace QS3D.Core.SmokeTests
             var absentPath = Path.Combine(absentRoot, "nested", "coverage.csv");
             try
             {
-                Throws<EncoderFallbackException>(() =>
+                Throws<ArgumentException>(() =>
                     MeasurementWorkItemCoverageCsvExporter.Export(absentPath, BuildMatrix("map-high-\uD800")));
                 True(!Directory.Exists(absentRoot),
                     "Malformed coverage CSV input must fail before creating the destination directory.");
@@ -57,7 +57,7 @@ namespace QS3D.Core.SmokeTests
             var beforeFiles = Directory.GetFiles(existingRoot).OrderBy(x => x, StringComparer.Ordinal).ToArray();
             try
             {
-                Throws<EncoderFallbackException>(() =>
+                Throws<ArgumentException>(() =>
                     MeasurementWorkItemCoverageCsvExporter.Export(existingPath, BuildMatrix("map-low-\uDC00")));
                 True(File.ReadAllBytes(existingPath).SequenceEqual(sentinel),
                     "Malformed coverage CSV input must not replace an existing destination.");
