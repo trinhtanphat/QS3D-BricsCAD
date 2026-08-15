@@ -13,9 +13,10 @@ RUNBOOK = ROOT / "docs/SOURCE-RECONCILE-GENERATED-OUTPUTS.md"
 INBOX = ROOT / "docs/LOCAL-AGENT-INBOX.md"
 CLAIM = ROOT / "docs/agent-work-claims/2026-08-13-codex-local004-source-reconcile-runtime.md"
 DISCRIMINATOR_CLAIM = ROOT / "docs/agent-work-claims/2026-08-14-gpt56sol-issue1005-post-undo-marker-discriminator.md"
+SUCCESSOR_CLAIM = ROOT / "docs/agent-work-claims/2026-08-15-codex-local004-post-undo-marker-classification.md"
 errors = []
 
-for path in (COMMAND, MARKER_PROBE, RUNNER, HELPER, SOURCE_COMMAND, SOURCE_SERVICE, RUNBOOK, INBOX, CLAIM, DISCRIMINATOR_CLAIM):
+for path in (COMMAND, MARKER_PROBE, RUNNER, HELPER, SOURCE_COMMAND, SOURCE_SERVICE, RUNBOOK, INBOX, CLAIM, DISCRIMINATOR_CLAIM, SUCCESSOR_CLAIM):
     if not path.is_file():
         errors.append("missing LOCAL-004 Source Reconcile file: " + str(path.relative_to(ROOT)))
 
@@ -107,20 +108,23 @@ if MARKER_PROBE.is_file():
         'CommandMethod("QS3DSRTMARKERAFTERREDO", CommandFlags.Modal)',
         'CommandMethod("QS3DSRTMARKERPUBLISH", CommandFlags.Modal)',
         'SourceReconcileUndoCoordinator.CaptureSanitizedState(context.Document, context.Project)',
-        'current.CompareMarkerTo(state.PreFinal)',
-        'current.CompareMarkerTo(postFinal)',
-        '"post_undo_marker_vs_pre_final_state="',
-        '"post_undo_marker_vs_post_final_state="',
-        '"post_redo_marker_vs_pre_final_state="',
-        '"post_redo_marker_vs_post_final_state="',
-        '"ADVANCED"',
+        'ClassifyMarker(current, state.PreFinal, postFinal)',
+        'current.CompareMarkerTo(before)',
+        'current.CompareMarkerTo(after)',
+        '"post_undo_marker_class="',
+        '"post_redo_marker_class="',
+        '"BEFORE"',
+        '"AFTER"',
+        '"OTHER_OR_INVALID"',
         '"UNCHANGED"',
         '"MISSING_OR_INVALID"',
         'FileMode.CreateNew',
         'File.Replace(temp, path, null)',
-        'QS3D_SOURCE_RECONCILE_PHASE_RESULT',
+        'QS3D_SOURCE_RECONCILE_MARKER_RESULT',
+        'source-reconcile-post-undo-marker.txt',
+        'QS3D_SOURCE_RECONCILE_POST_UNDO_MARKER_V1',
         'QS3D_SOURCE_RECONCILE_NONCE',
-        'qualification_boundary=LOCAL_004_ONLY',
+        'yield return "qualification_boundary=" + Boundary',
     )
     for token in required:
         if token not in text:
@@ -132,6 +136,23 @@ if MARKER_PROBE.is_file():
     ):
         if forbidden in lower:
             errors.append("LOCAL-004 post-Undo marker discriminator leaks/bypasses private marker state: " + forbidden)
+    for forbidden in (
+        'post_undo_marker_vs_pre_final_state',
+        'post_undo_marker_vs_post_final_state',
+        'post_redo_marker_vs_pre_final_state',
+        'post_redo_marker_vs_post_final_state',
+    ):
+        if forbidden in text:
+            errors.append("LOCAL-004 post-Undo marker discriminator retains an ambiguous comparison field: " + forbidden)
+    marker_lines_start = text.find('private static IEnumerable<string> MarkerLines')
+    marker_lines_end = text.find('private static void WriteNew', marker_lines_start)
+    marker_lines = text[marker_lines_start:marker_lines_end].lower()
+    for forbidden in (
+        'revision=', 'id=', 'handle=', 'path=', 'message=', 'count=',
+        'project=', 'document=', 'source=', 'generated=',
+    ):
+        if forbidden in marker_lines:
+            errors.append("LOCAL-004 post-Undo marker diagnostic exposes a forbidden field: " + forbidden)
 
 if RUNNER.is_file():
     text = RUNNER.read_text(encoding="utf-8")
@@ -150,6 +171,7 @@ if RUNNER.is_file():
         'source-b.source-reconcile-probe-copy.dwg',
         'QS3D_SOURCE_RECONCILE_RESULT',
         'QS3D_SOURCE_RECONCILE_PHASE_RESULT',
+        'QS3D_SOURCE_RECONCILE_MARKER_RESULT',
         'QS3D_SOURCE_RECONCILE_NONCE',
         'QS3D_SOURCE_RECONCILE_DWG_A',
         'QS3D_SOURCE_RECONCILE_DWG_B',
@@ -166,20 +188,23 @@ if RUNNER.is_file():
         '"QS3DSRTMARKERAFTERUNDO"',
         '"QS3DSRTMARKERAFTERREDO"',
         '"QS3DSRTMARKERPUBLISH"',
-        '"_.UNDO", "1", "QS3DSRTCHECKUNDO", "QS3DSRTMARKERAFTERUNDO", "_.REDO", "QS3DSRTCHECKREDO", "QS3DSRTMARKERAFTERREDO"',
+        '"_.UNDO", "1", "QS3DSRTMARKERAFTERUNDO", "QS3DSRTCHECKUNDO", "_.REDO", "QS3DSRTMARKERAFTERREDO", "QS3DSRTCHECKREDO"',
         '"QS3DSAVE", "_.QSAVE"',
         'QS3D_SOURCE_RECONCILE_RUNTIME_V1',
         'LOCAL_004_ONLY',
         'NATIVE_UNDO_SEMANTIC_DIVERGENCE',
         'Require-FinalReconcileDiagnostics',
         'Require-PostUndoMarkerDiagnostics',
-        'post_undo_marker_vs_pre_final_state',
-        'post_undo_marker_vs_post_final_state',
-        'post_redo_marker_vs_pre_final_state',
-        'post_redo_marker_vs_post_final_state',
+        'source-reconcile-post-undo-marker.txt',
+        'QS3D_SOURCE_RECONCILE_POST_UNDO_MARKER_V1',
+        'post_undo_marker_class',
+        'post_redo_marker_class',
+        '@("BEFORE", "AFTER", "OTHER_OR_INVALID")',
+        'post_undo_marker_diagnostic = $markerDiagnostic',
+        'if (@($Marker.Keys).Count -ne $expectedKeys.Count)',
+        'Require-PostUndoMarkerDiagnostics -Marker $markerDiagnostic -Nonce $nonce -RequireRedo',
         '@("BOTH_SOURCES", "LINE_ONLY", "POLY_ONLY", "OTHER_OR_MISSING")',
         '@("REMOVED_ALL", "RETAINED_ALL", "PARTIAL")',
-        '@("ADVANCED", "UNCHANGED", "MISSING_OR_INVALID")',
         '@("NONE", "SYNCED", "MARKER_MISMATCH", "DESYNCHRONIZED")',
         '@("ONE", "MULTIPLE")',
         'phase_marker = $phaseMarker',
@@ -209,8 +234,8 @@ if RUNNER.is_file():
         '"QS3DSRTPREPAMBIGUOUS"', '"QS3DSRTCHECKAMBIGUOUS"',
         '"_.OPEN"', '"QS3DSRTSEEDB"', '"QS3DSRTCHECKB"',
         '"QS3DSRTMARKERBEFOREFINAL"', '"QS3DSRTSELECTSOURCES"', '"QS3DSRTAFTERFINALSYNC"', '"QS3DSRTMARKERAFTERFINAL"',
-        '"_.UNDO"', '"QS3DSRTCHECKUNDO"', '"QS3DSRTMARKERAFTERUNDO"',
-        '"_.REDO"', '"QS3DSRTCHECKREDO"', '"QS3DSRTMARKERAFTERREDO"',
+        '"_.UNDO"', '"QS3DSRTMARKERAFTERUNDO"', '"QS3DSRTCHECKUNDO"',
+        '"_.REDO"', '"QS3DSRTMARKERAFTERREDO"', '"QS3DSRTCHECKREDO"',
         '"QS3DSRTFINALREBUILD"', '"QS3DSRTSESSION1"', '"QS3DSRTMARKERPUBLISH"', '"QS3DSAVE"', '"_.QSAVE"',
     )
     positions = [text.find(token) for token in ordered]
@@ -258,6 +283,12 @@ if DISCRIMINATOR_CLAIM.is_file():
         if token not in text:
             errors.append("LOCAL-004 discriminator claim missing coordination token: " + token)
 
+if SUCCESSOR_CLAIM.is_file():
+    text = SUCCESSOR_CLAIM.read_text(encoding="utf-8")
+    for token in ('LOCAL-004', 'Status: `ACTIVE`', 'BEFORE', 'AFTER', 'OTHER_OR_INVALID', 'no production fix is implemented'):
+        if token not in text:
+            errors.append("LOCAL-004 successor discriminator claim missing coordination token: " + token)
+
 print("QS3D LOCAL-004 Source Reconcile runtime-probe preflight")
 if errors:
     for error in errors:
@@ -265,4 +296,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: additive LOCAL-004 automation preserves production authoring/reconcile/rebuild/Undo/Save boundaries, captures only bounded post-Undo/post-Redo marker comparisons, covers success plus generated/ambiguous/multi-DWG refusal and post-invalidation unit-mismatch rollback, and enforces exact-SHA/privacy/cleanup without manufacturing licensed runtime evidence.")
+print("PASS: additive LOCAL-004 automation preserves production authoring/reconcile/rebuild/Undo/Save boundaries, captures only BEFORE/AFTER/OTHER_OR_INVALID post-Undo/post-Redo marker classes in a dedicated exact-key diagnostic, covers success plus generated/ambiguous/multi-DWG refusal and post-invalidation unit-mismatch rollback, and enforces exact-SHA/privacy/cleanup without manufacturing licensed runtime evidence.")

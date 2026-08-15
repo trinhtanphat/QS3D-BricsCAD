@@ -64,12 +64,35 @@ function Require-FinalReconcileDiagnostics {
 }
 
 function Require-PostUndoMarkerDiagnostics {
-    param([Parameter(Mandatory = $true)]$Marker)
-    $allowed = @("ADVANCED", "UNCHANGED", "MISSING_OR_INVALID")
-    Require-Qs3dAllowedValue $Marker "post_undo_marker_vs_pre_final_state" $allowed
-    Require-Qs3dAllowedValue $Marker "post_undo_marker_vs_post_final_state" $allowed
-    Require-Qs3dAllowedValue $Marker "post_redo_marker_vs_pre_final_state" $allowed
-    Require-Qs3dAllowedValue $Marker "post_redo_marker_vs_post_final_state" $allowed
+    param(
+        [Parameter(Mandatory = $true)]$Marker,
+        [Parameter(Mandatory = $true)][string]$Nonce,
+        [switch]$RequireRedo
+    )
+    $expectedKeys = @(
+        "status", "schema", "qualification_boundary", "nonce",
+        "post_undo_marker_class"
+    )
+    $hasRedo = $Marker.ContainsKey("post_redo_marker_class")
+    if ($RequireRedo -and -not $hasRedo) {
+        throw "LOCAL-004 post-Redo marker diagnostic is missing."
+    }
+    if ($hasRedo) { $expectedKeys += "post_redo_marker_class" }
+    if (@($Marker.Keys).Count -ne $expectedKeys.Count) {
+        throw "LOCAL-004 post-Undo marker diagnostic contains an unexpected field."
+    }
+    foreach ($key in $expectedKeys) {
+        if (-not $Marker.ContainsKey($key)) {
+            throw "LOCAL-004 post-Undo marker diagnostic is missing a required field."
+        }
+    }
+    Require-Qs3dValue $Marker "status" "PASS"
+    Require-Qs3dValue $Marker "schema" "QS3D_SOURCE_RECONCILE_POST_UNDO_MARKER_V1"
+    Require-Qs3dValue $Marker "qualification_boundary" "LOCAL_004_ONLY"
+    Require-Qs3dValue $Marker "nonce" $Nonce
+    $allowed = @("BEFORE", "AFTER", "OTHER_OR_INVALID")
+    Require-Qs3dAllowedValue $Marker "post_undo_marker_class" $allowed
+    if ($hasRedo) { Require-Qs3dAllowedValue $Marker "post_redo_marker_class" $allowed }
 }
 
 function Read-PositiveMarkerInt {
@@ -285,6 +308,7 @@ if ($privateFiles.Count -ne 12) { throw "LOCAL-004 private-state cleanup set is 
 
 $resultPath = Join-Path $ArtifactDir "source-reconcile-result.txt"
 $phasePath = Join-Path $ArtifactDir "source-reconcile-session1.txt"
+$markerDiagnosticPath = Join-Path $ArtifactDir "source-reconcile-post-undo-marker.txt"
 $scriptOnePath = Join-Path $ArtifactDir "source-reconcile-session1.private.scr"
 $scriptTwoPath = Join-Path $ArtifactDir "source-reconcile-session2.private.scr"
 $metadataPath = Join-Path $ArtifactDir "source-reconcile-metadata.json"
@@ -292,6 +316,7 @@ $nonce = [Guid]::NewGuid().ToString("N")
 $pluginHash = (Get-FileHash -LiteralPath $PluginDll -Algorithm SHA256).Hash.ToUpperInvariant()
 $environmentNames = @(
     "QS3D_SOURCE_RECONCILE_RESULT", "QS3D_SOURCE_RECONCILE_PHASE_RESULT", "QS3D_SOURCE_RECONCILE_NONCE",
+    "QS3D_SOURCE_RECONCILE_MARKER_RESULT",
     "QS3D_SOURCE_RECONCILE_DWG_A", "QS3D_SOURCE_RECONCILE_DWG_B",
     "QS3D_SOURCE_RECONCILE_UNDO_COHERENT", "QS3D_SOURCE_RECONCILE_REDO_COHERENT"
 )
@@ -304,6 +329,7 @@ $launcherOneId = 0
 $launcherTwoId = 0
 $launcherHandoffs = 0
 $phaseMarker = $null
+$markerDiagnostic = $null
 $finalMarker = $null
 $qualificationError = $null
 $cleanupError = $null
@@ -317,6 +343,7 @@ $startedAt = Get-Date
 try {
     $env:QS3D_SOURCE_RECONCILE_RESULT = $resultPath
     $env:QS3D_SOURCE_RECONCILE_PHASE_RESULT = $phasePath
+    $env:QS3D_SOURCE_RECONCILE_MARKER_RESULT = $markerDiagnosticPath
     $env:QS3D_SOURCE_RECONCILE_NONCE = $nonce
     $env:QS3D_SOURCE_RECONCILE_DWG_A = $drawingA
     $env:QS3D_SOURCE_RECONCILE_DWG_B = $drawingB
@@ -333,7 +360,7 @@ try {
         "QS3DSRTPREPAMBIGUOUS", "QS3DSYNCSOURCE", "QS3DSRTCHECKAMBIGUOUS",
         "_.OPEN", ('"' + $drawingB + '"'), "QS3DSRTSEEDB", "QS3DSYNCSOURCE", "QS3DSRTCHECKB",
         "QS3DSRTMARKERBEFOREFINAL", "QS3DSRTSELECTSOURCES", "QS3DSYNCSOURCE", "QS3DSRTAFTERFINALSYNC", "QS3DSRTMARKERAFTERFINAL",
-        "_.UNDO", "1", "QS3DSRTCHECKUNDO", "QS3DSRTMARKERAFTERUNDO", "_.REDO", "QS3DSRTCHECKREDO", "QS3DSRTMARKERAFTERREDO",
+        "_.UNDO", "1", "QS3DSRTMARKERAFTERUNDO", "QS3DSRTCHECKUNDO", "_.REDO", "QS3DSRTMARKERAFTERREDO", "QS3DSRTCHECKREDO",
         "QS3DSRTSELECTLINE", "QS3DBUILD3D", "QS3DSRTSELECTPOLY", "QS3DBUILD3D", "QS3DSRTFINALREBUILD",
         "QS3DSRTSESSION1", "QS3DSRTMARKERPUBLISH", "QS3DSAVE", "_.QSAVE", "_.QUIT", "_Y"
     )
@@ -345,6 +372,10 @@ try {
     $proxyDialogsDismissed += Wait-Qs3dMarkerOrFailure -Process ([ref]$processOne) -HandoffCount ([ref]$launcherHandoffs) -ExpectedExecutable $bricscadExe -ExpectedPath $phasePath -FailurePath $resultPath -Deadline $deadlineOne
     if (Test-Path -LiteralPath $resultPath -PathType Leaf) {
         $finalMarker = Read-Qs3dMarker -Path $resultPath
+        if (Test-Path -LiteralPath $markerDiagnosticPath -PathType Leaf) {
+            $markerDiagnostic = Read-Qs3dMarker -Path $markerDiagnosticPath
+            Require-PostUndoMarkerDiagnostics -Marker $markerDiagnostic -Nonce $nonce
+        }
         Require-Qs3dValue -Marker $finalMarker -Key "status" -Expected "FAIL"
         Require-Qs3dValue -Marker $finalMarker -Key "schema" -Expected "QS3D_SOURCE_RECONCILE_RUNTIME_V1"
         Require-Qs3dValue -Marker $finalMarker -Key "qualification_boundary" -Expected "LOCAL_004_ONLY"
@@ -361,6 +392,8 @@ try {
     Require-Qs3dValue -Marker $phaseMarker -Key "schema" -Expected "QS3D_SOURCE_RECONCILE_RUNTIME_V1"
     Require-Qs3dValue -Marker $phaseMarker -Key "qualification_boundary" -Expected "LOCAL_004_ONLY"
     Require-Qs3dValue -Marker $phaseMarker -Key "nonce" -Expected $nonce
+    $markerDiagnostic = Read-Qs3dMarker -Path $markerDiagnosticPath
+    Require-PostUndoMarkerDiagnostics -Marker $markerDiagnostic -Nonce $nonce -RequireRedo
     Require-Qs3dValue -Marker $phaseMarker -Key "source_count" -Expected "2"
     Require-Qs3dValue -Marker $phaseMarker -Key "success_reconcile_count" -Expected "2"
     foreach ($key in @("generated_refusal_verified", "ambiguous_refusal_verified", "forced_rollback_verified", "multi_document_refusal_verified", "source_geometry_preserved", "generated_replacement_verified")) {
@@ -368,7 +401,6 @@ try {
     }
     [void](Read-PositiveMarkerInt -Marker $phaseMarker -Key "generated_solid_count")
     Require-FinalReconcileDiagnostics -Marker $phaseMarker
-    Require-PostUndoMarkerDiagnostics -Marker $phaseMarker
     $env:QS3D_SOURCE_RECONCILE_UNDO_COHERENT = [string]$phaseMarker["undo_coherent"]
     $env:QS3D_SOURCE_RECONCILE_REDO_COHERENT = [string]$phaseMarker["redo_coherent"]
     Remove-ExactFile -Path $scriptOnePath
@@ -450,6 +482,7 @@ $metadata = [ordered]@{
     proxy_information_dialogs_dismissed = $proxyDialogsDismissed
     launcher_handoffs = $launcherHandoffs
     phase_marker = $phaseMarker
+    post_undo_marker_diagnostic = $markerDiagnostic
     marker = $finalMarker
 }
 $metadata | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
