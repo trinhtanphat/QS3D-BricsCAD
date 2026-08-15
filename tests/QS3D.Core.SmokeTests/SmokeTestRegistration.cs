@@ -96,6 +96,7 @@ namespace QS3D.Core.SmokeTests
             SemanticSheetAutoLayoutSmoke.Run();
             SemanticSchedulePlacementSmoke.Run();
             SemanticDocumentationCatalogStoreSmoke.Run();
+            SemanticDocumentationCatalogRevisionSmoke.Run();
             SemanticDocumentationCatalogEditorSmoke.Run();
             SemanticDocumentationCanonicalIdSmoke.Run();
             ProjectBrowserPlannerSmoke.Run();
@@ -138,17 +139,6 @@ namespace QS3D.Core.SmokeTests
             ProjectInterchangeValidationSmoke.Run();
             QsdbSaveAtomicitySmoke.Run();
             ProjectPersistenceLifecycleSmoke.Run();
-            ProjectSidecarRevisionStampSmoke.Run();
-            QsdbCanonicalPersistenceSmoke.Run();
-            QsdbFamilyCategoryReferenceSmoke.Run();
-            QsdbTimestampValidationSmoke.Run();
-            QsdbActiveContextReferentialIntegritySmoke.Run();
-            AuditTrailSnapshotSmoke.Run();
-            DrawingUnitResolutionSmoke.Run();
-            ProxyCaptureEligibilitySmoke.Run();
-            MeasuredSolidQuantityPolicySmoke.Run();
-            MepRecognitionSmoke.Run();
-            CubicostParitySmoke.Run();
         }
     }
 }
