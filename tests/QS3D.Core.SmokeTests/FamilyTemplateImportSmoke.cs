@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             ImportUsesCategoryNameAndLocalIds();
             RepeatedImportIsTrueNoOp();
+            UnrelatedLegacyDuplicateNamesDoNotBlockImport();
             FailedImportRestoresWholeProject();
         }
 
@@ -105,6 +106,25 @@ namespace QS3D.Core.SmokeTests
             Equal(versionBeforeSecond, project.ChangeVersion, "Second import must not bump ChangeVersion.");
             Equal(auditsBeforeSecond, project.AuditEvents.Count, "Second import must not append a no-op audit event.");
             Equal(updatedBeforeSecond, project.UpdatedUtc, "Second import must not change UpdatedUtc.");
+        }
+
+        private static void UnrelatedLegacyDuplicateNamesDoNotBlockImport()
+        {
+            var project = new ProjectState("P-FAMILY-IMPORT-LEGACY", "Family template legacy duplicate smoke");
+            project.Families.Add(new ProjectFamily("legacy-slab-a", "Legacy Slab", ElementCategory.Slab));
+            project.Families.Add(new ProjectFamily("legacy-slab-b", "Legacy Slab", ElementCategory.Slab));
+
+            var profile = new TemplateProfile("USER-FAMILY-LEGACY", "Legacy-tolerant Family Template");
+            var source = new ProjectFamily("foreign-beam", "D250x450", ElementCategory.Beam);
+            source.Properties["WidthM"] = "0.250";
+            source.Properties["HeightM"] = "0.450";
+            profile.Families.Add(source);
+
+            var result = FamilyTemplateImportService.Apply(project, profile);
+            Equal(1, result.FamiliesAdded, "Unrelated legacy duplicate names must not block importing a distinct Family.");
+            Equal(3, project.Families.Count, "Legacy duplicate tolerance changed an unrelated Family row.");
+            Equal(2, project.Families.Count(x => x.Category == ElementCategory.Slab && x.Name == "Legacy Slab"), "Import must leave unrelated legacy duplicates untouched.");
+            Equal(1, project.Families.Count(x => x.Category == ElementCategory.Beam && x.Name == "D250x450"), "Expected imported Beam Family is missing.");
         }
 
         private static void FailedImportRestoresWholeProject()
