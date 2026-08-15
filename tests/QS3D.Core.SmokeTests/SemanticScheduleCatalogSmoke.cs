@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
         {
             SaveLoadRoundTripIsDeterministic();
             PersistedCategoriesRequireCanonicalNames();
+            DuplicateCategoriesFailClosedAndDistinctCategoriesRoundTrip();
             PersistedSchemaRequiresCanonicalShape();
             UpsertAndRemoveSupportMultipleDefinitions();
             BuildFiltersAndUsesCanonicalTemplateRenderer();
@@ -66,6 +67,58 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidDataException>(() => SemanticScheduleCatalog.Load(project));
 
             project.Metadata[SemanticScheduleCatalog.MetadataKey] = canonical.Replace(canonicalToken, "value=\" " + categoryName + " \"");
+            Throws<InvalidDataException>(() => SemanticScheduleCatalog.Load(project));
+        }
+
+        private static void DuplicateCategoriesFailClosedAndDistinctCategoriesRoundTrip()
+        {
+            var project = Project();
+            var beforeVersion = project.ChangeVersion;
+            var duplicate = new SemanticScheduleDefinition(
+                "S-DUPLICATE-CATEGORY",
+                "Duplicate category",
+                "DUPLICATE CATEGORY",
+                new[] { ElementCategory.Beam, ElementCategory.Beam },
+                string.Empty,
+                string.Empty,
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                new[] { new SemanticDocumentationColumn("Id", "{Id}") });
+
+            Throws<InvalidOperationException>(() => SemanticScheduleCatalog.Save(project, new[] { duplicate }));
+            Throws<InvalidOperationException>(() => SemanticScheduleCatalog.Build(project, duplicate));
+            Equal(beforeVersion, project.ChangeVersion);
+            False(project.Metadata.ContainsKey(SemanticScheduleCatalog.MetadataKey));
+
+            var distinct = new SemanticScheduleDefinition(
+                "S-DISTINCT-CATEGORIES",
+                "Distinct categories",
+                "DISTINCT CATEGORIES",
+                new[] { ElementCategory.Column, ElementCategory.Beam },
+                string.Empty,
+                string.Empty,
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                new[] { new SemanticDocumentationColumn("Id", "{Id}") });
+            SemanticScheduleCatalog.Save(project, new[] { distinct });
+            var canonical = project.Metadata[SemanticScheduleCatalog.MetadataKey];
+            var savedVersion = project.ChangeVersion;
+            var loaded = SemanticScheduleCatalog.Load(project);
+
+            Equal(2, loaded[0].Categories.Count);
+            Equal(ElementCategory.Beam, loaded[0].Categories[0]);
+            Equal(ElementCategory.Column, loaded[0].Categories[1]);
+            SemanticScheduleCatalog.Save(project, loaded);
+            Equal(canonical, project.Metadata[SemanticScheduleCatalog.MetadataKey]);
+            Equal(savedVersion, project.ChangeVersion);
+
+            var root = XDocument.Parse(canonical).Root ?? throw new Exception("Catalog root missing.");
+            var categoryContainer = root.Element("schedule")?.Element("categories")
+                ?? throw new Exception("Category container missing.");
+            categoryContainer.Add(new XElement(
+                categoryContainer.Elements("category").First()));
+            project.Metadata[SemanticScheduleCatalog.MetadataKey] = root.ToString(SaveOptions.DisableFormatting);
+
             Throws<InvalidDataException>(() => SemanticScheduleCatalog.Load(project));
         }
 
