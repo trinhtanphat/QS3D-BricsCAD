@@ -4,10 +4,11 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 REVIEW = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
+APPLY = ROOT / "src/QS3D.BricsCAD.V25/Services/RecognitionApplyBatchService.cs"
 READER = ROOT / "src/QS3D.BricsCAD.V25/Cad/EntitySnapshotReader.cs"
 errors = []
 
-for path in (REVIEW, READER):
+for path in (REVIEW, APPLY, READER):
     if not path.is_file():
         errors.append("missing modeless freshness contract file: " + str(path.relative_to(ROOT)))
 
@@ -31,45 +32,55 @@ if REVIEW.is_file():
     if "ProjectContextCoordinator.GetOrCreate(document)" in helper:
         errors.append("BBS/Revision modeless Locate must not create/cache replacement project state")
 
-    apply_pos = text.find("Action<RecognitionResult> apply = result =>")
-    locate_pos = text.find("Action<RecognitionResult> locate = result =>", apply_pos)
-    apply_body = text[apply_pos:locate_pos] if apply_pos >= 0 and locate_pos > apply_pos else ""
     review_project_pos = text.find("var reviewProjectId = project.ProjectId;")
     batch_pos = text.find("var batch = new ProjectRecognitionService().SuggestBatch(project, snapshots)")
+    apply_pos = text.find("Func<IReadOnlyList<RecognitionResult>, bool, int> apply")
     if min(review_project_pos, batch_pos, apply_pos) < 0 or not review_project_pos < batch_pos < apply_pos:
         errors.append("Recognition modeless review must capture ProjectId before building the batch and Apply callback")
+
     for token in (
-        "EntitySnapshotReader.ReadHandles(doc, new[] { result.Handle })",
-        "if (!ExistingProjectMutationContext.TryGet(doc, out var currentProject))",
-        "string.Equals(currentProject.ProjectId, reviewProjectId, StringComparison.OrdinalIgnoreCase)",
-        "new ProjectRecognitionService().Suggest(currentProject, liveSnapshots[0])",
-        "candidate.Category != expectedCandidate.Category",
-        "!refreshed.IsCaptureReady",
-        "SemanticCaptureService.CaptureSnapshot(doc, refreshed.Snapshot, candidate.Category)",
-        "AuditTrail.ForProject(currentProject).Record",
-        "đã commit; UI refresh warning:",
+        "RecognitionApplyBatchService.PrepareStrict(",
+        "reviewProjectId,",
+        "requireAutoAcceptance: requireLiveConfidence",
+        "RecognitionApplyBatchService.Commit(doc, reviewProjectId, plan)",
+        "RecognitionApplyBatchService.PrepareBestEffort(doc, reviewProjectId, batch.AutoAccepted)",
+        "RecognitionApplyBatchService.Commit(doc, reviewProjectId, autoPlan)",
     ):
-        if token not in apply_body:
-            errors.append("Recognition modeless Apply missing live-state token: " + token)
+        if token not in text:
+            errors.append("Recognition modeless review missing atomic batch route token: " + token)
 
     for forbidden in (
         "SemanticCaptureService.CaptureSnapshot(doc, result.Snapshot",
-        "SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, result.Handle)",
-        "AuditTrail.ForProject(project).Record(\"recognition.apply\"",
         "var currentProject = ProjectContextCoordinator.GetOrCreate(doc);",
     ):
-        if forbidden in apply_body:
-            errors.append("Recognition modeless Apply still uses stale or replacement-creating state: " + forbidden)
+        if forbidden in text:
+            errors.append("Recognition review must not use stale inline/replacement-creating apply state: " + forbidden)
 
-    auto_apply_pos = text.find("if (autoApply)", locate_pos)
-    window_pos = text.find("Application.ShowModelessWindow", auto_apply_pos)
-    auto_apply_body = text[auto_apply_pos:window_pos] if auto_apply_pos >= 0 and window_pos > auto_apply_pos else ""
-    for token in (
-        "ExistingProjectMutationContext.TryGet(doc, out var auditProject)",
-        "string.Equals(auditProject.ProjectId, reviewProjectId, StringComparison.OrdinalIgnoreCase)",
-    ):
-        if token not in auto_apply_body:
-            errors.append("Recognition auto-apply skip audit missing reviewed-project identity guard: " + token)
+if APPLY.is_file():
+    text = APPLY.read_text(encoding="utf-8")
+    required = (
+        "ExistingProjectMutationContext.TryGet(document, out var project)",
+        "string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase)",
+        "var version = project.ChangeVersion;",
+        "EntitySnapshotReader.ReadHandles(document, new[] { result.Handle })",
+        "new ProjectRecognitionService().Suggest(project, liveSnapshots[0])",
+        "candidate.Category != expectedCandidate.Category",
+        "!refreshed.IsCaptureReady",
+        "EnsureProjectUnchanged(document, project, expectedProjectId, version",
+        "if (project.ChangeVersion != plan.ProjectChangeVersion)",
+        "var rollback = ProjectStateSnapshot.Capture(project);",
+        "SemanticCaptureService.CaptureSnapshot(document, item.Snapshot, item.Category)",
+        "rollback.Restore(project)",
+        'audit.Record("recognition.skip", skip.Handle, skip.Reason);',
+    )
+    for token in required:
+        if token not in text:
+            errors.append("RecognitionApplyBatchService missing live freshness/atomicity token: " + token)
+
+    require_current = text.find("private static ProjectState RequireCurrentProject")
+    require_body = text[require_current:] if require_current >= 0 else ""
+    if "ProjectContextCoordinator.GetOrCreate" in require_body:
+        errors.append("Recognition batch service must not create/cache replacement project state")
 
 if READER.is_file():
     text = READER.read_text(encoding="utf-8")
@@ -91,4 +102,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] BBS/Revision Locate re-resolve current semantic state read-only and Recognition Apply re-reads live CAD then requires the exact reviewed ProjectId before modeless commit/audit")
+print("[PASS] BBS/Revision Locate re-resolve current semantic state read-only; Recognition batch apply re-reads live CAD, verifies reviewed ProjectId/version/candidate readiness, and commits atomically with rollback/audit")
