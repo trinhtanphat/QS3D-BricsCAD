@@ -12,6 +12,9 @@ namespace QS3D.BricsCAD.V25.Cad
 {
     internal static class StructuralSolidBuilder
     {
+        private const double BeamArcSagittaM = .002d;
+        private const int MaxBeamPathSegments = 2048;
+
         private sealed class PendingUpdate
         {
             public ProjectElement Element { get; set; } = null!;
@@ -19,6 +22,18 @@ namespace QS3D.BricsCAD.V25.Cad
             public string GeneratedHandle { get; set; } = string.Empty;
             public ElementCategory Category { get; set; }
             public CadElementVerticalPlacement? VerticalPlacement { get; set; }
+        }
+
+        private readonly struct BeamPathPoint
+        {
+            public BeamPathPoint(double x, double y)
+            {
+                X = x;
+                Y = y;
+            }
+
+            public double X { get; }
+            public double Y { get; }
         }
 
         public static bool Supports(ElementCategory category) =>
@@ -64,15 +79,28 @@ namespace QS3D.BricsCAD.V25.Cad
                         var family = project.FindFamily(element.FamilyId);
                         Solid3d solid;
                         CadElementVerticalPlacement? vertical;
-                        if (UsesLine(category))
+                        if (category == ElementCategory.Beam)
+                        {
+                            solid = BuildBeamPrism(document, project, entity, element, family, out vertical);
+                        }
+                        else if (UsesLine(category))
                         {
                             if (!(entity is Line line)) throw new InvalidOperationException(category + " element " + element.Id + " cần source LINE để dựng 3D.");
                             solid = BuildLinePrism(document, project, line, element, family, category, out vertical);
                         }
+                        else if (entity is Polyline polyline && polyline.Closed)
+                        {
+                            solid = BuildClosedProfilePrism(document, project, polyline, polyline.Elevation, element, family, category, out vertical);
+                        }
+                        else if ((category == ElementCategory.Slab || category == ElementCategory.Column) && entity is Circle circle)
+                        {
+                            EnsureWcsXy(circle.Normal, element.Id + "/circle");
+                            solid = BuildClosedProfilePrism(document, project, circle, circle.Center.Z, element, family, category, out vertical);
+                        }
                         else
                         {
-                            if (!(entity is Polyline polyline) || !polyline.Closed) throw new InvalidOperationException(category + " element " + element.Id + " cần closed POLYLINE để dựng 3D.");
-                            solid = BuildClosedPolylinePrism(document, project, polyline, element, family, category, out vertical);
+                            throw new InvalidOperationException(category + " element " + element.Id + " cần closed POLYLINE" +
+                                (category == ElementCategory.Slab || category == ElementCategory.Column ? " hoặc CIRCLE" : string.Empty) + " để dựng 3D.");
                         }
 
                         try
@@ -132,7 +160,176 @@ namespace QS3D.BricsCAD.V25.Cad
         }
 
         private static bool UsesLine(ElementCategory category) =>
-            category == ElementCategory.Beam || category == ElementCategory.StructuralWall || category == ElementCategory.Railing;
+            category == ElementCategory.StructuralWall || category == ElementCategory.Railing;
+
+        private static Solid3d BuildBeamPrism(
+            Document document,
+            ProjectState project,
+            Entity entity,
+            ProjectElement element,
+            ProjectFamily? family,
+            out CadElementVerticalPlacement? vertical)
+        {
+            if (entity is Line line)
+                return BuildLinePrism(document, project, line, element, family, ElementCategory.Beam, out vertical);
+
+            var points = ReadBeamPath(document, entity, element.Id, out var sourceZ, out var closed);
+            var widthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "WidthM", .3d), element.Id + "/3D width");
+            vertical = CadElementVerticalPlacement.Resolve(document, project, element, family, sourceZ, "HeightM", .5d);
+            var width = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, widthM, element.Id + "/3D width"), element.Id + "/3D width drawing units");
+            var height = vertical.HeightDrawing;
+            var overlap = width / 2d;
+            Solid3d? result = null;
+            try
+            {
+                var segmentCount = points.Count - 1;
+                if (segmentCount <= 0 || segmentCount > MaxBeamPathSegments)
+                    throw new InvalidOperationException("Beam path segment count không hợp lệ: " + element.Id);
+
+                for (var index = 0; index < segmentCount; index++)
+                {
+                    var start = points[index];
+                    var end = points[index + 1];
+                    var dx = CadGeometryGuard.Subtract(end.X, start.X, element.Id + "/beam path dx");
+                    var dy = CadGeometryGuard.Subtract(end.Y, start.Y, element.Id + "/beam path dy");
+                    var length = CadGeometryGuard.Hypot(dx, dy, element.Id + "/beam path segment");
+                    if (length <= 1e-6d) throw new InvalidOperationException("Beam path chứa segment quá ngắn: " + element.Id);
+                    var ux = dx / length;
+                    var uy = dy / length;
+                    var before = closed || index > 0 ? overlap : 0d;
+                    var after = closed || index + 1 < segmentCount ? overlap : 0d;
+                    var extendedLength = CadGeometryGuard.Finite(length + before + after, element.Id + "/beam extended length");
+                    var midpointShift = (after - before) / 2d;
+                    var midX = CadGeometryGuard.Finite((start.X + end.X) / 2d + ux * midpointShift, element.Id + "/beam mid X");
+                    var midY = CadGeometryGuard.Finite((start.Y + end.Y) / 2d + uy * midpointShift, element.Id + "/beam mid Y");
+                    var angle = CadGeometryGuard.Finite(Math.Atan2(dy, dx), element.Id + "/beam angle");
+
+                    var part = new Solid3d();
+                    try
+                    {
+                        part.SetDatabaseDefaults(document.Database);
+                        part.CreateBox(extendedLength, width, height);
+                        part.TransformBy(Matrix3d.Rotation(angle, Vector3d.ZAxis, Point3d.Origin));
+                        part.TransformBy(Matrix3d.Displacement(new Vector3d(midX, midY, vertical.CenterDrawing)));
+                        if (result == null)
+                        {
+                            result = part;
+                            part = null!;
+                        }
+                        else
+                        {
+                            result.BooleanOperation(BooleanOperationType.BoolUnite, part);
+                        }
+                    }
+                    finally { part?.Dispose(); }
+                }
+
+                if (result == null) throw new InvalidOperationException("Không tạo được Beam solid từ curved path: " + element.Id);
+                var completed = result;
+                result = null;
+                return completed;
+            }
+            finally { result?.Dispose(); }
+        }
+
+        private static IReadOnlyList<BeamPathPoint> ReadBeamPath(
+            Document document,
+            Entity entity,
+            string label,
+            out double sourceZ,
+            out bool closed)
+        {
+            var maximumSagitta = CadGeometryGuard.Positive(
+                CadGeometryGuard.ToDrawingUnits(document, BeamArcSagittaM, label + "/beam arc sagitta"),
+                label + "/beam arc sagitta drawing units");
+
+            if (entity is Arc arc)
+            {
+                EnsureWcsXy(arc.Normal, label + "/arc");
+                sourceZ = CadGeometryGuard.Finite(arc.Center.Z, label + "/arc Z");
+                closed = false;
+                var sweep = NormalizeSweep(arc.EndAngle - arc.StartAngle, label + "/arc sweep");
+                return SampleCircularPath(arc.Center.X, arc.Center.Y, arc.Radius, arc.StartAngle, sweep, maximumSagitta, false, label);
+            }
+
+            if (entity is Circle circle)
+            {
+                EnsureWcsXy(circle.Normal, label + "/circle");
+                sourceZ = CadGeometryGuard.Finite(circle.Center.Z, label + "/circle Z");
+                closed = true;
+                return SampleCircularPath(circle.Center.X, circle.Center.Y, circle.Radius, 0d, Math.PI * 2d, maximumSagitta, true, label);
+            }
+
+            if (entity is Polyline polyline && !polyline.Closed)
+            {
+                sourceZ = CadGeometryGuard.Finite(polyline.Elevation, label + "/polyline elevation");
+                closed = false;
+                var path = CadPolylinePathReader.ReadOpenWcsXy(document, polyline, BeamArcSagittaM, label + "/beam path");
+                var result = new List<BeamPathPoint>(path.Count);
+                foreach (var point in path)
+                {
+                    result.Add(new BeamPathPoint(
+                        CadGeometryGuard.ToDrawingUnits(document, point.X, label + "/beam path X"),
+                        CadGeometryGuard.ToDrawingUnits(document, point.Y, label + "/beam path Y")));
+                }
+                return result.AsReadOnly();
+            }
+
+            throw new InvalidOperationException("Beam element " + label + " cần LINE, ARC, CIRCLE hoặc open POLYLINE để dựng 3D.");
+        }
+
+        private static IReadOnlyList<BeamPathPoint> SampleCircularPath(
+            double centerX,
+            double centerY,
+            double radius,
+            double startAngle,
+            double sweep,
+            double maximumSagitta,
+            bool closed,
+            string label)
+        {
+            centerX = CadGeometryGuard.Finite(centerX, label + "/center X");
+            centerY = CadGeometryGuard.Finite(centerY, label + "/center Y");
+            radius = CadGeometryGuard.Positive(radius, label + "/radius");
+            startAngle = CadGeometryGuard.Finite(startAngle, label + "/start angle");
+            sweep = CadGeometryGuard.Positive(sweep, label + "/sweep");
+            maximumSagitta = CadGeometryGuard.Positive(maximumSagitta, label + "/maximum sagitta");
+
+            var cosine = 1d - Math.Min(maximumSagitta, radius) / radius;
+            cosine = Math.Max(-1d, Math.Min(1d, cosine));
+            var maximumAngle = 2d * Math.Acos(cosine);
+            if (double.IsNaN(maximumAngle) || double.IsInfinity(maximumAngle) || maximumAngle <= 1e-6d)
+                maximumAngle = Math.PI / 180d;
+            var minimumSegments = closed ? 12 : 1;
+            var segmentCount = Math.Max(minimumSegments, (int)Math.Ceiling(sweep / maximumAngle));
+            if (segmentCount > MaxBeamPathSegments)
+                throw new InvalidOperationException(label + " curved Beam cần " + segmentCount + " path segments, vượt giới hạn " + MaxBeamPathSegments + ".");
+
+            var result = new List<BeamPathPoint>(segmentCount + 1);
+            for (var index = 0; index <= segmentCount; index++)
+            {
+                var angle = startAngle + sweep * index / segmentCount;
+                result.Add(new BeamPathPoint(
+                    CadGeometryGuard.Finite(centerX + radius * Math.Cos(angle), label + "/sample X"),
+                    CadGeometryGuard.Finite(centerY + radius * Math.Sin(angle), label + "/sample Y")));
+            }
+            return result.AsReadOnly();
+        }
+
+        private static double NormalizeSweep(double sweep, string label)
+        {
+            sweep = CadGeometryGuard.Finite(sweep, label);
+            var full = Math.PI * 2d;
+            while (sweep <= 0d) sweep += full;
+            if (sweep > full + 1e-9d) throw new InvalidOperationException(label + " vượt quá một vòng tròn.");
+            return sweep;
+        }
+
+        private static void EnsureWcsXy(Vector3d normal, string label)
+        {
+            if (Math.Abs(normal.X) > 1e-9d || Math.Abs(normal.Y) > 1e-9d || Math.Abs(normal.Z - 1d) > 1e-9d)
+                throw new InvalidOperationException(label + " hiện phải nằm trong WCS XY với +Z normal; profile/path nghiêng bị fail closed để tránh dựng 3D sai.");
+        }
 
         private static Solid3d BuildLinePrism(
             Document document,
@@ -192,10 +389,11 @@ namespace QS3D.BricsCAD.V25.Cad
             return solid;
         }
 
-        private static Solid3d BuildClosedPolylinePrism(
+        private static Solid3d BuildClosedProfilePrism(
             Document document,
             ProjectState project,
-            Polyline polyline,
+            Entity profile,
+            double sourceElevation,
             ProjectElement element,
             ProjectFamily? family,
             ElementCategory category,
@@ -212,8 +410,9 @@ namespace QS3D.BricsCAD.V25.Cad
                 case ElementCategory.Stair: heightKey = "ThicknessM"; heightFallback = .15d; break;
                 case ElementCategory.Earthwork: heightKey = "DepthM"; heightFallback = 1d; direction = -1d; break;
                 case ElementCategory.Column: heightKey = "HeightM"; heightFallback = 3.6d; break;
-                default: throw new InvalidOperationException("Category không hỗ trợ closed polyline prism: " + category);
+                default: throw new InvalidOperationException("Category không hỗ trợ closed profile prism: " + category);
             }
+            sourceElevation = CadGeometryGuard.Finite(sourceElevation, element.Id + "/profile elevation");
             double heightMagnitude;
             double offset;
             if (category == ElementCategory.Earthwork)
@@ -226,15 +425,15 @@ namespace QS3D.BricsCAD.V25.Cad
             else
             {
                 vertical = CadElementVerticalPlacement.Resolve(
-                    document, project, element, family, polyline.Elevation, heightKey, heightFallback);
+                    document, project, element, family, sourceElevation, heightKey, heightFallback);
                 heightMagnitude = vertical.HeightDrawing;
-                offset = CadGeometryGuard.Subtract(vertical.BottomDrawing, polyline.Elevation, element.Id + "/resolved source displacement Z");
+                offset = CadGeometryGuard.Subtract(vertical.BottomDrawing, sourceElevation, element.Id + "/resolved source displacement Z");
             }
             var height = CadGeometryGuard.Finite(heightMagnitude * direction, element.Id + "/signed extrusion height");
 
             var solid = new Solid3d();
             solid.SetDatabaseDefaults(document.Database);
-            solid.CreateExtrudedSolid(polyline, new Vector3d(0d, 0d, height), new SweepOptions());
+            solid.CreateExtrudedSolid(profile, new Vector3d(0d, 0d, height), new SweepOptions());
             if (Math.Abs(offset) > 1e-12) solid.TransformBy(Matrix3d.Displacement(new Vector3d(0d, 0d, offset)));
             return solid;
         }
