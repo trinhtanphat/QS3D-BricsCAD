@@ -136,7 +136,7 @@ if RUNNER.is_file():
         '-WindowStyle Hidden',
         'Stop-Qs3dLevelProcess -Process $process',
         'function Restore-Qs3dLevelDrawingAndPrivateState {',
-        'Restore-Qs3dLevelDrawingAndPrivateState -ScriptPath $scriptPath -ProjectSidecar $projectSidecar -DrawingCopy $DrawingCopy -DrawingBackupPath $drawingBackupPath',
+        'Restore-Qs3dLevelDrawingAndPrivateState -ScriptPath $scriptPath -ProjectSidecar $projectSidecar -DrawingCopy $DrawingCopy -DrawingBackupPath $drawingBackupPath -OriginalDrawingAttributes $originalDrawingAttributes',
         'Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue',
         '$gracefulExit = $process.WaitForExit(15000)',
         'BricsCAD did not exit gracefully after the Level Z marker.',
@@ -146,8 +146,14 @@ if RUNNER.is_file():
         'process_cleanup_verified = $processCleanupVerified',
         'script_cleanup_verified = $scriptCleanupVerified',
         'private_state_cleanup_verified = $privateStateCleanupVerified',
+        'drawing_read_only_guard_verified = $drawingReadOnlyGuardVerified',
+        'drawing_unwritten_verified = $drawingUnwrittenVerified',
         'drawing_restore_verified = $drawingRestoreVerified',
+        'drawing_attributes_restored = $drawingAttributesRestored',
         '$drawingBackupPath = Join-Path $ArtifactDir "level-z-original.dwg"',
+        '$originalDrawingAttributes = [IO.File]::GetAttributes($DrawingCopy)',
+        '[IO.FileAttributes]::ReadOnly',
+        '[IO.File]::SetAttributes($DrawingCopy, $guardedDrawingAttributes)',
         'Copy-Item -LiteralPath $DrawingCopy -Destination $drawingBackupPath -ErrorAction Stop',
         'Copy-Item -LiteralPath $drawingBackupPath -Destination $DrawingCopy -Force -ErrorAction Stop',
         '($projectSidecar + ".bak")',
@@ -178,18 +184,19 @@ if RUNNER.is_file():
             errors.append("Level-Z runner contains broad process/window action: " + forbidden)
     if "rev-parse HEAD 2>$null | Select-Object -First 1" in text:
         errors.append("Level-Z runner must not pipe rev-parse through Select-Object because early pipeline closure can corrupt LASTEXITCODE")
-    restore_call = 'Restore-Qs3dLevelDrawingAndPrivateState -ScriptPath $scriptPath -ProjectSidecar $projectSidecar -DrawingCopy $DrawingCopy -DrawingBackupPath $drawingBackupPath'
+    restore_call = 'Restore-Qs3dLevelDrawingAndPrivateState -ScriptPath $scriptPath -ProjectSidecar $projectSidecar -DrawingCopy $DrawingCopy -DrawingBackupPath $drawingBackupPath -OriginalDrawingAttributes $originalDrawingAttributes'
     validation = text.find('if ($rebarCount -ne 4)')
     stop = text.find('Stop-Qs3dLevelProcess -Process $process', validation)
-    restore = text.find(restore_call, stop)
-    drawing_hash = text.find('$drawingHashAfter =', restore)
-    metadata = text.find('$metadata =', drawing_hash)
+    read_only_check = text.find('$drawingReadOnlyGuardVerified =', stop)
+    drawing_hash = text.find('$drawingHashAfter =', read_only_check)
+    restore = text.find(restore_call, drawing_hash)
+    metadata = text.find('$metadata =', restore)
     finalizer = text.find('finally {', metadata)
     finalizer_restore = text.find(restore_call, finalizer)
-    if min(validation, stop, restore, drawing_hash, metadata, finalizer, finalizer_restore) < 0 or not (
-        validation < stop < restore < drawing_hash < metadata < finalizer < finalizer_restore
+    if min(validation, stop, read_only_check, drawing_hash, restore, metadata, finalizer, finalizer_restore) < 0 or not (
+        validation < stop < read_only_check < drawing_hash < restore < metadata < finalizer < finalizer_restore
     ):
-        errors.append("Level-Z runner must stop the host, restore the drawing/private state before hash verification and retry the same idempotent restore in finally")
+        errors.append("Level-Z runner must stop the host, verify the read-only guard and hash before restoration, then retry idempotent cleanup from finally")
 
 if COMMAND.is_file():
     text = COMMAND.read_text(encoding="utf-8")
