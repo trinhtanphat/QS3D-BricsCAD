@@ -13,17 +13,25 @@ namespace QS3D.Core.SmokeTests
 
         internal static void Run()
         {
-            InvalidMetadataValueFailsBeforeFilesystemMutation();
+            InvalidMetadataValueFailsAtPublicMutationBoundary();
             InvalidRelationTextFailsBeforeFilesystemMutation();
             LoneSurrogateFailsBeforeFilesystemMutation();
             SupplementaryUnicodeRoundTrips();
         }
 
-        private static void InvalidMetadataValueFailsBeforeFilesystemMutation()
+        private static void InvalidMetadataValueFailsAtPublicMutationBoundary()
         {
             var project = Project("P-QSDB-XML-METADATA");
-            project.Metadata["Note"] = "bad\u0001value";
-            AssertPreflightFailure(project, "invalid-metadata-control");
+            var schema = project.SchemaVersion;
+            var updatedUtc = project.UpdatedUtc;
+            var changeVersion = project.ChangeVersion;
+
+            Throws<ArgumentException>(() => project.Metadata["Note"] = "bad\u0001value");
+
+            if (project.Metadata.ContainsKey("Note"))
+                throw new InvalidOperationException("Invalid XML metadata value was retained after public mutation rejection.");
+            if (project.SchemaVersion != schema || project.UpdatedUtc != updatedUtc || project.ChangeVersion != changeVersion)
+                throw new InvalidOperationException("Invalid XML metadata mutation changed project persistence state before rejection.");
         }
 
         private static void InvalidRelationTextFailsBeforeFilesystemMutation()
