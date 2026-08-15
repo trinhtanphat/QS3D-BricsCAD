@@ -321,6 +321,7 @@ namespace QS3D.BricsCAD.V25.UI
 
                 if (!category.HasValue)
                 {
+                    CollapseQuickFields();
                     SetQuickField(QuickWidthBox, false, string.Empty);
                     SetQuickField(QuickDepthBox, false, string.Empty);
                     SetQuickField(QuickHeightBox, false, string.Empty);
@@ -343,6 +344,7 @@ namespace QS3D.BricsCAD.V25.UI
         private void PopulateQuickFields(ElementCategory category, ProjectFamily? family, bool overwriteWithDefaults)
         {
             var schema = ProjectFamilyQuickSchemaService.GetSchema(category);
+            ApplyQuickFieldVisibility(schema);
             PopulateQuickField(QuickWidthBox, "WidthM", schema, family, overwriteWithDefaults);
             PopulateQuickField(QuickDepthBox, "DepthM", schema, family, overwriteWithDefaults);
             PopulateQuickField(QuickHeightBox, "HeightM", schema, family, overwriteWithDefaults);
@@ -364,7 +366,27 @@ namespace QS3D.BricsCAD.V25.UI
             else
                 QuickMaterialCombo.Text = schema.DefaultMaterial;
 
-            QuickCategoryHintText.Text = FriendlyCategory(category) + " • nhập thông số theo mm • QS3D tự đổi sang m, quản lý schema và Material phía sau.";
+            QuickCategoryHintText.Text = FriendlyCategory(category) + " • chỉ hiện field phù hợp • nhập theo mm • QS3D tự đổi sang m và quản lý schema phía sau.";
+        }
+
+        private void ApplyQuickFieldVisibility(ProjectFamilyQuickSchema schema)
+        {
+            QuickWidthField.Visibility = schema.Contains("WidthM") ? Visibility.Visible : Visibility.Collapsed;
+            QuickDepthField.Visibility = schema.Contains("DepthM") ? Visibility.Visible : Visibility.Collapsed;
+            QuickHeightField.Visibility = schema.Contains("HeightM") ? Visibility.Visible : Visibility.Collapsed;
+            QuickThicknessField.Visibility = schema.Contains("ThicknessM") ? Visibility.Visible : Visibility.Collapsed;
+            QuickBottomOffsetField.Visibility = schema.Contains("BottomOffsetM") ? Visibility.Visible : Visibility.Collapsed;
+            QuickMaterialField.Visibility = schema.SupportsQuickForm ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void CollapseQuickFields()
+        {
+            QuickWidthField.Visibility = Visibility.Collapsed;
+            QuickDepthField.Visibility = Visibility.Collapsed;
+            QuickHeightField.Visibility = Visibility.Collapsed;
+            QuickThicknessField.Visibility = Visibility.Collapsed;
+            QuickBottomOffsetField.Visibility = Visibility.Collapsed;
+            QuickMaterialField.Visibility = Visibility.Collapsed;
         }
 
         private static void PopulateQuickField(
