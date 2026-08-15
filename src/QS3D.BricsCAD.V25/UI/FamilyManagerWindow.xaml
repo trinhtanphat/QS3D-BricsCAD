@@ -209,6 +209,7 @@
                             <WrapPanel Margin="0,9,0,0">
                                 <Button Content="+ Tạo nhanh" Click="OnQuickCreateClick"/>
                                 <Button Content="Auto Family" Click="OnAutoFamilyClick"/>
+                                <Button Content="Lưu" Click="OnQuickSaveClick"/>
                                 <Button Content="Tạo &amp; sử dụng" Style="{StaticResource AccentButton}"
                                         Click="OnCreateAndUseClick"/>
                                 <Button Content="Lưu &amp; Vẽ" Style="{StaticResource AccentButton}"
