@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             HistoricalBenchmark();
             TenderEvaluation();
             ProgressClaim();
+            CubicostDeepParitySmoke.Run();
         }
 
         private static void MepAggregation()
