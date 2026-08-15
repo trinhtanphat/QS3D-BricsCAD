@@ -2,6 +2,8 @@ using System;
 using System.Linq;
 using System.Windows.Controls;
 using System.Windows.Data;
+using Bricscad.ApplicationServices;
+using QS3D.BricsCAD.V25.Services;
 using QS3D.Core.Domain;
 
 namespace QS3D.BricsCAD.V25.UI
@@ -75,14 +77,24 @@ namespace QS3D.BricsCAD.V25.UI
             _categoryFilter = null;
             ApplySlabOpeningWorkspaceFamilyFilter();
 
-            var family = FindExactSlabOpeningFamily();
+            ProjectFamily? family;
+            try
+            {
+                family = FindOrCreateExactSlabOpeningFamily();
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Khởi tạo/kích hoạt exact slabOpen lỗi: " + ex.Message);
+                return;
+            }
+
             if (family == null)
             {
                 _loadingContext = true;
                 try { FamilyList.SelectedItem = null; }
                 finally { _loadingContext = false; }
 
-                SetStatus("Lỗ Mở Sàn yêu cầu Family exact slabOpen. Project hiện tại chưa có slabOpen; không dùng Family Sàn thay thế.");
+                SetStatus("Lỗ Mở Sàn yêu cầu Family exact slabOpen; không dùng Family Sàn thay thế.");
                 return;
             }
 
@@ -124,7 +136,7 @@ namespace QS3D.BricsCAD.V25.UI
                 return FamilyList.SelectedItem as ProjectFamily;
 
             ApplySlabOpeningWorkspaceFamilyFilter();
-            var family = FindExactSlabOpeningFamily();
+            var family = FindOrCreateExactSlabOpeningFamily();
             if (family == null)
             {
                 SetStatus("Không thể vẽ Lỗ Mở Sàn: cần exact Family slabOpen; không fallback sang Slab/WallOpening khác.");
@@ -145,6 +157,31 @@ namespace QS3D.BricsCAD.V25.UI
         private ProjectFamily? FindExactSlabOpeningFamily()
         {
             return _viewModel.Families.FirstOrDefault(SlabOpeningContract.IsSlabOpenFamily);
+        }
+
+        private ProjectFamily? FindOrCreateExactSlabOpeningFamily()
+        {
+            var family = FindExactSlabOpeningFamily();
+            if (family != null) return family;
+
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null)
+                throw new InvalidOperationException("Không có bản vẽ BricsCAD đang active để khởi tạo slabOpen.");
+
+            var project = ExistingProjectMutationContext.Require(document, "Khởi tạo Family slabOpen từ Lỗ Mở Sàn");
+            family = project.Families.FirstOrDefault(SlabOpeningContract.IsSlabOpenFamily);
+            if (family == null)
+            {
+                family = ProjectFamilyService.Create(
+                    project,
+                    SlabOpeningContract.FamilyKey,
+                    SlabOpeningContract.FamilyKey,
+                    ElementCategory.WallOpening);
+            }
+
+            if (!_viewModel.Families.Contains(family))
+                _viewModel.Families.Add(family);
+            return family;
         }
 
         private void ApplySlabOpeningWorkspaceFamilyFilter()

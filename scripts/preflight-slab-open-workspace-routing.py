@@ -39,7 +39,11 @@ def main():
                 '"Sàn Đặc"',
                 "SlabOpeningContract.IsSlabOpenFamily",
                 "ApplySlabOpeningWorkspaceFamilyFilter()",
-                "FindExactSlabOpeningFamily()",
+                "FindOrCreateExactSlabOpeningFamily()",
+                "ExistingProjectMutationContext.Require",
+                "ProjectFamilyService.Create",
+                "SlabOpeningContract.FamilyKey",
+                "ElementCategory.WallOpening",
                 "_viewModel.SetActiveFamily(family);",
                 "không dùng Family Sàn thay thế",
                 "không fallback sang Slab/WallOpening khác",
@@ -52,8 +56,13 @@ def main():
         return fail("workspace route must split the existing Slab leaf instead of inventing another generic category")
     if "family.Category == ElementCategory.Slab" in route:
         return fail("slabOpen workspace route must not accept a generic Slab family")
-    if "ProjectFamilyService.Create" in route or "GetOrCreate" in route:
-        return fail("selecting Lỗ Mở Sàn must not silently create/fallback a family")
+    if "GetOrCreate" in route:
+        return fail("selecting Lỗ Mở Sàn must not silently create a QS3D project")
+    create = route.find("ProjectFamilyService.Create(")
+    family_key = route.find("SlabOpeningContract.FamilyKey", create)
+    wall_opening = route.find("ElementCategory.WallOpening", create)
+    if create < 0 or family_key < 0 or wall_opening < 0:
+        return fail("missing exact slabOpen provisioning as WallOpening")
     if 'Send("QS3DDRAWSLABOPEN")' in quick or 'Send("QS3DDRAWSLABOPENADV")' in quick:
         return fail("workspace must retain active-family dispatch freshness instead of bypassing QS3DDRAWACTIVE")
     if "_viewModel.SetActiveFamily(family);" not in quick:
@@ -71,7 +80,7 @@ def main():
         return fail("quick draw must resolve exact slabOpen, activate it, then dispatch")
 
     print(
-        "PASS: V25 Sàn > Lỗ Mở Sàn resolves only exact slabOpen, activates it before "
+        "PASS: V25 Sàn > Lỗ Mở Sàn provisions/resolves only exact slabOpen, activates it before "
         "QS3DDRAWACTIVE dispatch, blocks generic basic draw fallback, and preserves the "
         "dedicated negative-Z/BoolSubtract command boundary. NATIVE_RUNTIME=LOCAL_ONLY"
     )
