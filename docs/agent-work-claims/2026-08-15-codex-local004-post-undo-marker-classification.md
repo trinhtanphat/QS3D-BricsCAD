@@ -1,9 +1,11 @@
 # Work claim — LOCAL-004 post-Undo marker classification
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-local004-postundo-marker-20260815` (`/root/local004_postundo_marker`, delegated by `/root`)
 - Registered: `2026-08-15T07:41:39+07:00`
+- Completed: `2026-08-15T07:49:51+07:00`
 - Baseline main SHA: `3f35c2fa2b448fe6572aa0ce6b6b4612441ee0ad`
+- Implementation commit: `eea8822bcb962dd01fc126d1fd046c5b67e07170`
 - Priority: `LOCAL-004 / issue #1005` — the licensed exact-SHA result at `8a5fbb2ca6b406a5ad4776da1b110b4d863af37b` remained `undo_coherent=false` / `redo_coherent=true`, but the failing path did not retain a decisive post-Undo native-marker class.
 
 ## Reserved scope
@@ -43,3 +45,12 @@ The active root claim `2026-08-13-codex-local004-source-reconcile-runtime.md` ow
 ## Completion condition
 
 The automation-only discriminator and strict privacy gate are pushed from a current-main descendant, focused gates and the installed-reference V25 build pass, and the active root LOCAL-004 owner receives the exact implementation SHA plus the bounded production implication: if licensed post-Undo classification is `AFTER`, the next non-local production claim may be limited to explicit ModelSpace block-table-record undo recording; no production fix is implemented in this lane.
+
+## Implementation and validation
+
+- Exact implementation commit `eea8822bcb962dd01fc126d1fd046c5b67e07170` writes a dedicated nonce-bound `QS3D_SOURCE_RECONCILE_POST_UNDO_MARKER_V1` diagnostic immediately after guarded native Undo, before semantic coherence is checked. The optional Redo class is added atomically after guarded native Redo.
+- The diagnostic accepts exactly the base status/schema/boundary/nonce keys plus `post_undo_marker_class` and, when captured, `post_redo_marker_class`. Each classification is limited to `BEFORE`, `AFTER`, or `OTHER_OR_INVALID`; raw revisions, semantic/native IDs, Handles, paths, messages and counts are absent.
+- The runner retains this dedicated diagnostic separately from the ordinary session-one and cold-reopen markers, including a sanitized failure path. The existing production commands, Source Reconcile coordinator/service, acceptance matrix and licensed execution ownership are unchanged.
+- The focused runtime-probe, Source Reconcile, Undo-coherence, single-bind, audit-owned-revision and grid-annotation gates passed. The PowerShell runner parsed successfully.
+- Installed-reference `Release|x64` V25 build succeeded with `0 warnings / 0 errors`. Both adapter and Core ProductVersion end in `+eea8822bcb962dd01fc126d1fd046c5b67e07170`.
+- No BricsCAD process, private data or GitHub Actions were used. The active root LOCAL-004 owner retains the licensed exact-SHA rerun and result publication.
