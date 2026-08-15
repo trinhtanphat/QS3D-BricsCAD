@@ -294,6 +294,7 @@ try {
             "NETLOAD", ('"' + $PluginDll + '"'),
             "QS3DSRULPREPARE", "QS3DSRULMUTATE",
             "_.UNDO", "1", "QS3DSRULCHECKUNDO",
+            "_.CLOSE", "_N",
             "_.QUIT", "_N"
         )
         [IO.File]::WriteAllLines($scriptPath, $script, [Text.Encoding]::ASCII)

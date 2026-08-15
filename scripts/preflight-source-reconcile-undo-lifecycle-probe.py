@@ -107,6 +107,7 @@ if RUNNER.is_file():
         'source-undo-lifecycle.private.scr',
         '"QS3DSRULPREPARE", "QS3DSRULMUTATE"',
         '"_.UNDO", "1", "QS3DSRULCHECKUNDO"',
+        '"_.CLOSE", "_N"',
         '"_.QUIT", "_N"',
         'QS3D_SOURCE_UNDO_MATRIX_RESULT',
         'QS3D_SOURCE_UNDO_MATRIX_NONCE',
@@ -136,6 +137,7 @@ if RUNNER.is_file():
     sequence = (
         '"QS3DSRULPREPARE", "QS3DSRULMUTATE"',
         '"_.UNDO", "1", "QS3DSRULCHECKUNDO"',
+        '"_.CLOSE", "_N"',
         '"_.QUIT", "_N"',
     )
     positions = [text.find(token) for token in sequence]
@@ -200,4 +202,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: four fresh-process database/object Undo variants are statically bound to an existing XData mutation plus topology sentinel, generic result metadata is materialized through the Windows PowerShell 5.1-safe pipeline path without masking qualification errors, sanitized evidence/cleanup guards are preserved, and production Source Reconcile database Undo lifecycle remains untouched.")
+print("PASS: four fresh-process database/object Undo variants are statically bound to an existing XData mutation plus topology sentinel, close the synthetic DWG explicitly without saving before host quit, materialize generic result metadata through the Windows PowerShell 5.1-safe pipeline path without masking qualification errors, preserve sanitized evidence/cleanup guards, and leave production Source Reconcile database Undo lifecycle untouched.")
