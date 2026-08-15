@@ -12,9 +12,9 @@ namespace QS3D.BricsCAD.V25
 {
     /// <summary>
     /// Automation-only LOCAL-004 diagnostic. It isolates database/object Undo
-    /// enrollment for an existing XData carrier and a newly appended topology
-    /// sentinel. It does not call Source Reconcile production code and cannot
-    /// qualify LOCAL-004.
+    /// enrollment for an existing XData carrier and either an appended or an
+    /// erased topology sentinel. It does not call Source Reconcile production
+    /// code and cannot qualify LOCAL-004.
     /// </summary>
     public sealed class SourceReconcileUndoLifecycleProbeCommands
     {
@@ -38,6 +38,7 @@ namespace QS3D.BricsCAD.V25
             Execute("PREPARE", () =>
             {
                 var context = RequireContext();
+                var sentinelId = ObjectId.Null;
                 using (var transaction = context.Document.Database.TransactionManager.StartTransaction())
                 {
                     EnsureRegApp(context.Document.Database, transaction);
@@ -45,15 +46,29 @@ namespace QS3D.BricsCAD.V25
                     carrier.DisableUndoRecording(false);
                     carrier.UpgradeOpen();
                     WriteMarker(carrier, BeforeToken);
+
+                    if (context.Variant == MatrixVariant.ObjectErase)
+                    {
+                        var modelSpace = OpenModelSpace(context.Document.Database, transaction, OpenMode.ForWrite);
+                        var sentinel = new DBPoint(Point3d.Origin);
+                        sentinelId = modelSpace.AppendEntity(sentinel);
+                        transaction.AddNewlyCreatedDBObject(sentinel, true);
+                    }
                     transaction.Commit();
                 }
 
                 if (!string.Equals(ReadMarker(context.Document), BeforeToken, StringComparison.Ordinal))
                     throw new InvalidOperationException("LOCAL-004 Undo lifecycle baseline marker was not committed.");
+                if (context.Variant == MatrixVariant.ObjectErase &&
+                    !string.Equals(ClassifyTopology(context.Document, sentinelId), "PRESENT", StringComparison.Ordinal))
+                    throw new InvalidOperationException("LOCAL-004 Undo lifecycle erase sentinel was not committed.");
 
                 lock (Sync)
                 {
-                    _state = new MatrixState(context.Document, context.Nonce, context.Variant);
+                    _state = new MatrixState(context.Document, context.Nonce, context.Variant)
+                    {
+                        SentinelId = sentinelId,
+                    };
                 }
             });
         }
@@ -93,15 +108,26 @@ namespace QS3D.BricsCAD.V25
                     carrier.UpgradeOpen();
                     WriteMarker(carrier, AfterToken);
 
-                    var modelSpace = OpenModelSpace(database, transaction, OpenMode.ForWrite);
-                    var sentinel = new DBPoint(Point3d.Origin);
-                    state.SentinelId = modelSpace.AppendEntity(sentinel);
-                    transaction.AddNewlyCreatedDBObject(sentinel, true);
+                    if (context.Variant == MatrixVariant.ObjectErase)
+                    {
+                        var sentinel = transaction.GetObject(state.SentinelId, OpenMode.ForWrite, false) as Entity;
+                        if (sentinel == null || sentinel.IsErased)
+                            throw new InvalidOperationException("LOCAL-004 Undo lifecycle erase sentinel is unavailable.");
+                        sentinel.Erase();
+                    }
+                    else
+                    {
+                        var modelSpace = OpenModelSpace(database, transaction, OpenMode.ForWrite);
+                        var sentinel = new DBPoint(Point3d.Origin);
+                        state.SentinelId = modelSpace.AppendEntity(sentinel);
+                        transaction.AddNewlyCreatedDBObject(sentinel, true);
+                    }
                     transaction.Commit();
                 }
 
+                var expectedTopology = context.Variant == MatrixVariant.ObjectErase ? "UNDONE" : "PRESENT";
                 if (!string.Equals(ReadMarker(context.Document), AfterToken, StringComparison.Ordinal) ||
-                    !string.Equals(ClassifyTopology(context.Document, state.SentinelId), "PRESENT", StringComparison.Ordinal))
+                    !string.Equals(ClassifyTopology(context.Document, state.SentinelId), expectedTopology, StringComparison.Ordinal))
                     throw new InvalidOperationException("LOCAL-004 Undo lifecycle mutation did not commit.");
 
                 state.MutationCommitted = true;
@@ -185,6 +211,7 @@ namespace QS3D.BricsCAD.V25
             switch ((raw ?? string.Empty).Trim().ToUpperInvariant())
             {
                 case "OBJECT_ONLY": return MatrixVariant.ObjectOnly;
+                case "OBJECT_ERASE": return MatrixVariant.ObjectErase;
                 case "DB_ENABLE_OBJECT": return MatrixVariant.DbEnableObject;
                 case "DB_START_OBJECT": return MatrixVariant.DbStartObject;
                 case "DB_ENABLE_DB_START_OBJECT": return MatrixVariant.DbEnableDbStartObject;
@@ -197,6 +224,7 @@ namespace QS3D.BricsCAD.V25
             switch (variant)
             {
                 case MatrixVariant.ObjectOnly: return "OBJECT_ONLY";
+                case MatrixVariant.ObjectErase: return "OBJECT_ERASE";
                 case MatrixVariant.DbEnableObject: return "DB_ENABLE_OBJECT";
                 case MatrixVariant.DbStartObject: return "DB_START_OBJECT";
                 case MatrixVariant.DbEnableDbStartObject: return "DB_ENABLE_DB_START_OBJECT";
@@ -353,6 +381,7 @@ namespace QS3D.BricsCAD.V25
         private enum MatrixVariant
         {
             ObjectOnly,
+            ObjectErase,
             DbEnableObject,
             DbStartObject,
             DbEnableDbStartObject,
