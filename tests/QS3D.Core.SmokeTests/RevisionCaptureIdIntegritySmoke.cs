@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             InvalidIdsFailAtCaptureBoundary();
             CanonicalIdIsPreservedExactly();
+            CapturePreservesProjectIdentity();
         }
 
         private static void InvalidIdsFailAtCaptureBoundary()
@@ -32,6 +33,14 @@ namespace QS3D.Core.SmokeTests
             var snapshot = service.Capture(project, "REV-A/2026-08-12");
             Equal("REV-A/2026-08-12", snapshot.Id);
             Equal(DateTimeKind.Utc, snapshot.CreatedUtc.Kind);
+        }
+
+        private static void CapturePreservesProjectIdentity()
+        {
+            var service = new RevisionService();
+            var project = new ProjectState("revision-id-project", "Revision Id Project");
+            var snapshot = service.Capture(project, "REV-PROJECT-ID");
+            Equal(project.ProjectId, snapshot.ProjectId);
         }
 
         private static void Throws<T>(Action action) where T : Exception
