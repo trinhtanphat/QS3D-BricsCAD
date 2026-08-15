@@ -47,7 +47,7 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnQuickFamilySelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_loading) return;
-            _creatingNew = FamilyList.SelectedItem == null;
+            if (FamilyList.SelectedItem != null) _creatingNew = false;
             RefreshQuickWorkflow();
         }
 
