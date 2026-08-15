@@ -50,7 +50,7 @@ require(code, "ResolveCurrentRow(currentProject, displayedView)", "locate curren
 require(code, "currentProject.FindElement(elementId)", "locate semantic identity")
 require(code, "IsWallCategory(currentElement.Category)", "locate current wall category")
 require(code, "ProjectQuantityReportBuilder.Detail(currentSnapshot, new[] { elementId })", "locate detached current detail")
-require(code, "SourceHandleResolver.Resolve(currentProject, currentRow.ElementIds)", "locate current handles")
+require(code, "Resolve3DLocateHandles(currentProject, currentElement, currentRow)", "locate guarded 3D handles")
 require(code, "QS3D.BricsCAD.V25.Cad.CadHandleService.Select(_document, handles)", "native CAD select")
 require(code, '_document.SendStringToExecute("QS3DZOOMSELECTED ', "native CAD zoom")
 require(xaml, 'x:Name="WallList"', "wall browser")
@@ -73,7 +73,8 @@ else:
         [
             'EnsureCurrentProject("định vị Tường trong View 3D")',
             "ResolveCurrentRow(currentProject, displayedView)",
-            "SourceHandleResolver.Resolve(currentProject, currentRow.ElementIds)",
+            "currentProject.FindElement(elementId)",
+            "Resolve3DLocateHandles(currentProject, currentElement, currentRow)",
             "CadHandleService.Select(_document, handles)",
             'SendStringToExecute("QS3DZOOMSELECTED ',
         ],
