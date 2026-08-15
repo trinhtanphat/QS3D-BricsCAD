@@ -6,6 +6,7 @@ param(
     [Parameter(Mandatory = $true)][string]$ArtifactDir,
     [Parameter(Mandatory = $true)][ValidatePattern("^[0-9a-fA-F]{40}$")][string]$ExpectedSourceSha,
     [Parameter(Mandatory = $true)][switch]$ConfirmDisposableCopy,
+    [ValidateSet("Millimeter", "Meter")][string]$NativeDrawingUnit = "Millimeter",
     [ValidateRange(30, 900)][int]$StartupTimeoutSeconds = 240
 )
 
@@ -266,6 +267,11 @@ $drawingRestoreVerified = $false
 $drawingAttributesRestored = $false
 $drawingHashAfter = $null
 $startedAt = Get-Date
+$nativeInsunits = switch ($NativeDrawingUnit) {
+    "Millimeter" { "4" }
+    "Meter" { "6" }
+    default { throw "Unsupported native drawing unit: $NativeDrawingUnit" }
+}
 
 try {
     $guardedDrawingAttributes = [IO.FileAttributes](([int]$originalDrawingAttributes) -bor [int][IO.FileAttributes]::ReadOnly)
@@ -281,7 +287,7 @@ try {
         "FILEDIA", "0",
         "CMDECHO", "1",
         "TILEMODE", "1",
-        "INSUNITS", "4",
+        "INSUNITS", $nativeInsunits,
         "UCS", "W",
         "NETLOAD", ('"' + $PluginDll + '"'),
         "QS3DLEVELZPROBE",
@@ -328,6 +334,7 @@ try {
     Require-Qs3dLevelValue -Marker $marker -Key "source_sha" -Expected $ExpectedSourceSha
     Require-Qs3dLevelValue -Marker $marker -Key "schema" -Expected "QS3D_LEVEL_Z_RUNTIME_V1"
     Require-Qs3dLevelValue -Marker $marker -Key "is_64bit" -Expected "true"
+    Require-Qs3dLevelValue -Marker $marker -Key "native_drawing_unit" -Expected $NativeDrawingUnit
     Require-Qs3dLevelValue -Marker $marker -Key "physical_opening_volume_reduced" -Expected "true"
     Require-Qs3dLevelValue -Marker $marker -Key "level_edit_invalidation" -Expected "true"
     Require-Qs3dLevelValue -Marker $marker -Key "top_only_fail_closed" -Expected "true"
@@ -396,6 +403,8 @@ $metadata = [ordered]@{
     completed_at = (Get-Date).ToUniversalTime().ToString("O")
     profile = $Profile
     bricscad_file_version = (Get-Item -LiteralPath $bricscadExe).VersionInfo.FileVersion
+    native_drawing_unit = $NativeDrawingUnit
+    native_insunits = $nativeInsunits
     plugin_sha256 = $pluginHash
     drawing_copy_sha256_before = $drawingHashBefore
     drawing_copy_sha256_after = $drawingHashAfter
@@ -419,6 +428,7 @@ $metadata = [ordered]@{
 $metadata | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
 
 Write-Host "QS3D BricsCAD V25 Level Z runtime PASS"
+Write-Host "Native drawing unit: $NativeDrawingUnit (INSUNITS=$nativeInsunits)"
 Write-Host "Curtain frames: $frameCount; panels: $panelCount; Beam bars: $rebarCount; stirrups: $stirrupCount"
 Write-Host "Marker: $resultPath"
 Write-Host "Metadata: $metadataPath"
