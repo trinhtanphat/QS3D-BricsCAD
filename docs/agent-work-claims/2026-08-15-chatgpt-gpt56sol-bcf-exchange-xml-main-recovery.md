@@ -1,6 +1,6 @@
 # Work claim — BCF exchange XML representability current-main recovery
 
-- Status: `RELEASED` — implementation complete; pending authorized review/integration on current main
+- Status: `COMPLETED`
 - Agent: `chatgpt-gpt56sol-bcf-exchange-xml-main-recovery-20260815`
 - Registered: `2026-08-15T10:04+07:00`
 - Exact main baseline: `49135b378a479fa6c4da78d2d8713ad65b5bba61`
@@ -49,3 +49,15 @@ Current `BcfIssueExchange.cs` allowed XML-illegal UTF-16 through BCF free text a
 ## Handoff / release
 
 All recovery source/regression state is represented by ready PR #1559 against `main`. Reservation ownership is released from this session. Keep Issue #1506 open until an authorized coordinator integrates #1559 and remote ancestry/source readback confirms the fix on `main`.
+
+## Integration closeout
+
+- Authorized integration PR `#1559` merged at exact main SHA
+  `be4729e8a4f15e7e1dbf3ca5267015a00a58ca85`; issue `#1506` closed through
+  that merge.
+- Exact-merge validation: smoke registration, Interchange validation, and
+  Interchange JSON gates PASS; `QS3D.Core.SmokeTests` Release build completed
+  with 0 warnings / 0 errors; full deterministic Core smoke reported
+  `ALL PASS`.
+- No BricsCAD/native runtime or GitHub Actions operation was performed during
+  integration.
