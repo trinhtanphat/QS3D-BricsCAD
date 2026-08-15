@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml;
 
 namespace QS3D.Core.Domain
 {
@@ -185,6 +186,14 @@ namespace QS3D.Core.Domain
                 throw new ArgumentException(parameterName + " must contain 1.." + maxLength + " characters.", parameterName);
             if (text.Any(char.IsControl))
                 throw new ArgumentException(parameterName + " cannot contain control characters.", parameterName);
+            try
+            {
+                XmlConvert.VerifyXmlChars(text);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException(parameterName + " contains characters that are invalid in XML.", parameterName, ex);
+            }
             return text;
         }
     }
