@@ -1,6 +1,6 @@
 # Work claim — Wall Quantity generated-locate gate reconciliation
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `Codex /root`
 - Registered: `2026-08-15T10:36:00+07:00`
 - Baseline main SHA: `d73420a2dce589fd74e220efdcca3071b828b335`
@@ -45,3 +45,17 @@ sync gate.
 - Run aggregate `scripts/preflight-all.py` and require the Wall Quantity gate to
   pass, recording the unrelated release-sync result without expanding scope.
 - Verify the diff contains only this gate plus the claim record.
+
+## Completion evidence
+
+- Claim PR `#1545` merged at
+  `49135b378a479fa6c4da78d2d8713ad65b5bba61` before the gate edit.
+- Gate PR `#1547` merged at exact main SHA
+  `425a529c72de934e5bf634f661f15ca5e283ab17`.
+- `preflight-wall-quantity-window.py`: PASS.
+- `preflight-wallqty-3d-locate-generated-solid.py`: PASS.
+- Aggregate discovered 814 feature gates. The Wall Quantity failure was removed;
+  the only remaining failure was the independent owner-controlled
+  `preflight-v25-preview-release-sync.py` guard. No release or Actions surface
+  was modified or operated.
+- Production remained unchanged in this successor lane.

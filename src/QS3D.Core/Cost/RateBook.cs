@@ -114,6 +114,7 @@ namespace QS3D.Core.Cost
             var snapshot = new List<RateItem>();
             var itemIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             _byScope = new Dictionary<string, List<RateItem>>(StringComparer.OrdinalIgnoreCase);
+            var effectiveTimesByScope = new Dictionary<string, HashSet<DateTime>>(StringComparer.OrdinalIgnoreCase);
 
             var index = 0;
             foreach (var item in items)
@@ -128,17 +129,15 @@ namespace QS3D.Core.Cost
                 {
                     scopedItems = new List<RateItem>();
                     _byScope.Add(scopeKey, scopedItems);
+                    effectiveTimesByScope.Add(scopeKey, new HashSet<DateTime>());
                 }
 
-                for (var i = 0; i < scopedItems.Count; i++)
-                {
-                    if (scopedItems[i].EffectiveFromUtc == item.EffectiveFromUtc)
-                        throw new ArgumentException(
-                            "Ambiguous rate items share the same cost code, unit, currency and effective timestamp: " +
-                            item.CostCode.Value + "/" + item.Unit + "/" + item.Currency + "/" +
-                            item.EffectiveFromUtc.ToString("O") + ".",
-                            nameof(items));
-                }
+                if (!effectiveTimesByScope[scopeKey].Add(item.EffectiveFromUtc))
+                    throw new ArgumentException(
+                        "Ambiguous rate items share the same cost code, unit, currency and effective timestamp: " +
+                        item.CostCode.Value + "/" + item.Unit + "/" + item.Currency + "/" +
+                        item.EffectiveFromUtc.ToString("O") + ".",
+                        nameof(items));
 
                 scopedItems.Add(item);
                 snapshot.Add(item);
