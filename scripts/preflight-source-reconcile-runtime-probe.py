@@ -285,7 +285,7 @@ if DISCRIMINATOR_CLAIM.is_file():
 
 if SUCCESSOR_CLAIM.is_file():
     text = SUCCESSOR_CLAIM.read_text(encoding="utf-8")
-    for token in ('LOCAL-004', 'Status: `ACTIVE`', 'BEFORE', 'AFTER', 'OTHER_OR_INVALID', 'no production fix is implemented'):
+    for token in ('LOCAL-004', 'Status: `COMPLETED`', 'BEFORE', 'AFTER', 'OTHER_OR_INVALID', 'no production fix is implemented'):
         if token not in text:
             errors.append("LOCAL-004 successor discriminator claim missing coordination token: " + token)
 
