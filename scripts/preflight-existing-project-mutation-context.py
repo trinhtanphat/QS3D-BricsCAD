@@ -48,8 +48,15 @@ def main():
         require(auto_host, "ExistingProjectMutationContext.TryGet(document, out var project)", "Auto Host")
 
         review = read("ReviewCommands.cs")
-        require(review, "ExistingProjectMutationContext.TryGet(doc, out var currentProject)", "Recognition Apply")
-        require(review, "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)", "Recognition Locate")
+        require(review, "RecognitionApplyBatchService.PrepareStrict(", "Recognition Apply batch preflight")
+        require(review, "RecognitionApplyBatchService.Commit(doc, reviewProjectId, plan)", "Recognition Apply atomic commit")
+        require(review, "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)", "Recognition/BBS/Revision Locate")
+
+        recognition_apply = read("Services/RecognitionApplyBatchService.cs")
+        require(recognition_apply, "ExistingProjectMutationContext.TryGet(document, out var project)", "Recognition Apply existing-project mutation")
+        require(recognition_apply, "string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase)", "Recognition Apply project identity")
+        require(recognition_apply, "if (project.ChangeVersion != plan.ProjectChangeVersion)", "Recognition Apply freshness")
+        forbid(recognition_apply, "ProjectContextCoordinator.GetOrCreate(document)", "Recognition Apply replacement project")
 
         tags = read("SemanticTagCommands.cs")
         tag_remove = read("SemanticTagRemovalCommands.cs")
@@ -82,7 +89,7 @@ def main():
         print("[FAIL] existing-project-mutation-context:", exc, file=sys.stderr)
         return 1
 
-    print("[PASS] lifecycle: true writes bind canonical existing state; read-only modeless regeneration uses detached snapshots")
+    print("[PASS] lifecycle: true writes bind canonical existing state; Recognition batch commit is existing-project/version guarded; read-only modeless regeneration uses detached snapshots")
     return 0
 
 
