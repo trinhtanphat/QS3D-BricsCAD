@@ -390,15 +390,16 @@ namespace QS3D.BricsCAD.V25.UI
 
             var preview = ProjectStateSnapshot.CreateDetachedCopy(project);
             new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(preview);
-            elementIds = CanonicalIds(option.Row.ElementIds).ToArray();
-            if (elementIds.Length != 1)
+            var canonicalElementIds = CanonicalIds(option.Row.ElementIds).ToArray();
+            elementIds = canonicalElementIds;
+            if (canonicalElementIds.Length != 1)
             {
                 error = "Diễn giải hình học cần đúng một cấu kiện canonical; bấm Làm mới dữ liệu detail.";
                 return false;
             }
 
-            var matches = ProjectQuantityReportBuilder.Detail(preview, elementIds)
-                .Where(x => SameElementIdentity(elementIds, x))
+            var matches = ProjectQuantityReportBuilder.Detail(preview, canonicalElementIds)
+                .Where(x => SameElementIdentity(canonicalElementIds, x))
                 .ToList();
             if (matches.Count != 1 || !SameRow(option.Row, matches[0]))
             {
@@ -406,7 +407,7 @@ namespace QS3D.BricsCAD.V25.UI
                 return false;
             }
 
-            var geometryProject = PrepareQuantityGeometrySnapshot(document, project, elementIds, out var geometryError);
+            var geometryProject = PrepareQuantityGeometrySnapshot(document, project, canonicalElementIds, out var geometryError);
             if (geometryProject == null)
             {
                 error = string.IsNullOrWhiteSpace(geometryError)
@@ -415,7 +416,7 @@ namespace QS3D.BricsCAD.V25.UI
                 return false;
             }
 
-            var fresh = QuantityGeometryExplanationService.Build(document, geometryProject, elementIds[0]);
+            var fresh = QuantityGeometryExplanationService.Build(document, geometryProject, canonicalElementIds[0]);
             if (_quantityGeometryCurrent == null ||
                 !string.Equals(fresh.GeometryFingerprint, _quantityGeometryCurrent.GeometryFingerprint, StringComparison.Ordinal))
             {
