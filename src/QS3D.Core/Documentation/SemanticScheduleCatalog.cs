@@ -121,7 +121,6 @@ namespace QS3D.Core.Documentation
             if (list.Count == 0)
             {
                 if (!project.Metadata.ContainsKey(MetadataKey)) return;
-                project.Touch();
                 project.Metadata.Remove(MetadataKey);
                 return;
             }
@@ -129,7 +128,6 @@ namespace QS3D.Core.Documentation
             var payload = Serialize(list);
             if (payload.Length > MaxPayloadChars) throw new InvalidOperationException("Semantic schedule catalog exceeds the 1 MiB metadata limit.");
             if (project.Metadata.TryGetValue(MetadataKey, out var current) && string.Equals(current, payload, StringComparison.Ordinal)) return;
-            project.Touch();
             project.Metadata[MetadataKey] = payload;
         }
 
