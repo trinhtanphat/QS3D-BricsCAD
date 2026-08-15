@@ -3,12 +3,15 @@
 **Date:** 2026-08-15 (UTC+7)  
 **Disposition:** `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`  
 **Canonical queues:** `docs/LOCAL-AGENT-INBOX.md` entries `LOCAL-001` and `LOCAL-003`; issue #72 for LOCAL-003 evidence  
-**Source recovery:** PR #1544, exact head `ea660524dba1f45c72be20ea5c959e31be471500`  
-**Curved/round runtime harness recovery:** stacked PR #1548, exact head `bcbaec9f7e6ed60fd67308be19a20c66a74691ae`  
+**Source recovery:** PR #1544, checkpoint head `21367e8d815c03eccde066e88297d2756614d8a9`  
+**Curved/round runtime harness recovery:** stacked PR #1548, checkpoint head `d6e57dddf2f132890faab89fe730c56e3d960db0`  
+**Locked main parent for this recovery checkpoint:** `c126bda58d1e226f2199e35f628b20ec9aef946c`  
 **Original reviewed implementation:** PR #1472 / `067ec63931a7a4c48849ddb87958155964bb6b3e`  
 **Original reviewed harness:** PR #1528 / `687ea56d66e5a3359c3107e66c4f97a319a49587`
 
 This file is a qualification addendum, not a second live LOCAL queue. It exists because the original #1472 and #1528 work targeted the now-stale `integration/20260815-merge-all-v2`. The reviewed production blobs are recovered on current-main ancestry by #1544, and the reviewed additive runtime-harness blobs are recovered by stacked PR #1548. The canonical LOCAL status remains outside this document.
+
+The repository is highly concurrent. The SHA above is a verified recovery checkpoint, not permission to merge a stale base later. The authorized coordinator must refetch current `main`, re-check reserved-path overlap, and preserve the same four-file source delta plus three-file stacked harness delta immediately before landing.
 
 No source/static result in #1544 or #1548 is licensed runtime evidence. Do not publish `LOCAL_PASS`, `P10_PASS`, or production-complete status until a licensed BricsCAD V25 x64 worker executes the final intended exact SHA and posts sanitized evidence to the canonical queue.
 
