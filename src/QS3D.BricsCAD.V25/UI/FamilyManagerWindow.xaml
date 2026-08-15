@@ -176,27 +176,27 @@
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
-                                <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,6,7">
+                                <StackPanel x:Name="QuickWidthField" Grid.Row="0" Grid.Column="0" Margin="0,0,6,7">
                                     <TextBlock Text="Bề rộng (mm)" Style="{StaticResource Caption}"/>
                                     <TextBox x:Name="QuickWidthBox" ToolTip="Nhập bề rộng theo mm"/>
                                 </StackPanel>
-                                <StackPanel Grid.Row="0" Grid.Column="1" Margin="6,0,6,7">
+                                <StackPanel x:Name="QuickDepthField" Grid.Row="0" Grid.Column="1" Margin="6,0,6,7">
                                     <TextBlock Text="Bề sâu (mm)" Style="{StaticResource Caption}"/>
                                     <TextBox x:Name="QuickDepthBox" ToolTip="Nhập bề sâu theo mm"/>
                                 </StackPanel>
-                                <StackPanel Grid.Row="0" Grid.Column="2" Margin="6,0,0,7">
+                                <StackPanel x:Name="QuickHeightField" Grid.Row="0" Grid.Column="2" Margin="6,0,0,7">
                                     <TextBlock Text="Chiều cao (mm)" Style="{StaticResource Caption}"/>
                                     <TextBox x:Name="QuickHeightBox" ToolTip="Nhập chiều cao theo mm"/>
                                 </StackPanel>
-                                <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,6,0">
+                                <StackPanel x:Name="QuickThicknessField" Grid.Row="1" Grid.Column="0" Margin="0,0,6,0">
                                     <TextBlock Text="Bề dày (mm)" Style="{StaticResource Caption}"/>
                                     <TextBox x:Name="QuickThicknessBox" ToolTip="Nhập bề dày theo mm"/>
                                 </StackPanel>
-                                <StackPanel Grid.Row="1" Grid.Column="1" Margin="6,0,6,0">
+                                <StackPanel x:Name="QuickBottomOffsetField" Grid.Row="1" Grid.Column="1" Margin="6,0,6,0">
                                     <TextBlock Text="Offset đáy (mm)" Style="{StaticResource Caption}"/>
                                     <TextBox x:Name="QuickBottomOffsetBox" ToolTip="Nhập offset đáy theo mm; có thể âm"/>
                                 </StackPanel>
-                                <StackPanel Grid.Row="1" Grid.Column="2" Margin="6,0,0,0">
+                                <StackPanel x:Name="QuickMaterialField" Grid.Row="1" Grid.Column="2" Margin="6,0,0,0">
                                     <TextBlock Text="Vật liệu" Style="{StaticResource Caption}"/>
                                     <ComboBox x:Name="QuickMaterialCombo" IsEditable="True"
                                               ToolTip="Chọn hoặc nhập vật liệu quen thuộc"/>
