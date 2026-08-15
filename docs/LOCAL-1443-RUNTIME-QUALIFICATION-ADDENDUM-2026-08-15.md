@@ -31,6 +31,14 @@ Exercise the real production routes `QS3DSLAB` and `QS3DCOLUMN` with planar WCS-
 
 Cover legacy/no-Level plus representative Bottom-only and Bottom+Top placement where applicable, and run at least one Millimeter drawing and one Meter drawing. Unsupported circle orientation or invalid geometry must fail closed without replacing an existing valid generated set.
 
+### Existing LOCAL-003 probe reuse boundary
+
+`scripts/test-bricscad-v25-level-z.ps1` plus `QS3DLEVELZPROBE` remain useful prerequisites for the shared vertical-placement contract and should be run on the exact candidate before the new curved/round matrix. They already prove a representative LINE Beam through `StructuralSolidBuilder`, Level placement, Beam rebar/stirrups, host/opening/Curtain alignment, stale propagation and exact-SHA/runtime cleanup.
+
+They do **not** close #1472 by themselves: the current `LevelZRuntimeProbeCommands.CreateSources(...)` creates the representative Beam with `AppendLine(...)`; it does not create ARC, CIRCLE or curved/bulged open-POLYLINE Beam sources, and it does not create CIRCLE Slab/Column sources. Existing historical `LOCAL_PASS` from that runner therefore remains baseline placement evidence only and must not be promoted to curved/round structural qualification.
+
+Do not widen `QS3DLEVELZPROBE` merely to make this handoff look automated. A local worker may either execute the explicit matrix above with sanitized evidence or add a dedicated additive guarded probe if that is the smallest maintainable way to automate the new source-shape contract. Any new probe/source change must follow the normal claim/branch/CI policy and still requires a fresh exact-SHA licensed run.
+
 ### Cross-cutting evidence
 
 Record only sanitized evidence:
@@ -67,6 +75,12 @@ Acceptance:
 - explicit `QS3DUPDATE` must still open Update Center on user request;
 - no duplicate Update Center windows or cross-DWG stale callbacks;
 - update discovery must not create/mutate QS3D semantic project state, CAD entities, selection, audit state or drawing bytes.
+
+### Existing updater probe boundary
+
+`UpdateManifestProbe` is a package/trust eligibility probe. It validates the selected GitHub release manifest, schema/product/target/version, signer thumbprint, SHA-256 and exact repository/tag/package URL under bounded HTTP reads. That evidence is useful for updater security but it does **not** observe BricsCAD startup, modal/modeless WPF presentation, Editor input availability, active-DWG switching or explicit `QS3DUPDATE` UI behavior.
+
+Likewise, source review of `UpdateBootstrapper.OnAutomaticUpdateFound(...)` proves that the current implementation writes a notification to the active document Editor and does not directly call `UpdateCenterWindowHost.Show()`. This is source evidence only. Do not convert either of these facts into `LOCAL_PASS`; the host matrix above remains required.
 
 Record exact SHA, BricsCAD/plugin identity, sanitized startup/update outcome, explicit-command result, active-DWG behavior and before/after mutation invariants. Do not record credentials, private update URLs or machine-private paths.
 
