@@ -17,16 +17,17 @@ if not errors:
 
     root = store.find("var root = LoadDocument(path).Root")
     validate = store.find("RevisionSnapshotXmlSchemaValidator.Validate(root);", root)
-    snapshot = store.find("var snapshot = new RevisionSnapshot", root)
-    if min(root, validate, snapshot) < 0 or not root < validate < snapshot:
-        errors.append("RevisionSnapshotStore.Load must validate XML shape before reading snapshot fields")
+    schema = store.find("var schemaVersion = ReadSchemaVersion(root);", validate)
+    snapshot = store.find("var snapshot = new RevisionSnapshot", schema)
+    if min(root, validate, schema, snapshot) < 0 or not root < validate < schema < snapshot:
+        errors.append("RevisionSnapshotStore.Load must validate XML shape and schema version before reading snapshot fields")
 
     required = [
         'var document = root.Document;',
         'foreach (var node in document.Nodes())',
         'ReferenceEquals(node, root)',
         'Unsupported QS3D revision document-level XML content.',
-        'ValidateElement(root, "qs3dRevision", new[] { "id", "createdUtc" }, new[] { "elements" })',
+        'ValidateElement(root, "qs3dRevision", new[] { "id", "createdUtc", "schemaVersion", "projectId" }, new[] { "elements" })',
         'RequireExactlyOne(root, "elements")',
         'parent.Elements(name).Take(2).Count() != 1',
         'ValidateElement(element, "element", new[] { "id", "category", "familyId", "floorId", "zoneId" }, new[] { "properties", "quantities", "sourceHandles", "dependencies" })',
@@ -48,6 +49,20 @@ if not errors:
     for token in required:
         if token not in validator:
             errors.append("revision schema validator missing contract token: " + token)
+
+    version_tokens = [
+        'var versionAttribute = root.Attribute("schemaVersion");',
+        'var projectIdAttribute = root.Attribute("projectId");',
+        'QS3D revision project identity requires schemaVersion=2.',
+        'QS3D revision schemaVersion=1 cannot contain projectId.',
+        'QS3D revision schemaVersion=2 requires projectId.',
+        'Unsupported QS3D revision schemaVersion: ',
+        'ProjectId = schemaVersion == 2',
+        'CanonicalRequired(root, "projectId", "revision project id")',
+    ]
+    for token in version_tokens:
+        if token not in store:
+            errors.append("revision schema-version store contract missing token: " + token)
 
     document_guard = validator.find("var document = root.Document;")
     root_shape = validator.find('ValidateElement(root, "qs3dRevision"')
@@ -80,4 +95,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: revision XML load rejects document-level sibling nodes and CDATA, requires canonical containers, and fails closed on foreign namespaces and unknown XML content.")
+print("PASS: revision XML load rejects noncanonical XML, permits only the v1/v2 root attribute surface, and validates schemaVersion/projectId pairing before snapshot materialization.")
