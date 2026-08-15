@@ -52,6 +52,11 @@ def main() -> int:
     require(service, "EntitySnapshotReader.ReadHandles", "RecognitionApplyBatchService")
     require(service, "SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner", "RecognitionApplyBatchService")
     require(service, "AuditTrail.ForProject(project)", "RecognitionApplyBatchService")
+    require(service, "private const double AutoAcceptConfidence = 0.92d;", "RecognitionApplyBatchService")
+    require(service, "private const double AutoAcceptMinimumMargin = 0.15d;", "RecognitionApplyBatchService")
+    require(service, "candidate.Confidence < AutoAcceptConfidence || refreshed.Margin < AutoAcceptMinimumMargin", "RecognitionApplyBatchService")
+    require(service, "PrepareOne(document, project, result, requireAutoAcceptance: true)", "RecognitionApplyBatchService")
+    require(service, "PrepareOne(document, project, result, requireAutoAcceptance: false)", "RecognitionApplyBatchService")
 
     commit_at = service.index("public static int Commit")
     rollback_at = service.index("var rollback = ProjectStateSnapshot.Capture(project);", commit_at)
@@ -65,7 +70,7 @@ def main() -> int:
     if "SemanticCaptureService.CaptureSnapshot" in prepare_region:
         fail("recognition preflight must remain mutation-free")
 
-    print("PASS: recognition batch apply is source-guarded as preflight-first and all-or-nothing")
+    print("PASS: recognition batch apply is source-guarded as preflight-first, live-gated and all-or-nothing")
     return 0
 
 
