@@ -15,14 +15,16 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("META-PERSIST", "Metadata persistability");
             var originalVersion = project.ChangeVersion;
-            var originalUpdatedUtc = project.UpdatedUtc;
+            var originalUpdatedUtc = new DateTime(2026, 8, 14, 0, 0, 0, DateTimeKind.Utc);
+            project.UpdatedUtc = originalUpdatedUtc;
             const string key = "Display.Preference";
             const string value = "  line 1\nline 2  ";
 
             project.Metadata[key] = value;
             Equal(value, project.Metadata[key], "Valid generic metadata value");
-            Equal(originalVersion, project.ChangeVersion, "Generic metadata semantic revision");
-            Equal(originalUpdatedUtc, project.UpdatedUtc, "Generic metadata project timestamp");
+            Equal(originalVersion + 1L, project.ChangeVersion, "Generic metadata semantic revision");
+            if (project.UpdatedUtc <= originalUpdatedUtc)
+                throw new InvalidOperationException("Generic metadata project timestamp did not advance.");
 
             RejectWithoutMutation(project, () => project.Metadata.Add("", "x"), key, value, "Blank metadata key");
             RejectWithoutMutation(project, () => project.Metadata[" padded "] = "x", key, value, "Padded metadata key");
