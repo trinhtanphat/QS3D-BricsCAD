@@ -1,6 +1,6 @@
 # Work claim — Semantic View category bounded snapshot
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Agent: `codex-audit-docs-gap-next-20260815` (`/root/audit_docs_gap_next`)
 - Registered: `2026-08-15T09:30:00+07:00`
 - Baseline main SHA: `de7aba1295abbc113cd548a6f86b8c6462172b2a`
@@ -30,3 +30,10 @@ Semantic Schedule categories, catalog load/save/freshness, Semantic Tags, native
 - full deterministic Core smoke;
 - focused documentation/view/sheet/schedule/tag gate set;
 - aggregate `scripts/preflight.py`.
+
+## Completion evidence
+
+- Claim-only PR `#1511` merged first at `2d101786403bd7526aa47715db325d941a7bcd88`.
+- Implementation head `15b588b6723b8864703fd9b8b2958e42c5ffb4af` merged through PR `#1503` at `1fb8bd4de41eea5a6a98368959bdb3bbe32ce436` after a non-force latest-main merge.
+- Exact integrated candidate validation passed: Core and SmokeTests Release builds `0 warnings / 0 errors`; full Core smoke `ALL PASS`; five focused Semantic View/Sheet gates PASS; aggregate preflight `809/809 PASS`; diff-check clean.
+- Only the bounded category snapshot, its registered smoke, and focused static contract changed. Issue `#77` remains open for broader documentation/native scope; no BricsCAD runtime, Actions, private data, Schedule/catalog persistence, or UI surface was touched.
