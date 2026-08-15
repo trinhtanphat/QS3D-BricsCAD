@@ -318,4 +318,186 @@ This session is not yet eligible for “everything 100% complete”. Large Core 
 5. continue remaining format/cloud/V26 lanes under separate claims;
 6. only an explicitly-authorized integration coordinator may merge remaining PRs to `main`.
 
-This document is the canonical handoff for the Cubicost-parity conversation as of 2026-08-15 15:02 Asia/Ho_Chi_Minh. Future agents should update this document or create a clearly linked successor when material state changes.
+This document was the canonical handoff for the Cubicost-parity conversation as of 2026-08-15 15:02 Asia/Ho_Chi_Minh. The following sections record the continuation that happened after that first snapshot.
+
+## 13. Cross-repository continuation after the first handoff snapshot
+
+The session expanded from the BricsCAD-only implementation history into a product-family architecture with `QS3D-Platform` as the canonical vendor-neutral contract layer and BricsCAD/AutoCAD/standalone as consuming hosts.
+
+### QS3D-Platform shared Cubicost parity baseline
+
+Issue #13 / PR #15 is the canonical shared clean-room parity wave.
+
+- branch: `agent/chatgpt-gpt56sol/cubicost-shared-parity-20260815`;
+- current PR head at this continuation checkpoint: `a5778f4abcf3b5c308c5d6854040dbc0c3082390`;
+- PR #15 remains open, mergeable and not merged;
+- Platform CI #120 validated the source implementation at `e029d4ba0de6ffe80575f7aed96affa1db1b9b33`;
+- later docs/status synchronization advanced the shared branch while preserving the source-ready contract;
+- shared responsibilities include MEP recognition/aggregation, clash envelopes, BQ/rate/benchmark/tender/progress contracts, 4D/5D cost projection, identification configuration and vendor-neutral coordination issue contracts;
+- native BricsCAD/AutoCAD/ODA/UI behavior remains outside Platform.
+
+### QS3D-Platform MEP quantity -> BQ -> cost lane
+
+Issue #16 / PR #17 adds the missing shared bridge between recognized/aggregated MEP quantities and estimating/cost contracts.
+
+- upstream shared parity branch: `agent/chatgpt-gpt56sol/cubicost-shared-parity-20260815`;
+- implementation branch: `agent/chatgpt-gpt56sol/cubicost-mep-bq-cost-projection-20260815`;
+- exact source implementation head: `eb36f886083202ebd4190ae18edd3b25227544fa`;
+- Platform CI #122 / run `31873450699`: **SUCCESS** on exact `eb36f886083202ebd4190ae18edd3b25227544fa`;
+- current branch head after docs-only synchronization: `3b18af3f54995c66e52738eb8b220d61a23d62c8`;
+- PR #17 is open, mergeable, stacked on PR #15 and not merged.
+
+Delivered contract details:
+
+- `MepBqMeasurementBasis`: Count / Length / Area / Volume;
+- deterministic `MepBqMappingRule` priority;
+- optional MEP kind/system/specification/region filters;
+- equal-priority conflicting top matches fail closed as ambiguous;
+- exact BQ unit compatibility `ea`, `m`, `m2`, `m3`;
+- no hidden unit conversion because authoritative host MEP groups are already SI;
+- deterministic aggregation by BQ item with source-group provenance/contribution;
+- missing BQ item, incompatible unit, duplicate source group and decimal overflow fail closed;
+- BQ -> cost projection joins exact item code + unit + currency against `CostRateBuildUp`;
+- missing or duplicate exact rate fails closed;
+- checked decimal line/aggregate totals preserve provenance.
+
+The authoritative Platform master plan was updated on this branch to mark this shared bridge source-ready and to synchronize cross-host rollout truth.
+
+## 14. AutoCAD continuation delivered in this session
+
+### AutoCAD MEP native adapter
+
+Issue #58 / PR #59 provides AutoCAD-native adoption of the shared Platform MEP contracts.
+
+- branch: `agent/chatgpt-gpt56sol/cubicost-mep-parity-autocad-20260815`;
+- exact head: `96cfa7b4e4b64b3e07f508034ac79d464731d261`;
+- shared Platform pin: `e029d4ba0de6ffe80575f7aed96affa1db1b9b33`;
+- CI #204 / run `31872689952`: **SUCCESS**;
+- PR #59 is open, mergeable and not merged.
+
+Implemented AutoCAD commands:
+
+- `QS3DMEPTAKEOFF`;
+- `QS3DMEPCLASH`;
+- `QS3DMEPCLASHLOCATE`;
+- `QS3DMEPEXACTCLASH`;
+- `QS3DMEPZOOMSELECTION`.
+
+Safety/accuracy decisions:
+
+- native Curve length and closed-area / Solid3d volume only where authoritative;
+- AutoCAD `INSUNITS` is converted to meters and unitless/unsupported drawings fail closed;
+- no bounding-box diagonal as length and no generic extents volume inference;
+- unknown/ambiguous recognition fails closed;
+- DB entities remain read-only; Locate mutates PICKFIRST only after both Handles resolve; Zoom changes view state only;
+- packaging stages Platform runtime assemblies and records exact shared provenance;
+- DemandLoad covers AutoCAD 2021, 2025-2026 and 2027.
+
+### AutoCAD MEP review palette and recognition profile
+
+Issue #60 / PR #61 continues on top of #59.
+
+- branch: `agent/chatgpt-gpt56sol/cubicost-mep-review-profile-autocad-20260815`;
+- exact current head: `cef52d0d468aef3696ab7e627a17d1140ef3a45f`;
+- CI #218 / run `31873799933`: **SUCCESS** on exact head;
+- PR #61 is open, mergeable and not merged.
+
+Delivered:
+
+- centralized `MepRecognitionProfileProvider.Current`;
+- bounded roaming user profile at `QS3D/AutoCAD/mep-recognition-profile.xml`;
+- 512 KiB file cap, 500 rules, 100 tokens/rule;
+- DTD prohibited and external XML resolution disabled;
+- strict root/version/child/enum parsing;
+- malformed profile fails closed to built-in shared defaults and exposes error state;
+- atomic same-directory temp + replace/move save semantics;
+- Save/Reload lifecycle serialized by provider gate;
+- `QS3DMEPREVIEW` `PaletteSet` + WPF control;
+- Takeoff, Broad Clash, Clash Locate, Exact Clash and Zoom Selection actions;
+- editable rule grid with ID, priority, discipline, category, Layer/BlockName source, MEP kind and tokens;
+- modeless UI retains presentation state only and does not retain `Document`, `ObjectId`, `DBObject` or `Solid3d`.
+
+CI defects found and fixed during this exact-head loop:
+
+1. WPF/WinForms `Button` / `DataGrid` / `Panel` / `UserControl` ambiguity;
+2. WPF `Binding` ambiguity;
+3. missing `System.IO` imports on the AutoCAD 2021 `net48` build;
+4. stale MEP parity guard expectation of a private default profile;
+5. process-local Save/Reload lifecycle race risk, fixed by serializing profile save/state replacement under the provider gate.
+
+CI #218 passed Core build, .NET 8/.NET 10 smoke, AutoCAD 2021/net48, 2025-2026/net8, 2027/net10 builds, both Cubicost MEP guards, architecture/bundle, release-security, native-acceptance contract, operational-readiness, package/release verification, Setup install/uninstall smoke, candidate upload/report, fail-closed native-acceptance smoke and Authenticode plumbing.
+
+Native palette lifecycle, DPI/focus, multi-DWG routing and command behavior remain `PENDING_NATIVE` until exercised in licensed AutoCAD on the exact integrated binary.
+
+## 15. Standalone QS3D-CAD continuation delivered
+
+Issue #34 / PR #35 provides the standalone/reference-host adoption of the same shared Platform candidate.
+
+- branch: `agent/chatgpt-gpt56sol/cubicost-parity-standalone-20260815`;
+- exact head: `bf2a64b069e56a15e99007b18f2cfb00620b1240`;
+- shared Platform pin: `e029d4ba0de6ffe80575f7aed96affa1db1b9b33`;
+- QS3D CAD CI #92 / run `31872446156`: **SUCCESS**;
+- PR #35 is open, mergeable and not merged.
+
+Delivered standalone commands:
+
+- `QSMEPRECOGNIZE`;
+- `QSMEPTAKEOFF metersPerUnit`;
+- `QSMEPCLASH clearanceMeters metersPerUnit`;
+- `QSMEPCLASHLOCATE index clearanceMeters metersPerUnit`;
+- `QSMEPISSUES clearanceMeters metersPerUnit`.
+
+The standalone host requires explicit finite positive unit scale, performs no proprietary/native DWG inference, keeps drawing/semantic state read-only except Locate selection, and uses the shared `CoordinationIssue` contract only in-memory. CI proves the reference implementation and installer path, not native DWG/ODA fidelity.
+
+## 16. Cross-host master-plan truth after this continuation
+
+The authoritative `QS3D-Platform/docs/CUBICOST-QS3D-FEATURE-MASTER-PLAN.md` was synchronized to record:
+
+- BricsCAD MEP review/profile source already integrated in its repository, with licensed V25/V26 review/profile truth still local-only;
+- shared Platform MEP quantity -> BQ and BQ -> cost projection source-ready on #16 / PR #17;
+- AutoCAD MEP adapter #58 / PR #59 source-ready with full multi-target CI;
+- AutoCAD modeless review/profile #60 / PR #61 source-ready with full multi-target CI;
+- standalone #34 / PR #35 source-ready with installer/desktop CI;
+- host BQ table/XLSX/report rendering remains consuming-host work;
+- project/team coordination persistence waits for the canonical shared contract to be integrated/published rather than creating duplicate host models;
+- service/cloud RBAC/sync/e-tender remains service scope;
+- native runtime qualification is not implied by repository CI.
+
+## 17. Current implementation authority and next execution order
+
+The owner has now asked to “note all information from this chat session into Markdown, push Git, then implement all”. Under the repository governance rules already adopted by the owner, this is authorization to continue source implementation and push isolated branches/PRs, but **not** authorization to merge implementation to `main` unless the owner separately says `merge all về main`, names an integration coordinator, or explicitly authorizes the target PR/main landing.
+
+The dependency-safe implementation order is therefore:
+
+1. preserve this handoff as the single cross-repository session truth;
+2. finish/reconcile active BricsCAD TBQ #1674 and TAS atomicity #1679 without duplicating active agents;
+3. keep Platform #15 + #17 source-ready and use those exact contracts for new host lanes instead of creating host-local competing domains;
+4. continue host MEP->BQ/report/export wiring on dedicated branches only where dependency/pinning is explicit;
+5. add coordination persistence bridges only after the shared coordination contract is canonical/integrated;
+6. continue remote-safe Format/AI/service planning under dedicated claims; do not fake proprietary parser/runtime completion;
+7. run exact-head CI on each source-capable lane until green;
+8. leave BricsCAD/AutoCAD native graphics/runtime truth `PENDING_LOCAL/PENDING_NATIVE` until licensed-host evidence exists;
+9. wait for explicit main-integration authority before landing remaining PR stacks.
+
+## 18. Updated completion truth at 2026-08-15 15:19 Asia/Ho_Chi_Minh
+
+Remote/source-safe work completed in this continuation includes the shared MEP->BQ/cost contract, AutoCAD MEP adapter, AutoCAD modeless review/profile editor and standalone MEP/reference host, all with exact green CI evidence at their implementation heads.
+
+The overall Cubicost/QS3D program is still **NOT 100% COMPLETE** because:
+
+- Platform #15/#17 are not integrated to Platform `main`;
+- AutoCAD #59/#61 are not integrated to AutoCAD integration/main;
+- standalone #35 is not integrated to QS3D-CAD `main`;
+- BricsCAD TBQ #1674 and TAS atomicity #1679 require continued reconciliation/implementation/evidence;
+- host BQ/report/export surfaces remain incomplete across the product family;
+- shared coordination issue persistence bridges remain intentionally blocked on canonical shared integration;
+- Format/OCR/RVT and cloud/CDE/e-tender lanes are separate substantial scopes;
+- licensed BricsCAD V25/V26 and AutoCAD 2021/2025-2027 native acceptance remains pending.
+
+`PROMPT/PROGRAM STATUS: ACTIVE / CONTINUE ALL`
+
+`SESSION CAN BE CLOSED/DELETED: NO`
+
+`MERGE AUTHORITY FROM CONTINUE ALL / IMPLEMENT ALL: NO`
+
+Future agents should read this document first, then re-read current repository/issue/PR/CI state because every SHA here is a historical exact evidence point, not permission to assume the branch/main has not advanced.
