@@ -21,7 +21,6 @@ on:
 permissions:
   contents: read
   actions: write
-  issues: write
 
 concurrency:
   group: qs3d-v25-cloud-main-integration
@@ -41,7 +40,7 @@ jobs:
           fetch-depth: 1
           fetch-tags: true
 
-      - name: Reserve preview ordinal and dispatch triggering main SHA
+      - name: Wait for prior V25 release and dispatch triggering main SHA
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -72,16 +71,33 @@ jobs:
               esac
             done < <(git diff --name-only "${source_sha}..${current_main}" --)
             if (( release_relevant_drift != 0 )); then
-              echo "main advanced with release-relevant changes; superseded dispatcher ${source_sha} exits before reservation/dispatch. Newer relevant main push owns the next release."
+              echo "main advanced with release-relevant changes; superseded dispatcher ${source_sha} exits before release dispatch. Newer relevant main push owns the next release."
               exit 0
             fi
             echo "main advanced only through non-release paths; dispatch remains pinned to ${source_sha}. Release preparation may absorb that inert main drift without changing source provenance."
           fi
 
+          max_wait_checks=240
+          for ((wait_check=1; wait_check<=max_wait_checks; wait_check++)); do
+            active_runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release-v25-cloud.yml/runs?per_page=100" --jq '[.workflow_runs[] | select(.status != "completed")] | length')"
+            if [[ ! "${active_runs}" =~ ^[0-9]+$ ]]; then
+              echo "Could not resolve active V25 release run count: ${active_runs}" >&2
+              exit 1
+            fi
+            if (( active_runs == 0 )); then
+              echo "No queued/running V25 release remains; deriving the next published preview ordinal now."
+              break
+            fi
+            if (( wait_check >= max_wait_checks )); then
+              echo "Timed out waiting for ${active_runs} queued/running V25 release run(s); refusing to allocate a preview ordinal early." >&2
+              exit 1
+            fi
+            echo "Waiting for ${active_runs} queued/running V25 release run(s) before preview allocation (${wait_check}/${max_wait_checks})."
+            sleep 15
+          done
+
           git fetch --force --tags origin
           series_prefix="v0.1.0-preview."
-          reservation_issue=1441
-          reservation_prefix="QS3D_V25_PREVIEW_RESERVATION"
           max_preview=0
           found_preview=0
 
@@ -116,14 +132,6 @@ jobs:
             consider_preview "${BASH_REMATCH[1]}" "Published"
           done < <(git tag --list "${series_prefix}*")
 
-          reservation_regex="^${reservation_prefix} ordinal=([1-9][0-9]*) source_sha=([0-9a-f]{40}) run_id=([1-9][0-9]*)$"
-          while IFS= read -r reservation; do
-            [[ -n "${reservation}" ]] || continue
-            if [[ "${reservation}" =~ ${reservation_regex} ]]; then
-              consider_preview "${BASH_REMATCH[1]}" "Reserved"
-            fi
-          done < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments" --jq '.[] | select(.user.login == "github-actions[bot]") | .body')
-
           if (( found_preview == 0 )); then
             preview=1
           else
@@ -134,12 +142,6 @@ jobs:
             preview=$((max_preview + 1))
           fi
           tag="${series_prefix}${preview}"
-
-          reservation="${reservation_prefix} ordinal=${preview} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"
-          gh api --method POST \
-            "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments" \
-            -f body="${reservation}" >/dev/null
-          echo "Reserved automatic preview ordinal ${preview} for ${source_sha}."
 
           echo "Dispatching release-v25-cloud.yml for ${source_sha} as ${tag}"
           gh workflow run release-v25-cloud.yml \
