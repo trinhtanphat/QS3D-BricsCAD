@@ -49,27 +49,59 @@ Before substantive work, read:
 4. `CI_POLICY.md`;
 5. fetch/read the latest `origin/main` and record its exact SHA;
 6. `docs/AGENT-WORK-REGISTRATION.md`;
-7. relevant open Issues/PRs plus `ACTIVE`/`BLOCKED` historical claims under `docs/agent-work-claims/`;
-8. `docs/REMOTE-AGENT-SCOPE.md`;
-9. the newest current handoff/status docs relevant to the task;
-10. `docs/LOCAL-AGENT-INBOX.md` for LOCAL_ONLY work;
-11. the exact feature/runbook documents required by the assigned lane.
+7. **for any reported bug/regression/quoted failure, `docs/DEFECT-PROVENANCE-TRIAGE.md` before creating or adopting a source-fix lane**;
+8. relevant open Issues/PRs plus `ACTIVE`/`BLOCKED` historical claims under `docs/agent-work-claims/`;
+9. `docs/REMOTE-AGENT-SCOPE.md`;
+10. the newest current handoff/status docs relevant to the task;
+11. `docs/LOCAL-AGENT-INBOX.md` for LOCAL_ONLY work;
+12. the exact feature/runbook documents required by the assigned lane.
 
 Current source wins over stale historical handoffs for implementation truth. `docs/LOCAL-AGENT-INBOX.md` is the live LOCAL_ONLY priority index when older local documents disagree on status/priority.
+
+## Mandatory defect-provenance gate
+
+For every task presented as a bug, regression, failing test, copied error, handoff conclusion, research finding, external reference, or quoted assertion, **prove the provenance before creating/adopting a source-fix lane or editing production code**.
+
+Follow `docs/DEFECT-PROVENANCE-TRIAGE.md` and classify the report as one of:
+
+- `REPRODUCED`;
+- `SOURCE_PRESENT`;
+- `ENVIRONMENT_GATED`;
+- `EXTERNAL_REFERENCE`;
+- `SPEC_ONLY / MISSING_SURFACE`.
+
+The fastest required evidence order is:
+
+```text
+exact failure producer/log
+  -> exact current tree
+  -> smallest focused reproducer
+  -> history/refs only if needed
+  -> product-boundary sibling repo only when justified
+  -> docs/spec/handoff provenance
+  -> public web only when external provenance is plausible
+```
+
+A source-fix lane may proceed only when a real current defect surface/reproducer exists (`REPRODUCED`, `SOURCE_PRESENT`, or a known `ENVIRONMENT_GATED` surface), or when the owner explicitly assigns an `EXTERNAL_REFERENCE` as a **new implementation/specification task**. `SPEC_ONLY / MISSING_SURFACE` is a provenance/blocker state, not permission to invent the missing class/test/method or patch a nearby implementation by name similarity.
+
+If both the quoted failure producer and named source/test surface are absent, switch immediately to provenance triage instead of repeatedly searching adjacent source or rerunning broad CI. Record exactly what is missing and what artifact would unblock the task.
 
 ## Mandatory work registration
 
 Before implementation, every normal agent must:
 
 1. fetch/read current `origin/main`;
-2. inspect relevant Issues, PRs, branches and active/blocking claims;
-3. choose a non-overlapping lane;
-4. create/update a GitHub Issue for the lane when practical, unless an existing owner-created issue already uniquely identifies the task;
-5. create a dedicated branch from the latest valid baseline, normally `agent/<agent-id>/<scope>`;
-6. put **all** task changes on that branch, including source, tests, scripts, workflows, docs, Markdown, claim/handoff/status files and chores;
-7. validate, commit and push only that branch;
-8. open/update a PR;
-9. stop before merge unless this session has explicit owner merge/integration authorization.
+2. for reported bugs/regressions, complete the mandatory defect-provenance gate **before** claiming a source-fix lane;
+3. inspect relevant Issues, PRs, branches and active/blocking claims;
+4. choose a non-overlapping lane whose scope matches the proven provenance state;
+5. create/update a GitHub Issue for the lane when practical, unless an existing owner-created issue already uniquely identifies the task;
+6. create a dedicated branch from the latest valid baseline, normally `agent/<agent-id>/<scope>`;
+7. put **all** task changes on that branch, including source, tests, scripts, workflows, docs, Markdown, claim/handoff/status files and chores;
+8. validate, commit and push only that branch;
+9. open/update a PR;
+10. stop before merge unless this session has explicit owner merge/integration authorization.
+
+If an owner-created issue already exists but its stated defect surface cannot be proven, do not silently accept the issue text as implementation truth. Keep/update the issue as `SPEC_ONLY / MISSING_SURFACE` or another accurate provenance state until the real test/source/artifact appears, or until the owner explicitly converts it into a new implementation/spec task.
 
 Historical Markdown work claims may still be used, but new/updated claim files belong on the task branch/PR. A claim does not need to be pushed to `main` before implementation starts.
 
@@ -108,6 +140,7 @@ For a normal agent, the successful endpoint is generally:
 
 ```text
 latest main read
+  -> defect provenance classified when applicable
   -> issue/reservation checked
   -> agent/<agent-id>/<scope>
   -> implementation/docs/chore commits
