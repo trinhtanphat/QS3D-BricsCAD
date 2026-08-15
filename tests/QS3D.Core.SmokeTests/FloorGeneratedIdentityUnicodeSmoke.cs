@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 
@@ -22,7 +23,16 @@ namespace QS3D.Core.SmokeTests
 
         private static void MalformedNamesAreRejected()
         {
-            var floor = new FloorDefinition("F-1", "Floor-\uD800", 3.5d);
+            const string malformedName = "Floor-\uD800";
+            Throws<ArgumentException>(() => new FloorDefinition("F-1", malformedName, 3.5d));
+
+            var floor = new FloorDefinition("F-1", "Floor 1", 3.5d);
+            var nameField = typeof(FloorDefinition).GetField("_name", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("FloorDefinition raw-name fixture field was not found.");
+            nameField.SetValue(floor, malformedName);
+            if (!string.Equals(floor.Name, malformedName, StringComparison.Ordinal))
+                throw new InvalidOperationException("FloorDefinition malformed legacy name fixture was not injected.");
+
             Throws<ArgumentException>(() => FloorGeneratedIdentityPlanner.Create(floor));
         }
 
