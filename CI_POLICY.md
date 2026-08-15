@@ -10,19 +10,57 @@ Requests such as `fix bug`, `update code`, `implement all`, `continue all`, `com
 
 Only a session explicitly authorized by the repository owner to merge/integrate may change `main`, and only for the named PR/batch/task.
 
+## Protected-main hard enforcement
+
+The repository has an active GitHub repository ruleset named `protectedMain` (ruleset `20890901`) targeting the default branch (`main`). This is hard enforcement in addition to the repository Markdown policy.
+
+The verified protected-main contract is:
+
+- require a pull request before `main` can be updated;
+- require successful status checks named `preflight` and `core`;
+- use strict required-status freshness, so an out-of-date merge candidate must be refreshed/revalidated before merge;
+- block deletion of `main`;
+- block non-fast-forward / force-push updates to `main`;
+- keep the ruleset bypass list empty unless the repository owner explicitly changes that governance decision.
+
+The GitHub ruleset is an external repository setting rather than committed source. Agents must not infer protection from Markdown alone: when protection state matters, verify the effective GitHub rules for `main`. If the ruleset is missing, disabled, no longer targets `main`, loses the required checks, or gains an unexpected bypass, treat that as a governance defect and do not claim hard protection is active.
+
+Hard protection does not grant an agent permission to merge. It only constrains what GitHub will accept. `docs/MAIN-WRITE-AUTHORIZATION.md` still controls which session may perform an authorized merge.
+
 ## Three-stage CI model
 
 QS3D separates validation from publishing. A branch must not need to land on `main` merely to learn whether remote-safe CI passes.
 
 The approved stages are:
 
-1. **automatic branch/PR validation** — `.github/workflows/ci.yml`;
-2. **combined integration validation** — the same `ci.yml` on `integration/**` combined trees and PR merge candidates;
+1. **automatic branch validation before PR** — `.github/workflows/ci.yml` on eligible `agent/**` pushes;
+2. **PR / combined integration validation** — the same `ci.yml` on PR merge candidates and `integration/**` combined trees when applicable;
 3. **exact-main release** — `.github/workflows/dispatch-v25-cloud-after-main-integration.yml` dispatches `.github/workflows/release-v25-cloud.yml` only after an authorized integration-relevant landing on `main`.
 
-Green branch CI proves only the tested branch/head or PR merge candidate. Green integration CI proves only that frozen combined tree. Neither is permission to merge and neither is a release. Exact-main release CI remains the final cloud evidence for the SHA that actually landed.
+Green branch CI proves only the tested branch SHA. Green PR CI proves only the tested PR merge candidate. Green integration CI proves only that frozen combined tree. None of those results is permission to merge and none is a release. Exact-main release CI remains the final cloud evidence for the SHA that actually landed.
 
 Licensed BricsCAD `NETLOAD`, native UI/runtime, private-DWG behavior, signing credentials, and other environment-gated evidence remain `LOCAL_ONLY` / `PENDING_LOCAL` unless actually executed in the required environment.
+
+## Mandatory branch-CI-before-PR gate
+
+For every task that changes a path watched by shared CI, the task branch must obtain a terminal green automatic branch-push CI run on the exact current branch SHA **before a new PR is opened**.
+
+The required sequence is:
+
+```text
+implement on agent/**
+  -> commit/push task branch
+  -> automatic shared branch CI on exact branch SHA
+  -> fix on the branch until terminal SUCCESS
+  -> refresh main and verify evidence is still fresh
+  -> only then open the PR
+```
+
+A PR must not be used as the first CI attempt for watched/integration-relevant work. Do not open a draft PR merely to obtain the first CI run. If branch CI fails, fix the failure on the task branch and obtain a new green run before PR creation.
+
+This rule avoids filling the PR queue with candidates that have never passed their own isolated validation. It does **not** mean that two independent full CI passes are always logically required for an unchanged tree. After PR creation, GitHub's protected-main ruleset controls the merge gate. If `main` moves, the branch is reconciled, or GitHub produces a different/fresher merge candidate, the applicable required checks must be fresh again before merge.
+
+For ordinary documentation/claim/handoff-only paths that are intentionally outside the shared CI watch set, the repository may omit heavy pre-PR branch CI. Those changes still require a branch and PR and must satisfy whatever protected-main required checks GitHub applies at merge time. Never bypass or weaken protection merely to land an unwatched docs-only change.
 
 ## Shared automatic branch/PR CI
 
@@ -41,7 +79,9 @@ Its automatic jobs are remote-safe only and must include the repository CI polic
 
 The workflow uses `contents: read`. Adding release/publish credentials or write permissions to this workflow is forbidden unless the owner explicitly changes this policy.
 
-A push run on `agent/**` validates that branch SHA. A `pull_request` run validates GitHub's PR merge candidate against its target branch. An `integration/**` push validates the exact combined integration tree. These are complementary evidence classes; no one run substitutes for all three when the corresponding stage exists.
+A push run on `agent/**` validates that branch SHA. A `pull_request` run validates GitHub's PR merge candidate against its target branch. An `integration/**` push validates the exact combined integration tree. These are complementary evidence classes. Branch CI is the mandatory pre-PR gate for watched task branches; PR/integration checks are freshness and compatibility evidence for the candidate GitHub may actually merge.
+
+The protected-main ruleset currently requires stable contexts `preflight` and `core`. Renaming or removing those job contexts, or changing workflow path/event behavior so the required contexts can no longer be produced for legitimate protected-main PRs, is a protection-compatibility change and must be reviewed as governance-sensitive work.
 
 ## Multi-agent integration
 
@@ -61,7 +101,7 @@ Before an authorized landing to `main`, the coordinator must:
 6. obtain green **combined-tree CI** on the frozen `integration/**` candidate when integration-relevant watched paths changed;
 7. inspect for accidental reversions, duplicate implementations and contract mismatches;
 8. freeze and record the integration candidate SHA;
-9. merge to `main` only within explicit owner authorization;
+9. merge to `main` only within explicit owner authorization and only when GitHub protected-main requirements are satisfied;
 10. fetch `main` again and record the exact final SHA.
 
 Do not independently merge every agent PR to `main` merely to assemble the batch unless the owner explicitly requests that strategy.
@@ -91,9 +131,9 @@ The automatic exact-main cloud run does not prove licensed local BricsCAD runtim
 
 All documentation and Markdown changes still use a branch/PR like every other task.
 
-The shared `ci.yml` intentionally watches canonical CI/governance documents such as `CI_POLICY.md`, `AGENTS.md`, `README.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, and `docs/AGENT-WORK-REGISTRATION.md`, because regressions there can invalidate repository safety contracts.
+The shared `ci.yml` intentionally watches canonical CI/governance documents such as `CI_POLICY.md`, `AGENTS.md`, `README.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, and `docs/AGENT-WORK-REGISTRATION.md`, because regressions there can invalidate repository safety contracts. For those watched governance documents, branch CI must be green before the PR is opened.
 
-Other ordinary docs/claim/handoff-only changes need not run heavy branch CI unless they also touch a watched integration-relevant path.
+Other ordinary docs/claim/handoff-only changes may skip heavy pre-PR branch CI when they are outside the shared workflow's watch set. They still must go through a PR and satisfy the effective protected-main merge rules; do not use direct-main writes or a protection bypass as a docs-only shortcut.
 
 After an authorized `main` merge, documentation-only landings outside the main dispatcher's watched set must not trigger the V25 release path.
 
@@ -128,6 +168,7 @@ Report **ALL MERGED TO MAIN** only when an authorized integration reviewer fresh
 - no required work remains only on an agent branch, local worktree, stash, draft patch or unmerged PR;
 - required branch/PR evidence is green for participating lanes where applicable;
 - the frozen combined integration tree has green combined-tree CI when applicable;
+- current `main` still reports the intended effective protected-main rules or any deliberate owner-approved replacement;
 - exact-main release/cloud validation is green for the landing SHA when required;
 - the combined tree has no unresolved merge markers, accidental reversions, duplicate competing implementations or known semantic/API/test collisions;
 - environment-gated evidence is explicitly handed off rather than falsely reported as PASS;
@@ -137,10 +178,13 @@ A branch existing/deleted, Issue state, PR `Merged` UI state, or green CI for an
 
 ## Enforcement
 
+- GitHub ruleset `protectedMain` (`20890901`) is the current hard-enforcement layer for the default branch and must target `main` effectively.
+- The ruleset must require a PR, stable status checks `preflight` and `core`, strict freshness, deletion protection and non-fast-forward/force-push protection unless the repository owner explicitly changes the governance contract.
+- The ruleset bypass list is expected to remain empty unless the owner explicitly approves a narrow exception.
 - `scripts/preflight.py` retains broad repository/source checks and its legacy broad automatic-trigger tripwire.
 - Automatic event keys for the two approved workflows are deliberately quoted in YAML; `scripts/preflight-ci-manual-only.py` is the strict allowlist that validates their exact trigger scopes, permissions, jobs and publishing boundaries.
 - `scripts/preflight-ci-manual-only.py` must reject any third automatic workflow, automatic release workflow, branch validation on direct `main` pushes, broadened publishing permission, or dispatcher target other than `release-v25-cloud.yml`.
 - Release workflows must retain explicit `RELEASE` confirmation.
-- GitHub branch protection/rulesets should protect `main`, require the intended PR/integration path for normal writers, prevent force-push/deletion, and require stable CI checks once their names are finalized. Track hard enforcement in the repository governance issue.
+- Markdown policy and GitHub hard protection are complementary. Do not claim the repository is hard-protected solely because the Markdown says so; verify the effective GitHub rules when that claim matters.
 
 Related canonical documents: `AGENTS.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, `docs/AGENT-WORK-REGISTRATION.md`, `docs/GITHUB-MAIN-PROTECTION.md` when present, and the manual/local qualification runbooks.
