@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
     internal static class IfcRoundTripProjectionCollectionBoundSmoke
     {
         private const int MaximumProjections = 10000;
+        // Keep this boundary smoke in the consolidated exact-head integration gate.
 
         internal static void Run()
         {
