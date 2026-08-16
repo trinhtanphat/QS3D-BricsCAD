@@ -14,6 +14,7 @@ internal static class CurtainWallOpeningFrameAreaPrecisionSmoke
         RemainingAreaLostPositiveContributionFailsClosed();
         RemovedAreaCollapseFailsClosed();
         FramePieceAreaUnderflowFailsClosed();
+        SubEpsilonUninterruptedFrameRemainsPresent();
         OrdinaryInterruptionRemainsStable();
     }
 
@@ -62,6 +63,21 @@ internal static class CurtainWallOpeningFrameAreaPrecisionSmoke
         var piece = new CurtainWallFramePiece { WidthM = double.Epsilon, HeightM = double.Epsilon };
         var error = Capture<OverflowException>(() => _ = piece.AreaM2);
         Equal("Curtain frame piece area underflowed to zero.", error.Message);
+    }
+
+    private static void SubEpsilonUninterruptedFrameRemainsPresent()
+    {
+        const double width = 5e-10d;
+        var plan = CurtainWallOpeningFramePlanner.Plan(
+            new[] { new CurtainWallRect(0d, 0d, width, 1d) },
+            Array.Empty<CurtainWallOpeningRect>());
+
+        Equal(1, plan.Pieces.Count);
+        Equal(0, plan.InterruptedFrameCount);
+        Near(width, plan.Pieces[0].WidthM);
+        Near(width, plan.OriginalFrameAreaM2);
+        Near(width, plan.RemainingFrameAreaM2);
+        Near(0d, plan.RemovedFrameAreaM2);
     }
 
     private static void OrdinaryInterruptionRemainsStable()
