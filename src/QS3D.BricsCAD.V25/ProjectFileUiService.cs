@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Windows;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
 using QS3D.BricsCAD.V25.UI;
