@@ -80,7 +80,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     ConfigPanelSourceId,
                     "Cấu hình",
                     new HomeButtonSpec("QS3D_HOME_SETTINGS", "Cài đặt", () => new ProjectToolsCommands().ShowProjectTools(), RibbonIconKind.Settings),
-                    new HomeButtonSpec("QS3D_HOME_SYSTEM_OBJECTS", "Đối tượng\nhệ thống", () => new FamilyManagerCommands().ShowFamilyManager(), RibbonIconKind.Objects));
+                    new HomeButtonSpec("QS3D_HOME_SYSTEM_OBJECTS", "Đối tượng\nhệ thống", () => new FamilyManagerCommands().ShowFamilyManager(), RibbonIconKind.Qs3dLogo));
 
                 _initialized = true;
                 return true;
