@@ -45,6 +45,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             try { documents.DocumentCreated -= OnDocumentAvailable; } catch { }
             try { documents.DocumentActivated -= OnDocumentAvailable; } catch { }
             StopTimedRetry();
+            BltBimWorkspaceActivationCoordinator.Stop();
             HomeTabActivationCoordinator.Stop();
             BltHomeRibbonAugmenter.Reset();
             BltDrawRibbonAugmenter.Reset();
@@ -96,6 +97,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             if (TryInitializeAll())
             {
                 _initialized = true;
+                BltBimWorkspaceActivationCoordinator.Start();
                 StopTimedRetry();
                 return;
             }
