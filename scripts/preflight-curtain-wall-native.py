@@ -72,6 +72,7 @@ checks = {
     "health": [
         'GeneratedCurtainFrameHandles', 'CURTAIN_FRAME_GENERATED_SOLID_MISSING',
         'CURTAIN_FRAME_GRID_COUNT_MISMATCH', 'GeneratedCurtainFrameBaseCount', 'GeneratedCurtainFrameOpeningCount',
+        'ExpectedPhysicalBaseFrameCount', 'matchingCurrentConfig',
         'LineFrameOverlay.OpeningAware', 'CURTAIN_FRAME_OPENING_MODE_MISMATCH',
         'GeneratedCurtainFrameDepthM', 'GeneratedCurtainFrameSourceLengthM', 'GeneratedCurtainFrameHeightM',
         'GeneratedCurtainFrameConfigFingerprint', 'CurtainWallFrameFingerprint.Compute',
@@ -96,7 +97,10 @@ checks = {
     "ui": ['x:Name="FrameDepthBox"', 'Tag="QS3DCURTAINFRAMES3D"', 'Tag="QS3DCURTAINFRAMEHEALTH"'],
     "ui_code": ['CurtainFrameDepthM', 'FrameDepthBox.Text', 'yield return FrameDepthBox'],
     "defaults": ['CurtainFrameDepthM'],
-    "health_smoke": ['ModuleInitializer', 'LaterGeneratedOwnerStillConflictsWithCurtainFrames', 'CURTAIN_FRAME_GENERATED_OWNERSHIP_CONFLICT'],
+    "health_smoke": [
+        'ModuleInitializer', 'LaterGeneratedOwnerStillConflictsWithCurtainFrames',
+        'ReducedPhysicalFrameCountMatchesNonZeroWidths', 'CURTAIN_FRAME_GENERATED_OWNERSHIP_CONFLICT',
+    ],
     "logic_smoke": ['CurtainFramesStaleOnLinkRehostAndUnlink', '!wallA.IsGeneratedSolidStale()', '!wallB.IsGeneratedSolidStale()'],
 }
 for key, needles in checks.items():
@@ -112,6 +116,13 @@ if files["detail"].is_file():
     build_panels = text.find("BuildPanelCells(input, layout)")
     if projected < 0 or build_panels < 0 or projected > build_panels:
         errors.append("Curtain detail native-solid budget must be checked before panel-list allocation.")
+
+if files["health"].is_file():
+    text = files["health"].read_text(encoding="utf-8")
+    if 'OptionalInteger(element, "GeneratedCurtainFrameBaseCount", true' not in text:
+        errors.append("Curtain health must accept zero physical base frames when configured frame widths are zero.")
+    if 'config.PerimeterFrameWidthM > 0d ? 4 : 0' not in text or 'config.MullionWidthM > 0d ? columns - 1 : 0' not in text or 'config.TransomWidthM > 0d ? rows - 1 : 0' not in text:
+        errors.append("Curtain health must derive physical base-frame count from nonzero frame widths, not conceptual grid boundaries alone.")
 
 owners = {"QS3DCURTAIN3D": [], "QS3DCURTAINFRAMES3D": [], "QS3DCURTAINFRAMEHEALTH": []}
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
