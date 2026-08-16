@@ -74,14 +74,19 @@ namespace QS3D.Core.Revisions
             var result = new List<QuantityRevisionSummary>();
             foreach (var group in summarizable.GroupBy(x => x.QuantityName, StringComparer.OrdinalIgnoreCase).OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
             {
-                var before = 0d;
-                var after = 0d;
+                var before = new CompensatedFiniteSum();
+                var after = new CompensatedFiniteSum();
                 foreach (var row in group)
                 {
-                    before = RevisionMath.Add(before, row.Before, group.Key + "/Before");
-                    after = RevisionMath.Add(after, row.After, group.Key + "/After");
+                    before.Add(row.Before, group.Key + "/Before");
+                    after.Add(row.After, group.Key + "/After");
                 }
-                result.Add(new QuantityRevisionSummary { QuantityName = group.Key, Before = before, After = after });
+                result.Add(new QuantityRevisionSummary
+                {
+                    QuantityName = group.Key,
+                    Before = before.Value(group.Key + "/Before"),
+                    After = after.Value(group.Key + "/After")
+                });
             }
             return result.AsReadOnly();
         }
@@ -119,6 +124,26 @@ namespace QS3D.Core.Revisions
         {
             if (value == null || string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
                 throw new InvalidOperationException("Revision " + label + " must be non-empty and must not contain leading/trailing whitespace.");
+        }
+
+        private struct CompensatedFiniteSum
+        {
+            private double _sum;
+            private double _compensation;
+
+            internal void Add(double value, string label)
+            {
+                var next = RevisionMath.Add(_sum, value, label);
+                var compensationLabel = label + " compensation";
+                var correction = Math.Abs(_sum) >= Math.Abs(value)
+                    ? RevisionMath.Add(RevisionMath.Subtract(_sum, next, compensationLabel), value, compensationLabel)
+                    : RevisionMath.Add(RevisionMath.Subtract(value, next, compensationLabel), _sum, compensationLabel);
+
+                _compensation = RevisionMath.Add(_compensation, correction, compensationLabel);
+                _sum = next;
+            }
+
+            internal double Value(string label) => RevisionMath.Add(_sum, _compensation, label);
         }
     }
 }
