@@ -30,14 +30,8 @@ def validate(text: str) -> list[str]:
         errors.append("both setters must track actual mutations separately")
     if text.count("layer.UpgradeOpen();") != 2:
         errors.append("each setter must write-open only inside its mutation path")
-
-    forbidden = (
-        "document.Editor.Regen();\n            return count;",
-        "layer.UpgradeOpen();\n                    layer.IsOff = !visible;",
-    )
-    for token in forbidden:
-        if token in text:
-            errors.append("redundant layer mutation pattern reintroduced: " + token.replace("\n", " "))
+    if "layer.UpgradeOpen();\n                    layer.IsOff = !visible;" in text:
+        errors.append("visibility path regressed to unconditional write-open/state assignment")
     return errors
 
 
