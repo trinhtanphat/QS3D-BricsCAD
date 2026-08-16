@@ -11,7 +11,17 @@ namespace QS3D.BricsCAD.V25.Updates
 {
     internal sealed class UpdateReleaseInfo
     {
-        internal UpdateReleaseInfo(SemanticReleaseVersion version, string tag, string name, bool prerelease, DateTime publishedUtc, Uri pageUri, Uri? manifestUri, string notes)
+        internal UpdateReleaseInfo(
+            SemanticReleaseVersion version,
+            string tag,
+            string name,
+            bool prerelease,
+            DateTime publishedUtc,
+            Uri pageUri,
+            Uri? manifestUri,
+            Uri? packageUri,
+            Uri? packageChecksumUri,
+            string notes)
         {
             Version = version;
             Tag = tag;
@@ -20,6 +30,8 @@ namespace QS3D.BricsCAD.V25.Updates
             PublishedUtc = publishedUtc;
             PageUri = pageUri;
             ManifestUri = manifestUri;
+            PackageUri = packageUri;
+            PackageChecksumUri = packageChecksumUri;
             Notes = notes;
         }
 
@@ -30,8 +42,11 @@ namespace QS3D.BricsCAD.V25.Updates
         internal DateTime PublishedUtc { get; }
         internal Uri PageUri { get; }
         internal Uri? ManifestUri { get; }
+        internal Uri? PackageUri { get; }
+        internal Uri? PackageChecksumUri { get; }
         internal string Notes { get; }
         internal bool HasSignedUpdateManifest => ManifestUri != null;
+        internal bool HasVerifiedPreviewPackage => PackageUri != null && PackageChecksumUri != null;
     }
 
     internal sealed class GitHubReleaseClient
@@ -40,6 +55,7 @@ namespace QS3D.BricsCAD.V25.Updates
         internal const string ReleasesEndpoint = "https://api.github.com/repos/trinhtanphat/QS3D-BricsCAD/releases?per_page=20";
         internal const string UpdateManifestAssetName = "QS3D-BricsCAD-V25.update.json";
         internal const string PackageAssetName = "QS3D-BricsCAD-V25.zip";
+        internal const string PackageChecksumAssetName = "QS3D-BricsCAD-V25.zip.sha256";
         private const int MaxResponseBytes = 2 * 1024 * 1024;
         private const int MaxReleasePages = 10;
 
@@ -124,6 +140,12 @@ namespace QS3D.BricsCAD.V25.Updates
                 if (package != null && TryGitHubUri(package.BrowserDownloadUrl, out var packageCandidate) && packageCandidate != null)
                     packageUri = packageCandidate;
 
+                Uri? packageChecksumUri = null;
+                var packageChecksum = assets.FirstOrDefault(asset =>
+                    asset != null && string.Equals(asset.Name, PackageChecksumAssetName, StringComparison.Ordinal));
+                if (packageChecksum != null && TryGitHubUri(packageChecksum.BrowserDownloadUrl, out var checksumCandidate) && checksumCandidate != null)
+                    packageChecksumUri = checksumCandidate;
+
                 // Repository releases are shared by multiple BricsCAD host majors. Keep a
                 // release in the V25 channel only when it carries the exact V25 manifest or
                 // V25 package asset. Manifest-less V25 previews remain visible so the
@@ -155,6 +177,8 @@ namespace QS3D.BricsCAD.V25.Updates
                     publishedUtc,
                     pageUri,
                     manifestUri,
+                    packageUri,
+                    packageChecksumUri,
                     notes));
             }
             return result;
