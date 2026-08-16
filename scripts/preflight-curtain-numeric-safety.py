@@ -27,6 +27,10 @@ CONTRACTS = {
         'throw new OverflowException(label + " width is below the representable coordinate resolution.");',
         'throw new OverflowException(label + " height is below the representable coordinate resolution.");',
         'throw new OverflowException(label + " underflowed to zero.");',
+        '"curtain vertical frame half-width placement"',
+        '"curtain horizontal frame half-height placement"',
+        'label + " lost a positive contribution at floating-point precision."',
+        'label + " lost a positive deduction at floating-point precision."',
     ),
     "tests/QS3D.Core.SmokeTests/CurtainWallLayoutUnderflowRegistration.cs": (
         "[ModuleInitializer]",
@@ -49,6 +53,12 @@ CONTRACTS = {
         "[ModuleInitializer]",
         "CurtainWallDetailNumericCollapseSmoke.Run();",
     ),
+    "tests/QS3D.Core.SmokeTests/CurtainWallDetailNumericCollapseSmoke.cs": (
+        "InternalVerticalFrameHalfWidthPlacementCollapseFailsClosed",
+        "InternalHorizontalFrameHalfHeightPlacementCollapseFailsClosed",
+        "half-width placement lost a positive deduction",
+        "half-height placement lost a positive deduction",
+    ),
 }
 
 
@@ -64,7 +74,7 @@ def main() -> int:
 
     print(
         "PASS: curtain layout/detail/opening planners retain fail-closed numeric underflow, "
-        "precision-collapse, and coordinate-resolution guards with deterministic smoke registration."
+        "precision-collapse, placement, and coordinate-resolution guards with deterministic smoke registration."
     )
     return 0
 
