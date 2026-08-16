@@ -245,9 +245,8 @@ else:
                 errors.append(f"{path.name}: direct main push must not trigger shared branch CI; main owns the release dispatcher")
 
             for watched in (
-                '"src/**"', '"tests/**"', '"scripts/**"', '".github/workflows/**"',
-                '"Directory.Build.props"', '"QS3D.sln"', '"CI_POLICY.md"',
-                '"docs/AGENT-WORK-REGISTRATION.md"',
+                '"src/**"', '"tests/**"', '"scripts/**"', '"samples/generated/**"', '".github/workflows/**"',
+                '"Directory.Build.props"', '"QS3D.sln"', '"CI_POLICY.md"', '"docs/AGENT-WORK-REGISTRATION.md"',
             ):
                 if watched not in push_block:
                     errors.append(f"{path.name}: shared branch-push validation scope missing {watched}")
@@ -260,18 +259,12 @@ else:
                 )
 
             require_tokens(text, (
-                "contents: read",
-                "persist-credentials: false",
-                "python scripts/preflight-ci-manual-only.py",
-                "python scripts/preflight-repository-professionalism.py",
-                "Classify validation scope",
-                "full_validation:",
-                "steps.scope.outputs.full_validation",
-                "needs.preflight.outputs.full_validation",
-                "Lightweight governance PR",
-                "python scripts/preflight.py",
-                "python scripts/preflight-all.py",
-                "test-v25-package-verifier.ps1",
+                "contents: read", "persist-credentials: false",
+                "python scripts/preflight-ci-manual-only.py", "python scripts/preflight-repository-professionalism.py",
+                "Classify validation scope", "source_validation:", "build_validation:",
+                "steps.scope.outputs.source_validation", "needs.preflight.outputs.build_validation",
+                "Lightweight non-build candidate", "samples/generated/",
+                "python scripts/preflight.py", "python scripts/preflight-all.py", "test-v25-package-verifier.ps1",
                 "dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release",
                 "tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release",
                 "dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64",
@@ -352,13 +345,8 @@ else:
 policy_path = ROOT / "CI_POLICY.md"
 policy = policy_path.read_text(encoding="utf-8") if policy_path.is_file() else ""
 for token in (
-    "automatic branch/PR validation",
-    VALIDATION_WORKFLOW,
-    "integration/<batch-id>",
-    "exact-main release",
-    AUTO_DISPATCHER,
-    "release-v25-cloud.yml",
-    "ALL MERGED TO MAIN",
+    "automatic branch/PR validation", VALIDATION_WORKFLOW, "integration/<batch-id>", "exact-main release",
+    AUTO_DISPATCHER, "release-v25-cloud.yml", "ALL MERGED TO MAIN",
 ):
     if token not in policy:
         errors.append("CI_POLICY.md missing staged CI policy token: " + token)
@@ -366,17 +354,10 @@ for token in (
 registration_path = ROOT / "docs/AGENT-WORK-REGISTRATION.md"
 registration = registration_path.read_text(encoding="utf-8") if registration_path.is_file() else ""
 for token in (
-    "agent/<agent-id>/<scope>",
-    "integration/<batch-id>",
-    "`origin/main` as read-only",
-    "dedicated issue/branch/PR",
+    "agent/<agent-id>/<scope>", "integration/<batch-id>", "`origin/main` as read-only", "dedicated issue/branch/PR",
     "Only an agent/session explicitly authorized by the repository owner as an integration/merge coordinator may change `main`.",
-    "shared branch/PR CI",
-    "combined-tree CI",
-    "exact-main release CI",
-    "merge to `main` only within the owner's explicit authorization",
-    "ALL MERGED TO MAIN",
-    AUTO_DISPATCHER,
+    "shared branch/PR CI", "combined-tree CI", "exact-main release CI",
+    "merge to `main` only within the owner's explicit authorization", "ALL MERGED TO MAIN", AUTO_DISPATCHER,
 ):
     if token not in registration:
         errors.append("AGENT-WORK-REGISTRATION.md missing staged integration token: " + token)
@@ -389,6 +370,6 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: shared branch CI remains path-bounded, every PR receives stable required preflight/core contexts with light docs-only validation, "
-    "integration-relevant candidates run Core plus V25 compile, main alone owns the exact-source V25 dispatcher, and releases retain explicit confirmation."
+    "PASS: branch CI is path-bounded, every PR emits stable required contexts, governance-only candidates keep source guards without redundant builds, "
+    "build-relevant candidates run Core plus V25 compile, main alone owns exact-source V25 dispatch, and releases retain explicit confirmation."
 )

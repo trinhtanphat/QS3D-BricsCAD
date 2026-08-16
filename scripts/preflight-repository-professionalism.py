@@ -147,8 +147,9 @@ def main() -> int:
         ci,
         (
             "permissions:\n  contents: read", "persist-credentials: false", '"pull_request":',
-            "Classify validation scope", "full_validation:", "steps.scope.outputs.full_validation",
-            "needs.preflight.outputs.full_validation", "Lightweight governance PR",
+            "Classify validation scope", "source_validation:", "build_validation:",
+            "steps.scope.outputs.source_validation", "needs.preflight.outputs.build_validation",
+            "Lightweight non-build candidate", '"samples/generated/**"',
             "python scripts/preflight-repository-professionalism.py",
             "dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64",
         ),
@@ -184,7 +185,8 @@ def main() -> int:
     print(" - security reporting avoids public disclosure of sensitive material")
     print(" - critical governance/release surfaces have explicit ownership")
     print(" - dependency maintenance is bounded and low-noise")
-    print(" - every PR emits stable required contexts while docs-only candidates avoid redundant Core/V25 builds")
+    print(" - every PR emits stable required contexts; policy-only candidates retain guards while non-build changes avoid redundant Core/V25 builds")
+    print(" - synthetic generated fixtures are treated as build-relevant validation inputs")
     print(" - no workflow implements autonomous PR-to-main merging")
     return 0
 
