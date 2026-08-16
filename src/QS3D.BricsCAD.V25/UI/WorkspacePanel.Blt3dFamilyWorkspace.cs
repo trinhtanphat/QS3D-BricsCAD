@@ -121,6 +121,19 @@ namespace QS3D.BricsCAD.V25.UI
 
             foreach (UIElement child in workspace.Children)
                 child.Visibility = Grid.GetColumn(child) <= 2 ? Visibility.Visible : Visibility.Collapsed;
+
+            HideRetiredDashboardBands(workspace);
+        }
+
+        private static void HideRetiredDashboardBands(Grid workspace)
+        {
+            // Defensive idempotence: the retired room/inspection bands must never surface when a
+            // persisted layout or later visual-tree refresh re-applies child visibility.
+            foreach (UIElement child in workspace.Children)
+            {
+                if (Grid.GetColumn(child) > 2)
+                    child.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void RestoreBlt3dFamilyRows()
