@@ -161,7 +161,18 @@ def main():
         'StatusButton("Mô hình", () => new Commands().ShowWorkspace())',
         'StatusButton("BQ", () => new Commands().ShowQuantitySummary())',
         'private Button CreateActionCard(',
+        'private static readonly ControlTemplate ClickSurfaceTemplate = CreateClickSurfaceTemplate();',
         'private static Button CreateClickSurface(UIElement content, Cursor cursor)',
+        'Template = ClickSurfaceTemplate,',
+        'private static ControlTemplate CreateClickSurfaceTemplate()',
+        'new FrameworkElementFactory(typeof(Border))',
+        'root.SetValue(Border.BackgroundProperty, Brushes.Transparent);',
+        'new FrameworkElementFactory(typeof(ContentPresenter))',
+        'presenter.SetValue(ContentPresenter.ContentSourceProperty, "Content");',
+        'return new ControlTemplate(typeof(Button))',
+        'VisualTree = root',
+        'button.MouseEnter += (_, __) => border.Background = PanelHoverBrush;',
+        'button.MouseLeave += (_, __) => border.Background = PanelBrush;',
         'button.Click += (_, __) => RunUiAction(action);',
         'button.Click += (_, __) => OpenRecentProject(recent);',
         'Application.DocumentManager.Open(normalized, false)',
@@ -180,6 +191,8 @@ def main():
         '"_.SAVEAS',
         'border.MouseLeftButtonUp',
         'border.MouseLeftButtonDown',
+        'FocusVisualStyle = null',
+        'Focusable = false',
         'Text = "Nhấp đúp vào dự án để mở trực tiếp và bắt đầu làm việc"',
     ):
         forbid(shell, stale, shell_rel)
@@ -187,7 +200,7 @@ def main():
     command = read(command_rel)
     require(command, "createdWindow = new BltStartCenterWindow();", command_rel)
 
-    print("PASS: QS3D Home and Start Center use native WPF Button.Click hit targets, unique panels, rasterized icons and direct mouse-first project actions; Create New explicitly seeds the canonical project, while Save/Save As preserve existing-project and verified sidecar-transition safety.")
+    print("PASS: QS3D Home and Start Center keep native WPF Button.Click and keyboard/focus semantics while a QS3D-owned flat Button template suppresses host-theme hover/pressed chrome; action-card hover remains bounded to the intended dark panel, with project and sidecar safety contracts preserved.")
     return 0
 
 
