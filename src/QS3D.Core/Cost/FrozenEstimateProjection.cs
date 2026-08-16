@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
@@ -18,6 +19,8 @@ namespace QS3D.Core.Cost
         public static FrozenEstimateProjection Create(IEnumerable<EstimateLine> lines)
         {
             if (lines == null) throw new ArgumentNullException(nameof(lines));
+            if (TryGetKnownCount(lines, out var knownCount) && knownCount > MaxLines)
+                ThrowTooManyLines();
 
             var rows = new List<FrozenEstimateProjectionRow>();
             var lineIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -25,8 +28,7 @@ namespace QS3D.Core.Cost
             foreach (var line in lines)
             {
                 if (index == MaxLines)
-                    throw new InvalidOperationException(
-                        "Frozen estimate projection supports at most " + MaxLines + " estimate lines.");
+                    ThrowTooManyLines();
                 if (line == null)
                     throw new ArgumentException("Estimate projection contains a null line at index " + index + ".", nameof(lines));
                 if (!lineIds.Add(line.EstimateLineId))
@@ -38,6 +40,36 @@ namespace QS3D.Core.Cost
 
             rows.Sort(CompareRows);
             return new FrozenEstimateProjection(rows);
+        }
+
+        private static bool TryGetKnownCount(IEnumerable<EstimateLine> lines, out int count)
+        {
+            if (lines is ICollection<EstimateLine> collection)
+            {
+                count = collection.Count;
+                return true;
+            }
+
+            if (lines is IReadOnlyCollection<EstimateLine> readOnlyCollection)
+            {
+                count = readOnlyCollection.Count;
+                return true;
+            }
+
+            if (lines is ICollection nonGenericCollection)
+            {
+                count = nonGenericCollection.Count;
+                return true;
+            }
+
+            count = 0;
+            return false;
+        }
+
+        private static void ThrowTooManyLines()
+        {
+            throw new InvalidOperationException(
+                "Frozen estimate projection supports at most " + MaxLines + " estimate lines.");
         }
 
         private static int CompareRows(FrozenEstimateProjectionRow left, FrozenEstimateProjectionRow right)

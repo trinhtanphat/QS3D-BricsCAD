@@ -23,8 +23,18 @@ namespace QS3D.Core.SmokeTests
 
         internal static void Run()
         {
+            KnownCountOverLimitFailsBeforeEnumeration();
             ExactLimitIsAccepted();
             FirstOverLimitLineFailsWithoutOverrun();
+        }
+
+        private static void KnownCountOverLimitFailsBeforeEnumeration()
+        {
+            var source = new KnownCountLineSource();
+            var error = Capture<InvalidOperationException>(() => FrozenEstimateProjection.Create(source));
+
+            AssertBoundError(error);
+            Assert(!source.Enumerated, "Known-count over-limit projection must fail before source enumeration starts.");
         }
 
         private static void ExactLimitIsAccepted()
@@ -41,15 +51,35 @@ namespace QS3D.Core.SmokeTests
             var source = new LineSource(MaxLines + 2);
             var error = Capture<InvalidOperationException>(() => FrozenEstimateProjection.Create(source));
 
+            AssertBoundError(error);
+            Assert(
+                source.ObservedCount == MaxLines + 1,
+                "Frozen estimate projection must stop after observing the 10,001st source line.");
+        }
+
+        private static void AssertBoundError(InvalidOperationException error)
+        {
             Assert(
                 string.Equals(
                     error.Message,
                     "Frozen estimate projection supports at most 10000 estimate lines.",
                     StringComparison.Ordinal),
                 "Frozen estimate projection must preserve the bounded-line failure contract.");
-            Assert(
-                source.ObservedCount == MaxLines + 1,
-                "Frozen estimate projection must stop after observing the 10,001st source line.");
+        }
+
+        private sealed class KnownCountLineSource : IReadOnlyCollection<EstimateLine>
+        {
+            internal bool Enumerated { get; private set; }
+
+            public int Count => MaxLines + 1;
+
+            public IEnumerator<EstimateLine> GetEnumerator()
+            {
+                Enumerated = true;
+                throw new InvalidOperationException("Known-count source must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private sealed class LineSource : IEnumerable<EstimateLine>
