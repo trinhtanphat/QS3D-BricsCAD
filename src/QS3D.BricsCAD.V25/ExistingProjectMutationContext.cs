@@ -45,7 +45,23 @@ namespace QS3D.BricsCAD.V25
 
         public static ProjectState Require(Document document, string operation)
         {
+            if (document == null) throw new ArgumentNullException(nameof(document));
             if (string.IsNullOrWhiteSpace(operation)) operation = "QS3D mutation";
+
+            // ProjectContextCoordinator.Save is the one existing-project write
+            // boundary that must tolerate a verified DWG path transition. Only an
+            // already-cached canonical project can take this path; cold-cache saves
+            // still fall through to TryGet and therefore require an existing sidecar.
+            // HasPendingChanges performs the non-mutating allow-path-transition
+            // freshness/destination check, and Save repeats that check under the
+            // project lock before committing.
+            if (string.Equals(operation, "Save Project", StringComparison.Ordinal) &&
+                ProjectContextCoordinator.TryGetCached(document, out var cached))
+            {
+                _ = ProjectContextCoordinator.HasPendingChanges(document);
+                return cached;
+            }
+
             if (!TryGet(document, out var project))
                 throw new InvalidOperationException(
                     operation + " cần một QS3D project hiện hữu; thao tác này không tạo project mới.");
