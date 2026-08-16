@@ -43,6 +43,8 @@ def main():
         "private const int MaxRedirects = 8;",
         "EnsureAllowedUri(release.PackageUri);",
         "EnsureAllowedUri(release.PackageChecksumUri);",
+        "var existingLength = new FileInfo(packagePath).Length;",
+        "if (existingLength <= MaxPackageBytes)",
         "private static async Task<HttpWebResponse> GetResponseFollowingRedirectsAsync(Uri uri)",
         "request.AllowAutoRedirect = false;",
         "var location = response.Headers[HttpResponseHeader.Location];",
@@ -61,6 +63,9 @@ def main():
         'Path.Combine(root, "QS3D", "Updates", "Downloads", ToSafePathSegment(tag))',
     ):
         require(downloader, needle, downloader_rel)
+
+    if downloader.index("var existingLength = new FileInfo(packagePath).Length;") > downloader.index("var existingSha256 = ComputeSha256(packagePath);"):
+        raise SystemExit("FAIL: cached preview package size must be checked before hashing the existing file")
 
     for stale in (
         "request.AllowAutoRedirect = true;",
@@ -88,9 +93,9 @@ def main():
         forbid(window, needle, window_rel)
 
     print(
-        "PASS: V25 preview fallback discovers the exact package/checksum pair, validates every bounded HTTPS GitHub redirect hop, "
-        "verifies SHA-256 before retaining the ZIP, stages under LocalApplicationData, and only reveals unsigned preview "
-        "packages while the existing signed-manifest scheduling path remains separate."
+        "PASS: V25 preview fallback discovers the exact package/checksum pair, bounds cached and network packages before hashing, "
+        "validates every bounded HTTPS GitHub redirect hop, verifies SHA-256 before retaining the ZIP, stages under LocalApplicationData, "
+        "and only reveals unsigned preview packages while the existing signed-manifest scheduling path remains separate."
     )
     return 0
 
