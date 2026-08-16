@@ -69,14 +69,18 @@ def main():
     ):
         require(workspace, token, "Workspace BLT3D shell")
 
-    # The pre-existing family workspace is the actual implementation, not a screenshot-only facade.
+    # Guard the actual controls and production hooks consumed by the BLT3D family-workspace partial.
+    # Historical aliases such as FamilySearchBox/PropertyGrid/FloorCombo are not members of this
+    # implementation and made the source guard fail even while the real workspace integration held.
     for token in (
-        "FamilySearchBox",
+        "WorkspaceContentRoot",
+        "WorkspaceOverflow",
+        "FamilySearch",
         "FamilyList",
-        "PropertyGrid",
+        "PropertyList",
         "ZoneCombo",
-        "FloorCombo",
         "ModelTree",
+        "AttachFamilySubtypeInteractions();",
     ):
         require(family_workspace, token, "Family workspace integration")
 
