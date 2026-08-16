@@ -53,6 +53,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
             BltRecognitionRibbonAugmenter.Reset();
             BltViewRibbonAugmenter.Reset();
             BltBimRibbonMirrorAugmenter.Reset();
+            BltModelingRibbonVisualRefiner.Reset();
+            BltModelingRibbonFunctionRefiner.Reset();
             BltModelingRibbonAugmenter.Reset();
             BltTopbarTabContract.Reset();
             RibbonBootstrapIconAugmenter.Reset();
@@ -133,6 +135,16 @@ namespace QS3D.BricsCAD.V25.Ribbon
             // into the BLT3D large-action + compact three-row layout; native/third-party
             // Ribbon content remains untouched.
             ready = BltModelingRibbonAugmenter.TryInitialize() && ready;
+
+            // Pin the functional route of all 21 reference buttons before visual finalization.
+            // In particular, Theo phương Z uses QS3DMOVEZ so it is genuinely Z-constrained rather
+            // than falling back to unrestricted MOVE plus manual coordinate instructions.
+            ready = BltModelingRibbonFunctionRefiner.TryInitialize() && ready;
+
+            // Apply the final dark-ribbon artwork only after every MODELING button exists. The
+            // visual refiner requires all 21 reference buttons and refuses a text-only fallback,
+            // while leaving grouping, command routing and native/third-party content unchanged.
+            ready = BltModelingRibbonVisualRefiner.TryInitialize() && ready;
 
             // The BLT owner reference shows the same qualified Vẽ/Công cụ/IFC surface under
             // MÔ HÌNH BIM. Mirror the already-wired Draw panels so behavior, icons and sizing
