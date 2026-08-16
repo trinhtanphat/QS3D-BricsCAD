@@ -58,22 +58,18 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 RemoveOwnedPanel(panels, LegacyProjectPanelSourceId);
                 RemoveOwnedPanel(panels, CoordinationPanelSourceId);
                 RemoveOwnedPanel(panels, QualityPanelSourceId);
+                RemoveOwnedPanel(panels, UpdatePanelSourceId);
                 RemoveOwnedPanel(panels, ConfigPanelSourceId);
 
-                // UpdateRibbonAugmenter runs immediately before this augmenter. Temporarily
-                // detach its panel so the final order is TỆP → HỆ THỐNG → CẤU HÌNH.
-                var updatePanel = FindPanelBySourceId(panels, UpdatePanelSourceId);
-                if (updatePanel != null) Remove(panels, updatePanel);
-
+                // Keep KHỞI ĐẦU faithful to the owner reference: only Dự án + Cấu hình.
+                // Update functionality remains available through its dedicated Update Center surfaces.
                 AddPanel(
                     panels,
                     FilePanelSourceId,
-                    "Tệp",
-                    new HomeButtonSpec("QS3D_HOME_OPEN_PROJECT", "Mở dự án...", ProjectFileUiService.OpenProjectFromPicker, RibbonIconKind.OpenProject),
+                    "Dự án",
+                    new HomeButtonSpec("QS3D_HOME_OPEN_PROJECT", "Mở...", ProjectFileUiService.OpenProjectFromPicker, RibbonIconKind.OpenProject),
                     new HomeButtonSpec("QS3D_HOME_SAVE_PROJECT", "Lưu", ProjectFileUiService.SaveCurrentProject, RibbonIconKind.Save),
                     new HomeButtonSpec("QS3D_HOME_SAVE_PROJECT_AS", "Lưu thành...", ProjectFileUiService.SaveCurrentProjectAs, RibbonIconKind.SaveAs));
-
-                if (updatePanel != null) Add(panels, updatePanel);
 
                 AddPanel(
                     panels,

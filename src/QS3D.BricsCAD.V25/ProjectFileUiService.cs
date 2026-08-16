@@ -99,7 +99,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var document = RequireActiveDocument();
-                ExistingProjectMutationContext.Require(document, "Lưu dự án");
+                ExistingProjectMutationContext.Require(document, ExistingProjectMutationContext.SaveProjectOperation);
 
                 var stopwatch = Stopwatch.StartNew();
                 InvokeAcadDocumentMethod(document, "Save");
@@ -122,7 +122,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var document = RequireActiveDocument();
-                ExistingProjectMutationContext.Require(document, "Lưu thành");
+                ExistingProjectMutationContext.Require(document, ExistingProjectMutationContext.SaveProjectOperation);
                 var currentProjectPath = ProjectContextCoordinator.GetProjectPath(document);
                 var defaultName = SafeStem(document.Name) + ".dwg";
                 var dialog = new SaveFileDialog

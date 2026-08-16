@@ -43,7 +43,7 @@ def main():
         "var brand = new Grid();",
         "brand.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });",
         "brand.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });",
-        "Text = \"Giải pháp mô hình hóa thông tin công trình BIM 3D trực quan và tối ưu hóa bóc tách khối lượng trong BricsCAD.\"",
+        "Text = \"Giải pháp mô hình hóa thông tin công trình BIM 3D trực quan và tối ưu hóa bóc tách khối lượng.\"",
         "TextWrapping = TextWrapping.Wrap",
     ):
         require(left, needle, SOURCE_REL + "::BuildLeftPane")
