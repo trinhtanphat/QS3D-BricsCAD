@@ -22,6 +22,9 @@ namespace QS3D.BricsCAD.V25.Cad
             public string GeneratedHandle { get; set; } = string.Empty;
             public ElementCategory Category { get; set; }
             public CadElementVerticalPlacement? VerticalPlacement { get; set; }
+            public ObjectId SourceId { get; set; }
+            public ObjectId GeneratedSolidId { get; set; }
+            public IReadOnlyList<string> AppliedSlabOpeningIds { get; set; } = Array.Empty<string>();
         }
 
         private readonly struct BeamPathPoint
@@ -107,6 +110,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         {
                             solid.Layer = entity.Layer;
                             var previousHandle = GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
+                            var appliedSlabOpeningIds = SlabOpeningPeerReplayService.CaptureAppliedOpeningIds(project, element, previousHandle);
                             modelSpace.AppendEntity(solid);
                             transaction.AddNewlyCreatedDBObject(solid, true);
                             GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category);
@@ -116,7 +120,10 @@ namespace QS3D.BricsCAD.V25.Cad
                                 PreviousHandle = previousHandle,
                                 GeneratedHandle = solid.Handle.ToString(),
                                 Category = category,
-                                VerticalPlacement = vertical
+                                VerticalPlacement = vertical,
+                                SourceId = id,
+                                GeneratedSolidId = solid.ObjectId,
+                                AppliedSlabOpeningIds = appliedSlabOpeningIds
                             });
                         }
                         catch
@@ -132,6 +139,26 @@ namespace QS3D.BricsCAD.V25.Cad
                         update.Element.Properties["GeneratedSolidMode"] = GeometryMode(update.Category);
                         if (update.VerticalPlacement != null)
                             CadElementVerticalPlacement.CommitSnapshot(update.Element, "GeneratedSolid", update.VerticalPlacement);
+                    }
+
+                    foreach (var update in pending.Where(x => x.Category == ElementCategory.Slab && x.AppliedSlabOpeningIds.Count > 0))
+                    {
+                        var source = transaction.GetObject(update.SourceId, OpenMode.ForRead, false) as Polyline;
+                        if (source == null || source.IsErased || !source.Closed)
+                            throw new InvalidOperationException("Rebuilt Slab with applied slabOpen peers must retain one live closed POLYLINE source: " + update.Element.Id);
+                        var generated = transaction.GetObject(update.GeneratedSolidId, OpenMode.ForWrite, false) as Solid3d;
+                        if (generated == null || generated.IsErased)
+                            throw new InvalidOperationException("Rebuilt Slab Solid3d disappeared before slabOpen peer replay: " + update.Element.Id);
+
+                        SlabOpeningPeerReplayService.ReplayAppliedOpenings(
+                            document,
+                            transaction,
+                            project,
+                            update.Element,
+                            source,
+                            generated,
+                            update.PreviousHandle,
+                            update.AppliedSlabOpeningIds);
                     }
 
                     if (pending.Count > 0) project.Touch();
