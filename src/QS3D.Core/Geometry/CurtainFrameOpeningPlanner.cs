@@ -23,19 +23,43 @@ namespace QS3D.Core.Geometry
         public double HeightM { get; }
         public double ClearanceM { get; }
 
+        internal double BaseRight => X_M + WidthM;
+        internal double BaseTop => Z_M + HeightM;
         internal double Left => X_M - ClearanceM;
         internal double Bottom => Z_M - ClearanceM;
-        internal double Right => X_M + WidthM + ClearanceM;
-        internal double Top => Z_M + HeightM + ClearanceM;
+        internal double Right => BaseRight + ClearanceM;
+        internal double Top => BaseTop + ClearanceM;
 
         private void EnsureFiniteBounds()
         {
-            if (!IsFinite(Left) ||
-                !IsFinite(Bottom) ||
-                !IsFinite(Right) ||
-                !IsFinite(Top))
+            var baseRight = BaseRight;
+            var baseTop = BaseTop;
+            var left = Left;
+            var bottom = Bottom;
+            var right = Right;
+            var top = Top;
+
+            if (!IsFinite(baseRight) ||
+                !IsFinite(baseTop) ||
+                !IsFinite(left) ||
+                !IsFinite(bottom) ||
+                !IsFinite(right) ||
+                !IsFinite(top))
             {
                 throw new OverflowException("Curtain opening bounds must remain finite after applying size and clearance.");
+            }
+
+            if (!(baseRight > X_M))
+                throw new OverflowException("Curtain opening width is below the representable coordinate resolution.");
+            if (!(baseTop > Z_M))
+                throw new OverflowException("Curtain opening height is below the representable coordinate resolution.");
+
+            if (ClearanceM > 0d)
+            {
+                if (!(left < X_M) || !(right > baseRight))
+                    throw new OverflowException("Curtain opening horizontal clearance is below the representable coordinate resolution.");
+                if (!(bottom < Z_M) || !(top > baseTop))
+                    throw new OverflowException("Curtain opening vertical clearance is below the representable coordinate resolution.");
             }
         }
 
@@ -108,11 +132,14 @@ namespace QS3D.Core.Geometry
                 frame.WidthM <= 0d || frame.HeightM <= 0d)
                 throw new InvalidOperationException("Curtain frame rectangle is invalid.");
 
-            if (!IsFinite(frame.X_M + frame.WidthM) ||
-                !IsFinite(frame.Z_M + frame.HeightM))
-            {
+            var right = frame.X_M + frame.WidthM;
+            var top = frame.Z_M + frame.HeightM;
+            if (!IsFinite(right) || !IsFinite(top))
                 throw new InvalidOperationException("Curtain frame rectangle bounds must remain finite.");
-            }
+            if (!(right > frame.X_M))
+                throw new InvalidOperationException("Curtain frame rectangle width is below the representable coordinate resolution.");
+            if (!(top > frame.Z_M))
+                throw new InvalidOperationException("Curtain frame rectangle height is below the representable coordinate resolution.");
 
             return frame;
         }
