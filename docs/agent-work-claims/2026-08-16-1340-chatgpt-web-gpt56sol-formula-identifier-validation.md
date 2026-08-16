@@ -1,0 +1,24 @@
+# Agent Work Claim
+
+- Agent: `GPT-5.6 Sol`
+- Status: `ACTIVE`
+- Started at: `2026-08-16T13:40:00+07:00`
+- Issue: `#1902`
+- Branch: `agent/chatgpt-gpt56sol/formula-variable-identifier-validation-1902`
+- Base: `main@d4d4aea09115b4f53edc3c3b060a270aebd13313`
+- Scope: Reject caller-supplied formula variable names that cannot be referenced by the existing expression identifier grammar, while preserving the already-integrated trim, duplicate, finite-value, and case-insensitive behavior.
+- Primary files:
+  - `src/QS3D.Core/Formulas/ExpressionEvaluator.cs`
+  - `tests/QS3D.Core.SmokeTests/FormulaVariableNameNormalizationSmoke.cs`
+  - `docs/agent-work-claims/2026-08-16-1340-chatgpt-web-gpt56sol-formula-identifier-validation.md`
+- Tests intended:
+  - Reject `1abc`, `a-b`, and `a b` as variable-map keys.
+  - Accept and evaluate `_x`, `A1`, and `a.b`.
+  - Preserve case-insensitive lookup (`Rate` supplied, `rate` referenced).
+  - Keep parser and normalization on the same identifier predicates so grammar cannot drift.
+- Dependencies:
+  - Builds on completed formula normalization/casefold/finite-safety work already on `main`.
+  - The historical `2026-08-11-2144-gpt56sol-formula-variable-name-normalization.md` claim is `DONE`; no active formula issue/PR collision was found before registration.
+- Notes:
+  - Pure Core / deterministic smoke change; no BricsCAD host, native runtime, UI, updater, quantity, rebar, interchange, or release surfaces are in scope.
+  - No direct writes to `main`; branch CI must be green on the exact final branch SHA before PR creation under `AGENTS.md`.
