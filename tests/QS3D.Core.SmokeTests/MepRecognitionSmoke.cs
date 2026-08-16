@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             ExplicitPriority();
             AmbiguityFailsClosed();
             UnmatchedFailsClosed();
+            MepTbqProjectionSmoke.Run();
         }
 
         private static void DefaultProfilePriorityAndCase()
