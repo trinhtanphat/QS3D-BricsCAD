@@ -51,6 +51,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             BltHomeRibbonAugmenter.Reset();
             BltDrawRibbonAugmenter.Reset();
             BltRecognitionRibbonAugmenter.Reset();
+            BltViewRibbonAugmenter.Reset();
             BltBimRibbonMirrorAugmenter.Reset();
             BltModelingRibbonAugmenter.Reset();
             BltTopbarTabContract.Reset();
@@ -122,10 +123,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
             ready = UpdateRibbonAugmenter.TryInitialize() && ready;
 
             // Reconcile screenshot-familiar presentation after feature augmenters so the
-            // QS3D-owned Home/Draw/Recognition groups are deterministic without replacing native tabs.
+            // QS3D-owned Home/Draw/Recognition/View groups are deterministic without replacing native tabs.
             ready = BltHomeRibbonAugmenter.TryInitialize() && ready;
             ready = BltDrawRibbonFailSafe.TryInitialize() && ready;
             ready = BltRecognitionRibbonAugmenter.TryInitialize() && ready;
+            ready = BltViewRibbonAugmenter.TryInitialize() && ready;
 
             // MODELING is a separate owner-reference surface. Rebuild only QS3D-owned panels
             // into the BLT3D large-action + compact three-row layout; native/third-party
