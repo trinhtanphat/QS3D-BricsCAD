@@ -91,6 +91,8 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
             (DOWNLOADER, "if (end < normalized.Length && !char.IsWhiteSpace(normalized[end]))", "if (false)"),
             (DOWNLOADER, "TryDelete(partialPath);", "/* mutation removed partial cleanup */"),
             (DOWNLOADER, "File.Move(partialPath, packagePath);", "/* mutation removed final promotion */"),
+            (DOWNLOADER, "var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);", "var root = System.IO.Path.GetTempPath();"),
+            (DOWNLOADER, "if (string.IsNullOrWhiteSpace(root))", "if (false)"),
             (DOWNLOADER, 'Path.Combine(root, "QS3D", "Updates", "Downloads", ToSafePathSegment(tag))', 'Path.Combine(root, "QS3D", "Updates", ToSafePathSegment(tag))'),
             (DOWNLOADER, 'if (IsWindowsReservedPathSegment(result)) result = "_" + result;', 'if (false) result = "_" + result;'),
             (DOWNLOADER, 'return result + "~" + ComputeTagIdentity(exactTag);', "return result;"),
