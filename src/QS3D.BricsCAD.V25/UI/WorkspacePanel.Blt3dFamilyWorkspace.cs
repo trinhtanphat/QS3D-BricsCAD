@@ -89,10 +89,11 @@ namespace QS3D.BricsCAD.V25.UI
             workspace.MinWidth = 520;
             WorkspaceOverflow.HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
 
+            var layout = Services.UserUiLayoutStore.Get();
             var modelColumn = workspace.ColumnDefinitions[0];
             modelColumn.MinWidth = 180;
             modelColumn.MaxWidth = 250;
-            modelColumn.Width = new GridLength(220);
+            modelColumn.Width = new GridLength(Math.Max(modelColumn.MinWidth, Math.Min(modelColumn.MaxWidth, layout.ModelColumnWidth)));
 
             var familySplitter = workspace.ColumnDefinitions[1];
             familySplitter.MinWidth = 0;
