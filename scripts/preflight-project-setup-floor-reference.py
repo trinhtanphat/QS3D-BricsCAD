@@ -40,6 +40,7 @@ def main() -> int:
     require(invariant, "item.IsReference = ReferenceEquals(item, keeper)", "exclusive reference normalization", errors)
     require(invariant, "references.Count == 0", "uncheck recovery", errors)
 
+    require(icon_parity, "private static readonly bool BltIconParityRegistered = RegisterBltIconParity();", "one-time icon class-handler registration", errors)
     require(icon_parity, "RegisterBltIconParity", "icon class-handler registration", errors)
     require(icon_parity, "BuildBltNavIconContent", "deterministic vector nav icon builder", errors)
     require(icon_parity, 'case "Thông tin dự án"', "Project Info icon mapping", errors)
