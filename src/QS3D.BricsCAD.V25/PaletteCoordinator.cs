@@ -79,9 +79,9 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        // Compatibility entry point used by the QS3D command. The primary authoring flow is now
-        // Ribbon-first, so opening Workspace must not also consume the CAD viewport with the
-        // drawing/layer and quantity palettes.
+        // Compatibility entry point used by the QS3D command. The BLT3D-like modeling workspace
+        // keeps the model palette on the left and the drawing/layer manager visible on the right.
+        // Quantity insight remains isolated and opens only on demand.
         public static void Show() => ShowWorkspace();
 
         public static void ShowWorkspace()
@@ -89,7 +89,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 EnsureCreated();
-                SetVisibility(workspace: true, right: false, quantityInsight: false);
+                SetVisibility(workspace: true, right: true, quantityInsight: false);
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
             }
             catch (Exception)
