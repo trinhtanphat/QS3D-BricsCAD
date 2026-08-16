@@ -26,6 +26,7 @@ namespace QS3D.BricsCAD.V25.Updates
         private const int MaxChecksumBytes = 64 * 1024;
         private const int NetworkTimeoutMilliseconds = 30000;
         private const int MaxRedirects = 8;
+        private const int MaxReleaseTagPrefixChars = 48;
 
         internal async Task<VerifiedReleaseDownload> DownloadAsync(UpdateReleaseInfo release)
         {
@@ -251,7 +252,8 @@ namespace QS3D.BricsCAD.V25.Updates
 
         private static string ToSafePathSegment(string value)
         {
-            var source = string.IsNullOrWhiteSpace(value) ? "release" : value.Trim();
+            var exactTag = value ?? string.Empty;
+            var source = string.IsNullOrWhiteSpace(exactTag) ? "release" : exactTag.Trim();
             var invalid = System.IO.Path.GetInvalidFileNameChars();
             var builder = new StringBuilder(source.Length);
             foreach (var character in source)
@@ -268,9 +270,24 @@ namespace QS3D.BricsCAD.V25.Updates
             }
 
             var result = builder.ToString().Trim().TrimEnd('.');
-            if (result.Length == 0) return "release";
+            if (result.Length == 0) result = "release";
             if (IsWindowsReservedPathSegment(result)) result = "_" + result;
-            return result;
+            if (result.Length > MaxReleaseTagPrefixChars)
+                result = result.Substring(0, MaxReleaseTagPrefixChars).TrimEnd(' ', '.');
+            if (result.Length == 0) result = "release";
+            return result + "~" + ComputeTagIdentity(exactTag);
+        }
+
+        private static string ComputeTagIdentity(string value)
+        {
+            var bytes = Encoding.UTF8.GetBytes(value ?? string.Empty);
+            using (var sha256 = SHA256.Create())
+            {
+                var hash = sha256.ComputeHash(bytes);
+                var builder = new StringBuilder(hash.Length * 2);
+                foreach (var item in hash) builder.Append(item.ToString("x2", CultureInfo.InvariantCulture));
+                return builder.ToString();
+            }
         }
 
         private static bool IsWindowsReservedPathSegment(string value)
