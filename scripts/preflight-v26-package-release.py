@@ -53,6 +53,7 @@ verify = read("scripts/verify-v26-signatures.ps1")
 finalize = read("scripts/finalize-v26-signed-package.ps1")
 manifest = read("scripts/new-v26-update-manifest.ps1")
 workflow = read(".github/workflows/release-v26.yml")
+qualification_workflow = read(".github/workflows/bricscad-v26.yml")
 v26_project = read("src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj")
 v25_release_client = read("src/QS3D.BricsCAD.V25/Updates/GitHubReleaseClient.cs")
 v26_release_client = read("src/QS3D.BricsCAD.V26/Updates/GitHubReleaseClient.cs")
@@ -73,7 +74,6 @@ for token in (
 ):
     require(transformer, token, "V26 script transformer")
 
-# Independently model the exact major-token transform against today's hardened V25 templates.
 template_expectations = {
     "scripts/install-v25-autoload.ps1": [
         "QS3D.BricsCAD.V26.dll", "BricsCAD V26 x64", "BricsCAD-V26", "^V26", "QS3D-BricsCAD-V26-Update-"
@@ -140,8 +140,6 @@ for text, label, template_name in (
     require(text, "contains a V25 token", label)
     require(text, "QS3D-BricsCAD-V26", label)
 
-# Release channel isolation: V25/V26 share a repository stream but only the exact
-# major-specific manifest asset makes a release eligible for that client's channel.
 for text, label, asset in (
     (v25_release_client, "V25 release client", "QS3D-BricsCAD-V25.update.json"),
     (v26_release_client, "V26 release client", "QS3D-BricsCAD-V26.update.json"),
@@ -152,8 +150,6 @@ for text, label, asset in (
 for token in ("QS3D-BricsCAD-V25.update.json", "QS3D-BricsCAD-V25-Updater"):
     forbid(v26_release_client, token, "V26 release client")
 
-# V26 targets .NET 8 with warnings-as-errors. Keep updater HTTP on HttpClient so
-# obsolete WebRequest/CreateHttp (SYSLIB0014) cannot re-enter this release lane.
 require(build_props, "<TreatWarningsAsErrors>true</TreatWarningsAsErrors>", "Directory.Build.props")
 for text, label in (
     (v26_release_client, "V26 release client"),
@@ -201,13 +197,32 @@ for token in ("QS3DUPDATE", "UpdateCenterWindowHost.Show()", "QS3DUPDATE V26 err
 for token in ("UpdateBootstrapper.Start();", "UpdateBootstrapper.Stop();"):
     require(v26_entry, token, "V26 PluginEntry")
 
+# V26 qualification must execute the same aggregate source/release guards used by
+# the release lane before native build/runtime evidence can be accepted.
+for token in (
+    "permissions:\n  contents: read",
+    "persist-credentials: false",
+    "python scripts/preflight-all.py",
+    "python scripts/preflight-bricscad-v26.py",
+    "python scripts/preflight-v26-package-release.py",
+    "dotnet build src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj -c Release -p:Platform=x64",
+    "test-bricscad-v26-runtime.ps1",
+):
+    require(qualification_workflow, token, "V26 qualification workflow")
+if "contents: write" in qualification_workflow:
+    errors.append("V26 qualification workflow must remain read-only")
+
+# V26 commercial publication is deliberately two-stage. The self-hosted/native
+# qualification job must never receive repository write authority; only the
+# GitHub-hosted publication job may receive contents:write after the candidate
+# crossed an artifact boundary and was independently reverified.
 for token in (
     "workflow_dispatch:",
     "github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE'",
+    "permissions:\n  contents: read",
+    "build_sign:",
     "runs-on: [self-hosted, windows, x64, bricscad-v26]",
-    "BRICSCAD_V26_DIR",
-    "FileMajorPart -ne 26",
-    "Microsoft\\.WindowsDesktop\\.App 8\\.",
+    "All discovered feature source guards",
     "preflight-bricscad-v26.py",
     "preflight-v26-package-release.py",
     "package-v26.ps1",
@@ -216,33 +231,58 @@ for token in (
     "finalize-v26-signed-package.ps1",
     "test-bricscad-v26-runtime.ps1",
     "new-v26-update-manifest.ps1",
-    "QS3D-BricsCAD-V26.update.json",
-    "QS3D-BricsCAD-V26.zip.sha256",
+    "Create V26 package checksum and provenance",
+    "QS3D-BricsCAD-V26.provenance.json",
+    "Upload V26 qualified candidate",
+    "release:",
+    "needs: build_sign",
+    "runs-on: windows-latest",
+    "contents: write",
+    "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+    "Verify V26 candidate after job boundary",
+    "V26 ZIP checksum mismatch after job boundary",
+    "V26 candidate provenance does not exactly bind tag, product, source, signing state and ZIP digest",
+    "verify-v26-signatures.ps1",
+    "gh release create",
+    "--draft",
+    "git ls-remote --tags origin",
+    "gh release download",
+    "Draft V26 release asset SHA-256 mismatch",
+    "gh release edit",
+    "--draft=false",
     "Stable V26 release requires run_runtime=true",
     "Stable V26 release requires sign_package=true",
-    "draft = $true",
-    "draft = $false",
-    "Assert-RemoteReleaseTagTargetsWorkflowSha",
-    "git ls-remote --tags origin",
-    "application/octet-stream",
-    "uploadedAsset.url",
-    "Uploaded V26 release asset size mismatch",
-    "Uploaded V26 release asset SHA-256 mismatch",
-    "Draft V26 release contains unexpected assets",
 ):
     require(workflow, token, "V26 release workflow")
-if workflow.count("Assert-RemoteReleaseTagTargetsWorkflowSha") < 3:
-    errors.append("V26 release workflow must define and invoke remote tag/SHA verification both before and after asset verification")
 
-release_create = workflow.find('$release = Invoke-RestMethod -Method Post')
-first_tag_check = workflow.find('Assert-RemoteReleaseTagTargetsWorkflowSha', release_create + 1)
-asset_hash_check = workflow.find('Uploaded V26 release asset SHA-256 mismatch', first_tag_check + 1)
-second_tag_check = workflow.find('Assert-RemoteReleaseTagTargetsWorkflowSha', asset_hash_check + 1)
-publish_release = workflow.find('$published = Invoke-RestMethod -Method Patch', second_tag_check + 1)
-if min(release_create, first_tag_check, asset_hash_check, second_tag_check, publish_release) < 0 or not (
-    release_create < first_tag_check < asset_hash_check < second_tag_check < publish_release
+build_index = workflow.find("  build_sign:")
+release_index = workflow.find("  release:", build_index + 1)
+if build_index < 0 or release_index < 0 or build_index >= release_index:
+    errors.append("V26 release workflow must order build_sign before release")
+else:
+    build_section = workflow[build_index:release_index]
+    release_section = workflow[release_index:]
+    if "contents: write" in build_section:
+        errors.append("V26 self-hosted build/sign/runtime job must not receive contents:write")
+    if "permissions:\n      contents: read" not in build_section:
+        errors.append("V26 self-hosted build/sign/runtime job must explicitly use contents:read")
+    if "permissions:\n      contents: write" not in release_section:
+        errors.append("V26 publication job must explicitly scope contents:write")
+    if "runs-on: [self-hosted" in release_section:
+        errors.append("V26 write-enabled publication job must not run on the self-hosted BricsCAD runner")
+
+upload_candidate = workflow.find("Upload V26 qualified candidate")
+download_candidate = workflow.find("actions/download-artifact@", release_index)
+verify_boundary = workflow.find("Verify V26 candidate after job boundary", download_candidate)
+draft_create = workflow.find("gh release create", verify_boundary)
+remote_tag_check = workflow.find("git ls-remote --tags origin", draft_create)
+remote_download = workflow.find("gh release download", remote_tag_check)
+remote_hash = workflow.find("Draft V26 release asset SHA-256 mismatch", remote_download)
+publish = workflow.find("gh release edit", remote_hash)
+if min(upload_candidate, download_candidate, verify_boundary, draft_create, remote_tag_check, remote_download, remote_hash, publish) < 0 or not (
+    upload_candidate < download_candidate < verify_boundary < draft_create < remote_tag_check < remote_download < remote_hash < publish
 ):
-    errors.append("V26 release publication order must be draft create -> tag/SHA check -> remote asset SHA-256 check -> tag/SHA recheck -> publish")
+    errors.append("V26 publication order must be qualified artifact -> download -> boundary verify -> draft -> tag/SHA check -> remote download/hash verify -> publish")
 
 for token in ("QS3D-BricsCAD-V25", "BRICSCAD_V25_DIR", "bricscad-v25", "QS3D.BricsCAD.V25.dll"):
     forbid(workflow, token, "V26 release workflow")
@@ -274,4 +314,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: V26 packaging preserves current hardened V25 transaction/security logic under guarded major transformation; .NET 8 update networking is HttpClient-only; discovery is manifest-channel isolated; publication revalidates remote tag identity and uploaded asset bytes before publish.")
+print("PASS: V26 packaging preserves hardened major isolation; qualification is aggregate-guarded and read-only; self-hosted build/sign/runtime is separated from write-enabled publication by a reverified artifact boundary.")
