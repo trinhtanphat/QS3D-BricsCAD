@@ -395,9 +395,11 @@ namespace QS3D.Core.Documentation
         private static IReadOnlyList<SemanticViewDefinition> ReadViews(XElement? container)
         {
             if (container == null) return Array.Empty<SemanticViewDefinition>();
-            var result = new List<SemanticViewDefinition>();
+            var result = new List<SemanticViewDefinition>(Math.Min(MaxCatalogViews, 256));
             foreach (var item in container.Elements("view"))
             {
+                if (result.Count >= MaxCatalogViews)
+                    throw new InvalidDataException("Semantic documentation catalog supports at most " + MaxCatalogViews + " views.");
                 var kind = NamedEnum<SemanticViewKind>(Required(item, "kind"), "view kind");
 
                 var categories = new List<ElementCategory>();
@@ -423,9 +425,11 @@ namespace QS3D.Core.Documentation
         private static IReadOnlyList<SemanticSheetDefinition> ReadSheets(XElement? container)
         {
             if (container == null) return Array.Empty<SemanticSheetDefinition>();
-            var result = new List<SemanticSheetDefinition>();
+            var result = new List<SemanticSheetDefinition>(Math.Min(MaxCatalogSheets, 256));
             foreach (var item in container.Elements("sheet"))
             {
+                if (result.Count >= MaxCatalogSheets)
+                    throw new InvalidDataException("Semantic documentation catalog supports at most " + MaxCatalogSheets + " sheets.");
                 var placements = new List<SemanticSheetPlacementDefinition>();
                 foreach (var placement in item.Element("placements")?.Elements("placement") ?? Enumerable.Empty<XElement>())
                 {
