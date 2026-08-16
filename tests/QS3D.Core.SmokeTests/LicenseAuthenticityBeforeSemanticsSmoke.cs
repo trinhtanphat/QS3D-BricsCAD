@@ -26,6 +26,18 @@ namespace QS3D.Core.SmokeTests
                 verifier.Verify(tamperedProduct, publicKey, "QS3D", nowUtc),
                 "Tampering ProductId must be classified as InvalidSignature before ProductMismatch.");
 
+            var tamperedNotBefore = CreateSigned(
+                rsa,
+                "QS3D",
+                new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                new DateTime(2030, 1, 3, 0, 0, 0, DateTimeKind.Utc),
+                "tampered-not-before");
+            tamperedNotBefore.NotBeforeUtc = new DateTime(2030, 1, 2, 12, 0, 0, DateTimeKind.Utc);
+            RequireStatus(
+                LicenseStatus.InvalidSignature,
+                verifier.Verify(tamperedNotBefore, publicKey, "QS3D", nowUtc),
+                "Tampering NotBeforeUtc must be classified as InvalidSignature before NotYetValid.");
+
             var tamperedExpiry = CreateSigned(
                 rsa,
                 "QS3D",
