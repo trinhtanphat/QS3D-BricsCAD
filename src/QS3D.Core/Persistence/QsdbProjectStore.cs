@@ -113,8 +113,8 @@ namespace QS3D.Core.Persistence
                 SchemaVersion = ProjectState.CurrentSchemaVersion,
                 DrawingPath = RawValue(root, "drawingPath"),
                 DrawingFingerprint = RawValue(root, "drawingFingerprint"),
-                ActiveZoneId = Value(root, "activeZoneId"),
-                ActiveFloorId = Value(root, "activeFloorId")
+                ActiveZoneId = RawValue(root, "activeZoneId"),
+                ActiveFloorId = RawValue(root, "activeFloorId")
             };
             project.RestorePersistenceState(updatedUtc, changeVersion);
 
@@ -155,7 +155,7 @@ namespace QS3D.Core.Persistence
                 foreach (var item in elements.Elements("element"))
                 {
                     var category = Category(item, "element");
-                    var element = new ProjectElement(Required(item, "id"), category, Value(item, "familyId"), Value(item, "floorId"), Value(item, "zoneId"))
+                    var element = new ProjectElement(Required(item, "id"), category, RawValue(item, "familyId"), RawValue(item, "floorId"), RawValue(item, "zoneId"))
                     {
                         DrawingFingerprint = RawValue(item, "drawingFingerprint")
                     };
