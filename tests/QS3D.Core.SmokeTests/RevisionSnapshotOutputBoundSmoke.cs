@@ -78,7 +78,7 @@ namespace QS3D.Core.SmokeTests
             var element = new RevisionElementSnapshot
             {
                 ElementId = "E-1",
-                Category = ElementCategory.Wall.ToString(),
+                Category = ElementCategory.Beam.ToString(),
                 FamilyId = "F-1",
                 FloorId = "L-1",
                 ZoneId = "Z-1"
