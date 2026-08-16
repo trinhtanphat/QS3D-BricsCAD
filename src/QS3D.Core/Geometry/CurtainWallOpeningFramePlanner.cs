@@ -136,7 +136,9 @@ namespace QS3D.Core.Geometry
                 if (changed) interrupted++;
                 foreach (var piece in pieces)
                 {
-                    if (piece.Width <= Epsilon || piece.Height <= Epsilon) continue;
+                    // Subtract already suppresses tolerance slivers. Preserve an untouched
+                    // valid input frame even when one of its dimensions is below Epsilon.
+                    if (!(piece.Width > 0d) || !(piece.Height > 0d)) continue;
                     output.Add(new CurtainWallFramePiece
                     {
                         SourceFrameIndex = frameIndex,
