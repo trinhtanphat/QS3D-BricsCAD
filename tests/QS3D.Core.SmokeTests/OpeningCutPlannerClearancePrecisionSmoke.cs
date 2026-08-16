@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             RejectsCollapsedTopClearanceAtLargeElevation();
             RejectsCollapsedDimensionExpansionAtLargeMagnitude();
             RejectsSubnormalPositiveClearanceCollapse();
+            PreservesRepresentableLargeOpeningHeight();
             PreservesOrdinaryPositiveClearance();
             PreservesZeroClearance();
         }
@@ -64,6 +65,21 @@ namespace QS3D.Core.SmokeTests
             input.ClearanceM = double.Epsilon;
 
             Throws<OverflowException>(() => OpeningCutPlanner.Plan(input));
+        }
+
+        private static void PreservesRepresentableLargeOpeningHeight()
+        {
+            var input = OrdinaryInput();
+            input.HostHeightM = 10000000000000004d;
+            input.OpeningHeightM = 2d;
+            input.SillHeightM = 10000000000000000d;
+            input.ClearanceM = 0d;
+
+            var plan = OpeningCutPlanner.Plan(input);
+
+            Equal(10000000000000000d, plan.BaseElevationM);
+            Equal(10000000000000002d, plan.TopElevationM);
+            Equal(2d, plan.CutterHeightM);
         }
 
         private static void PreservesOrdinaryPositiveClearance()
