@@ -51,7 +51,10 @@ def validate_candidates(candidates):
 
 
 def discover():
-    candidates = [path for path in SCRIPTS.glob("preflight-*.py") if path.resolve() != SELF]
+    # Exclude only the aggregate runner's exact directory entry. Do not resolve
+    # candidates first: a symlink that targets SELF is still an unsafe gate and
+    # must reach validate_candidates() so discovery fails closed.
+    candidates = [path for path in SCRIPTS.glob("preflight-*.py") if str(path) != str(SELF)]
     return validate_candidates(candidates)
 
 

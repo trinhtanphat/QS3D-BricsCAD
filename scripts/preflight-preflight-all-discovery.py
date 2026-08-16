@@ -77,6 +77,30 @@ def discovery_regressions(runner):
         with mock.patch.object(runner.os, "lstat", return_value=regular_mode), \
              mock.patch.object(Path, "is_symlink", return_value=True):
             assert_raises_runtime(lambda: runner.validate_candidates([symlink_candidate]), "symlink")
+        symlink_candidate.unlink()
+
+        # A symlink-like candidate whose resolved target is the aggregate runner
+        # must not be silently excluded as SELF before validation. This models the
+        # bypass without requiring Windows symlink privileges in CI.
+        self_alias = scripts / "preflight-self-alias.py"
+        self_alias.write_text("", encoding="utf-8")
+        original_resolve = Path.resolve
+        original_is_symlink = Path.is_symlink
+
+        def synthetic_resolve(path, *args, **kwargs):
+            if path == self_alias:
+                return runner.SELF
+            return original_resolve(path, *args, **kwargs)
+
+        def synthetic_is_symlink(path):
+            if path == self_alias:
+                return True
+            return original_is_symlink(path)
+
+        with mock.patch.object(Path, "resolve", synthetic_resolve), \
+             mock.patch.object(Path, "is_symlink", synthetic_is_symlink):
+            assert_raises_runtime(runner.discover, "symlink")
+        self_alias.unlink()
 
         outside = root.parent / "preflight-outside.py"
         assert_raises_runtime(lambda: runner.validate_candidates([outside]), "outside repository root")
