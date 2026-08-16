@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 XAML = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "FloorLevelWindow.xaml"
 SETUP = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "FloorLevelWindow.BltProjectSetup.cs"
 ROUTING = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "FloorLevelWindow.BltButtonRouting.cs"
+REFERENCE_ROUTING = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "FloorLevelWindow.BltReferenceRouting.cs"
 
 
 def fail(message: str) -> None:
@@ -38,6 +39,7 @@ def main() -> int:
     xaml = read(XAML)
     setup = read(SETUP)
     routing = read(ROUTING)
+    reference_routing = read(REFERENCE_ROUTING)
 
     # Every visible Project Setup button in the supplied BLT3D reference must retain an
     # explicit production action rather than becoming decorative while visual parity evolves.
@@ -136,10 +138,25 @@ def main() -> int:
     ):
         require(setup, token, label)
 
-    # The visible reference checkbox remains radio-like even though BLT3D renders a CheckBox.
-    require(setup, 'checkBox.IsChecked != true', "reference click only promotes checked row")
+    # The visible reference control is a CheckBox only for BLT3D visual parity. Runtime behavior
+    # must remain radio-like: clicking the active row restores it immediately instead of leaving
+    # the live grid with zero references, and selecting another row remains exclusive.
+    require(xaml, 'IsChecked="{Binding IsReference, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"', "reference TwoWay binding")
+    require(setup, 'OnBltReferenceClick(object sender, RoutedEventArgs e)', "legacy reference handler remains available")
+    for token, label in (
+        ('EventManager.RegisterClassHandler(', "reference routed class handler"),
+        ('typeof(CheckBox)', "reference CheckBox route scope"),
+        ('ButtonBase.ClickEvent', "reference Click event route"),
+        ('e.Handled = true;', "legacy zero-reference route suppression"),
+        ('window.ApplyBltReferenceSelection(row, checkBox.IsChecked == true);', "reference routed selection"),
+        ('foreach (var item in _bltFloors)', "exclusive reference enumeration"),
+        ('item.IsReference = ReferenceEquals(item, row);', "exactly-one reference assignment"),
+        ('Tầng tham chiếu phải luôn có một tầng được chọn', "active reference cannot be unchecked"),
+    ):
+        require(reference_routing, token, label)
+    forbid(reference_routing, 'checkBox.IsChecked != true) return;', "reference route must restore an attempted uncheck")
 
-    print("PASS: BLT3D Project Setup preserves unapplied floor edits across sub-tabs and all actions remain production-backed.")
+    print("PASS: BLT3D Project Setup preserves edits, keeps reference-floor selection radio-like, and all actions remain production-backed.")
     return 0
 
 
