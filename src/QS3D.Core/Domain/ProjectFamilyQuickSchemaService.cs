@@ -170,7 +170,7 @@ namespace QS3D.Core.Domain
             var valueMeters = valueMm / MillimetersPerMeter;
             if (positive && valueMeters <= 0d)
                 throw new InvalidOperationException((key ?? "Giá trị") + " quá nhỏ để biểu diễn giá trị dương theo đơn vị nội bộ (m).");
-            return valueMeters;
+            return valueMm / MillimetersPerMeter;
         }
 
         public static string FormatInternalMetersAsMillimeters(string key, string internalMeters, CultureInfo culture)
