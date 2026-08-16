@@ -90,10 +90,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 var id = GetProperty(item, "Id") as string;
                 if (!string.IsNullOrWhiteSpace(id))
                 {
-                    if (CommandByButtonId.TryGetValue(id, out var command))
+                    if (CommandByButtonId.TryGetValue(id!, out var command))
                     {
                         SetProperty(item, "CommandParameter", command);
-                        found.Add(id);
+                        found.Add(id!);
                     }
                     else if (string.Equals(id, Prefix + "PILE_EMBED_MM", StringComparison.OrdinalIgnoreCase))
                     {
