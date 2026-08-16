@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Regression guard for the owner-reported HOME canvas covering the MÔ HÌNH BIM workspace.
 from pathlib import Path
 import sys
 
