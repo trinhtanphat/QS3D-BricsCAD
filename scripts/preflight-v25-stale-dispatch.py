@@ -65,15 +65,28 @@ prepare_tokens = (
     "function Assert-ReleaseBaseIsSafe",
     "main moved after dispatch with release-relevant changes",
     "$maxAttempts = 12",
+    "git reset --hard",
     "git checkout --detach $releaseBase",
     "sync-preview-release-version.ps1",
-    "git push origin 'HEAD:refs/heads/main'",
-    "CAS lost to non-release main drift",
-    "Prepared exact release source commit",
+    "preflight-runtime-product-version-identity.py",
+    "Release workspace HEAD must remain the protected-main source commit",
+    "$latestMain = Get-RemoteMain",
+    "main advanced through additional non-release paths while preparing the workspace",
+    "No commit, push, branch-protection bypass, or main mutation was performed by release preparation.",
+    "Write-Output $releaseBase",
 )
 for token in prepare_tokens:
     if token not in prepare:
         errors.append("release preparation drift contract missing token: " + token)
+
+for forbidden in (
+    "git push",
+    "git commit",
+    "git add",
+    "HEAD:refs/heads/main",
+):
+    if forbidden.lower() in prepare.lower():
+        errors.append("protected-main release preparation must not contain write primitive: " + forbidden)
 
 if workflow:
     drift_guard = workflow.find('if [[ "${current_main}" != "${source_sha}" ]]; then')
@@ -93,12 +106,17 @@ if workflow:
 if prepare:
     checkout_index = prepare.find("git checkout --detach $releaseBase")
     sync_index = prepare.find("sync-preview-release-version.ps1")
-    push_index = prepare.find("git push origin 'HEAD:refs/heads/main'")
-    retry_index = prepare.find("CAS lost to non-release main drift")
-    if min(checkout_index, sync_index, push_index, retry_index) < 0 or not (
-        checkout_index < sync_index < push_index < retry_index
+    head_guard_index = prepare.find("Release workspace HEAD must remain the protected-main source commit")
+    refetch_index = prepare.find("$latestMain = Get-RemoteMain")
+    retry_index = prepare.find("main advanced through additional non-release paths while preparing the workspace")
+    output_index = prepare.find("Write-Output $releaseBase")
+    indexes = (checkout_index, sync_index, head_guard_index, refetch_index, retry_index, output_index)
+    if min(indexes) < 0 or not (
+        checkout_index < sync_index < head_guard_index < refetch_index < retry_index < output_index
     ):
-        errors.append("release preparation must select safe base before sync, push by CAS, then retry inert drift")
+        errors.append(
+            "release preparation must select a safe base, sync workspace-only identity, preserve HEAD, recheck main drift, then output the exact source SHA"
+        )
     if "Start a fresh release run instead of overwriting concurrent work." in prepare:
         errors.append("legacy unconditional main-drift failure must not remain in release preparation")
 
@@ -111,5 +129,5 @@ if errors:
 
 print(
     "PASS: V25 automation preserves triggering source provenance, skips superseded release-relevant dispatches, "
-    "absorbs only non-release main drift, and retries release preparation without overwriting concurrent work."
+    "absorbs only non-release main drift, and retries workspace-only release preparation without writing protected main."
 )

@@ -75,7 +75,10 @@ jobs:
             'scripts/new-v25-update-manifest.ps1',
             'scripts/finalize-v25-signed-package.ps1',
             'scripts/sign-v25.ps1',
-            'scripts/verify-v25-signatures.ps1'
+            'scripts/verify-v25-signatures.ps1',
+            'scripts/sync-preview-release-version.ps1',
+            'scripts/prepare-v25-cloud-release.ps1',
+            'scripts/acquire-v25-compile-references.ps1'
           )) {
             $tokens = $null
             $parseErrors = $null
@@ -93,6 +96,11 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request' }}
     needs: preflight
     runs-on: windows-latest
+    env:
+      BRICSCAD_V25_MIRROR_MSI_URL: http://103.9.157.20/BricsCAD-V25.2.10-1-en_US%28x64%29.msi
+      BRICSCAD_V25_PUBLIC_MSI_URL: https://storage.googleapis.com/production-boa-storage/ftp/release/en_US/BricsCAD/Windows/25.2.10/BricsCAD-V25.2.10-1-en_US%28x64%29.msi
+      BRICSCAD_V25_PINNED_MSI_SHA256: F44DF674C0E165D96BF579E243B20A8301E3F395F929779F47BF39A7D9DACDE1
+      BRICSCAD_V25_MSI_URL: ${{ secrets.BRICSCAD_V25_MSI_URL }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -102,3 +110,43 @@ jobs:
         run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
       - name: Run deterministic smoke tests
         run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
+      - name: Restore BricsCAD V25 installer cache
+        id: bricscad-msi-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .cache/bricscad/BricsCAD-V25.2.10-x64.msi
+          key: bricscad-v25.2.10-x64-en-us-${{ env.BRICSCAD_V25_PINNED_MSI_SHA256 }}
+      - name: Acquire trusted BricsCAD V25 compile references
+        timeout-minutes: 30
+        shell: pwsh
+        run: |
+          $msi = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad\BricsCAD-V25.2.10-x64.msi'
+          $extract = Join-Path $env:RUNNER_TEMP 'BricsCAD-V25-managed-references'
+          $bricsDir = (& .\scripts\acquire-v25-compile-references.ps1 `
+            -MsiPath $msi `
+            -ExtractDir $extract `
+            -ExpectedSha256 $env:BRICSCAD_V25_PINNED_MSI_SHA256 `
+            -MirrorUrl $env:BRICSCAD_V25_MIRROR_MSI_URL `
+            -PublicUrl $env:BRICSCAD_V25_PUBLIC_MSI_URL `
+            -FallbackUrl $env:BRICSCAD_V25_MSI_URL | Select-Object -Last 1)
+          if ([string]::IsNullOrWhiteSpace([string]$bricsDir)) {
+            throw 'BricsCAD V25 compile-reference acquisition returned no runtime directory.'
+          }
+          "BRICSCAD_V25_DIR=$([string]$bricsDir)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Save BricsCAD V25 installer cache
+        if: ${{ steps.bricscad-msi-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: .cache/bricscad/BricsCAD-V25.2.10-x64.msi
+          key: bricscad-v25.2.10-x64-en-us-${{ env.BRICSCAD_V25_PINNED_MSI_SHA256 }}
+      - name: Validate BricsCAD V25 compile references
+        shell: pwsh
+        run: |
+          if (-not $env:BRICSCAD_V25_DIR) { throw 'BRICSCAD_V25_DIR was not resolved from the pinned installer.' }
+          foreach ($name in @('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $env:BRICSCAD_V25_DIR $name) -PathType Leaf)) {
+              throw "Required BricsCAD V25 compile reference is missing: $name"
+            }
+          }
+      - name: Build BricsCAD V25 plugin
+        run: dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64
