@@ -4,6 +4,32 @@ namespace QS3D.Core.Reporting
 {
     public static class QuantityReportMath
     {
+        public struct CompensatedSum
+        {
+            private double _sum;
+            private double _compensation;
+
+            public double Add(double value, string label)
+            {
+                Finite(value, label);
+                var next = _sum + value;
+                if (double.IsNaN(next) || double.IsInfinity(next))
+                    throw new OverflowException("Quantity report total overflow: " + label);
+
+                if (Math.Abs(_sum) >= Math.Abs(value))
+                    _compensation += (_sum - next) + value;
+                else
+                    _compensation += (value - next) + _sum;
+                Finite(_compensation, label);
+                _sum = next;
+
+                var total = _sum + _compensation;
+                if (double.IsNaN(total) || double.IsInfinity(total))
+                    throw new OverflowException("Quantity report total overflow: " + label);
+                return total == 0d ? 0d : total;
+            }
+        }
+
         public static double Finite(double value, string label)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new InvalidOperationException("Quantity report value is not finite: " + label);
