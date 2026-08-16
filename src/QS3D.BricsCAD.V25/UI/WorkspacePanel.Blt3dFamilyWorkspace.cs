@@ -96,8 +96,10 @@ namespace QS3D.BricsCAD.V25.UI
             var modelColumn = workspace.ColumnDefinitions[0];
             modelColumn.MinWidth = 150;
             modelColumn.MaxWidth = 220;
-            var preferredModelWidth = layout.ModelColumnWidth > 0 ? layout.ModelColumnWidth : 168;
-            modelColumn.Width = new GridLength(Math.Max(modelColumn.MinWidth, Math.Min(modelColumn.MaxWidth, preferredModelWidth)));
+            if (layout.ModelColumnWidth > 0)
+                modelColumn.Width = new GridLength(Math.Max(modelColumn.MinWidth, Math.Min(modelColumn.MaxWidth, layout.ModelColumnWidth)));
+            else
+                modelColumn.Width = new GridLength(168);
 
             var familySplitter = workspace.ColumnDefinitions[1];
             familySplitter.MinWidth = 0;
