@@ -85,7 +85,7 @@ namespace QS3D.Core.SmokeTests
 
         private static ProjectElement Element(string id, string value)
         {
-            var element = new ProjectElement(id, ElementCategory.Wall);
+            var element = new ProjectElement(id, ElementCategory.StructuralWall);
             element.SetProperty(PropertyKey, value);
             return element;
         }
