@@ -65,6 +65,8 @@ def main():
         'Path.Combine(root, "QS3D", "Updates", "Downloads", ToSafePathSegment(tag))',
         'if (IsWindowsReservedPathSegment(result)) result = "_" + result;',
         "private static bool IsWindowsReservedPathSegment(string value)",
+        "var dotIndex = value.IndexOf('.');",
+        "var stem = (dotIndex >= 0 ? value.Substring(0, dotIndex) : value).TrimEnd(' ');",
         'string.Equals(stem, "CON", StringComparison.OrdinalIgnoreCase)',
         'string.Equals(stem, "PRN", StringComparison.OrdinalIgnoreCase)',
         'string.Equals(stem, "AUX", StringComparison.OrdinalIgnoreCase)',
@@ -124,8 +126,9 @@ def main():
     print(
         "PASS: V25 preview fallback discovers the exact package/checksum pair, bounds cached and network packages before hashing, "
         "validates every bounded HTTPS GitHub redirect hop, verifies SHA-256 before retaining the ZIP, escapes Windows reserved "
-        "release-tag cache segments, stages under LocalApplicationData, exposes the Update Center directly from Start Center without "
-        "command dispatch, and only reveals unsigned preview packages while the existing signed-manifest scheduling path remains separate."
+        "release-tag cache segments including extension forms, stages under LocalApplicationData, exposes the Update Center directly "
+        "from Start Center without command dispatch, and only reveals unsigned preview packages while the existing signed-manifest "
+        "scheduling path remains separate."
     )
     return 0
 
