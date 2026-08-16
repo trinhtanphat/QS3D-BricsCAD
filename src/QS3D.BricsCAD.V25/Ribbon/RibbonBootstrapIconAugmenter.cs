@@ -5,15 +5,19 @@ using System.Reflection;
 namespace QS3D.BricsCAD.V25.Ribbon
 {
     /// <summary>
-    /// Adds deterministic QS3D-generated icons to every bootstrap-owned ribbon tab except
-    /// the separately-polished Home ribbon, without changing command IDs or panel grouping.
+    /// Fills missing images on the canonical QS3D Ribbon after every richer feature augmenter
+    /// has reconciled. Existing Home/Draw/custom images are preserved; only text-only command
+    /// buttons receive deterministic QS3D-generated fallback icons.
     /// </summary>
     internal static class RibbonBootstrapIconAugmenter
     {
         private const string AssemblyName = "BrxMgd";
+
         private static readonly string[] TargetTabIds =
         {
+            "QS3D_HOME",
             "QS3D_PROJECT",
+            "QS3D_AUTHOR",
             "QS3D_BIM",
             "QS3D_RECOGNIZE",
             "QS3D_DRAW",
@@ -21,9 +25,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
             "QS3D_MODELING",
             "QS3D_VIEW",
             "QS3D_QTY",
-            "QS3D_REV",
-            "QS3D_AUTHOR"
+            "QS3D_REV"
         };
+
         private static bool _initialized;
 
         public static bool TryInitialize()
@@ -63,7 +67,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             var panels = GetProperty(tab, "Panels");
             if (!(panels is IEnumerable panelEnumerable)) return false;
 
-            var updatedButtons = 0;
+            var commandButtons = 0;
             foreach (var panel in panelEnumerable)
             {
                 if (panel == null) continue;
@@ -79,42 +83,63 @@ namespace QS3D.BricsCAD.V25.Ribbon
                         || string.IsNullOrWhiteSpace(command))
                         continue;
 
-                    var icon = ResolveIcon(command);
+                    commandButtons++;
+                    if (HasCompleteVisibleIcon(item))
+                        continue;
+
+                    var text = (GetProperty(item, "Text") as string)
+                               ?? (GetProperty(item, "Name") as string)
+                               ?? string.Empty;
+                    var icon = ResolveIcon(command, text);
                     SetProperty(item, "ShowImage", true);
                     SetProperty(item, "Image", RibbonIconFactory.Create(icon, 16));
                     SetProperty(item, "LargeImage", RibbonIconFactory.Create(icon, 32));
-                    updatedButtons++;
                 }
             }
 
-            return updatedButtons > 0;
+            return commandButtons > 0;
         }
 
-        private static RibbonIconKind ResolveIcon(string command)
+        private static bool HasCompleteVisibleIcon(object item) =>
+            GetProperty(item, "ShowImage") is bool showImage
+            && showImage
+            && GetProperty(item, "Image") != null
+            && GetProperty(item, "LargeImage") != null;
+
+        private static RibbonIconKind ResolveIcon(string command, string text)
         {
-            var normalized = command.Trim().ToUpperInvariant();
+            var normalized = (command + " " + text).Trim().ToUpperInvariant();
 
             if (normalized.Contains("HEALTH")
                 || normalized.Contains("VALIDATE")
                 || normalized.Contains("CHECK"))
                 return RibbonIconKind.UpdateStatus;
 
-            if (normalized.Contains("EXPORT") || normalized.Contains("SAVE"))
+            if (normalized.Contains("SAVEAS") || normalized.Contains("SAVE AS") || normalized.Contains("EXPORT"))
                 return RibbonIconKind.SaveAs;
+
+            if (normalized.Contains("SAVE") || normalized.Contains("QSAVE") || normalized.Contains("LƯU"))
+                return RibbonIconKind.Save;
 
             if (normalized.Contains("IMPORT")
                 || normalized.Contains("RELOAD")
-                || normalized.Contains("OPEN"))
+                || normalized.Contains("OPEN")
+                || normalized.Contains("NẠP"))
                 return RibbonIconKind.OpenProject;
 
-            if (normalized.Contains("SETTINGS") || normalized.Contains("PROJECTTOOLS"))
+            if (normalized.Contains("SETTINGS")
+                || normalized.Contains("PROJECTTOOLS")
+                || normalized.Contains("CONFIG")
+                || normalized.Contains("LICENSE")
+                || normalized.Contains("HELP"))
                 return RibbonIconKind.Settings;
 
             if (normalized.Contains("REFRESH")
                 || normalized.Contains("REGEN")
                 || normalized.Contains("SYNC")
                 || normalized.Contains("BUILD")
-                || normalized.Contains("CUT"))
+                || normalized.Contains("CUT")
+                || normalized.Contains("UPDATE"))
                 return RibbonIconKind.Update;
 
             return RibbonIconKind.Objects;
