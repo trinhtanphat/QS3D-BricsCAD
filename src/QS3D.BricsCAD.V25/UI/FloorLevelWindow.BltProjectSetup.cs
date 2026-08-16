@@ -32,7 +32,7 @@ namespace QS3D.BricsCAD.V25.UI
         }
 
         private void OnBltProjectInfoClick(object sender, RoutedEventArgs e) => OpenProjectTools("Thông tin dự án");
-        private void OnBltProjectPropertiesClick(object sender, RoutedEventArgs e) => OpenProjectTools("Thuộc tính dự án");
+        private void OnBltProjectPropertiesClick(object sender, RoutedEventArgs e) => OpenDedicatedBltProjectProperties();
 
         private void OnBltFloorSettingsClick(object sender, RoutedEventArgs e)
         {
