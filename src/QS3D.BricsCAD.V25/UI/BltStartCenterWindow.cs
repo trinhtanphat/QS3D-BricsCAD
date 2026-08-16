@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -7,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using QS3D.BricsCAD.V25.Services;
+using QS3D.BricsCAD.V25.Updates;
 using Application = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.UI
@@ -151,6 +153,7 @@ namespace QS3D.BricsCAD.V25.UI
             Grid.SetColumn(saveAs, 2);
             saveRow.Children.Add(saveAs);
             actions.Children.Add(saveRow);
+            actions.Children.Add(CreateActionCard("↻", "Cập nhật", "Kiểm tra và tải bản cập nhật QS3D", () => UpdateCenterWindowHost.Show()));
 
             Grid.SetRow(actions, 3);
             grid.Children.Add(actions);
@@ -373,8 +376,12 @@ namespace QS3D.BricsCAD.V25.UI
                     if (ProjectContextCoordinator.TryGetReadOnly(document, out var project) && !string.IsNullOrWhiteSpace(project.ActiveFloorId))
                     {
                         var floor = project.FindFloor(project.ActiveFloorId);
-                        if (floor != null && !string.IsNullOrWhiteSpace(floor.Name))
-                            _floorText.Text = "Tầng " + floor.Name;
+                        if (floor != null)
+                        {
+                            if (!string.IsNullOrWhiteSpace(floor.Name))
+                                _floorText.Text = "Tầng " + floor.Name;
+                            _elevationText.Text = "•  Cao độ " + floor.ElevationM.ToString("0.000", CultureInfo.InvariantCulture) + " m";
+                        }
                     }
                 }
                 catch

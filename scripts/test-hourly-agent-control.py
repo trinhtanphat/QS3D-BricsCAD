@@ -33,15 +33,25 @@ class HourlyAgentControlContractTests(unittest.TestCase):
             "Allocate exactly five mutually exclusive packages: Task 0 to itself and Task 1-4 to the four workers.",
             self.policy,
         )
-        self.assertIn(
-            "perform a real high-priority audit/fix/integration package rather than stopping after dispatch",
-            self.policy,
-        )
+        publish = "Publish the complete Task 0-4 assignment in #1910 before any substantive Task 0 coding"
+        execute = "Only after the complete assignment is visible, execute Task 0 immediately as a real engineering package"
+        self.assertIn(publish, self.policy)
+        self.assertIn(execute, self.policy)
+        self.assertLess(self.policy.index(publish), self.policy.index(execute))
 
     def test_minimum_workload_is_per_task_not_combined_or_elapsed(self) -> None:
         self.assertIn("at least 60 minutes of substantive engineering work", self.policy)
         self.assertIn("The minimum is per task, not combined across the pool.", self.policy)
         self.assertIn("This is a workload-sizing rule, not an elapsed-time claim.", self.policy)
+        self.assertIn("Never pad a package with filler", self.policy)
+
+    def test_package_continuation_and_stale_replacement_are_normative(self) -> None:
+        self.assertIn(
+            "A lane does not stop merely because its first defect/sub-item is fixed, one test turns green, or one commit is pushed.",
+            self.policy,
+        )
+        self.assertIn("If main drift makes a worker package obsolete", self.policy)
+        self.assertIn("record the replacement with the new baseline in #1910", self.policy)
 
     def test_collision_and_protected_main_safety_are_normative(self) -> None:
         for contract in (
@@ -49,6 +59,7 @@ class HourlyAgentControlContractTests(unittest.TestCase):
             "A clean Git merge does not prove semantic non-overlap.",
             "Reassignment/takeover must be written to #1910 first.",
             "Never force-push or overwrite another lane's work.",
+            "Never push commits directly to `main`.",
         ):
             self.assertIn(contract, self.policy)
         self.assertIn("branch protection", self.policy)
