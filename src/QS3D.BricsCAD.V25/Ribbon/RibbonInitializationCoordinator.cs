@@ -53,6 +53,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             BltToolRibbonAugmenter.Reset();
             BltToolRibbonCommandBinder.Reset();
             BltRecognitionRibbonAugmenter.Reset();
+            BltRecognitionIconPolisher.Reset();
             BltViewRibbonAugmenter.Reset();
             BltBimRibbonMirrorAugmenter.Reset();
             BltModelingRibbonAugmenter.Reset();
@@ -153,6 +154,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
             // augmenters have supplied their own images. This preserves recognition and
             // owner-reference Draw/Modeling/View artwork while filling genuine gaps.
             ready = RibbonBootstrapIconAugmenter.TryInitialize() && ready;
+
+            // Apply the final clean-room BLT3D-familiar Recognition artwork after generic
+            // decoration so all eight compact buttons keep their intended semantic icon,
+            // Image/LargeImage pair and active-vs-disabled visual hierarchy.
+            ready = BltRecognitionIconPolisher.TryInitialize() && ready;
 
             // BricsCAD can invoke ICommand without forwarding RibbonButton.CommandParameter.
             // Wrap every QS3D ribbon handler after all augmenters have reconciled so visible
