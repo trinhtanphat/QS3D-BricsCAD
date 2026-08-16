@@ -206,26 +206,50 @@ namespace QS3D.Core.Measurement
             double grossValue,
             IReadOnlyList<MeasurementTraceAdjustment> adjustments)
         {
-            var scale = Math.Abs(grossValue);
-            for (var i = 0; i < adjustments.Count; i++)
-                scale = Math.Max(scale, adjustments[i].Amount);
-            if (scale == 0d) return 0d;
-
-            var sum = grossValue / scale;
-            var compensation = 0d;
+            var pending = new List<double>();
+            pending.Add(grossValue);
             for (var i = 0; i < adjustments.Count; i++)
             {
                 var adjustment = adjustments[i];
-                var value = adjustment.Amount / scale;
-                if (adjustment.Kind == MeasurementTraceAdjustmentKind.Deduction)
-                    value = -value;
-
-                var corrected = value - compensation;
-                var next = sum + corrected;
-                compensation = (next - sum) - corrected;
-                sum = next;
+                pending.Add(adjustment.Kind == MeasurementTraceAdjustmentKind.Deduction
+                    ? -adjustment.Amount
+                    : adjustment.Amount);
             }
-            return sum * scale;
+
+            var reconciled = 0d;
+            while (pending.Count > 0)
+            {
+                var scale = 0d;
+                for (var i = 0; i < pending.Count; i++)
+                    scale = Math.Max(scale, Math.Abs(pending[i]));
+                if (scale == 0d) break;
+
+                var residuals = new List<double>();
+                var sum = 0d;
+                var compensation = 0d;
+                for (var i = 0; i < pending.Count; i++)
+                {
+                    var value = pending[i];
+                    var scaled = value / scale;
+                    if (value != 0d && scaled == 0d)
+                    {
+                        residuals.Add(value);
+                        continue;
+                    }
+
+                    var corrected = scaled - compensation;
+                    var next = sum + corrected;
+                    compensation = (next - sum) - corrected;
+                    sum = next;
+                }
+
+                reconciled += sum * scale;
+                if (double.IsNaN(reconciled) || double.IsInfinity(reconciled))
+                    return reconciled;
+                pending = residuals;
+            }
+
+            return reconciled == 0d ? 0d : reconciled;
         }
 
         public string SemanticIdentity { get; }
