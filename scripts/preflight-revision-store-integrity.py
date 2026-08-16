@@ -30,7 +30,7 @@ if STORE.is_file():
         "property.Attribute(\"value\")?.Value ?? string.Empty",
         "ValidateCanonicalStringList(element.SourceHandles",
         "Duplicate revision source handle:",
-        "x.SourceHandles.OrderBy",
+        ".SourceHandles.OrderBy(h => h, StringComparer.OrdinalIgnoreCase)",
     ):
         if token not in text:
             errors.append("RevisionSnapshotStore missing persistence-integrity token: " + token)
