@@ -12,7 +12,7 @@ def require(text: str, needle: str) -> None:
 
 def forbid(text: str, needle: str) -> None:
     if needle in text:
-        raise SystemExit(f"FAIL: hourly agent control policy retained stale topology contract: {needle}")
+        raise SystemExit(f"FAIL: hourly agent control policy retained stale or malformed contract: {needle}")
 
 
 def require_order(text: str, earlier: str, later: str) -> None:
@@ -83,6 +83,7 @@ def main() -> int:
         "one controller and five worker schedules",
         "`QS3D-WORKER-05`",
         "six assignments (controller + five workers)",
+        "when evidence supports it):",
     ):
         forbid(text, stale)
 
