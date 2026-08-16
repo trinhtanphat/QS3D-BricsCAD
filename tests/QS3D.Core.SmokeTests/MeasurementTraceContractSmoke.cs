@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             SnapshotIsolation();
             DuplicateEvidenceFailsClosed();
             NoneRoundingRequiresReconciliation();
+            BalancedFiniteAdjustmentsDoNotOverflow();
             OptionalMetadataNullability();
             AdjustmentRuleIdentity();
             OptionalRulePair();
@@ -227,6 +228,33 @@ namespace QS3D.Core.SmokeTests
                 "m2",
                 "nearest-cent");
             Equal(12d, explicitRounding.NetValue, "Non-none rounding policies remain outside this reconciliation contract.");
+        }
+
+        private static void BalancedFiniteAdjustmentsDoNotOverflow()
+        {
+            var deductions = new[]
+            {
+                new MeasurementTraceAdjustment(MeasurementTraceAdjustmentKind.Deduction, double.MaxValue, "m2", "large-deduction-a", "SRC-D1"),
+                new MeasurementTraceAdjustment(MeasurementTraceAdjustmentKind.Deduction, double.MaxValue, "m2", "large-deduction-b", "SRC-D2")
+            };
+            var additions = new[]
+            {
+                new MeasurementTraceAdjustment(MeasurementTraceAdjustmentKind.Addition, double.MaxValue, "m2", "large-addition-a", "SRC-A1"),
+                new MeasurementTraceAdjustment(MeasurementTraceAdjustmentKind.Addition, double.MaxValue, "m2", "large-addition-b", "SRC-A2")
+            };
+
+            var trace = new MeasurementTrace(
+                "SEM-WALL-MAX",
+                "SRC-WALL",
+                "NetAreaM2",
+                Array.Empty<MeasurementTraceFact>(),
+                0d,
+                new[] { additions[0], deductions[0], additions[1], deductions[1] },
+                0d,
+                "m2",
+                "none");
+
+            Equal(0d, trace.NetValue, "Balanced finite adjustments with a representable net must not fail on intermediate overflow.");
         }
 
         private static void OptionalMetadataNullability()
