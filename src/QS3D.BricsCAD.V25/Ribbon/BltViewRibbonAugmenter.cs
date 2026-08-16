@@ -100,7 +100,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private static void DecorateButton(object button, ButtonSpec spec)
         {
-            // Keep CommandParameter/CommandHandler exactly as RibbonBootstrapper wired them.
+            // Preserve the bootstrap command routing; this method changes presentation only.
             SetProperty(button, "Name", spec.Text);
             SetProperty(button, "Text", spec.Text);
             SetProperty(button, "ShowText", true);
