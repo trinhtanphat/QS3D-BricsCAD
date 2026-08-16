@@ -267,7 +267,9 @@ namespace QS3D.Core.Cost
             TradeCode = tradeCode;
             ItemCount = itemCount;
             TotalCost = totalCost;
-            CostPerCfaM2 = cfaM2 == 0m ? (decimal?)null : totalCost / cfaM2;
+            CostPerCfaM2 = cfaM2 == 0m
+                ? (decimal?)null
+                : CostDecimalMath.DividePreservingNonZero(totalCost, cfaM2, "trade cost per CFA");
         }
 
         public string TradeCode { get; }
