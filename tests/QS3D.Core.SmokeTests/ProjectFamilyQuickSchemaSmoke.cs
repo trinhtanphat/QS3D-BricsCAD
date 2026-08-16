@@ -50,6 +50,11 @@ namespace QS3D.Core.SmokeTests
             Near(-0.05d, ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters("Offset đáy", "-50", vi, false), 1e-12, "Negative bottom offset conversion mismatch.");
             Equal("300", ProjectFamilyQuickSchemaService.FormatInternalMetersAsMillimeters("WidthM", "0.300", vi), "0.300 m must display as 300 mm.");
             Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters("Bề dày", "0", vi, true));
+            Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters(
+                "Bề dày",
+                double.Epsilon.ToString("R", CultureInfo.InvariantCulture),
+                vi,
+                true));
         }
 
         private static void SuggestedNamesMatchQsConventions()
