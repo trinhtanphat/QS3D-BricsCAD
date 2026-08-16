@@ -48,6 +48,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
             HomeTabActivationCoordinator.Stop();
             BltHomeRibbonAugmenter.Reset();
             BltDrawRibbonAugmenter.Reset();
+            BltBimRibbonMirrorAugmenter.Reset();
+            BltTopbarTabContract.Reset();
             RibbonBootstrapIconAugmenter.Reset();
             Qs3dRibbonTabGroupCoordinator.Reset();
         }
@@ -119,6 +121,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
             ready = BltHomeRibbonAugmenter.TryInitialize() && ready;
             ready = BltDrawRibbonFailSafe.TryInitialize() && ready;
 
+            // The BLT owner reference shows the same qualified Vẽ/Công cụ/IFC surface under
+            // MÔ HÌNH BIM. Mirror the already-wired Draw panels so behavior, icons and sizing
+            // remain identical while each tab keeps independent Ribbon objects.
+            ready = BltBimRibbonMirrorAugmenter.TryInitialize() && ready;
+
             // The baseline Project/Authoring tabs are still text-only in RibbonBootstrapper.
             // Decorate them after feature augmenters have finished so both baseline and added
             // buttons receive QS3D-generated icons without changing their command routing.
@@ -129,8 +136,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
             // buttons keep their captured command for both CanExecute and Execute.
             ready = RibbonCommandParameterFallback.TryInitialize() && ready;
 
-            // Run ownership/layout last: native BricsCAD tabs keep their objects and relative
-            // order, while every QS3D_* tab becomes one contiguous group on the same tab row.
+            // Retire obsolete QS3D-owned tabs (notably the old TẠO MỚI authoring tab) only
+            // after icon/command reconciliation, then let the existing group coordinator enforce
+            // the exact ten-tab owner-reference order while preserving native BricsCAD tabs.
+            ready = BltTopbarTabContract.TryInitialize() && ready;
             ready = Qs3dRibbonTabGroupCoordinator.TryInitialize() && ready;
             ready = HomeTabActivationCoordinator.TryInitialize() && ready;
             return ready;
