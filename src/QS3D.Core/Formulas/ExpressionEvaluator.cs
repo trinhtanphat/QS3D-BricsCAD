@@ -104,26 +104,42 @@ namespace QS3D.Core.Formulas
             private double ParseExpression(int depth)
             {
                 GuardDepth(depth);
-                var value = ParseTerm(depth);
+                var sum = ParseTerm(depth);
+                var compensation = 0d;
                 while (true)
                 {
                     SkipWhiteSpace();
                     if (Match('+'))
                     {
                         var right = ParseTerm(depth);
-                        value = _evaluate
-                            ? EnsureFinite(value + right, "Addition produced a non-finite result.")
-                            : 0d;
+                        if (_evaluate) AddCompensated(ref sum, ref compensation, right, "Addition");
+                        else sum = 0d;
                     }
                     else if (Match('-'))
                     {
                         var right = ParseTerm(depth);
-                        value = _evaluate
-                            ? EnsureFinite(value - right, "Subtraction produced a non-finite result.")
-                            : 0d;
+                        if (_evaluate) AddCompensated(ref sum, ref compensation, -right, "Subtraction");
+                        else sum = 0d;
                     }
-                    else return value;
+                    else
+                    {
+                        return _evaluate
+                            ? EnsureFinite(sum + compensation, "Addition/subtraction produced a non-finite result.")
+                            : sum;
+                    }
                 }
+            }
+
+            private void AddCompensated(ref double sum, ref double compensation, double contribution, string operation)
+            {
+                var next = EnsureFinite(sum + contribution, operation + " produced a non-finite result.");
+                var correction = Math.Abs(sum) >= Math.Abs(contribution)
+                    ? (sum - next) + contribution
+                    : (contribution - next) + sum;
+                compensation = EnsureFinite(
+                    compensation + correction,
+                    operation + " compensation produced a non-finite result.");
+                sum = next;
             }
 
             private double ParseTerm(int depth)
