@@ -14,6 +14,7 @@ REQUIRED = (
     ".github/ISSUE_TEMPLATE/config.yml",
     "CONTRIBUTING.md",
     "SECURITY.md",
+    "CI_POLICY.md",
     "docs/MAIN-WRITE-AUTHORIZATION.md",
     ".github/workflows/ci.yml",
 )
@@ -142,6 +143,25 @@ def main() -> int:
         failures,
     )
 
+    ci_policy = read("CI_POLICY.md")
+    require(
+        ci_policy,
+        (
+            "### Narrow maintenance-bot exception",
+            "GitHub Dependabot is the only standing exception to branch-CI-before-PR",
+            "does **not** authorize Dependabot to merge",
+            "Repository-wide blind auto-merge remains intentionally disabled",
+            "repository-metadata tier",
+            "policy/source-guard tier",
+            "full build tier",
+            "every** pull request targeting `main`",
+            "samples/generated/**",
+            "persist-credentials: false",
+        ),
+        "CI_POLICY.md professionalism contract",
+        failures,
+    )
+
     ci = read(".github/workflows/ci.yml")
     require(
         ci,
@@ -184,7 +204,7 @@ def main() -> int:
     print(" - contributor, PR and issue surfaces require auditable task/evidence metadata")
     print(" - security reporting avoids public disclosure of sensitive material")
     print(" - critical governance/release surfaces have explicit ownership")
-    print(" - dependency maintenance is bounded and low-noise")
+    print(" - dependency maintenance is bounded and its bot exception cannot grant merge/release authority")
     print(" - every PR emits stable required contexts; policy-only candidates retain guards while non-build changes avoid redundant Core/V25 builds")
     print(" - synthetic generated fixtures are treated as build-relevant validation inputs")
     print(" - no workflow implements autonomous PR-to-main merging")
