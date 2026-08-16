@@ -6,8 +6,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
 {
     /// <summary>
     /// Fills missing images on the canonical QS3D Ribbon after every richer feature augmenter
-    /// has reconciled. Existing Home/Draw/custom images are preserved; only text-only command
-    /// buttons receive deterministic QS3D-generated fallback icons.
+    /// has reconciled. Existing Home/Draw/custom images are preserved; text-only buttons get
+    /// deterministic semantic QS3D icons based on their command intent.
     /// </summary>
     internal static class RibbonBootstrapIconAugmenter
     {
@@ -77,16 +77,22 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 if (!(items is IEnumerable itemEnumerable)) continue;
 
                 foreach (var item in itemEnumerable)
+                    DecorateItem(item, ref commandButtons);
+            }
+
+            return commandButtons > 0;
+        }
+
+        private static void DecorateItem(object? item, ref int commandButtons)
+        {
+            if (item == null) return;
+
+            if (GetProperty(item, "CommandParameter") is string command
+                && !string.IsNullOrWhiteSpace(command))
+            {
+                commandButtons++;
+                if (!HasCompleteVisibleIcon(item))
                 {
-                    if (item == null) continue;
-                    if (!(GetProperty(item, "CommandParameter") is string command)
-                        || string.IsNullOrWhiteSpace(command))
-                        continue;
-
-                    commandButtons++;
-                    if (HasCompleteVisibleIcon(item))
-                        continue;
-
                     var text = (GetProperty(item, "Text") as string)
                                ?? (GetProperty(item, "Name") as string)
                                ?? string.Empty;
@@ -97,7 +103,13 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 }
             }
 
-            return commandButtons > 0;
+            // Rich ribbon augmenters may wrap buttons in row/stack containers. Recurse so
+            // the same icon policy also covers their fallback layouts without replacing
+            // images already supplied by those augmenters.
+            var nested = GetProperty(item, "Items");
+            if (!(nested is IEnumerable nestedEnumerable)) return;
+            foreach (var child in nestedEnumerable)
+                DecorateItem(child, ref commandButtons);
         }
 
         private static bool HasCompleteVisibleIcon(object item) =>
@@ -110,39 +122,101 @@ namespace QS3D.BricsCAD.V25.Ribbon
         {
             var normalized = (command + " " + text).Trim().ToUpperInvariant();
 
-            if (normalized.Contains("HEALTH")
-                || normalized.Contains("VALIDATE")
-                || normalized.Contains("CHECK"))
+            // Recognition / inspection.
+            if (normalized.Contains("RECOGNIZE_AUTO") || normalized.Contains("AUTO CHẮC"))
+                return RibbonIconKind.RecognitionAuto;
+            if (normalized.Contains("RECOGNIZE_INSPECT") || normalized.Contains("INSPECT"))
+                return RibbonIconKind.Inspect;
+            if (normalized.Contains("RECOGNIZE") || normalized.Contains("NHẬN DẠNG"))
+                return RibbonIconKind.Recognition;
+            if (normalized.Contains("MEP_TAKEOFF") || normalized.Contains("TAKEOFF"))
+                return RibbonIconKind.Takeoff;
+
+            // Draw / edit / measure.
+            if (ContainsAny(normalized, "_POINT", "_LINE", "_ARC", "_RECTANGLE", "DRAW"))
+                return RibbonIconKind.Draw;
+            if (ContainsAny(normalized, "_MOVE", "_ROTATE", "_MIRROR", "_COPY", "_BREAK", "_JOIN"))
+                return RibbonIconKind.Transform;
+            if (normalized.Contains("MEASURE"))
+                return RibbonIconKind.Measure;
+
+            // Tool / navigation semantics.
+            if (normalized.Contains("LOCATE"))
+                return RibbonIconKind.Locate;
+            if (normalized.Contains("HIGHLIGHT"))
+                return RibbonIconKind.Highlight;
+            if (normalized.Contains("FOCUS"))
+                return RibbonIconKind.Focus;
+            if (normalized.Contains("ISOLATE"))
+                return RibbonIconKind.Isolate;
+            if (normalized.Contains("RESTORE"))
+                return RibbonIconKind.Restore;
+            if (normalized.Contains("ORBIT"))
+                return RibbonIconKind.Orbit;
+            if (ContainsAny(normalized, "VIEW3D", "VIEW_TOP", "3D VIEW", "TOP VIEW"))
+                return RibbonIconKind.View3d;
+            if (normalized.Contains("WORKSPACE"))
+                return RibbonIconKind.Workspace;
+            if (normalized.Contains("SECTION"))
+                return RibbonIconKind.Section;
+
+            // BIM authoring / modeling.
+            if (ContainsAny(normalized, "BUILD3D", "BUILD 3D", "SINH MÔ HÌNH"))
+                return RibbonIconKind.Model3d;
+            if (ContainsAny(normalized, "GLASS_WALL", "_WALL", "TƯỜNG", "VÁCH"))
+                return RibbonIconKind.Wall;
+            if (ContainsAny(normalized, "CURTAIN", "PIER", "JUNCTION", "BEAM", "SLAB", "COLUMN", "FOUNDATION", "KẾT CẤU"))
+                return RibbonIconKind.Structure;
+            if (ContainsAny(normalized, "AUTO_HOST", "CUT_OPENINGS", "OPENING", "LỖ MỞ"))
+                return RibbonIconKind.Opening;
+            if (normalized.Contains("DOOR") || normalized.Contains("CỬA"))
+                return RibbonIconKind.Door;
+            if (normalized.Contains("ROOM") || normalized.Contains("PHÒNG"))
+                return RibbonIconKind.Room;
+
+            // Quantity / schedules / data exchange.
+            if (ContainsAny(normalized, "REBAR", "BBS", "MESH"))
+                return RibbonIconKind.Rebar;
+            if (normalized.Contains("SCHEDULE"))
+                return RibbonIconKind.Schedule;
+            if (ContainsAny(normalized, "EXCEL", "XLSX"))
+                return RibbonIconKind.Excel;
+            if (ContainsAny(normalized, "_BQ", "QUANTITY", "QTY", "BÓC TÁCH"))
+                return RibbonIconKind.Quantity;
+
+            // Review / release.
+            if (normalized.Contains("BASELINE"))
+                return RibbonIconKind.Compare;
+            if (normalized.Contains("DIFF"))
+                return RibbonIconKind.Diff;
+            if (normalized.Contains("RELEASE"))
+                return RibbonIconKind.Release;
+            if (ContainsAny(normalized, "HEALTH", "VALIDATE", "CHECK"))
                 return RibbonIconKind.UpdateStatus;
 
+            // Common shell commands.
             if (normalized.Contains("SAVEAS") || normalized.Contains("SAVE AS") || normalized.Contains("EXPORT"))
                 return RibbonIconKind.SaveAs;
-
             if (normalized.Contains("SAVE") || normalized.Contains("QSAVE") || normalized.Contains("LƯU"))
                 return RibbonIconKind.Save;
-
-            if (normalized.Contains("IMPORT")
-                || normalized.Contains("RELOAD")
-                || normalized.Contains("OPEN")
-                || normalized.Contains("NẠP"))
+            if (ContainsAny(normalized, "IMPORT", "RELOAD", "OPEN", "NẠP"))
                 return RibbonIconKind.OpenProject;
-
-            if (normalized.Contains("SETTINGS")
-                || normalized.Contains("PROJECTTOOLS")
-                || normalized.Contains("CONFIG")
-                || normalized.Contains("LICENSE")
-                || normalized.Contains("HELP"))
+            if (ContainsAny(normalized, "SETTINGS", "PROJECTTOOLS", "CONFIG", "LICENSE", "HELP"))
                 return RibbonIconKind.Settings;
-
-            if (normalized.Contains("REFRESH")
-                || normalized.Contains("REGEN")
-                || normalized.Contains("SYNC")
-                || normalized.Contains("BUILD")
-                || normalized.Contains("CUT")
-                || normalized.Contains("UPDATE"))
+            if (ContainsAny(normalized, "REFRESH", "REGEN", "SYNC", "UPDATE"))
                 return RibbonIconKind.Update;
 
             return RibbonIconKind.Objects;
+        }
+
+        private static bool ContainsAny(string value, params string[] candidates)
+        {
+            foreach (var candidate in candidates)
+            {
+                if (value.Contains(candidate))
+                    return true;
+            }
+            return false;
         }
 
         private static object? FindById(object collection, string id)
