@@ -110,6 +110,7 @@ jobs:
       - name: PR branch CI admission gate
         if: ${{ github.event_name == 'pull_request' && github.event.action == 'opened' && github.actor != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository && steps.scope.outputs.source_validation == 'true' }}
         env:
+          QS3D_PR_BRANCH_CI_RUNTIME: "1"
           GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/preflight-pr-branch-ci-gate.py
       - name: Generic source guard
