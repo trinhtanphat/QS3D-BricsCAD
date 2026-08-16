@@ -8,6 +8,13 @@ WORKFLOW = ROOT / ".github/workflows/release-v25-cloud.yml"
 DOC = ROOT / "docs/CLOUD-V25-PREVIEW-RELEASE.md"
 PINNED_SHA256 = "F44DF674C0E165D96BF579E243B20A8301E3F395F929779F47BF39A7D9DACDE1"
 PINNED_PUBLIC_URL = "https://storage.googleapis.com/production-boa-storage/ftp/release/en_US/BricsCAD/Windows/25.2.10/BricsCAD-V25.2.10-1-en_US%28x64%29.msi"
+CHECKOUT_V7 = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
+SETUP_PYTHON_V7 = "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7"
+SETUP_DOTNET_V6 = "actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6"
+CACHE_V6 = "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0"
+CACHE_RESTORE_V6 = "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0"
+CACHE_SAVE_V6 = "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0"
+UPLOAD_ARTIFACT_V7 = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7"
 errors = []
 
 
@@ -60,19 +67,20 @@ else:
     required = (
         "workflow_dispatch:",
         "github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE'",
-        "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-        "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
-        "actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68",
-        "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
-        "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
-        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
-        "BRICSCAD_V25_MIRROR_MSI_URL:",
-        "BRICSCAD_V25_PUBLIC_MSI_URL:",
+        CHECKOUT_V7,
+        SETUP_PYTHON_V7,
+        SETUP_DOTNET_V6,
+        CACHE_V6,
+        CACHE_RESTORE_V6,
+        CACHE_SAVE_V6,
+        UPLOAD_ARTIFACT_V7,
+        "BRICSCAD_V25_MIRROR_MSI_URL: " + PINNED_PUBLIC_URL,
+        "BRICSCAD_V25_PUBLIC_MSI_URL: " + PINNED_PUBLIC_URL,
         "BRICSCAD_V25_PINNED_MSI_SHA256: " + PINNED_SHA256,
         "BRICSCAD_V25_MSI_SHA256: ${{ vars.BRICSCAD_V25_MSI_SHA256 }}",
         "bricscad-v25.2.10-x64-en-us-${{ env.BRICSCAD_V25_PINNED_MSI_SHA256 }}",
-        "Name = 'pinned-user-mirror'",
-        "Name = 'pinned-public'",
+        "Name = 'pinned-official-primary'",
+        "Name = 'pinned-official-secondary'",
         "Invoke-WebRequest -Uri $candidate.Url -OutFile $msi -MaximumRedirection 10 -TimeoutSec 1200 -UseBasicParsing",
         "$actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash",
         "[string]::Equals($actual, $env:BRICSCAD_V25_PINNED_MSI_SHA256, [StringComparison]::OrdinalIgnoreCase)",
@@ -103,10 +111,12 @@ else:
     )
     for token in required:
         if token not in text:
-            errors.append("cloud V25 workflow missing cache/pinning/signature/version/URI/manual-release token: " + token)
+            errors.append("cloud V25 workflow missing immutable-action/cache/pinning/signature/version/URI/manual-release token: " + token)
 
     if ".StartsWith($env:BRICSCAD_V25_PUBLIC_MSI_URL" in text:
         errors.append("cloud V25 fallback URI must not use string-prefix matching for pinned-object identity")
+    if "http://" in text.lower():
+        errors.append("cloud V25 release workflow must not contain plaintext HTTP transport")
 
     restore_index = text.find("- name: Restore BricsCAD V25 installer cache")
     acquire_index = text.find("- name: Acquire BricsCAD V25 compile references")
@@ -116,12 +126,12 @@ else:
         errors.append("BricsCAD installer cache restore must precede acquisition and verified cache save must precede reference validation")
 
     candidates_index = text.find("$candidates = @(", acquire_index if acquire_index >= 0 else 0)
-    mirror_index = text.find("Name = 'pinned-user-mirror'", candidates_index if candidates_index >= 0 else 0)
-    public_index = text.find("Name = 'pinned-public'", candidates_index if candidates_index >= 0 else 0)
-    if min(candidates_index, mirror_index, public_index) < 0:
-        errors.append("cloud V25 workflow must define approved mirror and pinned HTTPS public candidates")
-    elif not candidates_index < mirror_index < public_index:
-        errors.append("approved mirror must be attempted before the pinned HTTPS public candidate after cache miss")
+    primary_index = text.find("Name = 'pinned-official-primary'", candidates_index if candidates_index >= 0 else 0)
+    secondary_index = text.find("Name = 'pinned-official-secondary'", candidates_index if candidates_index >= 0 else 0)
+    if min(candidates_index, primary_index, secondary_index) < 0:
+        errors.append("cloud V25 workflow must define pinned official HTTPS primary and secondary candidates")
+    elif not candidates_index < primary_index < secondary_index:
+        errors.append("pinned official HTTPS primary must be attempted before the secondary candidate after cache miss")
 
     uri_parse_index = text.find("[Uri]::TryCreate($env:BRICSCAD_V25_MSI_URL")
     uri_path_index = text.find("$fallbackUri.AbsolutePath", uri_parse_index if uri_parse_index >= 0 else 0)
@@ -157,15 +167,16 @@ else:
         PINNED_SHA256,
         "Actions cache",
         "cache hit is re-verified",
-        "approved pinned HTTP mirror",
+        "pinned official HTTPS primary",
         "valid Bricsys Authenticode signer",
         "MSI ProductVersion must identify V25.2.10",
         "download timeout",
         "administrative extraction timeout",
         "only its query string may differ",
+        "immutable full commit SHA",
     ):
         if token not in doc:
-            errors.append("cloud V25 release documentation missing integrity/cache/URI statement: " + token)
+            errors.append("cloud V25 release documentation missing integrity/cache/HTTPS/action-pin statement: " + token)
 
 print("QS3D cloud V25 preview release preflight")
 if errors:
@@ -174,4 +185,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: cloud V25 preview remains manual-only; secret fallback is bound to the exact pinned official MSI object except query, the V25.2.10 digest is pinned, cache hits are re-verified, Bricsys Authenticode + MSI identity checks precede bounded extraction, and download/extraction waits are finite.")
+print("PASS: cloud V25 preview remains manual-only; GitHub Actions use immutable commits, installer transport is HTTPS-only, secret fallback is bound to the exact pinned official MSI object except query, the V25.2.10 digest is pinned, cache hits are re-verified, Bricsys Authenticode + MSI identity checks precede bounded extraction, and download/extraction waits are finite.")

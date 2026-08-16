@@ -8,6 +8,10 @@ RELEASE_WORKFLOW = ROOT / ".github/workflows/release-v25-cloud.yml"
 SHARED_CI = ROOT / ".github/workflows/ci.yml"
 ACQUIRE = ROOT / "scripts/acquire-v25-compile-references.ps1"
 
+CHECKOUT_V7 = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
+SETUP_DOTNET_V6 = "actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6"
+CACHE_V6 = "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0"
+
 
 def require(text: str, tokens: tuple[str, ...], label: str, failures: list[str]) -> None:
     for token in tokens:
@@ -67,7 +71,9 @@ def main() -> int:
             "  core:",
             "needs: preflight",
             "Run deterministic smoke tests",
-            "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+            CHECKOUT_V7,
+            SETUP_DOTNET_V6,
+            CACHE_V6,
             "acquire-v25-compile-references.ps1",
             "BRICSCAD_V25_PINNED_MSI_SHA256",
             "Validate BricsCAD V25 compile references",
@@ -108,7 +114,7 @@ def main() -> int:
     print("PASS: V25 preview release and pre-merge compile contracts are protected-main safe.")
     print(" - preview version synchronization is workspace-only")
     print(" - source HEAD/provenance remains an exact protected-main commit")
-    print(" - canonical core check also compiles V25 against pinned, verified managed references")
+    print(" - canonical core check compiles V25 with immutable Action refs and pinned, verified managed references")
     return 0
 
 
