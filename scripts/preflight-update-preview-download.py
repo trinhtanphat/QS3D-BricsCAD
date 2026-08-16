@@ -22,10 +22,12 @@ def main():
     client_rel = "src/QS3D.BricsCAD.V25/Updates/GitHubReleaseClient.cs"
     downloader_rel = "src/QS3D.BricsCAD.V25/Updates/VerifiedReleaseDownloader.cs"
     window_rel = "src/QS3D.BricsCAD.V25/Updates/UpdateCenterWindow.cs"
+    start_rel = "src/QS3D.BricsCAD.V25/UI/BltStartCenterWindow.cs"
 
     client = read(client_rel)
     downloader = read(downloader_rel)
     window = read(window_rel)
+    start = read(start_rel)
 
     for needle in (
         'internal const string PackageAssetName = "QS3D-BricsCAD-V25.zip";',
@@ -94,10 +96,22 @@ def main():
     ):
         forbid(window, needle, window_rel)
 
+    for needle in (
+        "using QS3D.BricsCAD.V25.Updates;",
+        'CreateActionCard("↻", "Cập nhật", "Kiểm tra và tải bản cập nhật QS3D", () => UpdateCenterWindowHost.Show())',
+    ):
+        require(start, needle, start_rel)
+    for stale in (
+        'SendStringToExecute("QS3DUPDATE',
+        'SendStringToExecute("QSUPDATE',
+    ):
+        forbid(start, stale, start_rel)
+
     print(
         "PASS: V25 preview fallback discovers the exact package/checksum pair, bounds cached and network packages before hashing, "
         "validates every bounded HTTPS GitHub redirect hop, verifies SHA-256 before retaining the ZIP, stages under LocalApplicationData, "
-        "and only reveals unsigned preview packages while the existing signed-manifest scheduling path remains separate."
+        "exposes the Update Center directly from Start Center without command dispatch, and only reveals unsigned preview packages while "
+        "the existing signed-manifest scheduling path remains separate."
     )
     return 0
 
