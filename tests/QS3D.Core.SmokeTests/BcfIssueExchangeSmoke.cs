@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using System.Xml.Linq;
 using QS3D.Core.Export;
 
 namespace QS3D.Core.SmokeTests
@@ -20,6 +22,7 @@ namespace QS3D.Core.SmokeTests
             BuildingSmartIdentityAndCameraShapesFailClosed();
             DanglingAndDuplicateReferencesFailClosed();
             MalformedPayloadFailsClosed();
+            AmbiguousXmlStructureFailsClosed();
         }
 
         private static void SerializationIsDeterministicAcrossInputOrdering()
@@ -96,6 +99,50 @@ namespace QS3D.Core.SmokeTests
         {
             ThrowsInvalidData(() => BcfIssueExchangeSerializer.Deserialize("<BcfIssueExchange schemaVersion=\"2.1\"></BcfIssueExchange>"), "Unsupported BCF schema versions must fail closed.");
             ThrowsInvalidData(() => BcfIssueExchangeSerializer.Deserialize("<broken"), "Malformed BCF XML must fail closed.");
+        }
+
+        private static void AmbiguousXmlStructureFailsClosed()
+        {
+            var valid = BcfIssueExchangeSerializer.Serialize(BuildFixture(false));
+            var title = "<Title>Canonical ordering</Title>";
+
+            ThrowsInvalidData(
+                () => BcfIssueExchangeSerializer.Deserialize(valid.Replace(title, title + title)),
+                "Duplicate BCF singleton elements must fail closed.");
+            ThrowsInvalidData(
+                () => BcfIssueExchangeSerializer.Deserialize(valid.Replace(title, "<Title data-extra=\"1\">Canonical ordering</Title>")),
+                "Attributed BCF scalar leaves must fail closed.");
+            ThrowsInvalidData(
+                () => BcfIssueExchangeSerializer.Deserialize(valid.Replace(title, "<Title><Injected>Canonical ordering</Injected></Title>")),
+                "Nested BCF scalar leaves must fail closed.");
+            ThrowsInvalidData(
+                () => BcfIssueExchangeSerializer.Deserialize(valid.Replace("<Viewpoints>", "<Unknown /><Viewpoints>")),
+                "Unknown BCF elements must fail closed.");
+            ThrowsInvalidData(
+                () => BcfIssueExchangeSerializer.Deserialize(valid.Replace("schemaVersion=\"3.0\"", "schemaVersion=\"3.0\" data-extra=\"1\"")),
+                "Unknown BCF attributes must fail closed.");
+            ThrowsInvalidData(
+                () => BcfIssueExchangeSerializer.Deserialize(valid.Replace("<BcfIssueExchange ", "<BcfIssueExchange xmlns=\"urn:unexpected\" ")),
+                "Namespaced BCF exchange payloads must fail closed.");
+
+            var mixedContainer = XDocument.Parse(valid);
+            mixedContainer.Root!.Elements("Topic").First().Element("Viewpoints")!.AddFirst(new XText("unexpected-text"));
+            ThrowsInvalidData(
+                () => BcfIssueExchangeSerializer.Deserialize(mixedContainer.ToString(SaveOptions.DisableFormatting)),
+                "Mixed text inside BCF element-only containers must fail closed.");
+
+            var nonEmptyComponent = XDocument.Parse(valid);
+            nonEmptyComponent.Descendants("Component").First().Add(new XText("unexpected-text"));
+            ThrowsInvalidData(
+                () => BcfIssueExchangeSerializer.Deserialize(nonEmptyComponent.ToString(SaveOptions.DisableFormatting)),
+                "BCF point/component empty elements must reject text content.");
+
+            var cdataScalar = XDocument.Parse(valid);
+            var scalar = cdataScalar.Descendants("Title").First();
+            scalar.ReplaceNodes(new XCData(scalar.Value));
+            ThrowsInvalidData(
+                () => BcfIssueExchangeSerializer.Deserialize(cdataScalar.ToString(SaveOptions.DisableFormatting)),
+                "BCF scalar leaves must reject CDATA/non-canonical node forms.");
         }
 
         private static BcfIssueExchange BuildFixture(bool reverse)
