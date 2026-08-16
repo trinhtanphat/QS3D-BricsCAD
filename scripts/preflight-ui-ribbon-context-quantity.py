@@ -39,7 +39,8 @@ forbid(palette, "_right.Visible = true;\n                _quantityInsight.Visibl
 
 quantity = read("src/QS3D.BricsCAD.V25/QuantityInsightCommands.cs")
 require(quantity, '[CommandMethod("QS3DQUANTITYINSIGHT", CommandFlags.UsePickSet)]', "quantity command")
-require(quantity, "EntitySnapshotReader.ReadImpliedSelection(document)", "quantity selection")
+require(quantity, "EntitySnapshotReader.ReadCurrentSelection(document)", "quantity selection")
+forbid(quantity, "EntitySnapshotReader.ReadImpliedSelection(document)", "quantity selection must prompt when PICKFIRST is empty")
 require(quantity, "PaletteCoordinator.ShowQuantityInsight();", "quantity palette")
 for token in ("GetOrCreate(", "Build3D", "TransactionManager", "AppendEntity", "ProjectRepository"):
     forbid(quantity, token, "quantity command must be read-only")
