@@ -208,6 +208,8 @@ namespace QS3D.Core.Services
                 if (string.IsNullOrWhiteSpace(id))
                     throw new ArgumentException("Bulk edit target id is required.", nameof(elementIds));
                 var normalized = id.Trim();
+                if (!string.Equals(id, normalized, StringComparison.Ordinal))
+                    throw new ArgumentException("Bulk edit target id must be canonical.", nameof(elementIds));
                 if (!requested.Add(normalized))
                     throw new InvalidOperationException("Bulk edit target list contains duplicate semantic element id: " + normalized);
                 if (!sourceIndex.TryGetValue(normalized, out var match))
@@ -280,9 +282,7 @@ namespace QS3D.Core.Services
             return result;
         }
 
-        private static void RequireFamilyOwnershipUnchanged(
-            ProjectState project,
-            IReadOnlyDictionary<string, ProjectFamily> expected)
+        private static void RequireFamilyOwnershipUnchanged(ProjectState project, IReadOnlyDictionary<string, ProjectFamily> expected)
         {
             if (project.Families.Count != expected.Count)
                 throw new InvalidOperationException("Project Family ownership changed while materializing bulk assignment targets. Retry against the current project state.");
@@ -290,10 +290,7 @@ namespace QS3D.Core.Services
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var family in project.Families)
             {
-                if (family == null ||
-                    !seen.Add(family.Id) ||
-                    !expected.TryGetValue(family.Id, out var original) ||
-                    !ReferenceEquals(original, family))
+                if (family == null || !seen.Add(family.Id) || !expected.TryGetValue(family.Id, out var original) || !ReferenceEquals(original, family))
                     throw new InvalidOperationException("Project Family ownership changed while materializing bulk assignment targets. Retry against the current project state.");
             }
         }
