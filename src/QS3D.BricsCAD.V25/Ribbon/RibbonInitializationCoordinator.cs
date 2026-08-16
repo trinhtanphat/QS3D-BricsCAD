@@ -51,6 +51,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             BltHomeRibbonAugmenter.Reset();
             BltDrawRibbonAugmenter.Reset();
             BltRecognitionRibbonAugmenter.Reset();
+            BltViewRibbonAugmenter.Reset();
             BltBimRibbonMirrorAugmenter.Reset();
             BltModelingRibbonAugmenter.Reset();
             BltTopbarTabContract.Reset();
@@ -122,10 +123,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
             ready = UpdateRibbonAugmenter.TryInitialize() && ready;
 
             // Reconcile screenshot-familiar presentation after feature augmenters so the
-            // QS3D-owned Home/Draw/Recognition groups are deterministic without replacing native tabs.
+            // QS3D-owned Home/Draw/Recognition/View groups are deterministic without replacing native tabs.
             ready = BltHomeRibbonAugmenter.TryInitialize() && ready;
             ready = BltDrawRibbonFailSafe.TryInitialize() && ready;
             ready = BltRecognitionRibbonAugmenter.TryInitialize() && ready;
+            ready = BltViewRibbonAugmenter.TryInitialize() && ready;
 
             // MODELING is a separate owner-reference surface. Rebuild only QS3D-owned panels
             // into the BLT3D large-action + compact three-row layout; native/third-party
@@ -139,7 +141,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
             // Decorate canonical text-only/fallback buttons only after all richer feature
             // augmenters have supplied their own images. This preserves recognition and
-            // owner-reference Draw/Modeling artwork while filling genuine gaps.
+            // owner-reference Draw/Modeling/View artwork while filling genuine gaps.
             ready = RibbonBootstrapIconAugmenter.TryInitialize() && ready;
 
             // BricsCAD can invoke ICommand without forwarding RibbonButton.CommandParameter.
