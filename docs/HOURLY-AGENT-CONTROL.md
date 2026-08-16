@@ -94,6 +94,23 @@ Scheduled workers are not exempt from normal multi-agent ownership rules.
 - Reassignment/takeover must be written to #1910 first.
 - Branches/PRs that become superseded should be preserved long enough to retain evidence, then closed/cleaned safely after dependencies are verified.
 
+## Write authority and `main` boundary
+
+Once a lane accepts the newest valid non-overlapping assignment addressed to its own identity, that assignment explicitly authorizes the lane to perform the repository work inside the reserved scope without another owner confirmation. The lane may reproduce/fix bugs, edit/add/delete/refactor code/config/docs/tests, add deterministic regressions/source guards, run or inspect allowed validation, fix failures caused by its own changes, commit, push its dedicated task branch, and open/update its PR.
+
+Scheduled lanes must not stop at readiness review or analysis when the accepted package contains valid implementation work they can perform remotely. This execution authority is branch-scoped and does not grant direct `main` write permission.
+
+`main` is integration-only for the scheduled pool:
+
+- Never push commits directly to `main`.
+- Never write the default branch through the GitHub Contents API.
+- Never update the `main` ref directly, force-update it, or use an equivalent bypass.
+- Never infer merge authorization merely from a green branch, open PR, mergeability, completed implementation, or generic `fix bug` / `update code` / `commit` / `push git` wording.
+- Integration into `main` must occur only through the repository-authorized PR/merge path and only when `docs/MAIN-WRITE-AUTHORIZATION.md`, active ownership, branch protection, current-head freshness, review state, and required CI/evidence all permit that named integration.
+- If merge is not authorized, leave the branch/PR verified and hand it off; do not bypass the boundary.
+
+A lane may reconcile/rebase its own task branch when repository policy and ownership permit. It must never overwrite another lane's branch or take over another active scope without a recorded reassignment.
+
 ## Engineering and Git rules
 
 Workers should use a dedicated branch plus PR by default. A normal round should, when evidence supports it:
