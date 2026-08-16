@@ -11,6 +11,24 @@ RELEASE_WORKFLOWS = {"release-v25.yml", "release-v25-cloud.yml", "release-v26.ym
 errors = []
 
 
+_MAPPING_KEY = r'(?:"([A-Za-z0-9_-]+)"|\'([A-Za-z0-9_-]+)\'|([A-Za-z0-9_-]+))'
+
+
+def parse_mapping_key(line, indent):
+    match = re.match(rf"^\s{{{indent}}}{_MAPPING_KEY}\s*:\s*(?:#.*)?$", line)
+    if not match:
+        return None
+    return next(value for value in match.groups() if value is not None)
+
+
+def parse_top_level_on_key(line):
+    return parse_mapping_key(line, 0) == "on"
+
+
+def parse_job_name(line):
+    return parse_mapping_key(line, 2)
+
+
 def collect_job_blocks(lines):
     jobs_index = next((i for i, line in enumerate(lines) if re.match(r"^jobs\s*:\s*(?:#.*)?$", line)), None)
     if jobs_index is None:
@@ -21,11 +39,11 @@ def collect_job_blocks(lines):
     for line in lines[jobs_index + 1:]:
         if line.strip() and not line.startswith((" ", "\t", "#")):
             break
-        match = re.match(r"^\s{2}([A-Za-z0-9_-]+)\s*:\s*(?:#.*)?$", line)
-        if match:
+        job_name = parse_job_name(line)
+        if job_name is not None:
             if current_name is not None:
                 blocks.append((current_name, current_lines))
-            current_name = match.group(1)
+            current_name = job_name
             current_lines = []
             continue
         if current_name is not None:
@@ -200,6 +218,21 @@ def validate_guard_parser():
     if parse_trigger_name('  "push":') != "push" or parse_trigger_name('  "pull_request":') != "pull_request":
         errors.append("trigger parser must support quoted automatic validation keys")
 
+    for spelling in ("on:", "'on':", '"on":', "on: # comment", "'on': # comment", '"on": # comment'):
+        if not parse_top_level_on_key(spelling):
+            errors.append(f"top-level on parser regression ({spelling})")
+    for malformed in (" on:", "  on:", "'on' : value", "\"on\": value", "'on:", '"on:', "on::"):
+        if parse_top_level_on_key(malformed):
+            errors.append(f"top-level on parser accepted malformed key ({malformed})")
+
+    for spelling in ("  preflight:", "  'preflight':", '  "preflight":', "  release: # comment"):
+        expected = "release" if spelling.startswith("  release") else "preflight"
+        if parse_job_name(spelling) != expected:
+            errors.append(f"job key parser regression ({spelling})")
+    for malformed in (" preflight:", "    preflight:", "  'pre flight':", "  \"preflight\": value", "  preflight::"):
+        if parse_job_name(malformed) is not None:
+            errors.append(f"job key parser accepted malformed key ({malformed})")
+
 
 validate_guard_parser()
 
@@ -217,7 +250,7 @@ else:
     for path in workflow_files:
         text = path.read_text(encoding="utf-8")
         lines = text.splitlines()
-        on_index = next((i for i, line in enumerate(lines) if re.match(r"^on\s*:\s*(?:#.*)?$", line)), None)
+        on_index = next((i for i, line in enumerate(lines) if parse_top_level_on_key(line)), None)
         if on_index is None:
             errors.append(f"{path.name}: top-level on: block is required")
             continue
