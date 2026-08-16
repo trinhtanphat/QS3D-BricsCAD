@@ -204,14 +204,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 }
             }
 
-            private string ResolveParameter(object? _)
-            {
-                // The button's captured CommandParameter is authoritative. Some BricsCAD builds
-                // pass non-null button metadata (for example an id/text string) as the ICommand
-                // event parameter; treating that value as a CAD command can launch the wrong
-                // command. Always dispatch the command that belongs to this ribbon button.
-                return _fallbackCommand;
-            }
+            private string ResolveParameter(object? parameter) =>
+                parameter is string command && !string.IsNullOrWhiteSpace(command)
+                    ? command
+                    : _fallbackCommand;
 
             public event EventHandler? CanExecuteChanged
             {
@@ -235,13 +231,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
             public void Execute(object? parameter) => _inner.Execute(ResolveParameter(parameter));
 
-            private string ResolveParameter(object? _)
-            {
-                // Keep wrapped QS3D handlers pinned to the owning button's CommandParameter as
-                // well. This makes a null, label, id, or other host-supplied event parameter
-                // harmless instead of allowing it to change the action routed by the button.
-                return _fallbackCommand;
-            }
+            private string ResolveParameter(object? parameter) =>
+                parameter is string command && !string.IsNullOrWhiteSpace(command)
+                    ? command
+                    : _fallbackCommand;
 
             public event EventHandler? CanExecuteChanged
             {
