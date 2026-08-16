@@ -43,8 +43,8 @@ namespace QS3D.BricsCAD.V25
             }
             else project = CreateDefault(document);
 
-            var persistenceStamp = new ProjectPersistenceStamp(project);
             SyncDrawingIdentity(project, document);
+            var persistenceStamp = new ProjectPersistenceStamp(project);
             var after = ProjectSidecarRevisionStamp.Capture(path);
             EnsureStableCapture(before, after, "QS3D project backing store changed while it was being bound. Retry the operation.");
             Projects[document] = project;
@@ -134,8 +134,8 @@ namespace QS3D.BricsCAD.V25
             var before = ProjectSidecarRevisionStamp.Capture(path);
             if (!before.HasAnyFile) throw new FileNotFoundException("QS3D project file was not found.", path);
             var project = LoadExistingProjectOrThrow(path);
-            var persistenceStamp = new ProjectPersistenceStamp(project);
             SyncDrawingIdentity(project, document);
+            var persistenceStamp = new ProjectPersistenceStamp(project);
             var after = ProjectSidecarRevisionStamp.Capture(path);
             EnsureStableCapture(before, after, "QS3D project backing store changed while it was being reloaded. Retry the operation.");
             SourceReconcileUndoCoordinator.Forget(document);
@@ -151,7 +151,8 @@ namespace QS3D.BricsCAD.V25
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (!Projects.TryGetValue(document, out var project)) return false;
             EnsureBackingStoreUnchanged(document, project, true, "QS3D pending-state inspection");
-            SyncDrawingIdentity(project, document);
+            ValidateDrawingIdentityReadOnly(project, document);
+            if (!SameDrawingName(project.DrawingPath, document.Name)) return true;
             return GetPersistenceStamp(document, project).RequiresSave(project);
         }
 
