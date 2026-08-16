@@ -25,37 +25,65 @@ def main():
     augmenter = read(augmenter_rel)
     coordinator = read(coordinator_rel)
 
+    for tab_id in (
+        "QS3D_HOME",
+        "QS3D_PROJECT",
+        "QS3D_AUTHOR",
+        "QS3D_BIM",
+        "QS3D_RECOGNIZE",
+        "QS3D_DRAW",
+        "QS3D_TOOL",
+        "QS3D_MODELING",
+        "QS3D_VIEW",
+        "QS3D_QTY",
+        "QS3D_REV",
+    ):
+        require(augmenter, f'"{tab_id}"', augmenter_rel)
+
     for needle in (
-        '"QS3D_PROJECT", "QS3D_AUTHOR"',
+        "if (HasCompleteVisibleIcon(item))",
+        "GetProperty(item, \"ShowImage\") is bool showImage",
+        'GetProperty(item, "Image") != null',
+        'GetProperty(item, "LargeImage") != null',
         'SetProperty(item, "ShowImage", true);',
         'SetProperty(item, "Image", RibbonIconFactory.Create(icon, 16));',
         'SetProperty(item, "LargeImage", RibbonIconFactory.Create(icon, 32));',
         'return RibbonIconKind.UpdateStatus;',
         'return RibbonIconKind.SaveAs;',
+        'return RibbonIconKind.Save;',
         'return RibbonIconKind.OpenProject;',
         'return RibbonIconKind.Settings;',
         'return RibbonIconKind.Update;',
         'return RibbonIconKind.Objects;',
-        'return updatedButtons > 0;',
+        'return commandButtons > 0;',
     ):
         require(augmenter, needle, augmenter_rel)
 
-    forbid(augmenter, '"QS3D_HOME"', augmenter_rel)
     forbid(augmenter, 'SetProperty(item, "ShowImage", false);', augmenter_rel)
 
     for needle in (
         "ready = RibbonBootstrapIconAugmenter.TryInitialize() && ready;",
         "RibbonBootstrapIconAugmenter.Reset();",
         "ready = ProjectRibbonAugmenter.TryInitialize() && ready;",
+        "ready = BltHomeRibbonAugmenter.TryInitialize() && ready;",
+        "ready = BltDrawRibbonFailSafe.TryInitialize() && ready;",
     ):
         require(coordinator, needle, coordinator_rel)
 
-    if coordinator.index("ProjectRibbonAugmenter.TryInitialize") > coordinator.index("RibbonBootstrapIconAugmenter.TryInitialize"):
-        raise SystemExit("FAIL: bootstrap icon decoration must run after ProjectRibbonAugmenter adds its buttons")
+    icon_index = coordinator.index("RibbonBootstrapIconAugmenter.TryInitialize")
+    for predecessor in (
+        "ProjectRibbonAugmenter.TryInitialize",
+        "BltHomeRibbonAugmenter.TryInitialize",
+        "BltDrawRibbonFailSafe.TryInitialize",
+    ):
+        if coordinator.index(predecessor) > icon_index:
+            raise SystemExit(
+                f"FAIL: complete ribbon icon decoration must run after {predecessor}"
+            )
 
     print(
-        "PASS: THIẾT LẬP DỰ ÁN and TẠO MỚI ribbon buttons receive deterministic "
-        "QS3D-generated icons after feature reconciliation without taking over KHỞI ĐẦU."
+        "PASS: every canonical QS3D ribbon tab gets deterministic fallback icons for "
+        "text-only command buttons while preserving already-polished Home/Draw/custom images."
     )
     return 0
 

@@ -13,10 +13,10 @@ namespace QS3D.Core.Domain
         internal const string WorkspaceKey = Prefix + "Workspace";
         private const string PayloadVersion = "1";
         private const int MaxPayloadChars = 1024 * 1024;
-        private const int MaxBillItems = 10000;
-        private const int MaxBuildUpRates = 10000;
-        private const int MaxRateReferences = 50000;
-        private const int MaxLibraryEntries = 10000;
+        private const int MaxBillItems = TbqProjectWorkspaceState.MaxBillItems;
+        private const int MaxBuildUpRates = TbqProjectWorkspaceState.MaxBuildUpRates;
+        private const int MaxRateReferences = TbqProjectWorkspaceState.MaxRateReferences;
+        private const int MaxLibraryEntries = TbqProjectWorkspaceState.MaxLibraryEntries;
 
         internal static bool IsReservedKey(string key) =>
             key != null && key.StartsWith(ReservedRoot, StringComparison.OrdinalIgnoreCase);

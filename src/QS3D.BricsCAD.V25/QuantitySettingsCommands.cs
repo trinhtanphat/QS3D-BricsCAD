@@ -15,6 +15,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var window = new QuantitySettingsWindow(new QuantitySettingsStore());
+                QuantitySettingsColorPickerEnhancer.Attach(window);
 
                 // Do not call WPF Window.ShowDialog() directly from a BricsCAD command.
                 // BricsCAD owns the host HWND/message loop and exposes ShowModalWindow
