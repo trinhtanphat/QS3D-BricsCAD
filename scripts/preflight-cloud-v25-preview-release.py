@@ -60,12 +60,12 @@ else:
     required = (
         "workflow_dispatch:",
         "github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE'",
-        "actions/checkout@v7",
-        "actions/setup-python@v7",
-        "actions/setup-dotnet@v6",
-        "actions/cache/restore@v6",
-        "actions/cache/save@v6",
-        "actions/upload-artifact@v7",
+        "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+        "actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68",
+        "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+        "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
         "BRICSCAD_V25_MIRROR_MSI_URL:",
         "BRICSCAD_V25_PUBLIC_MSI_URL:",
         "BRICSCAD_V25_PINNED_MSI_SHA256: " + PINNED_SHA256,
@@ -119,7 +119,7 @@ else:
     mirror_index = text.find("Name = 'pinned-user-mirror'", candidates_index if candidates_index >= 0 else 0)
     public_index = text.find("Name = 'pinned-public'", candidates_index if candidates_index >= 0 else 0)
     if min(candidates_index, mirror_index, public_index) < 0:
-        errors.append("cloud V25 workflow must define approved HTTP mirror and pinned HTTPS public candidates")
+        errors.append("cloud V25 workflow must define approved mirror and pinned HTTPS public candidates")
     elif not candidates_index < mirror_index < public_index:
         errors.append("approved mirror must be attempted before the pinned HTTPS public candidate after cache miss")
 
