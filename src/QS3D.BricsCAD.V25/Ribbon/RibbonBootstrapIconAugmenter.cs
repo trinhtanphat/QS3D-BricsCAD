@@ -63,8 +63,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 foreach (var item in itemEnumerable)
                 {
                     if (item == null) continue;
-                    var command = GetProperty(item, "CommandParameter") as string;
-                    if (string.IsNullOrWhiteSpace(command)) continue;
+                    if (!(GetProperty(item, "CommandParameter") is string command)
+                        || string.IsNullOrWhiteSpace(command))
+                        continue;
 
                     var icon = ResolveIcon(command);
                     SetProperty(item, "ShowImage", true);
