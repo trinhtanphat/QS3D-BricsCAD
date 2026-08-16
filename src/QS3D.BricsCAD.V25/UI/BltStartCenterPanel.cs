@@ -7,8 +7,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using QS3D.BricsCAD.V25.Ribbon;
 using QS3D.BricsCAD.V25.Services;
-using QS3D.BricsCAD.V25.Updates;
 using Application = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.UI
@@ -135,17 +135,17 @@ namespace QS3D.BricsCAD.V25.UI
             var brand = new Grid();
             brand.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             brand.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            var brandGlyph = new TextBlock
+            var brandLogo = new Image
             {
-                Text = "✦",
-                Foreground = AccentBrush,
-                FontSize = 34,
-                FontWeight = FontWeights.Bold,
-                Margin = new Thickness(0, -2, 14, 0),
-                VerticalAlignment = VerticalAlignment.Top
+                Source = Qs3dBrandIconFactory.Create(36),
+                Width = 36,
+                Height = 36,
+                Margin = new Thickness(0, 0, 14, 0),
+                VerticalAlignment = VerticalAlignment.Top,
+                Stretch = Stretch.Uniform
             };
-            Grid.SetColumn(brandGlyph, 0);
-            brand.Children.Add(brandGlyph);
+            Grid.SetColumn(brandLogo, 0);
+            brand.Children.Add(brandLogo);
             var brandText = new StackPanel();
             brandText.Children.Add(new TextBlock
             {
@@ -169,7 +169,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             var description = new TextBlock
             {
-                Text = "Giải pháp mô hình hóa thông tin công trình BIM 3D trực quan và tối ưu hóa bóc tách khối lượng trong BricsCAD.",
+                Text = "Giải pháp mô hình hóa thông tin công trình BIM 3D trực quan và tối ưu hóa bóc tách khối lượng.",
                 Foreground = MutedBrush,
                 FontSize = 14,
                 LineHeight = 20,
@@ -192,28 +192,37 @@ namespace QS3D.BricsCAD.V25.UI
 
             var actions = new StackPanel();
             actions.Children.Add(CreateActionCard(
-                "＋",
+                CreateNewProjectIcon(30),
                 "Tạo dự án mới",
                 "Bắt đầu bản vẽ trắng sạch hoàn toàn",
                 ProjectFileUiService.CreateNewDrawing));
             actions.Children.Add(CreateActionCard(
-                "▱",
+                RibbonIconFactory.Create(RibbonIconKind.OpenProject, 30),
                 "Mở tệp dự án...",
-                "Chọn tệp BLT3D/QS3D hiện có từ máy tính",
+                "Chọn tệp tin .blt3d hiện có từ máy tính",
                 ProjectFileUiService.OpenProjectFromPicker));
 
             var saveRow = new Grid();
             saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) });
             saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            var save = CreateActionCard("▣", "Lưu", "Lưu project QS3D", ProjectFileUiService.SaveCurrentProject, compact: true);
+            var save = CreateActionCard(
+                RibbonIconFactory.Create(RibbonIconKind.Save, 26),
+                "Lưu",
+                "Ctrl+S",
+                ProjectFileUiService.SaveCurrentProject,
+                compact: true);
             Grid.SetColumn(save, 0);
             saveRow.Children.Add(save);
-            var saveAs = CreateActionCard("▤", "Lưu thành...", "Tạo bản sao BLT3D", ProjectFileUiService.SaveCurrentProjectAs, compact: true);
+            var saveAs = CreateActionCard(
+                RibbonIconFactory.Create(RibbonIconKind.SaveAs, 26),
+                "Lưu thành...",
+                "Tạo bản sao mới",
+                ProjectFileUiService.SaveCurrentProjectAs,
+                compact: true);
             Grid.SetColumn(saveAs, 2);
             saveRow.Children.Add(saveAs);
             actions.Children.Add(saveRow);
-            actions.Children.Add(CreateActionCard("↻", "Cập nhật", "Kiểm tra và tải bản cập nhật QS3D", () => UpdateCenterWindowHost.Show()));
 
             Grid.SetRow(actions, 3);
             grid.Children.Add(actions);
@@ -329,7 +338,7 @@ namespace QS3D.BricsCAD.V25.UI
             return border;
         }
 
-        private Button CreateActionCard(string glyph, string title, string subtitle, Action action, bool compact = false)
+        private Button CreateActionCard(ImageSource icon, string title, string subtitle, Action action, bool compact = false)
         {
             var frame = new Border
             {
@@ -341,14 +350,14 @@ namespace QS3D.BricsCAD.V25.UI
             };
 
             var content = new Grid();
-            content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(34) });
+            content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(36) });
             content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            content.Children.Add(new TextBlock
+            content.Children.Add(new Image
             {
-                Text = glyph,
-                Foreground = AccentBrush,
-                FontSize = 24,
-                FontWeight = FontWeights.SemiBold,
+                Source = icon,
+                Width = compact ? 26 : 30,
+                Height = compact ? 26 : 30,
+                Stretch = Stretch.Uniform,
                 VerticalAlignment = VerticalAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Center
             });
@@ -505,11 +514,12 @@ namespace QS3D.BricsCAD.V25.UI
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(3),
                 VerticalAlignment = VerticalAlignment.Top,
-                Child = new TextBlock
+                Child = new Image
                 {
-                    Text = "▥",
-                    Foreground = AccentBrush,
-                    FontSize = 17,
+                    Source = RibbonIconFactory.Create(RibbonIconKind.OpenProject, 20),
+                    Width = 20,
+                    Height = 20,
+                    Stretch = Stretch.Uniform,
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center
                 }
@@ -595,6 +605,54 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 _statusText.Text = ex.Message;
             }
+        }
+
+        private static ImageSource CreateNewProjectIcon(int pixelSize)
+        {
+            if (pixelSize <= 0)
+                throw new ArgumentOutOfRangeException(nameof(pixelSize));
+
+            var page = BrushFromRgb(224, 238, 255);
+            var accent = BrushFromRgb(34, 137, 245);
+            var accentDark = BrushFromRgb(13, 77, 172);
+            var outlinePen = new Pen(accentDark, 1.35)
+            {
+                StartLineCap = PenLineCap.Round,
+                EndLineCap = PenLineCap.Round,
+                LineJoin = PenLineJoin.Round
+            };
+            outlinePen.Freeze();
+            var plusPen = new Pen(Brushes.White, 2.1)
+            {
+                StartLineCap = PenLineCap.Round,
+                EndLineCap = PenLineCap.Round
+            };
+            plusPen.Freeze();
+
+            var group = new DrawingGroup();
+            var pageGeometry = new RectangleGeometry(new Rect(5, 3, 20, 26), 1.5, 1.5);
+            pageGeometry.Freeze();
+            group.Children.Add(new GeometryDrawing(page, outlinePen, pageGeometry));
+            var foldGeometry = Geometry.Parse("M18,3 L25,10 L18,10 Z");
+            foldGeometry.Freeze();
+            group.Children.Add(new GeometryDrawing(accent, null, foldGeometry));
+            var badgeGeometry = new EllipseGeometry(new Point(24, 24), 6, 6);
+            badgeGeometry.Freeze();
+            group.Children.Add(new GeometryDrawing(accent, null, badgeGeometry));
+            var plusGeometry = Geometry.Parse("M20,24 L28,24 M24,20 L24,28");
+            plusGeometry.Freeze();
+            group.Children.Add(new GeometryDrawing(null, plusPen, plusGeometry));
+
+            if (pixelSize != 32)
+            {
+                var scale = pixelSize / 32.0;
+                group.Transform = new ScaleTransform(scale, scale);
+            }
+
+            group.Freeze();
+            var image = new DrawingImage(group);
+            image.Freeze();
+            return image;
         }
 
         private static string DisplayVersion()
