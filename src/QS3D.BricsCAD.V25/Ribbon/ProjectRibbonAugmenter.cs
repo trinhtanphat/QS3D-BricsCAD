@@ -49,7 +49,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
         {
             new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\ndự án", "QS3DPROJECTTOOLS"),
             new ButtonSpec("QS3D_PROJECT_FLOORS", "Cài đặt\ntầng", "QS3DLEVELS"),
-            new ButtonSpec("QS3D_PROJECT_PROPERTIES", "Thuộc tính\ndự án", "QS3DPROJECTTOOLS")
+            new ButtonSpec("QS3D_PROJECT_PROPERTIES", "Thuộc tính\ndự án", "QS3DPROJECTPROPERTIES")
         };
 
         public static bool TryInitialize()
