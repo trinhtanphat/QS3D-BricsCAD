@@ -121,8 +121,18 @@ namespace QS3D.BricsCAD.V25.Ribbon
             SetProperty(button, "CommandParameter", spec.Id);
             SetProperty(button, "CommandHandler", new DirectActionHandler(spec.Action));
             SetEnumProperty(button, "Size", "Large");
-            SetProperty(button, "Image", RibbonIconFactory.Create(spec.Icon, 16));
-            SetProperty(button, "LargeImage", RibbonIconFactory.Create(spec.Icon, 32));
+
+            // The system-object action is QS3D-owned UI, so render the repository-approved cube
+            // mark rather than the generic semantic glyph. BricsCAD's host/application icon is
+            // never touched by this augmenter.
+            var smallImage = spec.Icon == RibbonIconKind.Qs3dLogo
+                ? Qs3dBrandIconFactory.Create(16)
+                : RibbonIconFactory.Create(spec.Icon, 16);
+            var largeImage = spec.Icon == RibbonIconKind.Qs3dLogo
+                ? Qs3dBrandIconFactory.Create(32)
+                : RibbonIconFactory.Create(spec.Icon, 32);
+            SetProperty(button, "Image", smallImage);
+            SetProperty(button, "LargeImage", largeImage);
             return button;
         }
 
