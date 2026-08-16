@@ -27,3 +27,11 @@ This audit must not duplicate or take over currently reserved/open lanes. Existi
 
 ## Completion rule
 Each implemented defect must be independently reproducible from current source, have bounded scope, include regression evidence, and remain on this branch/PR until owner-authorized integration.
+
+## Verified fixes delivered on this audit branch
+
+### Curtain wall layout arithmetic underflow
+`CurtainWallLayoutPlanner` accepted strictly positive finite dimensions/frame widths but could silently round a nonzero division result to zero. The guarded divide path now fails closed on nonzero-to-zero underflow, with deterministic smoke coverage for positive mullion/transom half-width loss while preserving ordinary and legitimate zero-width internal-frame cases.
+
+### Curtain opening/frame coordinate-resolution collapse
+`CurtainFrameOpeningPlanner` accepted strictly positive opening/frame dimensions whose endpoint arithmetic collapsed back onto the starting coordinate (for example `1e16 + 1d == 1e16`). That left a semantic positive extent which the clipping arithmetic observed as zero. Opening base bounds and positive clearances now require representable outward movement, frame right/top bounds require strict representable ordering, and deterministic smoke coverage exercises horizontal/vertical size collapse, clearance collapse, frame collapse, plus the ordinary four-fragment interruption path.
