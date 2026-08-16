@@ -1,10 +1,22 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import unicodedata
 
 ROOT = Path(__file__).resolve().parents[1]
 view_path = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/BltViewRibbonAugmenter.cs"
 bootstrap_path = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs"
 init_path = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator.cs"
+
+
+def normalized_source(path):
+    # Git stores UTF-8 source bytes, but authored Vietnamese literals can be
+    # canonically equivalent while using different composed/decomposed forms.
+    # Normalize both Unicode and line endings before enforcing textual source
+    # contracts so Windows CI validates semantics rather than encoding shape.
+    text = path.read_text(encoding="utf-8")
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    return unicodedata.normalize("NFC", text)
+
 
 errors = []
 for path in (view_path, bootstrap_path, init_path):
@@ -12,9 +24,9 @@ for path in (view_path, bootstrap_path, init_path):
         errors.append(f"missing required source: {path.relative_to(ROOT)}")
 
 if not errors:
-    view = view_path.read_text(encoding="utf-8")
-    bootstrap = bootstrap_path.read_text(encoding="utf-8")
-    init = init_path.read_text(encoding="utf-8")
+    view = normalized_source(view_path)
+    bootstrap = normalized_source(bootstrap_path)
+    init = normalized_source(init_path)
 
     panel_contract = [
         ("QS3D_VIEW_ORIENTATION_PANEL_SOURCE", "Góc nhìn"),
