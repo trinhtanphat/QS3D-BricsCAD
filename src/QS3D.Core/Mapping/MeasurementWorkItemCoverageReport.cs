@@ -40,6 +40,8 @@ namespace QS3D.Core.Mapping
 
     public sealed class MeasurementWorkItemCoverageReport
     {
+        private const int MaximumFindingCount = 10000;
+
         private MeasurementWorkItemCoverageReport(
             IReadOnlyList<MeasurementWorkItemCoverageReportRow> rows,
             int readyCount,
@@ -69,10 +71,15 @@ namespace QS3D.Core.Mapping
         {
             if (findings == null) throw new ArgumentNullException(nameof(findings));
 
+            RejectKnownOversize(findings);
+
             var rows = new List<MeasurementWorkItemCoverageReportRow>();
             var index = 0;
             foreach (var finding in findings)
             {
+                if (index >= MaximumFindingCount)
+                    throw new InvalidOperationException(
+                        "Coverage report input must contain at most " + MaximumFindingCount + " findings.");
                 if (finding == null)
                     throw new ArgumentException("Coverage report input contains a null finding at index " + index + ".", nameof(findings));
                 rows.Add(new MeasurementWorkItemCoverageReportRow(finding));
@@ -115,6 +122,23 @@ namespace QS3D.Core.Mapping
                 missingQuantityCount,
                 staleQuantityCount,
                 unmappedWorkItemCount);
+        }
+
+        private static void RejectKnownOversize(IEnumerable<MeasurementWorkItemCoverageFinding> findings)
+        {
+            if (findings is ICollection<MeasurementWorkItemCoverageFinding> collection &&
+                collection.Count > MaximumFindingCount)
+            {
+                throw new InvalidOperationException(
+                    "Coverage report input must contain at most " + MaximumFindingCount + " findings.");
+            }
+
+            if (findings is IReadOnlyCollection<MeasurementWorkItemCoverageFinding> readOnlyCollection &&
+                readOnlyCollection.Count > MaximumFindingCount)
+            {
+                throw new InvalidOperationException(
+                    "Coverage report input must contain at most " + MaximumFindingCount + " findings.");
+            }
         }
 
         private static int CompareRows(
