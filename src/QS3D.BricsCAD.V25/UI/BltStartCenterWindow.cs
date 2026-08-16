@@ -186,7 +186,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             var help = new TextBlock
             {
-                Text = "Nhấp đúp vào dự án để mở trực tiếp và bắt đầu làm việc",
+                Text = "Nhấp vào dự án để mở trực tiếp và bắt đầu làm việc",
                 Foreground = MutedBrush,
                 FontSize = 12,
                 Margin = new Thickness(0, 6, 0, 18)
@@ -252,7 +252,7 @@ namespace QS3D.BricsCAD.V25.UI
             return border;
         }
 
-        private Border CreateActionCard(string glyph, string title, string subtitle, Action action, bool compact = false)
+        private Button CreateActionCard(string glyph, string title, string subtitle, Action action, bool compact = false)
         {
             var border = new Border
             {
@@ -260,10 +260,7 @@ namespace QS3D.BricsCAD.V25.UI
                 BorderBrush = ShellBorderBrush,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(5),
-                Padding = compact ? new Thickness(14, 10, 14, 10) : new Thickness(14, 11, 14, 11),
-                Margin = new Thickness(0, 0, 0, 11),
-                Cursor = Cursors.Hand,
-                MinHeight = compact ? 54 : 58
+                Padding = compact ? new Thickness(14, 10, 14, 10) : new Thickness(14, 11, 14, 11)
             };
 
             var content = new Grid();
@@ -286,10 +283,14 @@ namespace QS3D.BricsCAD.V25.UI
             content.Children.Add(texts);
             border.Child = content;
 
-            border.MouseEnter += (_, __) => border.Background = PanelHoverBrush;
-            border.MouseLeave += (_, __) => border.Background = PanelBrush;
-            border.MouseLeftButtonUp += (_, __) => RunUiAction(action);
-            return border;
+            var button = CreateClickSurface(border, Cursors.Hand);
+            button.Margin = new Thickness(0, 0, 0, 11);
+            button.MinHeight = compact ? 54 : 58;
+            button.ToolTip = title;
+            button.MouseEnter += (_, __) => border.Background = PanelHoverBrush;
+            button.MouseLeave += (_, __) => border.Background = PanelBrush;
+            button.Click += (_, __) => RunUiAction(action);
+            return button;
         }
 
         private UIElement StatusButton(string text, Action action)
@@ -300,13 +301,30 @@ namespace QS3D.BricsCAD.V25.UI
                 BorderBrush = AccentBrush,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(2),
-                Padding = new Thickness(12, 3, 12, 3),
-                Margin = new Thickness(0, 0, 7, 0),
-                Cursor = Cursors.Hand
+                Padding = new Thickness(12, 3, 12, 3)
             };
             border.Child = new TextBlock { Text = text, Foreground = Brushes.White, FontSize = 12, FontWeight = FontWeights.SemiBold };
-            border.MouseLeftButtonUp += (_, __) => RunUiAction(action);
-            return border;
+
+            var button = CreateClickSurface(border, Cursors.Hand);
+            button.Margin = new Thickness(0, 0, 7, 0);
+            button.ToolTip = text;
+            button.Click += (_, __) => RunUiAction(action);
+            return button;
+        }
+
+        private static Button CreateClickSurface(UIElement content, Cursor cursor)
+        {
+            return new Button
+            {
+                Background = Brushes.Transparent,
+                BorderBrush = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(0),
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                VerticalContentAlignment = VerticalAlignment.Stretch,
+                Cursor = cursor,
+                Content = content
+            };
         }
 
         private TextBlock StatusItem(string text, bool highlighted = false)
@@ -395,7 +413,6 @@ namespace QS3D.BricsCAD.V25.UI
                 BorderBrush = BrushFromRgb(42, 42, 42),
                 BorderThickness = new Thickness(0, 0, 0, 1),
                 Padding = new Thickness(12, 12, 6, 12),
-                Cursor = recent.Exists ? Cursors.Hand : Cursors.Arrow,
                 Tag = recent
             };
 
@@ -457,14 +474,14 @@ namespace QS3D.BricsCAD.V25.UI
             grid.Children.Add(date);
             border.Child = grid;
 
-            border.MouseEnter += (_, __) => border.Background = PanelBrush;
-            border.MouseLeave += (_, __) => border.Background = Brushes.Transparent;
-            border.MouseLeftButtonDown += (_, e) =>
-            {
-                if (e.ClickCount == 2 && recent.Exists)
-                    OpenRecentProject(recent);
-            };
-            return border;
+            var button = CreateClickSurface(border, recent.Exists ? Cursors.Hand : Cursors.Arrow);
+            button.IsEnabled = recent.Exists;
+            button.Tag = recent;
+            button.ToolTip = recent.Exists ? "Mở " + fileName : "Tệp không còn tồn tại";
+            button.MouseEnter += (_, __) => border.Background = PanelBrush;
+            button.MouseLeave += (_, __) => border.Background = Brushes.Transparent;
+            button.Click += (_, __) => OpenRecentProject(recent);
+            return button;
         }
 
         private void OpenRecentProject(StartCenterRecentProject recent)
