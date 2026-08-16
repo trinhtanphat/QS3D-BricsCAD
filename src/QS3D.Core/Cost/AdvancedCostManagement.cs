@@ -50,10 +50,8 @@ namespace QS3D.Core.Cost
             BillUnit = RateBookContract.RequireLowerToken(billUnit, nameof(billUnit));
             Currency = RateBookContract.RequireCurrency(currency, nameof(currency));
             if (components == null) throw new ArgumentNullException(nameof(components));
-            if (overheadPercent < 0m || overheadPercent > 100m)
-                throw new ArgumentOutOfRangeException(nameof(overheadPercent));
-            if (profitPercent < 0m || profitPercent > 100m)
-                throw new ArgumentOutOfRangeException(nameof(profitPercent));
+            ValidatePercentageForScaling(overheadPercent, nameof(overheadPercent));
+            ValidatePercentageForScaling(profitPercent, nameof(profitPercent));
 
             var snapshot = new List<CostResourceComponent>();
             var resourceCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -82,6 +80,14 @@ namespace QS3D.Core.Cost
                 ProfitUnitCost = (direct + OverheadUnitCost) * (ProfitPercent / 100m);
                 UnitRate = direct + OverheadUnitCost + ProfitUnitCost;
             }
+        }
+
+        private static void ValidatePercentageForScaling(decimal value, string paramName)
+        {
+            if (value < 0m || value > 100m)
+                throw new ArgumentOutOfRangeException(paramName, value, "Percentage must be between 0 and 100.");
+            if (value > 0m && value / 100m == 0m)
+                throw new ArgumentOutOfRangeException(paramName, value, "Positive percentage is too small to preserve at decimal precision.");
         }
 
         public string BuildUpId { get; }
