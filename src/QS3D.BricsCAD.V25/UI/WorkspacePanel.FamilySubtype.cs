@@ -101,6 +101,14 @@ namespace QS3D.BricsCAD.V25.UI
                 var selected = FamilyList.SelectedItem as ProjectFamily;
                 if (selected != null && !FamilyMatchesWorkspaceSubtype(selected, subtype)) selected = null;
 
+                var category = _categoryFilter ?? selected?.Category ?? ElementCategory.Room;
+                if (!string.IsNullOrWhiteSpace(subtype)) category = ElementCategory.Foundation;
+                if (launchSolid3D && !Cad.NativeBuildCapability.Supports(category))
+                {
+                    SetStatus(Cad.NativeBuildCapability.UnsupportedMessage(category));
+                    return;
+                }
+
                 var project = selected == null
                     ? ProjectContextCoordinator.GetOrCreate(doc)
                     : ExistingProjectMutationContext.Require(doc, "Thêm Family từ Workspace");
@@ -108,8 +116,6 @@ namespace QS3D.BricsCAD.V25.UI
                 if (selected != null && basis == null)
                     throw new InvalidOperationException("Family đang chọn không còn tồn tại trong project hiện tại. Hãy Refresh Workspace.");
 
-                var category = _categoryFilter ?? basis?.Category ?? ElementCategory.Room;
-                if (!string.IsNullOrWhiteSpace(subtype)) category = ElementCategory.Foundation;
                 var existingNames = new HashSet<string>(
                     project.Families.Where(x => x.Category == category).Select(x => x.Name),
                     StringComparer.OrdinalIgnoreCase);
