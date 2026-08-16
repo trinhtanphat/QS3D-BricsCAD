@@ -5,7 +5,6 @@ ROOT = Path(__file__).resolve().parents[1]
 XAML = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "FloorLevelWindow.xaml"
 SETUP = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "FloorLevelWindow.BltProjectSetup.cs"
 ROUTING = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "FloorLevelWindow.BltButtonRouting.cs"
-PROPERTIES_COMMAND = ROOT / "src" / "QS3D.BricsCAD.V25" / "ProjectPropertiesCommands.cs"
 
 
 def fail(message: str) -> None:
@@ -24,11 +23,15 @@ def require(text: str, token: str, label: str) -> None:
         fail(f"{label}: expected source contract not found: {token}")
 
 
+def forbid(text: str, token: str, label: str) -> None:
+    if token in text:
+        fail(f"{label}: forbidden source contract is still present: {token}")
+
+
 def main() -> int:
     xaml = read(XAML)
     setup = read(SETUP)
     routing = read(ROUTING)
-    properties_command = read(PROPERTIES_COMMAND)
 
     # Every visible Project Setup button in the supplied BLT3D reference must retain an
     # explicit production action rather than becoming decorative while visual parity evolves.
@@ -47,27 +50,38 @@ def main() -> int:
     for token, label in xaml_routes:
         require(xaml, token, f"XAML action wiring for {label}")
 
-    # Project Info stays on the read-only Project Tools surface and Floor Settings refreshes
-    # the current bounded surface rather than opening a duplicate window.
-    require(setup, 'OnBltProjectInfoClick(object sender, RoutedEventArgs e) => OpenProjectTools("Thông tin dự án")', "Project Info action")
-    require(setup, 'var window = new ProjectToolsWindow(_document);', "Project Info Project Tools route")
-    require(setup, 'OnBltFloorSettingsClick', "Floor Settings action")
-    require(setup, 'RefreshBltSetup();', "Floor Settings refresh")
+    # BLT3D reference parity: the Project Info and Project Properties entries stay inside the
+    # same bounded Project Setup shell and display the reference placeholder. They must not
+    # spawn a second modeless Project Tools/Properties surface from the top-nav route.
+    for token, label in (
+        ('case "Thông tin dự án":', "Project Info routed action"),
+        ('case "Cài đặt tầng":', "Floor Settings routed action"),
+        ('case "Thuộc tính dự án":', "Project Properties routed action"),
+        ('window.ShowBltProjectPlaceholder("Thông tin dự án")', "Project Info placeholder route"),
+        ('window.ShowBltFloorSettingsSurface()', "Floor Settings in-window route"),
+        ('window.ShowBltProjectPlaceholder("Thuộc tính dự án")', "Project Properties placeholder route"),
+        ('e.Handled = true;', "legacy modeless route suppression"),
+        ('(Chưa xây dựng — Thông tin dự án / Thuộc tính dự án)', "BLT3D placeholder text"),
+        ('Grid.SetRow(surface, 1);', "placeholder workspace row"),
+        ('Panel.SetZIndex(surface, 100);', "placeholder overlay ownership"),
+        ('ApplyBltProjectNavSelection', "top-nav active-state parity"),
+        ('OpenDedicatedBltProjectProperties()', "canonical Project Properties compatibility method"),
+        ('ShowBltProjectPlaceholder("Thuộc tính dự án")', "canonical Project Properties placeholder fallback"),
+    ):
+        require(routing, token, label)
 
-    # Project Properties must route correctly from the canonical XAML handler itself. The
-    # early Button class route remains as a compatibility/safety layer, not as the only thing
-    # preventing Project Properties from falling through to Project Tools.
-    canonical_properties_handler = 'OnBltProjectPropertiesClick(object sender, RoutedEventArgs e) => OpenDedicatedBltProjectProperties()'
-    legacy_properties_handler = 'OnBltProjectPropertiesClick(object sender, RoutedEventArgs e) => OpenProjectTools("Thuộc tính dự án")'
-    require(setup, canonical_properties_handler, "Project Properties canonical click action")
-    if legacy_properties_handler in setup:
-        fail("Project Properties canonical click handler must not alias the Project Info/Project Tools route")
-    require(routing, 'typeof(Button)', "Project Properties early Button class handler")
-    require(routing, 'e.Handled = true;', "Project Properties compatibility route suppression")
-    require(routing, '"Thuộc tính dự án"', "Project Properties label match")
-    require(routing, '_document.SendStringToExecute("QS3DPROJECTPROPERTIES "', "dedicated Project Properties action")
-    require(properties_command, '[CommandMethod("QS3DPROJECTPROPERTIES", CommandFlags.Modal)]', "dedicated Project Properties command")
-    require(properties_command, 'var window = new ProjectPropertiesWindow();', "dedicated Project Properties surface")
+    forbid(
+        routing,
+        '_document.SendStringToExecute("QS3DPROJECTPROPERTIES "',
+        "Project Properties top-nav must not launch a second modeless surface",
+    )
+
+    # The legacy instance handlers remain source-compatible, but the class route above owns all
+    # visible top-nav actions before those handlers can open duplicate windows.
+    require(setup, 'OnBltProjectInfoClick(object sender, RoutedEventArgs e)', "Project Info legacy handler remains available")
+    require(setup, 'OnBltFloorSettingsClick', "Floor Settings legacy handler remains available")
+    require(setup, 'OnBltProjectPropertiesClick(object sender, RoutedEventArgs e) => OpenDedicatedBltProjectProperties()', "Project Properties canonical handler")
+    require(setup, 'RefreshBltSetup();', "Floor Settings refresh")
 
     # Zone toolbar actions must mutate real ProjectState through the canonical service and keep
     # active-zone semantics consistent when selection/deletion changes.
@@ -98,7 +112,7 @@ def main() -> int:
     # The visible reference checkbox remains radio-like even though BLT3D renders a CheckBox.
     require(setup, 'checkBox.IsChecked != true', "reference click only promotes checked row")
 
-    print("PASS: all visible BLT3D Project Setup buttons retain distinct, production-backed actions.")
+    print("PASS: BLT3D Project Setup top-nav stays in one bounded surface and all floor/zone actions remain production-backed.")
     return 0
 
 
