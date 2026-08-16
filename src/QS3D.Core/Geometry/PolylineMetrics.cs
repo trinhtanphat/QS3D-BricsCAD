@@ -15,9 +15,12 @@ namespace QS3D.Core.Geometry
             }
 
             double total = 0d;
-            for (var i = 1; i < points.Count; i++) total = AddFinite(total, points[i - 1].DistanceTo(points[i]));
-            if (closed) total = AddFinite(total, points[points.Count - 1].DistanceTo(points[0]));
-            return total;
+            double correction = 0d;
+            for (var i = 1; i < points.Count; i++)
+                AddLengthCompensated(ref total, ref correction, points[i - 1].DistanceTo(points[i]));
+            if (closed)
+                AddLengthCompensated(ref total, ref correction, points[points.Count - 1].DistanceTo(points[0]));
+            return AddFinite(total, correction);
         }
 
         public static double SignedArea(IReadOnlyList<Point2> points)
@@ -123,6 +126,21 @@ namespace QS3D.Core.Geometry
 
             var normalizedArea = MultiplyFinitePreservingNonZero(sum, 0.5d, "Polyline normalized area");
             return RestoreScaledAreaFinite(normalizedArea, scaleX, scaleY);
+        }
+
+        private static void AddLengthCompensated(ref double sum, ref double correction, double value)
+        {
+            var next = sum + value;
+            if (!Finite(next)) throw new OverflowException("Polyline length exceeds the supported numeric range.");
+
+            var recovered = Math.Abs(sum) >= Math.Abs(value)
+                ? (sum - next) + value
+                : (value - next) + sum;
+            var nextCorrection = correction + recovered;
+            if (!Finite(nextCorrection)) throw new OverflowException("Polyline length compensation exceeds the supported numeric range.");
+
+            sum = next;
+            correction = nextCorrection;
         }
 
         private static void AddCompensated(ref double sum, ref double compensation, double value)
