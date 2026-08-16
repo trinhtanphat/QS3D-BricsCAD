@@ -305,10 +305,17 @@ namespace QS3D.BricsCAD.V25
             var stored = project.DrawingPath ?? string.Empty;
             if (!string.IsNullOrWhiteSpace(stored))
             {
-                if (Path.IsPathRooted(stored)) return Path.GetFullPath(stored);
-                var directory = Path.GetDirectoryName(projectPath) ?? string.Empty;
-                var relativeCandidate = Path.GetFullPath(Path.Combine(directory, stored));
-                if (File.Exists(relativeCandidate)) return relativeCandidate;
+                if (Path.IsPathRooted(stored))
+                {
+                    var rootedCandidate = Path.GetFullPath(stored);
+                    if (File.Exists(rootedCandidate)) return rootedCandidate;
+                }
+                else
+                {
+                    var directory = Path.GetDirectoryName(projectPath) ?? string.Empty;
+                    var relativeCandidate = Path.GetFullPath(Path.Combine(directory, stored));
+                    if (File.Exists(relativeCandidate)) return relativeCandidate;
+                }
             }
 
             var sameStem = Path.ChangeExtension(projectPath, ".dwg");
