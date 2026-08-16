@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             MepAggregation();
             ClashDetection();
             ClashDetectionLargeFiniteClearance();
+            ClashDetectionRejectsNonFiniteDerivedOverlap();
             RateBuildUp();
             HistoricalBenchmark();
             TradeCostAnalysisCaseDeterminism();
@@ -67,6 +68,23 @@ namespace QS3D.Core.SmokeTests
             if (double.IsNaN(clashes[0].SeparationM) || double.IsInfinity(clashes[0].SeparationM))
                 throw new InvalidOperationException("large finite clearance separation must stay finite.");
             Near(largeGap, clashes[0].SeparationM, 1e185d, "large finite clearance distance");
+        }
+
+        private static void ClashDetectionRejectsNonFiniteDerivedOverlap()
+        {
+            var extreme = new AxisAlignedBox(
+                -double.MaxValue,
+                0d,
+                0d,
+                double.MaxValue,
+                1d,
+                1d);
+
+            Throws<OverflowException>(() => new ClashDetectionService().Detect(new[]
+            {
+                new CoordinationElement("S-EXTREME", "STRUCTURE", "BEAM", "STRUCT", "ZONE-A", extreme),
+                new CoordinationElement("M-EXTREME", "MEP", "DUCT", "SA", "ZONE-A", extreme)
+            }));
         }
 
         private static void RateBuildUp()
@@ -184,6 +202,19 @@ namespace QS3D.Core.SmokeTests
         {
             if (Math.Abs(expected - actual) > tolerance)
                 throw new InvalidOperationException(label + ": expected " + expected + ", actual " + actual + ".");
+        }
+
+        private static void Throws<TException>(Action action) where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException)
+            {
+                return;
+            }
+            throw new InvalidOperationException("Expected " + typeof(TException).Name + ".");
         }
     }
 }
