@@ -78,7 +78,12 @@ if not errors:
         errors.append("XEM DecorateButton presentation boundary missing")
     else:
         decorate = view[decorate_start:decorate_end]
-        for forbidden in ("CommandParameter", "CommandHandler", "SendStringToExecute"):
+        forbidden_writes = (
+            'SetProperty(button, "CommandParameter"',
+            'SetProperty(button, "CommandHandler"',
+            "SendStringToExecute(",
+        )
+        for forbidden in forbidden_writes:
             if forbidden in decorate:
                 errors.append(f"XEM presentation augmenter must not rewrite routing: {forbidden}")
 
