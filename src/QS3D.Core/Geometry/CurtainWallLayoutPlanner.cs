@@ -159,8 +159,10 @@ namespace QS3D.Core.Geometry
                 var halfInternalM = Divide(internalFrameWidthM, 2d, label + " half internal frame");
                 edgeClearM = Subtract(Subtract(bayM, perimeterFrameWidthM, label + " edge frame"), halfInternalM, label + " edge clear span");
                 interiorClearM = Subtract(bayM, internalFrameWidthM, label + " interior clear span");
-                var internalCount = Math.Max(0, divisions - 2);
-                totalClearM = Add(Multiply(2d, edgeClearM, label + " edge clear total"), Multiply(internalCount, interiorClearM, label + " interior clear total"), label + " clear total");
+                var perimeterFrameTotalM = Multiply(2d, perimeterFrameWidthM, label + " perimeter frame total");
+                var internalFrameTotalM = Multiply(divisions - 1d, internalFrameWidthM, label + " internal frame total");
+                var frameWidthTotalM = Add(perimeterFrameTotalM, internalFrameTotalM, label + " frame width total");
+                totalClearM = Subtract(totalM, frameWidthTotalM, label + " clear total");
             }
 
             if (!(edgeClearM > 0d) || !(interiorClearM > 0d) || !(totalClearM > 0d))
