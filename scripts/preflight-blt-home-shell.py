@@ -46,8 +46,13 @@ def main():
         'new ProjectToolsCommands().ShowProjectTools()',
         'new FamilyManagerCommands().ShowFamilyManager()',
         'SetProperty(button, "ShowImage", true)',
-        'SetProperty(button, "Image", RibbonIconFactory.Create',
-        'SetProperty(button, "LargeImage", RibbonIconFactory.Create',
+        'spec.Icon == RibbonIconKind.Qs3dLogo',
+        'Qs3dBrandIconFactory.Create(16)',
+        'Qs3dBrandIconFactory.Create(32)',
+        'RibbonIconFactory.Create(spec.Icon, 16)',
+        'RibbonIconFactory.Create(spec.Icon, 32)',
+        'SetProperty(button, "Image", smallImage)',
+        'SetProperty(button, "LargeImage", largeImage)',
         'DirectActionHandler',
         'FilePanelSourceId',
         'LegacyProjectPanelSourceId',
@@ -164,7 +169,6 @@ def main():
         'new Commands().ShowQuantitySummary();',
         'private Button CreateActionCard(',
         'private static readonly ControlTemplate ClickSurfaceTemplate = CreateClickSurfaceTemplate();',
-        'private static Button CreateClickSurface(UIElement content, Cursor cursor)',
         'Template = ClickSurfaceTemplate,',
         'private static ControlTemplate CreateClickSurfaceTemplate()',
         'new FrameworkElementFactory(typeof(Border))',
@@ -175,6 +179,7 @@ def main():
         'VisualTree = root',
         'button.MouseEnter += (_, __) => frame.Background = PanelHoverBrush;',
         'button.MouseLeave += (_, __) => frame.Background = PanelBrush;',
+        'private static Button CreateClickSurface(UIElement content, Cursor cursor)',
         'button.Click += (_, __) => RunUiAction(action);',
         'button.Click += (_, __) => OpenRecentProject(recent);',
         'Application.DocumentManager.Open(normalized, false)',
@@ -212,7 +217,7 @@ def main():
     require(host, '_palette.AddVisual("Khởi đầu", _panel, true);', host_rel)
     require(host, 'Dock = DockSides.Left', host_rel)
 
-    print("PASS: QS3D Home and embedded Start Center keep native WPF Button.Click and keyboard/focus semantics while a QS3D-owned flat Button template suppresses host-theme hover/pressed chrome; action-card hover stays bounded to the intended dark panel, with embedded PaletteSet and project/sidecar safety contracts preserved.")
+    print("PASS: QS3D Home and embedded Start Center keep branded/rasterized icons, native WPF Button.Click and keyboard/focus semantics while a QS3D-owned flat Button template suppresses host-theme hover/pressed chrome; action-card hover stays bounded to the intended dark panel, with embedded PaletteSet and project/sidecar safety contracts preserved.")
     return 0
 
 
