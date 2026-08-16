@@ -9,6 +9,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             SwallowedDirectContributionFailsClosed();
+            SwallowedAccumulatedSubtotalFailsClosed();
             RepresentableLowOrderContributionRemainsAccepted();
             OrdinaryPercentageCompositionRemainsStable();
         }
@@ -34,6 +35,33 @@ namespace QS3D.Core.SmokeTests
             Throws<OverflowException>(() =>
                 new CostRateBuildUp(
                     "BUILD-SWALLOWED-DIRECT",
+                    new CostCode("CONC"),
+                    "ea",
+                    "VND",
+                    components));
+        }
+
+        private static void SwallowedAccumulatedSubtotalFailsClosed()
+        {
+            var components = new[]
+            {
+                new CostResourceComponent(
+                    "A-SMALL",
+                    "Small direct component",
+                    "ea",
+                    1m,
+                    0.1m),
+                new CostResourceComponent(
+                    "B-LARGE",
+                    "Large direct component",
+                    "ea",
+                    1m,
+                    70000000000000000000000000000m)
+            };
+
+            Throws<OverflowException>(() =>
+                new CostRateBuildUp(
+                    "BUILD-SWALLOWED-ACCUMULATED",
                     new CostCode("CONC"),
                     "ea",
                     "VND",
