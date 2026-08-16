@@ -1,0 +1,51 @@
+name: Feature request
+description: Propose a focused QS3D capability or workflow improvement.
+title: "[Feature] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep requests outcome-focused. If this extends an existing issue or parity lane, link that issue instead of creating overlapping work.
+
+  - type: dropdown
+    id: target
+    attributes:
+      label: Product target
+      options:
+        - BricsCAD V25
+        - BricsCAD V26
+        - V25 + V26
+        - Core / host-neutral
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / user outcome
+      description: What user problem should this solve? Avoid prescribing implementation unless it is a hard constraint.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List observable behaviors that would make the request complete and testable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References / evidence
+      description: Existing QS3D issue/PR, competitor behavior, screenshots, sanitized drawings, or documentation links.
+
+  - type: checkboxes
+    id: coordination
+    attributes:
+      label: Coordination
+      options:
+        - label: I searched for an existing issue/PR that already owns this scope.
+          required: true
