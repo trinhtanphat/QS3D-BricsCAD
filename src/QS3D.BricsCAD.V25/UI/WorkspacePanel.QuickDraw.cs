@@ -19,6 +19,7 @@ namespace QS3D.BricsCAD.V25.UI
             PreviewKeyDown += OnQuickDrawPreviewKeyDown;
             FamilyList.MouseDoubleClick += OnFamilyQuickDrawDoubleClick;
             EnsureSlabOpeningWorkspaceRoute();
+            AttachFamilySubtypeInteractions();
 
             var menu = FamilyList.ContextMenu;
             if (menu == null) return;
