@@ -40,4 +40,6 @@ Write-Host "=== Workspace / RightPanel offline source-contract smoke ==="
 
 Write-Host ""
 Write-Host "PASS: offline WPF theme + Workspace/RightPanel source-contract smoke completed."
+Write-Host "This is an early local failure detector only; it does not launch or host BricsCAD UI."
+Write-Host "This offline smoke does not replace licensed BricsCAD V25 NETLOAD and in-host runtime qualification."
 Write-Host "Palette construction/layout is intentionally deferred to the licensed in-host BricsCAD V25 runtime probe; offline PowerShell must not load BricsCAD native UI dependencies."
