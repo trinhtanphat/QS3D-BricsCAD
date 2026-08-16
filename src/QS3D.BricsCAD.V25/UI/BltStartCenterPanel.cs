@@ -90,7 +90,15 @@ namespace QS3D.BricsCAD.V25.UI
             Grid.SetRow(body, 0);
             root.Children.Add(body);
 
-            var left = BuildLeftPane();
+            var leftContent = BuildLeftPane();
+            var left = new ScrollViewer
+            {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                CanContentScroll = false,
+                Content = leftContent
+            };
+            left.SizeChanged += (_, e) => leftContent.MinHeight = Math.Max(0d, e.NewSize.Height);
             Grid.SetColumn(left, 0);
             body.Children.Add(left);
 
@@ -123,8 +131,10 @@ namespace QS3D.BricsCAD.V25.UI
             grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            var brand = new StackPanel { Orientation = Orientation.Horizontal };
-            brand.Children.Add(new TextBlock
+            var brand = new Grid();
+            brand.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            brand.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var brandGlyph = new TextBlock
             {
                 Text = "✦",
                 Foreground = AccentBrush,
@@ -132,7 +142,9 @@ namespace QS3D.BricsCAD.V25.UI
                 FontWeight = FontWeights.Bold,
                 Margin = new Thickness(0, -2, 14, 0),
                 VerticalAlignment = VerticalAlignment.Top
-            });
+            };
+            Grid.SetColumn(brandGlyph, 0);
+            brand.Children.Add(brandGlyph);
             var brandText = new StackPanel();
             brandText.Children.Add(new TextBlock
             {
@@ -146,18 +158,21 @@ namespace QS3D.BricsCAD.V25.UI
                 Text = "BIM Modeling & Quantity Application",
                 Foreground = MutedBrush,
                 FontSize = 11,
+                TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(1, 1, 0, 0)
             });
+            Grid.SetColumn(brandText, 1);
             brand.Children.Add(brandText);
             Grid.SetRow(brand, 0);
             grid.Children.Add(brand);
 
             var description = new TextBlock
             {
-                Text = "Giải pháp mô hình hóa thông tin công trình BIM 3D trực quan và tối ưu\nhóa bóc tách khối lượng trong BricsCAD.",
+                Text = "Giải pháp mô hình hóa thông tin công trình BIM 3D trực quan và tối ưu hóa bóc tách khối lượng trong BricsCAD.",
                 Foreground = MutedBrush,
                 FontSize = 14,
                 LineHeight = 20,
+                TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 28, 0, 26)
             };
             Grid.SetRow(description, 1);
@@ -207,6 +222,7 @@ namespace QS3D.BricsCAD.V25.UI
                 Text = "Phiên bản " + DisplayVersion() + " • BLT3D Team",
                 Foreground = MutedBrush,
                 FontSize = 10,
+                TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 16, 0, 0)
             };
             Grid.SetRow(version, 5);
@@ -236,6 +252,7 @@ namespace QS3D.BricsCAD.V25.UI
                 Text = "Nhấp vào dự án để mở trực tiếp và bắt đầu làm việc",
                 Foreground = MutedBrush,
                 FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 6, 0, 18)
             };
             Grid.SetRow(help, 1);
@@ -345,13 +362,15 @@ namespace QS3D.BricsCAD.V25.UI
                 Text = title,
                 Foreground = TextBrush,
                 FontWeight = FontWeights.SemiBold,
-                FontSize = 14
+                FontSize = 14,
+                TextWrapping = TextWrapping.Wrap
             });
             texts.Children.Add(new TextBlock
             {
                 Text = subtitle,
                 Foreground = MutedBrush,
                 FontSize = 11,
+                TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 2, 0, 0)
             });
             Grid.SetColumn(texts, 1);
@@ -488,7 +507,8 @@ namespace QS3D.BricsCAD.V25.UI
                 Text = fileName,
                 Foreground = recent.Exists ? TextBrush : MutedBrush,
                 FontWeight = FontWeights.SemiBold,
-                FontSize = 13
+                FontSize = 13,
+                TextTrimming = TextTrimming.CharacterEllipsis
             });
             text.Children.Add(new TextBlock
             {
