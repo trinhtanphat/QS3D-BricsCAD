@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             ReaderCollectionsAreImmutableSnapshots();
             InvalidSnapshotFailsBeforeTypedRead();
             MissingTimestampWarningRemainsReadable();
+            WhitespaceOnlyTimestampWarningsRemainReadable();
         }
 
         private static void ExportedSnapshotReadsAllPortableFields()
@@ -93,6 +94,35 @@ namespace QS3D.Core.SmokeTests
             True(snapshot.Validation.WarningCount > 0);
             True(!snapshot.Project.UpdatedUtc.HasValue);
             Equal(string.Empty, snapshot.Project.UpdatedUtcRaw);
+        }
+
+        private static void WhitespaceOnlyTimestampWarningsRemainReadable()
+        {
+            var rewritten = ProjectInterchangeJsonExporter.Build(Project());
+            const string marker = "\"updatedUtc\":";
+            var searchFrom = 0;
+            var replaced = 0;
+            while (true)
+            {
+                var next = rewritten.IndexOf(marker, searchFrom, StringComparison.Ordinal);
+                if (next < 0) break;
+                var valueStart = next + marker.Length;
+                True(valueStart < rewritten.Length && rewritten[valueStart] == '"');
+                var valueEnd = rewritten.IndexOf('"', valueStart + 1);
+                True(valueEnd > valueStart);
+                rewritten = rewritten.Substring(0, valueStart) + "\"   \"" + rewritten.Substring(valueEnd + 1);
+                searchFrom = valueStart + 5;
+                replaced++;
+            }
+
+            True(replaced >= 2);
+            var snapshot = ProjectInterchangeValidatedSnapshotReader.Read(rewritten);
+            True(snapshot.Validation.IsValid);
+            True(snapshot.Validation.WarningCount >= replaced);
+            True(!snapshot.Project.UpdatedUtc.HasValue);
+            Equal(string.Empty, snapshot.Project.UpdatedUtcRaw);
+            True(snapshot.Elements.All(x => !x.UpdatedUtc.HasValue));
+            True(snapshot.Elements.All(x => string.Equals(x.UpdatedUtcRaw, string.Empty, StringComparison.Ordinal)));
         }
 
         private static ProjectState Project()

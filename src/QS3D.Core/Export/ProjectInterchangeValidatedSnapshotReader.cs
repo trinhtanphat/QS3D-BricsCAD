@@ -173,7 +173,7 @@ namespace QS3D.Core.Export
             var elements = contract.Elements.Select((x, i) =>
             {
                 if (x == null) throw new InvalidDataException("Validated element entry is null at index " + i + ".");
-                var rawTimestamp = CanonicalOptional(x.UpdatedUtc, "element updatedUtc");
+                var rawTimestamp = TimestampRaw(x.UpdatedUtc, "element updatedUtc");
                 return new InterchangeElementSnapshot(
                     Id(x.Id, "element"),
                     Category(x.Category, "element"),
@@ -190,7 +190,7 @@ namespace QS3D.Core.Export
                     NumberMap(x.Quantities, "element quantities"));
             }).ToList().AsReadOnly();
 
-            var projectTimestamp = CanonicalOptional(contract.Project.UpdatedUtc, "project updatedUtc");
+            var projectTimestamp = TimestampRaw(contract.Project.UpdatedUtc, "project updatedUtc");
             var result = new ProjectInterchangeValidatedSnapshot(
                 validation,
                 Required(contract.Format, "format"),
@@ -245,6 +245,12 @@ namespace QS3D.Core.Export
             if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
                 throw new InvalidDataException("Validated semantic snapshot contains non-canonical padded " + label + ".");
             return raw;
+        }
+        private static string TimestampRaw(string? value, string label)
+        {
+            var raw = value ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+            return CanonicalOptional(raw, label);
         }
         private static string CanonicalRequired(string? value, string label)
         {
