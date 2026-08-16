@@ -47,6 +47,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             StopTimedRetry();
             HomeTabActivationCoordinator.Stop();
             BltHomeRibbonAugmenter.Reset();
+            BltDrawRibbonAugmenter.Reset();
             Qs3dRibbonTabGroupCoordinator.Reset();
         }
 
@@ -112,9 +113,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
             ready = QuantityReferenceRibbonAugmenter.TryInitialize() && ready;
             ready = UpdateRibbonAugmenter.TryInitialize() && ready;
 
-            // Reconcile KHỞI ĐẦU after feature augmenters so its two screenshot-familiar
-            // groups are deterministic and their panel boundary supplies the requested divider.
+            // Reconcile screenshot-familiar presentation after feature augmenters so the
+            // QS3D-owned Home/Draw groups are deterministic without replacing native tabs.
             ready = BltHomeRibbonAugmenter.TryInitialize() && ready;
+            ready = BltDrawRibbonAugmenter.TryInitialize() && ready;
 
             // BricsCAD can invoke ICommand without forwarding RibbonButton.CommandParameter.
             // Wrap every QS3D ribbon handler after all augmenters have reconciled so visible
