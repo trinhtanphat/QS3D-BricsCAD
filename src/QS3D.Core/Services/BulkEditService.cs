@@ -208,10 +208,12 @@ namespace QS3D.Core.Services
                 if (string.IsNullOrWhiteSpace(id))
                     throw new ArgumentException("Bulk edit target id is required.", nameof(elementIds));
                 var normalized = id.Trim();
-                if (!requested.Add(normalized))
-                    throw new InvalidOperationException("Bulk edit target list contains duplicate semantic element id: " + normalized);
-                if (!sourceIndex.TryGetValue(normalized, out var match))
-                    throw new KeyNotFoundException("Unknown semantic element: " + normalized);
+                if (!string.Equals(normalized, id, StringComparison.Ordinal))
+                    throw new ArgumentException("Bulk edit target id must use canonical surrounding whitespace: " + id, nameof(elementIds));
+                if (!requested.Add(id))
+                    throw new InvalidOperationException("Bulk edit target list contains duplicate semantic element id: " + id);
+                if (!sourceIndex.TryGetValue(id, out var match))
+                    throw new KeyNotFoundException("Unknown semantic element: " + id);
                 resolved.Add(match);
             }
             return resolved.AsReadOnly();
