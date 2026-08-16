@@ -332,8 +332,41 @@ namespace QS3D.Core.Review
             }
             if (changedElements.Count != snapshot.ChangedElementCount)
                 throw new InvalidOperationException("Preview review changed-element summary does not match its entries.");
+
+            ValidateKindSpecificInvariants(snapshot);
+
             if (string.IsNullOrWhiteSpace(snapshot.Fingerprint) || snapshot.Fingerprint.Length != 64 || snapshot.Fingerprint.Any(ch => !Uri.IsHexDigit(ch)))
                 throw new InvalidOperationException("Preview review fingerprint must be a 64-character SHA-256 hex value.");
+        }
+
+        private static void ValidateKindSpecificInvariants(PreviewReviewSnapshot snapshot)
+        {
+            if (snapshot.Kind == PreviewReviewKind.QuantityRule)
+            {
+                if (!string.Equals(snapshot.Scope, "Project", StringComparison.Ordinal) || snapshot.TargetElementIds.Count != 0)
+                    throw new InvalidOperationException("Quantity-rule review snapshot must use whole-project scope without targets.");
+                if (snapshot.RegeneratedElementCount != 0 || snapshot.NewHealthIssueCount != 0 || snapshot.NewHealthErrorCount != 0 || snapshot.ResolvedHealthIssueCount != 0 || snapshot.OmittedHandleFieldCount != 0)
+                    throw new InvalidOperationException("Quantity-rule review snapshot cannot contain regeneration or health summary counts.");
+                foreach (var entry in snapshot.Entries)
+                {
+                    if (string.IsNullOrEmpty(entry.Category))
+                        throw new InvalidOperationException("Quantity-rule review entries require a category.");
+                    if (!entry.Field.StartsWith(QuantityFieldPrefix, StringComparison.Ordinal))
+                        throw new InvalidOperationException("Quantity-rule review entries must use canonical Quantity: fields.");
+                }
+                return;
+            }
+
+            if (snapshot.Kind == PreviewReviewKind.Regeneration)
+            {
+                foreach (var entry in snapshot.Entries)
+                {
+                    if (entry.Category.Length != 0)
+                        throw new InvalidOperationException("Regeneration review entries must not contain quantity-rule categories.");
+                    if (entry.BeforeProvenance.Length != 0 || entry.AfterProvenance.Length != 0)
+                        throw new InvalidOperationException("Regeneration review entries must not contain quantity-rule provenance.");
+                }
+            }
         }
 
         private static PreviewReviewSnapshot Build(
