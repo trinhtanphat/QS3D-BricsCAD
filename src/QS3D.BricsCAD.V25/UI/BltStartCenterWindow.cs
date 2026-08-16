@@ -22,7 +22,7 @@ namespace QS3D.BricsCAD.V25.UI
         private static readonly Brush ShellBrush = BrushFromRgb(29, 29, 29);
         private static readonly Brush PanelBrush = BrushFromRgb(39, 39, 39);
         private static readonly Brush PanelHoverBrush = BrushFromRgb(47, 47, 47);
-        private static readonly Brush BorderBrush = BrushFromRgb(67, 67, 67);
+        private static readonly Brush ShellBorderBrush = BrushFromRgb(67, 67, 67);
         private static readonly Brush MutedBrush = BrushFromRgb(174, 179, 188);
         private static readonly Brush AccentBrush = BrushFromRgb(20, 113, 236);
         private static readonly Brush TextBrush = Brushes.White;
@@ -63,7 +63,7 @@ namespace QS3D.BricsCAD.V25.UI
             Grid.SetColumn(left, 0);
             body.Children.Add(left);
 
-            var divider = new Border { Width = 1, Background = BorderBrush, Margin = new Thickness(18, 6, 28, 6) };
+            var divider = new Border { Width = 1, Background = ShellBorderBrush, Margin = new Thickness(18, 6, 28, 6) };
             Grid.SetColumn(divider, 1);
             body.Children.Add(divider);
 
@@ -259,7 +259,7 @@ namespace QS3D.BricsCAD.V25.UI
             var border = new Border
             {
                 Background = PanelBrush,
-                BorderBrush = BorderBrush,
+                BorderBrush = ShellBorderBrush,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(5),
                 Padding = compact ? new Thickness(14, 10, 14, 10) : new Thickness(14, 11, 14, 11),
@@ -410,7 +410,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 Width = 25,
                 Height = 25,
-                BorderBrush = BorderBrush,
+                BorderBrush = ShellBorderBrush,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(3),
                 VerticalAlignment = VerticalAlignment.Top
@@ -523,7 +523,7 @@ namespace QS3D.BricsCAD.V25.UI
             var informational = typeof(BltStartCenterWindow).Assembly
                 .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
             if (!string.IsNullOrWhiteSpace(informational))
-                return informational.Split('+')[0];
+                return informational!.Split('+')[0];
             return typeof(BltStartCenterWindow).Assembly.GetName().Version?.ToString() ?? "1.0.0";
         }
 
