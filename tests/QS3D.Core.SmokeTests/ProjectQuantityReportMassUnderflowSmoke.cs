@@ -30,7 +30,7 @@ namespace QS3D.Core.SmokeTests
             {
                 var rows = ProjectQuantityReportBuilder.Detail(project);
                 var reportedMass = rows.Count == 1 && rows[0].MassKg.HasValue
-                    ? rows[0].MassKg.Value.ToString("R")
+                    ? rows[0].MassKg.GetValueOrDefault().ToString("R")
                     : "<missing>";
                 throw new InvalidOperationException(
                     "Positive finite density-derived mass that rounds to zero must fail closed instead of reporting MassKg=" +
