@@ -29,8 +29,8 @@ on:
       - "integration/**"
 
 permissions:
-  actions: read
   contents: read
+  actions: read
 
 concurrency:
   group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
