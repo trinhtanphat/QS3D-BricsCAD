@@ -336,6 +336,36 @@ namespace QS3D.Core.Review
                 throw new InvalidOperationException("Preview review fingerprint must be a 64-character SHA-256 hex value.");
         }
 
+        internal static void ValidatePersistedKindSpecificInvariants(PreviewReviewSnapshot snapshot)
+        {
+            if (snapshot.Kind == PreviewReviewKind.QuantityRule)
+            {
+                if (!string.Equals(snapshot.Scope, "Project", StringComparison.Ordinal) || snapshot.TargetElementIds.Count != 0)
+                    throw new InvalidOperationException("Quantity-rule review snapshot must use whole-project scope without targets.");
+                if (snapshot.RegeneratedElementCount != 0 || snapshot.NewHealthIssueCount != 0 || snapshot.NewHealthErrorCount != 0 || snapshot.ResolvedHealthIssueCount != 0 || snapshot.OmittedHandleFieldCount != 0)
+                    throw new InvalidOperationException("Quantity-rule review snapshot cannot contain regeneration or health summary counts.");
+                foreach (var entry in snapshot.Entries)
+                {
+                    if (string.IsNullOrEmpty(entry.Category))
+                        throw new InvalidOperationException("Quantity-rule review entries require a category.");
+                    if (!entry.Field.StartsWith(QuantityFieldPrefix, StringComparison.Ordinal))
+                        throw new InvalidOperationException("Quantity-rule review entries must use canonical Quantity: fields.");
+                }
+                return;
+            }
+
+            if (snapshot.Kind == PreviewReviewKind.Regeneration)
+            {
+                foreach (var entry in snapshot.Entries)
+                {
+                    if (entry.Category.Length != 0)
+                        throw new InvalidOperationException("Regeneration review entries must not contain quantity-rule categories.");
+                    if (entry.BeforeProvenance.Length != 0 || entry.AfterProvenance.Length != 0)
+                        throw new InvalidOperationException("Regeneration review entries must not contain quantity-rule provenance.");
+                }
+            }
+        }
+
         private static PreviewReviewSnapshot Build(
             string name,
             string projectId,
@@ -424,6 +454,7 @@ namespace QS3D.Core.Review
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Preview review path is required.", nameof(path));
+            PreviewReviewSnapshotService.ValidatePersistedKindSpecificInvariants(snapshot);
             var service = new PreviewReviewSnapshotService();
             if (!service.Verify(snapshot)) throw new InvalidOperationException("Preview review snapshot fingerprint or invariants are invalid.");
 
@@ -499,6 +530,14 @@ namespace QS3D.Core.Review
             entries = entries.OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Field, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Change, StringComparer.Ordinal).ThenBy(x => x.Before, StringComparer.Ordinal).ThenBy(x => x.After, StringComparer.Ordinal).ToList();
 
             var snapshot = new PreviewReviewSnapshot(name, projectId, kind, sourceChangeVersion, scope, targets, entries, changedElementCount, regeneratedElementCount, newHealthIssueCount, newHealthErrorCount, resolvedHealthIssueCount, omittedHandleFieldCount, fingerprint);
+            try
+            {
+                PreviewReviewSnapshotService.ValidatePersistedKindSpecificInvariants(snapshot);
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new InvalidDataException("Preview review snapshot kind-specific persisted invariants are invalid.", ex);
+            }
             if (!new PreviewReviewSnapshotService().Verify(snapshot)) throw new InvalidDataException("Preview review snapshot fingerprint or invariants are invalid.");
             return snapshot;
         }
