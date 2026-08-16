@@ -56,15 +56,44 @@
                 <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
                 <Setter Property="Padding" Value="12,7" />
                 <Setter Property="FontWeight" Value="SemiBold" />
-                <Style.Triggers>
-                    <Trigger Property="IsSelected" Value="True">
-                        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
-                        <Setter Property="Background" Value="{StaticResource BgRaisedBrush}" />
-                    </Trigger>
-                    <Trigger Property="IsMouseOver" Value="True">
-                        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
-                    </Trigger>
-                </Style.Triggers>
+                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="TabItem">
+                            <Border x:Name="Chrome"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="3,3,0,0"
+                                    Padding="{TemplateBinding Padding}"
+                                    SnapsToDevicePixels="True">
+                                <ContentPresenter ContentSource="Header"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  RecognizesAccessKey="True" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Chrome" Property="Background" Value="{StaticResource BgHoverBrush}" />
+                                    <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource BorderStrongBrush}" />
+                                    <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter TargetName="Chrome" Property="Background" Value="{StaticResource BgRaisedBrush}" />
+                                    <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource BorderStrongBrush}" />
+                                    <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                                </Trigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                    <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource BorderFocusBrush}" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Foreground" Value="{StaticResource DisabledTextBrush}" />
+                                    <Setter Property="Opacity" Value="0.7" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
             </Style>
             <Style x:Key="FieldLabel" TargetType="TextBlock">
                 <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
