@@ -27,7 +27,7 @@ namespace QS3D.Core.Features
 
         private static bool TryNormalizeName(string name, out string normalized)
         {
-            normalized = null;
+            normalized = string.Empty;
             if (string.IsNullOrWhiteSpace(name)) return false;
 
             var candidate = name.Trim();
