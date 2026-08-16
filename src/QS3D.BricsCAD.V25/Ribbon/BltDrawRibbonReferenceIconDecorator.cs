@@ -123,7 +123,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 if (string.Equals(typeName, "RibbonButton", StringComparison.Ordinal))
                 {
                     var id = GetProperty(item, "Id") as string;
-                    if (!string.IsNullOrWhiteSpace(id))
+                    if (id != null && !string.IsNullOrWhiteSpace(id))
                         buttons[id] = item;
                     continue;
                 }
