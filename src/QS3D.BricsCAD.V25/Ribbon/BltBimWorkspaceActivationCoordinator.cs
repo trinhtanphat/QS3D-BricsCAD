@@ -15,7 +15,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
     {
         private const string AssemblyName = "BrxMgd";
         private const string BimTabId = "QS3D_BIM";
-        private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(400);
+        private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(250);
 
         private static DispatcherTimer? _timer;
         private static string _lastTabId = string.Empty;
@@ -56,8 +56,14 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     return;
 
                 _lastTabId = currentId;
-                if (string.Equals(currentId, BimTabId, StringComparison.OrdinalIgnoreCase))
-                    PaletteCoordinator.ShowBimWorkspace();
+                if (!string.Equals(currentId, BimTabId, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                // The embedded HOME Start Center owns a large docked surface. Release it before
+                // showing the left/right BIM palettes so the real BricsCAD viewport is visible in
+                // the centre instead of leaving the HOME canvas covering the model workspace.
+                StartCenterPaletteCoordinator.Hide();
+                PaletteCoordinator.ShowBimWorkspace();
             }
             catch
             {
@@ -68,23 +74,64 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private static string ResolveCurrentTabId(object control)
         {
-            foreach (var propertyName in new[] { "CurrentTab", "ActiveTab", "SelectedTab" })
+            foreach (var propertyName in new[] { "CurrentTab", "SelectedTab", "ActiveTab" })
             {
                 var tab = GetProperty(control, propertyName);
-                var id = tab == null ? null : GetProperty(tab, "Id") as string;
+                var id = TabId(tab);
                 if (!string.IsNullOrWhiteSpace(id)) return id;
             }
 
-            var tabs = GetProperty(control, "Tabs") as IEnumerable;
+            var tabs = GetProperty(control, "Tabs");
             if (tabs == null) return string.Empty;
-            foreach (var tab in tabs)
+
+            foreach (var propertyName in new[] { "SelectedTabIndex", "SelectedIndex", "CurrentTabIndex" })
             {
-                if (tab == null) continue;
-                var selected = ReadBool(tab, "IsActive") || ReadBool(tab, "IsSelected");
-                if (!selected) continue;
-                return GetProperty(tab, "Id") as string ?? string.Empty;
+                var rawIndex = GetProperty(control, propertyName);
+                if (!(rawIndex is int index) || index < 0) continue;
+                var tab = ItemAt(tabs, index);
+                var id = TabId(tab);
+                if (!string.IsNullOrWhiteSpace(id)) return id;
             }
+
+            if (tabs is IEnumerable enumerable)
+            {
+                foreach (var tab in enumerable)
+                {
+                    if (tab == null) continue;
+                    if (!ReadBool(tab, "IsActive") &&
+                        !ReadBool(tab, "IsSelected") &&
+                        !ReadBool(tab, "Selected"))
+                        continue;
+
+                    var id = TabId(tab);
+                    if (!string.IsNullOrWhiteSpace(id)) return id;
+                }
+            }
+
             return string.Empty;
+        }
+
+        private static string TabId(object? tab)
+        {
+            if (tab == null) return string.Empty;
+            return GetProperty(tab, "Id") as string ?? GetProperty(tab, "Name") as string ?? string.Empty;
+        }
+
+        private static object? ItemAt(object collection, int index)
+        {
+            if (collection is IList list)
+                return index < list.Count ? list[index] : null;
+
+            if (!(collection is IEnumerable enumerable))
+                return null;
+
+            var current = 0;
+            foreach (var item in enumerable)
+            {
+                if (current == index) return item;
+                current++;
+            }
+            return null;
         }
 
         private static bool ReadBool(object target, string propertyName)
