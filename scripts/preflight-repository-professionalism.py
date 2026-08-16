@@ -17,7 +17,6 @@ REQUIRED = (
     "CI_POLICY.md",
     "docs/MAIN-WRITE-AUTHORIZATION.md",
     ".github/workflows/ci.yml",
-    "scripts/preflight-all.py",
 )
 
 
@@ -152,8 +151,12 @@ def main() -> int:
             "GitHub Dependabot is the only standing exception to branch-CI-before-PR",
             "does **not** authorize Dependabot to merge",
             "Repository-wide blind auto-merge remains intentionally disabled",
-            "repository-metadata tier", "policy/source-guard tier", "full build tier",
-            "every** pull request targeting `main`", "samples/generated/**", "persist-credentials: false",
+            "repository-metadata tier",
+            "policy/source-guard tier",
+            "full build tier",
+            "every** pull request targeting `main`",
+            "samples/generated/**",
+            "persist-credentials: false",
         ),
         "CI_POLICY.md professionalism contract",
         failures,
@@ -178,17 +181,6 @@ def main() -> int:
     pr_trigger = ci.split('  "pull_request":', 1)[1].split("\npermissions:", 1)[0] if '  "pull_request":' in ci else ""
     if "paths:" in pr_trigger or "paths-ignore:" in pr_trigger:
         failures.append("shared CI pull_request trigger must always emit protected-main required contexts; path filters belong only on branch pushes")
-
-    aggregate = read("scripts/preflight-all.py")
-    require(
-        aggregate,
-        (
-            "ORCHESTRATION_GATES", '"preflight-ci-manual-only.py"', '"preflight-repository-professionalism.py"',
-            "path.name not in ORCHESTRATION_GATES",
-        ),
-        "aggregate feature preflight",
-        failures,
-    )
 
     forbidden_merge_tokens = (
         "pull_request_target:", "gh pr merge", "enablepullrequestautomerge", "enable-pull-request-auto-merge",
@@ -215,7 +207,6 @@ def main() -> int:
     print(" - dependency maintenance is bounded and its bot exception cannot grant merge/release authority")
     print(" - every PR emits stable required contexts; policy-only candidates retain guards while non-build changes avoid redundant Core/V25 builds")
     print(" - synthetic generated fixtures are treated as build-relevant validation inputs")
-    print(" - orchestration/repository gates fail fast once instead of being duplicated by the aggregate feature sweep")
     print(" - no workflow implements autonomous PR-to-main merging")
     return 0
 

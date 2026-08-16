@@ -7,20 +7,13 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SELF = Path(__file__).resolve()
-# These are orchestration/repository-governance gates, not feature gates.
-# Shared CI invokes them explicitly before the aggregate so they fail fast and
-# remain available even for lightweight metadata/policy-only validation tiers.
-ORCHESTRATION_GATES = {
-    "preflight-ci-manual-only.py",
-    "preflight-repository-professionalism.py",
-}
 
 
 def discover():
     return [
         path
         for path in sorted(SCRIPTS.glob("preflight-*.py"), key=lambda p: p.name.lower())
-        if path.resolve() != SELF and path.name not in ORCHESTRATION_GATES
+        if path.resolve() != SELF
     ]
 
 
