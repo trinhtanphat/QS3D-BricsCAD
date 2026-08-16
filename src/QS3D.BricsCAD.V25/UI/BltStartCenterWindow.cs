@@ -6,7 +6,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Services;
 using Application = Bricscad.ApplicationServices.Application;
 
@@ -14,8 +13,7 @@ namespace QS3D.BricsCAD.V25.UI
 {
     /// <summary>
     /// Clean-room BLT3D-familiar home shell for the hosted BricsCAD plugin.
-    /// The legacy StartCenterWindow controls stay constructed by the base class so existing
-    /// command/state contracts remain intact while this shell temporarily owns the visible body.
+    /// User-facing actions invoke C# APIs directly; the Start Center never dispatches command-line strings.
     /// </summary>
     public sealed class BltStartCenterWindow : StartCenterWindow
     {
@@ -139,17 +137,17 @@ namespace QS3D.BricsCAD.V25.UI
             grid.Children.Add(quickTitle);
 
             var actions = new StackPanel();
-            actions.Children.Add(CreateActionCard("＋", "Tạo dự án mới", "Bắt đầu bản vẽ trắng sạch hoàn toàn", () => SendHostCommand("_.NEW ")));
-            actions.Children.Add(CreateActionCard("▱", "Mở tệp dự án...", "Chọn tệp DWG/QS3D hiện có từ máy tính", () => SendHostCommand("_.OPEN ")));
+            actions.Children.Add(CreateActionCard("＋", "Tạo dự án mới", "Bắt đầu bản vẽ trắng sạch hoàn toàn", ProjectFileUiService.CreateNewDrawing));
+            actions.Children.Add(CreateActionCard("▱", "Mở tệp dự án...", "Chọn tệp BLT3D/QS3D hiện có từ máy tính", ProjectFileUiService.OpenProjectFromPicker));
 
             var saveRow = new Grid { Margin = new Thickness(0, 0, 0, 0) };
             saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) });
             saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            var save = CreateActionCard("▣", "Lưu", "Ctrl+S", () => SendHostCommand("_.QSAVE "), compact: true);
+            var save = CreateActionCard("▣", "Lưu", "Lưu project QS3D", ProjectFileUiService.SaveCurrentProject, compact: true);
             Grid.SetColumn(save, 0);
             saveRow.Children.Add(save);
-            var saveAs = CreateActionCard("▤", "Lưu thành...", "Tạo bản sao mới", () => SendHostCommand("_.SAVEAS "), compact: true);
+            var saveAs = CreateActionCard("▤", "Lưu thành...", "Tạo bản sao BLT3D", ProjectFileUiService.SaveCurrentProjectAs, compact: true);
             Grid.SetColumn(saveAs, 2);
             saveRow.Children.Add(saveAs);
             actions.Children.Add(saveRow);
@@ -229,8 +227,8 @@ namespace QS3D.BricsCAD.V25.UI
             dock.Children.Add(right);
 
             var left = new StackPanel { Orientation = Orientation.Horizontal };
-            left.Children.Add(StatusButton("Mô hình", "QS3D"));
-            left.Children.Add(StatusButton("BQ", "QS3DBQ"));
+            left.Children.Add(StatusButton("Mô hình", () => new Commands().ShowWorkspace()));
+            left.Children.Add(StatusButton("BQ", () => new Commands().ShowQuantitySummary()));
 
             _floorText.Foreground = MutedBrush;
             _floorText.FontSize = 12;
@@ -290,11 +288,11 @@ namespace QS3D.BricsCAD.V25.UI
 
             border.MouseEnter += (_, __) => border.Background = PanelHoverBrush;
             border.MouseLeave += (_, __) => border.Background = PanelBrush;
-            border.MouseLeftButtonUp += (_, __) => action();
+            border.MouseLeftButtonUp += (_, __) => RunUiAction(action);
             return border;
         }
 
-        private UIElement StatusButton(string text, string command)
+        private UIElement StatusButton(string text, Action action)
         {
             var border = new Border
             {
@@ -307,7 +305,7 @@ namespace QS3D.BricsCAD.V25.UI
                 Cursor = Cursors.Hand
             };
             border.Child = new TextBlock { Text = text, Foreground = Brushes.White, FontSize = 12, FontWeight = FontWeights.SemiBold };
-            border.MouseLeftButtonUp += (_, __) => SendHostCommand(command + " ");
+            border.MouseLeftButtonUp += (_, __) => RunUiAction(action);
             return border;
         }
 
@@ -478,18 +476,11 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
             }
 
-            var document = Application.DocumentManager.MdiActiveDocument;
-            if (document == null)
-            {
-                _statusText.Text = "BricsCAD chưa có bản vẽ active để nhận lệnh OPEN.";
-                return;
-            }
-
             try
             {
-                document.SendStringToExecute("_.OPEN \"" + normalized + "\" ", true, false, false);
+                Application.DocumentManager.Open(normalized, false);
                 StartCenterUserStateStore.RecordProject(normalized);
-                _statusText.Text = "Đang mở " + Path.GetFileName(normalized) + "…";
+                _statusText.Text = "Đã mở " + Path.GetFileName(normalized) + ".";
                 RefreshRecentProjects();
             }
             catch (Exception ex)
@@ -498,18 +489,11 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
-        private void SendHostCommand(string command)
+        private void RunUiAction(Action action)
         {
-            var document = Application.DocumentManager.MdiActiveDocument;
-            if (document == null)
-            {
-                _statusText.Text = "BricsCAD chưa có bản vẽ active.";
-                return;
-            }
-
             try
             {
-                document.SendStringToExecute(command, true, false, false);
+                action();
                 _statusText.Text = string.Empty;
             }
             catch (Exception ex)
