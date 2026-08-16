@@ -11,6 +11,19 @@ RELEASE_WORKFLOWS = {"release-v25.yml", "release-v25-cloud.yml", "release-v26.ym
 errors = []
 
 
+def parse_block_mapping_key(line, indentation):
+    if indentation < 0:
+        return None
+    match = re.fullmatch(
+        re.escape(" " * indentation)
+        + r"(?:\"([A-Za-z0-9_-]+)\"|'([A-Za-z0-9_-]+)'|([A-Za-z0-9_-]+))\s*:\s*(?:#.*)?",
+        line,
+    )
+    if not match:
+        return None
+    return next(value for value in match.groups() if value is not None)
+
+
 def collect_job_blocks(lines):
     jobs_index = next((i for i, line in enumerate(lines) if re.match(r"^jobs\s*:\s*(?:#.*)?$", line)), None)
     if jobs_index is None:
@@ -21,11 +34,11 @@ def collect_job_blocks(lines):
     for line in lines[jobs_index + 1:]:
         if line.strip() and not line.startswith((" ", "\t", "#")):
             break
-        match = re.match(r"^\s{2}([A-Za-z0-9_-]+)\s*:\s*(?:#.*)?$", line)
-        if match:
+        job_name = parse_block_mapping_key(line, 2)
+        if job_name is not None:
             if current_name is not None:
                 blocks.append((current_name, current_lines))
-            current_name = match.group(1)
+            current_name = job_name
             current_lines = []
             continue
         if current_name is not None:
@@ -200,6 +213,44 @@ def validate_guard_parser():
     if parse_trigger_name('  "push":') != "push" or parse_trigger_name('  "pull_request":') != "pull_request":
         errors.append("trigger parser must support quoted automatic validation keys")
 
+    accepted_policy_keys = (
+        ("on:", 0, "on"),
+        ("'on':", 0, "on"),
+        ('"on": # approved triggers', 0, "on"),
+        ("  preflight:", 2, "preflight"),
+        ("  'release':", 2, "release"),
+        ('  "core": # protected context', 2, "core"),
+    )
+    for line, indentation, expected in accepted_policy_keys:
+        if parse_block_mapping_key(line, indentation) != expected:
+            errors.append(f"quoted policy mapping-key parser regression: {line!r}")
+
+    rejected_policy_keys = (
+        (" on:", 0),
+        ("\t'on':", 0),
+        ("'on\":", 0),
+        ('"on\':', 0),
+        ("   preflight:", 2),
+        ("  'bad.name':", 2),
+        ("  'bad name':", 2),
+        ("  'unterminated:", 2),
+    )
+    for line, indentation in rejected_policy_keys:
+        if parse_block_mapping_key(line, indentation) is not None:
+            errors.append(f"policy mapping-key parser must fail closed: {line!r}")
+
+    quoted_jobs = collect_job_blocks([
+        "jobs:",
+        "  preflight:",
+        "    if: ${{ github.event_name == 'workflow_dispatch' }}",
+        "  'core':",
+        "    needs: preflight",
+        '  "release-job": # comment',
+        "    runs-on: windows-latest",
+    ])
+    if [name for name, _ in quoted_jobs] != ["preflight", "core", "release-job"]:
+        errors.append("job parser must support unquoted/single-quoted/double-quoted two-space job IDs")
+
 
 validate_guard_parser()
 
@@ -217,7 +268,7 @@ else:
     for path in workflow_files:
         text = path.read_text(encoding="utf-8")
         lines = text.splitlines()
-        on_index = next((i for i, line in enumerate(lines) if re.match(r"^on\s*:\s*(?:#.*)?$", line)), None)
+        on_index = next((i for i, line in enumerate(lines) if parse_block_mapping_key(line, 0) == "on"), None)
         if on_index is None:
             errors.append(f"{path.name}: top-level on: block is required")
             continue
