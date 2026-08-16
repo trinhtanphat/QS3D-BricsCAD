@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Windows;
+using System.Xml;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
 using QS3D.BricsCAD.V25.UI;
@@ -19,7 +20,7 @@ namespace QS3D.BricsCAD.V25
     /// </summary>
     internal static class ProjectFileUiService
     {
-        private const string ProjectFilter = "QS3D Project (*.blt3d;*.qsdb)|*.blt3d;*.qsdb|BLT3D Project (*.blt3d)|*.blt3d|QS3D Project (*.qsdb)|*.qsdb";
+        private const string ProjectFilter = "QS3D Project (*.blt3d;*.qsdb)|*.blt3d;*.qsdb|BLT3D Project (*.blt3d)|*.blt3d|QS3D Project (*.qsdb)|*.qsdb|BricsCAD Drawing (*.dwg)|*.dwg";
         private const string DrawingFilter = "BricsCAD Drawing (*.dwg)|*.dwg";
 
         public static void CreateNewDrawing()
@@ -176,10 +177,24 @@ namespace QS3D.BricsCAD.V25
             var fullProjectPath = Path.GetFullPath(projectPath);
             if (!File.Exists(fullProjectPath)) throw new FileNotFoundException("Không tìm thấy tệp dự án QS3D.", fullProjectPath);
 
+            var extension = Path.GetExtension(fullProjectPath);
+            if (string.Equals(extension, ".dwg", StringComparison.OrdinalIgnoreCase))
+            {
+                OpenDrawing(fullProjectPath);
+                return;
+            }
+
+            if (!IsProjectFileExtension(extension))
+            {
+                throw new InvalidDataException(
+                    "Tệp đã chọn không phải dự án QS3D hoặc bản vẽ BricsCAD được hỗ trợ. " +
+                    "Hãy chọn tệp .blt3d, .qsdb hoặc .dwg.");
+            }
+
             var total = Stopwatch.StartNew();
             var read = Stopwatch.StartNew();
             var store = new QsdbProjectStore();
-            var importedProject = store.Load(fullProjectPath);
+            var importedProject = LoadSelectedProject(store, fullProjectPath);
             read.Stop();
 
             var drawingPath = ResolveDrawingPath(fullProjectPath, importedProject);
@@ -221,6 +236,44 @@ namespace QS3D.BricsCAD.V25
             try { PaletteCoordinator.RefreshProject(); }
             catch { }
             ProjectOperationResultWindow.ShowOpenSuccess(fullProjectPath, project, read.ElapsedMilliseconds, bind.ElapsedMilliseconds, total.ElapsedMilliseconds);
+        }
+
+        private static ProjectState LoadSelectedProject(QsdbProjectStore store, string projectPath)
+        {
+            try
+            {
+                return store.Load(projectPath);
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidDataException(
+                    "Không thể đọc tệp dự án \"" + Path.GetFileName(projectPath) +
+                    "\". Tệp không đúng định dạng QS3D hoặc đã bị hỏng. " +
+                    "Hãy chọn tệp .blt3d/.qsdb hợp lệ; nếu đây là bản vẽ BricsCAD, hãy chọn tệp .dwg.",
+                    ex);
+            }
+        }
+
+        private static bool IsProjectFileExtension(string extension)
+        {
+            return string.Equals(extension, ".blt3d", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(extension, ".qsdb", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void OpenDrawing(string drawingPath)
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null || !SamePath(document.Name, drawingPath))
+            {
+                document = Application.DocumentManager.Open(drawingPath, false);
+                Application.DocumentManager.MdiActiveDocument = document;
+            }
+
+            if (document == null || !SamePath(document.Name, drawingPath))
+                throw new InvalidOperationException("BricsCAD không kích hoạt được bản vẽ đã chọn.");
+
+            try { PaletteCoordinator.RefreshProject(); }
+            catch { }
         }
 
         private static void PublishSelectedProject(QsdbProjectStore store, ProjectState project, string selectedPath, string canonicalPath)
