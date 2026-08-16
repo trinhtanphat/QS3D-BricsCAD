@@ -106,9 +106,13 @@ namespace QS3D.Core.Domain
         {
             get
             {
-                var value = GrossConcreteM3 - DeductionM3;
+                var gross = GrossConcreteM3;
+                var deduction = DeductionM3;
+                var value = gross - deduction;
                 if (double.IsNaN(value) || double.IsInfinity(value))
                     throw new OverflowException("Net concrete volume must be finite.");
+                if (deduction > 0d && value == gross)
+                    throw new OverflowException("Net concrete deduction is below numeric resolution and cannot be represented safely.");
                 return Math.Max(0d, value);
             }
         }
