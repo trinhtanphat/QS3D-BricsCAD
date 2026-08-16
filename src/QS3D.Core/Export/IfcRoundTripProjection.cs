@@ -184,7 +184,22 @@ namespace QS3D.Core.Export
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A non-empty token is required.", parameterName);
             if (!string.Equals(value, value.Trim(), StringComparison.Ordinal)) throw new ArgumentException("Token must not contain surrounding whitespace.", parameterName);
             for (var index = 0; index < value.Length; index++)
-                if (char.IsControl(value[index])) throw new ArgumentException("Token must not contain control characters.", parameterName);
+            {
+                var character = value[index];
+                if (char.IsControl(character))
+                    throw new ArgumentException("Token must not contain control characters.", parameterName);
+
+                if (char.IsHighSurrogate(character))
+                {
+                    if (index + 1 >= value.Length || !char.IsLowSurrogate(value[index + 1]))
+                        throw new ArgumentException("Token must contain well-formed UTF-16.", parameterName);
+                    index++;
+                    continue;
+                }
+
+                if (char.IsLowSurrogate(character))
+                    throw new ArgumentException("Token must contain well-formed UTF-16.", parameterName);
+            }
             return value;
         }
 

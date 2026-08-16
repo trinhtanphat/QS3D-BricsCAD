@@ -2,9 +2,9 @@ name: QS3D Shared Branch and Integration CI
 
 on:
   workflow_dispatch:
-  # Quoted automatic event keys are intentional. scripts/preflight.py keeps its
-  # broad legacy fail-closed rule; scripts/preflight-ci-manual-only.py is the
-  # strict allowlist for this non-publishing validation workflow.
+  # Task branches keep a watched-path filter so ordinary docs-only branch pushes
+  # do not burn CI. PR validation intentionally has no paths filter because
+  # protected main always requires stable `preflight` and `core` contexts.
   "push":
     branches:
       - "agent/**"
@@ -13,6 +13,7 @@ on:
       - "src/**"
       - "tests/**"
       - "scripts/**"
+      - "samples/generated/**"
       - ".github/workflows/**"
       - "Directory.Build.props"
       - "QS3D.sln"
@@ -26,19 +27,6 @@ on:
     branches:
       - main
       - "integration/**"
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "scripts/**"
-      - ".github/workflows/**"
-      - "Directory.Build.props"
-      - "QS3D.sln"
-      - "QS3D.V26.sln"
-      - "CI_POLICY.md"
-      - "AGENTS.md"
-      - "README.md"
-      - "docs/MAIN-WRITE-AUTHORIZATION.md"
-      - "docs/AGENT-WORK-REGISTRATION.md"
 
 permissions:
   contents: read
@@ -51,18 +39,79 @@ jobs:
   preflight:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request' }}
     runs-on: windows-latest
+    timeout-minutes: 30
+    outputs:
+      source_validation: ${{ steps.scope.outputs.source_validation }}
+      build_validation: ${{ steps.scope.outputs.build_validation }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: CI trigger and publishing policy gate
         run: python scripts/preflight-ci-manual-only.py
+      - name: Repository professionalism gate
+        run: python scripts/preflight-repository-professionalism.py
+      - name: Classify validation scope
+        id: scope
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sourceValidation = $true
+          $buildValidation = $true
+          $changed = @()
+
+          if ($env:GITHUB_EVENT_NAME -ne 'workflow_dispatch') {
+            $sourceValidation = $false
+            $buildValidation = $false
+            $baseBranch = if ($env:GITHUB_EVENT_NAME -eq 'pull_request') { $env:GITHUB_BASE_REF } else { 'main' }
+            if ([string]::IsNullOrWhiteSpace($baseBranch)) {
+              throw 'A comparison base branch is required for validation scope classification.'
+            }
+            & git fetch --no-tags origin "+refs/heads/$baseBranch`:refs/remotes/origin/$baseBranch"
+            if ($LASTEXITCODE -ne 0) { throw "Could not fetch validation base $baseBranch." }
+            $changed = @(& git diff --name-only "origin/$baseBranch...HEAD" --)
+            if ($LASTEXITCODE -ne 0) { throw "Could not classify changed paths against $baseBranch." }
+
+            foreach ($rawPath in $changed) {
+              $path = ([string]$rawPath).Trim().Replace('\', '/')
+              if ([string]::IsNullOrWhiteSpace($path)) { continue }
+
+              if ($path -match '^(src|tests|scripts)/' -or
+                  $path -match '^samples/generated/' -or
+                  $path -match '^\.github/workflows/' -or
+                  $path -in @('Directory.Build.props', 'QS3D.sln', 'QS3D.V26.sln')) {
+                $sourceValidation = $true
+                $buildValidation = $true
+                continue
+              }
+
+              if ($path -in @('CI_POLICY.md', 'AGENTS.md', 'README.md', 'docs/MAIN-WRITE-AUTHORIZATION.md', 'docs/AGENT-WORK-REGISTRATION.md')) {
+                $sourceValidation = $true
+              }
+            }
+          }
+
+          $sourceValue = if ($sourceValidation) { 'true' } else { 'false' }
+          $buildValue = if ($buildValidation) { 'true' } else { 'false' }
+          "source_validation=$sourceValue" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "build_validation=$buildValue" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Validation scope: source_validation=$sourceValue build_validation=$buildValue"
+          if ($changed.Count -gt 0) {
+            Write-Host 'Candidate changed paths:'
+            $changed | ForEach-Object { Write-Host " - $_" }
+          }
       - name: Generic source guard
+        if: ${{ steps.scope.outputs.source_validation == 'true' }}
         run: python scripts/preflight.py
       - name: All discovered feature source guards
+        if: ${{ steps.scope.outputs.source_validation == 'true' }}
         run: python scripts/preflight-all.py
       - name: Validate release PowerShell syntax
+        if: ${{ steps.scope.outputs.source_validation == 'true' }}
         shell: pwsh
         run: |
           foreach ($script in @(
@@ -89,6 +138,7 @@ jobs:
             }
           }
       - name: V25 package integrity contract tests
+        if: ${{ steps.scope.outputs.source_validation == 'true' }}
         shell: pwsh
         run: .\scripts\test-v25-package-verifier.ps1
 
@@ -96,27 +146,40 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request' }}
     needs: preflight
     runs-on: windows-latest
+    timeout-minutes: 60
     env:
       BRICSCAD_V25_MIRROR_MSI_URL: http://103.9.157.20/BricsCAD-V25.2.10-1-en_US%28x64%29.msi
       BRICSCAD_V25_PUBLIC_MSI_URL: https://storage.googleapis.com/production-boa-storage/ftp/release/en_US/BricsCAD/Windows/25.2.10/BricsCAD-V25.2.10-1-en_US%28x64%29.msi
       BRICSCAD_V25_PINNED_MSI_SHA256: F44DF674C0E165D96BF579E243B20A8301E3F395F929779F47BF39A7D9DACDE1
       BRICSCAD_V25_MSI_URL: ${{ secrets.BRICSCAD_V25_MSI_URL }}
     steps:
+      - name: Lightweight non-build candidate
+        if: ${{ needs.preflight.outputs.build_validation != 'true' }}
+        shell: pwsh
+        run: Write-Host 'No build-relevant paths changed; stable required core context succeeds without a redundant Core/V25 rebuild.'
       - uses: actions/checkout@v7
+        if: ${{ needs.preflight.outputs.build_validation == 'true' }}
+        with:
+          persist-credentials: false
       - uses: actions/setup-dotnet@v6
+        if: ${{ needs.preflight.outputs.build_validation == 'true' }}
         with:
           dotnet-version: "8.0.x"
       - name: Build core
+        if: ${{ needs.preflight.outputs.build_validation == 'true' }}
         run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
       - name: Run deterministic smoke tests
+        if: ${{ needs.preflight.outputs.build_validation == 'true' }}
         run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
       - name: Restore BricsCAD V25 installer cache
+        if: ${{ needs.preflight.outputs.build_validation == 'true' }}
         id: bricscad-msi-cache
         uses: actions/cache/restore@v6
         with:
           path: .cache/bricscad/BricsCAD-V25.2.10-x64.msi
           key: bricscad-v25.2.10-x64-en-us-${{ env.BRICSCAD_V25_PINNED_MSI_SHA256 }}
       - name: Acquire trusted BricsCAD V25 compile references
+        if: ${{ needs.preflight.outputs.build_validation == 'true' }}
         timeout-minutes: 30
         shell: pwsh
         run: |
@@ -134,12 +197,13 @@ jobs:
           }
           "BRICSCAD_V25_DIR=$([string]$bricsDir)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Save BricsCAD V25 installer cache
-        if: ${{ steps.bricscad-msi-cache.outputs.cache-hit != 'true' }}
+        if: ${{ needs.preflight.outputs.build_validation == 'true' && steps.bricscad-msi-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6
         with:
           path: .cache/bricscad/BricsCAD-V25.2.10-x64.msi
           key: bricscad-v25.2.10-x64-en-us-${{ env.BRICSCAD_V25_PINNED_MSI_SHA256 }}
       - name: Validate BricsCAD V25 compile references
+        if: ${{ needs.preflight.outputs.build_validation == 'true' }}
         shell: pwsh
         run: |
           if (-not $env:BRICSCAD_V25_DIR) { throw 'BRICSCAD_V25_DIR was not resolved from the pinned installer.' }
@@ -149,4 +213,5 @@ jobs:
             }
           }
       - name: Build BricsCAD V25 plugin
+        if: ${{ needs.preflight.outputs.build_validation == 'true' }}
         run: dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64
