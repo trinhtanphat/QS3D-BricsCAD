@@ -26,10 +26,11 @@ namespace QS3D.Core.SmokeTests
                 "dimension",
                 "VND",
                 decimal.MaxValue - 1m);
+            var deviation = result.DeviationFromAveragePercent.GetValueOrDefault();
 
             Assert(result.DeviationFromAveragePercent.HasValue, "A positive historical average must produce a numeric deviation.");
-            Assert(result.DeviationFromAveragePercent.Value < 0m, "A current rate below the average must report a negative deviation.");
-            Assert(result.DeviationFromAveragePercent.Value != 0m, "A representable nonzero final deviation must not underflow to zero before percent scaling.");
+            Assert(deviation < 0m, "A current rate below the average must report a negative deviation.");
+            Assert(deviation != 0m, "A representable nonzero final deviation must not underflow to zero before percent scaling.");
         }
 
         private static void LargeDeltaUsesOverflowSafeOrdering()
