@@ -74,13 +74,45 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void EnsureReferenceModelCategories()
         {
-            EnsureReferenceCategory("Kết cấu thép", ElementCategory.CustomQuantity,
-                "Nhóm tương thích BLT3D; QS3D hiện lưu các cấu kiện thép chưa có builder chuyên biệt theo CustomQuantity để không giả lập native BIM semantics.");
-            EnsureReferenceCategory("Cấu kiện khác", ElementCategory.CustomQuantity,
-                "Nhóm cấu kiện tổng quát dùng CustomQuantity cho các loại chưa có category chuyên biệt.");
+            // Reuse the generic category already supported by the core model instead of inventing
+            // a second unsupported semantic type only for UI parity.
+            var generic = ModelTree.Items.OfType<TreeViewItem>()
+                .FirstOrDefault(item =>
+                    string.Equals(item.Tag as string, ElementCategory.CustomQuantity.ToString(), StringComparison.OrdinalIgnoreCase));
+            if (generic != null)
+            {
+                generic.Header = "Cấu kiện khác";
+                generic.Tag = ElementCategory.CustomQuantity.ToString();
+                generic.ToolTip = "Nhóm cấu kiện tổng quát dùng CustomQuantity cho các loại chưa có category chuyên biệt.";
+            }
+            else
+            {
+                generic = EnsureReferenceCategory(
+                    "Cấu kiện khác",
+                    ElementCategory.CustomQuantity,
+                    "Nhóm cấu kiện tổng quát dùng CustomQuantity cho các loại chưa có category chuyên biệt.");
+            }
+
+            var steel = ModelTree.Items.OfType<TreeViewItem>()
+                .FirstOrDefault(item => string.Equals(item.Header as string, "Kết cấu thép", StringComparison.OrdinalIgnoreCase));
+            if (steel == null)
+            {
+                steel = new TreeViewItem
+                {
+                    Header = "Kết cấu thép",
+                    Tag = ElementCategory.CustomQuantity.ToString(),
+                    ToolTip = "Nhóm tương thích BLT3D; dùng CustomQuantity cho tới khi QS3D có steel builder chuyên biệt, tránh giả lập native BIM semantics.",
+                    MinHeight = 22,
+                    Padding = new Thickness(3, 1, 2, 1),
+                    Margin = new Thickness(0)
+                };
+                var genericIndex = ModelTree.Items.IndexOf(generic);
+                if (genericIndex >= 0) ModelTree.Items.Insert(genericIndex, steel);
+                else ModelTree.Items.Add(steel);
+            }
         }
 
-        private void EnsureReferenceCategory(string header, ElementCategory category, string toolTip)
+        private TreeViewItem EnsureReferenceCategory(string header, ElementCategory category, string toolTip)
         {
             var existing = ModelTree.Items.OfType<TreeViewItem>()
                 .FirstOrDefault(item => string.Equals(item.Header as string, header, StringComparison.OrdinalIgnoreCase));
@@ -88,7 +120,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 existing.Tag = category.ToString();
                 existing.ToolTip = toolTip;
-                return;
+                return existing;
             }
 
             var item = new TreeViewItem
@@ -100,24 +132,8 @@ namespace QS3D.BricsCAD.V25.UI
                 Padding = new Thickness(3, 1, 2, 1),
                 Margin = new Thickness(0)
             };
-
-            // Keep the owner-reference tail ordering: ... Đào đắp → Kết cấu thép → Cấu kiện khác.
-            var custom = ModelTree.Items.OfType<TreeViewItem>()
-                .FirstOrDefault(candidate => string.Equals(candidate.Tag as string, ElementCategory.CustomQuantity.ToString(), StringComparison.OrdinalIgnoreCase));
-            if (custom != null && !string.Equals(custom.Header as string, "Kết cấu thép", StringComparison.OrdinalIgnoreCase))
-            {
-                var index = ModelTree.Items.IndexOf(custom);
-                if (index >= 0)
-                {
-                    if (string.Equals(header, "Kết cấu thép", StringComparison.OrdinalIgnoreCase))
-                        ModelTree.Items.Insert(index, item);
-                    else
-                        ModelTree.Items.Insert(Math.Min(index + 1, ModelTree.Items.Count), item);
-                    return;
-                }
-            }
-
             ModelTree.Items.Add(item);
+            return item;
         }
 
         private void ApplyReferenceFooter()
