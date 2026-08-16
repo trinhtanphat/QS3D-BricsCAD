@@ -113,7 +113,7 @@ A lane may reconcile/rebase its own task branch when repository policy and owner
 
 ## Engineering and Git rules
 
-Workers should use a dedicated branch plus PR by default. A normal round should, when evidence supports it):
+Workers should use a dedicated branch plus PR by default. A normal round should, when evidence supports it:
 
 1. reproduce or verify a concrete defect/gap;
 2. reserve a bounded scope;
