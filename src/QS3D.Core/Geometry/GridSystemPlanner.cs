@@ -117,16 +117,16 @@ namespace QS3D.Core.Geometry
             var curves = new List<GridReferenceCurve>(uStations.Count + vStations.Count);
             foreach (var station in uStations)
             {
-                var basePoint = Add(input.OriginM, Scale(u, station.CoordinateM));
-                var start = Add(basePoint, Scale(v, input.VMinM));
-                var end = Add(basePoint, Scale(v, input.VMaxM));
+                var basePoint = Add(input.OriginM, Scale(u, station.CoordinateM), coordinateTolerance);
+                var start = Add(basePoint, Scale(v, input.VMinM), coordinateTolerance);
+                var end = Add(basePoint, Scale(v, input.VMaxM), coordinateTolerance);
                 curves.Add(GridReferenceCurve.Line(station.ElementId, start, end));
             }
             foreach (var station in vStations)
             {
-                var basePoint = Add(input.OriginM, Scale(v, station.CoordinateM));
-                var start = Add(basePoint, Scale(u, input.UMinM));
-                var end = Add(basePoint, Scale(u, input.UMaxM));
+                var basePoint = Add(input.OriginM, Scale(v, station.CoordinateM), coordinateTolerance);
+                var start = Add(basePoint, Scale(u, input.UMinM), coordinateTolerance);
+                var end = Add(basePoint, Scale(u, input.UMaxM), coordinateTolerance);
                 curves.Add(GridReferenceCurve.Line(station.ElementId, start, end));
             }
             return curves.AsReadOnly();
@@ -187,8 +187,8 @@ namespace QS3D.Core.Geometry
                 var ray = rays[i];
                 var angle = normalizedAngles[i];
                 var direction = new Point2(Math.Cos(angle), Math.Sin(angle));
-                var start = Add(input.CenterM, Scale(direction, input.InnerRadiusM));
-                var end = Add(input.CenterM, Scale(direction, input.OuterRadiusM));
+                var start = Add(input.CenterM, Scale(direction, input.InnerRadiusM), coordinateTolerance);
+                var end = Add(input.CenterM, Scale(direction, input.OuterRadiusM), coordinateTolerance);
                 curves.Add(GridReferenceCurve.Line(ray.ElementId, start, end));
             }
             for (var i = 0; i < rings.Count; i++)
@@ -263,12 +263,21 @@ namespace QS3D.Core.Geometry
             return new Point2(x, y);
         }
 
-        private static Point2 Add(Point2 left, Point2 right)
+        private static Point2 Add(Point2 left, Point2 right, double tolerance)
         {
             var x = left.X + right.X;
             var y = left.Y + right.Y;
             if (!Finite(x) || !Finite(y)) throw new OverflowException("Grid system coordinate addition exceeded the supported numeric range.");
+            RequireRepresentableAddition(left.X, right.X, x, tolerance, "X");
+            RequireRepresentableAddition(left.Y, right.Y, y, tolerance, "Y");
             return new Point2(x, y);
+        }
+
+        private static void RequireRepresentableAddition(double left, double right, double sum, double tolerance, string component)
+        {
+            if ((Math.Abs(right) > tolerance && sum == left) ||
+                (Math.Abs(left) > tolerance && sum == right))
+                throw new OverflowException("Grid system " + component + " coordinate addition lost a meaningful nonzero operand to floating-point precision.");
         }
 
         private static double NormalizeAngle(double angle)
