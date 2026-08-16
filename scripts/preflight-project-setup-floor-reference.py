@@ -26,6 +26,7 @@ def main() -> int:
     invariant = INVARIANT.read_text(encoding="utf-8")
     xaml = XAML.read_text(encoding="utf-8")
 
+    require(invariant, "static FloorLevelWindow()", "one-time class-handler registration", errors)
     require(invariant, "EventManager.RegisterClassHandler", "routed click guard", errors)
     require(invariant, "ButtonBase.ClickEvent", "button click route", errors)
     require(invariant, "checkBox.Tag is BltFloorRow row", "reference-row identity", errors)
