@@ -77,6 +77,7 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
             (DOWNLOADER, "private const int MaxRedirects = 8;", "private const int MaxRedirects = int.MaxValue;"),
             (DOWNLOADER, "request.AllowAutoRedirect = false;", "request.AllowAutoRedirect = true;"),
             (DOWNLOADER, "EnsureAllowedUri(nextUri);", "/* mutation removed redirect-hop validation */"),
+            (DOWNLOADER, "if (response.StatusCode != HttpStatusCode.OK)", "if (false)"),
             (DOWNLOADER, "EnsureAllowedUri(response.ResponseUri);", "/* mutation removed final-response validation */"),
             (DOWNLOADER, "if (response.ContentLength > maxBytes)", "if (false)"),
             (DOWNLOADER, "if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))", "if (false)"),
@@ -86,6 +87,7 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
             (DOWNLOADER, 'host.EndsWith(".githubusercontent.com", StringComparison.OrdinalIgnoreCase)', "false"),
             (DOWNLOADER, "await CopyBoundedAsync(source, buffer, MaxChecksumBytes)", "await source.CopyToAsync(buffer)"),
             (DOWNLOADER, "await CopyBoundedAsync(source, target, maxBytes)", "await source.CopyToAsync(target)"),
+            (DOWNLOADER, "if (input == null)", "if (false)"),
             (DOWNLOADER, "if (total > maxBytes)", "if (false)"),
             (DOWNLOADER, "if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))", "if (false)"),
             (DOWNLOADER, "if (end < normalized.Length && !char.IsWhiteSpace(normalized[end]))", "if (false)"),
@@ -95,6 +97,10 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
             (DOWNLOADER, "if (string.IsNullOrWhiteSpace(root))", "if (false)"),
             (DOWNLOADER, 'Path.Combine(root, "QS3D", "Updates", "Downloads", ToSafePathSegment(tag))', 'Path.Combine(root, "QS3D", "Updates", ToSafePathSegment(tag))'),
             (DOWNLOADER, 'if (IsWindowsReservedPathSegment(result)) result = "_" + result;', 'if (false) result = "_" + result;'),
+            (DOWNLOADER, 'string.Equals(stem, "CONIN$", StringComparison.OrdinalIgnoreCase)', "false"),
+            (DOWNLOADER, 'string.Equals(stem, "CONOUT$", StringComparison.OrdinalIgnoreCase)', "false"),
+            (DOWNLOADER, "if (stem.Length != 4) return false;", "/* mutation removed COM/LPT exact-length guard */"),
+            (DOWNLOADER, "if (suffix < '1' || suffix > '9') return false;", "if (false) return false;"),
             (DOWNLOADER, 'return result + "~" + ComputeTagIdentity(exactTag);', "return result;"),
             (DOWNLOADER, "if (result.Length > MaxReleaseTagPrefixChars)", "if (false)"),
             (DOWNLOADER, "var bytes = Encoding.UTF8.GetBytes(value ?? string.Empty);", "var bytes = Encoding.UTF8.GetBytes((value ?? string.Empty).ToLowerInvariant());"),
@@ -105,6 +111,40 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
         for index, (relative, old, new) in enumerate(cases, 1):
             with self.subTest(case=index, file=str(relative)):
                 self.assert_rejected(relative, old, new)
+
+    def test_response_validation_order_is_mutation_resistant(self):
+        temporary, fixture = self.make_fixture()
+        self.addCleanup(temporary.cleanup)
+        path = fixture / DOWNLOADER
+        text = path.read_text(encoding="utf-8")
+        status = "if (response.StatusCode != HttpStatusCode.OK)"
+        uri = "EnsureAllowedUri(response.ResponseUri);"
+        length = "if (response.ContentLength > maxBytes)"
+        self.assertLess(text.index(status), text.index(uri))
+        self.assertLess(text.index(uri), text.index(length))
+        mutated = text.replace(status, "// status validation moved after trust checks", 1)
+        mutated = mutated.replace(length, status + "\n            " + length, 1)
+        path.write_text(mutated, encoding="utf-8")
+        result = self.run_guard(fixture)
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn("preview response must require HTTP 200, validate final URI, then enforce declared size", result.stdout)
+
+    def test_device_name_grammar_order_is_mutation_resistant(self):
+        temporary, fixture = self.make_fixture()
+        self.addCleanup(temporary.cleanup)
+        path = fixture / DOWNLOADER
+        text = path.read_text(encoding="utf-8")
+        length_gate = "if (stem.Length != 4) return false;"
+        suffix_gate = "if (suffix < '1' || suffix > '9') return false;"
+        com_gate = 'stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase)'
+        self.assertLess(text.index(length_gate), text.index(suffix_gate))
+        self.assertLess(text.index(suffix_gate), text.index(com_gate))
+        mutated = text.replace(length_gate, "// exact device-name length check moved", 1)
+        mutated = mutated.replace(com_gate, length_gate + "\n            return " + com_gate, 1)
+        path.write_text(mutated, encoding="utf-8")
+        result = self.run_guard(fixture)
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn("COM/LPT reserved-device detection must be limited to numeric device names 1-9", result.stdout)
 
     def test_forbidden_direct_execution_is_rejected(self):
         temporary, fixture = self.make_fixture()
