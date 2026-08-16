@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace QS3D.Core.Domain
@@ -41,6 +42,11 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (opening == null) throw new ArgumentNullException(nameof(opening));
             if (hostSlab == null) throw new ArgumentNullException(nameof(hostSlab));
+
+            var elements = ResolveProjectElements(project);
+            EnsureOwnedElement(elements, opening, "slabOpen opening");
+            EnsureOwnedElement(elements, hostSlab, "slabOpen host Slab");
+
             if (opening.Category != ElementCategory.WallOpening)
                 throw new InvalidOperationException("slabOpen semantic element must use WallOpening category.");
             if (!IsSlabOpenFamily(project.FindFamily(opening.FamilyId)))
@@ -73,6 +79,34 @@ namespace QS3D.Core.Domain
             if (!TryGetHostSlabId(opening, out var hostSlabId))
                 throw new InvalidOperationException("slabOpen element is missing HostSlabId.");
             return hostSlabId;
+        }
+
+        private static IReadOnlyDictionary<string, ProjectElement> ResolveProjectElements(ProjectState project)
+        {
+            var elements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry.");
+                var elementId = (element.Id ?? string.Empty).Trim();
+                if (elementId.Length == 0)
+                    throw new InvalidOperationException("Project contains an element with a blank semantic id.");
+                if (elements.ContainsKey(elementId))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + elementId);
+                elements.Add(elementId, element);
+            }
+            return elements;
+        }
+
+        private static void EnsureOwnedElement(
+            IReadOnlyDictionary<string, ProjectElement> elements,
+            ProjectElement supplied,
+            string label)
+        {
+            if (!elements.TryGetValue(supplied.Id, out var owned))
+                throw new InvalidOperationException(label + " does not belong to the project: " + supplied.Id);
+            if (!ReferenceEquals(owned, supplied))
+                throw new InvalidOperationException(label + " instance does not belong to the project: " + supplied.Id);
         }
     }
 }

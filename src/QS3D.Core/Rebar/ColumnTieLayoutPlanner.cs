@@ -128,7 +128,8 @@ namespace QS3D.Core.Rebar
 
         private static double SubtractPositive(double value, double deduction, string label)
         {
-            var result = RebarMath.Subtract(value, deduction, label);
+            var result = value - deduction;
+            Finite(result, label);
             if (deduction > 0d && result == value)
                 throw new OverflowException(label + " lost a positive deduction at the current coordinate scale.");
             return result;
