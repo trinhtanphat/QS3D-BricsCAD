@@ -143,12 +143,15 @@ def main() -> int:
 
     for token in (
         'private const string DrawTabId = "QS3D_DRAW";',
-        'private const string IfcPanelSourceId = "QS3D_DRAW_BLT_IFC_PANEL_SOURCE";',
-        "var ifcPanel = FindPanelBySourceId(panels, IfcPanelSourceId);",
+        'private const string BimTabId = "QS3D_BIM";',
+        'private const string DrawIfcPanelSourceId = "QS3D_DRAW_BLT_IFC_PANEL_SOURCE";',
+        'private const string BimIfcPanelSourceId = "QS3D_BIM_BLT_IFC_PANEL_SOURCE";',
+        "if (FindPanelBySourceId(bimPanels, BimIfcPanelSourceId) == null)",
+        "var ifcPanel = FindPanelBySourceId(drawPanels, DrawIfcPanelSourceId);",
         "if (ifcPanel == null)",
         "return true;",
-        "Remove(panels, ifcPanel);",
-        "return FindPanelBySourceId(panels, IfcPanelSourceId) == null;",
+        "Remove(drawPanels, ifcPanel);",
+        "return FindPanelBySourceId(drawPanels, DrawIfcPanelSourceId) == null;",
     ):
         require(finalizer, token, "final visible VẼ panel contract")
 
