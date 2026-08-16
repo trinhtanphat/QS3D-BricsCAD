@@ -72,7 +72,7 @@ checks = {
     "health": [
         'GeneratedCurtainFrameHandles', 'CURTAIN_FRAME_GENERATED_SOLID_MISSING',
         'CURTAIN_FRAME_GRID_COUNT_MISMATCH', 'GeneratedCurtainFrameBaseCount', 'GeneratedCurtainFrameOpeningCount',
-        'ExpectedPhysicalBaseFrameCount', 'matchingCurrentConfig',
+        'ExpectedPhysicalBaseFrameCount', 'matchingCurrentConfig', 'rawHandles.Length > 0',
         'LineFrameOverlay.OpeningAware', 'CURTAIN_FRAME_OPENING_MODE_MISMATCH',
         'GeneratedCurtainFrameDepthM', 'GeneratedCurtainFrameSourceLengthM', 'GeneratedCurtainFrameHeightM',
         'GeneratedCurtainFrameConfigFingerprint', 'CurtainWallFrameFingerprint.Compute',
@@ -99,7 +99,8 @@ checks = {
     "defaults": ['CurtainFrameDepthM'],
     "health_smoke": [
         'ModuleInitializer', 'LaterGeneratedOwnerStillConflictsWithCurtainFrames',
-        'ReducedPhysicalFrameCountMatchesNonZeroWidths', 'CURTAIN_FRAME_GENERATED_OWNERSHIP_CONFLICT',
+        'ReducedPhysicalFrameCountMatchesNonZeroWidths', 'ZeroFrameSnapshotsRemainInspectable',
+        'CURTAIN_FRAME_GENERATED_OWNERSHIP_CONFLICT', 'CURTAIN_FRAME_CONFIG_STALE',
     ],
     "logic_smoke": ['CurtainFramesStaleOnLinkRehostAndUnlink', '!wallA.IsGeneratedSolidStale()', '!wallB.IsGeneratedSolidStale()'],
 }
@@ -121,6 +122,10 @@ if files["health"].is_file():
     text = files["health"].read_text(encoding="utf-8")
     if 'OptionalInteger(element, "GeneratedCurtainFrameBaseCount", true' not in text:
         errors.append("Curtain health must accept zero physical base frames when configured frame widths are zero.")
+    if 'Integer(element, "GeneratedCurtainFrameCount", issues, "CURTAIN_FRAME_COUNT_INVALID", true)' not in text:
+        errors.append("Curtain health must accept writer-owned GeneratedCurtainFrameCount=0 for all-zero frame configurations.")
+    if 'if (!element.Properties.TryGetValue(HandlesKey, out var raw)) continue;' not in text:
+        errors.append("Curtain health must inspect writer-owned empty handle snapshots instead of skipping all-zero frame configurations.")
     if 'config.PerimeterFrameWidthM > 0d ? 4 : 0' not in text or 'config.MullionWidthM > 0d ? columns - 1 : 0' not in text or 'config.TransomWidthM > 0d ? rows - 1 : 0' not in text:
         errors.append("Curtain health must derive physical base-frame count from nonzero frame widths, not conceptual grid boundaries alone.")
 
