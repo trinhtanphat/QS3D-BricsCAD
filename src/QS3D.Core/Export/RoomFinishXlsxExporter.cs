@@ -35,9 +35,10 @@ namespace QS3D.Core.Export
                 ValidateCellText(row.UnitHint, rowIndex, "UnitHint");
                 ValidateJoinedCellText(row.ElementIds, rowIndex, "ElementIds");
                 ValidateJoinedCellText(row.RoomIds, rowIndex, "RoomIds");
-                ValidateFinite(row.PrimaryQuantity, rowIndex, "PrimaryQuantity");
-                ValidateFinite(row.LengthM, rowIndex, "LengthM");
-                ValidateFinite(row.AreaM2, rowIndex, "AreaM2");
+                ValidatePositiveCount(row.Count, rowIndex);
+                ValidateNonNegativeFinite(row.PrimaryQuantity, rowIndex, "PrimaryQuantity");
+                ValidateNonNegativeFinite(row.LengthM, rowIndex, "LengthM");
+                ValidateNonNegativeFinite(row.AreaM2, rowIndex, "AreaM2");
                 snapshot.Add(row);
             }
             var fullPath = Path.GetFullPath(path);
@@ -173,12 +174,20 @@ namespace QS3D.Core.Export
             }
         }
 
-        private static void ValidateFinite(double value, int rowIndex, string fieldName)
+        private static void ValidatePositiveCount(int value, int rowIndex)
         {
-            if (double.IsNaN(value) || double.IsInfinity(value))
+            if (value <= 0)
                 throw new ArgumentOutOfRangeException(
                     "rows",
-                    "Room-finish XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be finite.");
+                    "Room-finish XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field Count must be greater than zero.");
+        }
+
+        private static void ValidateNonNegativeFinite(double value, int rowIndex, string fieldName)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Room-finish XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be finite and non-negative.");
         }
 
         private static void StringCell(StringBuilder sb, string cellRef, string value, int style)
