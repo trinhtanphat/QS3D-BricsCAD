@@ -64,7 +64,9 @@ def main():
     ):
         require(downloader, needle, downloader_rel)
 
-    if downloader.index("var existingLength = new FileInfo(packagePath).Length;") > downloader.index("var existingSha256 = ComputeSha256(packagePath);"):
+    cache_size_gate = downloader.index("if (existingLength <= MaxPackageBytes)")
+    cache_hash = downloader.index("var existingSha256 = ComputeSha256(packagePath);")
+    if cache_size_gate > cache_hash:
         raise SystemExit("FAIL: cached preview package size must be checked before hashing the existing file")
 
     for stale in (
