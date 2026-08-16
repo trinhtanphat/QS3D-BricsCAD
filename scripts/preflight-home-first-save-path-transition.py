@@ -41,7 +41,8 @@ if create_ui:
 forbid(mutation, 'string.Equals(operation, "Lưu dự án", StringComparison.Ordinal)', "generic mutation guard must not infer project creation from the localized Home Save label")
 forbid(mutation, 'string.Equals(operation, "Lưu thành", StringComparison.Ordinal)', "generic mutation guard must not infer project creation from the localized Home Save As label")
 forbid(mutation, 'IsMouseFirstUnsavedProjectSave', "generic mutation guard must not contain a hidden first-save bootstrap path")
-require(mutation, 'string.Equals(operation, "Save Project", StringComparison.Ordinal)', "coordinator save must have an explicit cached-project path-transition boundary")
+require(mutation, 'internal const string SaveProjectOperation = "Save Project";', "Save Project operation must have one canonical invariant token")
+require(mutation, 'string.Equals(operation, SaveProjectOperation, StringComparison.Ordinal)', "coordinator save must have an explicit cached-project path-transition boundary")
 require(mutation, 'ProjectContextCoordinator.TryGetCached(document, out var cached)', "Save path transition must only reuse the canonical cached project")
 require(mutation, '_ = ProjectContextCoordinator.HasPendingChanges(document);', "Save path transition must verify freshness and destination collision before reuse")
 require(mutation, 'if (!TryGet(document, out var project))', "cold-cache mutation must still require an already-existing project")
@@ -49,13 +50,13 @@ require(mutation, 'thao tác này không tạo project mới.', "cold-cache muta
 
 save_ui = method_body(project_ui, "public static void SaveCurrentProject()", "public static void SaveCurrentProjectAs()", "ProjectFileUiService.SaveCurrentProject")
 if save_ui:
-    require(save_ui, 'ExistingProjectMutationContext.Require(document, "Lưu dự án")', "Home Save must require the already-seeded/existing canonical project before DWG save")
+    require(save_ui, 'ExistingProjectMutationContext.Require(document, ExistingProjectMutationContext.SaveProjectOperation)', "Home Save must use the canonical Save Project operation guard before DWG save")
     require(save_ui, 'InvokeAcadDocumentMethod(document, "Save")', "Home Save must persist the DWG before the QS3D sidecar")
     require(save_ui, 'ProjectContextCoordinator.Save(document)', "Home Save must commit through the canonical coordinator")
 
 save_as_ui = method_body(project_ui, "public static void SaveCurrentProjectAs()", "internal static void OpenProject", "ProjectFileUiService.SaveCurrentProjectAs")
 if save_as_ui:
-    require(save_as_ui, 'ExistingProjectMutationContext.Require(document, "Lưu thành")', "Home Save As must require the already-seeded/existing canonical project before path transition")
+    require(save_as_ui, 'ExistingProjectMutationContext.Require(document, ExistingProjectMutationContext.SaveProjectOperation)', "Home Save As must use the canonical Save Project operation guard before path transition")
     require(save_as_ui, 'InvokeAcadDocumentMethod(document, "SaveAs", targetDrawingPath, Type.Missing, Type.Missing)', "Home Save As must move the active DWG before sidecar commit")
     require(save_as_ui, 'ProjectContextCoordinator.Save(document)', "Home Save As must commit the canonical sidecar after the DWG path transition")
     require(save_as_ui, 'File.Exists(targetProjectPath) || File.Exists(targetProjectPath + ".bak")', "Home Save As must reject an occupied destination sidecar")
