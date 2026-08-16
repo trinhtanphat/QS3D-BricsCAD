@@ -52,19 +52,24 @@ namespace QS3D.Core.Rebar
 
             var diameterM = RebarMath.Divide(input.DiameterMm, 1000d, "column tie diameter");
             var radiusM = RebarMath.Divide(diameterM, 2d, "column tie radius");
-            var halfWidth = input.WidthM / 2d - input.CoverM - radiusM;
-            var halfDepth = input.DepthM / 2d - input.CoverM - radiusM;
+            var halfWidth = SubtractPositive(input.WidthM / 2d, input.CoverM, "column tie half-width cover");
+            halfWidth = SubtractPositive(halfWidth, radiusM, "column tie half-width radius");
+            var halfDepth = SubtractPositive(input.DepthM / 2d, input.CoverM, "column tie half-depth cover");
+            halfDepth = SubtractPositive(halfDepth, radiusM, "column tie half-depth radius");
             if (!(halfWidth > 0d) || !(halfDepth > 0d))
                 throw new InvalidOperationException("Cover + tie radius leaves no usable tie envelope inside the column section.");
 
-            var start = input.BottomClearanceM + input.CoverM + radiusM;
-            var end = input.HeightM - input.TopClearanceM - input.CoverM - radiusM;
+            var start = AddPositive(input.BottomClearanceM, input.CoverM, "column tie start cover");
+            start = AddPositive(start, radiusM, "column tie start radius");
+            var end = SubtractPositive(input.HeightM, input.TopClearanceM, "column tie end top clearance");
+            end = SubtractPositive(end, input.CoverM, "column tie end cover");
+            end = SubtractPositive(end, radiusM, "column tie end radius");
             Finite(start, "tie start elevation");
             Finite(end, "tie end elevation");
             if (end < start) throw new InvalidOperationException("Column height/clearances leave no usable vertical tie range.");
 
             var requestedSpacingM = input.SpacingMm / 1000d;
-            var usable = end - start;
+            var usable = SubtractPositive(end, start, "column tie usable height");
             int tieCount;
             double actualSpacing;
             if (usable <= 1e-12d)
@@ -111,6 +116,22 @@ namespace QS3D.Core.Rebar
             if (!(perimeter > 0d)) throw new InvalidOperationException("Tie path perimeter is degenerate.");
 
             return new ColumnTieLayout(path.AsReadOnly(), elevations.AsReadOnly(), actualSpacing, perimeter);
+        }
+
+        private static double AddPositive(double value, double addition, string label)
+        {
+            var result = RebarMath.Add(value, addition, label);
+            if (addition > 0d && result == value)
+                throw new OverflowException(label + " lost a positive contribution at the current coordinate scale.");
+            return result;
+        }
+
+        private static double SubtractPositive(double value, double deduction, string label)
+        {
+            var result = RebarMath.Subtract(value, deduction, label);
+            if (deduction > 0d && result == value)
+                throw new OverflowException(label + " lost a positive deduction at the current coordinate scale.");
+            return result;
         }
 
         private static void Positive(double value, string name)
