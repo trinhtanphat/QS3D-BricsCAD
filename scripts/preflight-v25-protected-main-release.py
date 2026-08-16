@@ -67,7 +67,7 @@ def main() -> int:
             "  core:",
             "needs: preflight",
             "Run deterministic smoke tests",
-            "actions/cache/restore@v6",
+            "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
             "acquire-v25-compile-references.ps1",
             "BRICSCAD_V25_PINNED_MSI_SHA256",
             "Validate BricsCAD V25 compile references",
