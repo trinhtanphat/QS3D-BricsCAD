@@ -39,7 +39,7 @@ namespace QS3D.BricsCAD.V25
                 _rightPanel = new RightPanel();
                 _quantityInsightPanel = new QuantityInsightPanel();
 
-                _workspace = new PaletteSet("QS3D — Mô hình", WorkspaceGuid)
+                _workspace = new PaletteSet("QS3D — MÔ HÌNH BIM", WorkspaceGuid)
                 {
                     DockEnabled = DockSides.Left | DockSides.Right,
                     Dock = DockSides.Left,
@@ -50,7 +50,7 @@ namespace QS3D.BricsCAD.V25
                 _workspace.DeviceIndependentSize = new WpfSize(layout.WorkspacePaletteWidth, layout.WorkspacePaletteHeight);
                 _workspace.AddVisual("Mô hình", _workspacePanel, true);
 
-                _right = new PaletteSet("QS3D — Bản vẽ & Lớp", RightGuid)
+                _right = new PaletteSet("QS3D — Quản lý bản vẽ & lớp", RightGuid)
                 {
                     DockEnabled = DockSides.Left | DockSides.Right,
                     Dock = DockSides.Right,
@@ -79,22 +79,28 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        // Compatibility entry point used by the QS3D command. The primary authoring flow is now
-        // Ribbon-first, so opening Workspace must not also consume the CAD viewport with the
-        // drawing/layer and quantity palettes.
-        public static void Show() => ShowWorkspace();
+        // The owner-reference BIM workspace is a coordinated three-zone shell: model/family tools
+        // docked left, the real BricsCAD viewport in the centre, and drawing/layer management
+        // docked right. Keeping the native viewport in the middle preserves PAN/ZOOM/ORBIT/PICK
+        // behavior instead of introducing a fake preview renderer.
+        public static void Show() => ShowBimWorkspace();
 
-        public static void ShowWorkspace()
+        public static void ShowWorkspace() => ShowBimWorkspace();
+
+        public static void ShowBimWorkspace()
         {
             try
             {
                 EnsureCreated();
-                SetVisibility(workspace: true, right: false, quantityInsight: false);
+                EnsureBimDockContract();
+                SetVisibility(workspace: true, right: true, quantityInsight: false);
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
+                _rightPanel?.Refresh();
+                _workspacePanel?.SetStatus("MÔ HÌNH BIM • BLT3D workspace • viewport BricsCAD native ở giữa.");
             }
             catch (Exception)
             {
-                ReportPaletteFailure("Workspace");
+                ReportPaletteFailure("MÔ HÌNH BIM");
             }
         }
 
@@ -198,6 +204,8 @@ namespace QS3D.BricsCAD.V25
             var quantityVisible = IsQuantityInsightVisible;
             Dispose();
             EnsureCreated();
+            if (workspaceVisible && rightVisible && !quantityVisible)
+                EnsureBimDockContract();
             SetVisibility(workspaceVisible, rightVisible, quantityVisible);
         }
 
@@ -227,6 +235,16 @@ namespace QS3D.BricsCAD.V25
             {
                 // Native palette teardown is best-effort; one failed palette must not block the others.
             }
+        }
+
+        private static void EnsureBimDockContract()
+        {
+            // Re-assert the BLT3D framing each time BIM is entered. Users can still resize both
+            // palettes; only the dock side is contractual so the native CAD viewport stays centred.
+            if (_workspace != null && _workspace.Dock != DockSides.Left)
+                _workspace.Dock = DockSides.Left;
+            if (_right != null && _right.Dock != DockSides.Right)
+                _right.Dock = DockSides.Right;
         }
 
         private static void SetVisibility(bool workspace, bool right, bool quantityInsight)
