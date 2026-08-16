@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 
 namespace QS3D.Core.Cost
 {
     public sealed class FrozenEstimateProjection
     {
+        private const int MaxProjectionLines = 10000;
+
         private FrozenEstimateProjection(List<FrozenEstimateProjectionRow> rows)
         {
             Rows = new ReadOnlyCollection<FrozenEstimateProjectionRow>(rows.ToArray());
@@ -17,11 +20,17 @@ namespace QS3D.Core.Cost
         {
             if (lines == null) throw new ArgumentNullException(nameof(lines));
 
+            var collectionCount = TryGetCollectionCount(lines);
+            if (collectionCount.HasValue && collectionCount.Value > MaxProjectionLines)
+                throw TooManyLines(collectionCount.Value);
+
             var rows = new List<FrozenEstimateProjectionRow>();
             var lineIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var line in lines)
             {
+                if (index >= MaxProjectionLines)
+                    throw TooManyLines(index + 1);
                 if (line == null)
                     throw new ArgumentException("Estimate projection contains a null line at index " + index + ".", nameof(lines));
                 if (!lineIds.Add(line.EstimateLineId))
@@ -33,6 +42,22 @@ namespace QS3D.Core.Cost
 
             rows.Sort(CompareRows);
             return new FrozenEstimateProjection(rows);
+        }
+
+        private static int? TryGetCollectionCount(IEnumerable<EstimateLine> lines)
+        {
+            if (lines is ICollection<EstimateLine> collection)
+                return collection.Count;
+            if (lines is IReadOnlyCollection<EstimateLine> readOnlyCollection)
+                return readOnlyCollection.Count;
+            return null;
+        }
+
+        private static InvalidDataException TooManyLines(int actualCount)
+        {
+            return new InvalidDataException(
+                "Frozen estimate projection cannot contain more than " + MaxProjectionLines +
+                " lines (actual: " + actualCount + ").");
         }
 
         private static int CompareRows(FrozenEstimateProjectionRow left, FrozenEstimateProjectionRow right)
