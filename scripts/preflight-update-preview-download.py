@@ -57,6 +57,7 @@ def main():
         "var location = response.Headers[HttpResponseHeader.Location];",
         "if (!Uri.TryCreate(current, location, out nextUri) || nextUri == null)",
         "EnsureAllowedUri(nextUri);",
+        "if (response.StatusCode != HttpStatusCode.OK)",
         "EnsureAllowedUri(response.ResponseUri);",
         "if (response.ContentLength > maxBytes)",
         "if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))",
@@ -66,6 +67,7 @@ def main():
         'host.EndsWith(".githubusercontent.com", StringComparison.OrdinalIgnoreCase)',
         "await DownloadBoundedAsync(release.PackageUri, partialPath, MaxPackageBytes)",
         "await CopyBoundedAsync(source, target, maxBytes)",
+        "if (input == null)",
         "if (total > maxBytes)",
         "var actualSha256 = ComputeSha256(partialPath);",
         "if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))",
@@ -90,6 +92,10 @@ def main():
         'string.Equals(stem, "PRN", StringComparison.OrdinalIgnoreCase)',
         'string.Equals(stem, "AUX", StringComparison.OrdinalIgnoreCase)',
         'string.Equals(stem, "NUL", StringComparison.OrdinalIgnoreCase)',
+        'string.Equals(stem, "CONIN$", StringComparison.OrdinalIgnoreCase)',
+        'string.Equals(stem, "CONOUT$", StringComparison.OrdinalIgnoreCase)',
+        "if (stem.Length != 4) return false;",
+        "if (suffix < '1' || suffix > '9') return false;",
         'stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase)',
         'stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)',
     ):
@@ -100,6 +106,17 @@ def main():
     if cache_size_gate > cache_hash:
         raise SystemExit("FAIL: cached preview package size must be checked before hashing the existing file")
 
+    response_status = downloader.index("if (response.StatusCode != HttpStatusCode.OK)")
+    response_uri = downloader.index("EnsureAllowedUri(response.ResponseUri);", response_status)
+    response_length = downloader.index("if (response.ContentLength > maxBytes)", response_uri)
+    if not (response_status < response_uri < response_length):
+        raise SystemExit("FAIL: preview response must require HTTP 200, validate final URI, then enforce declared size")
+
+    copy_null_gate = downloader.index("if (input == null)")
+    copy_loop = downloader.index("while (true)", copy_null_gate)
+    if copy_null_gate > copy_loop:
+        raise SystemExit("FAIL: preview stream must reject an empty response body before bounded copy")
+
     safe_segment_start = downloader.index("private static string ToSafePathSegment(string value)")
     reserved_gate = downloader.index('if (IsWindowsReservedPathSegment(result)) result = "_" + result;', safe_segment_start)
     prefix_bound = downloader.index("if (result.Length > MaxReleaseTagPrefixChars)", safe_segment_start)
@@ -108,6 +125,14 @@ def main():
         raise SystemExit(
             "FAIL: release-tag cache segment must escape reserved names, bound its readable prefix, then append exact-tag identity"
         )
+
+    reserved_start = downloader.index("private static bool IsWindowsReservedPathSegment(string value)")
+    reserved_length = downloader.index("if (stem.Length != 4) return false;", reserved_start)
+    reserved_suffix = downloader.index("if (suffix < '1' || suffix > '9') return false;", reserved_length)
+    reserved_com = downloader.index('stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase)', reserved_suffix)
+    reserved_lpt = downloader.index('stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)', reserved_suffix)
+    if not (reserved_length < reserved_suffix < reserved_com and reserved_suffix < reserved_lpt):
+        raise SystemExit("FAIL: COM/LPT reserved-device detection must be limited to numeric device names 1-9")
 
     for stale in (
         "request.AllowAutoRedirect = true;",
@@ -148,11 +173,11 @@ def main():
 
     print(
         "PASS: V25 preview fallback discovers the exact package/checksum pair, bounds cached, declared and streamed network bytes before hashing, "
-        "uses bounded request/read-write timeouts, validates every bounded HTTPS GitHub redirect hop and final response URI, rejects URI user-info, "
-        "verifies SHA-256 before retaining the ZIP, escapes Windows reserved release-tag cache segments, bounds the readable cache prefix, appends a "
-        "SHA-256 identity of the exact release tag to prevent case/sanitization cache collisions, stages under LocalApplicationData, exposes the Update "
-        "Center directly from Start Center without command dispatch, and only reveals unsigned preview packages while the existing signed-manifest "
-        "scheduling path remains separate."
+        "uses bounded request/read-write timeouts, requires HTTP 200, validates every bounded HTTPS GitHub redirect hop and final response URI, rejects "
+        "URI user-info and empty response bodies, verifies SHA-256 before retaining the ZIP, escapes exact Windows reserved device names without "
+        "over-classifying ordinary COM/LPT prefixes, bounds the readable cache prefix, appends a SHA-256 identity of the exact release tag to prevent "
+        "case/sanitization cache collisions, stages under LocalApplicationData, exposes the Update Center directly from Start Center without command "
+        "dispatch, and only reveals unsigned preview packages while the existing signed-manifest scheduling path remains separate."
     )
     return 0
 
