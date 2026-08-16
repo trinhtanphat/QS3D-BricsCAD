@@ -129,7 +129,6 @@ namespace QS3D.BricsCAD.V25.UI
             RenameBlt3dButton("+ Thêm", "+ Add");
             RenameBlt3dButton("＋  Add", "+ Add");
             RenameBlt3dButton("Xóa", "Delete");
-            RenameBlt3dButton("Bóc chọn", "⚡ Nhập tự động");
         }
 
         private void RenameBlt3dButton(string oldText, string newText)
