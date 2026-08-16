@@ -3,7 +3,6 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using System.Windows.Threading;
 
 namespace QS3D.BricsCAD.V25.UI
 {
@@ -34,15 +33,11 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
             }
 
-            // Run after the source CheckBox handler and TwoWay binding have settled so
-            // the invariant observes the actual post-click state rather than the old one.
-            window.Dispatcher.BeginInvoke(
-                DispatcherPriority.Background,
-                new Action(() =>
-                {
-                    if (!window.IsLoaded || window.Dispatcher.HasShutdownStarted) return;
-                    window.EnsureBltReferenceInvariant(row);
-                }));
+            // The CheckBox has already toggled and its TwoWay binding has updated by the time
+            // the routed Click bubbles to the owning window. Normalize synchronously here so
+            // an attempted uncheck never leaves a transient zero-reference state queued behind
+            // another click, refresh, apply, or window shutdown.
+            window.EnsureBltReferenceInvariant(row);
         }
 
         private void EnsureBltReferenceInvariant(BltFloorRow clickedRow)
