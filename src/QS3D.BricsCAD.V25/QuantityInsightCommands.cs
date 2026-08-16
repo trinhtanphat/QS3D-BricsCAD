@@ -15,10 +15,15 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
-                var snapshots = EntitySnapshotReader.ReadImpliedSelection(document);
+                // Ribbon activation must work both with PICKFIRST and when the user clicks
+                // Diễn giải before selecting anything. ReadCurrentSelection preserves an
+                // existing implied selection and otherwise opens BricsCAD's normal selection
+                // prompt, so the topbar button is a complete workflow instead of requiring a
+                // separate right-click/context-menu path first.
+                var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
                 if (snapshots.Count == 0)
                 {
-                    document.Editor.WriteMessage("\nQS3D Diễn giải khối lượng: hãy chọn cấu kiện trước rồi nhấp chuột phải.");
+                    document.Editor.WriteMessage("\nQS3D Diễn giải khối lượng: chưa có cấu kiện nào được chọn.");
                     return;
                 }
 
