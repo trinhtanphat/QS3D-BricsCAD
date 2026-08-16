@@ -36,6 +36,11 @@ def main():
         'private static void OpenDrawing(string drawingPath)',
         'document = Application.DocumentManager.Open(drawingPath, false);',
         'Application.DocumentManager.MdiActiveDocument = document;',
+        'ProjectContextCoordinator.Reload(document);',
+        'var rootedCandidate = Path.GetFullPath(stored);',
+        'if (File.Exists(rootedCandidate)) return rootedCandidate;',
+        'var sameStem = Path.ChangeExtension(projectPath, ".dwg");',
+        'if (File.Exists(sameStem)) return Path.GetFullPath(sameStem);',
     ):
         require(source, needle, rel)
 
@@ -49,7 +54,15 @@ def main():
     forbid(open_block, 'store.Load(fullProjectPath)', rel + '::OpenProject')
     forbid(source, 'Data at the root level is invalid', rel)
 
-    print("PASS: project open routes DWG before QSDB XML parsing, keeps .blt3d/.qsdb loading explicit, and translates XML parse failures into actionable QS3D format guidance.")
+    resolve_block = source.split('private static string ResolveDrawingPath(string projectPath, ProjectState project)', 1)[1].split('private static Document RequireActiveDocument()', 1)[0]
+    rooted = resolve_block.find('var rootedCandidate = Path.GetFullPath(stored);')
+    rooted_exists = resolve_block.find('if (File.Exists(rootedCandidate)) return rootedCandidate;')
+    same_stem = resolve_block.find('var sameStem = Path.ChangeExtension(projectPath, ".dwg");')
+    if rooted < 0 or rooted_exists < 0 or same_stem < 0 or not (rooted < rooted_exists < same_stem):
+        raise SystemExit("FAIL: rooted stored DWG must be existence-checked before the same-stem fallback")
+    forbid(resolve_block, 'if (Path.IsPathRooted(stored)) return Path.GetFullPath(stored);', rel + '::ResolveDrawingPath')
+
+    print("PASS: project open routes DWG before QSDB XML parsing, translates malformed project errors, and falls back from a stale rooted stored DWG path to the co-located same-stem drawing without bypassing canonical reload identity validation.")
     return 0
 
 

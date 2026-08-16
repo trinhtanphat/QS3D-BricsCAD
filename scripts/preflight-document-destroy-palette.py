@@ -42,7 +42,7 @@ require(palette, "var rightVisible = IsRightPanelVisible;", "right visibility pr
 require(palette, "Dispose();", "no-document stale palette teardown")
 require(palette, "EnsureCreated();", "palette creation guard")
 require(palette, "public static void ResetForUnavailableProject(string status)", "unavailable-project reset API")
-require(palette, "_workspacePanel?.ClearProject(status);", "unavailable-project workspace clear")
+require(palette, "_workspacePanel?.ClearProjectForUnavailableDocument(status);", "unavailable-project workspace clear")
 require(palette, "_rightPanel?.Refresh();", "unavailable-project CAD refresh")
 
 require(workspace, "private WorkspaceViewModel _viewModel = new WorkspaceViewModel();", "replaceable workspace view model")
