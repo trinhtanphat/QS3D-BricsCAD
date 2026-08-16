@@ -1,4 +1,6 @@
 using System;
+using System.Globalization;
+using System.Threading;
 using System.Windows;
 using System.Windows.Media;
 
@@ -17,11 +19,29 @@ namespace QS3D.BricsCAD.V25.Ribbon
             if (pixelSize <= 0)
                 throw new ArgumentOutOfRangeException(nameof(pixelSize));
 
-            var background = Brush(Color.FromRgb(6, 19, 35));
-            var white = Brush(Color.FromRgb(234, 247, 255));
-            var blue = Brush(Color.FromRgb(22, 139, 255));
-            var cyan = Brush(Color.FromRgb(51, 197, 255));
-            var guide = Brush(Color.FromRgb(131, 218, 255));
+            // Geometry.Parse consumes path-data decimals using the current thread culture.
+            // BricsCAD runs under the user's Windows locale, so guard comma-decimal locales the
+            // same way as the semantic Ribbon icon pipeline and immediately restore host culture.
+            var thread = Thread.CurrentThread;
+            var previousCulture = thread.CurrentCulture;
+            try
+            {
+                thread.CurrentCulture = CultureInfo.InvariantCulture;
+                return CreateCore(pixelSize);
+            }
+            finally
+            {
+                thread.CurrentCulture = previousCulture;
+            }
+        }
+
+        private static ImageSource CreateCore(int pixelSize)
+        {
+            var background = FrozenBrush(Color.FromRgb(6, 19, 35));
+            var white = FrozenBrush(Color.FromRgb(234, 247, 255));
+            var blue = FrozenBrush(Color.FromRgb(22, 139, 255));
+            var cyan = FrozenBrush(Color.FromRgb(51, 197, 255));
+            var guide = FrozenBrush(Color.FromRgb(131, 218, 255));
 
             var group = new DrawingGroup();
             group.Children.Add(new GeometryDrawing(
@@ -52,7 +72,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
             // Very light alignment ticks from the master mark; they remain subtle at 32 px and
             // disappear naturally at 16 px without relying on bitmap downsampling.
-            var guidePen = new Pen(guide, 0.45) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+            var guidePen = new Pen(guide, 0.45)
+            {
+                StartLineCap = PenLineCap.Round,
+                EndLineCap = PenLineCap.Round
+            };
             guidePen.Freeze();
             group.Children.Add(new GeometryDrawing(
                 null,
@@ -71,7 +95,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             return image;
         }
 
-        private static SolidColorBrush Brush(Color color)
+        private static SolidColorBrush FrozenBrush(Color color)
         {
             var brush = new SolidColorBrush(color);
             brush.Freeze();
