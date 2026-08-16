@@ -19,6 +19,19 @@ REQUIRED = (
     ".github/workflows/ci.yml",
 )
 
+FORBIDDEN_EXTERNAL_ORCHESTRATION_PATHS = {
+    "docs/hourly-agent-control.md",
+    "scripts/preflight-hourly-agent-control.py",
+}
+FORBIDDEN_EXTERNAL_ORCHESTRATION_PATH_MARKERS = (
+    "hourly-agent-control",
+    "scheduled-agent-control",
+    "agent-orchestration",
+    "controller-worker-pool",
+)
+ORCHESTRATION_SCAN_SUFFIXES = {".md", ".txt", ".yml", ".yaml", ".json", ".toml", ".py", ".ps1", ".sh"}
+SELF_PATH = "scripts/preflight-repository-professionalism.py"
+
 
 def read(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
@@ -30,6 +43,35 @@ def require(text: str, tokens: tuple[str, ...], label: str, failures: list[str])
             failures.append(f"{label} missing required contract marker: {token}")
 
 
+def reject_external_orchestration_artifacts(failures: list[str]) -> None:
+    for path in ROOT.rglob("*"):
+        if not path.is_file() or ".git" in path.parts:
+            continue
+
+        relative = path.relative_to(ROOT).as_posix()
+        lowered_relative = relative.lower()
+        if lowered_relative in FORBIDDEN_EXTERNAL_ORCHESTRATION_PATHS or any(
+            marker in lowered_relative for marker in FORBIDDEN_EXTERNAL_ORCHESTRATION_PATH_MARKERS
+        ):
+            failures.append(
+                f"external scheduler/orchestration artifact must stay outside the QS3D source tree: {relative}"
+            )
+            continue
+
+        if relative == SELF_PATH or path.suffix.lower() not in ORCHESTRATION_SCAN_SUFFIXES:
+            continue
+
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+
+        if "QS3D-CONTROL" in text and "QS3D-WORKER-" in text:
+            failures.append(
+                f"external scheduler topology leaked into repository content: {relative}; keep it in automation configuration/coordination state"
+            )
+
+
 def main() -> int:
     failures: list[str] = []
 
@@ -37,6 +79,8 @@ def main() -> int:
         path = ROOT / relative
         if not path.is_file():
             failures.append(f"missing repository professionalism file: {relative}")
+
+    reject_external_orchestration_artifacts(failures)
 
     if failures:
         print("Repository professionalism preflight FAILED")
@@ -207,6 +251,7 @@ def main() -> int:
     print(" - dependency maintenance is bounded and its bot exception cannot grant merge/release authority")
     print(" - every PR emits stable required contexts; policy-only candidates retain guards while non-build changes avoid redundant Core/V25 builds")
     print(" - synthetic generated fixtures are treated as build-relevant validation inputs")
+    print(" - external scheduler/controller-worker orchestration artifacts are kept out of the QS3D source tree")
     print(" - no workflow implements autonomous PR-to-main merging")
     return 0
 
