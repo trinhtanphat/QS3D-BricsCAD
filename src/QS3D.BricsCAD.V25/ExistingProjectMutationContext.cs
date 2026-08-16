@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Domain;
 
@@ -49,18 +48,13 @@ namespace QS3D.BricsCAD.V25
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (string.IsNullOrWhiteSpace(operation)) operation = "QS3D mutation";
 
-            // Home/Start Center intentionally owns first-save creation for a new,
-            // still-unnamed DWG. Keep every other mutation fail-closed: native
-            // QS3DSAVE and arbitrary mutation callers still cannot create a project.
-            if (IsMouseFirstUnsavedProjectSave(document, operation))
-                return ProjectContextCoordinator.GetOrCreate(document);
-
             // ProjectContextCoordinator.Save is the one existing-project write
-            // boundary that must tolerate a verified DWG path transition. This is
-            // reached after BricsCAD Save/SaveAs has already moved the active DWG.
-            // HasPendingChanges performs the non-mutating, allow-path-transition
-            // freshness/target-sidecar check; Save repeats it under the project lock
-            // before committing, so this does not weaken collision protection.
+            // boundary that must tolerate a verified DWG path transition. Only an
+            // already-cached canonical project can take this path; cold-cache saves
+            // still fall through to TryGet and therefore require an existing sidecar.
+            // HasPendingChanges performs the non-mutating allow-path-transition
+            // freshness/destination check, and Save repeats that check under the
+            // project lock before committing.
             if (string.Equals(operation, "Save Project", StringComparison.Ordinal) &&
                 ProjectContextCoordinator.TryGetCached(document, out var cached))
             {
@@ -72,16 +66,6 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException(
                     operation + " cần một QS3D project hiện hữu; thao tác này không tạo project mới.");
             return project;
-        }
-
-        private static bool IsMouseFirstUnsavedProjectSave(Document document, string operation)
-        {
-            if (!string.Equals(operation, "Lưu dự án", StringComparison.Ordinal) &&
-                !string.Equals(operation, "Lưu thành", StringComparison.Ordinal))
-                return false;
-
-            var drawing = document.Name ?? string.Empty;
-            return string.IsNullOrWhiteSpace(drawing) || !Path.IsPathRooted(drawing);
         }
     }
 }
