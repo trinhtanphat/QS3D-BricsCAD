@@ -344,7 +344,10 @@ namespace QS3D.Core.Cost
                 checked
                 {
                     aggregate.ItemCount++;
-                    aggregate.TotalCost += item.Cost;
+                    aggregate.TotalCost = CostDecimalMath.AddPreservingNonZeroContribution(
+                        aggregate.TotalCost,
+                        item.Cost,
+                        "trade cost aggregate total");
                 }
                 index++;
             }
