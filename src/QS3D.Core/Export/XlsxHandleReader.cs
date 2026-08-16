@@ -96,24 +96,49 @@ namespace QS3D.Core.Export
                 if (target == null)
                     return new XlsxHandleLookupResult(Array.Empty<string>(), Array.Empty<string>(), string.Empty, false, worksheet.Name, false, worksheet.IsEd2Detail);
 
-                var targetCells = ReadCells(target, ns, sharedStrings);
+                var targetCells = ReadCells(target, ns, sharedStrings, out var targetFormulaColumns);
                 var handleColumns = new HashSet<int>();
                 var fuzzyHandleColumns = new HashSet<int>();
                 var elementIdColumns = new HashSet<int>();
                 var fingerprintColumns = new HashSet<int>();
+                var formulaIdentityHeaderColumns = new HashSet<int>();
                 foreach (var headerRow in rows.Where(x => ParsePositiveInt((string?)x.Attribute("r")) < rowNumber).Take(10))
-                    foreach (var cell in ReadCells(headerRow, ns, sharedStrings))
+                {
+                    var headerCells = ReadCells(headerRow, ns, sharedStrings, out var headerFormulaColumns);
+                    foreach (var cell in headerCells)
                     {
                         var header = (cell.Value ?? string.Empty).Trim();
-                        if (string.Equals(header, "CAD Handle (hex)", StringComparison.OrdinalIgnoreCase)) handleColumns.Add(cell.Key);
-                        else if (header.IndexOf("handle", StringComparison.OrdinalIgnoreCase) >= 0) fuzzyHandleColumns.Add(cell.Key);
-                        if (string.Equals(header, "QS3D Drawing Fingerprint", StringComparison.OrdinalIgnoreCase)) fingerprintColumns.Add(cell.Key);
-                        if (string.Equals(header, "QS3D Element ID", StringComparison.OrdinalIgnoreCase)) elementIdColumns.Add(cell.Key);
+                        if (string.Equals(header, "CAD Handle (hex)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            handleColumns.Add(cell.Key);
+                            if (headerFormulaColumns.Contains(cell.Key)) formulaIdentityHeaderColumns.Add(cell.Key);
+                        }
+                        else if (header.IndexOf("handle", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            fuzzyHandleColumns.Add(cell.Key);
+                            if (headerFormulaColumns.Contains(cell.Key)) formulaIdentityHeaderColumns.Add(cell.Key);
+                        }
+                        if (string.Equals(header, "QS3D Drawing Fingerprint", StringComparison.OrdinalIgnoreCase))
+                        {
+                            fingerprintColumns.Add(cell.Key);
+                            if (headerFormulaColumns.Contains(cell.Key)) formulaIdentityHeaderColumns.Add(cell.Key);
+                        }
+                        if (string.Equals(header, "QS3D Element ID", StringComparison.OrdinalIgnoreCase))
+                        {
+                            elementIdColumns.Add(cell.Key);
+                            if (headerFormulaColumns.Contains(cell.Key)) formulaIdentityHeaderColumns.Add(cell.Key);
+                        }
                     }
+                }
                 if (handleColumns.Count == 0) handleColumns.UnionWith(fuzzyHandleColumns);
 
                 var isModernSchema = elementIdColumns.Count > 0 || fingerprintColumns.Count > 0;
-                foreach (var column in handleColumns.Concat(elementIdColumns).Concat(fingerprintColumns))
+                var identityColumns = handleColumns.Concat(elementIdColumns).Concat(fingerprintColumns).Distinct().ToList();
+                if (isModernSchema && formulaIdentityHeaderColumns.Overlaps(identityColumns))
+                    throw new InvalidDataException("QS3D Excel identity headers must contain literal values, not formulas.");
+                if (isModernSchema && targetFormulaColumns.Overlaps(identityColumns))
+                    throw new InvalidDataException("QS3D Excel identity cells must contain literal values, not formulas.");
+                foreach (var column in identityColumns)
                     if (targetCells.TryGetValue(column, out var criticalValue) && string.Equals(criticalValue, UnsupportedCellSentinel, StringComparison.Ordinal))
                         throw new InvalidDataException("Excel identity cell contains an unsupported XLSX value type.");
                 if (worksheet.IsEd2Detail && !isModernSchema)
@@ -239,15 +264,20 @@ namespace QS3D.Core.Export
             using (var reader = XmlReader.Create(stream, settings)) return XDocument.Load(reader, LoadOptions.None);
         }
 
-        private static Dictionary<int, string> ReadCells(XElement row, XNamespace ns, IReadOnlyList<string> sharedStrings)
+        private static Dictionary<int, string> ReadCells(XElement row, XNamespace ns, IReadOnlyList<string> sharedStrings) =>
+            ReadCells(row, ns, sharedStrings, out _);
+
+        private static Dictionary<int, string> ReadCells(XElement row, XNamespace ns, IReadOnlyList<string> sharedStrings, out HashSet<int> formulaColumns)
         {
             var rowNumber = ParsePositiveInt((string?)row.Attribute("r"));
             if (rowNumber == int.MaxValue || rowNumber > MaxRows) throw new InvalidDataException("Excel worksheet row number is missing, invalid, or exceeds the XLSX row limit.");
             var result = new Dictionary<int, string>();
+            formulaColumns = new HashSet<int>();
             foreach (var cell in row.Elements(ns + "c"))
             {
                 var column = ColumnIndex((string?)cell.Attribute("r"), rowNumber);
                 if (column >= MaxColumns) throw new InvalidDataException("Excel cell column exceeds the XLSX column limit.");
+                if (cell.Element(ns + "f") != null) formulaColumns.Add(column);
                 var type = (string?)cell.Attribute("t") ?? string.Empty;
                 string value;
                 if (string.Equals(type, "inlineStr", StringComparison.OrdinalIgnoreCase)) value = string.Concat(cell.Descendants(ns + "t").Select(x => x.Value));
