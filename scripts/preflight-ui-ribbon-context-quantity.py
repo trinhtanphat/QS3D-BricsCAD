@@ -30,12 +30,13 @@ def fail(message: str) -> None:
 
 
 palette = read("src/QS3D.BricsCAD.V25/PaletteCoordinator.cs")
-require(palette, "public static void Show() => ShowWorkspace();", "palette isolation")
+require(palette, "public static void Show() => ShowWorkspace();", "palette workspace entry")
 require(palette, "public static void ShowWorkspace()", "workspace mode")
-require(palette, "SetVisibility(workspace: true, right: false, quantityInsight: false);", "workspace mode")
+require(palette, "SetVisibility(workspace: true, right: true, quantityInsight: false);", "workspace right-palette mode")
+forbid(palette, "SetVisibility(workspace: true, right: false, quantityInsight: false);\n                SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);\n            }\n            catch (Exception)\n            {\n                ReportPaletteFailure(\"Workspace\");", "workspace must keep right palette visible")
 require(palette, "public static void ShowQuantityInsight()", "quantity mode")
 require(palette, "SetVisibility(workspace: false, right: false, quantityInsight: true);", "quantity mode")
-forbid(palette, "_right.Visible = true;\n                _quantityInsight.Visible = true;", "all-palettes takeover")
+forbid(palette, "_right.Visible = true;\n                _quantityInsight.Visible = true;", "quantity takeover")
 
 quantity = read("src/QS3D.BricsCAD.V25/QuantityInsightCommands.cs")
 require(quantity, '[CommandMethod("QS3DQUANTITYINSIGHT", CommandFlags.UsePickSet)]', "quantity command")
@@ -131,4 +132,4 @@ for command in ("QS3DQUANTITYINSIGHT", "QS3DDRAWRAFTFOUNDATION"):
     if registrations != 1:
         fail(f"{command}: expected exactly one CommandMethod registration, found {registrations}")
 
-print("PASS: ribbon-first palettes, exact simple closed-boundary Móng Bè, and selected-object quantity explanation source contracts")
+print("PASS: modeling workspace keeps the drawing/layer palette on the right; quantity insight remains isolated; exact simple closed-boundary Móng Bè and selected-object quantity explanation source contracts remain intact")
