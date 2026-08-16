@@ -28,17 +28,22 @@ namespace QS3D.Core.Revisions
             ValidateSnapshot(snapshot);
             var full = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(full);
-            if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-            var temp = AtomicFileCommit.CreateTempPath(full);
+            var preflight = Path.Combine(Path.GetTempPath(), "qs3d-revision-" + Guid.NewGuid().ToString("N") + ".tmp");
+            string? temp = null;
             var backup = full + ".bak";
             try
             {
-                using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
+                using (var stream = new FileStream(preflight, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 using (var bounded = new BoundedWriteStream(stream, maximumBytes))
                 {
                     Serialize(snapshot, bounded);
                 }
-                ValidateSerializedFile(temp);
+                ValidateSerializedFile(preflight);
+
+                if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
+                temp = AtomicFileCommit.CreateTempPath(full);
+                File.Copy(preflight, temp, false);
+
                 if (ShouldPreserveValidatedBackup(full, backup))
                 {
                     AtomicFileCommit.ReplaceWithoutBackup(temp, full);
@@ -53,6 +58,7 @@ namespace QS3D.Core.Revisions
             finally
             {
                 AtomicFileCommit.TryDelete(temp);
+                AtomicFileCommit.TryDelete(preflight);
             }
         }
 
