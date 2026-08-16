@@ -79,10 +79,11 @@ namespace QS3D.Core.Export
 
         private static IReadOnlyList<BcfComponentReference> CanonicalizeComponents(IEnumerable<BcfComponentReference> components)
         {
-            if (components == null) throw new ArgumentNullException(nameof(components));
-            var items = components.ToList();
-            if (items.Count > BcfIssueExchangeContract.MaxComponentsPerViewpoint)
-                throw new ArgumentException("BCF viewpoint component count exceeds the bounded package contract.", nameof(components));
+            var items = BcfIssueExchangeContract.MaterializeBounded(
+                components,
+                BcfIssueExchangeContract.MaxComponentsPerViewpoint,
+                nameof(components),
+                "BCF viewpoint component count exceeds the bounded package contract.");
             var qs3dIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var ifcIds = new HashSet<string>(StringComparer.Ordinal);
             for (var index = 0; index < items.Count; index++)
@@ -151,10 +152,11 @@ namespace QS3D.Core.Export
 
         private static IReadOnlyList<BcfViewpoint> CanonicalizeViewpoints(IEnumerable<BcfViewpoint> viewpoints)
         {
-            if (viewpoints == null) throw new ArgumentNullException(nameof(viewpoints));
-            var items = viewpoints.ToList();
-            if (items.Count > BcfIssueExchangeContract.MaxViewpointsPerTopic)
-                throw new ArgumentException("BCF viewpoint count exceeds the bounded package contract.", nameof(viewpoints));
+            var items = BcfIssueExchangeContract.MaterializeBounded(
+                viewpoints,
+                BcfIssueExchangeContract.MaxViewpointsPerTopic,
+                nameof(viewpoints),
+                "BCF viewpoint count exceeds the bounded package contract.");
             var ids = new HashSet<string>(StringComparer.Ordinal);
             for (var index = 0; index < items.Count; index++)
             {
@@ -168,10 +170,11 @@ namespace QS3D.Core.Export
 
         private static IReadOnlyList<BcfComment> CanonicalizeComments(IEnumerable<BcfComment> comments, IReadOnlyList<BcfViewpoint> viewpoints)
         {
-            if (comments == null) throw new ArgumentNullException(nameof(comments));
-            var items = comments.ToList();
-            if (items.Count > BcfIssueExchangeContract.MaxCommentsPerTopic)
-                throw new ArgumentException("BCF comment count exceeds the bounded package contract.", nameof(comments));
+            var items = BcfIssueExchangeContract.MaterializeBounded(
+                comments,
+                BcfIssueExchangeContract.MaxCommentsPerTopic,
+                nameof(comments),
+                "BCF comment count exceeds the bounded package contract.");
             var ids = new HashSet<string>(StringComparer.Ordinal);
             var viewpointIds = new HashSet<string>(viewpoints.Select(x => x.Id), StringComparer.Ordinal);
             for (var index = 0; index < items.Count; index++)
@@ -200,11 +203,12 @@ namespace QS3D.Core.Export
 
         public static BcfIssueExchange Create(IEnumerable<BcfTopic> topics)
         {
-            if (topics == null) throw new ArgumentNullException(nameof(topics));
-            var items = topics.ToList();
+            var items = BcfIssueExchangeContract.MaterializeBounded(
+                topics,
+                BcfIssueExchangeContract.MaxTopics,
+                nameof(topics),
+                "BCF topic count exceeds the bounded package contract.");
             if (items.Count == 0) throw new ArgumentException("At least one BCF topic is required.", nameof(topics));
-            if (items.Count > BcfIssueExchangeContract.MaxTopics)
-                throw new ArgumentException("BCF topic count exceeds the bounded package contract.", nameof(topics));
             var ids = new HashSet<string>(StringComparer.Ordinal);
             for (var index = 0; index < items.Count; index++)
             {
@@ -223,6 +227,32 @@ namespace QS3D.Core.Export
         internal const int MaxViewpointsPerTopic = 256;
         internal const int MaxCommentsPerTopic = 1024;
         internal const int MaxComponentsPerViewpoint = 1000;
+
+        internal static List<T> MaterializeBounded<T>(
+            IEnumerable<T> values,
+            int maximumCount,
+            string parameterName,
+            string overflowMessage)
+        {
+            if (values == null) throw new ArgumentNullException(parameterName);
+
+            if (values is ICollection<T> collection && collection.Count > maximumCount)
+                throw new ArgumentException(overflowMessage, parameterName);
+            if (values is IReadOnlyCollection<T> readOnlyCollection && readOnlyCollection.Count > maximumCount)
+                throw new ArgumentException(overflowMessage, parameterName);
+
+            var items = new List<T>();
+            var observedCount = 0;
+            foreach (var value in values)
+            {
+                observedCount++;
+                if (observedCount > maximumCount)
+                    throw new ArgumentException(overflowMessage, parameterName);
+                items.Add(value);
+            }
+
+            return items;
+        }
 
         internal static string RequireBcfGuid(string value, string parameterName)
         {
