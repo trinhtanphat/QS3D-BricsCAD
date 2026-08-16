@@ -73,6 +73,8 @@ namespace QS3D.Core.Selection
                     throw new OverflowException("Bulk property multiplication overflow for " + element.Id + "/" + key + ".");
                 if (next == 0d && number != 0d && factor != 0d)
                     throw new InvalidOperationException("Semantic selection property multiplication underflow for " + element.Id + "/" + key + ".");
+                if (next.Equals(number) && number != 0d && factor != 1d)
+                    throw new InvalidOperationException("Semantic selection property multiplication lost a non-unit factor at floating-point precision for " + element.Id + "/" + key + ".");
                 if (next.Equals(number)) continue;
                 var formatted = next.ToString("R", CultureInfo.InvariantCulture);
                 updates.Add(new PendingValue(element, formatted));
