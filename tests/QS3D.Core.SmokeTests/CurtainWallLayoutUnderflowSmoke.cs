@@ -39,6 +39,22 @@ internal static class CurtainWallLayoutUnderflowSmoke
         if (zeroInternalFrames.PanelCount != 6)
             throw new InvalidOperationException("Legitimate zero internal-frame widths must remain supported.");
 
+        const double roundedRatioMaxPanelWidthM = 0.1000000000000001d;
+        var roundedIntegerRatio = CurtainWallLayoutPlanner.Plan(new CurtainWallLayoutInput
+        {
+            LengthM = 0.5000000000000006d,
+            HeightM = 1d,
+            MaxPanelWidthM = roundedRatioMaxPanelWidthM,
+            MaxPanelHeightM = 1d,
+            PerimeterFrameWidthM = 0d,
+            MullionWidthM = 0d,
+            TransomWidthM = 0d
+        });
+        if (roundedIntegerRatio.Columns != 6)
+            throw new InvalidOperationException("A rounded integer division ratio must add a curtain column when five bays exceed MaxPanelWidthM.");
+        if (roundedIntegerRatio.BayWidthM > roundedRatioMaxPanelWidthM)
+            throw new InvalidOperationException("A rounded integer division ratio must not produce a bay wider than MaxPanelWidthM.");
+
         AssertThrows<InvalidOperationException>(() => CurtainWallLayoutPlanner.Plan(new CurtainWallLayoutInput
         {
             LengthM = 6d,
