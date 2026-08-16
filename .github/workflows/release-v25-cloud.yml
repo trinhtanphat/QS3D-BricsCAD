@@ -41,11 +41,12 @@ jobs:
       BRICSCAD_V25_MSI_SHA256: ${{ vars.BRICSCAD_V25_MSI_SHA256 }}
       NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.source_sha || github.sha }}
           fetch-depth: 0
           fetch-tags: true
+          persist-credentials: false
 
       - name: Validate cloud prerelease request
         shell: powershell
@@ -137,16 +138,16 @@ jobs:
           "RELEASE_COMMIT_SHA=$releaseCommit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "Exact release source commit: $releaseCommit"
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
 
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: "8.0.x"
 
       - name: Cache NuGet packages
-        uses: actions/cache@v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', 'nuget.config') }}
@@ -191,7 +192,7 @@ jobs:
 
       - name: Restore BricsCAD V25 installer cache
         id: bricscad-msi-cache
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .cache/bricscad/BricsCAD-V25.2.10-x64.msi
           key: bricscad-v25.2.10-x64-en-us-${{ env.BRICSCAD_V25_PINNED_MSI_SHA256 }}
@@ -331,7 +332,7 @@ jobs:
 
       - name: Save BricsCAD V25 installer cache
         if: ${{ steps.bricscad-msi-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .cache/bricscad/BricsCAD-V25.2.10-x64.msi
           key: bricscad-v25.2.10-x64-en-us-${{ env.BRICSCAD_V25_PINNED_MSI_SHA256 }}
@@ -406,7 +407,7 @@ jobs:
           )
 
       - name: Upload cloud preview artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: QS3D-BricsCAD-V25-${{ inputs.release_tag }}-cloud-preview
           if-no-files-found: error

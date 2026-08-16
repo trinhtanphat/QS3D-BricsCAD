@@ -21,6 +21,17 @@ Sanitize drawings, logs, screenshots, paths and machine/user identifiers before 
 
 Security reports are accepted for the current repository code and published QS3D release/update mechanisms. Preview releases may change quickly, but vulnerabilities in preview package integrity, update verification, provenance, signing, or protected-main/release automation are still security-relevant.
 
+## GitHub Actions supply-chain policy
+
+- Every external `uses:` reference under `.github` must resolve to one immutable full 40-hex Git commit SHA. Human-readable version comments such as `# v7` are encouraged, but mutable tags or branches are not accepted.
+- Local actions referenced with `./...` are allowed. Container actions, if introduced, must use an immutable `sha256:` image digest.
+- `scripts/preflight-github-actions-pins.py` is a fail-closed repository gate and is automatically included by `scripts/preflight-all.py`. Do not bypass or weaken it to make CI green.
+- Checkout credentials should use `persist-credentials: false` unless a narrowly reviewed workflow has a demonstrated need for Git credential persistence.
+- `GITHUB_TOKEN` permissions must remain least-privilege. Read-only build/test jobs use `contents: read`; write scopes are limited to trusted owner-controlled dispatch or release paths that actually require them.
+- Untrusted pull-request code must never be executed with a write-capable token. In particular, do not introduce a `pull_request_target` path that checks out or executes untrusted PR content under elevated permissions.
+- Dependabot GitHub Actions major upgrades are compatibility/security review events. They must pass the repository CI gates and are not merged by bypassing failed checks; when accepted, the resulting action is still pinned to an immutable full commit SHA.
+- Merge/release provenance should prefer GitHub-verified or otherwise cryptographically verified commits where the platform supports it. Release workflows must continue to bind artifacts and tags to the exact qualified source SHA.
+
 ## Release and update security expectations
 
 QS3D release automation is expected to fail closed on source identity, package integrity, release-tag/version binding, signing identity where signing is required, and update-manifest validation. A security fix must not weaken those controls merely to restore a green build.

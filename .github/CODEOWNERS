@@ -11,6 +11,7 @@
 /docs/MAIN-WRITE-AUTHORIZATION.md @trinhtanphat
 /docs/AGENT-WORK-REGISTRATION.md @trinhtanphat
 /scripts/preflight-ci-manual-only.py @trinhtanphat
+/scripts/preflight-github-actions-pins.py @trinhtanphat
 /scripts/preflight-repository-professionalism.py @trinhtanphat
 /scripts/*release* @trinhtanphat
 /scripts/*sign* @trinhtanphat
