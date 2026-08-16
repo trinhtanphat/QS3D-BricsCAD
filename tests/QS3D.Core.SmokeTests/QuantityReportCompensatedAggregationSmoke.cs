@@ -9,8 +9,10 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             PreservesRepresentableLowOrderContributions();
+            PreservesLowOrderContributionsAcrossAllFields();
             PreservesOrdinaryAggregation();
             AccumulatorStillFailsClosedOnOverflow();
+            AccumulatorRejectsNonFiniteInputs();
         }
 
         private static void PreservesRepresentableLowOrderContributions()
@@ -30,6 +32,29 @@ namespace QS3D.Core.SmokeTests
             if (row.FormworkM2 != expected) throw new InvalidOperationException("Compensated formwork aggregation lost representable low-order contributions.");
             if (row.LengthM != expected) throw new InvalidOperationException("Compensated length aggregation lost representable low-order contributions.");
             if (row.ElementIds.Count != 3) throw new InvalidOperationException("Quantity-report provenance changed during compensated aggregation.");
+        }
+
+        private static void PreservesLowOrderContributionsAcrossAllFields()
+        {
+            var family = new FamilyDefinition("W2", ElementCategory.StructuralWall, "Concrete");
+            var first = ElementWithAllQuantities("A1", family, 1e16);
+            var second = ElementWithAllQuantities("A2", family, 1d);
+            var third = ElementWithAllQuantities("A3", family, 1d);
+
+            var row = QuantityReportBuilder.Group(new[] { first, second, third })[0];
+            const double expected = 10000000000000002d;
+            Equal(expected, row.GrossConcreteM3, "GrossConcreteM3");
+            Equal(expected, row.DeductionM3, "DeductionM3");
+            Equal(expected, row.NetConcreteM3, "NetConcreteM3");
+            Equal(expected, row.FormworkM2, "FormworkM2");
+            Equal(expected, row.LengthM, "LengthM");
+            Equal(expected, row.OuterPerimeterM, "OuterPerimeterM");
+            Equal(expected, row.InnerPerimeterM, "InnerPerimeterM");
+            Equal(expected, row.DoorAreaM2, "DoorAreaM2");
+            Equal(expected, row.SideAreaM2, "SideAreaM2");
+            Equal(expected, row.BottomAreaM2, "BottomAreaM2");
+            Equal(expected, row.TopAreaM2, "TopAreaM2");
+            Equal(expected, row.OtherAreaM2, "OtherAreaM2");
         }
 
         private static void PreservesOrdinaryAggregation()
@@ -58,6 +83,20 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void AccumulatorRejectsNonFiniteInputs()
+        {
+            ThrowsInvalidOperation(() =>
+            {
+                var accumulator = new QuantityReportMath.FiniteAccumulator();
+                accumulator.Add(double.NaN, "nan");
+            });
+            ThrowsInvalidOperation(() =>
+            {
+                var accumulator = new QuantityReportMath.FiniteAccumulator();
+                accumulator.Add(double.PositiveInfinity, "infinity");
+            });
+        }
+
         private static ElementInstance Element(string id, FamilyDefinition family, double value)
         {
             return new ElementInstance(id, family, "L1")
@@ -66,6 +105,45 @@ namespace QS3D.Core.SmokeTests
                 FormworkM2 = value,
                 LengthM = value
             };
+        }
+
+        private static ElementInstance ElementWithAllQuantities(string id, FamilyDefinition family, double value)
+        {
+            return new ElementInstance(id, family, "L1")
+            {
+                GrossConcreteM3 = value,
+                DeductionM3 = value,
+                NetConcreteM3 = value,
+                FormworkM2 = value,
+                LengthM = value,
+                OuterPerimeterM = value,
+                InnerPerimeterM = value,
+                DoorAreaM2 = value,
+                SideAreaM2 = value,
+                BottomAreaM2 = value,
+                TopAreaM2 = value,
+                OtherAreaM2 = value
+            };
+        }
+
+        private static void Equal(double expected, double actual, string field)
+        {
+            if (actual != expected)
+                throw new InvalidOperationException("Compensated " + field + " aggregation lost representable low-order contributions.");
+        }
+
+        private static void ThrowsInvalidOperation(Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException("Expected non-finite compensated quantity-report input to fail closed.");
         }
     }
 }
