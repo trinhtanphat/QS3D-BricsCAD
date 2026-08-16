@@ -31,6 +31,25 @@ namespace QS3D.Core.SmokeTests
             NearRelative(5e200d, distance);
             Throws<OverflowException>(() => new Point2(double.MaxValue, 0d).DistanceTo(new Point2(-double.MaxValue, 0d)));
 
+            Equal(5d, PolylineMetrics.Length(new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(3d, 4d)
+            }, false));
+            Equal(12d, PolylineMetrics.Length(new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(3d, 0d),
+                new Point2(3d, 4d)
+            }, true));
+            Equal(10000000000000002d, PolylineMetrics.Length(new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(1e16d, 0d),
+                new Point2(1e16d, 1d),
+                new Point2(1e16d, 2d)
+            }, false));
+
             const double origin = 1e12d;
             var polygon = new[]
             {
