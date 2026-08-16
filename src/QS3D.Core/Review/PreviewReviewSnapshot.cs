@@ -332,14 +332,11 @@ namespace QS3D.Core.Review
             }
             if (changedElements.Count != snapshot.ChangedElementCount)
                 throw new InvalidOperationException("Preview review changed-element summary does not match its entries.");
-
-            ValidateKindSpecificInvariants(snapshot);
-
             if (string.IsNullOrWhiteSpace(snapshot.Fingerprint) || snapshot.Fingerprint.Length != 64 || snapshot.Fingerprint.Any(ch => !Uri.IsHexDigit(ch)))
                 throw new InvalidOperationException("Preview review fingerprint must be a 64-character SHA-256 hex value.");
         }
 
-        private static void ValidateKindSpecificInvariants(PreviewReviewSnapshot snapshot)
+        internal static void ValidatePersistedKindSpecificInvariants(PreviewReviewSnapshot snapshot)
         {
             if (snapshot.Kind == PreviewReviewKind.QuantityRule)
             {
@@ -457,6 +454,7 @@ namespace QS3D.Core.Review
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Preview review path is required.", nameof(path));
+            PreviewReviewSnapshotService.ValidatePersistedKindSpecificInvariants(snapshot);
             var service = new PreviewReviewSnapshotService();
             if (!service.Verify(snapshot)) throw new InvalidOperationException("Preview review snapshot fingerprint or invariants are invalid.");
 
@@ -532,6 +530,14 @@ namespace QS3D.Core.Review
             entries = entries.OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Field, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Change, StringComparer.Ordinal).ThenBy(x => x.Before, StringComparer.Ordinal).ThenBy(x => x.After, StringComparer.Ordinal).ToList();
 
             var snapshot = new PreviewReviewSnapshot(name, projectId, kind, sourceChangeVersion, scope, targets, entries, changedElementCount, regeneratedElementCount, newHealthIssueCount, newHealthErrorCount, resolvedHealthIssueCount, omittedHandleFieldCount, fingerprint);
+            try
+            {
+                PreviewReviewSnapshotService.ValidatePersistedKindSpecificInvariants(snapshot);
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new InvalidDataException("Preview review snapshot kind-specific persisted invariants are invalid.", ex);
+            }
             if (!new PreviewReviewSnapshotService().Verify(snapshot)) throw new InvalidDataException("Preview review snapshot fingerprint or invariants are invalid.");
             return snapshot;
         }
