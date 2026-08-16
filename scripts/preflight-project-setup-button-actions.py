@@ -35,7 +35,7 @@ def main() -> int:
     xaml_routes = (
         ('Click="OnBltProjectInfoClick"', "Thông tin dự án"),
         ('Click="OnBltFloorSettingsClick"', "Cài đặt tầng"),
-        ('Click="OnBltProjectPropertiesClick"', "Thuộc tính dự án legacy compatibility route"),
+        ('Click="OnBltProjectPropertiesClick"', "Thuộc tính dự án canonical click route"),
         ('Click="OnBltAddZoneClick"', "Thêm vùng"),
         ('Click="OnBltDeleteZoneClick"', "Xóa vùng"),
         ('Click="OnBltInsertFloorClick"', "Chèn sàn"),
@@ -54,11 +54,16 @@ def main() -> int:
     require(setup, 'OnBltFloorSettingsClick', "Floor Settings action")
     require(setup, 'RefreshBltSetup();', "Floor Settings refresh")
 
-    # Project Properties must not perform the same action as Project Info. The Button class
-    # route overrides the legacy XAML handler before its instance Click handler runs and sends
-    # the dedicated command introduced for BLT3D parity.
+    # Project Properties must route correctly from the canonical XAML handler itself. The
+    # early Button class route remains as a compatibility/safety layer, not as the only thing
+    # preventing Project Properties from falling through to Project Tools.
+    canonical_properties_handler = 'OnBltProjectPropertiesClick(object sender, RoutedEventArgs e) => OpenDedicatedBltProjectProperties()'
+    legacy_properties_handler = 'OnBltProjectPropertiesClick(object sender, RoutedEventArgs e) => OpenProjectTools("Thuộc tính dự án")'
+    require(setup, canonical_properties_handler, "Project Properties canonical click action")
+    if legacy_properties_handler in setup:
+        fail("Project Properties canonical click handler must not alias the Project Info/Project Tools route")
     require(routing, 'typeof(Button)', "Project Properties early Button class handler")
-    require(routing, 'e.Handled = true;', "Project Properties legacy-route suppression")
+    require(routing, 'e.Handled = true;', "Project Properties compatibility route suppression")
     require(routing, '"Thuộc tính dự án"', "Project Properties label match")
     require(routing, '_document.SendStringToExecute("QS3DPROJECTPROPERTIES "', "dedicated Project Properties action")
     require(properties_command, '[CommandMethod("QS3DPROJECTPROPERTIES", CommandFlags.Modal)]', "dedicated Project Properties command")
