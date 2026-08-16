@@ -70,7 +70,7 @@ def main():
         forbid(project_ui, stale, project_ui_rel)
 
     result = read(result_rel)
-    for needle in ('"Đã mở \\""', 'project.Zones.Count', 'project.Elements.Count', 'readMilliseconds', 'totalMilliseconds', 'Content = "OK"'):
+    for needle in ('var summary = "Đã mở', '+ fileName +', 'project.Zones.Count', 'project.Elements.Count', 'readMilliseconds', 'totalMilliseconds', 'Content = "OK"'):
         require(result, needle, result_rel)
 
     icons = read(icon_rel)
