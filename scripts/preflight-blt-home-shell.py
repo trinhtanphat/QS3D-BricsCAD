@@ -33,8 +33,8 @@ def main():
 
     ribbon = read(ribbon_rel)
     for needle in (
-        '"Tệp"',
-        '"Mở dự án..."',
+        '"Dự án"',
+        '"Mở..."',
         '"Lưu"',
         '"Lưu thành..."',
         '"Cấu hình"',
@@ -56,11 +56,22 @@ def main():
         'DirectActionHandler',
         'FilePanelSourceId',
         'LegacyProjectPanelSourceId',
+        'UpdatePanelSourceId',
         'ConfigPanelSourceId',
         'RemoveOwnedPanel(panels, LegacyProjectPanelSourceId)',
+        'RemoveOwnedPanel(panels, UpdatePanelSourceId)',
     ):
         require(ribbon, needle, ribbon_rel)
-    for stale in ('SendStringToExecute', '"_OPEN"', '"_QSAVE"', '"_SAVEAS"'):
+    for stale in (
+        'SendStringToExecute',
+        '"_OPEN"',
+        '"_QSAVE"',
+        '"_SAVEAS"',
+        '"Tệp"',
+        '"Mở dự án..."',
+        'TỆP → HỆ THỐNG → CẤU HÌNH',
+        'if (updatePanel != null) Add(panels, updatePanel);',
+    ):
         forbid(ribbon, stale, ribbon_rel)
 
     project_ui = read(project_ui_rel)
@@ -154,14 +165,17 @@ def main():
     for needle in (
         'Text = "BLT3D"',
         'BIM Modeling & Quantity Application',
+        'Text = "Giải pháp mô hình hóa thông tin công trình BIM 3D trực quan và tối ưu hóa bóc tách khối lượng."',
         'Text = "QUY TRÌNH NHANH"',
         '"Tạo dự án mới"',
+        '"Bắt đầu bản vẽ trắng sạch hoàn toàn"',
         'ProjectFileUiService.CreateNewDrawing',
         '"Mở tệp dự án..."',
-        '"Chọn tệp BLT3D/QS3D hiện có từ máy tính"',
+        '"Chọn tệp tin .blt3d hiện có từ máy tính"',
         'ProjectFileUiService.OpenProjectFromPicker',
-        'ProjectFileUiService.SaveCurrentProject',
-        'ProjectFileUiService.SaveCurrentProjectAs',
+        'CreateActionCard("▣", "Lưu", "Ctrl+S", ProjectFileUiService.SaveCurrentProject, compact: true)',
+        'CreateActionCard("▤", "Lưu thành...", "Tạo bản sao mới", ProjectFileUiService.SaveCurrentProjectAs, compact: true)',
+        'Text = "Phiên bản " + DisplayVersion() + " • BLT3D Team"',
         'Text = "DỰ ÁN GẦN ĐÂY"',
         'Text = "Nhấp vào dự án để mở trực tiếp và bắt đầu làm việc"',
         'StartCenterPaletteCoordinator.Hide();',
@@ -203,6 +217,13 @@ def main():
         'Text = "Nhấp đúp vào dự án để mở trực tiếp và bắt đầu làm việc"',
         ' : Window',
         'ShowModelessWindow',
+        'using QS3D.BricsCAD.V25.Updates;',
+        'UpdateCenterWindowHost.Show()',
+        'CreateActionCard("↻", "Cập nhật"',
+        '"Chọn tệp BLT3D/QS3D hiện có từ máy tính"',
+        '"Lưu project QS3D"',
+        '"Tạo bản sao BLT3D"',
+        'khối lượng trong BricsCAD.',
     ):
         forbid(shell, stale, shell_rel)
 
@@ -217,7 +238,7 @@ def main():
     require(host, '_palette.AddVisual("Khởi đầu", _panel, true);', host_rel)
     require(host, 'Dock = DockSides.Left', host_rel)
 
-    print("PASS: QS3D Home and embedded Start Center keep branded/rasterized icons, native WPF Button.Click and keyboard/focus semantics while a QS3D-owned flat Button template suppresses host-theme hover/pressed chrome; action-card hover stays bounded to the intended dark panel, with embedded PaletteSet and project/sidecar safety contracts preserved.")
+    print("PASS: QS3D KHỞI ĐẦU matches the BLT3D reference surface with Dự án + Cấu hình ribbon groups and exactly four embedded quick actions, while preserving branded/rasterized icons, native WPF Button.Click and keyboard/focus semantics, responsive embedded PaletteSet layout, project/sidecar safety, truthful dynamic versioning, recent projects, and bottom status routing.")
     return 0
 
 
