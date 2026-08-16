@@ -1,0 +1,83 @@
+name: Bug report
+description: Report a reproducible QS3D defect with enough evidence for an agent or maintainer to reserve and fix safely.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please search existing issues first. Do not upload confidential drawings, credentials, signing material, or customer data. Use a sanitized/minimal reproduction whenever possible.
+
+  - type: dropdown
+    id: target
+    attributes:
+      label: Product target
+      options:
+        - BricsCAD V25
+        - BricsCAD V26
+        - Core / host-neutral
+        - Unknown
+    validations:
+      required: true
+
+  - type: input
+    id: release
+    attributes:
+      label: QS3D release / commit
+      description: Release tag (preferred) or exact commit SHA if known.
+      placeholder: v0.1.0-preview.10081 or 0123456789abcdef...
+
+  - type: input
+    id: bricscad
+    attributes:
+      label: BricsCAD version
+      description: Include the full version/build when the bug is host-specific.
+      placeholder: V25.2.10 x64
+
+  - type: input
+    id: command
+    attributes:
+      label: Command / feature
+      placeholder: QSGENERATE, Quantity Settings, Tool Diễn Giải, ...
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Give the smallest deterministic sequence that reproduces the defect.
+      placeholder: |
+        1. Open a sanitized drawing...
+        2. Run ...
+        3. Select ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include exact error text where available.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Sanitized screenshots, logs, CI run/job links, or a minimal synthetic drawing. Do not post secrets or private customer data.
+
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety checks
+      options:
+        - label: I searched for an existing issue/PR for the same bug.
+          required: true
+        - label: Any attached drawing/log/screenshot is sanitized and contains no confidential customer data, credentials, or signing material.
+          required: true
