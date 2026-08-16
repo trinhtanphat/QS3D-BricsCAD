@@ -56,6 +56,14 @@ def main() -> int:
         "First visible valid reservation owns overlapping scope.",
         "A clean Git merge does not prove semantic non-overlap.",
         "Reassignment/takeover must be written to #1910 first.",
+        "without another owner confirmation",
+        "commit, push its dedicated task branch, and open/update its PR",
+        "Scheduled lanes must not stop at readiness review or analysis",
+        "Never push commits directly to `main`.",
+        "Never write the default branch through the GitHub Contents API.",
+        "Never update the `main` ref directly, force-update it, or use an equivalent bypass.",
+        "Integration into `main` must occur only through the repository-authorized PR/merge path",
+        "If merge is not authorized, leave the branch/PR verified and hand it off; do not bypass the boundary.",
         "merge only when repository policy, branch protection, current-head evidence, and the assignment's merge authority all allow it",
         '"Push git" means push to the repository-prescribed canonical working branch/PR workflow, not direct protected-main push.',
         "Never force-push or overwrite another lane's work.",
@@ -90,8 +98,8 @@ def main() -> int:
 
     print(
         "PASS: hourly QS3D controller policy retains five-schedule topology, pre-code dispatch ordering, "
-        "substantial Task 0-4 package fields, continuation/fallback semantics, stale-package replacement, "
-        "collision refusal, protected-main workflow, and truthful runtime reporting boundaries."
+        "substantial Task 0-4 package fields, continuation/fallback semantics, worker branch-write authority, "
+        "direct-main refusal, stale-package replacement, collision refusal, and truthful runtime reporting boundaries."
     )
     return 0
 
