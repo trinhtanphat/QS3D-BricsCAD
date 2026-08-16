@@ -7,9 +7,22 @@ AUGMENTER = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/QuantityReferenceRibbonAugmente
 ICON_FACTORY = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonIconFactory.cs"
 COORDINATOR = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator.cs"
 PLUGIN = ROOT / "src/QS3D.BricsCAD.V25/PluginEntry.cs"
+SETTINGS_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/QuantitySettingsCommands.cs"
+CORE_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/Commands.cs"
+INSIGHT_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/QuantityInsightCommands.cs"
+REVIEW_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
 errors = []
 
-for path in (AUGMENTER, ICON_FACTORY, COORDINATOR, PLUGIN):
+for path in (
+    AUGMENTER,
+    ICON_FACTORY,
+    COORDINATOR,
+    PLUGIN,
+    SETTINGS_COMMANDS,
+    CORE_COMMANDS,
+    INSIGHT_COMMANDS,
+    REVIEW_COMMANDS,
+):
     if not path.is_file():
         errors.append("missing quantity Ribbon parity source: " + str(path.relative_to(ROOT)))
 
@@ -18,7 +31,7 @@ button_specs = (
     ("QS3D_QTY_BLT_CALCULATE", "Tính khối lượng\\n(Engine2)", "QS3DREGEN", "QuantityCalculate"),
     ("QS3D_QTY_BLT_EXPORT", "Xuất\\n.blte2", "QS3DED2", "QuantityExport"),
     ("QS3D_QTY_BLT_VIEW", "Xem khối\\nlượng", "QS3DBQ", "QuantityView"),
-    ("QS3D_QTY_BLT_EXPLAIN", "Diễn\\ngiải", "QS3DBQ", "QuantityExplain"),
+    ("QS3D_QTY_BLT_EXPLAIN", "Diễn\\ngiải", "QS3DQUANTITYINSIGHT", "QuantityExplain"),
     ("QS3D_QTY_BLT_COMPARE", "Đối chiếu\\nCũ/Mới", "QS3DREVDIFF", "QuantityCompare"),
 )
 
@@ -73,7 +86,8 @@ if AUGMENTER.is_file():
         "QS3DQUANTITYSETTINGS": 1,
         "QS3DREGEN": 1,
         "QS3DED2": 1,
-        "QS3DBQ": 2,
+        "QS3DBQ": 1,
+        "QS3DQUANTITYINSIGHT": 1,
         "QS3DREVDIFF": 1,
     }
     for command, expected_count in expected_command_counts.items():
@@ -82,6 +96,9 @@ if AUGMENTER.is_file():
             errors.append(
                 f"expected {expected_count} BLT3D quantity command binding(s) for {command}, found {actual_count}"
             )
+
+    if '"QS3D_QTY_BLT_EXPLAIN",\n                "Diễn\\ngiải",\n                "QS3DBQ"' in text:
+        errors.append("Diễn giải must not reuse the Xem khối lượng QS3DBQ route")
 
     forbidden_button_ids = (
         "QS3D_QTY_REF_SETTINGS",
@@ -127,6 +144,71 @@ if PLUGIN.is_file():
         if needle not in text:
             errors.append("PluginEntry missing coordinated Quantity reference lifecycle hook: " + needle)
 
+# Pin the real behavior behind every visible BLT3D-style quantity action. A registered
+# command name alone is not enough: this catches accidental visual aliases such as the
+# old Diễn giải -> QS3DBQ routing bug.
+behavior_contracts = (
+    (
+        SETTINGS_COMMANDS,
+        "Cài đặt tính toán",
+        (
+            '[CommandMethod("QS3DQUANTITYSETTINGS", CommandFlags.Modal)]',
+            "ShowQuantitySettings();",
+            "Application.ShowModalWindow(window);",
+        ),
+    ),
+    (
+        CORE_COMMANDS,
+        "Tính khối lượng (Engine2)",
+        (
+            '[CommandMethod("QS3DREGEN", CommandFlags.Modal)]',
+            "var count = RegenerateProject(project);",
+        ),
+    ),
+    (
+        CORE_COMMANDS,
+        "Xuất .blte2 / ED2 export route",
+        (
+            '[CommandMethod("QS3DED2", CommandFlags.UsePickSet)]',
+            "XlsxQuantityExporter.ExportEd2(dialog.FileName, details, summary);",
+        ),
+    ),
+    (
+        CORE_COMMANDS,
+        "Xem khối lượng",
+        (
+            '[CommandMethod("QS3DBQ", CommandFlags.UsePickSet)]',
+            "new QuantitySummaryWindow(doc, rows, locate, recalculate)",
+        ),
+    ),
+    (
+        INSIGHT_COMMANDS,
+        "Diễn giải",
+        (
+            '[CommandMethod("QS3DQUANTITYINSIGHT", CommandFlags.UsePickSet)]',
+            "PaletteCoordinator.SetInspection(snapshots);",
+            "PaletteCoordinator.ShowQuantityInsight();",
+        ),
+    ),
+    (
+        REVIEW_COMMANDS,
+        "Đối chiếu Cũ/Mới",
+        (
+            '[CommandMethod("QS3DREVDIFF", CommandFlags.Modal)]',
+            "new QuantityRevisionReport().Build(before, after);",
+            "new RevisionWindow(doc, before, after, rows, locate)",
+        ),
+    ),
+)
+
+for path, action_name, needles in behavior_contracts:
+    if not path.is_file():
+        continue
+    text = path.read_text(encoding="utf-8")
+    for needle in needles:
+        if needle not in text:
+            errors.append(f"{action_name} behavior contract missing: {needle}")
+
 adapter_root = ROOT / "src/QS3D.BricsCAD.V25"
 if adapter_root.is_dir():
     command_source = "\n".join(
@@ -149,5 +231,6 @@ if errors:
 print(
     "PASS: QS3D_QTY is reconciled to the BLT3D reference with exactly two groups, "
     "six large icon buttons, deterministic removal of legacy QS3D quantity panels, "
-    "registered command routing, coordinated initialization, and contained teardown."
+    "distinct registered command routing with pinned behavior, coordinated initialization, "
+    "and contained teardown."
 )
