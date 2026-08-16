@@ -71,9 +71,12 @@ namespace QS3D.Core.Rebar
             var groups = RebarNotationParser.Parse(input.Notation);
             if (input.CountOverride.HasValue && groups.Count > 1) throw new InvalidOperationException("CountOverride is ambiguous for compound rebar notation.");
 
-            var cuttingLength = RebarMath.Add(input.CuttingLengthM, input.LapLengthM, "cutting + lap length");
-            cuttingLength = RebarMath.Add(cuttingLength, input.AnchorLengthM, "cutting + anchor length");
-            cuttingLength = RebarMath.Add(cuttingLength, input.HookAllowanceM, "cutting + hook allowance");
+            var cuttingLengthParts = new CompensatedFiniteSum();
+            cuttingLengthParts.Add(input.CuttingLengthM, "cutting length");
+            cuttingLengthParts.Add(input.LapLengthM, "cutting + lap length");
+            cuttingLengthParts.Add(input.AnchorLengthM, "cutting + anchor length");
+            cuttingLengthParts.Add(input.HookAllowanceM, "cutting + hook allowance");
+            var cuttingLength = cuttingLengthParts.Value;
             if (cuttingLength <= 0d) throw new InvalidOperationException("Rebar cutting length must be greater than zero.");
             var baseMark = string.IsNullOrWhiteSpace(input.BarMark) ? (string.IsNullOrWhiteSpace(input.ElementId) ? "BAR" : input.ElementId) : input.BarMark.Trim();
             var fabricationStatus = Normalize(input.FabricationStatus);
@@ -142,6 +145,45 @@ namespace QS3D.Core.Rebar
                 return checked((int)rounded + 1);
             }
             throw new InvalidOperationException("Rebar quantity cannot be inferred. Provide count notation, spacing + distribution length, or CountOverride.");
+        }
+
+        private struct CompensatedFiniteSum
+        {
+            private double _sum;
+            private double _compensation;
+            private string _lastLabel;
+
+            public void Add(double value, string label)
+            {
+                var next = _sum + value;
+                EnsureFinite(next, label);
+
+                var correction = Math.Abs(_sum) >= Math.Abs(value)
+                    ? (_sum - next) + value
+                    : (value - next) + _sum;
+                var compensation = _compensation + correction;
+                EnsureFinite(compensation, label);
+
+                _sum = next;
+                _compensation = compensation;
+                _lastLabel = label;
+            }
+
+            public double Value
+            {
+                get
+                {
+                    var result = _sum + _compensation;
+                    EnsureFinite(result, _lastLabel ?? "cutting + hook allowance");
+                    return result;
+                }
+            }
+
+            private static void EnsureFinite(double value, string label)
+            {
+                if (double.IsNaN(value) || double.IsInfinity(value))
+                    throw new OverflowException("Rebar addition overflow: " + label);
+            }
         }
 
         private static string Normalize(string value) => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
