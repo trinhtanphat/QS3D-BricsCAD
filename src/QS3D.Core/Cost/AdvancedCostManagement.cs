@@ -269,7 +269,7 @@ namespace QS3D.Core.Cost
                   ((values[values.Count / 2] - values[(values.Count / 2) - 1]) / 2m);
             decimal? deviation = average == 0m
                 ? (currentUnitCost == 0m ? 0m : (decimal?)null)
-                : ((currentUnitCost - average) / average) * 100m;
+                : CalculateDeviationPercent(currentUnitCost, average);
             return new CostBenchmarkResult(
                 values.Count,
                 values[0],
@@ -278,6 +278,23 @@ namespace QS3D.Core.Cost
                 median,
                 currentUnitCost,
                 deviation);
+        }
+
+        private static decimal CalculateDeviationPercent(decimal currentUnitCost, decimal averageUnitCost)
+        {
+            var delta = checked(currentUnitCost - averageUnitCost);
+            if (delta == 0m) return 0m;
+
+            try
+            {
+                var scaledDelta = CostDecimalMath.MultiplyPreservingNonZero(delta, 100m, "benchmark deviation scaled delta");
+                return CostDecimalMath.DividePreservingNonZero(scaledDelta, averageUnitCost, "benchmark deviation percent");
+            }
+            catch (OverflowException)
+            {
+                var ratio = CostDecimalMath.DividePreservingNonZero(delta, averageUnitCost, "benchmark deviation ratio");
+                return CostDecimalMath.MultiplyPreservingNonZero(ratio, 100m, "benchmark deviation percent");
+            }
         }
     }
 
