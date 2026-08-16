@@ -211,7 +211,10 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <Button Content="Làm mới" Click="OnRefreshClick"/>
+            <StackPanel>
+                <TextBlock Text="SEMANTIC LEVEL"/>
+                <Button Content="Làm mới" Click="OnRefreshClick"/>
+            </StackPanel>
 
             <Grid Grid.Row="1">
                 <Grid.RowDefinitions>
