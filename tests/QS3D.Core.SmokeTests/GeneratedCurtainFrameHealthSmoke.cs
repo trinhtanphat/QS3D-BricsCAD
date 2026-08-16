@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             LaterGeneratedOwnerStillConflictsWithCurtainFrames();
             ReducedPhysicalFrameCountMatchesNonZeroWidths();
             ZeroFrameSnapshotsRemainInspectable();
+            PathMappedFrameCountCannotExceedGeneratedPieces();
         }
 
         private static void LaterGeneratedOwnerStillConflictsWithCurtainFrames()
@@ -137,6 +138,62 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Curtain health rejected writer-owned GeneratedCurtainFrameCount=0.");
             if (issues.Any(x => x.ElementId == curtain.Id && x.Code == "CURTAIN_FRAME_BASE_COUNT_INVALID"))
                 throw new Exception("Curtain health rejected writer-owned GeneratedCurtainFrameBaseCount=0.");
+        }
+
+        private static void PathMappedFrameCountCannotExceedGeneratedPieces()
+        {
+            var project = new ProjectState("curtain-health-path-mapped-count", "Curtain Health Path Mapped Count");
+            var impossible = PathSnapshot("CW-PATH-IMPOSSIBLE", "A1;A2", 2, 3);
+            var splitAcrossSegments = PathSnapshot("CW-PATH-SPLIT", "B1;B2;B3;B4", 4, 2);
+            project.Elements.Add(impossible);
+            project.Elements.Add(splitAcrossSegments);
+
+            var issues = new GeneratedCurtainFrameHealthService().Inspect(project);
+            if (!issues.Any(x => x.ElementId == impossible.Id && x.Code == "CURTAIN_FRAME_PATH_MAPPED_COUNT_MISMATCH"))
+                throw new Exception("Curtain health accepted more mapped source frames than generated native path pieces.");
+            if (issues.Any(x => x.ElementId == splitAcrossSegments.Id && x.Code == "CURTAIN_FRAME_PATH_MAPPED_COUNT_MISMATCH"))
+                throw new Exception("Curtain health rejected valid path splitting where one mapped frame can create multiple native pieces.");
+        }
+
+        private static ProjectElement PathSnapshot(string id, string handles, int generatedCount, int mappedFrameCount)
+        {
+            var curtain = new ProjectElement(id, ElementCategory.GlassWall, string.Empty, string.Empty, string.Empty);
+            var config = new CurtainWallFrameFingerprintInput
+            {
+                LengthM = 1d,
+                HeightM = 1d,
+                BottomOffsetM = 0d,
+                MaxPanelWidthM = 1d,
+                MaxPanelHeightM = 1d,
+                PerimeterFrameWidthM = 0.05d,
+                MullionWidthM = 0.05d,
+                TransomWidthM = 0.05d,
+                FrameDepthM = 0.05d
+            };
+
+            curtain.Properties["GeneratedCurtainFrameHandles"] = handles;
+            curtain.Properties["GeneratedCurtainFrameCount"] = generatedCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            curtain.Properties["GeneratedCurtainFrameColumns"] = "1";
+            curtain.Properties["GeneratedCurtainFrameRows"] = "1";
+            curtain.Properties["GeneratedCurtainFrameBaseCount"] = "4";
+            curtain.Properties["GeneratedCurtainFrameOpeningCount"] = "1";
+            curtain.Properties["GeneratedCurtainFrameDepthM"] = "0.05";
+            curtain.Properties["GeneratedCurtainFrameSourceLengthM"] = "1";
+            curtain.Properties["GeneratedCurtainFrameHeightM"] = "1";
+            curtain.Properties["GeneratedCurtainFrameConfigFingerprint"] = CurtainWallFrameFingerprint.Compute(config);
+            curtain.Properties["GeneratedCurtainFrameMode"] = "PathFrameOverlay.OpeningAware";
+            curtain.Properties["GeneratedCurtainFrameSourceKind"] = "OpenPolyline";
+            curtain.Properties["GeneratedCurtainFramePathSegmentCount"] = "2";
+            curtain.Properties["GeneratedCurtainFrameMappedFrameCount"] = mappedFrameCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            curtain.Properties["LengthM"] = "1";
+            curtain.Properties["HeightM"] = "1";
+            curtain.Properties["CurtainMaxPanelWidthM"] = "1";
+            curtain.Properties["CurtainMaxPanelHeightM"] = "1";
+            curtain.Properties["CurtainPerimeterFrameWidthM"] = "0.05";
+            curtain.Properties["CurtainMullionWidthM"] = "0.05";
+            curtain.Properties["CurtainTransomWidthM"] = "0.05";
+            curtain.Properties["CurtainFrameDepthM"] = "0.05";
+            return curtain;
         }
     }
 }
