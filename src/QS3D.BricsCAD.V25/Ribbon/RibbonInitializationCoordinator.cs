@@ -126,6 +126,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
             // QS3D-owned Home/Draw/Recognition/View groups are deterministic without replacing native tabs.
             ready = BltHomeRibbonAugmenter.TryInitialize() && ready;
             ready = BltDrawRibbonFailSafe.TryInitialize() && ready;
+
+            // Apply the owner-reference icon language to every visible VẼ/Công cụ button after
+            // compact layout refinement. MÔ HÌNH BIM later mirrors these same decorated buttons.
+            ready = BltDrawRibbonReferenceIconDecorator.TryInitialize() && ready;
             ready = BltRecognitionRibbonAugmenter.TryInitialize() && ready;
             ready = BltViewRibbonAugmenter.TryInitialize() && ready;
 
