@@ -9,7 +9,6 @@ namespace QS3D.Core.Documentation
     {
         public SemanticDocumentationColumn(string header, string template)
         {
-            SemanticTagRenderer.ValidateTemplate(template);
             Header = header;
             Template = template;
         }
