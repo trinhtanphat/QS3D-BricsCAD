@@ -9,6 +9,10 @@ namespace QS3D.Core.Diagnostics
 {
     public static class BomReleaseGuardService
     {
+        private const int MaxLiveGeneratedHandleCount = 10000;
+        private const string LiveGeneratedHandleCountExceededMessage =
+            "Live generated handle count must not exceed 10000 for BOM release diagnostics.";
+
         public static IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project, ISet<string>? liveGeneratedHandles = null)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -16,9 +20,17 @@ namespace QS3D.Core.Diagnostics
             ISet<string>? liveHandleIndex = null;
             if (liveGeneratedHandles != null)
             {
+                if (liveGeneratedHandles.Count > MaxLiveGeneratedHandleCount)
+                    throw new InvalidOperationException(LiveGeneratedHandleCountExceededMessage);
+
                 var index = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var observedLiveHandleCount = 0;
                 foreach (var handle in liveGeneratedHandles)
                 {
+                    observedLiveHandleCount++;
+                    if (observedLiveHandleCount > MaxLiveGeneratedHandleCount)
+                        throw new InvalidOperationException(LiveGeneratedHandleCountExceededMessage);
+
                     var normalized = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
                     if (normalized.Length > 0) index.Add(normalized);
                 }
