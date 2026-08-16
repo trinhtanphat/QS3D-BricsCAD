@@ -1,14 +1,16 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection;
+using System.Threading;
 
 namespace QS3D.BricsCAD.V25.Ribbon
 {
     /// <summary>
     /// Fills missing images on the canonical QS3D Ribbon after every richer feature augmenter
-    /// has reconciled. Existing Home/Draw/custom images are preserved; only text-only command
-    /// buttons receive deterministic QS3D-generated fallback icons.
+    /// has reconciled. Existing Home/Draw/custom images are preserved; text-only buttons get
+    /// deterministic semantic QS3D icons based on their command intent.
     /// </summary>
     internal static class RibbonBootstrapIconAugmenter
     {
@@ -76,46 +78,64 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 var source = GetProperty(panel, "Source");
                 if (source == null) continue;
                 var items = GetProperty(source, "Items");
-                if (items == null) continue;
-                ApplyIconsToCollection(items, visited, ref commandButtons);
+                if (!(items is IEnumerable itemEnumerable)) continue;
+
+                foreach (var item in itemEnumerable)
+                    DecorateItem(item, visited, ref commandButtons);
             }
 
             return commandButtons > 0;
         }
 
-        private static void ApplyIconsToCollection(object collection, HashSet<object> visited, ref int commandButtons)
+        private static void DecorateItem(object? item, HashSet<object> visited, ref int commandButtons)
         {
-            if (!(collection is IEnumerable enumerable)) return;
+            if (item == null || !visited.Add(item)) return;
 
-            foreach (var item in enumerable)
+            if (GetProperty(item, "CommandParameter") is string command
+                && !string.IsNullOrWhiteSpace(command))
             {
-                if (item == null || !visited.Add(item)) continue;
-
-                if (GetProperty(item, "CommandParameter") is string command
-                    && !string.IsNullOrWhiteSpace(command))
+                commandButtons++;
+                if (!HasCompleteVisibleIcon(item))
                 {
-                    commandButtons++;
-                    if (HasCompleteVisibleIcon(item))
-                    {
-                        // Preserve custom images supplied by richer Ribbon augmenters.
-                    }
-                    else
-                    {
-                        var text = (GetProperty(item, "Text") as string)
-                                   ?? (GetProperty(item, "Name") as string)
-                                   ?? string.Empty;
-                        var icon = ResolveIcon(command, text);
-                        SetProperty(item, "ShowImage", true);
-                        SetProperty(item, "Image", RibbonIconFactory.Create(icon, 16));
-                        SetProperty(item, "LargeImage", RibbonIconFactory.Create(icon, 32));
-                    }
+                    var text = (GetProperty(item, "Text") as string)
+                               ?? (GetProperty(item, "Name") as string)
+                               ?? string.Empty;
+                    var icon = ResolveIcon(command, text);
+                    SetProperty(item, "ShowImage", true);
+                    SetProperty(item, "Image", CreateIcon(icon, 16));
+                    SetProperty(item, "LargeImage", CreateIcon(icon, 32));
                 }
+            }
 
-                // Compact BLT-style panels use RibbonRowPanel containers. Traverse nested
-                // Items so those buttons count toward readiness and retain their own icons.
-                var nestedItems = GetProperty(item, "Items");
-                if (nestedItems != null)
-                    ApplyIconsToCollection(nestedItems, visited, ref commandButtons);
+            // Rich ribbon augmenters may wrap buttons in row/stack containers. Recurse so
+            // the same icon policy also covers their fallback layouts without replacing
+            // images already supplied by those augmenters. Guard cycles/shared host objects.
+            var nested = GetProperty(item, "Items");
+            if (!(nested is IEnumerable nestedEnumerable)) return;
+            foreach (var child in nestedEnumerable)
+                DecorateItem(child, visited, ref commandButtons);
+        }
+
+        private static object CreateIcon(RibbonIconKind icon, int pixelSize)
+        {
+            // Unknown-but-command-bearing QS3D buttons use the exact repository brand mark as
+            // the final safety net rather than the old generic four-dot Objects glyph.
+            if (icon == RibbonIconKind.Qs3dLogo)
+                return Qs3dBrandIconFactory.Create(pixelSize);
+
+            // RibbonIconFactory uses compact path-data strings for a few generated shapes.
+            // Keep rendering invariant even on Windows installations that use a comma decimal
+            // separator, then restore the host UI thread culture immediately afterward.
+            var thread = Thread.CurrentThread;
+            var previous = thread.CurrentCulture;
+            try
+            {
+                thread.CurrentCulture = CultureInfo.InvariantCulture;
+                return RibbonIconFactory.Create(icon, pixelSize);
+            }
+            finally
+            {
+                thread.CurrentCulture = previous;
             }
         }
 
@@ -129,39 +149,130 @@ namespace QS3D.BricsCAD.V25.Ribbon
         {
             var normalized = (command + " " + text).Trim().ToUpperInvariant();
 
-            if (normalized.Contains("HEALTH")
-                || normalized.Contains("VALIDATE")
-                || normalized.Contains("CHECK"))
+            // QS3D shell/catalog surfaces that historically fell through to the generic
+            // Objects glyph. Give every canonical bootstrap action an intentional icon.
+            if (ContainsAny(normalized, "QS3DSTART", "START CENTER"))
+                return RibbonIconKind.Qs3dLogo;
+            if (ContainsAny(normalized, "FAMIL", "FAMILY / TYPE"))
+                return RibbonIconKind.Settings;
+            if (ContainsAny(normalized, "LAYER", "XREF"))
+                return RibbonIconKind.Workspace;
+            if (ContainsAny(normalized, "CAPTURE", "BÓC CHỌN"))
+                return RibbonIconKind.Inspect;
+
+            // Recognition / inspection.
+            if (normalized.Contains("RECOGNIZE_AUTO") || normalized.Contains("AUTO CHẮC"))
+                return RibbonIconKind.RecognitionAuto;
+            if (normalized.Contains("RECOGNIZE_INSPECT") || normalized.Contains("INSPECT"))
+                return RibbonIconKind.Inspect;
+            if (normalized.Contains("RECOGNIZE") || normalized.Contains("NHẬN DẠNG"))
+                return RibbonIconKind.Recognition;
+            if (normalized.Contains("MEP_TAKEOFF") || normalized.Contains("TAKEOFF"))
+                return RibbonIconKind.Takeoff;
+
+            // Edit / measure. Generic DRAW is intentionally deferred until all semantic domains
+            // have had a chance to classify commands such as DRAW_WALL, DRAW_DOOR and DRAW_REBAR.
+            if (ContainsAny(normalized, "_MOVE", "_ROTATE", "_MIRROR", "_COPY", "_BREAK", "_JOIN"))
+                return RibbonIconKind.Transform;
+            if (ContainsAny(normalized, "MEASURE", "_DIST", "DISTANCE", "KHOẢNG CÁCH"))
+                return RibbonIconKind.Measure;
+
+            // Tool / navigation semantics.
+            if (normalized.Contains("LOCATE"))
+                return RibbonIconKind.Locate;
+            if (normalized.Contains("HIGHLIGHT"))
+                return RibbonIconKind.Highlight;
+            if (normalized.Contains("FOCUS"))
+                return RibbonIconKind.Focus;
+            if (normalized.Contains("ISOLATE"))
+                return RibbonIconKind.Isolate;
+            if (normalized.Contains("RESTORE"))
+                return RibbonIconKind.Restore;
+            if (normalized.Contains("ORBIT"))
+                return RibbonIconKind.Orbit;
+            if (ContainsAny(normalized, "VIEW3D", "VIEW_TOP", "3D VIEW", "TOP VIEW"))
+                return RibbonIconKind.View3d;
+            if (normalized.Contains("WORKSPACE"))
+                return RibbonIconKind.Workspace;
+            if (normalized.Contains("SECTION"))
+                return RibbonIconKind.Section;
+            if (normalized.Contains("ZOOM"))
+                return RibbonIconKind.Focus;
+            if (normalized.Contains("CLIP"))
+                return RibbonIconKind.Section;
+            if (normalized.Contains("SNAP"))
+                return RibbonIconKind.Locate;
+
+            // BIM authoring / modeling.
+            if (ContainsAny(normalized, "BUILD3D", "BUILD 3D", "SINH MÔ HÌNH"))
+                return RibbonIconKind.Model3d;
+            if (ContainsAny(normalized, "AUTO_HOST", "AUTOLINKHOST", "LINKHOST", "CUT_OPENINGS", "OPENING", "LỖ MỞ", "HOST"))
+                return RibbonIconKind.Opening;
+            if (normalized.Contains("DOOR") || normalized.Contains("CỬA"))
+                return RibbonIconKind.Door;
+            if (normalized.Contains("ROOM") || normalized.Contains("PHÒNG"))
+                return RibbonIconKind.Room;
+            if (ContainsAny(normalized, "GLASS_WALL", "_WALL", "TƯỜNG", "VÁCH"))
+                return RibbonIconKind.Wall;
+            if (ContainsAny(normalized, "CURTAIN", "PIER", "JUNCTION", "BEAM", "SLAB", "COLUMN", "FOUNDATION", "STAIR", "RAILING", "EARTHWORK", "CẦU THANG", "LAN CAN", "ĐÀO ĐẤT", "KẾT CẤU"))
+                return RibbonIconKind.Structure;
+
+            // Quantity / schedules / data exchange.
+            if (ContainsAny(normalized, "REBAR", "BBS", "MESH"))
+                return RibbonIconKind.Rebar;
+            if (normalized.Contains("SCHEDULE"))
+                return RibbonIconKind.Schedule;
+            if (ContainsAny(normalized, "EXCEL", "XLSX"))
+                return RibbonIconKind.Excel;
+            if (ContainsAny(normalized, "QS3DBQ", "_BQ", " BQ", "QUANTITY", "QTY", "BÓC TÁCH"))
+                return RibbonIconKind.Quantity;
+
+            // Review / release.
+            if (normalized.Contains("BASELINE"))
+                return RibbonIconKind.Compare;
+            if (normalized.Contains("DIFF"))
+                return RibbonIconKind.Diff;
+            if (normalized.Contains("RELEASE"))
+                return RibbonIconKind.Release;
+            if (ContainsAny(normalized, "HEALTH", "VALIDATE", "CHECK"))
                 return RibbonIconKind.UpdateStatus;
 
+            // Common shell commands.
             if (normalized.Contains("SAVEAS") || normalized.Contains("SAVE AS") || normalized.Contains("EXPORT"))
                 return RibbonIconKind.SaveAs;
-
             if (normalized.Contains("SAVE") || normalized.Contains("QSAVE") || normalized.Contains("LƯU"))
                 return RibbonIconKind.Save;
-
-            if (normalized.Contains("IMPORT")
-                || normalized.Contains("RELOAD")
-                || normalized.Contains("OPEN")
-                || normalized.Contains("NẠP"))
+            if (ContainsAny(normalized, "IMPORT", "RELOAD", "OPEN", "NẠP"))
                 return RibbonIconKind.OpenProject;
-
-            if (normalized.Contains("SETTINGS")
-                || normalized.Contains("PROJECTTOOLS")
-                || normalized.Contains("CONFIG")
-                || normalized.Contains("LICENSE")
-                || normalized.Contains("HELP"))
+            if (ContainsAny(normalized, "SETTINGS", "PROJECTTOOLS", "CONFIG", "LICENSE", "HELP"))
                 return RibbonIconKind.Settings;
-
-            if (normalized.Contains("REFRESH")
-                || normalized.Contains("REGEN")
-                || normalized.Contains("SYNC")
-                || normalized.Contains("BUILD")
-                || normalized.Contains("CUT")
-                || normalized.Contains("UPDATE"))
+            if (ContainsAny(normalized, "REFRESH", "REGEN", "SYNC", "UPDATE"))
                 return RibbonIconKind.Update;
 
-            return RibbonIconKind.Objects;
+            // BricsCAD's native rectangle command is _RECTANG, while the longer spelling may
+            // appear in aliases/labels. Cover both before the branded final safety net.
+            if (normalized.Contains("_RECTANG"))
+                return RibbonIconKind.Draw;
+
+            // Generic drawing is deliberately the last semantic fallback. Otherwise broad DRAW
+            // command names shadow richer intents such as DRAW_WALL, DRAW_REBAR or DRAW_DOOR.
+            if (ContainsAny(normalized, "_POINT", "_LINE", "_ARC", "_RECTANGLE", "DRAW"))
+                return RibbonIconKind.Draw;
+
+            // Never leave a QS3D command button with the old generic Objects placeholder. Rich
+            // augmenters keep their own images; any genuinely unknown bootstrap command is still
+            // visibly branded and can be assigned a richer semantic glyph later.
+            return RibbonIconKind.Qs3dLogo;
+        }
+
+        private static bool ContainsAny(string value, params string[] candidates)
+        {
+            foreach (var candidate in candidates)
+            {
+                if (value.Contains(candidate))
+                    return true;
+            }
+            return false;
         }
 
         private static object? FindById(object collection, string id)

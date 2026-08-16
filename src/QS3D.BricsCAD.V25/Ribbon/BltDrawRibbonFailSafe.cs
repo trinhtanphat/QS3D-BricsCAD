@@ -57,7 +57,16 @@ namespace QS3D.BricsCAD.V25.Ribbon
         {
             var fallback = CaptureFallback();
             if (BltDrawRibbonAugmenter.TryInitialize())
-                return true;
+            {
+                if (BltDrawRibbonLayoutRefiner.TryInitialize())
+                    return true;
+
+                // The rich augmenter marks itself initialized only after producing its flat
+                // qualified panels. If the compact BLT layout cannot be applied, reset that
+                // state before restoring bootstrap panels so the next bounded retry can build
+                // a fresh rich surface rather than getting stuck on panels that were removed.
+                BltDrawRibbonAugmenter.Reset();
+            }
 
             RestoreFallback(fallback);
             return false;
