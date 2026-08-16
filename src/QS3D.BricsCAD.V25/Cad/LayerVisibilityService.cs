@@ -7,13 +7,16 @@ namespace QS3D.BricsCAD.V25.Cad
 {
     internal static class LayerVisibilityService
     {
+        private const int MaxRequestedLayerNames = 10000;
+
         public static int SetVisible(Document document, IEnumerable<string> names, bool visible)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (names == null) throw new ArgumentNullException(nameof(names));
-            var wanted = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+            var wanted = BuildWantedNames(names);
             if (wanted.Count == 0) return 0;
             var count = 0;
+            var mutationCount = 0;
             using (document.LockDocument())
             using (var tr = document.Database.TransactionManager.StartTransaction())
             {
@@ -22,14 +25,21 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     var layer = tr.GetObject(id, OpenMode.ForRead) as LayerTableRecord;
                     if (layer == null || !wanted.Contains(layer.Name)) continue;
-                    layer.UpgradeOpen();
-                    layer.IsOff = !visible;
-                    if (visible && layer.IsFrozen) layer.IsFrozen = false;
                     count++;
+
+                    var desiredOff = !visible;
+                    var changeOffState = layer.IsOff != desiredOff;
+                    var thawLayer = visible && layer.IsFrozen;
+                    if (!changeOffState && !thawLayer) continue;
+
+                    layer.UpgradeOpen();
+                    if (changeOffState) layer.IsOff = desiredOff;
+                    if (thawLayer) layer.IsFrozen = false;
+                    mutationCount++;
                 }
                 tr.Commit();
             }
-            document.Editor.Regen();
+            if (mutationCount > 0) document.Editor.Regen();
             return count;
         }
 
@@ -37,9 +47,10 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (names == null) throw new ArgumentNullException(nameof(names));
-            var wanted = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+            var wanted = BuildWantedNames(names);
             if (wanted.Count == 0) return 0;
             var count = 0;
+            var mutationCount = 0;
             using (document.LockDocument())
             using (var tr = document.Database.TransactionManager.StartTransaction())
             {
@@ -48,19 +59,35 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     var layer = tr.GetObject(id, OpenMode.ForRead) as LayerTableRecord;
                     if (layer == null || !wanted.Contains(layer.Name)) continue;
-                    if (layer.IsLocked == locked)
-                    {
-                        count++;
-                        continue;
-                    }
+                    count++;
+                    if (layer.IsLocked == locked) continue;
+
                     layer.UpgradeOpen();
                     layer.IsLocked = locked;
-                    count++;
+                    mutationCount++;
                 }
                 tr.Commit();
             }
-            document.Editor.Regen();
+            if (mutationCount > 0) document.Editor.Regen();
             return count;
+        }
+
+        private static HashSet<string> BuildWantedNames(IEnumerable<string> names)
+        {
+            var wanted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var enumerated = 0;
+            foreach (var name in names)
+            {
+                enumerated++;
+                if (enumerated > MaxRequestedLayerNames)
+                {
+                    throw new ArgumentException(
+                        "Layer selection exceeds the supported limit of " + MaxRequestedLayerNames + " entries.",
+                        nameof(names));
+                }
+                wanted.Add(name);
+            }
+            return wanted;
         }
     }
 }
