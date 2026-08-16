@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
+using QS3D.Core.Export;
 using QS3D.Core.Reporting;
 
 namespace QS3D.Core.SmokeTests
@@ -15,6 +17,8 @@ namespace QS3D.Core.SmokeTests
             PreservesAllQuantityFields();
             PreservesOrdinaryAggregation();
             RejectsNonFiniteAndOverflowingTotals();
+            Ed2ParityUsesCompensatedQuantityAndMassTotals();
+            Ed2ParityStillRejectsWrongSummary();
         }
 
         private static void PreservesRepresentableSmallContributions()
@@ -98,6 +102,96 @@ namespace QS3D.Core.SmokeTests
                 Element("overflow-1", family, double.MaxValue),
                 Element("overflow-2", family, double.MaxValue)
             }));
+        }
+
+        private static void Ed2ParityUsesCompensatedQuantityAndMassTotals()
+        {
+            var details = new[]
+            {
+                Ed2Detail("ed2-1", "A1", 10000000000000000d),
+                Ed2Detail("ed2-2", "A2", 1d),
+                Ed2Detail("ed2-3", "A3", 1d)
+            };
+            var summary = Ed2Summary(details, 10000000000000002d);
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-ed2-compensated-" + Guid.NewGuid().ToString("N") + ".xlsx");
+            try
+            {
+                XlsxQuantityExporter.ExportEd2(path, details, new[] { summary });
+                if (!File.Exists(path)) throw new InvalidOperationException("ED2 compensated parity export did not publish the workbook.");
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
+
+        private static void Ed2ParityStillRejectsWrongSummary()
+        {
+            var details = new[]
+            {
+                Ed2Detail("bad-1", "B1", 10000000000000000d),
+                Ed2Detail("bad-2", "B2", 1d),
+                Ed2Detail("bad-3", "B3", 1d)
+            };
+            var summary = Ed2Summary(details, 10000000000000000d);
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-ed2-wrong-summary-" + Guid.NewGuid().ToString("N") + ".xlsx");
+            try
+            {
+                Throws<InvalidDataException>(() => XlsxQuantityExporter.ExportEd2(path, details, new[] { summary }));
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
+
+        private static QuantityReportRow Ed2Detail(string id, string handle, double value)
+        {
+            var row = new QuantityReportRow
+            {
+                Floor = "L1",
+                Zone = "Z1",
+                Category = "Beam",
+                FamilyId = "F1",
+                FamilyName = "Precision Beam",
+                ElementName = "Precision Beam",
+                Material = "Concrete",
+                DrawingFingerprint = "0123456789ABCDEF",
+                Count = 1,
+                GrossConcreteM3 = value,
+                NetConcreteM3 = value,
+                LengthM = value,
+                MassKg = value
+            };
+            row.ElementIds.Add(id);
+            row.SourceHandles.Add(handle);
+            return row;
+        }
+
+        private static QuantityReportRow Ed2Summary(IReadOnlyList<QuantityReportRow> details, double value)
+        {
+            var row = new QuantityReportRow
+            {
+                Floor = "L1",
+                Zone = "Z1",
+                Category = "Beam",
+                FamilyId = "F1",
+                FamilyName = "Precision Beam",
+                ElementName = "Precision Beam",
+                Material = "Concrete",
+                DrawingFingerprint = "0123456789ABCDEF",
+                Count = details.Count,
+                GrossConcreteM3 = value,
+                NetConcreteM3 = value,
+                LengthM = value,
+                MassKg = value
+            };
+            foreach (var detail in details)
+            {
+                row.ElementIds.Add(detail.ElementIds[0]);
+                row.SourceHandles.Add(detail.SourceHandles[0]);
+            }
+            return row;
         }
 
         private static ElementInstance Element(string id, FamilyDefinition family, double value)
