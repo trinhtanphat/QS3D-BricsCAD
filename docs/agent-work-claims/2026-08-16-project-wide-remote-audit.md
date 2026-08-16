@@ -41,3 +41,6 @@ Each implemented defect must be independently reproducible from current source, 
 
 ### Curtain detail generated-rectangle collapse and area underflow
 `CurtainWallDetailPlanner` could generate a positive-width/height frame whose endpoint rounded back onto its start at large coordinates, and its detail-area multiplication accepted nonzero dimensions whose product underflowed to zero. Generated rectangles now require representable right/top movement, detail area multiplication fails closed on nonzero-to-zero underflow, and `CurtainWallRect.AreaM2` no longer reports zero for an unrepresentable nonzero area. Regression coverage exercises horizontal/vertical generated-frame collapse, direct rectangle-area underflow, per-panel area underflow, and an ordinary detail plan.
+
+## Owner-authorized integration follow-up
+The validated curtain fixes above are now being consolidated on `integration/open-pr-cleanup-20260816-r1` together with other non-overlapping green bugfix lanes. The integration candidate is rebuilt from current `main` and intentionally keeps current-main versions of aggregate preflight and updater trust-boundary files, so the older audit carrier cannot reintroduce stale CI/updater content while its 19 intended curtain/audit files are preserved.
