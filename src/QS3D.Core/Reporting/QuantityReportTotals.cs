@@ -37,6 +37,13 @@ namespace QS3D.Core.Reporting
                 totals.DoorAreaM2 = Add(totals.DoorAreaM2, ref doorAreaCompensation, row.DoorAreaM2, rowIndex, "DoorAreaM2");
                 rowIndex++;
             }
+
+            totals.GrossConcreteM3 = Finalize(totals.GrossConcreteM3, grossConcreteCompensation, "GrossConcreteM3");
+            totals.DeductionM3 = Finalize(totals.DeductionM3, deductionCompensation, "DeductionM3");
+            totals.NetConcreteM3 = Finalize(totals.NetConcreteM3, netConcreteCompensation, "NetConcreteM3");
+            totals.FormworkM2 = Finalize(totals.FormworkM2, formworkCompensation, "FormworkM2");
+            totals.LengthM = Finalize(totals.LengthM, lengthCompensation, "LengthM");
+            totals.DoorAreaM2 = Finalize(totals.DoorAreaM2, doorAreaCompensation, "DoorAreaM2");
             return totals;
         }
 
@@ -46,18 +53,28 @@ namespace QS3D.Core.Reporting
             QuantityReportMath.Finite(current, label);
             QuantityReportMath.Finite(compensation, label + "/compensation");
             var incoming = QuantityReportMath.NonNegative(value, label);
-            var corrected = incoming - compensation;
-            if (double.IsNaN(corrected) || double.IsInfinity(corrected))
-                throw new OverflowException("Quantity report total overflow: " + label);
 
-            var result = current + corrected;
+            var result = current + incoming;
             if (double.IsNaN(result) || double.IsInfinity(result))
                 throw new OverflowException("Quantity report total overflow: " + label);
 
-            var nextCompensation = (result - current) - corrected;
+            var correction = Math.Abs(current) >= Math.Abs(incoming)
+                ? (current - result) + incoming
+                : (incoming - result) + current;
+            var nextCompensation = compensation + correction;
             if (double.IsNaN(nextCompensation) || double.IsInfinity(nextCompensation))
                 throw new OverflowException("Quantity report total compensation overflow: " + label);
-            compensation = nextCompensation;
+            compensation = nextCompensation == 0d ? 0d : nextCompensation;
+            return result == 0d ? 0d : result;
+        }
+
+        private static double Finalize(double current, double compensation, string quantity)
+        {
+            QuantityReportMath.Finite(current, "total/" + quantity);
+            QuantityReportMath.Finite(compensation, "total/" + quantity + "/compensation");
+            var result = current + compensation;
+            if (double.IsNaN(result) || double.IsInfinity(result))
+                throw new OverflowException("Quantity report total overflow: " + quantity);
             return result == 0d ? 0d : result;
         }
     }
