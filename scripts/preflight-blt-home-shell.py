@@ -22,8 +22,9 @@ def main():
     ribbon_rel = "src/QS3D.BricsCAD.V25/Ribbon/BltHomeRibbonAugmenter.cs"
     activation_rel = "src/QS3D.BricsCAD.V25/Ribbon/HomeTabActivationCoordinator.cs"
     init_rel = "src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator.cs"
-    shell_rel = "src/QS3D.BricsCAD.V25/UI/BltStartCenterWindow.cs"
+    shell_rel = "src/QS3D.BricsCAD.V25/UI/BltStartCenterPanel.cs"
     command_rel = "src/QS3D.BricsCAD.V25/StartCenterCommands.cs"
+    host_rel = "src/QS3D.BricsCAD.V25/StartCenterPaletteCoordinator.cs"
     project_ui_rel = "src/QS3D.BricsCAD.V25/ProjectFileUiService.cs"
     mutation_rel = "src/QS3D.BricsCAD.V25/ExistingProjectMutationContext.cs"
     context_rel = "src/QS3D.BricsCAD.V25/ProjectContextCoordinator.cs"
@@ -146,7 +147,7 @@ def main():
 
     shell = read(shell_rel)
     for needle in (
-        'Text = "QS3D"',
+        'Text = "BLT3D"',
         'BIM Modeling & Quantity Application',
         'Text = "QUY TRÌNH NHANH"',
         '"Tạo dự án mới"',
@@ -158,8 +159,9 @@ def main():
         'ProjectFileUiService.SaveCurrentProjectAs',
         'Text = "DỰ ÁN GẦN ĐÂY"',
         'Text = "Nhấp vào dự án để mở trực tiếp và bắt đầu làm việc"',
-        'StatusButton("Mô hình", () => new Commands().ShowWorkspace())',
-        'StatusButton("BQ", () => new Commands().ShowQuantitySummary())',
+        'StartCenterPaletteCoordinator.Hide();',
+        'new Commands().ShowWorkspace();',
+        'new Commands().ShowQuantitySummary();',
         'private Button CreateActionCard(',
         'private static Button CreateClickSurface(UIElement content, Cursor cursor)',
         'button.Click += (_, __) => RunUiAction(action);',
@@ -181,13 +183,23 @@ def main():
         'border.MouseLeftButtonUp',
         'border.MouseLeftButtonDown',
         'Text = "Nhấp đúp vào dự án để mở trực tiếp và bắt đầu làm việc"',
+        ' : Window',
+        'ShowModelessWindow',
     ):
         forbid(shell, stale, shell_rel)
 
     command = read(command_rel)
-    require(command, "createdWindow = new BltStartCenterWindow();", command_rel)
+    require(command, "StartCenterPaletteCoordinator.Show();", command_rel)
+    forbid(command, "Application.ShowModelessWindow", command_rel)
+    forbid(command, "new BltStartCenterWindow", command_rel)
+    forbid(command, "new StartCenterWindow", command_rel)
 
-    print("PASS: QS3D Home and Start Center use native WPF Button.Click hit targets, unique panels, rasterized icons and direct mouse-first project actions; Create New explicitly seeds the canonical project, while Save/Save As preserve existing-project and verified sidecar-transition safety.")
+    host = read(host_rel)
+    require(host, 'new PaletteSet("BLT3D — Khởi đầu"', host_rel)
+    require(host, '_palette.AddVisual("Khởi đầu", _panel, true);', host_rel)
+    require(host, 'Dock = DockSides.Left', host_rel)
+
+    print("PASS: QS3D Home and embedded Start Center use native WPF Button.Click hit targets, unique panels, rasterized icons and direct mouse-first project actions; Create New explicitly seeds the canonical project, while Save/Save As preserve existing-project and verified sidecar-transition safety.")
     return 0
 
 
