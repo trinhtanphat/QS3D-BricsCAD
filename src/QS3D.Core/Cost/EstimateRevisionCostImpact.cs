@@ -179,7 +179,7 @@ namespace QS3D.Core.Cost
         {
             try
             {
-                return checked(left * right);
+                return CostDecimalMath.MultiplyPreservingNonZero(left, right, "estimate revision " + operation);
             }
             catch (OverflowException ex)
             {
