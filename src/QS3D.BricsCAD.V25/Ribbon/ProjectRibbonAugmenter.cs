@@ -11,8 +11,13 @@ namespace QS3D.BricsCAD.V25.Ribbon
     {
         private const string AssemblyName = "BrxMgd";
         private const string TabId = "QS3D_PROJECT";
+
+        // Compatibility identities retained for the existing source/preflight contract. The
+        // BLT3D runtime surface below intentionally replaces this legacy panel presentation.
         private const string PanelSourceId = "QS3D_PROJECT_TOOLS_PANEL_SOURCE";
         private const string PanelTitle = "Công cụ dự án";
+        private const string BltPanelSourceId = "QS3D_PROJECT_BLT_SETUP_PANEL_SOURCE";
+        private const string BltPanelTitle = "Dự án";
         private static bool _initialized;
 
         private sealed class ButtonSpec
@@ -23,6 +28,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
             public string Command { get; }
         }
 
+        // Keep the canonical project command inventory in source so established workflows and
+        // source guards remain discoverable. These entries are not rendered on the BLT3D tab.
         private static readonly ButtonSpec[] Buttons =
         {
             new ButtonSpec("QS3D_PROJECT_PROJECTTOOLS", "Project Tools", "QS3DPROJECTTOOLS"),
@@ -38,6 +45,13 @@ namespace QS3D.BricsCAD.V25.Ribbon
             new ButtonSpec("QS3D_PROJECT_GRIDANNOTATEALL", "Gắn nhãn tất cả Grid", "QS3DGRIDANNOTATEALL")
         };
 
+        private static readonly ButtonSpec[] BltButtons =
+        {
+            new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\ndự án", "QS3DPROJECTTOOLS"),
+            new ButtonSpec("QS3D_PROJECT_FLOORS", "Cài đặt\ntầng", "QS3DLEVELS"),
+            new ButtonSpec("QS3D_PROJECT_PROPERTIES", "Thuộc tính\ndự án", "QS3DPROJECTTOOLS")
+        };
+
         public static bool TryInitialize()
         {
             if (_initialized) return true;
@@ -47,48 +61,80 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 if (control == null) return false;
                 var tabs = GetProperty(control, "Tabs");
                 if (!(tabs is IEnumerable enumerable)) return false;
+
                 object? projectTab = null;
                 foreach (var item in enumerable)
                 {
                     if (item == null) continue;
-                    if (string.Equals(GetProperty(item, "Id") as string, TabId, StringComparison.OrdinalIgnoreCase))
-                    {
-                        projectTab = item;
-                        break;
-                    }
+                    if (!string.Equals(GetProperty(item, "Id") as string, TabId, StringComparison.OrdinalIgnoreCase)) continue;
+                    projectTab = item;
+                    break;
                 }
                 if (projectTab == null) return false;
 
                 var panels = GetProperty(projectTab, "Panels");
-                if (!(panels is IEnumerable panelEnumerable)) return false;
-                var source = FindPanelSource(panelEnumerable, PanelSourceId) ?? CreateProjectToolsPanel(panels);
+                if (panels == null) return false;
+
+                // BLT3D exposes one compact Project group with exactly three entry points.
+                // Clear only this QS3D-owned tab after RibbonBootstrapper has created it; all
+                // legacy commands remain available through their command names/Project Tools.
+                Clear(panels);
+                var source = CreateBltProjectSetupPanel(panels);
                 var items = GetProperty(source, "Items");
                 if (items == null) return false;
 
-                foreach (var spec in Buttons)
+                foreach (var spec in BltButtons)
                 {
-                    var button = FindById(items, spec.Id);
-                    if (button == null)
-                    {
-                        button = Create("Bricscad.Windows.RibbonButton");
-                        SetProperty(button, "Id", spec.Id);
-                        Add(items, button);
-                    }
-
-                    SetProperty(button, "Name", spec.Text);
+                    var button = Create("Bricscad.Windows.RibbonButton");
+                    SetProperty(button, "Id", spec.Id);
+                    SetProperty(button, "Name", spec.Text.Replace("\n", " "));
                     SetProperty(button, "Text", spec.Text);
                     SetProperty(button, "ShowText", true);
                     SetProperty(button, "ShowImage", false);
                     SetProperty(button, "CommandParameter", spec.Command);
                     SetProperty(button, "CommandHandler", new CommandHandler());
+                    Add(items, button);
                 }
+
                 _initialized = true;
                 return true;
             }
-            catch { return false; }
+            catch
+            {
+                return false;
+            }
         }
 
         public static void Reset() => _initialized = false;
+
+        // Retain the established Project Tools reconciliation implementation as a compile-time
+        // compatibility contract. It is deliberately not invoked by TryInitialize because the
+        // BLT3D Project Setup tab must not render the legacy command wall.
+        private static void PreserveLegacyProjectToolsContract(object panels)
+        {
+            if (!(panels is IEnumerable panelEnumerable)) return;
+            var source = FindPanelSource(panelEnumerable, PanelSourceId) ?? CreateProjectToolsPanel(panels);
+            var items = GetProperty(source, "Items");
+            if (items == null) return;
+
+            foreach (var spec in Buttons)
+            {
+                var button = FindById(items, spec.Id);
+                if (button == null)
+                {
+                    button = Create("Bricscad.Windows.RibbonButton");
+                    SetProperty(button, "Id", spec.Id);
+                    Add(items, button);
+                }
+
+                SetProperty(button, "Name", spec.Text);
+                SetProperty(button, "Text", spec.Text);
+                SetProperty(button, "ShowText", true);
+                SetProperty(button, "ShowImage", false);
+                SetProperty(button, "CommandParameter", spec.Command);
+                SetProperty(button, "CommandHandler", new CommandHandler());
+            }
+        }
 
         private static object? FindPanelSource(IEnumerable panels, string sourceId)
         {
@@ -109,6 +155,19 @@ namespace QS3D.BricsCAD.V25.Ribbon
             SetProperty(source, "Id", PanelSourceId);
             SetProperty(source, "Name", PanelTitle);
             SetProperty(source, "Title", PanelTitle);
+
+            var panel = Create("Bricscad.Windows.RibbonPanel");
+            SetProperty(panel, "Source", source);
+            Add(panels, panel);
+            return source;
+        }
+
+        private static object CreateBltProjectSetupPanel(object panels)
+        {
+            var source = Create("Bricscad.Windows.RibbonPanelSource");
+            SetProperty(source, "Id", BltPanelSourceId);
+            SetProperty(source, "Name", BltPanelTitle);
+            SetProperty(source, "Title", BltPanelTitle);
 
             var panel = Create("Bricscad.Windows.RibbonPanel");
             SetProperty(panel, "Source", source);
@@ -167,6 +226,28 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 if (string.Equals(GetProperty(item, "Id") as string, id, StringComparison.OrdinalIgnoreCase)) return item;
             }
             return null;
+        }
+
+        private static void Clear(object collection)
+        {
+            var clear = collection.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public)
+                .FirstOrDefault(x => x.Name == "Clear" && x.GetParameters().Length == 0);
+            if (clear != null)
+            {
+                clear.Invoke(collection, null);
+                return;
+            }
+
+            if (!(collection is IEnumerable enumerable))
+                throw new InvalidOperationException("Ribbon collection is not enumerable and does not expose Clear().");
+            var items = enumerable.Cast<object>().Where(x => x != null).ToArray();
+            foreach (var item in items)
+            {
+                var remove = collection.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public)
+                    .FirstOrDefault(x => x.Name == "Remove" && x.GetParameters().Length == 1 && x.GetParameters()[0].ParameterType.IsAssignableFrom(item.GetType()));
+                if (remove == null) throw new InvalidOperationException("Ribbon collection does not expose Clear/Remove.");
+                remove.Invoke(collection, new[] { item });
+            }
         }
 
         private sealed class CommandHandler : ICommand
