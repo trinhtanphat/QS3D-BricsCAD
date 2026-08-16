@@ -568,6 +568,8 @@ namespace QS3D.Core.Cost
             if (claimLines == null) throw new ArgumentNullException(nameof(claimLines));
             if (retentionPercent < 0m || retentionPercent > 100m)
                 throw new ArgumentOutOfRangeException(nameof(retentionPercent));
+            if (retentionPercent > 0m && retentionPercent / 100m == 0m)
+                throw new ArgumentOutOfRangeException(nameof(retentionPercent), retentionPercent, "Positive retention percentage is too small to preserve at decimal precision.");
 
             var contracts = new Dictionary<string, ProgressContractItem>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in contractItems)
