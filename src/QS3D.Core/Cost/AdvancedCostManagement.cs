@@ -4,6 +4,17 @@ using System.Collections.ObjectModel;
 
 namespace QS3D.Core.Cost
 {
+    internal static class CostDecimalMath
+    {
+        public static decimal MultiplyPreservingNonZero(decimal left, decimal right, string label)
+        {
+            var result = checked(left * right);
+            if (left != 0m && right != 0m && result == 0m)
+                throw new OverflowException("Cost multiplication underflow: " + label + ".");
+            return result;
+        }
+    }
+
     public sealed class CostResourceComponent
     {
         public CostResourceComponent(
@@ -31,7 +42,7 @@ namespace QS3D.Core.Cost
         public string Unit { get; }
         public decimal QuantityPerBillUnit { get; }
         public decimal UnitRate { get; }
-        public decimal ExtendedUnitCost => checked(QuantityPerBillUnit * UnitRate);
+        public decimal ExtendedUnitCost => CostDecimalMath.MultiplyPreservingNonZero(QuantityPerBillUnit, UnitRate, "resource extended unit cost");
     }
 
     public sealed class CostRateBuildUp
@@ -76,8 +87,8 @@ namespace QS3D.Core.Cost
                 for (var i = 0; i < snapshot.Count; i++)
                     direct += snapshot[i].ExtendedUnitCost;
                 DirectUnitCost = direct;
-                OverheadUnitCost = direct * (OverheadPercent / 100m);
-                ProfitUnitCost = (direct + OverheadUnitCost) * (ProfitPercent / 100m);
+                OverheadUnitCost = CostDecimalMath.MultiplyPreservingNonZero(direct, OverheadPercent / 100m, "overhead unit cost");
+                ProfitUnitCost = CostDecimalMath.MultiplyPreservingNonZero(direct + OverheadUnitCost, ProfitPercent / 100m, "profit unit cost");
                 UnitRate = direct + OverheadUnitCost + ProfitUnitCost;
             }
         }
@@ -385,7 +396,7 @@ namespace QS3D.Core.Cost
                         missing.Add(requirement.ItemCode);
                         continue;
                     }
-                    checked { total += requirement.Quantity * quote.UnitRate; }
+                    checked { total += CostDecimalMath.MultiplyPreservingNonZero(requirement.Quantity, quote.UnitRate, "tender evaluated line cost"); }
                 }
                 missing.Sort(StringComparer.OrdinalIgnoreCase);
                 working.Add(new EvaluationBuilder(bid, total, missing));
@@ -609,7 +620,7 @@ namespace QS3D.Core.Cost
                     var certified = requested <= available ? requested : available;
                     var rejected = requested - certified;
                     var remaining = available - certified;
-                    var value = certified * item.UnitRate;
+                    var value = CostDecimalMath.MultiplyPreservingNonZero(certified, item.UnitRate, "progress certified line value");
                     gross += value;
                     results.Add(new ProgressClaimLineResult(
                         item.ItemCode,
@@ -620,7 +631,7 @@ namespace QS3D.Core.Cost
                         remaining,
                         value));
                 }
-                var retention = gross * (retentionPercent / 100m);
+                var retention = CostDecimalMath.MultiplyPreservingNonZero(gross, retentionPercent / 100m, "progress retention value");
                 var net = gross - retention;
                 return new ProgressClaimResult(
                     new ReadOnlyCollection<ProgressClaimLineResult>(results.ToArray()),
