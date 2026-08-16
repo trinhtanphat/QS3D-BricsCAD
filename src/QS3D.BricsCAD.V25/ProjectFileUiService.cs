@@ -1,6 +1,8 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
 using QS3D.BricsCAD.V25.UI;
@@ -11,12 +13,59 @@ using Application = Bricscad.ApplicationServices.Application;
 namespace QS3D.BricsCAD.V25
 {
     /// <summary>
-    /// Mouse-first project file workflow used by the QS3D Home ribbon.
+    /// Mouse-first project file workflow used by the QS3D Home ribbon and Start Center.
     /// No BricsCAD command strings are dispatched from this service.
     /// </summary>
     internal static class ProjectFileUiService
     {
         private const string ProjectFilter = "QS3D Project (*.blt3d;*.qsdb)|*.blt3d;*.qsdb|BLT3D Project (*.blt3d)|*.blt3d|QS3D Project (*.qsdb)|*.qsdb";
+
+        public static void CreateNewDrawing()
+        {
+            try
+            {
+                var manager = Application.DocumentManager;
+                var managerType = manager.GetType();
+                object? created = null;
+
+                var parameterless = managerType.GetMethods(BindingFlags.Instance | BindingFlags.Public)
+                    .FirstOrDefault(method => string.Equals(method.Name, "Add", StringComparison.Ordinal)
+                        && method.GetParameters().Length == 0);
+                if (parameterless != null)
+                {
+                    created = parameterless.Invoke(manager, null);
+                }
+                else
+                {
+                    var withTemplate = managerType.GetMethods(BindingFlags.Instance | BindingFlags.Public)
+                        .FirstOrDefault(method => string.Equals(method.Name, "Add", StringComparison.Ordinal)
+                            && method.GetParameters().Length == 1
+                            && method.GetParameters()[0].ParameterType == typeof(string));
+                    if (withTemplate == null)
+                        throw new InvalidOperationException("BricsCAD không cung cấp API tạo bản vẽ mới cho phiên bản này.");
+                    created = withTemplate.Invoke(manager, new object[] { string.Empty });
+                }
+
+                var document = created as Document ?? manager.MdiActiveDocument;
+                if (document == null)
+                    throw new InvalidOperationException("BricsCAD không tạo được bản vẽ mới.");
+
+                ProjectContextCoordinator.Forget(document);
+                System.Windows.MessageBox.Show(
+                    "Đã tạo bản vẽ mới. Khi bắt đầu làm việc với QS3D, project sẽ được liên kết với bản vẽ này và có thể lưu bằng nút Lưu/Lưu thành.",
+                    "QS3D — Tạo dự án mới",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (TargetInvocationException ex) when (ex.InnerException != null)
+            {
+                ShowError("Tạo dự án mới", ex.InnerException);
+            }
+            catch (Exception ex)
+            {
+                ShowError("Tạo dự án mới", ex);
+            }
+        }
 
         public static void OpenProjectFromPicker()
         {
