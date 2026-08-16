@@ -25,22 +25,24 @@ namespace QS3D.Core.SmokeTests
 
         private static void PreservesCanonicalMismatchClassification()
         {
-            using var rsa = RSA.Create();
-            rsa.KeySize = 2048;
-            var license = CreateLicense();
-            license.Signature = rsa.SignData(
-                license.CanonicalPayload(),
-                HashAlgorithmName.SHA256,
-                RSASignaturePadding.Pkcs1);
+            using (var rsa = RSA.Create())
+            {
+                rsa.KeySize = 2048;
+                var license = CreateLicense("OTHER-PRODUCT");
+                license.Signature = rsa.SignData(
+                    license.CanonicalPayload(),
+                    HashAlgorithmName.SHA256,
+                    RSASignaturePadding.Pkcs1);
 
-            var result = new LicenseVerifier().Verify(
-                license,
-                rsa.ExportParameters(false),
-                "OTHER-PRODUCT",
-                VerificationTime());
-            if (result.Status != LicenseStatus.ProductMismatch)
-                throw new InvalidOperationException(
-                    "LicenseVerifierProductInputCanonicalitySmoke canonical signed mismatch expected ProductMismatch, actual=" + result.Status + ".");
+                var result = new LicenseVerifier().Verify(
+                    license,
+                    rsa.ExportParameters(false),
+                    "QS3D",
+                    VerificationTime());
+                if (result.Status != LicenseStatus.ProductMismatch)
+                    throw new InvalidOperationException(
+                        "LicenseVerifierProductInputCanonicalitySmoke canonical mismatch expected ProductMismatch, actual=" + result.Status + ".");
+            }
         }
 
         private static void PreservesCanonicalMatchVerificationFlow()
@@ -74,14 +76,14 @@ namespace QS3D.Core.SmokeTests
                 "LicenseVerifierProductInputCanonicalitySmoke expected ArgumentException for " + label + " expectedProductId.");
         }
 
-        private static LicenseDocument CreateLicense()
+        private static LicenseDocument CreateLicense(string productId = "QS3D")
         {
             var now = VerificationTime();
             return new LicenseDocument
             {
                 LicenseId = "LIC-PRODUCT-INPUT",
                 CustomerId = "CUSTOMER",
-                ProductId = "QS3D",
+                ProductId = productId,
                 NotBeforeUtc = now.AddDays(-1),
                 ExpiresUtc = now.AddDays(1),
                 Nonce = "NONCE"
