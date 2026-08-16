@@ -488,7 +488,14 @@ namespace QS3D.Core.Cost
                         missing.Add(requirement.ItemCode);
                         continue;
                     }
-                    checked { total += CostDecimalMath.MultiplyPreservingNonZero(requirement.Quantity, quote.UnitRate, "tender evaluated line cost"); }
+                    var evaluatedLineCost = CostDecimalMath.MultiplyPreservingNonZero(
+                        requirement.Quantity,
+                        quote.UnitRate,
+                        "tender evaluated line cost");
+                    total = CostDecimalMath.AddPreservingNonZeroContribution(
+                        total,
+                        evaluatedLineCost,
+                        "tender evaluated total");
                 }
                 missing.Sort(StringComparer.OrdinalIgnoreCase);
                 working.Add(new EvaluationBuilder(bid, total, missing));
