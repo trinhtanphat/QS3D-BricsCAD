@@ -15,8 +15,11 @@ namespace QS3D.Core.Geometry
             }
 
             double total = 0d;
-            for (var i = 1; i < points.Count; i++) total = AddFinite(total, points[i - 1].DistanceTo(points[i]));
-            if (closed) total = AddFinite(total, points[points.Count - 1].DistanceTo(points[0]));
+            double compensation = 0d;
+            for (var i = 1; i < points.Count; i++)
+                AddLengthCompensated(ref total, ref compensation, points[i - 1].DistanceTo(points[i]));
+            if (closed)
+                AddLengthCompensated(ref total, ref compensation, points[points.Count - 1].DistanceTo(points[0]));
             return total;
         }
 
@@ -125,6 +128,15 @@ namespace QS3D.Core.Geometry
             return RestoreScaledAreaFinite(normalizedArea, scaleX, scaleY);
         }
 
+        private static void AddLengthCompensated(ref double sum, ref double compensation, double value)
+        {
+            var corrected = value - compensation;
+            var next = sum + corrected;
+            if (!Finite(next)) throw new OverflowException("Polyline length exceeds the supported numeric range.");
+            compensation = (next - sum) - corrected;
+            sum = next;
+        }
+
         private static void AddCompensated(ref double sum, ref double compensation, double value)
         {
             var corrected = value - compensation;
@@ -143,13 +155,6 @@ namespace QS3D.Core.Geometry
         {
             if (!Finite(point.X) || !Finite(point.Y))
                 throw new InvalidOperationException("Polyline coordinates must be finite.");
-        }
-
-        private static double AddFinite(double first, double second)
-        {
-            var value = first + second;
-            if (!Finite(value)) throw new OverflowException("Polyline metric exceeds the supported numeric range.");
-            return value;
         }
 
         private static double TranslatedCrossFinite(Point2 origin, Point2 first, Point2 second)
