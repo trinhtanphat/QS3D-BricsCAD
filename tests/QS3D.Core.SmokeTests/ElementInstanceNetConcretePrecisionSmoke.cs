@@ -55,7 +55,7 @@ namespace QS3D.Core.SmokeTests
         private static ElementInstance Element() =>
             new ElementInstance(
                 "NET-CONCRETE-PRECISION",
-                new FamilyDefinition("Concrete family", ElementCategory.StructuralColumn),
+                new FamilyDefinition("Concrete family", ElementCategory.Column),
                 "L1");
 
         private static void ReadNet(ElementInstance element) => _ = element.NetConcreteM3;
