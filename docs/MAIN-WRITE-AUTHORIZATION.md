@@ -2,6 +2,14 @@
 
 This document is the canonical repository rule for who may change `main`. It overrides older wording in `AGENTS.md`, `CI_POLICY.md`, handoffs, claim files, or historical instructions when those documents conflict with this policy.
 
+## Default rule: agents treat `main` as read-only
+
+`origin/main` is read-only for direct task writes. Source, tests, scripts, workflows, docs, Markdown, claims, handoffs, status files and chores must be committed to a dedicated task branch and land through a PR.
+
+### Explicit authorization required
+
+A normal agent must never use a direct ref update, direct contents write, force-push, or equivalent write primitive against `main` for ordinary task work. Merge authorization is exercised through the task PR after the repository's required checks and merge gates are satisfied.
+
 ## Standing owner authorization: green task PRs merge themselves
 
 The repository owner has granted a standing integration instruction for normal owner-requested task work:
@@ -13,8 +21,6 @@ This standing authorization applies only to the task/PR the current agent is act
 The owner may override the standing rule for any task with an explicit instruction such as `do not merge main`, `PR only`, `stop before merge`, `đừng merge`, or another clearly equivalent restriction.
 
 ## Main remains PR-only
-
-`origin/main` remains read-only for direct task writes. Source, tests, scripts, workflows, docs, Markdown, claims, handoffs, status files and chores must be committed to a dedicated task branch and land through a PR.
 
 Normal requests such as the following authorize task work on the task branch/PR, and under the standing rule above the agent should merge that **same task PR** once all merge gates are green:
 
