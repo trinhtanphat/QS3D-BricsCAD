@@ -71,7 +71,8 @@ def main():
             (
                 'CommandMethod("QS3DDRAWSLABOPEN"',
                 'CommandMethod("QS3DDRAWSLABOPENADV"',
-                "CadSelectionGuard.ReadImpliedSelection",
+                "CadSelectionGuard.AcquireCurrentSelection",
+                "if (selectedHostIds.Length == 0) return;",
                 "ElementCategory.Slab",
                 "EnsureFirstUseHostSolid(document, project, host, selectedHostHandle);",
                 'host.Properties.TryGetValue("GeneratedSolidHandle", out var existingHandle)',
@@ -122,6 +123,8 @@ def main():
         return fail("dedicated slabOpen boolean service must not fall back to HostWallId")
     if "HostWallId" in direct:
         return fail("slabOpen Direct Draw must bind HostSlabId, not fake HostWallId")
+    if "CadSelectionGuard.ReadImpliedSelection" in direct:
+        return fail("slabOpen Direct Draw must support click-first host selection, not PICKFIRST-only selection")
     if "DirectDrawOpeningCommands" not in routing:
         return fail("ordinary WallOpening routing must remain present")
     if "HostWallId" not in health:
@@ -155,9 +158,10 @@ def main():
         return fail("slabOpen must preserve an existing generated host and auto-build only the first-use missing-solid case")
 
     print(
-        "PASS: slabOpen exact-family routing, first-use host auto-build, HostSlabId semantics, live footprint-aware "
-        "physical-cut freshness, negative-Z cutter, automatic BoolSubtract, stale-existing-host fail-closed behavior, "
-        "and ordinary wall-host preservation are pinned. NATIVE_RUNTIME=LOCAL_ONLY"
+        "PASS: slabOpen exact-family routing, PICKFIRST/click-first host acquisition, first-use host auto-build, "
+        "HostSlabId semantics, live footprint-aware physical-cut freshness, negative-Z cutter, automatic "
+        "BoolSubtract, stale-existing-host fail-closed behavior, and ordinary wall-host preservation are pinned. "
+        "NATIVE_RUNTIME=LOCAL_ONLY"
     )
     return 0
 
