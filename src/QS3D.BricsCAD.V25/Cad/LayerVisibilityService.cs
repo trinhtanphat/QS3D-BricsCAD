@@ -74,6 +74,14 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private static HashSet<string> BuildWantedNames(IEnumerable<string> names)
         {
+            var countedNames = names as ICollection<string>;
+            if (countedNames != null && countedNames.Count > MaxRequestedLayerNames)
+            {
+                throw new ArgumentException(
+                    "Layer selection exceeds the supported limit of " + MaxRequestedLayerNames + " entries.",
+                    nameof(names));
+            }
+
             var wanted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var enumerated = 0;
             foreach (var name in names)
