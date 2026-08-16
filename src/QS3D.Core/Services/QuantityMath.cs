@@ -22,6 +22,8 @@ namespace QS3D.Core.Services
             RequireNonNegativeFinite(right, label);
             var result = left + right;
             if (!IsFinite(result)) throw new OverflowException("Quantity addition overflow: " + label);
+            if (left != 0d && right != 0d && (result.Equals(left) || result.Equals(right)))
+                throw new InvalidOperationException("Quantity addition lost a positive contribution at floating-point precision: " + label);
             return result == 0d ? 0d : result;
         }
 
@@ -31,6 +33,8 @@ namespace QS3D.Core.Services
             RequireNonNegativeFinite(right, label);
             var result = left - right;
             if (!IsFinite(result)) throw new OverflowException("Quantity subtraction overflow: " + label);
+            if (right > 0d && right < left && result.Equals(left))
+                throw new InvalidOperationException("Quantity subtraction lost a positive deduction at floating-point precision: " + label);
             return result > 0d ? result : 0d;
         }
 
@@ -55,6 +59,8 @@ namespace QS3D.Core.Services
             var factor = Math.Sqrt(1d + ratio * ratio);
             var result = maximum * factor;
             if (!IsFinite(result)) throw new OverflowException("Quantity hypotenuse overflow: " + label);
+            if (minimum != 0d && result.Equals(maximum))
+                throw new InvalidOperationException("Quantity hypotenuse lost a positive component at floating-point precision: " + label);
             return result;
         }
 
