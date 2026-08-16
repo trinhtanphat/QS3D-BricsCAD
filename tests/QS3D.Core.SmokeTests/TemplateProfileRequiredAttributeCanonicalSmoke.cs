@@ -13,6 +13,8 @@ namespace QS3D.Core.SmokeTests
         {
             CanonicalRequiredAttributesRoundTrip();
             PaddedRequiredAttributesAreRejected();
+            TemplateIdentityTextRejectsControlAndXmlInvalidCharacters();
+            TemplateIdentityTextPreservesValidUnicodeAndSetterAtomicity();
         }
 
         private static void CanonicalRequiredAttributesRoundTrip()
@@ -44,6 +46,33 @@ namespace QS3D.Core.SmokeTests
             AssertRejected("rule output", document => Set(First(document, "rule"), "output", " NetVolumeM3 "));
             AssertRejected("rule expression", document => Set(First(document, "rule"), "expression", " Length*Height*Thickness "));
             AssertRejected("rule version", document => Set(First(document, "rule"), "version", " 1 "));
+        }
+
+        private static void TemplateIdentityTextRejectsControlAndXmlInvalidCharacters()
+        {
+            var controls = new[] { '\0', '\t', '\n', '\u007F', '\u0085' };
+            foreach (var control in controls)
+            {
+                Throws<ArgumentException>(() => new TemplateProfile("TPL" + control + "1", "Name"), "Template id must reject control characters.");
+                Throws<ArgumentException>(() => new TemplateProfile("TPL-1", "Na" + control + "me"), "Template name must reject control characters.");
+            }
+
+            var invalidSurrogate = new string(new[] { '\uD800' });
+            Throws<ArgumentException>(() => new TemplateProfile("TPL" + invalidSurrogate + "1", "Name"), "Template id must reject XML-invalid surrogate text.");
+            Throws<ArgumentException>(() => new TemplateProfile("TPL-1", "Na" + invalidSurrogate + "me"), "Template name must reject XML-invalid surrogate text.");
+        }
+
+        private static void TemplateIdentityTextPreservesValidUnicodeAndSetterAtomicity()
+        {
+            var profile = new TemplateProfile(" TPL-Đ1 ", " Mẫu tiếng Việt ");
+            Equal("TPL-Đ1", profile.Id, "Valid Unicode template id should retain existing trim normalization.");
+            Equal("Mẫu tiếng Việt", profile.Name, "Valid Unicode template name should retain existing trim normalization.");
+
+            profile.Name = " Tên mẫu mới ";
+            Equal("Tên mẫu mới", profile.Name, "Valid Unicode template name setter should normalize surrounding whitespace.");
+
+            Throws<ArgumentException>(() => profile.Name = "Tên\nkhông hợp lệ", "Mutable template name must reject control characters.");
+            Equal("Tên mẫu mới", profile.Name, "Rejected mutable template name must not replace the previous canonical value.");
         }
 
         private static void AssertRejected(string label, Action<XDocument> mutate)
