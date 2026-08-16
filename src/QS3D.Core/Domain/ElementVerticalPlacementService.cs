@@ -234,6 +234,8 @@ namespace QS3D.Core.Domain
         {
             var value = left + right;
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new InvalidOperationException(label + " must be finite.");
+            if (right != 0d && value == left)
+                throw new InvalidOperationException(label + " loses a non-zero additive term due to floating-point precision.");
             return CanonicalZero(value);
         }
 
