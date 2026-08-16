@@ -91,6 +91,30 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
             "missing required preview-download contract: private const int MaxChecksumBytes = 64 * 1024;",
         )
 
+    def test_network_timeout_constant_cannot_be_unbounded(self):
+        self.assert_rejected(
+            DOWNLOADER,
+            "private const int NetworkTimeoutMilliseconds = 30000;",
+            "private const int NetworkTimeoutMilliseconds = int.MaxValue;",
+            "missing required preview-download contract: private const int NetworkTimeoutMilliseconds = 30000;",
+        )
+
+    def test_request_timeout_wiring_cannot_be_removed(self):
+        self.assert_rejected(
+            DOWNLOADER,
+            "request.Timeout = NetworkTimeoutMilliseconds;",
+            "request.Timeout = System.Threading.Timeout.Infinite;",
+            "missing required preview-download contract: request.Timeout = NetworkTimeoutMilliseconds;",
+        )
+
+    def test_read_write_timeout_wiring_cannot_be_removed(self):
+        self.assert_rejected(
+            DOWNLOADER,
+            "request.ReadWriteTimeout = NetworkTimeoutMilliseconds;",
+            "request.ReadWriteTimeout = System.Threading.Timeout.Infinite;",
+            "missing required preview-download contract: request.ReadWriteTimeout = NetworkTimeoutMilliseconds;",
+        )
+
     def test_automatic_redirects_cannot_be_reenabled(self):
         self.assert_rejected(
             DOWNLOADER,
@@ -171,7 +195,15 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
             'missing required preview-download contract: if (IsWindowsReservedPathSegment(result)) result = "_" + result;',
         )
 
-    def test_local_appdata_staging_cannot_be_redirected_elsewhere(self):
+    def test_local_appdata_root_cannot_be_replaced(self):
+        self.assert_rejected(
+            DOWNLOADER,
+            "Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);",
+            "Environment.GetFolderPath(Environment.SpecialFolder.CurrentDirectory);",
+            "missing required preview-download contract: Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);",
+        )
+
+    def test_download_staging_subdirectory_cannot_be_redirected_elsewhere(self):
         self.assert_rejected(
             DOWNLOADER,
             'Path.Combine(root, "QS3D", "Updates", "Downloads", ToSafePathSegment(tag))',
