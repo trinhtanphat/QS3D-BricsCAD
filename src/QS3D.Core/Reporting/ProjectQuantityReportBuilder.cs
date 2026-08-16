@@ -216,6 +216,8 @@ namespace QS3D.Core.Reporting
             var mass = checked(volume.Value * densityKgM3.Value);
             if (double.IsNaN(mass) || double.IsInfinity(mass))
                 throw new OverflowException("Quantity report mass overflow: " + element.Id + "/volume*density.");
+            if (mass == 0d && volume.Value > 0d && densityKgM3.Value > 0d)
+                throw new InvalidOperationException("Quantity report mass underflow: " + element.Id + "/volume*density rounded positive finite inputs to zero.");
             return mass;
         }
 
