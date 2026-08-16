@@ -1,20 +1,47 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import os
+import stat
 import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SELF = Path(__file__).resolve()
+CHILD_TIMEOUT_SECONDS = 180
 
 
 def discover():
-    return [
-        path
-        for path in sorted(SCRIPTS.glob("preflight-*.py"), key=lambda p: p.name.lower())
-        if path.resolve() != SELF
-    ]
+    candidates = [path for path in SCRIPTS.glob("preflight-*.py") if path.resolve() != SELF]
+    unsafe = []
+    by_casefold = {}
+
+    for path in candidates:
+        rel = path.relative_to(ROOT)
+        try:
+            mode = os.lstat(path).st_mode
+        except OSError as exc:
+            raise RuntimeError("cannot inspect feature preflight gate " + str(rel) + ": " + str(exc)) from exc
+
+        if path.is_symlink():
+            unsafe.append((str(rel), "symlink"))
+        elif not stat.S_ISREG(mode):
+            unsafe.append((str(rel), "non-regular"))
+
+        key = path.name.casefold()
+        by_casefold.setdefault(key, []).append(path)
+
+    collisions = [paths for paths in by_casefold.values() if len(paths) > 1]
+    if unsafe or collisions:
+        messages = []
+        for rel, reason in sorted(unsafe):
+            messages.append(rel + " is " + reason)
+        for paths in sorted(collisions, key=lambda group: group[0].name.casefold()):
+            names = ", ".join(sorted(str(path.relative_to(ROOT)) for path in paths))
+            messages.append("case-insensitive preflight filename collision: " + names)
+        raise RuntimeError("unsafe or ambiguous feature preflight discovery: " + "; ".join(messages))
+
+    return sorted(candidates, key=lambda path: (path.name.casefold(), path.name))
 
 
 def escape_actions_data(value):
@@ -35,7 +62,12 @@ def emit_failure_annotation(path, reason):
 
 
 def main():
-    gates = discover()
+    try:
+        gates = discover()
+    except RuntimeError as exc:
+        print("ERROR:", exc)
+        return 1
+
     if not gates:
         print("ERROR: no feature preflight gates were discovered.")
         return 1
@@ -58,10 +90,10 @@ def main():
                 cwd=str(ROOT),
                 check=False,
                 env=child_env,
-                timeout=180,
+                timeout=CHILD_TIMEOUT_SECONDS,
             )
         except subprocess.TimeoutExpired:
-            print("ERROR:", rel, "timed out after 180 seconds.")
+            print("ERROR:", rel, "timed out after", CHILD_TIMEOUT_SECONDS, "seconds.")
             failed.append((str(rel), "timeout"))
             continue
         except OSError as exc:
