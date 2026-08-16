@@ -152,7 +152,10 @@ namespace QS3D.Core.Rebar
             var closure = new Point2(0d, -halfHeightM);
             if (hookLengthM > 1e-12d)
             {
-                var angle = hookTailAngleDeg * Math.PI / 180d;
+                var angle = RebarMath.Divide(
+                    RebarMath.Multiply(hookTailAngleDeg, Math.PI, "beam stirrup hook tail angle radians"),
+                    180d,
+                    "beam stirrup hook tail angle radians");
                 var startTail = new Point2(
                     closure.X + hookLengthM * Math.Cos(Math.PI - angle),
                     closure.Y + hookLengthM * Math.Sin(Math.PI - angle));
@@ -190,7 +193,10 @@ namespace QS3D.Core.Rebar
             Append(points, closure);
             if (hookLengthM > 1e-12d)
             {
-                var angle = hookTailAngleDeg * Math.PI / 180d;
+                var angle = RebarMath.Divide(
+                    RebarMath.Multiply(hookTailAngleDeg, Math.PI, "beam stirrup hook tail angle radians"),
+                    180d,
+                    "beam stirrup hook tail angle radians");
                 var endTail = new Point2(
                     closure.X + hookLengthM * Math.Cos(angle),
                     closure.Y + hookLengthM * Math.Sin(angle));
