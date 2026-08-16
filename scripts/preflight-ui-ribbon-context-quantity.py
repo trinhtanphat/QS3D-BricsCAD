@@ -47,14 +47,16 @@ for token in ("GetOrCreate(", "Build3D", "TransactionManager", "AppendEntity", "
 context = read("src/QS3D.BricsCAD.V25/QuantityContextMenuCoordinator.cs")
 require(context, '"Diễn giải khối lượng"', "context menu label")
 require(context, 'private const string QuantityCommand = "QS3DQUANTITYINSIGHT";', "context command")
+require(context, 'private const string ExtensionTypeName = "Bricscad.Windows.ContextMenuExtension, BrxMgd";', "native context extension type")
+require(context, 'private const string MenuItemTypeName = "Bricscad.Windows.MenuItem, BrxMgd";', "native context menu item type")
 require(context, "RXObject.GetClass(typeof(Entity))", "entity context class")
 require(context, '"AddObjectContextMenuExtension"', "object context registration")
 require(context, '"RemoveObjectContextMenuExtension"', "object context teardown")
 require(context, "document.SendStringToExecute(QuantityCommand + \" \", true, false, false);", "context dispatch")
 for token in ("AddDefaultContextMenuExtension", "RemoveDefaultContextMenuExtension"):
     forbid(context, token, "quantity action must use selected-object context")
-for token in ("GetOrCreate(", "Build3D", "TransactionManager", "AppendEntity", "ProjectRepository"):
-    forbid(context, token, "native context-menu callback must be read-only")
+for token in ("System.Windows.Forms.MenuItem", "GetOrCreate(", "Build3D", "TransactionManager", "AppendEntity", "ProjectRepository"):
+    forbid(context, token, "native context-menu callback must stay BricsCAD-native and read-only")
 
 raft = read("src/QS3D.BricsCAD.V25/RaftFoundationCommands.cs")
 require(raft, '[CommandMethod("QS3DDRAWRAFTFOUNDATION", CommandFlags.Modal)]', "raft command")
