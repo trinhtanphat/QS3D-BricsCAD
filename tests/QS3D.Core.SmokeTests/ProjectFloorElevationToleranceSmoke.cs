@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
             RenameWithSubToleranceElevationPreservesExactElevation();
             MaterialElevationChangeStillMarksGeometryDirty();
             PureSubToleranceElevationRequestRemainsNoOp();
+            LargeCoordinateMaterialChangeDoesNotDisappear();
         }
 
         private static void RenameWithSubToleranceElevationPreservesExactElevation()
@@ -66,6 +67,31 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Pure sub-tolerance Floor elevation request changed project freshness.");
             if (fixture.Element.Dirty != ElementDirtyFlags.None || fixture.Element.UpdatedUtc != beforeUpdatedUtc)
                 throw new Exception("Pure sub-tolerance Floor elevation request mutated referenced element freshness.");
+        }
+
+        private static void LargeCoordinateMaterialChangeDoesNotDisappear()
+        {
+            const double originalElevation = 1e16d;
+            var requestedElevation = originalElevation + 2d;
+            if (requestedElevation.Equals(originalElevation))
+                throw new Exception("Large-coordinate Floor regression fixture requires two distinct representable elevations.");
+
+            var project = new ProjectState("P-FLOOR-TOLERANCE-large-coordinate", "Floor tolerance large coordinate");
+            var floor = ProjectFloorService.Create(project, "F1", "Level 1", originalElevation);
+            var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall, string.Empty, floor.Id, string.Empty);
+            project.Elements.Add(element);
+            element.MarkClean(ElementDirtyFlags.All);
+            var beforeVersion = project.ChangeVersion;
+
+            ProjectFloorService.Update(project, floor.Id, floor.Name, requestedElevation);
+
+            if (!floor.ElevationM.Equals(requestedElevation))
+                throw new Exception("Representable two-metre Floor elevation change disappeared at a large coordinate magnitude.");
+            if (project.ChangeVersion != beforeVersion + 1L)
+                throw new Exception("Material large-coordinate Floor elevation change should touch the project exactly once.");
+            var requiredDirty = ElementDirtyFlags.Geometry | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity;
+            if ((element.Dirty & requiredDirty) != requiredDirty)
+                throw new Exception("Material large-coordinate Floor elevation change did not invalidate referenced geometry/relations/quantity.");
         }
 
         private static Fixture NewFixture(string id)
