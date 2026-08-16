@@ -18,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             CostRatePercentagePrecisionFailsClosed();
             ProgressRetentionPercentagePrecisionFailsClosed();
             CostMonetaryMultiplicationPrecisionFailsClosed();
+            HistoricalUnitCostDivisionPrecisionFailsClosed();
             InvalidInputsFailClosed();
         }
 
@@ -239,6 +240,27 @@ namespace QS3D.Core.SmokeTests
                 10m);
             Equal(0m, zeroProgress.GrossCertifiedThisPeriod, "Zero progress quantity should keep gross zero.");
             Equal(0m, zeroProgress.RetentionThisPeriod, "Zero progress gross should keep retention zero.");
+        }
+
+        private static void HistoricalUnitCostDivisionPrecisionFailsClosed()
+        {
+            const decimal minimumPositive = 0.0000000000000000000000000001m;
+            var asOf = Utc(2026, 1, 1);
+
+            var underflow = new HistoricalCostRecord("HIST-TINY", "CONC", "default", 10m, minimumPositive, "VND", asOf);
+            Throws<OverflowException>(() => { var _ = underflow.UnitCost; });
+            Throws<OverflowException>(() => new CostBenchmarkService().Analyze(
+                new HistoricalCostCatalog(new[] { underflow }),
+                "CONC",
+                "default",
+                "VND",
+                1m));
+
+            var zero = new HistoricalCostRecord("HIST-ZERO", "CONC", "default", 10m, 0m, "VND", asOf);
+            Equal(0m, zero.UnitCost, "Zero historical total cost should preserve zero unit cost.");
+
+            var normal = new HistoricalCostRecord("HIST-NORMAL", "CONC", "default", 4m, 10m, "VND", asOf);
+            Equal(2.5m, normal.UnitCost, "Normal historical unit cost changed.");
         }
 
         private static void InvalidInputsFailClosed()
