@@ -194,9 +194,9 @@ namespace QS3D.Core.Mep
                 _region,
                 _elementCount,
                 _quantityCount,
-                _lengthM,
-                _areaM2,
-                _volumeM3);
+                MepContract.CheckedCompensatedValue(_lengthM, _lengthCompensation, "MEP aggregated length"),
+                MepContract.CheckedCompensatedValue(_areaM2, _areaCompensation, "MEP aggregated area"),
+                MepContract.CheckedCompensatedValue(_volumeM3, _volumeCompensation, "MEP aggregated volume"));
         }
     }
 
@@ -228,9 +228,11 @@ namespace QS3D.Core.Mep
             double value,
             string label)
         {
-            var corrected = value - compensation;
-            var result = sum + corrected;
-            var nextCompensation = (result - sum) - corrected;
+            var result = sum + value;
+            var correction = Math.Abs(sum) >= Math.Abs(value)
+                ? (sum - result) + value
+                : (value - result) + sum;
+            var nextCompensation = compensation + correction;
             if (double.IsNaN(result) ||
                 double.IsInfinity(result) ||
                 double.IsNaN(nextCompensation) ||
@@ -240,6 +242,14 @@ namespace QS3D.Core.Mep
             }
 
             compensation = nextCompensation == 0d ? 0d : nextCompensation;
+            return result == 0d ? 0d : result;
+        }
+
+        internal static double CheckedCompensatedValue(double sum, double compensation, string label)
+        {
+            var result = sum + compensation;
+            if (double.IsNaN(result) || double.IsInfinity(result))
+                throw new OverflowException(label + " exceeded the representable numeric range.");
             return result == 0d ? 0d : result;
         }
     }
