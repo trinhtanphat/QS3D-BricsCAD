@@ -170,21 +170,26 @@ if compact.is_file():
     text = compact.read_text(encoding="utf-8")
     for needle in (
         "var root = WorkspaceContentRoot;",
+        "root.MinWidth = 0;",
+        "WorkspaceOverflow.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;",
+        "WorkspaceOverflow.ScrollToHorizontalOffset(0);",
         "root.RowDefinitions[0].Height = new GridLength(40);",
         "root.RowDefinitions[2].Height = new GridLength(30);",
-        "splitter.ShowsPreview = true;",
-        "splitter.Focusable = false;",
-        "WorkspacePanel.LayoutPersistence.cs",
-        "must not",
+        "var primaryColumn = workspace.ColumnDefinitions[0];",
+        "primaryColumn.MinWidth = 0;",
+        "primaryColumn.MaxWidth = double.PositiveInfinity;",
+        "primaryColumn.Width = new GridLength(1, GridUnitType.Star);",
+        "for (var index = 1; index < workspace.ColumnDefinitions.Count; index++)",
+        "retiredColumn.MinWidth = 0;",
+        "retiredColumn.MaxWidth = 0;",
+        "retiredColumn.Width = new GridLength(0);",
+        "if (Grid.GetColumn(child) > 0)",
+        "child.Visibility = Visibility.Collapsed;",
     ):
         if needle not in text:
-            errors.append("Workspace compact shell missing non-persisted presentation contract: " + needle)
+            errors.append("Workspace compact shell missing retired-pane presentation contract: " + needle)
 
     for forbidden in (
-        "workspace.ColumnDefinitions[0].Width =",
-        "workspace.ColumnDefinitions[0].MinWidth =",
-        "workspace.ColumnDefinitions[2].Width =",
-        "workspace.ColumnDefinitions[2].MinWidth =",
         "familyAndProperties.RowDefinitions[0].Height =",
         "familyAndProperties.RowDefinitions[0].MinHeight =",
         "roomAndSelection.RowDefinitions[0].Height =",
@@ -192,7 +197,7 @@ if compact.is_file():
     ):
         if forbidden in text:
             errors.append(
-                "Workspace compact shell must not overwrite a pane dimension restored by layout persistence: " + forbidden
+                "Workspace compact shell must not mutate retired pane row dimensions; retirement is enforced at the workspace-column boundary: " + forbidden
             )
 
 if runtime.is_file():
@@ -216,4 +221,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: centralized palette minimums preserve compact Workspace overflow, the compact presentation layer leaves persisted splitter dimensions intact, and layout persistence remains atomic/best-effort.")
+print("PASS: centralized palette minimums remain persisted atomically/best-effort, while the compact presentation layer permanently retires the obsolete Workspace dashboard columns after legacy widths are restored.")
