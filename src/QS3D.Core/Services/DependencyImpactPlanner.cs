@@ -55,7 +55,8 @@ namespace QS3D.Core.Services
             var sourceElementOwnership = SnapshotElementOwnership(project);
             var sourceDependencyTopology = SnapshotDependencyTopology(sourceElementOwnership);
             var requestedRoots = CanonicalRoots(sourceElementIds, sourceElementOwnership.Count);
-            RequireProjectFresh(project, sourceChangeVersion, sourceElementOwnership, sourceDependencyTopology);
+            RequireProjectFresh(project, sourceChangeVersion, sourceElementOwnership);
+            RequireDependencyTopologyFresh(project, sourceDependencyTopology);
 
             var graph = new DependencyGraph();
             graph.Rebuild(project.Elements);
@@ -98,7 +99,8 @@ namespace QS3D.Core.Services
                 }
             }
 
-            RequireProjectFresh(project, sourceChangeVersion, sourceElementOwnership, sourceDependencyTopology);
+            RequireProjectFresh(project, sourceChangeVersion, sourceElementOwnership);
+            RequireDependencyTopologyFresh(project, sourceDependencyTopology);
 
             var ordered = entries
                 .OrderBy(x => x.Depth)
@@ -136,8 +138,7 @@ namespace QS3D.Core.Services
         private static void RequireProjectFresh(
             ProjectState project,
             long expectedChangeVersion,
-            IReadOnlyDictionary<string, ProjectElement> expectedOwnership,
-            IReadOnlyDictionary<string, IReadOnlyList<string>> expectedDependencyTopology)
+            IReadOnlyDictionary<string, ProjectElement> expectedOwnership)
         {
             if (project.ChangeVersion != expectedChangeVersion)
                 throw new InvalidOperationException("Project changed while dependency impact was being planned; recompute the impact plan.");
@@ -151,7 +152,17 @@ namespace QS3D.Core.Services
                     !expectedOwnership.TryGetValue(element.Id, out var original) ||
                     !ReferenceEquals(original, element))
                     throw StructuralFreshnessError();
-                if (!expectedDependencyTopology.TryGetValue(element.Id, out var expectedDependencies) ||
+            }
+        }
+
+        private static void RequireDependencyTopologyFresh(
+            ProjectState project,
+            IReadOnlyDictionary<string, IReadOnlyList<string>> expectedDependencyTopology)
+        {
+            foreach (var element in project.Elements)
+            {
+                if (element == null ||
+                    !expectedDependencyTopology.TryGetValue(element.Id, out var expectedDependencies) ||
                     !DependencyTopologyMatches(element.DependsOn, expectedDependencies))
                     throw DependencyTopologyFreshnessError();
             }
