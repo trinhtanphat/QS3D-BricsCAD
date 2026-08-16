@@ -21,10 +21,7 @@ if store.is_file():
     text = store.read_text(encoding="utf-8")
     for needle in (
         "Environment.SpecialFolder.LocalApplicationData",
-        "#if BRICSCAD_V26",
-        'private const string HostMajorDirectory = "BricsCAD-V26";',
-        'private const string HostMajorDirectory = "BricsCAD-V25";',
-        'Path.Combine(root, "QS3D", HostMajorDirectory, "ui-layout-v1.txt")',
+        'Path.Combine(root, "QS3D", "BricsCAD-V25", "ui-layout-v1.txt")',
         "MaxFileBytes = 16 * 1024",
         "internal const int WorkspacePaletteMinWidth = 460;",
         "internal const int WorkspacePaletteMinHeight = 420;",

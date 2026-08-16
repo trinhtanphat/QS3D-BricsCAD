@@ -30,11 +30,6 @@ namespace QS3D.BricsCAD.V25.Services
         internal const int QuantityPaletteMinHeight = 360;
 
         private const int MaxFileBytes = 16 * 1024;
-#if BRICSCAD_V26
-        private const string HostMajorDirectory = "BricsCAD-V26";
-#else
-        private const string HostMajorDirectory = "BricsCAD-V25";
-#endif
         private static readonly object Gate = new object();
         private static UserUiLayout _current = LoadCore();
 
@@ -164,7 +159,7 @@ namespace QS3D.BricsCAD.V25.Services
         {
             var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             if (string.IsNullOrWhiteSpace(root)) throw new InvalidOperationException("LocalApplicationData is unavailable.");
-            return Path.Combine(root, "QS3D", HostMajorDirectory, "ui-layout-v1.txt");
+            return Path.Combine(root, "QS3D", "BricsCAD-V25", "ui-layout-v1.txt");
         }
 
         private static void Normalize(UserUiLayout layout)
