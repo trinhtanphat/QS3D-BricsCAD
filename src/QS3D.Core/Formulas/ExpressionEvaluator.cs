@@ -43,6 +43,8 @@ namespace QS3D.Core.Formulas
                     throw new InvalidOperationException("Variable names cannot be blank or whitespace-only.");
 
                 var normalizedName = pair.Key.Trim();
+                if (!IsValidIdentifier(normalizedName))
+                    throw new InvalidOperationException($"Variable name '{normalizedName}' is not a valid expression identifier.");
                 if (normalized.ContainsKey(normalizedName))
                     throw new InvalidOperationException($"Variable name '{pair.Key}' conflicts with another variable after trimming whitespace and ignoring casing.");
                 if (double.IsNaN(pair.Value) || double.IsInfinity(pair.Value))
@@ -52,6 +54,20 @@ namespace QS3D.Core.Formulas
 
             return normalized;
         }
+
+        private static bool IsValidIdentifier(string value)
+        {
+            if (value.Length == 0 || !IsIdentifierStart(value[0])) return false;
+            for (var i = 1; i < value.Length; i++)
+            {
+                if (!IsIdentifierPart(value[i])) return false;
+            }
+            return true;
+        }
+
+        private static bool IsIdentifierStart(char value) => char.IsLetter(value) || value == '_';
+
+        private static bool IsIdentifierPart(char value) => char.IsLetterOrDigit(value) || value == '_' || value == '.';
 
         private sealed class Parser
         {
@@ -171,7 +187,7 @@ namespace QS3D.Core.Formulas
                     return value;
                 }
                 if (_index < _text.Length && (char.IsDigit(_text[_index]) || _text[_index] == '.')) return ParseNumber();
-                if (_index < _text.Length && (char.IsLetter(_text[_index]) || _text[_index] == '_'))
+                if (_index < _text.Length && IsIdentifierStart(_text[_index]))
                 {
                     var name = ParseIdentifier();
                     SkipWhiteSpace();
@@ -292,7 +308,7 @@ namespace QS3D.Core.Formulas
                 while (_index < _text.Length)
                 {
                     var c = _text[_index];
-                    if (char.IsLetterOrDigit(c) || c == '_' || c == '.') _index++;
+                    if (IsIdentifierPart(c)) _index++;
                     else break;
                 }
                 return _text.Substring(start, _index - start);
