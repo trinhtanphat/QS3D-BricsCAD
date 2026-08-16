@@ -10,6 +10,8 @@ namespace QS3D.BricsCAD.V25
     /// </summary>
     internal static class ExistingProjectMutationContext
     {
+        internal const string SaveProjectOperation = "Save Project";
+
         public static bool TryGet(Document document, out ProjectState project)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
@@ -55,7 +57,7 @@ namespace QS3D.BricsCAD.V25
             // HasPendingChanges performs the non-mutating allow-path-transition
             // freshness/destination check, and Save repeats that check under the
             // project lock before committing.
-            if (string.Equals(operation, "Save Project", StringComparison.Ordinal) &&
+            if (string.Equals(operation, SaveProjectOperation, StringComparison.Ordinal) &&
                 ProjectContextCoordinator.TryGetCached(document, out var cached))
             {
                 _ = ProjectContextCoordinator.HasPendingChanges(document);
