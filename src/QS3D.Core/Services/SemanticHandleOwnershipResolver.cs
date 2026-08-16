@@ -43,6 +43,8 @@ namespace QS3D.Core.Services
             if (normalizedHandle.Length == 0) throw new ArgumentException("Source handle is required.", nameof(sourceHandle));
             var normalizedId = (canonicalId ?? string.Empty).Trim();
             if (normalizedId.Length == 0) throw new ArgumentException("Canonical element ID is required.", nameof(canonicalId));
+            if (!string.Equals(canonicalId, normalizedId, StringComparison.Ordinal))
+                throw new ArgumentException("Canonical element ID must not contain leading or trailing whitespace.", nameof(canonicalId));
 
             var sourceOwner = ResolveUniqueSourceOwner(project, normalizedHandle);
             if (sourceOwner != null && sourceOwner.Category != category)
