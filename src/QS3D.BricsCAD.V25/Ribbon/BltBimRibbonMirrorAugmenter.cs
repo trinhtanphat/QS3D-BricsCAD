@@ -113,10 +113,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
             foreach (var sourceItem in sourceItems)
             {
                 if (sourceItem == null) continue;
-                var mirrored = CloneRibbonItem(sourceItem);
+                var mirrored = CloneRibbonItem(sourceItem, ref buttonCount);
                 if (mirrored == null) continue;
                 Add(mirroredItems, mirrored);
-                buttonCount++;
             }
 
             if (buttonCount == 0)
@@ -127,36 +126,65 @@ namespace QS3D.BricsCAD.V25.Ribbon
             Add(targetPanels, panel);
         }
 
-        private static object? CloneRibbonItem(object source)
+        private static object? CloneRibbonItem(object source, ref int buttonCount)
         {
-            // BltDrawRibbonAugmenter intentionally emits flat RibbonButton collections. Keep the
-            // mirror strict: if that contract changes, fail and retry rather than silently building
-            // a visually different BIM panel.
-            if (!string.Equals(source.GetType().Name, "RibbonButton", StringComparison.Ordinal))
-                return null;
-
-            var target = Activator.CreateInstance(source.GetType())
-                         ?? throw new InvalidOperationException("Cannot clone " + source.GetType().FullName + ".");
-
-            var id = GetProperty(source, "Id") as string;
-            if (!string.IsNullOrWhiteSpace(id))
+            var typeName = source.GetType().Name;
+            if (string.Equals(typeName, "RibbonButton", StringComparison.Ordinal))
             {
-                var mirroredId = id.StartsWith(DrawOwnedPrefix, StringComparison.OrdinalIgnoreCase)
-                    ? BimOwnedPrefix + id.Substring(DrawOwnedPrefix.Length)
-                    : BimOwnedPrefix + id;
-                SetProperty(target, "Id", mirroredId);
+                var target = Activator.CreateInstance(source.GetType())
+                             ?? throw new InvalidOperationException("Cannot clone " + source.GetType().FullName + ".");
+
+                var id = GetProperty(source, "Id") as string;
+                if (!string.IsNullOrWhiteSpace(id))
+                {
+                    var mirroredId = id.StartsWith(DrawOwnedPrefix, StringComparison.OrdinalIgnoreCase)
+                        ? BimOwnedPrefix + id.Substring(DrawOwnedPrefix.Length)
+                        : BimOwnedPrefix + id;
+                    SetProperty(target, "Id", mirroredId);
+                }
+
+                // Copy presentation and routing from the already-qualified BLT panel. ImageSource
+                // instances are frozen by the source augmenter and are safe to share.
+                foreach (var property in new[]
+                {
+                    "Name", "Text", "ShowText", "ShowImage", "CommandParameter", "CommandHandler",
+                    "Description", "ToolTip", "Size", "Image", "LargeImage", "IsEnabled", "IsVisible"
+                })
+                    CopyProperty(source, target, property);
+
+                buttonCount++;
+                return target;
             }
 
-            // Copy presentation and routing from the already-qualified BLT panel. ImageSource
-            // instances are frozen by the source augmenter and are safe to share.
-            foreach (var property in new[]
+            if (string.Equals(typeName, "RibbonRowBreak", StringComparison.Ordinal))
             {
-                "Name", "Text", "ShowText", "ShowImage", "CommandParameter", "CommandHandler",
-                "Description", "ToolTip", "Size", "Image", "LargeImage", "IsEnabled", "IsVisible"
-            })
-                CopyProperty(source, target, property);
+                return Activator.CreateInstance(source.GetType())
+                       ?? throw new InvalidOperationException("Cannot clone " + source.GetType().FullName + ".");
+            }
 
-            return target;
+            if (string.Equals(typeName, "RibbonRowPanel", StringComparison.Ordinal))
+            {
+                var target = Activator.CreateInstance(source.GetType())
+                             ?? throw new InvalidOperationException("Cannot clone " + source.GetType().FullName + ".");
+                var sourceItems = GetProperty(source, "Items") as IEnumerable
+                                  ?? throw new InvalidOperationException("Source RibbonRowPanel did not expose Items.");
+                var targetItems = GetProperty(target, "Items")
+                                  ?? throw new InvalidOperationException("Target RibbonRowPanel did not expose Items.");
+
+                foreach (var sourceItem in sourceItems)
+                {
+                    if (sourceItem == null) continue;
+                    var mirrored = CloneRibbonItem(sourceItem, ref buttonCount);
+                    if (mirrored != null)
+                        Add(targetItems, mirrored);
+                }
+
+                return target;
+            }
+
+            // Unknown QS3D-owned ribbon item shapes are never guessed. Fail the mirror rather than
+            // silently emitting a different BIM surface.
+            return null;
         }
 
         private static object? FindPanelBySourceId(object panels, string sourceId)
