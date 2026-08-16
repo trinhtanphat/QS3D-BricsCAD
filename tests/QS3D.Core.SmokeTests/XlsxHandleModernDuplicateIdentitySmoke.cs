@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             RejectsDuplicateModernElementIds();
             RejectsDuplicateModernHandleAliases();
             RejectsFormulaBackedModernIdentity();
+            PreservesUnrelatedModernFormulaCells();
             PreservesUniqueModernIdentitySets();
             PreservesLegacyHandleDeduplication();
         }
@@ -39,6 +40,22 @@ namespace QS3D.Core.SmokeTests
             RejectModernFormula("A2", "\"E999\"", "E1");
             RejectModernFormula("B2", "\"B\"", "A");
             RejectModernFormula("C2", "\"DRAWING-OTHER\"", "DRAWING-1");
+        }
+
+        private static void PreservesUnrelatedModernFormulaCells()
+        {
+            var path = CreateModernWorkbook(
+                "E1",
+                "A",
+                true,
+                extraRow2Cell: FormulaCell("D2", "1+1", "2"));
+            try
+            {
+                var result = XlsxHandleReader.ReadHandleLookup(path, 2);
+                if (!result.IsModernSchema || !result.IsEd2Detail || result.ElementIds.Count != 1 || result.ElementIds[0] != "E1" || result.Handles.Count != 1 || result.Handles[0] != "A" || result.DrawingFingerprint != "DRAWING-1")
+                    throw new Exception("Formula cells outside modern identity/provenance columns must not change Handle lookup behavior.");
+            }
+            finally { Delete(path); }
         }
 
         private static void PreservesUniqueModernIdentitySets()
@@ -129,7 +146,8 @@ namespace QS3D.Core.SmokeTests
             bool ed2Detail,
             string formulaCellReference = "",
             string formula = "",
-            string cachedValue = "")
+            string cachedValue = "",
+            string extraRow2Cell = "")
         {
             var rows =
                 "<row r=\"1\">" +
@@ -141,6 +159,7 @@ namespace QS3D.Core.SmokeTests
                 ModernCell("A2", elementIds, formulaCellReference, formula, cachedValue) +
                 ModernCell("B2", handles, formulaCellReference, formula, cachedValue) +
                 ModernCell("C2", "DRAWING-1", formulaCellReference, formula, cachedValue) +
+                extraRow2Cell +
                 "</row>";
             if (!ed2Detail) return CreateLegacyWorkbook(rows);
 
