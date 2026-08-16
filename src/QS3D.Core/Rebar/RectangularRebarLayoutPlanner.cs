@@ -45,8 +45,8 @@ namespace QS3D.Core.Rebar
             var projectedBars = 2L * input.BarsAlongWidth + 2L * Math.Max(0, input.BarsAlongDepth - 2);
             if (projectedBars > MaxBars) throw new InvalidOperationException("Rectangular rebar layout exceeds the supported bar count.");
 
-            var diameterM = input.DiameterMm / 1000d;
-            var radiusM = diameterM / 2d;
+            var diameterM = RebarMath.Divide(input.DiameterMm, 1000d, "rectangular rebar diameter");
+            var radiusM = RebarMath.Divide(diameterM, 2d, "rectangular rebar radius");
             var halfWidth = input.WidthM / 2d - input.CoverM - radiusM;
             var halfDepth = input.DepthM / 2d - input.CoverM - radiusM;
             if (!(halfWidth > 0d) || !(halfDepth > 0d)) throw new InvalidOperationException("Cover + bar radius leaves no usable reinforcement envelope inside the host section.");
