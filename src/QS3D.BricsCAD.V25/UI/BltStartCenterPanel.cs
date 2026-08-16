@@ -8,7 +8,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using QS3D.BricsCAD.V25.Services;
-using QS3D.BricsCAD.V25.Updates;
 using Application = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.UI
@@ -169,7 +168,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             var description = new TextBlock
             {
-                Text = "Giải pháp mô hình hóa thông tin công trình BIM 3D trực quan và tối ưu hóa bóc tách khối lượng trong BricsCAD.",
+                Text = "Giải pháp mô hình hóa thông tin công trình BIM 3D trực quan và tối ưu hóa bóc tách khối lượng.",
                 Foreground = MutedBrush,
                 FontSize = 14,
                 LineHeight = 20,
@@ -199,21 +198,20 @@ namespace QS3D.BricsCAD.V25.UI
             actions.Children.Add(CreateActionCard(
                 "▱",
                 "Mở tệp dự án...",
-                "Chọn tệp BLT3D/QS3D hiện có từ máy tính",
+                "Chọn tệp tin .blt3d hiện có từ máy tính",
                 ProjectFileUiService.OpenProjectFromPicker));
 
             var saveRow = new Grid();
             saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) });
             saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            var save = CreateActionCard("▣", "Lưu", "Lưu project QS3D", ProjectFileUiService.SaveCurrentProject, compact: true);
+            var save = CreateActionCard("▣", "Lưu", "Ctrl+S", ProjectFileUiService.SaveCurrentProject, compact: true);
             Grid.SetColumn(save, 0);
             saveRow.Children.Add(save);
-            var saveAs = CreateActionCard("▤", "Lưu thành...", "Tạo bản sao BLT3D", ProjectFileUiService.SaveCurrentProjectAs, compact: true);
+            var saveAs = CreateActionCard("▤", "Lưu thành...", "Tạo bản sao mới", ProjectFileUiService.SaveCurrentProjectAs, compact: true);
             Grid.SetColumn(saveAs, 2);
             saveRow.Children.Add(saveAs);
             actions.Children.Add(saveRow);
-            actions.Children.Add(CreateActionCard("↻", "Cập nhật", "Kiểm tra và tải bản cập nhật QS3D", () => UpdateCenterWindowHost.Show()));
 
             Grid.SetRow(actions, 3);
             grid.Children.Add(actions);
