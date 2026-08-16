@@ -42,8 +42,14 @@ jobs:
       - name: Generic source guard
         run: python scripts/preflight.py
 
+      - name: All discovered feature source guards
+        run: python scripts/preflight-all.py
+
       - name: BricsCAD V26 compatibility guard
         run: python scripts/preflight-bricscad-v26.py
+
+      - name: V26 package/release isolation guard
+        run: python scripts/preflight-v26-package-release.py
 
       - name: Validate V26 host references and runtime identity
         shell: powershell
