@@ -84,6 +84,9 @@ namespace QS3D.Core.Templates
             {
                 if (attribute.IsNamespaceDeclaration || attribute.Name.Namespace != XNamespace.None || !attributes.Contains(attribute.Name))
                     throw new InvalidDataException("Unsupported QS3D template attribute: " + element.Name.LocalName + "/" + attribute.Name);
+                if (!string.Equals(attribute.Name.LocalName, "value", StringComparison.Ordinal) &&
+                    (string.IsNullOrWhiteSpace(attribute.Value) || !string.Equals(attribute.Value, attribute.Value.Trim(), StringComparison.Ordinal)))
+                    throw new InvalidDataException("QS3D template attribute is empty or non-canonical: " + element.Name.LocalName + "/" + attribute.Name.LocalName);
             }
 
             var children = new HashSet<XName>(allowedChildren.Select(XName.Get));
