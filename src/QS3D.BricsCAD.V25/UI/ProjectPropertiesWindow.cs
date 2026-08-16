@@ -7,7 +7,7 @@ namespace QS3D.BricsCAD.V25.UI
     /// <summary>
     /// Bounded BLT3D-reference surface for THIẾT LẬP DỰ ÁN → Thuộc tính dự án.
     /// The supplied owner reference explicitly marks this surface as not built yet, so this
-    /// window intentionally stays read-only and does not invent ProjectState persistence fields.
+    /// window intentionally stays read-only and does not invent unsupported persistence fields.
     /// </summary>
     public sealed class ProjectPropertiesWindow : Window
     {
