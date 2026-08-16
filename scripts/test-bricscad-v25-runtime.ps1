@@ -126,6 +126,7 @@ try {
     Require-Qs3dMarkerValue -Marker $marker -Key "ribbon_ready" -Expected "true"
     Require-Qs3dMarkerValue -Marker $marker -Key "palette_visible" -Expected "true"
     Require-Qs3dMarkerValue -Marker $marker -Key "right_palette_visible" -Expected "false"
+    Require-Qs3dMarkerValue -Marker $marker -Key "quantity_palette_visible" -Expected "false"
 
     if (-not $marker.ContainsKey("assembly")) { throw "Runtime marker is missing 'assembly'." }
     $loadedAssembly = [IO.Path]::GetFullPath([string]$marker["assembly"])
@@ -221,6 +222,7 @@ public static class QS3DWin32Capture {
         ribbon_ready = $true
         palette_visible = $true
         right_palette_visible = $false
+        quantity_palette_visible = $false
     }
     $metadata | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
 
