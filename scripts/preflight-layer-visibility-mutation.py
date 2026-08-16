@@ -22,6 +22,8 @@ def validate(text: str) -> list[str]:
         "if (layer.IsLocked == locked) continue;",
         "if (mutationCount > 0) document.Editor.Regen();",
         "private static HashSet<string> BuildWantedNames(IEnumerable<string> names)",
+        "var countedNames = names as ICollection<string>;",
+        "countedNames.Count > MaxRequestedLayerNames",
         "if (enumerated > MaxRequestedLayerNames)",
         "wanted.Add(name);",
     )
@@ -63,6 +65,8 @@ def validate(text: str) -> list[str]:
         errors.append("SetLocked regressed to unconditional Regen")
 
     helper_required = (
+        "var countedNames = names as ICollection<string>;",
+        "countedNames != null && countedNames.Count > MaxRequestedLayerNames",
         "var enumerated = 0;",
         "foreach (var name in names)",
         "enumerated++;",
@@ -72,6 +76,12 @@ def validate(text: str) -> list[str]:
     for token in helper_required:
         if token not in helper:
             errors.append("bounded layer-name ingestion missing: " + token)
+
+    fast_bound = helper.find("countedNames.Count > MaxRequestedLayerNames")
+    enumeration = helper.find("foreach (var name in names)")
+    streaming_bound = helper.find("if (enumerated > MaxRequestedLayerNames)")
+    if min(fast_bound, enumeration, streaming_bound) < 0 or not fast_bound < enumeration < streaming_bound:
+        errors.append("known-count bound must reject before enumeration and streaming bound must remain inside enumeration")
 
     return errors
 
@@ -91,7 +101,11 @@ def run_mutation_self_checks(pristine: str) -> list[str]:
             "if (mutationCount > 0) document.Editor.Regen();",
             "document.Editor.Regen();",
         ),
-        "unbounded request ingestion": (
+        "lost known-count fast bound": (
+            "countedNames != null && countedNames.Count > MaxRequestedLayerNames",
+            "false",
+        ),
+        "lost streaming request bound": (
             "if (enumerated > MaxRequestedLayerNames)",
             "if (false)",
         ),
