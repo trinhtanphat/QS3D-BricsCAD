@@ -109,7 +109,7 @@ for key, needles in checks.items():
 if files["detail"].is_file():
     text = files["detail"].read_text(encoding="utf-8")
     projected = text.find("var projectedDetailSolids")
-    build_panels = text.find("BuildPanelCells(verticalFrames, horizontalFrames)")
+    build_panels = text.find("BuildPanelCells(input, layout)")
     if projected < 0 or build_panels < 0 or projected > build_panels:
         errors.append("Curtain detail native-solid budget must be checked before panel-list allocation.")
 
