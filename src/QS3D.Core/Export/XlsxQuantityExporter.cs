@@ -253,8 +253,10 @@ namespace QS3D.Core.Export
             Func<QuantityReportRow, double> selector,
             string field)
         {
+            var accumulator = new QuantityReportMath.CompensatedSum();
             var expected = 0d;
-            foreach (var detail in group) expected = AddFinite(expected, selector(detail), field);
+            foreach (var detail in group)
+                expected = AddCompensatedEd2(ref accumulator, selector(detail), field);
             RequireFinite(actual, field);
             if (actual != expected) throw NumericParityError(field);
         }
@@ -275,17 +277,38 @@ namespace QS3D.Core.Export
 
         private static void RequireMassParity(QuantityReportRow summary, IReadOnlyList<QuantityReportRow> group)
         {
+            var accumulator = new QuantityReportMath.CompensatedSum();
             double? expected = 0d;
             foreach (var detail in group)
             {
                 ValidateMass(detail.MassKg);
                 if (expected.HasValue && detail.MassKg.HasValue)
-                    expected = AddFinite(expected.Value, detail.MassKg.Value, "MassKg");
+                    expected = AddCompensatedEd2(ref accumulator, detail.MassKg.Value, "MassKg");
                 else
                     expected = null;
             }
             ValidateMass(summary.MassKg);
             if (!NullableEqual(summary.MassKg, expected)) throw NumericParityError("MassKg");
+        }
+
+        private static double AddCompensatedEd2(
+            ref QuantityReportMath.CompensatedSum accumulator,
+            double value,
+            string field)
+        {
+            RequireFinite(value, field);
+            try
+            {
+                return accumulator.Add(value, "ED2/" + field);
+            }
+            catch (OverflowException ex)
+            {
+                throw new InvalidDataException("ED2 " + field + " aggregate exceeds the supported numeric range.", ex);
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new InvalidDataException("ED2 " + field + " aggregate must be finite.", ex);
+            }
         }
 
         private static void ValidateDensity(double? value)
@@ -300,15 +323,6 @@ namespace QS3D.Core.Export
             if (!value.HasValue) return;
             RequireFinite(value.Value, "MassKg");
             if (value.Value < 0d) throw new InvalidDataException("ED2 mass must be non-negative when present.");
-        }
-
-        private static double AddFinite(double left, double right, string field)
-        {
-            RequireFinite(left, field);
-            RequireFinite(right, field);
-            var total = left + right;
-            RequireFinite(total, field);
-            return total;
         }
 
         private static void RequireFinite(double value, string field)
