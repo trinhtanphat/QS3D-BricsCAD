@@ -68,12 +68,14 @@ Before implementation, every normal agent must:
 5. create a dedicated branch from the latest valid baseline, normally `agent/<agent-id>/<scope>`;
 6. put **all** task changes on that branch, including source, tests, scripts, workflows, docs, Markdown, claim/handoff/status files and chores;
 7. validate, commit and push only that branch;
-8. open/update a PR;
-9. stop before merge unless this session has explicit owner merge/integration authorization.
+8. when watched/integration-relevant paths changed, wait for the automatic shared **branch-push CI on the exact current branch SHA to finish `SUCCESS` before opening a new PR**; a PR or draft PR must not be the first CI attempt;
+9. refresh `origin/main`; if the baseline moved, reconcile safely, push the reconciled branch and obtain fresh green branch CI before PR creation;
+10. open/update the PR; protected-main required checks and PR/integration CI then validate merge-candidate freshness as applicable;
+11. stop before merge unless this session has explicit owner merge/integration authorization.
 
 Historical Markdown work claims may still be used, but new/updated claim files belong on the task branch/PR. A claim does not need to be pushed to `main` before implementation starts.
 
-An Issue plus pushed task branch/PR is the preferred visible coordination surface.
+An Issue plus pushed task branch is the preferred visible coordination surface before PR creation. The PR becomes the review/handoff surface only after the applicable branch-CI gate is green.
 
 ## Mandatory sync discipline
 
@@ -88,7 +90,8 @@ Before each branch push and before PR handoff:
 1. refresh `origin/main` again;
 2. verify whether relevant concurrent work moved;
 3. if needed, rebase/reapply/merge safely on the task branch without discarding newer work;
-4. review the final diff so it contains only intended changes.
+4. review the final diff so it contains only intended changes;
+5. for watched work, make sure the exact final branch SHA has fresh green branch CI before opening the PR.
 
 Never force-push `main`, reset it backwards, silently overwrite another agent's work, or use `ours`/`theirs` blindly to hide semantic conflicts.
 
@@ -113,7 +116,10 @@ latest main read
   -> implementation/docs/chore commits
   -> validation
   -> branch pushed
+  -> watched branch CI SUCCESS on exact branch SHA
+  -> refresh/reconcile main if needed
   -> PR opened/updated
+  -> protected-main/PR checks as applicable
   -> STOP BEFORE MERGE
 ```
 
@@ -139,7 +145,7 @@ The authorized coordinator must:
 6. run relevant combined-tree remote-safe validation;
 7. inspect the combined diff for accidental reversions and duplicate implementations;
 8. freeze and record the integration candidate SHA;
-9. merge to `main` only within explicit owner authorization;
+9. satisfy the active protected-main rules and merge to `main` only within explicit owner authorization;
 10. fetch `main` again and record the exact resulting SHA.
 
 Authorization to merge one batch is not standing authorization for later batches.
@@ -151,7 +157,9 @@ State **ALL MERGED TO MAIN** only after an authorized integration reviewer verif
 - every required Issue/reservation is terminal or explicitly excluded/superseded;
 - every required implementation/docs commit is represented in current `main`;
 - no required work exists only on an agent branch, local worktree, stash, draft patch or unmerged PR;
+- required branch/PR/integration evidence is green and fresh where applicable;
 - current `main` was refreshed after the authorized landing;
+- current `main` still reports the intended effective protected-main rules or an explicitly owner-approved replacement;
 - the combined tree contains the intended behavior without unresolved merge markers, accidental reversions, duplicate competing implementations or known semantic/API/test collisions;
 - required remote-safe validation passed or environment-gated evidence is explicitly handed off;
 - the exact current `main` SHA is recorded.
@@ -228,7 +236,9 @@ Lack of local capability is a handoff condition, not a reason for repeated remot
 Follow `CI_POLICY.md` strictly.
 
 - Workflows are manual-only by default.
-- The sole owner-approved automatic exception is `.github/workflows/dispatch-v25-cloud-after-main-integration.yml` after an authorized integration-relevant `main` landing.
+- The shared non-publishing branch/PR CI in `.github/workflows/ci.yml` is an owner-approved automatic validation exception.
+- For watched task branches, its branch-push run must be green on the exact final branch SHA before a new PR is opened.
+- The sole owner-approved automatic publishing/dispatch exception is `.github/workflows/dispatch-v25-cloud-after-main-integration.yml` after an authorized integration-relevant `main` landing.
 - Normal task authorization does not authorize manual workflow dispatch/re-run/cancel.
 - Manual CI authorization does not imply `main` merge authorization.
 - `main` merge authorization does not imply unrelated manual CI/release authorization.
@@ -239,11 +249,19 @@ For approved release operations, follow the applicable manual build/release runb
 
 ## GitHub hard protection
 
-Repository policy should be backed by GitHub branch protection/rulesets:
+GitHub ruleset **`protectedMain`** (ruleset ID **`20890901`**) is active on the default branch and is the current hard-enforcement layer for `main`.
 
-- protect `main` from force-push/deletion;
-- require PR-based changes for normal writers;
-- keep owner/admin bypass narrow and deliberate;
-- require stable status checks when appropriate.
+The expected effective contract is:
 
-Until GitHub reports `main` protected/ruleset-enforced, these repository rules remain mandatory but cannot physically stop a credential with write permission from bypassing them. Track hard-enforcement work in the repository governance issue for `main` protection.
+- require PR-based updates to `main`;
+- require stable status checks `preflight` and `core`;
+- strict required-status freshness enabled;
+- block force pushes / non-fast-forward updates;
+- block deletion;
+- bypass list empty.
+
+Repository policy and GitHub hard protection are complementary. The ruleset prevents many invalid writes, while `docs/MAIN-WRITE-AUTHORIZATION.md` decides which session is allowed by the owner to merge.
+
+When protection state matters, verify GitHub's effective rules instead of trusting Markdown alone. If the ruleset stops targeting `main`, required checks disappear, force-push/deletion protection is lost, or an unexpected bypass actor appears, treat it as a governance defect and do not claim hard protection is active.
+
+See `docs/GITHUB-MAIN-PROTECTION.md` for the verification and recovery contract.
