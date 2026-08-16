@@ -268,7 +268,28 @@ namespace QS3D.BricsCAD.V25.Updates
             }
 
             var result = builder.ToString().Trim().TrimEnd('.');
-            return result.Length == 0 ? "release" : result;
+            if (result.Length == 0) return "release";
+            if (IsWindowsReservedPathSegment(result)) result = "_" + result;
+            return result;
+        }
+
+        private static bool IsWindowsReservedPathSegment(string value)
+        {
+            var dotIndex = value.IndexOf('.');
+            var stem = (dotIndex >= 0 ? value.Substring(0, dotIndex) : value).TrimEnd(' ');
+            if (string.Equals(stem, "CON", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(stem, "PRN", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(stem, "AUX", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(stem, "NUL", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(stem, "CONIN$", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(stem, "CONOUT$", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (stem.Length != 4) return false;
+            var suffix = stem[3];
+            if (suffix < '1' || suffix > '9') return false;
+            return stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase)
+                   || stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase);
         }
 
         private static void TryDelete(string path)
