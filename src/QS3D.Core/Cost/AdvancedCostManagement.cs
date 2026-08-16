@@ -26,7 +26,7 @@ namespace QS3D.Core.Cost
         public static decimal AddPreservingNonZeroContribution(decimal left, decimal right, string label)
         {
             var result = checked(left + right);
-            if (right != 0m && result == left)
+            if ((right != 0m && result == left) || (left != 0m && result == right))
                 throw new OverflowException("Cost addition precision loss: " + label + ".");
             return result;
         }
