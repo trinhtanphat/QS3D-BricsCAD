@@ -63,6 +63,7 @@ namespace QS3D.Core.SmokeTests
             WallJunctionRegressionSmoke.Run();
             WallJunctionAdjustmentSmoke.Run();
             PolylineOpeningCutSmoke.Run();
+            OpeningCutPlannerClearancePrecisionSmoke.Run();
             ProjectRebarShapeSmoke.Run();
             RebarOwnershipHealthSmoke.Run();
             RebarFabricationQualificationSmoke.Run();
