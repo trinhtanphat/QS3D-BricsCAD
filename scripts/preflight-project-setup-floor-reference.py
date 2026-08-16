@@ -12,6 +12,11 @@ def require(text: str, needle: str, label: str, errors: list[str]) -> None:
         errors.append(f"missing {label}: {needle}")
 
 
+def forbid(text: str, needle: str, label: str, errors: list[str]) -> None:
+    if needle in text:
+        errors.append(f"forbidden {label}: {needle}")
+
+
 def main() -> int:
     errors: list[str] = []
     for path, label in (
@@ -34,7 +39,9 @@ def main() -> int:
     require(invariant, "EventManager.RegisterClassHandler", "routed click guard", errors)
     require(invariant, "ButtonBase.ClickEvent", "button click route", errors)
     require(invariant, "checkBox.Tag is BltFloorRow row", "reference-row identity", errors)
-    require(invariant, "EnsureBltReferenceInvariant(row)", "post-click invariant call", errors)
+    require(invariant, "window.EnsureBltReferenceInvariant(row);", "synchronous post-click invariant call", errors)
+    forbid(invariant, "Dispatcher.BeginInvoke", "deferred reference normalization", errors)
+    forbid(invariant, "DispatcherPriority.Background", "background reference normalization", errors)
     require(invariant, "references.Count == 1", "single-reference fast path", errors)
     require(invariant, "references.FirstOrDefault() ?? clickedRow", "fallback reference keeper", errors)
     require(invariant, "item.IsReference = ReferenceEquals(item, keeper)", "exclusive reference normalization", errors)
@@ -66,7 +73,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: BLT3D Project Setup keeps one visible floor reference and deterministic semantic button icons.")
+    print("PASS: BLT3D Project Setup keeps one synchronous visible floor reference and deterministic semantic button icons.")
     return 0
 
 
