@@ -48,6 +48,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             HomeTabActivationCoordinator.Stop();
             BltHomeRibbonAugmenter.Reset();
             BltDrawRibbonAugmenter.Reset();
+            BltViewRibbonAugmenter.Reset();
             RibbonBootstrapIconAugmenter.Reset();
             Qs3dRibbonTabGroupCoordinator.Reset();
         }
@@ -115,13 +116,15 @@ namespace QS3D.BricsCAD.V25.Ribbon
             ready = UpdateRibbonAugmenter.TryInitialize() && ready;
 
             // Reconcile screenshot-familiar presentation after feature augmenters so the
-            // QS3D-owned Home/Draw groups are deterministic without replacing native tabs.
+            // QS3D-owned Home/Draw/View groups are deterministic without replacing native tabs.
             ready = BltHomeRibbonAugmenter.TryInitialize() && ready;
             ready = BltDrawRibbonFailSafe.TryInitialize() && ready;
+            ready = BltViewRibbonAugmenter.TryInitialize() && ready;
 
             // The baseline Project/Authoring tabs are still text-only in RibbonBootstrapper.
             // Decorate them after feature augmenters have finished so both baseline and added
             // buttons receive QS3D-generated icons without changing their command routing.
+            // XEM already has complete, purpose-built icons, so the fallback pass preserves them.
             ready = RibbonBootstrapIconAugmenter.TryInitialize() && ready;
 
             // BricsCAD can invoke ICommand without forwarding RibbonButton.CommandParameter.
