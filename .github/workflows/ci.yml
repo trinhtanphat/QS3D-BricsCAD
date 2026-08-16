@@ -44,17 +44,19 @@ jobs:
       source_validation: ${{ steps.scope.outputs.source_validation }}
       build_validation: ${{ steps.scope.outputs.build_validation }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
       - name: CI trigger and publishing policy gate
         run: python scripts/preflight-ci-manual-only.py
       - name: Repository professionalism gate
         run: python scripts/preflight-repository-professionalism.py
+      - name: Immutable GitHub Actions supply-chain gate
+        run: python scripts/check-actions-pinned.py
       - name: Classify validation scope
         id: scope
         shell: pwsh
@@ -148,7 +150,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     env:
-      BRICSCAD_V25_MIRROR_MSI_URL: http://103.9.157.20/BricsCAD-V25.2.10-1-en_US%28x64%29.msi
+      BRICSCAD_V25_MIRROR_MSI_URL: https://storage.googleapis.com/production-boa-storage/ftp/release/en_US/BricsCAD/Windows/25.2.10/BricsCAD-V25.2.10-1-en_US%28x64%29.msi
       BRICSCAD_V25_PUBLIC_MSI_URL: https://storage.googleapis.com/production-boa-storage/ftp/release/en_US/BricsCAD/Windows/25.2.10/BricsCAD-V25.2.10-1-en_US%28x64%29.msi
       BRICSCAD_V25_PINNED_MSI_SHA256: F44DF674C0E165D96BF579E243B20A8301E3F395F929779F47BF39A7D9DACDE1
       BRICSCAD_V25_MSI_URL: ${{ secrets.BRICSCAD_V25_MSI_URL }}
@@ -157,11 +159,11 @@ jobs:
         if: ${{ needs.preflight.outputs.build_validation != 'true' }}
         shell: pwsh
         run: Write-Host 'No build-relevant paths changed; stable required core context succeeds without a redundant Core/V25 rebuild.'
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: ${{ needs.preflight.outputs.build_validation == 'true' }}
         with:
           persist-credentials: false
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         if: ${{ needs.preflight.outputs.build_validation == 'true' }}
         with:
           dotnet-version: "8.0.x"
@@ -174,7 +176,7 @@ jobs:
       - name: Restore BricsCAD V25 installer cache
         if: ${{ needs.preflight.outputs.build_validation == 'true' }}
         id: bricscad-msi-cache
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .cache/bricscad/BricsCAD-V25.2.10-x64.msi
           key: bricscad-v25.2.10-x64-en-us-${{ env.BRICSCAD_V25_PINNED_MSI_SHA256 }}
@@ -198,7 +200,7 @@ jobs:
           "BRICSCAD_V25_DIR=$([string]$bricsDir)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Save BricsCAD V25 installer cache
         if: ${{ needs.preflight.outputs.build_validation == 'true' && steps.bricscad-msi-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .cache/bricscad/BricsCAD-V25.2.10-x64.msi
           key: bricscad-v25.2.10-x64-en-us-${{ env.BRICSCAD_V25_PINNED_MSI_SHA256 }}
