@@ -253,8 +253,23 @@ namespace QS3D.Core.Geometry
         private static double ClosedPerimeter(IReadOnlyList<Point2> polygon)
         {
             var value = 0d;
-            for (var i = 0; i < polygon.Count; i++) value = CheckedAdd(value, polygon[i].DistanceTo(polygon[(i + 1) % polygon.Count]), "wall footprint perimeter");
+            var compensation = 0d;
+            for (var i = 0; i < polygon.Count; i++)
+                AddCompensated(ref value, ref compensation, polygon[i].DistanceTo(polygon[(i + 1) % polygon.Count]), "wall footprint perimeter");
             return value;
+        }
+
+        private static void AddCompensated(ref double sum, ref double compensation, double value, string label)
+        {
+            if (!Finite(sum) || !Finite(compensation) || !Finite(value))
+                throw new OverflowException(label + " contains a non-finite value.");
+            var corrected = value - compensation;
+            if (!Finite(corrected)) throw new OverflowException(label + " overflowed.");
+            var next = sum + corrected;
+            if (!Finite(next)) throw new OverflowException(label + " overflowed.");
+            compensation = (next - sum) - corrected;
+            if (!Finite(compensation)) throw new OverflowException(label + " overflowed.");
+            sum = next;
         }
 
         private static double CheckedAdd(double left, double right, string label)
