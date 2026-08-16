@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             LargeSingleScopeUsesIndexedTimestampUniqueness();
             CostRatePercentagePrecisionFailsClosed();
             ProgressRetentionPercentagePrecisionFailsClosed();
+            CostMonetaryMultiplicationPrecisionFailsClosed();
             InvalidInputsFailClosed();
         }
 
@@ -189,6 +190,55 @@ namespace QS3D.Core.SmokeTests
             var normal = service.Evaluate(contracts, claims, 10m);
             Equal(10m, normal.RetentionThisPeriod, "Normal retention value mismatch.");
             Equal(90m, normal.NetCertifiedThisPeriod, "Normal retention net value mismatch.");
+        }
+
+        private static void CostMonetaryMultiplicationPrecisionFailsClosed()
+        {
+            const decimal minimumPositive = 0.0000000000000000000000000001m;
+
+            var underflowComponent = new CostResourceComponent("TINY", "Tiny", "ea", minimumPositive, 0.1m);
+            Throws<OverflowException>(() => { var _ = underflowComponent.ExtendedUnitCost; });
+
+            var zeroComponent = new CostResourceComponent("ZERO", "Zero", "ea", 0m, minimumPositive);
+            Equal(0m, zeroComponent.ExtendedUnitCost, "Zero resource quantity should remain zero.");
+            var normalComponent = new CostResourceComponent("NORMAL", "Normal", "ea", 2m, 3m);
+            Equal(6m, normalComponent.ExtendedUnitCost, "Normal resource extended cost changed.");
+
+            var tinyDirect = new[] { new CostResourceComponent("BASE", "Base", "ea", 1m, minimumPositive) };
+            Throws<OverflowException>(() =>
+                new CostRateBuildUp("BUILD-OH-MUL", new CostCode("CONC"), "ea", "VND", tinyDirect, 10m, 0m));
+            Throws<OverflowException>(() =>
+                new CostRateBuildUp("BUILD-PROFIT-MUL", new CostCode("CONC"), "ea", "VND", tinyDirect, 0m, 10m));
+
+            var tenderRequirements = new[] { new TenderRequirement("ITEM", "Item", "ea", minimumPositive) };
+            var tenderBids = new[]
+            {
+                new TenderBid("BID", "Bidder", "VND", new[] { new TenderQuoteLine("ITEM", 0.1m) })
+            };
+            Throws<OverflowException>(() => new TenderEvaluationService().Evaluate(tenderRequirements, tenderBids));
+
+            var normalTender = new TenderEvaluationService().Evaluate(
+                new[] { new TenderRequirement("ITEM", "Item", "ea", 2m) },
+                new[] { new TenderBid("BID", "Bidder", "VND", new[] { new TenderQuoteLine("ITEM", 3m) }) });
+            Equal(6m, normalTender[0].EvaluatedTotal, "Normal tender evaluated total changed.");
+
+            var progress = new ProgressClaimService();
+            Throws<OverflowException>(() => progress.Evaluate(
+                new[] { new ProgressContractItem("ITEM", "ea", minimumPositive, 0.1m) },
+                new[] { new ProgressClaimLine("ITEM", 0m, minimumPositive) },
+                0m));
+
+            Throws<OverflowException>(() => progress.Evaluate(
+                new[] { new ProgressContractItem("ITEM", "ea", 1m, minimumPositive) },
+                new[] { new ProgressClaimLine("ITEM", 0m, 1m) },
+                10m));
+
+            var zeroProgress = progress.Evaluate(
+                new[] { new ProgressContractItem("ITEM", "ea", 1m, minimumPositive) },
+                new[] { new ProgressClaimLine("ITEM", 0m, 0m) },
+                10m);
+            Equal(0m, zeroProgress.GrossCertifiedThisPeriod, "Zero progress quantity should keep gross zero.");
+            Equal(0m, zeroProgress.RetentionThisPeriod, "Zero progress gross should keep retention zero.");
         }
 
         private static void InvalidInputsFailClosed()
