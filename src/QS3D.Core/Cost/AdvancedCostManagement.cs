@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
@@ -20,6 +21,41 @@ namespace QS3D.Core.Cost
             if (numerator != 0m && result == 0m)
                 throw new OverflowException("Cost division underflow: " + label + ".");
             return result;
+        }
+    }
+
+    internal static class AdvancedCostCollectionContract
+    {
+        internal const int MaximumEntries = 10000;
+
+        internal static bool TryGetKnownCount<T>(IEnumerable<T> items, out int count)
+        {
+            if (items is ICollection<T> collection)
+            {
+                count = collection.Count;
+                return true;
+            }
+
+            if (items is IReadOnlyCollection<T> readOnlyCollection)
+            {
+                count = readOnlyCollection.Count;
+                return true;
+            }
+
+            if (items is ICollection nonGenericCollection)
+            {
+                count = nonGenericCollection.Count;
+                return true;
+            }
+
+            count = 0;
+            return false;
+        }
+
+        internal static void ThrowTooManyEntries(string collectionLabel)
+        {
+            throw new InvalidOperationException(
+                collectionLabel + " supports at most " + MaximumEntries + " entries.");
         }
     }
 
@@ -71,12 +107,17 @@ namespace QS3D.Core.Cost
             if (components == null) throw new ArgumentNullException(nameof(components));
             ValidatePercentageForScaling(overheadPercent, nameof(overheadPercent));
             ValidatePercentageForScaling(profitPercent, nameof(profitPercent));
+            if (AdvancedCostCollectionContract.TryGetKnownCount(components, out var knownComponentCount) &&
+                knownComponentCount > AdvancedCostCollectionContract.MaximumEntries)
+                AdvancedCostCollectionContract.ThrowTooManyEntries("Rate build-up component collection");
 
             var snapshot = new List<CostResourceComponent>();
             var resourceCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var component in components)
             {
+                if (index == AdvancedCostCollectionContract.MaximumEntries)
+                    AdvancedCostCollectionContract.ThrowTooManyEntries("Rate build-up component collection");
                 if (component == null)
                     throw new ArgumentException("Rate build-up contains a null component at index " + index + ".", nameof(components));
                 if (!resourceCodes.Add(component.ResourceCode))
@@ -161,11 +202,17 @@ namespace QS3D.Core.Cost
         public HistoricalCostCatalog(IEnumerable<HistoricalCostRecord> records)
         {
             if (records == null) throw new ArgumentNullException(nameof(records));
+            if (AdvancedCostCollectionContract.TryGetKnownCount(records, out var knownRecordCount) &&
+                knownRecordCount > AdvancedCostCollectionContract.MaximumEntries)
+                AdvancedCostCollectionContract.ThrowTooManyEntries("Historical cost catalog");
+
             var snapshot = new List<HistoricalCostRecord>();
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var record in records)
             {
+                if (index == AdvancedCostCollectionContract.MaximumEntries)
+                    AdvancedCostCollectionContract.ThrowTooManyEntries("Historical cost catalog");
                 if (record == null)
                     throw new ArgumentException("Historical cost catalog contains a null record at index " + index + ".", nameof(records));
                 if (!ids.Add(record.RecordId))

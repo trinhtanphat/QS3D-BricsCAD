@@ -45,12 +45,16 @@ namespace QS3D.BricsCAD.V25.Ribbon
             try { documents.DocumentCreated -= OnDocumentAvailable; } catch { }
             try { documents.DocumentActivated -= OnDocumentAvailable; } catch { }
             StopTimedRetry();
+            BltBimWorkspaceActivationCoordinator.Stop();
             HomeTabActivationCoordinator.Stop();
             Blt3dShellChromeCoordinator.Reset();
             BltHomeRibbonAugmenter.Reset();
             BltDrawRibbonAugmenter.Reset();
             BltRecognitionRibbonAugmenter.Reset();
             BltViewRibbonAugmenter.Reset();
+            BltBimRibbonMirrorAugmenter.Reset();
+            BltModelingRibbonAugmenter.Reset();
+            BltTopbarTabContract.Reset();
             RibbonBootstrapIconAugmenter.Reset();
             Qs3dRibbonTabGroupCoordinator.Reset();
         }
@@ -97,6 +101,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             if (TryInitializeAll())
             {
                 _initialized = true;
+                BltBimWorkspaceActivationCoordinator.Start();
                 StopTimedRetry();
                 return;
             }
@@ -124,9 +129,19 @@ namespace QS3D.BricsCAD.V25.Ribbon
             ready = BltRecognitionRibbonAugmenter.TryInitialize() && ready;
             ready = BltViewRibbonAugmenter.TryInitialize() && ready;
 
-            // The baseline Project/Authoring tabs are still text-only in RibbonBootstrapper.
-            // Decorate them after feature augmenters have finished so both baseline and added
-            // buttons receive QS3D-generated icons without changing their command routing.
+            // MODELING is a separate owner-reference surface. Rebuild only QS3D-owned panels
+            // into the BLT3D large-action + compact three-row layout; native/third-party
+            // Ribbon content remains untouched.
+            ready = BltModelingRibbonAugmenter.TryInitialize() && ready;
+
+            // The BLT owner reference shows the same qualified Vẽ/Công cụ/IFC surface under
+            // MÔ HÌNH BIM. Mirror the already-wired Draw panels so behavior, icons and sizing
+            // remain identical while each tab keeps independent Ribbon objects.
+            ready = BltBimRibbonMirrorAugmenter.TryInitialize() && ready;
+
+            // Decorate canonical text-only/fallback buttons only after all richer feature
+            // augmenters have supplied their own images. This preserves recognition and
+            // owner-reference Draw/Modeling/View artwork while filling genuine gaps.
             ready = RibbonBootstrapIconAugmenter.TryInitialize() && ready;
 
             // BricsCAD can invoke ICommand without forwarding RibbonButton.CommandParameter.
@@ -134,9 +149,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
             // buttons keep their captured command for both CanExecute and Execute.
             ready = RibbonCommandParameterFallback.TryInitialize() && ready;
 
-            // Keep repository ownership semantics intact: native/third-party tabs stay in the
-            // Ribbon collection, QS3D_* tabs are grouped in BLT3D order, and only shell chrome
-            // (application/QAT/search) is hidden to match the reference presentation.
+            // Retire obsolete QS3D-owned tabs (notably the old TẠO MỚI authoring tab) only
+            // after icon/command reconciliation, then group the canonical QS3D tabs, reconcile
+            // BLT3D shell chrome, and finally activate HOME without touching native tab ownership.
+            ready = BltTopbarTabContract.TryInitialize() && ready;
             ready = Qs3dRibbonTabGroupCoordinator.TryInitialize() && ready;
             ready = Blt3dShellChromeCoordinator.TryInitialize() && ready;
             ready = HomeTabActivationCoordinator.TryInitialize() && ready;
