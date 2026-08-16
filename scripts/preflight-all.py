@@ -7,14 +7,46 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SELF = Path(__file__).resolve()
+CHILD_TIMEOUT_SECONDS = 180
+
+
+def _relative_to_root(path):
+    try:
+        return path.relative_to(ROOT)
+    except ValueError as exc:
+        raise RuntimeError("feature preflight escaped repository root: " + str(path)) from exc
 
 
 def discover():
-    return [
-        path
-        for path in sorted(SCRIPTS.glob("preflight-*.py"), key=lambda p: p.name.lower())
-        if path.resolve() != SELF
-    ]
+    candidates = list(SCRIPTS.glob("preflight-*.py"))
+    validated = []
+    names = {}
+
+    for path in candidates:
+        if path.is_symlink():
+            raise RuntimeError("feature preflight must not be a symlink: " + _relative_to_root(path).as_posix())
+        if not path.is_file():
+            raise RuntimeError("feature preflight must be a regular file: " + _relative_to_root(path).as_posix())
+
+        try:
+            resolved = path.resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise RuntimeError("failed to resolve feature preflight: " + str(path) + " - " + str(exc)) from exc
+
+        _relative_to_root(resolved)
+        if resolved == SELF:
+            continue
+
+        folded = path.name.casefold()
+        prior = names.get(folded)
+        if prior is not None and prior.name != path.name:
+            raise RuntimeError(
+                "case-insensitive feature preflight filename collision: " + prior.name + " / " + path.name
+            )
+        names[folded] = path
+        validated.append(path)
+
+    return sorted(validated, key=lambda p: (p.name.casefold(), p.name))
 
 
 def escape_actions_data(value):
@@ -34,8 +66,37 @@ def emit_failure_annotation(path, reason):
     print("::error file=" + file_property + "::" + message)
 
 
+def run_gate(path, child_env):
+    rel = path.relative_to(ROOT)
+    rel_text = rel.as_posix()
+    print("\n===", rel_text, "===")
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(path)],
+            cwd=str(ROOT),
+            check=False,
+            env=child_env,
+            timeout=CHILD_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        print("ERROR:", rel_text, "timed out after", CHILD_TIMEOUT_SECONDS, "seconds.")
+        return rel_text, "timeout"
+    except OSError as exc:
+        print("ERROR: failed to start", rel_text, "-", exc)
+        return rel_text, "launch"
+
+    if completed.returncode != 0:
+        return rel_text, "exit=" + str(completed.returncode)
+    return None
+
+
 def main():
-    gates = discover()
+    try:
+        gates = discover()
+    except (OSError, RuntimeError) as exc:
+        print("ERROR: feature preflight discovery failed -", exc)
+        return 1
+
     if not gates:
         print("ERROR: no feature preflight gates were discovered.")
         return 1
@@ -43,34 +104,16 @@ def main():
     print("QS3D aggregate feature preflight")
     print("Discovered", len(gates), "feature gate(s):")
     for path in gates:
-        print(" -", path.relative_to(ROOT))
+        print(" -", path.relative_to(ROOT).as_posix())
 
     failed = []
     child_env = os.environ.copy()
     child_env["PYTHONUTF8"] = "1"
     child_env["PYTHONIOENCODING"] = "utf-8"
     for path in gates:
-        rel = path.relative_to(ROOT)
-        print("\n===", rel, "===")
-        try:
-            completed = subprocess.run(
-                [sys.executable, str(path)],
-                cwd=str(ROOT),
-                check=False,
-                env=child_env,
-                timeout=180,
-            )
-        except subprocess.TimeoutExpired:
-            print("ERROR:", rel, "timed out after 180 seconds.")
-            failed.append((str(rel), "timeout"))
-            continue
-        except OSError as exc:
-            print("ERROR: failed to start", rel, "-", exc)
-            failed.append((str(rel), "launch"))
-            continue
-
-        if completed.returncode != 0:
-            failed.append((str(rel), "exit=" + str(completed.returncode)))
+        failure = run_gate(path, child_env)
+        if failure is not None:
+            failed.append(failure)
 
     if failed:
         print("\nAggregate preflight FAILED:")
