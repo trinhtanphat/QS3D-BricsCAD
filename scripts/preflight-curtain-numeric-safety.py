@@ -30,6 +30,7 @@ CONTRACTS = {
         'throw new OverflowException(label + " underflowed to zero.");',
         'throw new OverflowException(label + " lost a positive contribution at floating-point precision.");',
         'throw new OverflowException("Curtain removed frame area was lost at floating-point precision.");',
+        'if (!(piece.Width > 0d) || !(piece.Height > 0d)) continue;',
     ),
     "src/QS3D.Core/Geometry/CurtainWallDetailPlanner.cs": (
         'throw new OverflowException("Curtain rectangle area underflowed to zero.");',
@@ -75,6 +76,7 @@ CONTRACTS = {
         "RemainingAreaLostPositiveContributionFailsClosed",
         "RemovedAreaCollapseFailsClosed",
         "FramePieceAreaUnderflowFailsClosed",
+        "SubEpsilonUninterruptedFrameRemainsPresent",
         "OrdinaryInterruptionRemainsStable",
     ),
     "tests/QS3D.Core.SmokeTests/CurtainWallDetailNumericCollapseRegistration.cs": (
@@ -108,7 +110,7 @@ def main() -> int:
     print(
         "PASS: curtain layout/detail/opening planners retain fail-closed numeric underflow, "
         "precision-collapse, grid-bound, clear-area, area-accounting, placement, zero-frame, "
-        "and coordinate-resolution guards with deterministic smoke registration."
+        "thin-frame preservation, and coordinate-resolution guards with deterministic smoke registration."
     )
     return 0
 
