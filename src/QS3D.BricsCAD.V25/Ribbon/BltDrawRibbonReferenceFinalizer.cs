@@ -15,7 +15,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
     {
         private const string AssemblyName = "BrxMgd";
         private const string DrawTabId = "QS3D_DRAW";
-        private const string IfcPanelSourceId = "QS3D_DRAW_BLT_IFC_PANEL_SOURCE";
+        private const string BimTabId = "QS3D_BIM";
+        private const string DrawIfcPanelSourceId = "QS3D_DRAW_BLT_IFC_PANEL_SOURCE";
+        private const string BimIfcPanelSourceId = "QS3D_BIM_BLT_IFC_PANEL_SOURCE";
 
         public static bool TryInitialize()
         {
@@ -26,20 +28,31 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     return false;
 
                 var tabs = GetProperty(control, "Tabs");
-                var drawTab = tabs == null ? null : FindById(tabs, DrawTabId);
-                if (drawTab == null)
+                if (tabs == null)
                     return false;
 
-                var panels = GetProperty(drawTab, "Panels");
-                if (panels == null)
+                var drawTab = FindById(tabs, DrawTabId);
+                var bimTab = FindById(tabs, BimTabId);
+                if (drawTab == null || bimTab == null)
                     return false;
 
-                var ifcPanel = FindPanelBySourceId(panels, IfcPanelSourceId);
+                var drawPanels = GetProperty(drawTab, "Panels");
+                var bimPanels = GetProperty(bimTab, "Panels");
+                if (drawPanels == null || bimPanels == null)
+                    return false;
+
+                // Keep the Draw IFC staging panel until BIM owns the independent mirrored copy.
+                // If the BIM mirror has not completed yet, fail this initialization attempt and
+                // let the bounded coordinator retry instead of silently removing IFC everywhere.
+                if (FindPanelBySourceId(bimPanels, BimIfcPanelSourceId) == null)
+                    return false;
+
+                var ifcPanel = FindPanelBySourceId(drawPanels, DrawIfcPanelSourceId);
                 if (ifcPanel == null)
                     return true;
 
-                Remove(panels, ifcPanel);
-                return FindPanelBySourceId(panels, IfcPanelSourceId) == null;
+                Remove(drawPanels, ifcPanel);
+                return FindPanelBySourceId(drawPanels, DrawIfcPanelSourceId) == null;
             }
             catch
             {
