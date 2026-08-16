@@ -45,7 +45,7 @@ namespace QS3D.Core.SmokeTests
             if (changed.Count != 1 || changed[0] != "W1") throw new Exception("Bulk multiply must report the canonical owned element once.");
             if (!wall.Properties.TryGetValue("WidthM", out var width) || width != "0.4") throw new Exception("Bulk multiply must read/write the canonical trimmed property key.");
             if (wall.Properties.Keys.Any(key => key != key.Trim())) throw new Exception("Bulk multiply must not create padded property keys.");
-            if ((wall.Dirty & ElementDirtyFlags.Geometry) == 0) throw new Exception("Canonical geometry property bulk multiply must mark generated geometry dirty.");
+            if ((wall.Dirty & ElementDirtyFlags.Geometry) == 0) throw new Exception("Bulk multiply must mark generated geometry dirty.");
         }
 
         private static void CorruptProjectFailsBeforeBulkMutation()
@@ -109,6 +109,10 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentException>(() => service.SetProperty(project, new[] { "W1", "   " }, "WidthM", "0.25"));
             if (wall.Properties["WidthM"] != "0.2" || project.ChangeVersion != version)
                 throw new Exception("Blank bulk target must reject the whole batch before mutation.");
+
+            Throws<ArgumentException>(() => service.SetProperty(project, new[] { " W1 " }, "WidthM", "0.25"));
+            if (wall.Properties["WidthM"] != "0.2" || project.ChangeVersion != version)
+                throw new Exception("Padded bulk target must fail closed before mutating its canonical element.");
 
             Throws<InvalidOperationException>(() => service.SetProperty(project, new[] { "W1", "w1" }, "WidthM", "0.25"));
             if (wall.Properties["WidthM"] != "0.2" || project.ChangeVersion != version)
