@@ -6,6 +6,8 @@ namespace QS3D.Core.Cost
 {
     public sealed class FrozenEstimateProjection
     {
+        internal const int MaxLines = 10000;
+
         private FrozenEstimateProjection(List<FrozenEstimateProjectionRow> rows)
         {
             Rows = new ReadOnlyCollection<FrozenEstimateProjectionRow>(rows.ToArray());
@@ -22,6 +24,9 @@ namespace QS3D.Core.Cost
             var index = 0;
             foreach (var line in lines)
             {
+                if (index == MaxLines)
+                    throw new InvalidOperationException(
+                        "Frozen estimate projection supports at most " + MaxLines + " estimate lines.");
                 if (line == null)
                     throw new ArgumentException("Estimate projection contains a null line at index " + index + ".", nameof(lines));
                 if (!lineIds.Add(line.EstimateLineId))
