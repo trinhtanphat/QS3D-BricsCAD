@@ -101,12 +101,25 @@ def main():
     require(init, "BltModelingRibbonAugmenter.TryInitialize()", "MODELING ribbon initialization")
     require(init, "BltModelingRibbonAugmenter.Reset();", "MODELING ribbon teardown")
 
-    # BIM ribbon is required to stay the exact qualified Vẽ / Công cụ / IFC reference surface.
+    # BIM ribbon mirrors the exact qualified Vẽ / Công cụ / IFC source panels in owner order.
+    # The Draw surface can now contain compact RibbonRowPanel/RibbonRowBreak columns, so the
+    # mirror must clone nested row items instead of assuming a flat list of RibbonButton objects.
     require_order(
         bim_ribbon,
-        ('"Vẽ"', '"Công cụ"', '"IFC"'),
+        (
+            'new PanelMirrorSpec("QS3D_DRAW_BLT_DRAW_PANEL_SOURCE", "QS3D_BIM_BLT_DRAW_PANEL_SOURCE")',
+            'new PanelMirrorSpec("QS3D_DRAW_BLT_TOOLS_PANEL_SOURCE", "QS3D_BIM_BLT_TOOLS_PANEL_SOURCE")',
+            'new PanelMirrorSpec("QS3D_DRAW_BLT_IFC_PANEL_SOURCE", "QS3D_BIM_BLT_IFC_PANEL_SOURCE")',
+        ),
         "BIM ribbon panel order",
     )
+    for token in (
+        'string.Equals(typeName, "RibbonButton", StringComparison.Ordinal)',
+        'string.Equals(typeName, "RibbonRowBreak", StringComparison.Ordinal)',
+        'string.Equals(typeName, "RibbonRowPanel", StringComparison.Ordinal)',
+        "CloneRibbonItem(sourceItem, ref buttonCount)",
+    ):
+        require(bim_ribbon, token, "BIM compact Draw mirror")
 
     # MODELING mirrors the owner screenshot: three lead groups followed by compact stacked groups.
     require_order(
@@ -177,20 +190,26 @@ def main():
     ):
         require(modeling, token, "MODELING command routing")
 
-    # Topbar remains the ten-tab owner contract and may not silently resurrect QS3D_AUTHOR.
-    for token in (
-        '"QS3D_HOME"',
-        '"QS3D_PROJECT"',
-        '"QS3D_BIM"',
-        '"QS3D_RECOGNITION"',
-        '"QS3D_DRAW"',
-        '"QS3D_TOOLS"',
-        '"QS3D_MODELING"',
-        '"QS3D_VIEW"',
-        '"QS3D_QUANTITY"',
-        '"QS3D_REVIEW"',
-    ):
-        require(topbar, token, "Topbar owner contract")
+    # Topbar remains the exact ten-tab IDs emitted by RibbonBootstrapper and may not silently
+    # resurrect QS3D_AUTHOR. Guard the production IDs, not stale aliases from older prototypes.
+    require_order(
+        topbar,
+        (
+            'new TabSpec("QS3D_HOME", "KHỞI ĐẦU")',
+            'new TabSpec("QS3D_PROJECT", "THIẾT LẬP DỰ ÁN")',
+            'new TabSpec("QS3D_BIM", "MÔ HÌNH BIM")',
+            'new TabSpec("QS3D_RECOGNIZE", "NHẬN DẠNG")',
+            'new TabSpec("QS3D_DRAW", "VẼ")',
+            'new TabSpec("QS3D_TOOL", "TOOL")',
+            'new TabSpec("QS3D_MODELING", "MODELING")',
+            'new TabSpec("QS3D_VIEW", "XEM")',
+            'new TabSpec("QS3D_QTY", "ĐỊNH LƯỢNG")',
+            'new TabSpec("QS3D_REV", "BẢN SỬA ĐỔI")',
+        ),
+        "Topbar owner contract",
+    )
+    if 'new TabSpec("QS3D_AUTHOR"' in topbar:
+        fail("Topbar owner contract must not resurrect QS3D_AUTHOR")
 
     print("PASS: BLT3D BIM + MODELING owner-reference source contract is intact.")
     return 0
