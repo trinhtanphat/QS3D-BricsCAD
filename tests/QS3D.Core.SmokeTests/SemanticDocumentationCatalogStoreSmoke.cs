@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 using QS3D.Core.Documentation;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
@@ -16,6 +17,8 @@ namespace QS3D.Core.SmokeTests
             SameCatalogDoesNotTouchProjectTwice();
             InvalidCatalogDoesNotReplaceStoredPayload();
             UnsafeXmlFailsClosed();
+            PersistedViewCountBound();
+            PersistedSheetCountBound();
             EmptyCatalogClearsMetadata();
         }
 
@@ -142,6 +145,61 @@ namespace QS3D.Core.SmokeTests
             try { new SemanticDocumentationCatalogStore().Load(project); }
             catch (InvalidDataException) { failed = true; }
             if (!failed) throw new Exception("Documentation metadata containing a DTD must fail closed.");
+        }
+
+        private static void PersistedViewCountBound()
+        {
+            var store = new SemanticDocumentationCatalogStore();
+            var exact = BuildPersistedCatalog(10000, 0);
+            if (exact.Length >= 1024 * 1024)
+                throw new Exception("View count-bound fixture must remain below the metadata character cap.");
+
+            var project = BuildProject();
+            project.Metadata[SemanticDocumentationCatalogStore.MetadataKey] = exact;
+            Equal(10000, store.Load(project).Views.Count);
+
+            project.Metadata[SemanticDocumentationCatalogStore.MetadataKey] = BuildPersistedCatalog(10001, 0);
+            MustFailLoad(
+                () => store.Load(project),
+                "Persisted documentation catalogs above the 10,000-view bound must fail closed.");
+        }
+
+        private static void PersistedSheetCountBound()
+        {
+            var store = new SemanticDocumentationCatalogStore();
+            var exact = BuildPersistedCatalog(0, 10000);
+            if (exact.Length >= 1024 * 1024)
+                throw new Exception("Sheet count-bound fixture must remain below the metadata character cap.");
+
+            var project = BuildProject();
+            project.Metadata[SemanticDocumentationCatalogStore.MetadataKey] = exact;
+            Equal(10000, store.Load(project).Sheets.Count);
+
+            project.Metadata[SemanticDocumentationCatalogStore.MetadataKey] = BuildPersistedCatalog(0, 10001);
+            MustFailLoad(
+                () => store.Load(project),
+                "Persisted documentation catalogs above the 10,000-sheet bound must fail closed.");
+        }
+
+        // Keep these generated fixtures deliberately compact so count guards, not the 1 MiB XML cap, determine the result.
+        private static string BuildPersistedCatalog(int viewCount, int sheetCount)
+        {
+            var payload = new StringBuilder("<documentation version=\"1\"><views>");
+            for (var i = 0; i < viewCount; i++)
+            {
+                payload.Append("<view id=\"V").Append(i)
+                    .Append("\" name=\"V").Append(i)
+                    .Append("\" kind=\"Plan\" floorId=\"\" zoneId=\"\"/>");
+            }
+            payload.Append("</views><sheets>");
+            for (var i = 0; i < sheetCount; i++)
+            {
+                payload.Append("<sheet id=\"S").Append(i)
+                    .Append("\" number=\"").Append(i)
+                    .Append("\" name=\"S").Append(i)
+                    .Append("\" widthMm=\"1\" heightMm=\"1\" titleBlockName=\"\"/>");
+            }
+            return payload.Append("</sheets></documentation>").ToString();
         }
 
         private static void EmptyCatalogClearsMetadata()
