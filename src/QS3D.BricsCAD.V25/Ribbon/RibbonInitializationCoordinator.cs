@@ -47,7 +47,6 @@ namespace QS3D.BricsCAD.V25.Ribbon
             StopTimedRetry();
             BltBimWorkspaceActivationCoordinator.Stop();
             HomeTabActivationCoordinator.Stop();
-            Blt3dShellChromeCoordinator.Reset();
             BltHomeRibbonAugmenter.Reset();
             BltDrawRibbonAugmenter.Reset();
             BltRecognitionRibbonAugmenter.Reset();
@@ -148,11 +147,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
             ready = RibbonCommandParameterFallback.TryInitialize() && ready;
 
             // Retire obsolete QS3D-owned tabs (notably the old TẠO MỚI authoring tab) only
-            // after icon/command reconciliation, then group the canonical QS3D tabs, reconcile
-            // BLT3D shell chrome, and finally activate HOME without touching native tab ownership.
+            // after icon/command reconciliation, then group the canonical QS3D tabs and
+            // finally activate HOME without touching native tab ownership or host chrome.
             ready = BltTopbarTabContract.TryInitialize() && ready;
             ready = Qs3dRibbonTabGroupCoordinator.TryInitialize() && ready;
-            ready = Blt3dShellChromeCoordinator.TryInitialize() && ready;
             ready = HomeTabActivationCoordinator.TryInitialize() && ready;
             return ready;
         }
