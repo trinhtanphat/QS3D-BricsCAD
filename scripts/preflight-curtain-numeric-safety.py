@@ -40,6 +40,12 @@ CONTRACTS = {
         '"curtain horizontal frame half-height placement"',
         'label + " lost a positive contribution at floating-point precision."',
         'label + " lost a positive deduction at floating-point precision."',
+        'private static int PhysicalFrameCount(',
+        'if (width == 0d) continue;',
+        'if (height == 0d) continue;',
+        'var panels = BuildPanelCells(input, layout);',
+        '"curtain panel half mullion width"',
+        '"curtain panel half transom height"',
     ),
     "tests/QS3D.Core.SmokeTests/CurtainWallLayoutUnderflowRegistration.cs": (
         "[ModuleInitializer]",
@@ -80,6 +86,11 @@ CONTRACTS = {
         "InternalHorizontalFrameHalfHeightPlacementCollapseFailsClosed",
         "half-width placement lost a positive deduction",
         "half-height placement lost a positive deduction",
+        "ZeroInternalFramesRemainValidWithoutDegenerateSolids",
+        "AllZeroFramesProducePanelOnlyDetail",
+        "MixedZeroMullionPreservesTransomSolids",
+        "zero-internal-frame panel area",
+        "all-zero-frame panel area",
     ),
 }
 
@@ -96,7 +107,8 @@ def main() -> int:
 
     print(
         "PASS: curtain layout/detail/opening planners retain fail-closed numeric underflow, "
-        "precision-collapse, grid-bound, clear-area, area-accounting, placement, and coordinate-resolution guards with deterministic smoke registration."
+        "precision-collapse, grid-bound, clear-area, area-accounting, placement, zero-frame, "
+        "and coordinate-resolution guards with deterministic smoke registration."
     )
     return 0
 
