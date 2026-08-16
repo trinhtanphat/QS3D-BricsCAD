@@ -2,8 +2,9 @@ using System;
 using System.Collections;
 using System.Linq;
 using System.Reflection;
+using System.Windows;
 using System.Windows.Input;
-using Bricscad.ApplicationServices;
+using QS3D.BricsCAD.V25.Updates;
 
 namespace QS3D.BricsCAD.V25.Ribbon
 {
@@ -17,23 +18,25 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private sealed class ButtonSpec
         {
-            public ButtonSpec(string id, string text, string command)
+            public ButtonSpec(string id, string text, Action action, RibbonIconKind icon)
             {
                 Id = id;
                 Text = text;
-                Command = command;
+                Action = action ?? throw new ArgumentNullException(nameof(action));
+                Icon = icon;
             }
 
             public string Id { get; }
             public string Text { get; }
-            public string Command { get; }
+            public Action Action { get; }
+            public RibbonIconKind Icon { get; }
         }
 
         private static readonly ButtonSpec[] Buttons =
         {
-            new ButtonSpec("QS3D_HOME_UPDATE_CHECK", "Cập nhật QS3D", "QS3DUPDATE"),
-            new ButtonSpec("QS3D_HOME_UPDATE_ON_CLOSE", "Update khi đóng", "QS3DUPDATEONCLOSE"),
-            new ButtonSpec("QS3D_HOME_UPDATE_STATUS", "Trạng thái Update", "QS3DUPDATESTATUS")
+            new ButtonSpec("QS3D_HOME_UPDATE_CHECK", "Cập nhật QS3D", () => new UpdateCommands().ShowUpdateCenter(), RibbonIconKind.Update),
+            new ButtonSpec("QS3D_HOME_UPDATE_ON_CLOSE", "Update khi đóng", ToggleInstallOnExit, RibbonIconKind.UpdateOnClose),
+            new ButtonSpec("QS3D_HOME_UPDATE_STATUS", "Trạng thái Update", ShowUpdateStatus, RibbonIconKind.UpdateStatus)
         };
 
         public static bool TryInitialize()
@@ -59,28 +62,14 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 if (homeTab == null) return false;
 
                 var panels = GetProperty(homeTab, "Panels");
-                if (!(panels is IEnumerable panelEnumerable)) return false;
-                var source = FindPanelSource(panelEnumerable, PanelSourceId) ?? CreateUpdatePanel(panels);
+                if (panels == null) return false;
+                RemoveOwnedPanel(panels);
+                var source = CreateUpdatePanel(panels);
                 var items = GetProperty(source, "Items");
                 if (items == null) return false;
 
                 foreach (var spec in Buttons)
-                {
-                    var button = FindById(items, spec.Id);
-                    if (button == null)
-                    {
-                        button = Create("Bricscad.Windows.RibbonButton");
-                        SetProperty(button, "Id", spec.Id);
-                        Add(items, button);
-                    }
-
-                    SetProperty(button, "Name", spec.Text);
-                    SetProperty(button, "Text", spec.Text);
-                    SetProperty(button, "ShowText", true);
-                    SetProperty(button, "ShowImage", false);
-                    SetProperty(button, "CommandParameter", spec.Command);
-                    SetProperty(button, "CommandHandler", new CommandHandler());
-                }
+                    Add(items, CreateButton(spec));
 
                 _initialized = true;
                 return true;
@@ -93,17 +82,69 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         public static void Reset() => _initialized = false;
 
-        private static object? FindPanelSource(IEnumerable panels, string sourceId)
+        private static object CreateButton(ButtonSpec spec)
         {
-            foreach (var panel in panels)
+            var button = Create("Bricscad.Windows.RibbonButton");
+            SetProperty(button, "Id", spec.Id);
+            SetProperty(button, "Name", spec.Text);
+            SetProperty(button, "Text", spec.Text);
+            SetProperty(button, "ShowText", true);
+            SetProperty(button, "ShowImage", true);
+            SetProperty(button, "CommandParameter", spec.Id);
+            SetProperty(button, "CommandHandler", new DirectActionHandler(spec.Action));
+            SetEnumProperty(button, "Size", "Large");
+            SetProperty(button, "Image", RibbonIconFactory.Create(spec.Icon, 16));
+            SetProperty(button, "LargeImage", RibbonIconFactory.Create(spec.Icon, 32));
+            return button;
+        }
+
+        private static void ToggleInstallOnExit()
+        {
+            var enabled = !UpdatePreferences.InstallOnExit;
+            if (!UpdatePreferences.TrySetInstallOnExit(enabled, out var error))
+                throw new InvalidOperationException(error);
+
+            MessageBox.Show(
+                enabled
+                    ? "Đã bật cập nhật khi đóng BricsCAD. Khi có gói cập nhật đã được xác thực, QS3D có thể hoàn tất cài đặt sau khi ứng dụng đóng."
+                    : "Đã tắt cập nhật khi đóng BricsCAD.",
+                "QS3D — Update khi đóng",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
+        private static void ShowUpdateStatus()
+        {
+            var assembly = typeof(UpdateCommands).Assembly;
+            var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            var version = string.IsNullOrWhiteSpace(informational)
+                ? assembly.GetName().Version?.ToString() ?? "unknown"
+                : informational!.Split('+')[0];
+            var installOnExit = UpdatePreferences.InstallOnExit ? "Bật" : "Tắt";
+
+            MessageBox.Show(
+                "Phiên bản đang chạy: " + version + "\nUpdate khi đóng: " + installOnExit + "\n\nNhấn “Cập nhật QS3D” để mở trung tâm cập nhật và kiểm tra release mới.",
+                "QS3D — Trạng thái Update",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
+        private static void RemoveOwnedPanel(object panels)
+        {
+            if (!(panels is IEnumerable enumerable)) return;
+            object? match = null;
+            foreach (var panel in enumerable)
             {
                 if (panel == null) continue;
                 var source = GetProperty(panel, "Source");
                 if (source == null) continue;
-                if (string.Equals(GetProperty(source, "Id") as string, sourceId, StringComparison.OrdinalIgnoreCase))
-                    return source;
+                if (string.Equals(GetProperty(source, "Id") as string, PanelSourceId, StringComparison.OrdinalIgnoreCase))
+                {
+                    match = panel;
+                    break;
+                }
             }
-            return null;
+            if (match != null) Remove(panels, match);
         }
 
         private static object CreateUpdatePanel(object panels)
@@ -153,6 +194,14 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 property.SetValue(target, value, null);
         }
 
+        private static void SetEnumProperty(object target, string name, string enumValue)
+        {
+            var property = target.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public);
+            if (property == null || !property.CanWrite || !property.PropertyType.IsEnum) return;
+            try { property.SetValue(target, Enum.Parse(property.PropertyType, enumValue, true), null); }
+            catch { }
+        }
+
         private static void Add(object collection, object item)
         {
             var method = collection.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public)
@@ -161,25 +210,32 @@ namespace QS3D.BricsCAD.V25.Ribbon
             method.Invoke(collection, new[] { item });
         }
 
-        private static object? FindById(object collection, string id)
+        private static void Remove(object collection, object item)
         {
-            if (!(collection is IEnumerable enumerable)) return null;
-            foreach (var item in enumerable)
-            {
-                if (item == null) continue;
-                if (string.Equals(GetProperty(item, "Id") as string, id, StringComparison.OrdinalIgnoreCase)) return item;
-            }
-            return null;
+            var method = collection.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public)
+                .FirstOrDefault(x => x.Name == "Remove" && x.GetParameters().Length == 1 && x.GetParameters()[0].ParameterType.IsAssignableFrom(item.GetType()));
+            if (method == null) throw new InvalidOperationException("Ribbon collection does not expose a compatible Remove method.");
+            method.Invoke(collection, new[] { item });
         }
 
-        private sealed class CommandHandler : ICommand
+        private sealed class DirectActionHandler : ICommand
         {
-            public bool CanExecute(object? parameter) => parameter is string command && !string.IsNullOrWhiteSpace(command);
+            private readonly Action _action;
+
+            public DirectActionHandler(Action action)
+            {
+                _action = action ?? throw new ArgumentNullException(nameof(action));
+            }
+
+            public bool CanExecute(object? parameter) => true;
 
             public void Execute(object? parameter)
             {
-                if (!(parameter is string command) || string.IsNullOrWhiteSpace(command)) return;
-                Application.DocumentManager.MdiActiveDocument?.SendStringToExecute(command + " ", true, false, false);
+                try { _action(); }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
 
             public event EventHandler? CanExecuteChanged { add { } remove { } }

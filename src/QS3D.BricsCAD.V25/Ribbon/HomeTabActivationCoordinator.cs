@@ -2,14 +2,12 @@ using System;
 using System.Collections;
 using System.Reflection;
 using System.Windows.Threading;
-using Bricscad.ApplicationServices;
-using Application = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.Ribbon
 {
     /// <summary>
-    /// Watches only the selected Ribbon tab and launches QS3DSTART on a transition into
-    /// QS3D_HOME. Polling is intentionally reflection-only so the source stays tolerant of
+    /// Watches only the selected Ribbon tab and opens the QS3D Start Center directly on a
+    /// transition into QS3D_HOME. Polling is reflection-only so the source stays tolerant of
     /// BricsCAD minor-version Ribbon event-shape differences.
     /// </summary>
     internal static class HomeTabActivationCoordinator
@@ -76,11 +74,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 if (!string.Equals(selectedId, HomeTabId, StringComparison.OrdinalIgnoreCase))
                     return;
 
-                var document = Application.DocumentManager.MdiActiveDocument;
-                if (document == null)
-                    return;
-
-                try { document.SendStringToExecute("QS3DSTART ", true, false, false); }
+                try { new StartCenterCommands().ShowStartCenter(); }
                 catch { }
             }
             catch
@@ -117,8 +111,6 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     return id;
             }
 
-            // Autodesk/BricsCAD Ribbon variants commonly expose selection on each tab
-            // instead of on RibbonControl. Scan only booleans; never mutate host tabs.
             if (tabs is IEnumerable enumerable)
             {
                 foreach (var tab in enumerable)
