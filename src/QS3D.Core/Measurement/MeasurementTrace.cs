@@ -188,18 +188,31 @@ namespace QS3D.Core.Measurement
             double grossValue,
             IReadOnlyList<MeasurementTraceAdjustment> adjustments)
         {
-            var reconciled = grossValue;
+            var sum = grossValue;
+            var compensation = 0d;
             for (var i = 0; i < adjustments.Count; i++)
             {
                 var adjustment = adjustments[i];
-                var next = adjustment.Kind == MeasurementTraceAdjustmentKind.Deduction
-                    ? reconciled - adjustment.Amount
-                    : reconciled + adjustment.Amount;
+                var term = adjustment.Kind == MeasurementTraceAdjustmentKind.Deduction
+                    ? -adjustment.Amount
+                    : adjustment.Amount;
+                var next = sum + term;
                 if (double.IsNaN(next) || double.IsInfinity(next))
                     return ReconcileNetValueScaled(grossValue, adjustments);
-                reconciled = next;
+
+                compensation += Math.Abs(sum) >= Math.Abs(term)
+                    ? (sum - next) + term
+                    : (term - next) + sum;
+                if (double.IsNaN(compensation) || double.IsInfinity(compensation))
+                    return ReconcileNetValueScaled(grossValue, adjustments);
+
+                sum = next;
             }
-            return reconciled;
+
+            var reconciled = sum + compensation;
+            if (double.IsNaN(reconciled) || double.IsInfinity(reconciled))
+                return ReconcileNetValueScaled(grossValue, adjustments);
+            return reconciled == 0d ? 0d : reconciled;
         }
 
         private static double ReconcileNetValueScaled(

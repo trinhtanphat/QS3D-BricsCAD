@@ -54,6 +54,7 @@ namespace QS3D.BricsCAD.V25
             TryCleanup(QuantityContextMenuCoordinator.Stop);
             TryCleanup(RibbonInitializationCoordinator.Stop);
             TryCleanup(DocumentLifecycleCoordinator.Stop);
+            TryCleanup(StartCenterPaletteCoordinator.Dispose);
             TryCleanup(PaletteCoordinator.Dispose);
             TryCleanup(UpdateRibbonAugmenter.Reset);
             TryCleanup(QuantityReferenceRibbonAugmenter.Reset);

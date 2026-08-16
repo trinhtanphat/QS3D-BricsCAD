@@ -244,10 +244,37 @@ namespace QS3D.Core.Geometry
 
         private static double ClosedPerimeter(IReadOnlyList<Point2> polygon)
         {
-            var total = 0d;
+            var sum = 0d;
+            var compensation = 0d;
             for (var index = 0; index < polygon.Count; index++)
-                total = Add(total, polygon[index].DistanceTo(polygon[(index + 1) % polygon.Count]), "wall-pier path perimeter");
-            return total;
+                AddCompensated(ref sum, ref compensation, polygon[index].DistanceTo(polygon[(index + 1) % polygon.Count]), "wall-pier path perimeter");
+            return FinalizeCompensated(sum, compensation, "wall-pier path perimeter");
+        }
+
+        private static void AddCompensated(ref double sum, ref double compensation, double value, string label)
+        {
+            if (!IsFinite(sum) || !IsFinite(compensation) || !IsFinite(value))
+                throw new OverflowException(label + " contains a non-finite value.");
+
+            var next = sum + value;
+            if (!IsFinite(next)) throw new OverflowException(label + " overflowed.");
+            var correction = Math.Abs(sum) >= Math.Abs(value)
+                ? (sum - next) + value
+                : (value - next) + sum;
+            var nextCompensation = compensation + correction;
+            if (!IsFinite(nextCompensation)) throw new OverflowException(label + " overflowed.");
+
+            sum = next == 0d ? 0d : next;
+            compensation = nextCompensation == 0d ? 0d : nextCompensation;
+        }
+
+        private static double FinalizeCompensated(double sum, double compensation, string label)
+        {
+            if (!IsFinite(sum) || !IsFinite(compensation))
+                throw new OverflowException(label + " contains a non-finite value.");
+            var result = sum + compensation;
+            if (!IsFinite(result)) throw new OverflowException(label + " overflowed.");
+            return result == 0d ? 0d : result;
         }
 
         private static double CoordinateScale(IReadOnlyList<Point2> polygon)
@@ -302,5 +329,7 @@ namespace QS3D.Core.Geometry
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new OverflowException(label + " must be finite.");
             return value;
         }
+
+        private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
     }
 }
