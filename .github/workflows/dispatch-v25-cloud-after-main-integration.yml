@@ -31,6 +31,8 @@ jobs:
   dispatch:
     if: ${{ github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-latest
+    env:
+      MINIMUM_RELEASE_CHANGES: "10"
     steps:
       - name: Debounce adjacent integration landings
         if: ${{ github.event_name == 'push' }}
@@ -38,11 +40,11 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           fetch-tags: true
           persist-credentials: false
 
-      - name: Reserve preview ordinal and dispatch triggering main SHA
+      - name: Gate batch, reserve preview ordinal and dispatch exact main SHA
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -53,6 +55,7 @@ jobs:
             echo "Triggering source SHA is not one exact 40-hex commit: ${source_sha}" >&2
             exit 1
           fi
+
           current_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
           echo "Triggering integration source: ${source_sha}"
           echo "Current main at dispatch time: ${current_main}"
@@ -73,13 +76,43 @@ jobs:
               esac
             done < <(git diff --name-only "${source_sha}..${current_main}" --)
             if (( release_relevant_drift != 0 )); then
-              echo "main advanced with release-relevant changes; superseded dispatcher ${source_sha} exits before reservation/dispatch. Newer relevant main push owns the next release."
+              echo "main advanced with release-relevant changes; superseded dispatcher ${source_sha} exits before reservation/dispatch. Newer relevant main push owns the next release decision."
               exit 0
             fi
             echo "main advanced only through non-release paths; dispatch remains pinned to ${source_sha}. Release preparation may absorb that inert main drift without changing source provenance."
           fi
 
           git fetch --force --tags origin
+
+          active_release_runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release-v25-cloud.yml/runs?per_page=30" --jq '[.workflow_runs[] | select(.status != "completed")] | length')"
+          if [[ ! "${active_release_runs}" =~ ^[0-9]+$ ]]; then
+            echo "Could not determine active V25 cloud release-run count: ${active_release_runs}" >&2
+            exit 1
+          fi
+          if (( active_release_runs > 0 )); then
+            echo "A V25 cloud release is already queued or running; this landing stays pending for the next batch decision."
+            exit 0
+          fi
+
+          gate_args=(
+            scripts/v25-release-batch-gate.py
+            --source-sha "${source_sha}"
+            --minimum-changes "${MINIMUM_RELEASE_CHANGES}"
+            --require-ready
+          )
+          set +e
+          python "${gate_args[@]}"
+          gate_status=$?
+          set -e
+          if (( gate_status == 3 )); then
+            echo "Preview batch is not yet eligible; no release ordinal is reserved and no release workflow is dispatched."
+            exit 0
+          fi
+          if (( gate_status != 0 )); then
+            echo "Preview batch evaluation failed with exit ${gate_status}." >&2
+            exit "${gate_status}"
+          fi
+
           series_prefix="v0.1.0-preview."
           reservation_issue=1441
           reservation_prefix="QS3D_V25_PREVIEW_RESERVATION"

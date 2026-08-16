@@ -16,6 +16,7 @@ namespace QS3D.Core.Domain
 
         private const int MaxFloors = 2000;
         private const int MaxNameLength = 120;
+        private static readonly double MaxElevationNoOpToleranceM = new GeometryTolerancePolicy().PointToleranceM;
 
         public static FloorDefinition Create(ProjectState project, string id, string name, double elevationM)
         {
@@ -450,7 +451,8 @@ namespace QS3D.Core.Domain
         private static bool NearlyEqual(double left, double right)
         {
             var scale = Math.Max(1d, Math.Max(Math.Abs(left), Math.Abs(right)));
-            return Math.Abs(left - right) <= scale * 1e-12d;
+            var relativeTolerance = scale * 1e-12d;
+            return Math.Abs(left - right) <= Math.Min(relativeTolerance, MaxElevationNoOpToleranceM);
         }
     }
 }
