@@ -46,8 +46,10 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
     def mutate(self, fixture, relative, old, new):
         path = fixture / relative
         text = path.read_text(encoding="utf-8")
-        self.assertIn(old, text, f"mutation anchor missing in {relative}: {old}")
-        path.write_text(text.replace(old, new, 1), encoding="utf-8")
+        self.assertEqual(1, text.count(old), f"mutation anchor must be unique in {relative}: {old}")
+        mutated = text.replace(old, new, 1)
+        self.assertNotIn(old, mutated, f"mutation replacement retained guard anchor in {relative}: {old}")
+        path.write_text(mutated, encoding="utf-8")
 
     def assert_rejected(self, relative, old, new, expected):
         temporary, fixture = self.make_fixture()
