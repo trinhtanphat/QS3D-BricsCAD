@@ -160,7 +160,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
         private static bool IsOwnedTab(object tab)
         {
             var id = GetProperty(tab, "Id") as string;
-            return !string.IsNullOrWhiteSpace(id)
+            return id != null
+                   && !string.IsNullOrWhiteSpace(id)
                    && id.StartsWith(OwnedTabPrefix, StringComparison.OrdinalIgnoreCase);
         }
 
