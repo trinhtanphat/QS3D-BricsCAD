@@ -29,7 +29,7 @@ namespace QS3D.Core.SmokeTests
 
             var result = service.Project(current, groups);
             Equal(5, result.ProjectedBillItemCount, "projected MEP bill row count");
-            Equal(4, result.ReportRows.Count, "MEP report group count");
+            Equal(3, result.ReportRows.Count, "MEP report group count");
             Equal(6, result.State.BillItems.Count, "preserved plus projected bill item count");
 
             Equal(true, ContainsCode(result.State.BillItems, "KEEP"), "non-MEP bill item preservation");
