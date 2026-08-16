@@ -48,19 +48,34 @@ def main():
         require(finalize, "signedExecutablePayload", "signed executable metadata")
         require(prefs, 'InstallOnExitValue = "InstallOnExit"', "update preference")
         require(prefs, "ReadBoolean(InstallOnExitValue, false)", "safe update-on-close default")
-        require(settings, '[CommandMethod("QS3DUPDATEONCLOSE"', "update-on-close command")
-        require(settings, '[CommandMethod("QS3DUPDATESTATUS"', "update status command")
+        require(settings, '[CommandMethod("QS3DUPDATEONCLOSE"', "update-on-close compatibility command")
+        require(settings, '[CommandMethod("QS3DUPDATESTATUS"', "update status compatibility command")
         require(coordinator, "_ = CheckAsync(true);", "automatic startup update check")
         require(center, 'MakeButton("Cập nhật ngay", true)', "Update Center")
         for token in ("TryScheduleVerifiedUpdateOnExit();", "UpdatePreferences.InstallOnExit", "result.CanAutoInstall", "SecureUpdateLauncher.TrySchedule(release, out _)"): require(bootstrap, token, "update-on-close lifecycle")
         for token in ("while (Get-Process -Name bricscad", "Get-AuthenticodeSignature -LiteralPath $updater", "Start-Process -FilePath $bricscad"): require(secure, token, "detached updater")
-        for token in ('PanelTitle = "Hệ thống"', '"Cập nhật QS3D", "QS3DUPDATE"', '"Update khi đóng", "QS3DUPDATEONCLOSE"', '"Trạng thái Update", "QS3DUPDATESTATUS"'): require(ribbon, token, "update ribbon")
+
+        for token in (
+            'PanelTitle = "Hệ thống"',
+            '"Cập nhật QS3D", () => new UpdateCommands().ShowUpdateCenter()',
+            '"Update khi đóng", ToggleInstallOnExit',
+            '"Trạng thái Update", ShowUpdateStatus',
+            'UpdatePreferences.TrySetInstallOnExit',
+            'UpdatePreferences.InstallOnExit',
+            'DirectActionHandler',
+            'SetProperty(button, "ShowImage", true)',
+            'SetProperty(button, "LargeImage", RibbonIconFactory.Create',
+        ):
+            require(ribbon, token, "update ribbon")
+        forbid(ribbon, "SendStringToExecute", "update ribbon")
+        forbid(ribbon, 'new CommandHandler()', "update ribbon")
+
         require(ribbon_coord, "UpdateRibbonAugmenter.TryInitialize()", "update ribbon retry bootstrap")
         require(entry, "RibbonInitializationCoordinator.Start();", "ribbon bootstrap")
         require(entry, "TryCleanup(UpdateRibbonAugmenter.Reset);", "contained update ribbon teardown")
     except (OSError, UnicodeError, AssertionError, ValueError) as exc:
         print("ERROR:", exc); return 1
-    print("PASS: secure install/recovery, signed provenance, update-on-close and retry-coordinated update Ribbon UX remain guarded with contained teardown.")
+    print("PASS: secure update lifecycle remains guarded while Home update controls use direct button actions and rasterized icons instead of host command dispatch.")
     return 0
 
 if __name__ == "__main__": raise SystemExit(main())
