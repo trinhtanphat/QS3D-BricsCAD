@@ -83,7 +83,9 @@ namespace QS3D.Core.Services
                     throw new InvalidOperationException("Locate root selection cannot exceed " + MaxRootElementIdInputCount + " input entries.");
                 inputCount++;
                 if (string.IsNullOrWhiteSpace(rawId)) continue;
-                roots.Add(rawId.Trim());
+                if (!string.Equals(rawId, rawId.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Locate root selection contains a non-canonical semantic element id. Refresh the semantic selection and retry Locate.");
+                roots.Add(rawId);
             }
             return roots.AsReadOnly();
         }
