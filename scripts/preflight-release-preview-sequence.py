@@ -11,6 +11,7 @@ TAG_RE = re.compile(
     r"(?P<patch>0|[1-9][0-9]*)-preview\."
     r"(?P<ordinal>[1-9][0-9]*)$"
 )
+PINNED_CHECKOUT_V7 = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
 
 
 def fail(message: str) -> None:
@@ -104,7 +105,7 @@ def main() -> int:
     if "GITHUB_RUN_NUMBER" in dispatcher or "10000 +" in dispatcher:
         fail("automatic dispatcher must not derive public preview ordinals from Actions run numbering")
     for token in (
-        "actions/checkout@v7",
+        PINNED_CHECKOUT_V7,
         "git fetch --force --tags origin",
         'series_prefix="v0.1.0-preview."',
         'git tag --list "${series_prefix}*"',
