@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ASSET = ROOT / "assets" / "branding" / "qs3d-logo.svg"
 FACTORY = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "Qs3dBrandIconFactory.cs"
 HOME = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "BltHomeRibbonAugmenter.cs"
+BOOTSTRAP = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "RibbonBootstrapIconAugmenter.cs"
 
 
 def fail(message: str) -> None:
@@ -17,14 +18,20 @@ def require(text: str, needle: str, label: str) -> None:
         fail(f"{label}: expected source contract not found: {needle}")
 
 
+def forbid(text: str, needle: str, label: str) -> None:
+    if needle in text:
+        fail(f"{label}: forbidden source contract found: {needle}")
+
+
 def main() -> int:
-    for path in (ASSET, FACTORY, HOME):
+    for path in (ASSET, FACTORY, HOME, BOOTSTRAP):
         if not path.is_file():
             fail(f"missing required branding source: {path.relative_to(ROOT)}")
 
     asset = ASSET.read_text(encoding="utf-8")
     factory = FACTORY.read_text(encoding="utf-8")
     home = HOME.read_text(encoding="utf-8")
+    bootstrap = BOOTSTRAP.read_text(encoding="utf-8")
 
     for token in (
         "QS3D CAD",
@@ -56,6 +63,17 @@ def main() -> int:
     ):
         require(home, token, "QS3D-owned system ribbon branding")
 
+    # The late bootstrap decorator must never regress an unclassified QS3D action back to the
+    # old generic four-dot Objects placeholder. Rich buttons keep their own semantic images and
+    # truly unknown command-bearing buttons use the same repository-owned QS3D brand mark.
+    for token in (
+        "if (icon == RibbonIconKind.Qs3dLogo)",
+        "return Qs3dBrandIconFactory.Create(pixelSize);",
+        "return RibbonIconKind.Qs3dLogo;",
+    ):
+        require(bootstrap, token, "canonical Ribbon brand fallback")
+    forbid(bootstrap, "return RibbonIconKind.Objects;", "canonical Ribbon brand fallback")
+
     for forbidden in (
         "ApplicationIcon",
         "SetApplicationIcon",
@@ -66,8 +84,9 @@ def main() -> int:
             fail(f"QS3D ribbon branding must not replace BricsCAD host icon: {forbidden}")
 
     print(
-        "PASS: QS3D-owned system Ribbon action uses the repository-approved cube mark while "
-        "BricsCAD host/application icon ownership remains untouched."
+        "PASS: QS3D-owned system Ribbon action uses the repository-approved cube mark, unknown "
+        "QS3D command buttons cannot fall back to the generic Objects placeholder, and BricsCAD "
+        "host/application icon ownership remains untouched."
     )
     return 0
 
