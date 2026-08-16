@@ -68,28 +68,17 @@ namespace QS3D.Core.Diagnostics
                 var count = Integer(element, "GeneratedCurtainFrameCount", issues, "CURTAIN_FRAME_COUNT_INVALID");
                 var columns = Integer(element, "GeneratedCurtainFrameColumns", issues, "CURTAIN_FRAME_COLUMNS_INVALID");
                 var rows = Integer(element, "GeneratedCurtainFrameRows", issues, "CURTAIN_FRAME_ROWS_INVALID");
-                var baseCount = OptionalInteger(element, "GeneratedCurtainFrameBaseCount", false, issues, "CURTAIN_FRAME_BASE_COUNT_INVALID");
+                var baseCount = OptionalInteger(element, "GeneratedCurtainFrameBaseCount", true, issues, "CURTAIN_FRAME_BASE_COUNT_INVALID");
                 var openingCount = OptionalInteger(element, "GeneratedCurtainFrameOpeningCount", true, issues, "CURTAIN_FRAME_OPENING_COUNT_INVALID") ?? 0;
                 if (count.HasValue && count.Value != validCount)
                     issues.Add(new ModelHealthIssue("CURTAIN_FRAME_COUNT_MISMATCH", HealthSeverity.Warning, "GeneratedCurtainFrameCount không khớp số handle hợp lệ.", element.Id));
-                if (columns.HasValue && rows.HasValue)
-                {
-                    int expectedBase;
-                    try { expectedBase = checked(columns.Value + rows.Value + 2); }
-                    catch (OverflowException) { expectedBase = -1; }
-                    if (expectedBase < 0)
-                        issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GRID_COUNT_MISMATCH", HealthSeverity.Warning, "Curtain frame grid count bị overflow.", element.Id));
-                    else if (baseCount.HasValue && baseCount.Value != expectedBase)
-                        issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GRID_COUNT_MISMATCH", HealthSeverity.Warning, "GeneratedCurtainFrameBaseCount không khớp Columns+Rows+2.", element.Id));
-                    else if (!baseCount.HasValue && openingCount == 0 && count.HasValue && count.Value != expectedBase)
-                        issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GRID_COUNT_MISMATCH", HealthSeverity.Warning, "Legacy curtain frame count không khớp Columns+Rows+2.", element.Id));
-                }
 
                 var storedDepth = PositiveValue(element, "GeneratedCurtainFrameDepthM", "CURTAIN_FRAME_DEPTH_INVALID", "CURTAIN_FRAME_DEPTH_NON_CANONICAL", issues);
                 var storedLength = PositiveValue(element, "GeneratedCurtainFrameSourceLengthM", "CURTAIN_FRAME_SOURCE_LENGTH_INVALID", "CURTAIN_FRAME_SOURCE_LENGTH_NON_CANONICAL", issues);
                 var storedHeight = PositiveValue(element, "GeneratedCurtainFrameHeightM", "CURTAIN_FRAME_HEIGHT_INVALID", "CURTAIN_FRAME_HEIGHT_NON_CANONICAL", issues);
                 CompareCurrent(element, "LengthM", storedLength, "CURTAIN_FRAME_SOURCE_LENGTH_STALE", issues);
                 var family = project.FindFamily(element.FamilyId);
+                CurtainWallFrameFingerprintInput? matchingCurrentConfig = null;
                 try
                 {
                     double currentHeight;
@@ -113,7 +102,7 @@ namespace QS3D.Core.Diagnostics
                         currentBottom = Number(element, family, "BottomOffsetM", 0d, false);
                     }
                     CompareValue(element, "HeightM", currentHeight, storedHeight, "CURTAIN_FRAME_HEIGHT_STALE", issues);
-                    ValidateConfigFingerprint(project, element, storedLength, storedHeight, storedDepth, currentHeight, currentBottom, issues);
+                    matchingCurrentConfig = ValidateConfigFingerprint(project, element, storedLength, storedHeight, storedDepth, currentHeight, currentBottom, issues);
                 }
                 catch (Exception ex) when (IsConfigDataFailure(ex))
                 {
@@ -123,6 +112,8 @@ namespace QS3D.Core.Diagnostics
                         "Không thể kiểm tra cao độ/config curtain frame hiện tại vì semantic/family config không hợp lệ.",
                         element.Id));
                 }
+
+                ValidateBaseFrameCount(element, count, columns, rows, baseCount, openingCount, matchingCurrentConfig, issues);
 
                 var rawMode = element.Properties.TryGetValue("GeneratedCurtainFrameMode", out var modeRaw) ? modeRaw ?? string.Empty : string.Empty;
                 var mode = rawMode.Trim();
@@ -163,7 +154,62 @@ namespace QS3D.Core.Diagnostics
             return issues.AsReadOnly();
         }
 
-        private static void ValidateConfigFingerprint(
+        private static void ValidateBaseFrameCount(
+            ProjectElement element,
+            int? generatedCount,
+            int? columns,
+            int? rows,
+            int? baseCount,
+            int openingCount,
+            CurtainWallFrameFingerprintInput? matchingCurrentConfig,
+            List<ModelHealthIssue> issues)
+        {
+            if (!columns.HasValue || !rows.HasValue) return;
+
+            int conceptualMaximum;
+            try { conceptualMaximum = checked(columns.Value + rows.Value + 2); }
+            catch (OverflowException)
+            {
+                issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GRID_COUNT_MISMATCH", HealthSeverity.Warning, "Curtain frame grid count bị overflow.", element.Id));
+                return;
+            }
+
+            if (baseCount.HasValue)
+            {
+                if (baseCount.Value > conceptualMaximum)
+                {
+                    issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GRID_COUNT_MISMATCH", HealthSeverity.Warning, "GeneratedCurtainFrameBaseCount vượt số vị trí frame tối đa của grid.", element.Id));
+                    return;
+                }
+
+                if (matchingCurrentConfig != null)
+                {
+                    int expectedPhysical;
+                    try { expectedPhysical = ExpectedPhysicalBaseFrameCount(columns.Value, rows.Value, matchingCurrentConfig); }
+                    catch (OverflowException)
+                    {
+                        issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GRID_COUNT_MISMATCH", HealthSeverity.Warning, "Curtain physical frame count bị overflow.", element.Id));
+                        return;
+                    }
+                    if (baseCount.Value != expectedPhysical)
+                        issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GRID_COUNT_MISMATCH", HealthSeverity.Warning, "GeneratedCurtainFrameBaseCount không khớp số physical frame có width > 0 của grid/config hiện tại.", element.Id));
+                }
+                return;
+            }
+
+            if (openingCount == 0 && generatedCount.HasValue && generatedCount.Value != conceptualMaximum)
+                issues.Add(new ModelHealthIssue("CURTAIN_FRAME_GRID_COUNT_MISMATCH", HealthSeverity.Warning, "Legacy curtain frame count không khớp Columns+Rows+2.", element.Id));
+        }
+
+        private static int ExpectedPhysicalBaseFrameCount(int columns, int rows, CurtainWallFrameFingerprintInput config)
+        {
+            return checked(
+                (config.PerimeterFrameWidthM > 0d ? 4 : 0) +
+                (config.MullionWidthM > 0d ? columns - 1 : 0) +
+                (config.TransomWidthM > 0d ? rows - 1 : 0));
+        }
+
+        private static CurtainWallFrameFingerprintInput? ValidateConfigFingerprint(
             ProjectState project,
             ProjectElement element,
             double? storedLength,
@@ -176,13 +222,13 @@ namespace QS3D.Core.Diagnostics
             if (!element.Properties.TryGetValue("GeneratedCurtainFrameConfigFingerprint", out var storedFingerprint) || string.IsNullOrWhiteSpace(storedFingerprint))
             {
                 issues.Add(new ModelHealthIssue("CURTAIN_FRAME_CONFIG_FINGERPRINT_MISSING", HealthSeverity.Warning, "Thiếu GeneratedCurtainFrameConfigFingerprint; rebuild curtain frames để nâng metadata.", element.Id));
-                return;
+                return null;
             }
-            if (!storedLength.HasValue || !storedHeight.HasValue || !storedDepth.HasValue) return;
+            if (!storedLength.HasValue || !storedHeight.HasValue || !storedDepth.HasValue) return null;
             try
             {
                 var family = project.FindFamily(element.FamilyId);
-                var current = CurtainWallFrameFingerprint.Compute(new CurtainWallFrameFingerprintInput
+                var input = new CurtainWallFrameFingerprintInput
                 {
                     LengthM = Number(element, family, "LengthM", storedLength.Value, true),
                     HeightM = currentHeight,
@@ -193,12 +239,17 @@ namespace QS3D.Core.Diagnostics
                     MullionWidthM = Number(element, family, "CurtainMullionWidthM", 0.05d, false, true),
                     TransomWidthM = Number(element, family, "CurtainTransomWidthM", 0.05d, false, true),
                     FrameDepthM = Number(element, family, "CurtainFrameDepthM", storedDepth.Value, true)
-                });
+                };
+                var current = CurtainWallFrameFingerprint.Compute(input);
                 var normalizedStored = storedFingerprint.Trim();
                 if (!string.Equals(current, normalizedStored, StringComparison.OrdinalIgnoreCase))
+                {
                     issues.Add(new ModelHealthIssue("CURTAIN_FRAME_CONFIG_STALE", HealthSeverity.Warning, "Panel grid/frame depth/offset hiện tại không còn khớp generated curtain frames; rebuild curtain frames.", element.Id));
-                else if (!string.Equals(current, storedFingerprint, StringComparison.Ordinal))
+                    return null;
+                }
+                if (!string.Equals(current, storedFingerprint, StringComparison.Ordinal))
                     issues.Add(new ModelHealthIssue("CURTAIN_FRAME_CONFIG_FINGERPRINT_NON_CANONICAL", HealthSeverity.Error, "GeneratedCurtainFrameConfigFingerprint phải dùng đúng lowercase SHA-256 writer-owned spelling.", element.Id));
+                return input;
             }
             catch (Exception ex) when (IsConfigDataFailure(ex))
             {
@@ -207,6 +258,7 @@ namespace QS3D.Core.Diagnostics
                     HealthSeverity.Warning,
                     "Không thể kiểm tra curtain-frame config hiện tại vì semantic/family config không hợp lệ.",
                     element.Id));
+                return null;
             }
         }
 
