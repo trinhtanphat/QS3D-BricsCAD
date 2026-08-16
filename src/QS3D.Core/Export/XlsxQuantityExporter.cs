@@ -253,8 +253,9 @@ namespace QS3D.Core.Export
             Func<QuantityReportRow, double> selector,
             string field)
         {
+            var accumulator = new QuantityReportMath.CompensatedSum();
             var expected = 0d;
-            foreach (var detail in group) expected = AddFinite(expected, selector(detail), field);
+            foreach (var detail in group) expected = AddCompensatedFinite(ref accumulator, selector(detail), field);
             RequireFinite(actual, field);
             if (actual != expected) throw NumericParityError(field);
         }
@@ -275,12 +276,13 @@ namespace QS3D.Core.Export
 
         private static void RequireMassParity(QuantityReportRow summary, IReadOnlyList<QuantityReportRow> group)
         {
+            var accumulator = new QuantityReportMath.CompensatedSum();
             double? expected = 0d;
             foreach (var detail in group)
             {
                 ValidateMass(detail.MassKg);
                 if (expected.HasValue && detail.MassKg.HasValue)
-                    expected = AddFinite(expected.Value, detail.MassKg.Value, "MassKg");
+                    expected = AddCompensatedFinite(ref accumulator, detail.MassKg.Value, "MassKg");
                 else
                     expected = null;
             }
@@ -302,13 +304,17 @@ namespace QS3D.Core.Export
             if (value.Value < 0d) throw new InvalidDataException("ED2 mass must be non-negative when present.");
         }
 
-        private static double AddFinite(double left, double right, string field)
+        private static double AddCompensatedFinite(ref QuantityReportMath.CompensatedSum accumulator, double value, string field)
         {
-            RequireFinite(left, field);
-            RequireFinite(right, field);
-            var total = left + right;
-            RequireFinite(total, field);
-            return total;
+            RequireFinite(value, field);
+            try
+            {
+                return accumulator.Add(value, field);
+            }
+            catch (OverflowException)
+            {
+                throw new InvalidDataException("ED2 " + field + " must be finite.");
+            }
         }
 
         private static void RequireFinite(double value, string field)
