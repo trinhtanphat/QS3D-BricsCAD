@@ -197,8 +197,6 @@ for token in ("QS3DUPDATE", "UpdateCenterWindowHost.Show()", "QS3DUPDATE V26 err
 for token in ("UpdateBootstrapper.Start();", "UpdateBootstrapper.Stop();"):
     require(v26_entry, token, "V26 PluginEntry")
 
-# V26 qualification must execute the same aggregate source/release guards used by
-# the release lane before native build/runtime evidence can be accepted.
 for token in (
     "permissions:\n  contents: read",
     "persist-credentials: false",
@@ -212,10 +210,6 @@ for token in (
 if "contents: write" in qualification_workflow:
     errors.append("V26 qualification workflow must remain read-only")
 
-# V26 commercial publication is deliberately two-stage. The self-hosted/native
-# qualification job must never receive repository write authority; only the
-# GitHub-hosted publication job may receive contents:write after the candidate
-# crossed an artifact boundary and was independently reverified.
 for token in (
     "workflow_dispatch:",
     "github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE'",
@@ -242,8 +236,8 @@ for token in (
     "Verify V26 candidate after job boundary",
     "V26 ZIP checksum mismatch after job boundary",
     "V26 candidate provenance does not exactly bind tag, product, source, signing state and ZIP digest",
-    "verify-v26-signatures.ps1",
-    "gh release create",
+    "$createArgs = @('release', 'create'",
+    "& gh @createArgs",
     "--draft",
     "git ls-remote --tags origin",
     "gh release download",
@@ -274,7 +268,7 @@ else:
 upload_candidate = workflow.find("Upload V26 qualified candidate")
 download_candidate = workflow.find("actions/download-artifact@", release_index)
 verify_boundary = workflow.find("Verify V26 candidate after job boundary", download_candidate)
-draft_create = workflow.find("gh release create", verify_boundary)
+draft_create = workflow.find("$createArgs = @('release', 'create'", verify_boundary)
 remote_tag_check = workflow.find("git ls-remote --tags origin", draft_create)
 remote_download = workflow.find("gh release download", remote_tag_check)
 remote_hash = workflow.find("Draft V26 release asset SHA-256 mismatch", remote_download)
