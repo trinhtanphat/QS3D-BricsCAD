@@ -25,6 +25,7 @@ namespace QS3D.BricsCAD.V25.Updates
         private const long MaxPackageBytes = 256L * 1024L * 1024L;
         private const int MaxChecksumBytes = 64 * 1024;
         private const int NetworkTimeoutMilliseconds = 30000;
+        private const int MaxRedirects = 8;
 
         internal async Task<VerifiedReleaseDownload> DownloadAsync(UpdateReleaseInfo release)
         {
@@ -73,8 +74,7 @@ namespace QS3D.BricsCAD.V25.Updates
 
         private static async Task<string> ReadExpectedSha256Async(Uri checksumUri)
         {
-            var request = CreateRequest(checksumUri);
-            using (var response = (HttpWebResponse)await request.GetResponseAsync().ConfigureAwait(false))
+            using (var response = await GetResponseFollowingRedirectsAsync(checksumUri).ConfigureAwait(false))
             {
                 EnsureSuccessfulResponse(response, MaxChecksumBytes);
                 using (var source = response.GetResponseStream())
@@ -89,8 +89,7 @@ namespace QS3D.BricsCAD.V25.Updates
 
         private static async Task DownloadBoundedAsync(Uri packageUri, string targetPath, long maxBytes)
         {
-            var request = CreateRequest(packageUri);
-            using (var response = (HttpWebResponse)await request.GetResponseAsync().ConfigureAwait(false))
+            using (var response = await GetResponseFollowingRedirectsAsync(packageUri).ConfigureAwait(false))
             {
                 EnsureSuccessfulResponse(response, maxBytes);
                 using (var source = response.GetResponseStream())
@@ -102,6 +101,45 @@ namespace QS3D.BricsCAD.V25.Updates
             }
         }
 
+        private static async Task<HttpWebResponse> GetResponseFollowingRedirectsAsync(Uri uri)
+        {
+            EnsureAllowedUri(uri);
+            var current = uri;
+            for (var redirectCount = 0; ; redirectCount++)
+            {
+                var request = CreateRequest(current);
+                var response = (HttpWebResponse)await request.GetResponseAsync().ConfigureAwait(false);
+                if (!IsRedirect(response.StatusCode)) return response;
+
+                try
+                {
+                    if (redirectCount >= MaxRedirects)
+                        throw new InvalidOperationException("GitHub Release asset vượt quá giới hạn redirect cho phép.");
+
+                    var location = response.Headers[HttpResponseHeader.Location];
+                    if (string.IsNullOrWhiteSpace(location))
+                        throw new InvalidOperationException("GitHub Release asset trả redirect nhưng không có Location hợp lệ.");
+
+                    Uri nextUri;
+                    if (!Uri.TryCreate(current, location, out nextUri) || nextUri == null)
+                        throw new InvalidOperationException("GitHub Release asset trả Location không hợp lệ.");
+
+                    EnsureAllowedUri(nextUri);
+                    current = nextUri;
+                }
+                finally
+                {
+                    response.Dispose();
+                }
+            }
+        }
+
+        private static bool IsRedirect(HttpStatusCode statusCode)
+        {
+            var code = (int)statusCode;
+            return code == 301 || code == 302 || code == 303 || code == 307 || code == 308;
+        }
+
         private static HttpWebRequest CreateRequest(Uri uri)
         {
             EnsureAllowedUri(uri);
@@ -109,8 +147,7 @@ namespace QS3D.BricsCAD.V25.Updates
             request.Method = "GET";
             request.Accept = "application/octet-stream";
             request.UserAgent = "QS3D-BricsCAD-V25-Updater";
-            request.AllowAutoRedirect = true;
-            request.MaximumAutomaticRedirections = 8;
+            request.AllowAutoRedirect = false;
             request.Timeout = NetworkTimeoutMilliseconds;
             request.ReadWriteTimeout = NetworkTimeoutMilliseconds;
             return request;
@@ -151,8 +188,8 @@ namespace QS3D.BricsCAD.V25.Updates
             while (end < normalized.Length && IsHex(normalized[end])) end++;
             if (end != 64)
                 throw new InvalidOperationException("Checksum asset không chứa SHA-256 hợp lệ ở đầu file.");
-            if (end < normalized.Length && IsHex(normalized[end]))
-                throw new InvalidOperationException("Checksum asset chứa digest SHA-256 không hợp lệ.");
+            if (end < normalized.Length && !char.IsWhiteSpace(normalized[end]))
+                throw new InvalidOperationException("Checksum asset chứa ký tự không hợp lệ ngay sau digest SHA-256.");
 
             var digest = normalized.Substring(0, 64);
             for (var i = 0; i < digest.Length; i++)
