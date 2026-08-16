@@ -562,8 +562,8 @@ namespace QS3D.BricsCAD.V25.UI
         {
             var informational = typeof(BltStartCenterPanel).Assembly
                 .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-            if (!string.IsNullOrWhiteSpace(informational))
-                return informational.Split('+')[0];
+            if (informational is string version && !string.IsNullOrWhiteSpace(version))
+                return version.Split('+')[0];
             return typeof(BltStartCenterPanel).Assembly.GetName().Version?.ToString() ?? "1.0.0";
         }
 
