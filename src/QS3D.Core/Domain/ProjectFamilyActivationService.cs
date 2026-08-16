@@ -21,8 +21,7 @@ namespace QS3D.Core.Domain
             if (normalized.Length == 0) throw new ArgumentException("Family id is required.", nameof(familyId));
             var family = project.FindFamily(normalized) ?? throw new InvalidOperationException("Family not found: " + normalized);
             if (project.Metadata.TryGetValue("ActiveFamilyId", out var current) &&
-                !string.IsNullOrWhiteSpace(current) &&
-                ReferenceEquals(project.FindFamily(current.Trim()), family)) return;
+                string.Equals(current, family.Id, StringComparison.Ordinal)) return;
             project.Metadata["ActiveFamilyId"] = family.Id;
         }
 
