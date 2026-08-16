@@ -13,6 +13,14 @@ namespace QS3D.Core.Cost
                 throw new OverflowException("Cost multiplication underflow: " + label + ".");
             return result;
         }
+
+        public static decimal DividePreservingNonZero(decimal numerator, decimal denominator, string label)
+        {
+            var result = numerator / denominator;
+            if (numerator != 0m && result == 0m)
+                throw new OverflowException("Cost division underflow: " + label + ".");
+            return result;
+        }
     }
 
     public sealed class CostResourceComponent
@@ -143,7 +151,7 @@ namespace QS3D.Core.Cost
         public decimal TotalCost { get; }
         public string Currency { get; }
         public DateTime AsOfUtc { get; }
-        public decimal UnitCost => TotalCost / Quantity;
+        public decimal UnitCost => CostDecimalMath.DividePreservingNonZero(TotalCost, Quantity, "historical unit cost");
     }
 
     public sealed class HistoricalCostCatalog
