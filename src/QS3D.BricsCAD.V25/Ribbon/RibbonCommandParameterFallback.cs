@@ -204,10 +204,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 }
             }
 
-            private string ResolveParameter(object? parameter) =>
-                parameter is string command && !string.IsNullOrWhiteSpace(command)
-                    ? command
-                    : _fallbackCommand;
+            private string ResolveParameter(object? parameter)
+            {
+                _ = parameter;
+                return _fallbackCommand;
+            }
 
             public event EventHandler? CanExecuteChanged
             {
@@ -231,10 +232,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
             public void Execute(object? parameter) => _inner.Execute(ResolveParameter(parameter));
 
-            private string ResolveParameter(object? parameter) =>
-                parameter is string command && !string.IsNullOrWhiteSpace(command)
-                    ? command
-                    : _fallbackCommand;
+            private string ResolveParameter(object? parameter)
+            {
+                _ = parameter;
+                return _fallbackCommand;
+            }
 
             public event EventHandler? CanExecuteChanged
             {
