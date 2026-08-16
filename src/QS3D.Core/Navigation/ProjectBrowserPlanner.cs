@@ -94,7 +94,9 @@ namespace QS3D.Core.Navigation
             {
                 if (element == null) throw new InvalidOperationException("Project browser cannot index a null semantic element.");
                 if (string.IsNullOrWhiteSpace(element.Id)) throw new InvalidOperationException("Project browser requires non-empty semantic element IDs.");
-                if (!ids.Add(element.Id.Trim())) throw new InvalidOperationException("Project browser found duplicate semantic element id: " + element.Id.Trim() + ".");
+                if (!string.Equals(element.Id, element.Id.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Project browser requires canonical semantic element IDs without surrounding whitespace: " + element.Id + ".");
+                if (!ids.Add(element.Id)) throw new InvalidOperationException("Project browser found duplicate semantic element id: " + element.Id + ".");
                 if (!Enum.IsDefined(typeof(ElementCategory), element.Category)) throw new InvalidOperationException("Project browser found undefined element category on: " + element.Id + ".");
                 elements.Add(element);
             }
