@@ -56,6 +56,8 @@ namespace QS3D.Core.Geometry
                 throw new InvalidOperationException("Opening width/position extends beyond the host wall length.");
 
             var openingTop = Add(input.SillHeightM, input.OpeningHeightM, "opening top");
+            if (!(openingTop > input.SillHeightM))
+                throw new OverflowException("Opening height cannot be represented at the requested sill elevation.");
             if (openingTop > input.HostHeightM)
                 throw new InvalidOperationException("Opening height/sill extends above the host wall height.");
 
