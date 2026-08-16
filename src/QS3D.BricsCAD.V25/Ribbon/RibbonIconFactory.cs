@@ -12,6 +12,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
         SaveAs,
         Settings,
         Objects,
+        Qs3dLogo,
         Update,
         UpdateOnClose,
         UpdateStatus
@@ -75,6 +76,26 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     group.Children.Add(Fill(accentDark, new EllipseGeometry(new Point(9, 23), 5, 5)));
                     group.Children.Add(Fill(accent, new EllipseGeometry(new Point(23, 23), 5, 5)));
                     group.Children.Add(Stroke(accentDark, 1.5, new RectangleGeometry(new Rect(3, 3, 26, 26), 2, 2)));
+                    break;
+
+                case RibbonIconKind.Qs3dLogo:
+                    var logoGroup = new DrawingGroup();
+                    var brandBlue = FrozenBrush(0, 90, 158);
+                    var brandGreen = FrozenBrush(54, 165, 54);
+                    logoGroup.Children.Add(Fill(
+                        brandBlue,
+                        Geometry.Parse("M22.2,10.5 L22.2,44.6 L25.75,46.65 L25.75,14.6 L57.7,33.05 L57.7,25.6 L26,7.3 Z")));
+                    logoGroup.Children.Add(Fill(
+                        brandGreen,
+                        Geometry.Parse("M28.95,16.45 L28.95,48.5 L32.5,50.55 L32.5,34 L43.2,40.15 L43.2,36.05 L28.95,27.85 L28.95,20.6 L54.3,35.25 L54.3,46.75 L37.2,36.9 L33.65,40.95 L57.85,54.9 L57.85,33.2 Z")));
+                    logoGroup.Transform = new MatrixTransform(
+                        0.5714285714,
+                        0,
+                        0,
+                        0.5714285714,
+                        -6.8857142851,
+                        -1.7714285712);
+                    group.Children.Add(logoGroup);
                     break;
 
                 case RibbonIconKind.Update:
