@@ -25,6 +25,8 @@ def main():
     shell_rel = "src/QS3D.BricsCAD.V25/UI/BltStartCenterWindow.cs"
     command_rel = "src/QS3D.BricsCAD.V25/StartCenterCommands.cs"
     project_ui_rel = "src/QS3D.BricsCAD.V25/ProjectFileUiService.cs"
+    mutation_rel = "src/QS3D.BricsCAD.V25/ExistingProjectMutationContext.cs"
+    context_rel = "src/QS3D.BricsCAD.V25/ProjectContextCoordinator.cs"
     result_rel = "src/QS3D.BricsCAD.V25/UI/ProjectOperationResultWindow.cs"
     icon_rel = "src/QS3D.BricsCAD.V25/Ribbon/RibbonIconFactory.cs"
 
@@ -61,6 +63,8 @@ def main():
         'DrawingFilter = "BricsCAD Drawing (*.dwg)|*.dwg"',
         'public static void CreateNewDrawing()',
         'method.Name, "Add"',
+        'ProjectContextCoordinator.Forget(document);',
+        '_ = ProjectContextCoordinator.GetOrCreate(document);',
         'new OpenFileDialog',
         'new SaveFileDialog',
         'InvokeAcadDocumentMethod(document, "Save")',
@@ -84,6 +88,30 @@ def main():
         'savedAsCopy',
     ):
         forbid(project_ui, stale, project_ui_rel)
+
+    mutation = read(mutation_rel)
+    for needle in (
+        'string.Equals(operation, "Save Project", StringComparison.Ordinal)',
+        'ProjectContextCoordinator.TryGetCached(document, out var cached)',
+        '_ = ProjectContextCoordinator.HasPendingChanges(document);',
+        'if (!TryGet(document, out var project))',
+        'thao tác này không tạo project mới.',
+    ):
+        require(mutation, needle, mutation_rel)
+    for stale in (
+        'IsMouseFirstUnsavedProjectSave',
+        'string.Equals(operation, "Lưu dự án"',
+        'string.Equals(operation, "Lưu thành"',
+    ):
+        forbid(mutation, stale, mutation_rel)
+
+    context = read(context_rel)
+    require(context, 'var project = ExistingProjectMutationContext.Require(document, "Save Project");', context_rel)
+    require(context, 'EnsureBackingStoreUnchanged(document, project, true, "QS3D save");', context_rel)
+    require(context, 'Store.SaveNew(project, path);', context_rel)
+    require(context, 'if (target.HasAnyFile)', context_rel)
+    save_block = context.split('public static string Save(Document document)', 1)[1].split('public static ProjectState Reload(Document document)', 1)[0]
+    forbid(save_block, 'GetOrCreate(', context_rel + '::Save')
 
     result = read(result_rel)
     for needle in (
@@ -145,7 +173,7 @@ def main():
     command = read(command_rel)
     require(command, "createdWindow = new BltStartCenterWindow();", command_rel)
 
-    print("PASS: QS3D Home and Start Center use unique panels, rasterized icons and direct mouse-first project actions; Save/Save As persist DWG plus canonical QS3D sidecar without host command dispatch.")
+    print("PASS: QS3D Home and Start Center use unique panels, rasterized icons and direct mouse-first project actions; Create New explicitly seeds the canonical project, while Save/Save As preserve existing-project and verified sidecar-transition safety.")
     return 0
 
 
