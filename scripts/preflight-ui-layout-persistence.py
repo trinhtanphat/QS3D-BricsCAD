@@ -206,22 +206,40 @@ if compact.is_file():
 if runtime.is_file():
     text = runtime.read_text(encoding="utf-8")
     for needle in (
-        "new(460d, 420d)",
-        "FindName('WorkspaceOverflow')",
-        "FindName('WorkspaceContentRoot')",
-        "ComputedHorizontalScrollBarVisibility",
-        "ComputedVerticalScrollBarVisibility",
-        "$dataContextMarker = [object]::new()",
-        "ReferenceEquals($contentRoot.DataContext, $dataContextMarker)",
+        "Read-XamlDocument",
+        "WorkspacePanel.xaml",
+        "RightPanel.xaml",
+        "WorkspaceOverflow",
+        "HorizontalScrollBarVisibility",
+        "VerticalScrollBarVisibility",
+        "CanContentScroll",
+        "PanningMode",
+        "WorkspaceContentRoot",
+        "ViewportWidth.*WorkspaceOverflow",
         "@('FamilySearch', 'PropertySearch')",
-        "$focusTarget.IsTabStop",
+        "Theme.xaml",
+        "DrawingList",
+        "LayerList",
+        "source/XAML checks only",
+        "Licensed in-host BricsCAD V25 runtime remains the authority",
     ):
         if needle not in text:
-            errors.append("offline WPF palette smoke missing host-safe compact overflow/content/focus assertion: " + needle)
+            errors.append("offline WPF palette smoke missing source-only host-safe compact overflow/content/focus assertion: " + needle)
+    for forbidden in (
+        "Assembly]::LoadFrom",
+        "add_AssemblyResolve",
+        "Activator]::CreateInstance",
+        "LoadFile(",
+        "LoadFrom(",
+        "Start-Process",
+        "System.Diagnostics.Process",
+    ):
+        if forbidden in text:
+            errors.append("offline WPF palette smoke must not regain native/plugin load primitive: " + forbidden)
 
 print("QS3D per-user UI layout persistence preflight")
 if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: centralized palette minimums remain persisted atomically/best-effort, while the compact presentation layer permanently retires the obsolete Workspace dashboard columns after legacy widths are restored.")
+print("PASS: centralized palette minimums remain persisted atomically/best-effort, while the compact presentation layer permanently retires the obsolete Workspace dashboard columns after legacy widths are restored and the offline palette smoke validates equivalent source/XAML contracts without loading hosted UI.")
