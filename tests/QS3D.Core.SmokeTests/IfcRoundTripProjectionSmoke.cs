@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
             CanonicalizesProjectionAndSetOrdering();
             ComparesNumericPayloadWithinTolerance();
             RequiresExactSemanticPayload();
+            RejectsMalformedUtf16Tokens();
             RejectsMalformedAndDuplicateState();
         }
 
@@ -137,6 +138,51 @@ namespace QS3D.Core.SmokeTests
                         new[] { "source:plate-b" }),
                     0d),
                 "IFC round-trip comparison ignored provenance drift.");
+        }
+
+        private static void RejectsMalformedUtf16Tokens()
+        {
+            var unpairedHigh = new string((char)0xD800, 1);
+            var unpairedLow = new string((char)0xDC00, 1);
+
+            Throws<ArgumentException>(() => CreateProjection(
+                "BEAM-" + unpairedHigh,
+                "ifc-beam-utf16-high",
+                "IfcBeam",
+                new[] { new IfcRoundTripNumericProperty("Length", 5d, "m") },
+                5d,
+                "m",
+                new[] { "source:a" }));
+
+            Throws<ArgumentException>(() => CreateProjection(
+                "BEAM-UTF16-LOW",
+                "ifc-beam-utf16-low",
+                "IfcBeam" + unpairedLow,
+                new[] { new IfcRoundTripNumericProperty("Length", 5d, "m") },
+                5d,
+                "m",
+                new[] { "source:a" }));
+
+            Throws<ArgumentException>(() => new IfcRoundTripNumericProperty("Length", 5d, "m" + unpairedHigh));
+            Throws<ArgumentException>(() => CreateProjection(
+                "BEAM-UTF16-PROVENANCE",
+                "ifc-beam-utf16-provenance",
+                "IfcBeam",
+                new[] { new IfcRoundTripNumericProperty("Length", 5d, "m") },
+                5d,
+                "m",
+                new[] { "source:" + unpairedLow }));
+
+            var validPair = char.ConvertFromUtf32(0x1F642);
+            var accepted = CreateProjection(
+                "BEAM-" + validPair,
+                "ifc-beam-" + validPair,
+                "IfcBeam-" + validPair,
+                new[] { new IfcRoundTripNumericProperty("Length-" + validPair, 5d, "m-" + validPair) },
+                5d,
+                "m2-" + validPair,
+                new[] { "source:" + validPair });
+            Require(accepted.Qs3dElementId == "BEAM-" + validPair, "Well-formed UTF-16 surrogate pairs must remain valid canonical tokens.");
         }
 
         private static void RejectsMalformedAndDuplicateState()
