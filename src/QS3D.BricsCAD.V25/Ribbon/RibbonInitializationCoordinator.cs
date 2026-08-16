@@ -46,8 +46,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
             try { documents.DocumentActivated -= OnDocumentAvailable; } catch { }
             StopTimedRetry();
             HomeTabActivationCoordinator.Stop();
+            Blt3dShellChromeCoordinator.Reset();
             BltHomeRibbonAugmenter.Reset();
             BltDrawRibbonAugmenter.Reset();
+            BltRecognitionRibbonAugmenter.Reset();
             RibbonBootstrapIconAugmenter.Reset();
             Qs3dRibbonTabGroupCoordinator.Reset();
         }
@@ -115,9 +117,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
             ready = UpdateRibbonAugmenter.TryInitialize() && ready;
 
             // Reconcile screenshot-familiar presentation after feature augmenters so the
-            // QS3D-owned Home/Draw groups are deterministic without replacing native tabs.
+            // QS3D-owned Home/Draw/Recognition groups are deterministic without replacing native tabs.
             ready = BltHomeRibbonAugmenter.TryInitialize() && ready;
             ready = BltDrawRibbonFailSafe.TryInitialize() && ready;
+            ready = BltRecognitionRibbonAugmenter.TryInitialize() && ready;
 
             // The baseline Project/Authoring tabs are still text-only in RibbonBootstrapper.
             // Decorate them after feature augmenters have finished so both baseline and added
@@ -129,9 +132,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
             // buttons keep their captured command for both CanExecute and Execute.
             ready = RibbonCommandParameterFallback.TryInitialize() && ready;
 
-            // Run ownership/layout last: native BricsCAD tabs keep their objects and relative
-            // order, while every QS3D_* tab becomes one contiguous group on the same tab row.
+            // Keep repository ownership semantics intact: native/third-party tabs stay in the
+            // Ribbon collection, QS3D_* tabs are grouped in BLT3D order, and only shell chrome
+            // (application/QAT/search) is hidden to match the reference presentation.
             ready = Qs3dRibbonTabGroupCoordinator.TryInitialize() && ready;
+            ready = Blt3dShellChromeCoordinator.TryInitialize() && ready;
             ready = HomeTabActivationCoordinator.TryInitialize() && ready;
             return ready;
         }
