@@ -47,7 +47,10 @@ namespace QS3D.BricsCAD.V25
                     "assembly=" + OneLine(assembly.Location),
                     "assembly_version=" + OneLine(assembly.GetName().Version?.ToString() ?? "unknown"),
                     "ribbon_ready=true",
+                    // Keep the legacy key for downstream artifact compatibility while also reporting
+                    // the specific Workspace/Right/Quantity states that define the Ribbon-first contract.
                     "palette_visible=true",
+                    "workspace_palette_visible=true",
                     "right_palette_visible=false",
                     "quantity_palette_visible=false"
                 });
