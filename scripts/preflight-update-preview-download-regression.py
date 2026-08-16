@@ -29,28 +29,25 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
         return temporary, fixture
 
     def run_guard(self, fixture):
-        return subprocess.run(
-            [sys.executable, str(fixture / PREFLIGHT)], cwd=str(fixture), text=True,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False, timeout=30,
-        )
+        return subprocess.run([sys.executable, str(fixture / PREFLIGHT)], cwd=str(fixture), text=True,
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False, timeout=30)
 
     def mutate_all(self, fixture, relative, old, new):
         path = fixture / relative
         text = path.read_text(encoding="utf-8")
         count = text.count(old)
         self.assertGreater(count, 0, f"mutation anchor missing in {relative}: {old}")
-        self.assertNotIn(old, new, f"replacement must remove exact guard needle: {old}")
         mutated = text.replace(old, new)
         self.assertNotIn(old, mutated, f"mutation must remove every guard needle ({count} found): {old}")
         path.write_text(mutated, encoding="utf-8")
 
-    def assert_rejected(self, relative, old, new, expected):
+    def assert_rejected(self, relative, old, new, expected_fragment=None):
         temporary, fixture = self.make_fixture()
         self.addCleanup(temporary.cleanup)
         self.mutate_all(fixture, relative, old, new)
         result = self.run_guard(fixture)
         self.assertNotEqual(0, result.returncode, result.stdout)
-        self.assertIn(expected, result.stdout)
+        self.assertIn(expected_fragment or old, result.stdout)
 
     def test_pristine_current_contract_passes(self):
         temporary, fixture = self.make_fixture()
@@ -59,17 +56,23 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stdout)
         self.assertIn("PASS: V25 preview fallback", result.stdout)
 
-    def test_security_contract_mutations_are_rejected(self):
+    def test_transport_integrity_and_staging_mutations_are_rejected(self):
         cases = (
-            (CLIENT, 'internal const string PackageAssetName = "QS3D-BricsCAD-V25.zip";', 'internal const string PackageAssetName = "QS3D-BricsCAD.zip";'),
-            (CLIENT, 'internal const string PackageChecksumAssetName = "QS3D-BricsCAD-V25.zip.sha256";', 'internal const string PackageChecksumAssetName = "QS3D-BricsCAD-V25.sha256";'),
+            (CLIENT, 'internal const string PackageAssetName = "QS3D-BricsCAD-V25.zip";', 'internal const string PackageAssetName = "QS3D.zip";'),
+            (CLIENT, 'internal const string PackageChecksumAssetName = "QS3D-BricsCAD-V25.zip.sha256";', 'internal const string PackageChecksumAssetName = "QS3D.sha256";'),
             (DOWNLOADER, "if (existingLength <= MaxPackageBytes)", "if (true)"),
+            (DOWNLOADER, "private const int NetworkTimeoutMilliseconds = 30000;", "private const int NetworkTimeoutMilliseconds = int.MaxValue;"),
+            (DOWNLOADER, "request.Timeout = NetworkTimeoutMilliseconds;", "request.Timeout = System.Threading.Timeout.Infinite;"),
+            (DOWNLOADER, "request.ReadWriteTimeout = NetworkTimeoutMilliseconds;", "request.ReadWriteTimeout = System.Threading.Timeout.Infinite;"),
             (DOWNLOADER, "await DownloadBoundedAsync(release.PackageUri, partialPath, MaxPackageBytes)", "await DownloadBoundedAsync(release.PackageUri, partialPath, long.MaxValue)"),
             (DOWNLOADER, "private const int MaxChecksumBytes = 64 * 1024;", "private const int MaxChecksumBytes = int.MaxValue;"),
             (DOWNLOADER, "private const int MaxRedirects = 8;", "private const int MaxRedirects = int.MaxValue;"),
             (DOWNLOADER, "request.AllowAutoRedirect = false;", "request.AllowAutoRedirect = true;"),
             (DOWNLOADER, "EnsureAllowedUri(nextUri);", "/* mutation removed redirect-hop validation */"),
+            (DOWNLOADER, "EnsureAllowedUri(response.ResponseUri);", "/* mutation removed final-response validation */"),
+            (DOWNLOADER, "if (response.ContentLength > maxBytes)", "if (false)"),
             (DOWNLOADER, "if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))", "if (false)"),
+            (DOWNLOADER, "if (!string.IsNullOrEmpty(uri.UserInfo))", "if (false)"),
             (DOWNLOADER, 'string.Equals(host, "github.com", StringComparison.OrdinalIgnoreCase)', "false"),
             (DOWNLOADER, 'string.Equals(host, "api.github.com", StringComparison.OrdinalIgnoreCase)', "false"),
             (DOWNLOADER, 'host.EndsWith(".githubusercontent.com", StringComparison.OrdinalIgnoreCase)', "false"),
@@ -77,6 +80,7 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
             (DOWNLOADER, "if (end < normalized.Length && !char.IsWhiteSpace(normalized[end]))", "if (false)"),
             (DOWNLOADER, "TryDelete(partialPath);", "/* mutation removed partial cleanup */"),
             (DOWNLOADER, "File.Move(partialPath, packagePath);", "/* mutation removed final promotion */"),
+            (DOWNLOADER, "Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)", "Environment.GetFolderPath(Environment.SpecialFolder.Desktop)"),
             (DOWNLOADER, 'if (IsWindowsReservedPathSegment(result)) result = "_" + result;', 'if (false) result = "_" + result;'),
             (DOWNLOADER, 'return result + "~" + ComputeTagIdentity(exactTag);', "return result;"),
             (DOWNLOADER, "if (result.Length > MaxReleaseTagPrefixChars)", "if (false)"),
@@ -87,8 +91,7 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
         )
         for index, (relative, old, new) in enumerate(cases, 1):
             with self.subTest(case=index, file=str(relative)):
-                expected = "missing required preview-download contract: " + old
-                self.assert_rejected(relative, old, new, expected)
+                self.assert_rejected(relative, old, new)
 
     def test_forbidden_direct_execution_is_rejected(self):
         temporary, fixture = self.make_fixture()
@@ -101,6 +104,14 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
         result = self.run_guard(fixture)
         self.assertNotEqual(0, result.returncode, result.stdout)
         self.assertIn("contains forbidden preview-download behavior: Process.Start(verified.Path", result.stdout)
+
+    def test_fixture_mutation_is_hermetic(self):
+        before = {relative: (ROOT / relative).read_bytes() for relative in FIXTURE_FILES}
+        temporary, fixture = self.make_fixture()
+        self.addCleanup(temporary.cleanup)
+        self.mutate_all(fixture, DOWNLOADER, "request.AllowAutoRedirect = false;", "request.AllowAutoRedirect = true;")
+        for relative, expected in before.items():
+            self.assertEqual(expected, (ROOT / relative).read_bytes(), f"fixture mutation leaked to repository source: {relative}")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
