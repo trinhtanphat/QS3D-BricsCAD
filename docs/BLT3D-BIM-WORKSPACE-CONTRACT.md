@@ -69,17 +69,45 @@ The QS3D-owned `MODELING` tab matches the owner BLT3D reference as eight groups 
 
 `BltModelingRibbonAugmenter` removes only QS3D-owned `QS3D_MODELING_*` panels, preserves native/third-party content, builds all replacement panels before mutating the live Ribbon, and rolls back to the prior QS3D panels if reconciliation fails.
 
-The visible actions reuse native BricsCAD BIM/modeling commands where they are authoritative:
+### 4.1 Button function contract
 
-- `MATERIALS`, `BIMPROFILES`, `BIMCREATEDETAIL`, `UCS World`;
-- `LINE`, `PLINE`, `RECTANG`, `CIRCLE`, `ARC`;
-- `JOIN`, `OFFSET`, `MOVE`, `COPY`;
-- `EXTRUDE`, `SWEEP`, `LOFT`;
-- `UNION`, `SUBTRACT`, `INTERSECT`.
+`BltModelingRibbonFunctionRefiner` runs after the reference panels are built and pins the exact route of all 21 visible actions. Initialization fails closed if a reference button is missing, duplicated, lacks its command handler, or cannot retain its required `CommandParameter`.
 
-`Gắn vào Family` opens the existing `QS3DFAMILIES` workflow so Family/Type assignment stays in the production Family Manager rather than introducing a screenshot-only duplicate workflow. `Theo phương Z` intentionally routes through `MOVE`; its tooltip instructs the user to enter a displacement in `@0,0,<ΔZ>` form so the operation stays on the Z axis without inventing a second transform engine.
+The production route matrix is:
 
-The icon artwork is generated as frozen WPF vector drawings in the plugin. This keeps the blue BLT3D-familiar visual language crisp at both standard/large size without shipping bitmap captures from the reference screenshot. QS3D branding is used only on QS3D-owned surfaces; BricsCAD retains ownership of the host shell/application icon.
+- `Vật liệu` → `MATERIALS`;
+- `Mặt cắt thép` → `BIMPROFILES`;
+- `Tạo chi tiết` → `BIMCREATEDETAIL`;
+- `Mặt XY` → `UCS World`;
+- `Đường` → `LINE`;
+- `Polyline` → `PLINE`;
+- `Chữ nhật` → `RECTANG`;
+- `Tròn` → `CIRCLE`;
+- `Cung` → `ARC`;
+- `Nối polyline` → `JOIN`;
+- `Offset` → `OFFSET`;
+- `Di chuyển` → `MOVE`;
+- `Sao chép` → `COPY`;
+- `Theo phương Z` → `QS3DMOVEZ`;
+- `Extrude` → `EXTRUDE`;
+- `Sweep` → `SWEEP`;
+- `Loft` → `LOFT`;
+- `Gắn vào Family` → `QS3DFAMILIES`;
+- `Union` → `UNION`;
+- `Subtract` → `SUBTRACT`;
+- `Intersect` → `INTERSECT`.
+
+Native BricsCAD routes use underscore-prefixed English command/option tokens in source so localized BricsCAD installations do not depend on translated command names.
+
+`Gắn vào Family` opens the existing production `QS3DFAMILIES` Family Manager, where the document-bound workflow owns Family/Type CRUD, inheritance-safe property behavior and semantic assignment for the current drawing rather than introducing a screenshot-only duplicate.
+
+`Theo phương Z` no longer exposes unrestricted `MOVE` and asks the user to manually key `@0,0,<ΔZ>`. `QS3DMOVEZ` preserves PICKFIRST selection, falls back to an interactive selection when necessary, accepts only a finite non-zero signed Z distance, re-checks the active document after the prompt, then delegates the actual mutation to native `MOVE` with its `Displacement` option and an `(0,0,ΔZ)` vector in the current UCS. BricsCAD therefore remains authoritative for native move/locked-layer/Undo behavior while the button semantics are genuinely constrained to Z.
+
+### 4.2 Icon / sizing contract
+
+`BltModelingRibbonVisualRefiner` runs after function pinning. It requires the same 21 exact button IDs, gives every action both `Image` and `LargeImage`, keeps `ShowImage=true`, and rejects a missing/text-only final reference surface.
+
+The first four lead actions (`Vật liệu`, `Mặt cắt thép`, `Tạo chi tiết`, `Mặt XY`) remain large; all remaining actions stay standard-sized inside compact rows. Icons are frozen WPF `DrawingImage` vectors on a fixed 32×32 logical canvas with a blue/dark-blue/light-outline palette tuned for the dark native Ribbon. This keeps standard/large icons visually consistent without shipping bitmap captures or proprietary BLT3D assets.
 
 ## 5. Full BIM workspace contract
 
@@ -125,11 +153,11 @@ Deleting/removing drawings continues to use the existing guarded Xref/drawing lo
 
 `BltBimWorkspaceActivationCoordinator` observes the active Ribbon tab on the UI idle dispatcher and opens the BIM shell on a transition into `QS3D_BIM`. It does not force palettes open on every timer tick, so a user who manually closes a palette while staying on BIM is respected. Ribbon teardown stops the coordinator.
 
-`RibbonInitializationCoordinator` initializes and resets `BltModelingRibbonAugmenter` with the rest of the Ribbon lifecycle so NETLOAD/unload/retry cannot leave stale MODELING panel objects. Draw compacting remains inside `BltDrawRibbonFailSafe`, so the existing coordinator retry boundary also owns layout recovery. The coordinator sequence for VẼ is `BltDrawRibbonFailSafe` → `BltDrawRibbonReferenceIconDecorator` → `BltBimRibbonMirrorAugmenter` → `BltDrawRibbonReferenceFinalizer`. This preserves qualified command wiring, applies all visible icons before BIM cloning, keeps IFC in BIM and guarantees IFC is absent from the final VẼ surface.
+`RibbonInitializationCoordinator` builds `BltModelingRibbonAugmenter`, then applies `BltModelingRibbonFunctionRefiner`, then `BltModelingRibbonVisualRefiner` before BIM mirroring and generic icon/command-parameter fallback. It resets all three MODELING stages on teardown so NETLOAD/unload/retry cannot leave stale panels, routes or artwork. Draw compacting remains inside `BltDrawRibbonFailSafe`, so the existing coordinator retry boundary also owns layout recovery. The coordinator sequence for VẼ is `BltDrawRibbonFailSafe` → `BltDrawRibbonReferenceIconDecorator` → `BltBimRibbonMirrorAugmenter` → `BltDrawRibbonReferenceFinalizer`. This preserves qualified command wiring, applies all visible icons before BIM cloning, keeps IFC in BIM and guarantees IFC is absent from the final VẼ surface.
 
 ## 10. Regression protection
 
-`scripts/preflight-blt3d-bim-workspace.py` and `scripts/preflight-blt3d-draw-layout.py` are auto-discovered by `scripts/preflight-all.py`. Together they lock the source-level contracts for:
+`scripts/preflight-blt3d-bim-workspace.py`, `scripts/preflight-blt3d-draw-layout.py`, `scripts/preflight-modeling-ribbon-parity.py` and `scripts/preflight-modeling-ribbon-functions.py` are auto-discovered by `scripts/preflight-all.py`. Together they lock the source-level contracts for:
 
 - dual left/right BIM palette visibility and docking;
 - owner-reference Family/category/footer labels;
@@ -142,7 +170,10 @@ Deleting/removing drawings continues to use the existing guarded Xref/drawing lo
 - exact VẼ and Công cụ compact column/button ordering, including `Biên dạng` ownership;
 - recursive compact-row mirroring from VẼ into MÔ HÌNH BIM;
 - exact MODELING group and button ordering;
-- MODELING command routing, compact `RibbonRowPanel` / `RibbonRowBreak` layout and lifecycle integration;
+- exact 21-button MODELING route table and non-null command handlers;
+- true Z-only `QS3DMOVEZ` selection/prompt/native-MOVE delegation contract;
+- exact 21-button vector icon coverage, normalized logical icon bounds and large/standard sizing;
+- MODELING function/visual lifecycle ordering and V26 shared-source coverage;
 - ten-tab QS3D topbar contract using the production tab IDs.
 
 Any future change that breaks these contracts must update both the implementation and this document intentionally.

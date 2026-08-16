@@ -7,7 +7,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 SCAN_SUFFIXES = {".md", ".txt", ".yml", ".yaml", ".json", ".toml", ".py", ".ps1", ".sh"}
 SELF_PATH = "scripts/preflight-external-orchestration-aliases.py"
-REGRESSION_PATH = "scripts/test-external-orchestration-aliases.py"
+REGRESSION_PATH = "scripts/preflight-external-orchestration-aliases-regression.py"
 EXCLUDED_PATHS = {SELF_PATH, REGRESSION_PATH}
 
 # PR #1964 already protects the historical exact names. This guard covers a
