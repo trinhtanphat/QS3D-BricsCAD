@@ -51,6 +51,7 @@ namespace QS3D.Core.SmokeTests
             ColumnTieQuantityUnderflowSmoke.Run();
             RoomBoundaryRegressionSmoke.Run();
             GeometryCompletionSmoke.Run();
+            PolylineLengthPrecisionSmoke.Run();
             AutoRoomLifecycleSmoke.Run();
             AutoRoomLookupIdentitySmoke.Run();
             RoomFinishIdentitySmoke.Run();
