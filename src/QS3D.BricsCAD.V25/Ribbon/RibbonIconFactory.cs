@@ -290,8 +290,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
                 case RibbonIconKind.Room:
                     AddWireCube(group, accentSoft, accentDark, light, 5, 4, 23);
-                    group.Children.Add(Fill(accent, new RectangleGeometry(new Rect(9, 11, 3, 13)));
-                    group.Children.Add(Fill(accent, new RectangleGeometry(new Rect(18, 8, 3, 16)));
+                    group.Children.Add(Fill(accent, new RectangleGeometry(new Rect(9, 11, 3, 13))));
+                    group.Children.Add(Fill(accent, new RectangleGeometry(new Rect(18, 8, 3, 16))));
                     break;
 
                 case RibbonIconKind.View3d:
@@ -317,9 +317,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 case RibbonIconKind.Quantity:
                     group.Children.Add(Fill(accentDark, new RectangleGeometry(new Rect(5, 6, 22, 21), 2, 2)));
                     group.Children.Add(Fill(light, new RectangleGeometry(new Rect(8, 9, 16, 15), 1, 1)));
-                    group.Children.Add(Fill(accent, new RectangleGeometry(new Rect(10, 19, 3, 3)));
-                    group.Children.Add(Fill(accent, new RectangleGeometry(new Rect(15, 15, 3, 7)));
-                    group.Children.Add(Fill(accent, new RectangleGeometry(new Rect(20, 11, 3, 11)));
+                    group.Children.Add(Fill(accent, new RectangleGeometry(new Rect(10, 19, 3, 3))));
+                    group.Children.Add(Fill(accent, new RectangleGeometry(new Rect(15, 15, 3, 7))));
+                    group.Children.Add(Fill(accent, new RectangleGeometry(new Rect(20, 11, 3, 11))));
                     group.Children.Add(Fill(green, new EllipseGeometry(new Point(25, 25), 4.5, 4.5)));
                     break;
 
