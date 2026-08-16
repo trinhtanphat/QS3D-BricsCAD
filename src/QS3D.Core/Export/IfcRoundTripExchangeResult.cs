@@ -112,6 +112,7 @@ namespace QS3D.Core.Export
     public sealed class IfcRoundTripExchangeResultSet
     {
         public const string DuplicateExternalIdentityDetail = "Duplicate external object identity";
+        public const int MaxResultsPerCollection = 10_000;
 
         private IfcRoundTripExchangeResultSet(IReadOnlyList<IfcRoundTripExchangeResult> items)
         {
@@ -124,9 +125,19 @@ namespace QS3D.Core.Export
         {
             if (results == null) throw new ArgumentNullException(nameof(results));
 
+            if (results is ICollection<IfcRoundTripExchangeResult> collection && collection.Count > MaxResultsPerCollection)
+                throw ResultCollectionTooLarge();
+            if (results is IReadOnlyCollection<IfcRoundTripExchangeResult> readOnlyCollection && readOnlyCollection.Count > MaxResultsPerCollection)
+                throw ResultCollectionTooLarge();
+
             var byExternalIdentity = new Dictionary<string, IfcRoundTripExchangeResult>(StringComparer.Ordinal);
+            var observedResultCount = 0;
             foreach (var item in results)
             {
+                observedResultCount++;
+                if (observedResultCount > MaxResultsPerCollection)
+                    throw ResultCollectionTooLarge();
+
                 if (item == null)
                     throw new ArgumentException("IFC exchange result collection cannot contain null entries.", nameof(results));
 
@@ -146,6 +157,12 @@ namespace QS3D.Core.Export
             var items = byExternalIdentity.Values.ToList();
             items.Sort(IfcRoundTripExchangeResultComparer.Instance);
             return new IfcRoundTripExchangeResultSet(Array.AsReadOnly(items.ToArray()));
+        }
+
+        private static InvalidOperationException ResultCollectionTooLarge()
+        {
+            return new InvalidOperationException(
+                $"IFC exchange result collection cannot exceed {MaxResultsPerCollection} input records.");
         }
     }
 
