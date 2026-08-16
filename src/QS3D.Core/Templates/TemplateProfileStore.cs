@@ -462,7 +462,7 @@ namespace QS3D.Core.Templates
         private static bool SameMap(IDictionary<string, string> left, IDictionary<string, string> right) => left.Count == right.Count && left.All(x => right.TryGetValue(x.Key, out var value) && string.Equals(x.Value ?? string.Empty, value ?? string.Empty, StringComparison.Ordinal));
         private static string Required(XElement element, string name)
         {
-            var raw = element.Attribute(name)?.Value;
+            var raw = element.Attribute(name)?.Value ?? string.Empty;
             if (string.IsNullOrWhiteSpace(raw)) throw new InvalidDataException("Missing attribute: " + name);
             if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
                 throw new InvalidDataException("Non-canonical attribute with leading or trailing whitespace: " + name);
