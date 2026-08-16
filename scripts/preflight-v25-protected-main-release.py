@@ -28,7 +28,7 @@ def main() -> int:
         "git add",
         "git config user.name",
         "git config user.email",
-        "refs/heads/main",
+        "HEAD:refs/heads/main",
     )
     for token in forbidden_prepare:
         if token.lower() in prepare.lower():
