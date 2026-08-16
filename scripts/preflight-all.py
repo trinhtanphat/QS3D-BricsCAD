@@ -7,14 +7,69 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SELF = Path(__file__).resolve()
+CHILD_TIMEOUT_SECONDS = 180
 
 
-def discover():
-    return [
-        path
-        for path in sorted(SCRIPTS.glob("preflight-*.py"), key=lambda p: p.name.lower())
-        if path.resolve() != SELF
-    ]
+class DiscoveryError(RuntimeError):
+    pass
+
+
+def _resolved_within(path, root):
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _ensure_unique_casefold_names(paths):
+    seen = {}
+    for path in paths:
+        key = path.name.casefold()
+        previous = seen.get(key)
+        if previous is not None and previous.name != path.name:
+            raise DiscoveryError(
+                "case-insensitive preflight filename collision: "
+                + previous.name
+                + " vs "
+                + path.name
+            )
+        seen[key] = path
+
+
+def validate_candidates(candidates, root=ROOT, self_path=SELF):
+    root_resolved = Path(root).resolve(strict=True)
+    self_resolved = Path(self_path).resolve(strict=True)
+    validated = []
+
+    for candidate in candidates:
+        path = Path(candidate)
+        if path.is_symlink():
+            raise DiscoveryError("preflight gate must not be a symlink: " + path.name)
+        if not path.is_file():
+            raise DiscoveryError("preflight gate must be a regular file: " + path.name)
+
+        try:
+            resolved = path.resolve(strict=True)
+        except OSError as exc:
+            raise DiscoveryError("failed to resolve preflight gate " + path.name + ": " + str(exc)) from exc
+
+        if not _resolved_within(resolved, root_resolved):
+            raise DiscoveryError("preflight gate resolves outside repository root: " + path.name)
+        if resolved == self_resolved:
+            continue
+        validated.append(path)
+
+    _ensure_unique_casefold_names(validated)
+    return sorted(validated, key=lambda p: (p.name.casefold(), p.name))
+
+
+def discover(scripts=SCRIPTS, root=ROOT, self_path=SELF):
+    try:
+        candidates = list(Path(scripts).glob("preflight-*.py"))
+    except OSError as exc:
+        raise DiscoveryError("failed to inspect preflight directory: " + str(exc)) from exc
+    return validate_candidates(candidates, root=root, self_path=self_path)
 
 
 def escape_actions_data(value):
@@ -34,8 +89,33 @@ def emit_failure_annotation(path, reason):
     print("::error file=" + file_property + "::" + message)
 
 
+def run_gate(path, root=ROOT, child_env=None, timeout=CHILD_TIMEOUT_SECONDS):
+    env = os.environ.copy() if child_env is None else child_env
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(path)],
+            cwd=str(root),
+            check=False,
+            env=env,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return "timeout"
+    except OSError:
+        return "launch"
+
+    if completed.returncode != 0:
+        return "exit=" + str(completed.returncode)
+    return None
+
+
 def main():
-    gates = discover()
+    try:
+        gates = discover()
+    except DiscoveryError as exc:
+        print("ERROR: preflight discovery failed:", exc)
+        return 1
+
     if not gates:
         print("ERROR: no feature preflight gates were discovered.")
         return 1
@@ -52,25 +132,14 @@ def main():
     for path in gates:
         rel = path.relative_to(ROOT)
         print("\n===", rel, "===")
-        try:
-            completed = subprocess.run(
-                [sys.executable, str(path)],
-                cwd=str(ROOT),
-                check=False,
-                env=child_env,
-                timeout=180,
-            )
-        except subprocess.TimeoutExpired:
-            print("ERROR:", rel, "timed out after 180 seconds.")
-            failed.append((str(rel), "timeout"))
+        reason = run_gate(path, root=ROOT, child_env=child_env)
+        if reason is None:
             continue
-        except OSError as exc:
-            print("ERROR: failed to start", rel, "-", exc)
-            failed.append((str(rel), "launch"))
-            continue
-
-        if completed.returncode != 0:
-            failed.append((str(rel), "exit=" + str(completed.returncode)))
+        if reason == "timeout":
+            print("ERROR:", rel, "timed out after", CHILD_TIMEOUT_SECONDS, "seconds.")
+        elif reason == "launch":
+            print("ERROR: failed to start", rel)
+        failed.append((str(rel), reason))
 
     if failed:
         print("\nAggregate preflight FAILED:")
