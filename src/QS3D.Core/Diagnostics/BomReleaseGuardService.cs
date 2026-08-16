@@ -19,11 +19,16 @@ namespace QS3D.Core.Diagnostics
             if (liveGeneratedHandles != null)
             {
                 if (liveGeneratedHandles.Count > MaxLiveGeneratedHandleInputs)
-                    throw new InvalidOperationException("BOM live generated Handle input exceeds the supported bound of " + MaxLiveGeneratedHandleInputs + ".");
+                    throw LiveHandleInputTooLarge();
 
                 var index = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var observedHandleCount = 0;
                 foreach (var handle in liveGeneratedHandles)
                 {
+                    observedHandleCount++;
+                    if (observedHandleCount > MaxLiveGeneratedHandleInputs)
+                        throw LiveHandleInputTooLarge();
+
                     var normalized = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
                     if (normalized.Length > 0) index.Add(normalized);
                 }
@@ -138,6 +143,11 @@ namespace QS3D.Core.Diagnostics
             }
 
             return issues.AsReadOnly();
+        }
+
+        private static InvalidOperationException LiveHandleInputTooLarge()
+        {
+            return new InvalidOperationException("BOM live generated Handle input exceeds the supported bound of " + MaxLiveGeneratedHandleInputs + ".");
         }
     }
 }
