@@ -112,6 +112,14 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
             "missing required preview-download contract: if (end < normalized.Length && !char.IsWhiteSpace(normalized[end]))",
         )
 
+    def test_windows_reserved_cache_segment_escape_cannot_be_removed(self):
+        self.assert_rejected(
+            DOWNLOADER,
+            'if (IsWindowsReservedPathSegment(result)) result = "_" + result;',
+            "if (false) result = \"_\" + result;",
+            'missing required preview-download contract: if (IsWindowsReservedPathSegment(result)) result = "_" + result;',
+        )
+
     def test_release_tag_cache_identity_cannot_be_removed(self):
         self.assert_rejected(
             DOWNLOADER,
