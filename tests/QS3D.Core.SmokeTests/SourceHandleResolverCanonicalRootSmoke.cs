@@ -44,7 +44,7 @@ namespace QS3D.Core.SmokeTests
             if (canonicalDifferentCase.Count != 1 || !string.Equals(canonicalDifferentCase[0], "AB12", StringComparison.Ordinal))
                 throw new Exception("Canonical Locate root lookup must retain case-insensitive semantic identity matching.");
 
-            var blank = SourceHandleResolver.Resolve(project, new string[] { null, string.Empty, "   ", "\t" });
+            var blank = SourceHandleResolver.Resolve(project, new string[] { null!, string.Empty, "   ", "\t" });
             if (blank.Count != 0)
                 throw new Exception("Blank Locate root ids must retain existing skip semantics.");
             if (project.ChangeVersion != inputVersion)
