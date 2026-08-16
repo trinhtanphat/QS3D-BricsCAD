@@ -17,7 +17,7 @@ namespace QS3D.BricsCAD.V25
     internal static class QuantityContextMenuCoordinator
     {
         private const string ExtensionTypeName = "Bricscad.Windows.ContextMenuExtension, BrxMgd";
-        private const string MenuItemTypeName = "System.Windows.Forms.MenuItem, System.Windows.Forms";
+        private const string MenuItemTypeName = "Bricscad.Windows.MenuItem, BrxMgd";
         private const string QuantityCommand = "QS3DQUANTITYINSIGHT";
 
         private static RXClass? _entityRuntimeClass;
@@ -33,7 +33,7 @@ namespace QS3D.BricsCAD.V25
             var extensionType = Type.GetType(ExtensionTypeName, false)
                 ?? throw new InvalidOperationException("BricsCAD ContextMenuExtension type is unavailable.");
             var menuItemType = Type.GetType(MenuItemTypeName, false)
-                ?? throw new InvalidOperationException("Windows Forms MenuItem type is unavailable.");
+                ?? throw new InvalidOperationException("BricsCAD native MenuItem type is unavailable.");
             var runtimeClass = RXObject.GetClass(typeof(Entity))
                 ?? throw new InvalidOperationException("BricsCAD Entity RXClass is unavailable.");
 
