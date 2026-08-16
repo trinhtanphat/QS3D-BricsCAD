@@ -11,6 +11,7 @@ namespace QS3D.Core.Export
     public static class RebarCsvExporter
     {
         private const int MaxRowCount = 10000;
+        private static readonly UTF8Encoding StrictUtf8WithBom = CreateStrictUtf8WithBom();
 
         public static void Export(string path, IEnumerable<RebarScheduleRow> rows)
         {
@@ -23,7 +24,7 @@ namespace QS3D.Core.Export
             try
             {
                 using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                using (var writer = new StreamWriter(stream, new UTF8Encoding(true)))
+                using (var writer = new StreamWriter(stream, StrictUtf8WithBom))
                 {
                     writer.Write(content);
                     writer.Flush();
@@ -65,7 +66,17 @@ namespace QS3D.Core.Export
                     .Append(Q(row.FabricationStandardCode)).Append(',')
                     .Append(Q(row.FabricationDetailingRevision)).AppendLine();
             }
-            return sb.ToString();
+            var content = sb.ToString();
+            StrictUtf8WithBom.GetByteCount(content);
+            return content;
+        }
+
+        private static UTF8Encoding CreateStrictUtf8WithBom()
+        {
+            var encoding = (UTF8Encoding)new UTF8Encoding(true).Clone();
+            encoding.EncoderFallback = EncoderFallback.ExceptionFallback;
+            encoding.DecoderFallback = DecoderFallback.ExceptionFallback;
+            return encoding;
         }
 
         private static void ValidateRow(RebarScheduleRow row)
