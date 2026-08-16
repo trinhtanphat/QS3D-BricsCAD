@@ -61,7 +61,41 @@ for token in ("System.Windows.Forms.MenuItem", "Windows Forms MenuItem", "GetOrC
 
 raft = read("src/QS3D.BricsCAD.V25/RaftFoundationCommands.cs")
 require(raft, '[CommandMethod("QS3DDRAWRAFTFOUNDATION", CommandFlags.Modal)]', "raft command")
-require(raft, "new DirectDrawP1Commands().DrawFoundation();", "canonical Foundation delegation")
+require(raft, "RaftFoundationBoundaryAuthoring.Execute();", "raft exact-boundary delegation")
+forbid(raft, "new DirectDrawP1Commands().DrawFoundation();", "raft must not fall back to point picking")
+
+raft_boundary = read("src/QS3D.BricsCAD.V25/RaftFoundationBoundaryAuthoring.cs")
+for token, label in (
+    ("PromptEntityOptions", "existing-boundary prompt"),
+    ("selected is Polyline polyline", "closed Polyline support"),
+    ("selected is Region region", "Region support"),
+    ("if (!polyline.Closed)", "closed Polyline validation"),
+    ("polyline.GetBulgeAt(index)", "curved Polyline rejection"),
+    ("region.Explode(exploded);", "exact Region decomposition"),
+    ("var line = item as Line;", "linear Region-only contract"),
+    ("usedCount != segments.Count", "multi-loop/hole rejection"),
+    ("CreateExactWcsPolyline(document, boundary)", "owned exact WCS source clone"),
+    ("SemanticCaptureService.Capture(document, ElementCategory.Foundation)", "canonical Foundation semantic capture"),
+    ("new Build3DCommands().Build3D();", "canonical native build"),
+    ("ProjectStateSnapshot.Capture(project)", "atomic project rollback"),
+    ("GeneratedGeometryService.RequireMatchingOwnership", "owned generated-CAD rollback"),
+    ("transaction.GetObject(result.ObjectId, OpenMode.ForRead, false)", "selected source stays read-only"),
+):
+    require(raft_boundary, token, label)
+for token in (
+    "GeometricExtents",
+    "Extents3d",
+    "GetPointAtDist",
+    "Tessell",
+    "Sample",
+    "ConvexHull",
+    "TransformBy(document.Editor.CurrentUserCoordinateSystem)",
+):
+    forbid(raft_boundary, token, "raft boundary must never guess/tessellate/retarget exact geometry")
+
+legacy_foundation = read("src/QS3D.BricsCAD.V25/DirectDrawP1Commands.cs")
+require(legacy_foundation, '[CommandMethod("QS3DDRAWFOUNDATION", CommandFlags.Modal)]', "legacy Foundation command preserved")
+require(legacy_foundation, 'AcquirePath(document, "Móng nhanh", 3, true);', "legacy Foundation point-pick preserved")
 
 ribbon = read("src/QS3D.BricsCAD.V25/Ribbon/RaftFoundationRibbonAugmenter.cs")
 require(ribbon, 'private const string ButtonText = "Móng Bè";', "raft ribbon label")
@@ -82,4 +116,4 @@ for command in ("QS3DQUANTITYINSIGHT", "QS3DDRAWRAFTFOUNDATION"):
     if registrations != 1:
         fail(f"{command}: expected exactly one CommandMethod registration, found {registrations}")
 
-print("PASS: ribbon-first palettes, Móng Bè quick draw, and selected-object quantity explanation source contracts")
+print("PASS: ribbon-first palettes, exact closed-boundary Móng Bè, and selected-object quantity explanation source contracts")
