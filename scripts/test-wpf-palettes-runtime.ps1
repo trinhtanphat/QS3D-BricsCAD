@@ -6,90 +6,97 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Xaml
+
+# IMPORTANT: this is an OFFLINE source-contract check. It must never load the
+# QS3D plugin or BricsCAD managed/native assemblies into standalone PowerShell.
+# Real palette construction/layout belongs to the licensed in-host V25 runtime
+# probe. PluginPath/BricscadDirectory are retained only for caller compatibility.
+$null = $PluginPath
+$null = $BricscadDirectory
 
 $root = Split-Path -Parent $PSScriptRoot
-if ([string]::IsNullOrWhiteSpace($PluginPath)) {
-    $PluginPath = Join-Path $root 'src\QS3D.BricsCAD.V25\bin\x64\Release\net48\QS3D.BricsCAD.V25.dll'
-}
-$plugin = (Resolve-Path -LiteralPath $PluginPath).Path
-$searchDirectories = @((Split-Path -Parent $plugin), (Resolve-Path -LiteralPath $BricscadDirectory).Path)
-$resolver = [System.ResolveEventHandler]{
-    param($sender, $eventArgs)
-    $fileName = ([System.Reflection.AssemblyName]$eventArgs.Name).Name + '.dll'
-    foreach ($directory in $searchDirectories) {
-        $candidate = Join-Path $directory $fileName
-        if (Test-Path -LiteralPath $candidate -PathType Leaf) { return [System.Reflection.Assembly]::LoadFrom($candidate) }
+$workspacePath = Join-Path $root 'src\QS3D.BricsCAD.V25\UI\WorkspacePanel.xaml'
+$rightPanelPath = Join-Path $root 'src\QS3D.BricsCAD.V25\UI\RightPanel.xaml'
+
+function Read-XamlDocument {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Required palette XAML source is missing: $Path"
     }
-    return $null
-}
 
-[AppDomain]::CurrentDomain.add_AssemblyResolve($resolver)
-try {
-    $assembly = [System.Reflection.Assembly]::LoadFrom($plugin)
-    foreach ($typeName in @('QS3D.BricsCAD.V25.UI.WorkspacePanel', 'QS3D.BricsCAD.V25.UI.RightPanel')) {
-        $type = $assembly.GetType($typeName, $true)
-        $control = [Activator]::CreateInstance($type)
-        if (-not ($control -is [System.Windows.UIElement])) { throw "$typeName is not a WPF UIElement." }
-        $control.Measure([System.Windows.Size]::new(1200d, 800d))
-        $control.Arrange([System.Windows.Rect]::new(0d, 0d, 1200d, 800d))
-        $control.UpdateLayout()
-        Write-Host "PASS: $typeName initialized and completed WPF layout."
-
-        if ($typeName -eq 'QS3D.BricsCAD.V25.UI.WorkspacePanel') {
-            $wideScroller = $control.FindName('WorkspaceOverflow')
-            if (-not ($wideScroller -is [System.Windows.Controls.ScrollViewer])) {
-                throw 'WorkspacePanel must expose the host-safe WorkspaceOverflow ScrollViewer.'
-            }
-            if ($wideScroller.ComputedHorizontalScrollBarVisibility -ne [System.Windows.Visibility]::Collapsed) {
-                throw 'WorkspacePanel must not show horizontal overflow at 1200x800.'
-            }
-
-            $compact = [Activator]::CreateInstance($type)
-            $dataContextMarker = [object]::new()
-            $compact.DataContext = $dataContextMarker
-            $compact.Measure([System.Windows.Size]::new(460d, 420d))
-            $compact.Arrange([System.Windows.Rect]::new(0d, 0d, 460d, 420d))
-            $compact.UpdateLayout()
-            $compactScroller = $compact.FindName('WorkspaceOverflow')
-            $contentRoot = $compact.FindName('WorkspaceContentRoot')
-            if (-not ($compactScroller -is [System.Windows.Controls.ScrollViewer])) {
-                throw 'Compact WorkspacePanel must retain the host-safe WorkspaceOverflow ScrollViewer.'
-            }
-            if (-not ($contentRoot -is [System.Windows.Controls.Grid])) {
-                throw 'Compact WorkspacePanel must expose WorkspaceContentRoot inside the overflow viewport.'
-            }
-            if ([Math]::Abs($compact.ActualWidth - 460d) -gt 0.1d -or [Math]::Abs($compact.ActualHeight - 420d) -gt 0.1d) {
-                throw "WorkspacePanel did not honor compact 460x420 arrange: $($compact.ActualWidth)x$($compact.ActualHeight)."
-            }
-            if ($compactScroller.HorizontalScrollBarVisibility -ne [System.Windows.Controls.ScrollBarVisibility]::Auto -or
-                $compactScroller.ComputedHorizontalScrollBarVisibility -ne [System.Windows.Visibility]::Visible) {
-                throw 'Compact WorkspacePanel must expose automatic horizontal overflow.'
-            }
-            if ($compactScroller.ExtentWidth -lt 559.5d -or $compactScroller.ViewportWidth -ge $compactScroller.ExtentWidth) {
-                throw "Compact WorkspacePanel must retain scrollable 560-DIP content: extent=$($compactScroller.ExtentWidth), viewport=$($compactScroller.ViewportWidth)."
-            }
-            if ($compactScroller.VerticalScrollBarVisibility -ne [System.Windows.Controls.ScrollBarVisibility]::Disabled -or
-                $compactScroller.ComputedVerticalScrollBarVisibility -eq [System.Windows.Visibility]::Visible -or
-                $compactScroller.ExtentHeight -gt ($compactScroller.ViewportHeight + 0.1d)) {
-                throw "WorkspacePanel outer viewport must not add vertical overflow: extent=$($compactScroller.ExtentHeight), viewport=$($compactScroller.ViewportHeight)."
-            }
-            if (-not ($compact.Content -is [System.Windows.Controls.ScrollViewer]) -or
-                -not [object]::ReferenceEquals($compact.DataContext, $dataContextMarker) -or
-                -not [object]::ReferenceEquals($contentRoot.DataContext, $dataContextMarker)) {
-                throw 'WorkspacePanel host-safe content composition must preserve inherited DataContext.'
-            }
-            foreach ($name in @('FamilySearch', 'PropertySearch')) {
-                $focusTarget = $compact.FindName($name)
-                if (-not ($focusTarget -is [System.Windows.Controls.Control]) -or
-                    -not $focusTarget.Focusable -or -not $focusTarget.IsTabStop) {
-                    throw "WorkspacePanel host-safe content composition must preserve keyboard focus for $name."
-                }
-            }
-            Write-Host "PASS: WorkspacePanel honors compact 460x420 overflow with normal WPF content composition and preserves DataContext plus keyboard focus targets."
-        }
+    try {
+        return [xml](Get-Content -LiteralPath $Path -Raw -Encoding UTF8)
+    }
+    catch {
+        throw "Palette XAML is not well-formed XML: $Path :: $($_.Exception.Message)"
     }
 }
-finally {
-    [AppDomain]::CurrentDomain.remove_AssemblyResolve($resolver)
+
+function New-XamlNamespaceManager {
+    param([Parameter(Mandatory = $true)][xml]$Document)
+
+    $manager = [System.Xml.XmlNamespaceManager]::new($Document.NameTable)
+    $manager.AddNamespace('p', 'http://schemas.microsoft.com/winfx/2006/xaml/presentation')
+    $manager.AddNamespace('x', 'http://schemas.microsoft.com/winfx/2006/xaml')
+    return $manager
 }
+
+function Require-Node {
+    param(
+        [Parameter(Mandatory = $true)][xml]$Document,
+        [Parameter(Mandatory = $true)][System.Xml.XmlNamespaceManager]$Namespaces,
+        [Parameter(Mandatory = $true)][string]$XPath,
+        [Parameter(Mandatory = $true)][string]$Message
+    )
+
+    $node = $Document.SelectSingleNode($XPath, $Namespaces)
+    if ($null -eq $node) { throw $Message }
+    return $node
+}
+
+$workspace = Read-XamlDocument $workspacePath
+$workspaceNs = New-XamlNamespaceManager $workspace
+$workspaceRoot = Require-Node $workspace $workspaceNs '/p:UserControl' 'WorkspacePanel.xaml must have a UserControl root.'
+if ($workspaceRoot.GetAttribute('Class', 'http://schemas.microsoft.com/winfx/2006/xaml') -ne 'QS3D.BricsCAD.V25.UI.WorkspacePanel') {
+    throw 'WorkspacePanel.xaml x:Class no longer matches the V25 WorkspacePanel contract.'
+}
+
+$workspaceOverflow = Require-Node $workspace $workspaceNs "//p:ScrollViewer[@x:Name='WorkspaceOverflow']" 'WorkspacePanel must expose WorkspaceOverflow.'
+if ($workspaceOverflow.GetAttribute('HorizontalScrollBarVisibility') -ne 'Auto' -or
+    $workspaceOverflow.GetAttribute('VerticalScrollBarVisibility') -ne 'Disabled' -or
+    $workspaceOverflow.GetAttribute('CanContentScroll') -ne 'False' -or
+    $workspaceOverflow.GetAttribute('PanningMode') -ne 'HorizontalOnly') {
+    throw 'WorkspaceOverflow must keep the host-safe horizontal-only overflow contract.'
+}
+
+$workspaceRootGrid = Require-Node $workspace $workspaceNs "//p:Grid[@x:Name='WorkspaceContentRoot']" 'WorkspacePanel must expose WorkspaceContentRoot.'
+$minWidth = 0d
+if (-not [double]::TryParse($workspaceRootGrid.GetAttribute('MinWidth'), [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$minWidth) -or $minWidth -lt 560d) {
+    throw 'WorkspaceContentRoot must retain at least the 560-DIP compact overflow width.'
+}
+if ($workspaceRootGrid.GetAttribute('Width') -notmatch 'ViewportWidth.*WorkspaceOverflow') {
+    throw 'WorkspaceContentRoot width must stay bound to WorkspaceOverflow.ViewportWidth.'
+}
+foreach ($name in @('FamilySearch', 'PropertySearch')) {
+    Require-Node $workspace $workspaceNs "//*[@x:Name='$name']" "WorkspacePanel must retain keyboard-focus target $name." | Out-Null
+}
+$workspaceTheme = Require-Node $workspace $workspaceNs "//p:ResourceDictionary[@Source='Theme.xaml']" 'WorkspacePanel must merge Theme.xaml.'
+$null = $workspaceTheme
+Write-Host 'PASS: WorkspacePanel source contract is structurally valid without loading BricsCAD/plugin assemblies.'
+
+$rightPanel = Read-XamlDocument $rightPanelPath
+$rightNs = New-XamlNamespaceManager $rightPanel
+$rightRoot = Require-Node $rightPanel $rightNs '/p:UserControl' 'RightPanel.xaml must have a UserControl root.'
+if ($rightRoot.GetAttribute('Class', 'http://schemas.microsoft.com/winfx/2006/xaml') -ne 'QS3D.BricsCAD.V25.UI.RightPanel') {
+    throw 'RightPanel.xaml x:Class no longer matches the V25 RightPanel contract.'
+}
+foreach ($name in @('DrawingHeaderGrid', 'DrawingList', 'LayerHeaderGrid', 'LayerSearchBox', 'LayerList')) {
+    Require-Node $rightPanel $rightNs "//*[@x:Name='$name']" "RightPanel must retain named contract element $name." | Out-Null
+}
+$rightTheme = Require-Node $rightPanel $rightNs "//p:ResourceDictionary[@Source='Theme.xaml']" 'RightPanel must merge Theme.xaml.'
+$null = $rightTheme
+Write-Host 'PASS: RightPanel source contract is structurally valid without loading BricsCAD/plugin assemblies.'
+
+Write-Host 'PASS: offline palette qualification completed using source/XAML checks only.'
+Write-Host 'Licensed in-host BricsCAD V25 runtime remains the authority for palette construction, layout, host theme, HiDPI, and native integration.'
