@@ -41,6 +41,7 @@ def main():
     activation = read("src/QS3D.BricsCAD.V25/Ribbon/BltBimWorkspaceActivationCoordinator.cs")
     init = read("src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator.cs")
     bim_ribbon = read("src/QS3D.BricsCAD.V25/Ribbon/BltBimRibbonMirrorAugmenter.cs")
+    modeling = read("src/QS3D.BricsCAD.V25/Ribbon/BltModelingRibbonAugmenter.cs")
     topbar = read("src/QS3D.BricsCAD.V25/Ribbon/BltTopbarTabContract.cs")
 
     # Full three-zone BIM workspace: real QS3D workspace left, native BricsCAD viewport centre,
@@ -96,6 +97,8 @@ def main():
 
     require(init, "BltBimWorkspaceActivationCoordinator.Start();", "Ribbon initialization")
     require(init, "BltBimWorkspaceActivationCoordinator.Stop();", "Ribbon teardown")
+    require(init, "BltModelingRibbonAugmenter.TryInitialize()", "MODELING ribbon initialization")
+    require(init, "BltModelingRibbonAugmenter.Reset();", "MODELING ribbon teardown")
 
     # BIM ribbon is required to stay the exact qualified Vẽ / Công cụ / IFC reference surface.
     require_order(
@@ -103,6 +106,75 @@ def main():
         ('"Vẽ"', '"Công cụ"', '"IFC"'),
         "BIM ribbon panel order",
     )
+
+    # MODELING mirrors the owner screenshot: three lead groups followed by compact stacked groups.
+    require_order(
+        modeling,
+        (
+            '"Vật liệu"',
+            '"Kết cấu thép"',
+            '"Mặt phẳng"',
+            '"Vẽ phác"',
+            '"Chỉnh sửa"',
+            '"Dựng 3D"',
+            '"Cấu kiện"',
+            '"Cắt khối"',
+        ),
+        "MODELING ribbon panel order",
+    )
+
+    for token in (
+        '"Vật\\nliệu"',
+        '"Mặt cắt\\nthép"',
+        '"Tạo chi\\ntiết"',
+        '"Mặt\\nXY"',
+        '"Đường"',
+        '"Polyline"',
+        '"Chữ nhật"',
+        '"Tròn"',
+        '"Cung"',
+        '"Nối polyline"',
+        '"Offset"',
+        '"Di chuyển"',
+        '"Sao chép"',
+        '"Theo phương Z"',
+        '"Extrude"',
+        '"Sweep"',
+        '"Loft"',
+        '"Gắn vào Family"',
+        '"Union"',
+        '"Subtract"',
+        '"Intersect"',
+        '"Bricscad.Windows.RibbonRowPanel"',
+        '"Bricscad.Windows.RibbonRowBreak"',
+        'spec.Large ? "Large" : "Standard"',
+        'private const string OwnedPrefix = "QS3D_MODELING_";',
+    ):
+        require(modeling, token, "MODELING owner-reference surface")
+
+    for token in (
+        '"_.MATERIALS"',
+        '"_.BIMPROFILES"',
+        '"_.BIMCREATEDETAIL"',
+        '"_.UCS _World"',
+        '"_.LINE"',
+        '"_.PLINE"',
+        '"_.RECTANG"',
+        '"_.CIRCLE"',
+        '"_.ARC"',
+        '"_.JOIN"',
+        '"_.OFFSET"',
+        '"_.MOVE"',
+        '"_.COPY"',
+        '"_.EXTRUDE"',
+        '"_.SWEEP"',
+        '"_.LOFT"',
+        '"QS3DFAMILIES"',
+        '"_.UNION"',
+        '"_.SUBTRACT"',
+        '"_.INTERSECT"',
+    ):
+        require(modeling, token, "MODELING command routing")
 
     # Topbar remains the ten-tab owner contract and may not silently resurrect QS3D_AUTHOR.
     for token in (
@@ -119,7 +191,7 @@ def main():
     ):
         require(topbar, token, "Topbar owner contract")
 
-    print("PASS: BLT3D MÔ HÌNH BIM workspace source contract is intact.")
+    print("PASS: BLT3D BIM + MODELING owner-reference source contract is intact.")
     return 0
 
 

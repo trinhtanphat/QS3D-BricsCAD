@@ -50,6 +50,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             BltHomeRibbonAugmenter.Reset();
             BltDrawRibbonAugmenter.Reset();
             BltBimRibbonMirrorAugmenter.Reset();
+            BltModelingRibbonAugmenter.Reset();
             BltTopbarTabContract.Reset();
             RibbonBootstrapIconAugmenter.Reset();
             Qs3dRibbonTabGroupCoordinator.Reset();
@@ -122,6 +123,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
             // QS3D-owned Home/Draw groups are deterministic without replacing native tabs.
             ready = BltHomeRibbonAugmenter.TryInitialize() && ready;
             ready = BltDrawRibbonFailSafe.TryInitialize() && ready;
+
+            // MODELING is a separate owner-reference surface. Rebuild only QS3D-owned panels
+            // into the BLT3D large-action + compact three-row layout; native/third-party
+            // Ribbon content remains untouched.
+            ready = BltModelingRibbonAugmenter.TryInitialize() && ready;
 
             // The BLT owner reference shows the same qualified Vẽ/Công cụ/IFC surface under
             // MÔ HÌNH BIM. Mirror the already-wired Draw panels so behavior, icons and sizing
