@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
+using System.Globalization;
 using System.Reflection;
+using System.Threading;
 
 namespace QS3D.BricsCAD.V25.Ribbon
 {
@@ -98,8 +100,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
                                ?? string.Empty;
                     var icon = ResolveIcon(command, text);
                     SetProperty(item, "ShowImage", true);
-                    SetProperty(item, "Image", RibbonIconFactory.Create(icon, 16));
-                    SetProperty(item, "LargeImage", RibbonIconFactory.Create(icon, 32));
+                    SetProperty(item, "Image", CreateIcon(icon, 16));
+                    SetProperty(item, "LargeImage", CreateIcon(icon, 32));
                 }
             }
 
@@ -110,6 +112,24 @@ namespace QS3D.BricsCAD.V25.Ribbon
             if (!(nested is IEnumerable nestedEnumerable)) return;
             foreach (var child in nestedEnumerable)
                 DecorateItem(child, ref commandButtons);
+        }
+
+        private static object CreateIcon(RibbonIconKind icon, int pixelSize)
+        {
+            // RibbonIconFactory uses compact path-data strings for a few generated shapes.
+            // Keep rendering invariant even on Windows installations that use a comma decimal
+            // separator, then restore the host UI thread culture immediately afterward.
+            var thread = Thread.CurrentThread;
+            var previous = thread.CurrentCulture;
+            try
+            {
+                thread.CurrentCulture = CultureInfo.InvariantCulture;
+                return RibbonIconFactory.Create(icon, pixelSize);
+            }
+            finally
+            {
+                thread.CurrentCulture = previous;
+            }
         }
 
         private static bool HasCompleteVisibleIcon(object item) =>
@@ -159,6 +179,12 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 return RibbonIconKind.Workspace;
             if (normalized.Contains("SECTION"))
                 return RibbonIconKind.Section;
+            if (normalized.Contains("ZOOM"))
+                return RibbonIconKind.Focus;
+            if (normalized.Contains("CLIP"))
+                return RibbonIconKind.Section;
+            if (normalized.Contains("SNAP"))
+                return RibbonIconKind.Locate;
 
             // BIM authoring / modeling.
             if (ContainsAny(normalized, "BUILD3D", "BUILD 3D", "SINH MÔ HÌNH"))
