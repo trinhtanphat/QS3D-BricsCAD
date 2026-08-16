@@ -14,6 +14,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var wanted = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
             if (wanted.Count == 0) return 0;
             var count = 0;
+            var changed = 0;
             using (document.LockDocument())
             using (var tr = document.Database.TransactionManager.StartTransaction())
             {
@@ -22,14 +23,20 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     var layer = tr.GetObject(id, OpenMode.ForRead) as LayerTableRecord;
                     if (layer == null || !wanted.Contains(layer.Name)) continue;
-                    layer.UpgradeOpen();
-                    layer.IsOff = !visible;
-                    if (visible && layer.IsFrozen) layer.IsFrozen = false;
                     count++;
+
+                    var targetIsOff = !visible;
+                    var requiresThaw = visible && layer.IsFrozen;
+                    if (layer.IsOff == targetIsOff && !requiresThaw) continue;
+
+                    layer.UpgradeOpen();
+                    if (layer.IsOff != targetIsOff) layer.IsOff = targetIsOff;
+                    if (requiresThaw) layer.IsFrozen = false;
+                    changed++;
                 }
                 tr.Commit();
             }
-            document.Editor.Regen();
+            if (changed > 0) document.Editor.Regen();
             return count;
         }
 
@@ -40,6 +47,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var wanted = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
             if (wanted.Count == 0) return 0;
             var count = 0;
+            var changed = 0;
             using (document.LockDocument())
             using (var tr = document.Database.TransactionManager.StartTransaction())
             {
@@ -48,18 +56,16 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     var layer = tr.GetObject(id, OpenMode.ForRead) as LayerTableRecord;
                     if (layer == null || !wanted.Contains(layer.Name)) continue;
-                    if (layer.IsLocked == locked)
-                    {
-                        count++;
-                        continue;
-                    }
+                    count++;
+                    if (layer.IsLocked == locked) continue;
+
                     layer.UpgradeOpen();
                     layer.IsLocked = locked;
-                    count++;
+                    changed++;
                 }
                 tr.Commit();
             }
-            document.Editor.Regen();
+            if (changed > 0) document.Editor.Regen();
             return count;
         }
     }
