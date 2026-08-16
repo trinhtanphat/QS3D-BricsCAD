@@ -48,6 +48,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             HomeTabActivationCoordinator.Stop();
             BltHomeRibbonAugmenter.Reset();
             BltDrawRibbonAugmenter.Reset();
+            BltRecognitionRibbonAugmenter.Reset();
             RibbonBootstrapIconAugmenter.Reset();
             Qs3dRibbonTabGroupCoordinator.Reset();
         }
@@ -115,9 +116,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
             ready = UpdateRibbonAugmenter.TryInitialize() && ready;
 
             // Reconcile screenshot-familiar presentation after feature augmenters so the
-            // QS3D-owned Home/Draw groups are deterministic without replacing native tabs.
+            // QS3D-owned Home/Draw/Recognition groups are deterministic without replacing native tabs.
             ready = BltHomeRibbonAugmenter.TryInitialize() && ready;
             ready = BltDrawRibbonFailSafe.TryInitialize() && ready;
+            ready = BltRecognitionRibbonAugmenter.TryInitialize() && ready;
 
             // The baseline Project/Authoring tabs are still text-only in RibbonBootstrapper.
             // Decorate them after feature augmenters have finished so both baseline and added
