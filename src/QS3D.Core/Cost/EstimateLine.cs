@@ -109,6 +109,9 @@ namespace QS3D.Core.Cost
                 throw new OverflowException("Estimate line final amount overflowed decimal arithmetic.", ex);
             }
 
+            if (finalAmount == 0m && estimatingQuantity != 0m && resolution.Item.UnitRate != 0m)
+                throw new OverflowException("Estimate line final amount underflowed decimal arithmetic.");
+
             return new EstimateLine(
                 canonicalLineId,
                 measurementSnapshot,
