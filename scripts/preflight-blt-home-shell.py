@@ -157,8 +157,13 @@ def main():
         'ProjectFileUiService.SaveCurrentProject',
         'ProjectFileUiService.SaveCurrentProjectAs',
         'Text = "DỰ ÁN GẦN ĐÂY"',
+        'Text = "Nhấp vào dự án để mở trực tiếp và bắt đầu làm việc"',
         'StatusButton("Mô hình", () => new Commands().ShowWorkspace())',
         'StatusButton("BQ", () => new Commands().ShowQuantitySummary())',
+        'private Button CreateActionCard(',
+        'private static Button CreateClickSurface(UIElement content, Cursor cursor)',
+        'button.Click += (_, __) => RunUiAction(action);',
+        'button.Click += (_, __) => OpenRecentProject(recent);',
         'Application.DocumentManager.Open(normalized, false)',
         'StatusItem("○ Nền sáng")',
         'StatusItem("◐ Tương phản")',
@@ -167,13 +172,22 @@ def main():
         'StartCenterUserStateStore.GetSnapshot().RecentProjects',
     ):
         require(shell, needle, shell_rel)
-    for stale in ('SendStringToExecute', '"_.OPEN', '"_.NEW', '"_.QSAVE', '"_.SAVEAS'):
+    for stale in (
+        'SendStringToExecute',
+        '"_.OPEN',
+        '"_.NEW',
+        '"_.QSAVE',
+        '"_.SAVEAS',
+        'border.MouseLeftButtonUp',
+        'border.MouseLeftButtonDown',
+        'Text = "Nhấp đúp vào dự án để mở trực tiếp và bắt đầu làm việc"',
+    ):
         forbid(shell, stale, shell_rel)
 
     command = read(command_rel)
     require(command, "createdWindow = new BltStartCenterWindow();", command_rel)
 
-    print("PASS: QS3D Home and Start Center use unique panels, rasterized icons and direct mouse-first project actions; Create New explicitly seeds the canonical project, while Save/Save As preserve existing-project and verified sidecar-transition safety.")
+    print("PASS: QS3D Home and Start Center use native WPF Button.Click hit targets, unique panels, rasterized icons and direct mouse-first project actions; Create New explicitly seeds the canonical project, while Save/Save As preserve existing-project and verified sidecar-transition safety.")
     return 0
 
 
