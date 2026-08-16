@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Rules;
 
@@ -11,7 +12,7 @@ namespace QS3D.Core.Templates
 
         public TemplateProfile(string id, string name)
         {
-            Id = string.IsNullOrWhiteSpace(id) ? throw new ArgumentException("Template id is required.", nameof(id)) : id.Trim();
+            Id = RequirePersistedText(id, nameof(id), "Template id");
             _name = RequireName(name);
         }
         public string Id { get; }
@@ -26,6 +27,18 @@ namespace QS3D.Core.Templates
         public IList<string> VisibleBqColumns { get; } = new List<string>();
 
         private static string RequireName(string value) =>
-            string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Template name is required.", nameof(value)) : value.Trim();
+            RequirePersistedText(value, nameof(value), "Template name");
+
+        private static string RequirePersistedText(string value, string parameterName, string label)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException(label + " is required.", parameterName);
+
+            var normalized = value.Trim();
+            if (normalized.Any(char.IsControl))
+                throw new ArgumentException(label + " cannot contain control characters.", parameterName);
+
+            return PersistedTextXml.Verify(normalized, parameterName, label);
+        }
     }
 }
