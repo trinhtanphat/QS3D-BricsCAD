@@ -54,9 +54,7 @@ namespace QS3D.Core.Geometry
                 AddCompensated(ref sum, ref compensation, cross);
             }
 
-            var area = sum * 0.5d;
-            if (!Finite(area)) throw new OverflowException("Polyline area exceeds the supported numeric range.");
-            return area;
+            return MultiplyFinitePreservingNonZero(sum, 0.5d, "Polyline area");
         }
 
         private static double SignedAreaScaled(IReadOnlyList<Point2> points)
@@ -123,8 +121,7 @@ namespace QS3D.Core.Geometry
                 AddCompensated(ref sum, ref compensation, cross);
             }
 
-            var normalizedArea = sum * 0.5d;
-            if (!Finite(normalizedArea)) throw new OverflowException("Polyline normalized area exceeds the supported numeric range.");
+            var normalizedArea = MultiplyFinitePreservingNonZero(sum, 0.5d, "Polyline normalized area");
             return RestoreScaledAreaFinite(normalizedArea, scaleX, scaleY);
         }
 
@@ -186,11 +183,8 @@ namespace QS3D.Core.Geometry
             var larger = Math.Max(scaleX, scaleY);
             var firstScale = Math.Abs(normalized) <= 1d ? larger : smaller;
             var secondScale = Math.Abs(normalized) <= 1d ? smaller : larger;
-            var scaled = normalized * firstScale;
-            if (!Finite(scaled)) throw new OverflowException("Polyline area exceeds the supported numeric range.");
-            var value = scaled * secondScale;
-            if (!Finite(value)) throw new OverflowException("Polyline area exceeds the supported numeric range.");
-            return value;
+            var scaled = MultiplyFinitePreservingNonZero(normalized, firstScale, "Polyline area");
+            return MultiplyFinitePreservingNonZero(scaled, secondScale, "Polyline area");
         }
 
         private static double RestoreScaledAreaFinite(double normalizedArea, double scaleX, double scaleY)
@@ -201,11 +195,8 @@ namespace QS3D.Core.Geometry
             var larger = Math.Max(scaleX, scaleY);
             var firstScale = Math.Abs(normalizedArea) <= 1d ? larger : smaller;
             var secondScale = Math.Abs(normalizedArea) <= 1d ? smaller : larger;
-            var scaled = normalizedArea * firstScale;
-            if (!Finite(scaled)) throw new OverflowException("Polyline area exceeds the supported numeric range.");
-            var area = scaled * secondScale;
-            if (!Finite(area)) throw new OverflowException("Polyline area exceeds the supported numeric range.");
-            return area;
+            var scaled = MultiplyFinitePreservingNonZero(normalizedArea, firstScale, "Polyline area");
+            return MultiplyFinitePreservingNonZero(scaled, secondScale, "Polyline area");
         }
 
         private static double CrossFinite(double ax, double ay, double bx, double by)
@@ -230,11 +221,17 @@ namespace QS3D.Core.Geometry
 
             var firstScale = Math.Min(scaleA, scaleB);
             var secondScale = Math.Max(scaleA, scaleB);
-            var scaled = normalized * firstScale;
-            if (!Finite(scaled)) throw new OverflowException("Polyline area exceeds the supported numeric range.");
-            var value = scaled * secondScale;
-            if (!Finite(value)) throw new OverflowException("Polyline area exceeds the supported numeric range.");
-            return value;
+            var scaled = MultiplyFinitePreservingNonZero(normalized, firstScale, "Polyline area");
+            return MultiplyFinitePreservingNonZero(scaled, secondScale, "Polyline area");
+        }
+
+        private static double MultiplyFinitePreservingNonZero(double first, double second, string operation)
+        {
+            var value = first * second;
+            if (!Finite(value)) throw new OverflowException(operation + " exceeds the supported numeric range.");
+            if (value == 0d && first != 0d && second != 0d)
+                throw new OverflowException(operation + " underflowed a non-zero value to zero.");
+            return value == 0d ? 0d : value;
         }
 
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
