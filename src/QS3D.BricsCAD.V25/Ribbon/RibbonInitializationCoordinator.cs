@@ -55,6 +55,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             BltRecognitionRibbonAugmenter.Reset();
             BltRecognitionIconPolisher.Reset();
             BltViewRibbonAugmenter.Reset();
+            BltViewActionOverrideAugmenter.Reset();
             BltBimRibbonMirrorAugmenter.Reset();
             BltModelingRibbonAugmenter.Reset();
             BltTopbarTabContract.Reset();
@@ -139,6 +140,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
             ready = BltRecognitionRibbonAugmenter.TryInitialize() && ready;
             ready = BltViewRibbonAugmenter.TryInitialize() && ready;
+            ready = BltViewActionOverrideAugmenter.TryInitialize() && ready;
 
             // MODELING is a separate owner-reference surface. Rebuild only QS3D-owned panels
             // into the BLT3D large-action + compact three-row layout; native/third-party
