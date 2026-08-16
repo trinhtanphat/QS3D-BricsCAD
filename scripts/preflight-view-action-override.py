@@ -9,6 +9,9 @@ init_path = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator
 fallback_path = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonCommandParameterFallback.cs"
 section_path = ROOT / "src/QS3D.BricsCAD.V25/SectionReviewCommands.cs"
 graphics_path = ROOT / "src/QS3D.BricsCAD.V25/GraphicsOptimizationCommands.cs"
+planner_path = ROOT / "src/QS3D.Core/Geometry/SectionDetailVolumePlanner.cs"
+planner_smoke_path = ROOT / "tests/QS3D.Core.SmokeTests/SectionDetailVolumePlannerSmoke.cs"
+smoke_registration_path = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 
 
 def source(path):
@@ -17,7 +20,16 @@ def source(path):
 
 
 errors = []
-for path in (override_path, init_path, fallback_path, section_path, graphics_path):
+for path in (
+    override_path,
+    init_path,
+    fallback_path,
+    section_path,
+    graphics_path,
+    planner_path,
+    planner_smoke_path,
+    smoke_registration_path,
+):
     if not path.is_file():
         errors.append("missing required source: " + str(path.relative_to(ROOT)))
 
@@ -27,6 +39,9 @@ if not errors:
     fallback = source(fallback_path)
     section = source(section_path)
     graphics = source(graphics_path)
+    planner = source(planner_path)
+    planner_smoke = source(planner_smoke_path)
+    smoke_registration = source(smoke_registration_path)
 
     if '"Hiển thị"' not in override:
         errors.append("XEM display panel title must be Hiển thị")
@@ -111,6 +126,9 @@ if not errors:
         "entity.GeometricExtents",
         "editor.CurrentUserCoordinateSystem.Inverse()",
         ".TransformBy(worldToUcs)",
+        "!Finite(minX)",
+        "!Finite(maxZ)",
+        "SectionDetailVolumePlanner.TryCreate(",
         "BuildDetailCommand(minPoint, maxPoint)",
         'private const string BimDetailCommand = "_BIMSECTION _Detail ";',
         "document.SendStringToExecute(command, true, false, true);",
@@ -118,6 +136,35 @@ if not errors:
     for token in cut_requirements:
         if token not in section:
             errors.append("Cắt theo đối tượng implementation contract missing: " + token)
+
+    planner_requirements = (
+        "!Finite(spanX)",
+        "!Finite(spanY)",
+        "!Finite(spanZ)",
+        "firstX < minX",
+        "firstY < minY",
+        "baseZ < minZ",
+        "oppositeX > maxX",
+        "oppositeY > maxY",
+        "paddedTopZ > maxZ",
+        "paddedHeight > spanZ",
+        "representedTopZ > maxZ",
+    )
+    for token in planner_requirements:
+        if token not in planner:
+            errors.append("Cắt theo đối tượng precision planner contract missing: " + token)
+
+    smoke_requirements = (
+        "LargeCoordinatePaddingCollapseFailsClosed",
+        "SpanOverflowFailsClosed",
+        "NonFiniteInputFailsClosed",
+        "RepresentableLargeCoordinatesRemainSupported",
+        "SectionDetailVolumePlannerSmoke.Run();",
+    )
+    combined_smoke = planner_smoke + "\n" + smoke_registration
+    for token in smoke_requirements:
+        if token not in combined_smoke:
+            errors.append("Cắt theo đối tượng deterministic precision regression missing: " + token)
 
     # Locally generated WPF vectors only. Do not pull proprietary/reference raster assets into QS3D.
     quoted_raster = re.compile(r'''["'][^"'\r\n]*\.(?:png|ico|bmp)["']''', re.IGNORECASE)
@@ -137,4 +184,4 @@ print("VIEW ACTION OVERRIDE PREFLIGHT: PASS")
 print("- XEM Hiển thị exposes Tối ưu đồ họa, Section Box, Cắt theo đối tượng in reference order.")
 print("- All three actions are large icon-forward buttons with deterministic command routing.")
 print("- Tối ưu đồ họa applies documented graphics preferences and regenerates the viewport.")
-print("- Cắt theo đối tượng derives a padded BIM Detail volume from selected object extents in the current UCS.")
+print("- Cắt theo đối tượng fails closed on non-finite/overflow/collapsed-padding bounds before native BIM Detail dispatch.")
