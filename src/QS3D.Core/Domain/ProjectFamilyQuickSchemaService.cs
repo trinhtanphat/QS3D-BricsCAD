@@ -166,7 +166,11 @@ namespace QS3D.Core.Domain
                 throw new InvalidOperationException((key ?? "Giá trị") + " phải là số hữu hạn hợp lệ (mm). Giá trị hiện tại: “" + raw + "”.");
             if (positive && valueMm <= 0d)
                 throw new InvalidOperationException((key ?? "Giá trị") + " phải lớn hơn 0 mm.");
-            return valueMm / MillimetersPerMeter;
+
+            var valueMeters = valueMm / MillimetersPerMeter;
+            if (positive && valueMeters <= 0d)
+                throw new InvalidOperationException((key ?? "Giá trị") + " quá nhỏ để biểu diễn giá trị dương theo đơn vị nội bộ (m).");
+            return valueMeters;
         }
 
         public static string FormatInternalMetersAsMillimeters(string key, string internalMeters, CultureInfo culture)
