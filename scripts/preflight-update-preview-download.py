@@ -42,6 +42,7 @@ def main():
     for needle in (
         "private const long MaxPackageBytes = 256L * 1024L * 1024L;",
         "private const int MaxChecksumBytes = 64 * 1024;",
+        "private const int NetworkTimeoutMilliseconds = 30000;",
         "private const int MaxRedirects = 8;",
         "private const int MaxReleaseTagPrefixChars = 48;",
         "EnsureAllowedUri(release.PackageUri);",
@@ -50,10 +51,15 @@ def main():
         "if (existingLength <= MaxPackageBytes)",
         "private static async Task<HttpWebResponse> GetResponseFollowingRedirectsAsync(Uri uri)",
         "request.AllowAutoRedirect = false;",
+        "request.Timeout = NetworkTimeoutMilliseconds;",
+        "request.ReadWriteTimeout = NetworkTimeoutMilliseconds;",
         "var location = response.Headers[HttpResponseHeader.Location];",
         "if (!Uri.TryCreate(current, location, out nextUri) || nextUri == null)",
         "EnsureAllowedUri(nextUri);",
+        "EnsureAllowedUri(response.ResponseUri);",
+        "if (response.ContentLength > maxBytes)",
         "if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))",
+        "if (!string.IsNullOrEmpty(uri.UserInfo))",
         'string.Equals(host, "github.com", StringComparison.OrdinalIgnoreCase)',
         'string.Equals(host, "api.github.com", StringComparison.OrdinalIgnoreCase)',
         'host.EndsWith(".githubusercontent.com", StringComparison.OrdinalIgnoreCase)',
@@ -63,6 +69,7 @@ def main():
         "if (end < normalized.Length && !char.IsWhiteSpace(normalized[end]))",
         "File.Move(partialPath, packagePath);",
         "TryDelete(partialPath);",
+        "Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)",
         'Path.Combine(root, "QS3D", "Updates", "Downloads", ToSafePathSegment(tag))',
         "var exactTag = value ?? string.Empty;",
         'if (IsWindowsReservedPathSegment(result)) result = "_" + result;',
@@ -94,9 +101,7 @@ def main():
     prefix_bound = downloader.index("if (result.Length > MaxReleaseTagPrefixChars)", safe_segment_start)
     identity_return = downloader.index('return result + "~" + ComputeTagIdentity(exactTag);', safe_segment_start)
     if not (reserved_gate < prefix_bound < identity_return):
-        raise SystemExit(
-            "FAIL: release-tag cache segment must escape reserved names, bound its readable prefix, then append exact-tag identity"
-        )
+        raise SystemExit("FAIL: release-tag cache segment must escape reserved names, bound its readable prefix, then append exact-tag identity")
 
     for stale in (
         "request.AllowAutoRedirect = true;",
@@ -135,13 +140,7 @@ def main():
     ):
         forbid(start, stale, start_rel)
 
-    print(
-        "PASS: V25 preview fallback discovers the exact package/checksum pair, bounds cached and network packages before hashing, "
-        "validates every bounded HTTPS GitHub redirect hop, verifies SHA-256 before retaining the ZIP, escapes Windows reserved "
-        "release-tag cache segments, bounds the readable cache prefix, appends a SHA-256 identity of the exact release tag to prevent "
-        "case/sanitization cache collisions, stages under LocalApplicationData, exposes the Update Center directly from Start Center "
-        "without command dispatch, and only reveals unsigned preview packages while the existing signed-manifest scheduling path remains separate."
-    )
+    print("PASS: V25 preview fallback pins package identity, bounded transport, manual redirect validation, response URI/content-length checks, HTTPS/user-info/GitHub host restrictions, checksum-before-retain, LocalApplicationData staging, release-tag identity, unsigned execution prohibition, and direct Update Center entry.")
     return 0
 
 
