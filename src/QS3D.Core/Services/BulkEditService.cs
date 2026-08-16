@@ -230,7 +230,7 @@ namespace QS3D.Core.Services
                     throw new InvalidOperationException("Project contains a null semantic element entry.");
                 var projectElementId = (projectElement.Id ?? string.Empty).Trim();
                 if (projectElementId.Length == 0)
-                    throw new InvalidOperationException("Project contains a semantic element with a blank id.");
+                    throw new InvalidOperationException("Project contains an element with a blank semantic id.");
                 if (projectElements.ContainsKey(projectElementId))
                     throw new InvalidOperationException("Project contains duplicate semantic element id: " + projectElementId);
                 projectElements.Add(projectElementId, projectElement);
@@ -279,6 +279,7 @@ namespace QS3D.Core.Services
                     throw new InvalidOperationException("Project contains duplicate family id: " + id + ".");
                 result.Add(id, family);
             }
+            return result;
         }
 
         private static void RequireFamilyOwnershipUnchanged(
