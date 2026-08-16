@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             CollectivelySignificantSmallTotalsArePreserved();
+            InputOrderDoesNotDropSmallTotals();
             OrdinarySummaryAggregationRemainsStable();
             OverflowStillFailsClosed();
         }
@@ -30,6 +31,21 @@ namespace QS3D.Core.SmokeTests
             Assert(summary.Before.Equals(expected), "Quantity revision summary Before lost collectively significant small contributions.");
             Assert(summary.After.Equals(expected), "Quantity revision summary After lost collectively significant small contributions.");
             Assert(summary.Delta.Equals(0d), "Equal compensated quantity revision totals must retain a zero delta.");
+        }
+
+        private static void InputOrderDoesNotDropSmallTotals()
+        {
+            const double expected = 10000000000000002d;
+            var summaries = Summarize(
+                Row("small-before", "Concrete", 1d, 1d),
+                Row("large-middle", "Concrete", 1e16d, 1e16d),
+                Row("small-after", "Concrete", 1d, 1d));
+
+            Assert(summaries.Count == 1, "Input-order regression must remain in one quantity revision summary group.");
+            var summary = summaries[0];
+            Assert(summary.Before.Equals(expected), "Quantity revision summary Before must preserve small contributions around a huge middle row.");
+            Assert(summary.After.Equals(expected), "Quantity revision summary After must preserve small contributions around a huge middle row.");
+            Assert(summary.Delta.Equals(0d), "Equal input-order-independent revision totals must retain a zero delta.");
         }
 
         private static void OrdinarySummaryAggregationRemainsStable()
