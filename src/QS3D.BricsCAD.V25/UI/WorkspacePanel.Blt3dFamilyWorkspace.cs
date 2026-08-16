@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using System.Windows.Threading;
 using QS3D.Core.Domain;
 
 namespace QS3D.BricsCAD.V25.UI
@@ -20,13 +21,39 @@ namespace QS3D.BricsCAD.V25.UI
             "Cọc", "Đài Cọc", "Dầm Móng", "Móng Băng", "Móng Bè", "Bê Tông Lót"
         };
 
+        // This initializer runs before WorkspacePanel's existing static constructor. The handler
+        // queues the BLT3D presentation until after the compact-shell Loaded handler has retired
+        // the legacy columns, so the final visible layout is deterministic.
+        private static readonly bool Blt3dFamilyWorkspaceBootstrapRegistered =
+            RegisterBlt3dFamilyWorkspaceBootstrap();
+
         private bool _blt3dFamilyWorkspaceApplied;
         private Border? _blt3dFamilyModeChooser;
         private TextBlock? _blt3dFamilyModeTitle;
 
+        private static bool RegisterBlt3dFamilyWorkspaceBootstrap()
+        {
+            EventManager.RegisterClassHandler(
+                typeof(WorkspacePanel),
+                FrameworkElement.LoadedEvent,
+                new RoutedEventHandler(OnBlt3dFamilyWorkspaceLoaded),
+                true);
+            return true;
+        }
+
+        private static void OnBlt3dFamilyWorkspaceLoaded(object sender, RoutedEventArgs e)
+        {
+            if (!(sender is WorkspacePanel panel)) return;
+            panel.Dispatcher.BeginInvoke(
+                new Action(panel.ApplyBlt3dFamilyWorkspace),
+                DispatcherPriority.Loaded);
+        }
+
         private void ApplyBlt3dFamilyWorkspace()
         {
-            if (_blt3dFamilyWorkspaceApplied) return;
+            // Read the bootstrap flag deliberately: repositories building with warnings-as-errors
+            // must not treat the registration field as an assigned-but-unused private field.
+            if (!Blt3dFamilyWorkspaceBootstrapRegistered || _blt3dFamilyWorkspaceApplied) return;
 
             RestoreBlt3dWorkspaceColumns();
             EnsureBlt3dFoundationTree();
