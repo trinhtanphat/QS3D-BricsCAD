@@ -43,6 +43,7 @@ def main():
         "private const long MaxPackageBytes = 256L * 1024L * 1024L;",
         "private const int MaxChecksumBytes = 64 * 1024;",
         "private const int MaxRedirects = 8;",
+        "private const int MaxReleaseTagPrefixChars = 48;",
         "EnsureAllowedUri(release.PackageUri);",
         "EnsureAllowedUri(release.PackageChecksumUri);",
         "var existingLength = new FileInfo(packagePath).Length;",
@@ -63,7 +64,14 @@ def main():
         "File.Move(partialPath, packagePath);",
         "TryDelete(partialPath);",
         'Path.Combine(root, "QS3D", "Updates", "Downloads", ToSafePathSegment(tag))',
+        "var exactTag = value ?? string.Empty;",
         'if (IsWindowsReservedPathSegment(result)) result = "_" + result;',
+        "if (result.Length > MaxReleaseTagPrefixChars)",
+        "result = result.Substring(0, MaxReleaseTagPrefixChars).TrimEnd(' ', '.');",
+        'return result + "~" + ComputeTagIdentity(exactTag);',
+        "private static string ComputeTagIdentity(string value)",
+        "var bytes = Encoding.UTF8.GetBytes(value ?? string.Empty);",
+        "var hash = sha256.ComputeHash(bytes);",
         "private static bool IsWindowsReservedPathSegment(string value)",
         "var dotIndex = value.IndexOf('.');",
         "var stem = (dotIndex >= 0 ? value.Substring(0, dotIndex) : value).TrimEnd(' ');",
@@ -83,13 +91,17 @@ def main():
 
     safe_segment_start = downloader.index("private static string ToSafePathSegment(string value)")
     reserved_gate = downloader.index('if (IsWindowsReservedPathSegment(result)) result = "_" + result;', safe_segment_start)
-    safe_segment_return = downloader.index("return result;", safe_segment_start)
-    if reserved_gate > safe_segment_return:
-        raise SystemExit("FAIL: Windows reserved release-tag segments must be escaped before the cache path segment is returned")
+    prefix_bound = downloader.index("if (result.Length > MaxReleaseTagPrefixChars)", safe_segment_start)
+    identity_return = downloader.index('return result + "~" + ComputeTagIdentity(exactTag);', safe_segment_start)
+    if not (reserved_gate < prefix_bound < identity_return):
+        raise SystemExit(
+            "FAIL: release-tag cache segment must escape reserved names, bound its readable prefix, then append exact-tag identity"
+        )
 
     for stale in (
         "request.AllowAutoRedirect = true;",
         "request.MaximumAutomaticRedirections",
+        'if (result.Length == 0) return "release";',
     ):
         forbid(downloader, stale, downloader_rel)
 
@@ -126,9 +138,9 @@ def main():
     print(
         "PASS: V25 preview fallback discovers the exact package/checksum pair, bounds cached and network packages before hashing, "
         "validates every bounded HTTPS GitHub redirect hop, verifies SHA-256 before retaining the ZIP, escapes Windows reserved "
-        "release-tag cache segments including extension forms, stages under LocalApplicationData, exposes the Update Center directly "
-        "from Start Center without command dispatch, and only reveals unsigned preview packages while the existing signed-manifest "
-        "scheduling path remains separate."
+        "release-tag cache segments, bounds the readable cache prefix, appends a SHA-256 identity of the exact release tag to prevent "
+        "case/sanitization cache collisions, stages under LocalApplicationData, exposes the Update Center directly from Start Center "
+        "without command dispatch, and only reveals unsigned preview packages while the existing signed-manifest scheduling path remains separate."
     )
     return 0
 
