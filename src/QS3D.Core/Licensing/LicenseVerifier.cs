@@ -149,8 +149,6 @@ namespace QS3D.Core.Licensing
             }
             if (nowUtc.Kind != DateTimeKind.Utc) throw new ArgumentException("Verification time must be UTC.", nameof(nowUtc));
             license.Validate();
-            if (!string.Equals(license.ProductId, expectedProductId, StringComparison.Ordinal))
-                return new LicenseVerificationResult(LicenseStatus.ProductMismatch, license);
             if (license.Signature == null || license.Signature.Length == 0)
                 return new LicenseVerificationResult(LicenseStatus.InvalidSignature, license);
 
@@ -161,6 +159,8 @@ namespace QS3D.Core.Licensing
                 signatureValid = rsa.VerifyData(license.CanonicalPayload(), license.Signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             }
             if (!signatureValid) return new LicenseVerificationResult(LicenseStatus.InvalidSignature, license);
+            if (!string.Equals(license.ProductId, expectedProductId, StringComparison.Ordinal))
+                return new LicenseVerificationResult(LicenseStatus.ProductMismatch, license);
             if (nowUtc < license.NotBeforeUtc) return new LicenseVerificationResult(LicenseStatus.NotYetValid, license);
             if (nowUtc >= license.ExpiresUtc) return new LicenseVerificationResult(LicenseStatus.Expired, license);
             return new LicenseVerificationResult(LicenseStatus.Valid, license);
