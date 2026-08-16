@@ -17,7 +17,7 @@ namespace QS3D.BricsCAD.V25
     internal static class QuantityContextMenuCoordinator
     {
         private const string ExtensionTypeName = "Bricscad.Windows.ContextMenuExtension, BrxMgd";
-        private const string MenuItemTypeName = "System.Windows.Forms.MenuItem, System.Windows.Forms";
+        private const string MenuItemTypeName = "Bricscad.Windows.MenuItem, BrxMgd";
         private const string QuantityCommand = "QS3DQUANTITYINSIGHT";
 
         private static RXClass? _entityRuntimeClass;
@@ -33,7 +33,7 @@ namespace QS3D.BricsCAD.V25
             var extensionType = Type.GetType(ExtensionTypeName, false)
                 ?? throw new InvalidOperationException("BricsCAD ContextMenuExtension type is unavailable.");
             var menuItemType = Type.GetType(MenuItemTypeName, false)
-                ?? throw new InvalidOperationException("Windows Forms MenuItem type is unavailable.");
+                ?? throw new InvalidOperationException("BricsCAD native MenuItem type is unavailable.");
             var runtimeClass = RXObject.GetClass(typeof(Entity))
                 ?? throw new InvalidOperationException("BricsCAD Entity RXClass is unavailable.");
 
@@ -148,11 +148,35 @@ namespace QS3D.BricsCAD.V25
 
         private static object CreateMenuItem(Type menuItemType, string text)
         {
+            object? item = null;
+
             var stringConstructor = menuItemType.GetConstructor(new[] { typeof(string) });
-            var item = stringConstructor != null
-                ? stringConstructor.Invoke(new object[] { text })
-                : Activator.CreateInstance(menuItemType)
-                  ?? throw new InvalidOperationException("Cannot create native menu item.");
+            if (stringConstructor != null)
+            {
+                item = stringConstructor.Invoke(new object[] { text });
+            }
+            else
+            {
+                // BricsCAD exposes a native MenuItem(string, System.Drawing.Icon) constructor on
+                // supported hosts. Keep this reflection-based so QS3D does not take a UI compile dependency.
+                var stringIconConstructor = menuItemType.GetConstructors(BindingFlags.Instance | BindingFlags.Public)
+                    .FirstOrDefault(constructor =>
+                    {
+                        var parameters = constructor.GetParameters();
+                        return parameters.Length == 2 &&
+                               parameters[0].ParameterType == typeof(string) &&
+                               string.Equals(parameters[1].ParameterType.FullName, "System.Drawing.Icon", StringComparison.Ordinal);
+                    });
+                if (stringIconConstructor != null)
+                {
+                    item = stringIconConstructor.Invoke(new object?[] { text, null });
+                }
+            }
+
+            item ??= Activator.CreateInstance(menuItemType);
+            if (item == null)
+                throw new InvalidOperationException("Cannot create BricsCAD native MenuItem.");
+
             SetProperty(item, "Text", text);
             return item;
         }

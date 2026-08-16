@@ -7,6 +7,7 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class StartCenterCommands
     {
+        private static readonly bool UseBltStartCenterShell = true;
         private static StartCenterWindow? _window;
         private static bool _documentActivatedSubscribed;
 
@@ -19,7 +20,13 @@ namespace QS3D.BricsCAD.V25
             {
                 if (_window == null || !_window.IsLoaded)
                 {
-                    createdWindow = new StartCenterWindow();
+                    // Keep the legacy StartCenterWindow as an explicit rollback path while the
+                    // requested BLT3D-familiar shell is the default visible surface.
+                    if (UseBltStartCenterShell)
+                        createdWindow = new BltStartCenterWindow();
+                    else
+                        createdWindow = new StartCenterWindow();
+
                     _window = createdWindow;
                     createdWindow.Closed += OnStartCenterClosed;
                     SubscribeToDocumentActivation();
