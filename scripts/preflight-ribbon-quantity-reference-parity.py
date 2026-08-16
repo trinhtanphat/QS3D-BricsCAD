@@ -4,60 +4,118 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 AUGMENTER = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/QuantityReferenceRibbonAugmenter.cs"
+ICON_FACTORY = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonIconFactory.cs"
 COORDINATOR = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator.cs"
 PLUGIN = ROOT / "src/QS3D.BricsCAD.V25/PluginEntry.cs"
-BOOTSTRAP = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs"
 errors = []
 
-for path in (AUGMENTER, COORDINATOR, PLUGIN, BOOTSTRAP):
+for path in (AUGMENTER, ICON_FACTORY, COORDINATOR, PLUGIN):
     if not path.is_file():
         errors.append("missing quantity Ribbon parity source: " + str(path.relative_to(ROOT)))
 
 button_specs = (
-    ('QS3D_QTY_REF_SETTINGS', 'Cài đặt tính toán', 'QS3DQUANTITYSETTINGS'),
-    ('QS3D_QTY_REF_CALCULATE', 'Tính khối lượng', 'QS3DREGEN'),
-    ('QS3D_QTY_REF_ED2', 'Xuất ED2', 'QS3DED2'),
-    ('QS3D_QTY_REF_VIEW', 'Xem khối lượng', 'QS3DBQ'),
-    ('QS3D_QTY_REF_EXPLAIN', 'Diễn giải', 'QS3DBQ'),
-    ('QS3D_QTY_REF_WALL', 'Khối lượng tường', 'QS3DWALLQTY'),
-    ('QS3D_QTY_REF_EXCELLOCATE', 'Excel → CAD', 'QS3DEXCELLOCATE'),
-    ('QS3D_QTY_REF_COMPARE', 'Đối chiếu Cũ/Mới', 'QS3DREVDIFF'),
+    ("QS3D_QTY_BLT_SETTINGS", "Cài đặt\\ntính toán", "QS3DQUANTITYSETTINGS", "QuantitySettings"),
+    ("QS3D_QTY_BLT_CALCULATE", "Tính khối lượng\\n(Engine2)", "QS3DREGEN", "QuantityCalculate"),
+    ("QS3D_QTY_BLT_EXPORT", "Xuất\\n.blte2", "QS3DED2", "QuantityExport"),
+    ("QS3D_QTY_BLT_VIEW", "Xem khối\\nlượng", "QS3DBQ", "QuantityView"),
+    ("QS3D_QTY_BLT_EXPLAIN", "Diễn\\ngiải", "QS3DBQ", "QuantityExplain"),
+    ("QS3D_QTY_BLT_COMPARE", "Đối chiếu\\nCũ/Mới", "QS3DREVDIFF", "QuantityCompare"),
+)
+
+legacy_panel_ids = (
+    "QS3D_QTY_EXCEL_PANEL_SOURCE",
+    "QS3D_QTY_OPENINGS_PANEL_SOURCE",
+    "QS3D_QTY_REBAR_SCHEDULE_PANEL_SOURCE",
+    "QS3D_QTY_REBAR_3D_PANEL_SOURCE",
+    "QS3D_QTY_REBAR_HEALTH_PANEL_SOURCE",
+    "QS3D_QTY_REFERENCE_PANEL_SOURCE",
+    "QS3D_QTY_PANEL_SOURCE",
 )
 
 if AUGMENTER.is_file():
     text = AUGMENTER.read_text(encoding="utf-8")
     required = (
         'private const string TabId = "QS3D_QTY";',
-        'private const string PanelSourceId = "QS3D_QTY_REFERENCE_PANEL_SOURCE";',
-        'private const string PanelTitle = "Tính khối lượng";',
-        'var source = FindPanelSource(panelEnumerable, PanelSourceId) ?? CreatePanel(panels);',
-        'var button = FindById(items, spec.Id);',
+        'private const string SettingsPanelSourceId = "QS3D_QTY_SETTINGS_PANEL_SOURCE";',
+        'private const string QuantityPanelSourceId = "QS3D_QTY_QUANTITY_PANEL_SOURCE";',
+        'RemoveOwnedPanel(panels, sourceId);',
+        'AddPanel(panels, SettingsPanelSourceId, "Cài đặt", SettingsButtons);',
+        'AddPanel(panels, QuantityPanelSourceId, "Khối lượng", QuantityButtons);',
+        'SetProperty(button, "ShowText", true);',
+        'SetProperty(button, "ShowImage", true);',
         'SetProperty(button, "CommandParameter", spec.Command);',
         'SetProperty(button, "CommandHandler", new CommandHandler());',
-        'if (quantityTab == null) return false;',
-        'Application.DocumentManager.MdiActiveDocument?.SendStringToExecute(normalized + " ", true, false, false);',
+        'SetEnumProperty(button, "Size", "Large");',
+        'SetProperty(button, "Image", RibbonIconFactory.Create(spec.Icon, 16));',
+        'SetProperty(button, "LargeImage", RibbonIconFactory.Create(spec.Icon, 32));',
+        'public static void Reset() => _initialized = false;',
     )
     for needle in required:
         if needle not in text:
-            errors.append("QuantityReferenceRibbonAugmenter missing reconciliation contract: " + needle)
+            errors.append("QuantityReferenceRibbonAugmenter missing BLT3D reconciliation contract: " + needle)
 
-    for button_id, label, command in button_specs:
-        token = f'new ButtonSpec("{button_id}", "{label}", "{command}")'
-        if text.count(token) != 1:
-            errors.append("expected exactly one quantity reference button spec: " + token)
+    if text.count("AddPanel(panels,") != 2:
+        errors.append("quantity BLT3D layout must add exactly two panels")
 
-    for forbidden in (".Clear()", "Remove(", "RibbonBootstrapper.Reset()", "new RibbonTab"):
-        if forbidden in text:
-            errors.append("quantity reference augmenter must remain additive/non-destructive: " + forbidden)
+    for panel_id in legacy_panel_ids:
+        if text.count(f'"{panel_id}"') != 1:
+            errors.append("legacy QS3D quantity panel must be owned exactly once for deterministic removal: " + panel_id)
+
+    for button_id, label, command, icon in button_specs:
+        if text.count(f'"{button_id}"') != 1:
+            errors.append("expected exactly one BLT3D quantity button id: " + button_id)
+        if text.count(f'"{label}"') != 1:
+            errors.append("expected exactly one BLT3D quantity button label: " + label)
+        if text.count(f"RibbonIconKind.{icon}") != 1:
+            errors.append("expected exactly one BLT3D quantity button icon binding: " + icon)
+
+    expected_command_counts = {
+        "QS3DQUANTITYSETTINGS": 1,
+        "QS3DREGEN": 1,
+        "QS3DED2": 1,
+        "QS3DBQ": 2,
+        "QS3DREVDIFF": 1,
+    }
+    for command, expected_count in expected_command_counts.items():
+        actual_count = text.count(f'"{command}"')
+        if actual_count != expected_count:
+            errors.append(
+                f"expected {expected_count} BLT3D quantity command binding(s) for {command}, found {actual_count}"
+            )
+
+    forbidden_button_ids = (
+        "QS3D_QTY_REF_SETTINGS",
+        "QS3D_QTY_REF_CALCULATE",
+        "QS3D_QTY_REF_ED2",
+        "QS3D_QTY_REF_WALL",
+        "QS3D_QTY_REF_EXCELLOCATE",
+    )
+    for button_id in forbidden_button_ids:
+        if button_id in text:
+            errors.append("stale additive quantity-reference button survived BLT3D replacement: " + button_id)
+
+if ICON_FACTORY.is_file():
+    text = ICON_FACTORY.read_text(encoding="utf-8")
+    for _, _, _, icon in button_specs:
+        if text.count(f"case RibbonIconKind.{icon}:") != 1:
+            errors.append("RibbonIconFactory must render exactly one BLT3D quantity icon case: " + icon)
+        enum_count = text.count(f"        {icon},") + text.count(f"        {icon}\n")
+        if enum_count != 1:
+            errors.append("RibbonIconKind must declare exactly one BLT3D quantity icon: " + icon)
 
 if COORDINATOR.is_file():
     text = COORDINATOR.read_text(encoding="utf-8")
     bootstrap_pos = text.find("RibbonBootstrapper.TryInitialize()")
     quick_pos = text.find("QuickWorkflowRibbonAugmenter.TryInitialize()")
+    raft_pos = text.find("RaftFoundationRibbonAugmenter.TryInitialize()")
     quantity_pos = text.find("QuantityReferenceRibbonAugmenter.TryInitialize()")
     update_pos = text.find("UpdateRibbonAugmenter.TryInitialize()")
-    if min(bootstrap_pos, quick_pos, quantity_pos, update_pos) < 0 or not bootstrap_pos < quick_pos < quantity_pos < update_pos:
-        errors.append("Quantity reference augmenter must run through RibbonInitializationCoordinator after canonical/quick Ribbon setup and before Update augmentation")
+    if min(bootstrap_pos, quick_pos, raft_pos, quantity_pos, update_pos) < 0:
+        errors.append("RibbonInitializationCoordinator is missing a required quantity initialization stage")
+    elif not bootstrap_pos < quick_pos < raft_pos < quantity_pos < update_pos:
+        errors.append(
+            "QuantityReferenceRibbonAugmenter must run after canonical/quick/raft setup and before Update augmentation"
+        )
 
 if PLUGIN.is_file():
     text = PLUGIN.read_text(encoding="utf-8")
@@ -69,45 +127,27 @@ if PLUGIN.is_file():
         if needle not in text:
             errors.append("PluginEntry missing coordinated Quantity reference lifecycle hook: " + needle)
 
-if BOOTSTRAP.is_file():
-    text = BOOTSTRAP.read_text(encoding="utf-8")
-    required_existing = (
-        '"QS3D_QTY",',
-        '"ĐỊNH LƯỢNG",',
-        'Panel("QUANTITY", "Khối lượng",',
-        'Button("Regenerate", "QS3DREGEN")',
-        'Button("BQ", "QS3DBQ")',
-        'Button("Takeoff", "QS3DTAKEOFF")',
-        'Panel("EXCEL", "Excel ↔ CAD",',
-        'Button("ED2 • Excel ↔ CAD", "QS3DED2")',
-        'Button("Excel → CAD", "QS3DEXCELLOCATE")',
-        'Panel("OPENINGS", "Cửa & lỗ mở",',
-        'Panel("REBAR_SCHEDULE", "BBS",',
-        'Panel("REBAR_3D", "Cốt thép 3D",',
-        'Panel("REBAR_HEALTH", "Health cốt thép",',
-        "ReconcileTab(tabs, tabSpec);",
-        "EnsurePanelButtons(tabSpec, panelSpec, source);",
-    )
-    for needle in required_existing:
-        if needle not in text:
-            errors.append("canonical QS3D_QTY bootstrap contract disappeared: " + needle)
-
 adapter_root = ROOT / "src/QS3D.BricsCAD.V25"
-command_source = "\n".join(
-    path.read_text(encoding="utf-8")
-    for path in adapter_root.rglob("*.cs")
-    if path.is_file() and path != AUGMENTER
-)
-for command in sorted({spec[2] for spec in button_specs}):
-    marker = f'[CommandMethod("{command}"'
-    if marker not in command_source:
-        errors.append("quantity reference Ribbon points to an unregistered adapter command: " + command)
+if adapter_root.is_dir():
+    command_source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in adapter_root.rglob("*.cs")
+        if path.is_file() and path != AUGMENTER
+    )
+    for command in sorted({spec[2] for spec in button_specs}):
+        marker = f'[CommandMethod("{command}"'
+        if marker not in command_source:
+            errors.append("BLT3D quantity Ribbon points to an unregistered adapter command: " + command)
 
-print("QS3D ĐỊNH LƯỢNG Ribbon reference-parity preflight")
+print("QS3D ĐỊNH LƯỢNG Ribbon BLT3D reference-parity preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: the additive QS3D_QTY reference panel reconciles eight real workflows by stable IDs, preserves canonical quantity panels, initializes through the bounded Ribbon coordinator, dispatches on the active DWG, and participates in contained teardown without clearing/removing Ribbon state.")
+print(
+    "PASS: QS3D_QTY is reconciled to the BLT3D reference with exactly two groups, "
+    "six large icon buttons, deterministic removal of legacy QS3D quantity panels, "
+    "registered command routing, coordinated initialization, and contained teardown."
+)
