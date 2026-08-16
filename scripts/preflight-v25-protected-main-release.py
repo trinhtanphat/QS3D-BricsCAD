@@ -64,17 +64,20 @@ def main() -> int:
     require(
         shared_ci,
         (
-            "v25-compile:",
+            "  core:",
             "needs: preflight",
+            "Run deterministic smoke tests",
             "actions/cache/restore@v6",
             "acquire-v25-compile-references.ps1",
             "BRICSCAD_V25_PINNED_MSI_SHA256",
             "Validate BricsCAD V25 compile references",
             "dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64",
         ),
-        "shared branch/PR CI",
+        "canonical core branch/PR check",
         failures,
     )
+    if "v25-compile:" in shared_ci:
+        failures.append("V25 compile must stay inside canonical core status check instead of creating an unrequired third check")
     if "permissions:\n  contents: read" not in shared_ci:
         failures.append("shared branch/PR CI must remain read-only")
 
@@ -105,7 +108,7 @@ def main() -> int:
     print("PASS: V25 preview release and pre-merge compile contracts are protected-main safe.")
     print(" - preview version synchronization is workspace-only")
     print(" - source HEAD/provenance remains an exact protected-main commit")
-    print(" - branch/PR CI compiles V25 against pinned, verified managed references")
+    print(" - canonical core check also compiles V25 against pinned, verified managed references")
     return 0
 
 
