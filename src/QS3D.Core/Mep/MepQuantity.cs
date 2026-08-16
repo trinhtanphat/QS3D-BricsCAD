@@ -149,8 +149,11 @@ namespace QS3D.Core.Mep
             private int _elementCount;
             private int _quantityCount;
             private double _lengthM;
+            private double _lengthCompensation;
             private double _areaM2;
+            private double _areaCompensation;
             private double _volumeM3;
+            private double _volumeCompensation;
 
             internal AggregateBuilder(MepElement seed)
             {
@@ -167,9 +170,21 @@ namespace QS3D.Core.Mep
                     _elementCount++;
                     _quantityCount += element.Count;
                 }
-                _lengthM = MepContract.CheckedAdd(_lengthM, element.LengthM, "MEP aggregated length");
-                _areaM2 = MepContract.CheckedAdd(_areaM2, element.AreaM2, "MEP aggregated area");
-                _volumeM3 = MepContract.CheckedAdd(_volumeM3, element.VolumeM3, "MEP aggregated volume");
+                _lengthM = MepContract.CheckedCompensatedAdd(
+                    _lengthM,
+                    ref _lengthCompensation,
+                    element.LengthM,
+                    "MEP aggregated length");
+                _areaM2 = MepContract.CheckedCompensatedAdd(
+                    _areaM2,
+                    ref _areaCompensation,
+                    element.AreaM2,
+                    "MEP aggregated area");
+                _volumeM3 = MepContract.CheckedCompensatedAdd(
+                    _volumeM3,
+                    ref _volumeCompensation,
+                    element.VolumeM3,
+                    "MEP aggregated volume");
             }
 
             internal MepQuantityGroup Build() => new MepQuantityGroup(
@@ -179,9 +194,9 @@ namespace QS3D.Core.Mep
                 _region,
                 _elementCount,
                 _quantityCount,
-                _lengthM,
-                _areaM2,
-                _volumeM3);
+                MepContract.CheckedCompensatedValue(_lengthM, _lengthCompensation, "MEP aggregated length"),
+                MepContract.CheckedCompensatedValue(_areaM2, _areaCompensation, "MEP aggregated area"),
+                MepContract.CheckedCompensatedValue(_volumeM3, _volumeCompensation, "MEP aggregated volume"));
         }
     }
 
@@ -207,9 +222,32 @@ namespace QS3D.Core.Mep
             return value == 0d ? 0d : value;
         }
 
-        internal static double CheckedAdd(double left, double right, string label)
+        internal static double CheckedCompensatedAdd(
+            double sum,
+            ref double compensation,
+            double value,
+            string label)
         {
-            var result = left + right;
+            var result = sum + value;
+            var correction = Math.Abs(sum) >= Math.Abs(value)
+                ? (sum - result) + value
+                : (value - result) + sum;
+            var nextCompensation = compensation + correction;
+            if (double.IsNaN(result) ||
+                double.IsInfinity(result) ||
+                double.IsNaN(nextCompensation) ||
+                double.IsInfinity(nextCompensation))
+            {
+                throw new OverflowException(label + " exceeded the representable numeric range.");
+            }
+
+            compensation = nextCompensation == 0d ? 0d : nextCompensation;
+            return result == 0d ? 0d : result;
+        }
+
+        internal static double CheckedCompensatedValue(double sum, double compensation, string label)
+        {
+            var result = sum + compensation;
             if (double.IsNaN(result) || double.IsInfinity(result))
                 throw new OverflowException(label + " exceeded the representable numeric range.");
             return result == 0d ? 0d : result;
