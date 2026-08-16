@@ -8,6 +8,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Windows;
 using Bricscad.ApplicationServices;
+using Application = Bricscad.ApplicationServices.Application;
 using Bricscad.EditorInput;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.Services;
