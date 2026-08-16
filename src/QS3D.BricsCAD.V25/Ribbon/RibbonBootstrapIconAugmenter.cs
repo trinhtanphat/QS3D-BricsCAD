@@ -118,6 +118,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private static object CreateIcon(RibbonIconKind icon, int pixelSize)
         {
+            // Unknown-but-command-bearing QS3D buttons use the exact repository brand mark as
+            // the final safety net rather than the old generic four-dot Objects glyph.
+            if (icon == RibbonIconKind.Qs3dLogo)
+                return Qs3dBrandIconFactory.Create(pixelSize);
+
             // RibbonIconFactory uses compact path-data strings for a few generated shapes.
             // Keep rendering invariant even on Windows installations that use a comma decimal
             // separator, then restore the host UI thread culture immediately afterward.
@@ -144,6 +149,17 @@ namespace QS3D.BricsCAD.V25.Ribbon
         {
             var normalized = (command + " " + text).Trim().ToUpperInvariant();
 
+            // QS3D shell/catalog surfaces that historically fell through to the generic
+            // Objects glyph. Give every canonical bootstrap action an intentional icon.
+            if (ContainsAny(normalized, "QS3DSTART", "START CENTER"))
+                return RibbonIconKind.Qs3dLogo;
+            if (ContainsAny(normalized, "FAMIL", "FAMILY / TYPE"))
+                return RibbonIconKind.Settings;
+            if (ContainsAny(normalized, "LAYER", "XREF"))
+                return RibbonIconKind.Workspace;
+            if (ContainsAny(normalized, "CAPTURE", "BÓC CHỌN"))
+                return RibbonIconKind.Inspect;
+
             // Recognition / inspection.
             if (normalized.Contains("RECOGNIZE_AUTO") || normalized.Contains("AUTO CHẮC"))
                 return RibbonIconKind.RecognitionAuto;
@@ -158,7 +174,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             // have had a chance to classify commands such as DRAW_WALL, DRAW_DOOR and DRAW_REBAR.
             if (ContainsAny(normalized, "_MOVE", "_ROTATE", "_MIRROR", "_COPY", "_BREAK", "_JOIN"))
                 return RibbonIconKind.Transform;
-            if (normalized.Contains("MEASURE"))
+            if (ContainsAny(normalized, "MEASURE", "_DIST", "DISTANCE", "KHOẢNG CÁCH"))
                 return RibbonIconKind.Measure;
 
             // Tool / navigation semantics.
@@ -190,7 +206,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             // BIM authoring / modeling.
             if (ContainsAny(normalized, "BUILD3D", "BUILD 3D", "SINH MÔ HÌNH"))
                 return RibbonIconKind.Model3d;
-            if (ContainsAny(normalized, "AUTO_HOST", "CUT_OPENINGS", "OPENING", "LỖ MỞ"))
+            if (ContainsAny(normalized, "AUTO_HOST", "AUTOLINKHOST", "LINKHOST", "CUT_OPENINGS", "OPENING", "LỖ MỞ", "HOST"))
                 return RibbonIconKind.Opening;
             if (normalized.Contains("DOOR") || normalized.Contains("CỬA"))
                 return RibbonIconKind.Door;
@@ -198,7 +214,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 return RibbonIconKind.Room;
             if (ContainsAny(normalized, "GLASS_WALL", "_WALL", "TƯỜNG", "VÁCH"))
                 return RibbonIconKind.Wall;
-            if (ContainsAny(normalized, "CURTAIN", "PIER", "JUNCTION", "BEAM", "SLAB", "COLUMN", "FOUNDATION", "KẾT CẤU"))
+            if (ContainsAny(normalized, "CURTAIN", "PIER", "JUNCTION", "BEAM", "SLAB", "COLUMN", "FOUNDATION", "STAIR", "RAILING", "EARTHWORK", "CẦU THANG", "LAN CAN", "ĐÀO ĐẤT", "KẾT CẤU"))
                 return RibbonIconKind.Structure;
 
             // Quantity / schedules / data exchange.
@@ -208,7 +224,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 return RibbonIconKind.Schedule;
             if (ContainsAny(normalized, "EXCEL", "XLSX"))
                 return RibbonIconKind.Excel;
-            if (ContainsAny(normalized, "_BQ", "QUANTITY", "QTY", "BÓC TÁCH"))
+            if (ContainsAny(normalized, "QS3DBQ", "_BQ", " BQ", "QUANTITY", "QTY", "BÓC TÁCH"))
                 return RibbonIconKind.Quantity;
 
             // Review / release.
@@ -233,12 +249,20 @@ namespace QS3D.BricsCAD.V25.Ribbon
             if (ContainsAny(normalized, "REFRESH", "REGEN", "SYNC", "UPDATE"))
                 return RibbonIconKind.Update;
 
+            // BricsCAD's native rectangle command is _RECTANG, while the longer spelling may
+            // appear in aliases/labels. Cover both before the branded final safety net.
+            if (normalized.Contains("_RECTANG"))
+                return RibbonIconKind.Draw;
+
             // Generic drawing is deliberately the last semantic fallback. Otherwise broad DRAW
             // command names shadow richer intents such as DRAW_WALL, DRAW_REBAR or DRAW_DOOR.
             if (ContainsAny(normalized, "_POINT", "_LINE", "_ARC", "_RECTANGLE", "DRAW"))
                 return RibbonIconKind.Draw;
 
-            return RibbonIconKind.Objects;
+            // Never leave a QS3D command button with the old generic Objects placeholder. Rich
+            // augmenters keep their own images; any genuinely unknown bootstrap command is still
+            // visibly branded and can be assigned a richer semantic glyph later.
+            return RibbonIconKind.Qs3dLogo;
         }
 
         private static bool ContainsAny(string value, params string[] candidates)
