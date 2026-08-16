@@ -195,10 +195,13 @@ namespace QS3D.Core.Coordination
             var scaledX = x / scale;
             var scaledY = y / scale;
             var scaledZ = z / scale;
-            return scale * Math.Sqrt(
+            var distance = scale * Math.Sqrt(
                 (scaledX * scaledX) +
                 (scaledY * scaledY) +
                 (scaledZ * scaledZ));
+            if (double.IsNaN(distance) || double.IsInfinity(distance))
+                throw new OverflowException("Coordination separation distance exceeded the finite double range.");
+            return distance == 0d ? 0d : distance;
         }
 
         private static double Overlap(double aMin, double aMax, double bMin, double bMax)

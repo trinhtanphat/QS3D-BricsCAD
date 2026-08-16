@@ -41,25 +41,47 @@ def main():
         require(augmenter, f'"{tab_id}"', augmenter_rel)
 
     for needle in (
-        "if (HasCompleteVisibleIcon(item))",
+        "if (!HasCompleteVisibleIcon(item))",
         "GetProperty(item, \"ShowImage\") is bool showImage",
         'GetProperty(item, "Image") != null',
         'GetProperty(item, "LargeImage") != null',
         'SetProperty(item, "ShowImage", true);',
-        'SetProperty(item, "Image", RibbonIconFactory.Create(icon, 16));',
-        'SetProperty(item, "LargeImage", RibbonIconFactory.Create(icon, 32));',
+        'SetProperty(item, "Image", CreateIcon(icon, 16));',
+        'SetProperty(item, "LargeImage", CreateIcon(icon, 32));',
+        'private static object CreateIcon(RibbonIconKind icon, int pixelSize)',
+        'if (icon == RibbonIconKind.Qs3dLogo)',
+        'return Qs3dBrandIconFactory.Create(pixelSize);',
+        'var thread = Thread.CurrentThread;',
+        'var previous = thread.CurrentCulture;',
+        'thread.CurrentCulture = CultureInfo.InvariantCulture;',
+        'return RibbonIconFactory.Create(icon, pixelSize);',
+        'thread.CurrentCulture = previous;',
+        '"QS3DSTART"',
+        '"FAMIL"',
+        '"LAYER"',
+        '"XREF"',
+        '"CAPTURE"',
+        '"_DIST"',
+        '"AUTOLINKHOST"',
+        '"LINKHOST"',
+        '"STAIR"',
+        '"RAILING"',
+        '"EARTHWORK"',
+        '"QS3DBQ"',
+        '"_RECTANG"',
         'return RibbonIconKind.UpdateStatus;',
         'return RibbonIconKind.SaveAs;',
         'return RibbonIconKind.Save;',
         'return RibbonIconKind.OpenProject;',
         'return RibbonIconKind.Settings;',
         'return RibbonIconKind.Update;',
-        'return RibbonIconKind.Objects;',
+        'return RibbonIconKind.Qs3dLogo;',
         'return commandButtons > 0;',
     ):
         require(augmenter, needle, augmenter_rel)
 
     forbid(augmenter, 'SetProperty(item, "ShowImage", false);', augmenter_rel)
+    forbid(augmenter, 'return RibbonIconKind.Objects;', augmenter_rel)
 
     for needle in (
         "ready = RibbonBootstrapIconAugmenter.TryInitialize() && ready;",
@@ -82,8 +104,9 @@ def main():
             )
 
     print(
-        "PASS: every canonical QS3D ribbon tab gets deterministic fallback icons for "
-        "text-only command buttons while preserving already-polished Home/Draw/custom images."
+        "PASS: every canonical QS3D ribbon tab gets deterministic culture-safe semantic icons; "
+        "known bootstrap gaps are classified explicitly and unknown commands use the exact QS3D "
+        "brand mark instead of the generic Objects placeholder."
     )
     return 0
 
