@@ -52,12 +52,17 @@ def main() -> int:
 
     require(init, "BltRecognitionRibbonAugmenter.TryInitialize()", "recognition parity initialization")
     require(init, "BltRecognitionRibbonAugmenter.Reset()", "recognition parity reset")
-    require(icons, "ApplyIconsToCollection", "nested-row icon traversal")
+
+    # RibbonBootstrapIconAugmenter now uses a single recursive DecorateItem traversal rather than
+    # the older ApplyIconsToCollection helper. Guard behavior/recursion, not a retired helper name.
+    require(icons, "DecorateItem(item, visited, ref commandButtons)", "nested-row icon traversal entry")
+    require(icons, "DecorateItem(child, visited, ref commandButtons)", "nested-row recursive traversal")
     require(icons, 'GetProperty(item, "Items")', "nested-row readiness traversal")
+    require(icons, "HasCompleteVisibleIcon(item)", "preserve richer recognition artwork")
 
     print(
         "PASS: NHẬN DẠNG topbar keeps the BLT3D reference labels, two compact groups, "
-        "stacked small-icon rows, disabled-state parity, and nested ribbon readiness."
+        "stacked small-icon rows, disabled-state parity, and recursive nested ribbon readiness."
     )
     return 0
 
