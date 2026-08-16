@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
         {
             RejectsDuplicateModernElementIds();
             RejectsDuplicateModernHandleAliases();
+            RejectsFormulaBackedModernIdentity();
             PreservesUniqueModernIdentitySets();
             PreservesLegacyHandleDeduplication();
         }
@@ -30,6 +31,14 @@ namespace QS3D.Core.SmokeTests
             RejectModern("E1", "AB;ab", "duplicate CAD Handle");
             RejectModern("E1", "A;0xA", "duplicate CAD Handle");
             RejectModern("E1", "A;00A", "duplicate CAD Handle");
+        }
+
+        private static void RejectsFormulaBackedModernIdentity()
+        {
+            RejectModernFormula("A1", "\"Not an identity header\"", "QS3D Element ID");
+            RejectModernFormula("A2", "\"E999\"", "E1");
+            RejectModernFormula("B2", "\"B\"", "A");
+            RejectModernFormula("C2", "\"DRAWING-OTHER\"", "DRAWING-1");
         }
 
         private static void PreservesUniqueModernIdentitySets()
@@ -59,6 +68,7 @@ namespace QS3D.Core.SmokeTests
                 "<row r=\"1\">" + Cell("A1", "Object Handle") + "</row>" +
                 "<row r=\"2\">" + Cell("A2", "A;0A") + "</row>");
             var decimalPath = CreateLegacyWorkbook("<row r=\"2\">" + Cell("A2", "$10$10") + "</row>");
+            var formulaPath = CreateLegacyWorkbook("<row r=\"2\">" + FormulaCell("A2", "\"$11$11\"", "$10$10") + "</row>");
             try
             {
                 var fuzzy = XlsxHandleReader.ReadHandleLookup(fuzzyPath, 2);
@@ -68,11 +78,16 @@ namespace QS3D.Core.SmokeTests
                 var legacy = XlsxHandleReader.ReadHandleLookup(decimalPath, 2);
                 if (!legacy.UsesLegacyDecimalHandles || legacy.Handles.Count != 1 || legacy.Handles[0] != "A")
                     throw new Exception("Legacy BLT decimal Handle deduplication must remain compatible.");
+
+                var formulaLegacy = XlsxHandleReader.ReadHandleLookup(formulaPath, 2);
+                if (!formulaLegacy.UsesLegacyDecimalHandles || formulaLegacy.Handles.Count != 1 || formulaLegacy.Handles[0] != "A")
+                    throw new Exception("Legacy formula-cached decimal Handle compatibility must remain unchanged.");
             }
             finally
             {
                 Delete(fuzzyPath);
                 Delete(decimalPath);
+                Delete(formulaPath);
             }
         }
 
@@ -92,18 +107,40 @@ namespace QS3D.Core.SmokeTests
             finally { Delete(path); }
         }
 
-        private static string CreateModernWorkbook(string elementIds, string handles, bool ed2Detail)
+        private static void RejectModernFormula(string formulaCellReference, string formula, string cachedValue)
+        {
+            var path = CreateModernWorkbook("E1", "A", true, formulaCellReference, formula, cachedValue);
+            try
+            {
+                try { XlsxHandleReader.ReadHandleLookup(path, 2); }
+                catch (InvalidDataException ex)
+                {
+                    if (ex.Message.IndexOf("formula", StringComparison.OrdinalIgnoreCase) >= 0) return;
+                    throw new Exception("Modern formula-backed identity refusal lost its formula diagnostic.", ex);
+                }
+                throw new Exception("Modern XLSX accepted formula-backed identity cell: " + formulaCellReference + ".");
+            }
+            finally { Delete(path); }
+        }
+
+        private static string CreateModernWorkbook(
+            string elementIds,
+            string handles,
+            bool ed2Detail,
+            string formulaCellReference = "",
+            string formula = "",
+            string cachedValue = "")
         {
             var rows =
                 "<row r=\"1\">" +
-                Cell("A1", "QS3D Element ID") +
-                Cell("B1", "CAD Handle (hex)") +
-                Cell("C1", "QS3D Drawing Fingerprint") +
+                ModernCell("A1", "QS3D Element ID", formulaCellReference, formula, cachedValue) +
+                ModernCell("B1", "CAD Handle (hex)", formulaCellReference, formula, cachedValue) +
+                ModernCell("C1", "QS3D Drawing Fingerprint", formulaCellReference, formula, cachedValue) +
                 "</row>" +
                 "<row r=\"2\">" +
-                Cell("A2", elementIds) +
-                Cell("B2", handles) +
-                Cell("C2", "DRAWING-1") +
+                ModernCell("A2", elementIds, formulaCellReference, formula, cachedValue) +
+                ModernCell("B2", handles, formulaCellReference, formula, cachedValue) +
+                ModernCell("C2", "DRAWING-1", formulaCellReference, formula, cachedValue) +
                 "</row>";
             if (!ed2Detail) return CreateLegacyWorkbook(rows);
 
@@ -136,6 +173,19 @@ namespace QS3D.Core.SmokeTests
             using (var writer = new StreamWriter(archive.CreateEntry(name, CompressionLevel.NoCompression).Open(), new UTF8Encoding(false)))
                 writer.Write(value);
         }
+
+        private static string ModernCell(
+            string reference,
+            string value,
+            string formulaCellReference,
+            string formula,
+            string cachedValue) =>
+            string.Equals(reference, formulaCellReference, StringComparison.OrdinalIgnoreCase)
+                ? FormulaCell(reference, formula, cachedValue)
+                : Cell(reference, value);
+
+        private static string FormulaCell(string reference, string formula, string cachedValue) =>
+            "<c r=\"" + reference + "\" t=\"str\"><f>" + Escape(formula) + "</f><v>" + Escape(cachedValue) + "</v></c>";
 
         private static string Cell(string reference, string value) =>
             "<c r=\"" + reference + "\" t=\"inlineStr\"><is><t>" + Escape(value) + "</t></is></c>";
