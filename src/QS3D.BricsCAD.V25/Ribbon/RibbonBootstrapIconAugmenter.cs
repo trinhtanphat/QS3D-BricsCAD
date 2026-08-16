@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
 using System.Threading;
@@ -70,6 +71,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             if (!(panels is IEnumerable panelEnumerable)) return false;
 
             var commandButtons = 0;
+            var visited = new HashSet<object>();
             foreach (var panel in panelEnumerable)
             {
                 if (panel == null) continue;
@@ -79,15 +81,15 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 if (!(items is IEnumerable itemEnumerable)) continue;
 
                 foreach (var item in itemEnumerable)
-                    DecorateItem(item, ref commandButtons);
+                    DecorateItem(item, visited, ref commandButtons);
             }
 
             return commandButtons > 0;
         }
 
-        private static void DecorateItem(object? item, ref int commandButtons)
+        private static void DecorateItem(object? item, HashSet<object> visited, ref int commandButtons)
         {
-            if (item == null) return;
+            if (item == null || !visited.Add(item)) return;
 
             if (GetProperty(item, "CommandParameter") is string command
                 && !string.IsNullOrWhiteSpace(command))
@@ -107,11 +109,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
             // Rich ribbon augmenters may wrap buttons in row/stack containers. Recurse so
             // the same icon policy also covers their fallback layouts without replacing
-            // images already supplied by those augmenters.
+            // images already supplied by those augmenters. Guard cycles/shared host objects.
             var nested = GetProperty(item, "Items");
             if (!(nested is IEnumerable nestedEnumerable)) return;
             foreach (var child in nestedEnumerable)
-                DecorateItem(child, ref commandButtons);
+                DecorateItem(child, visited, ref commandButtons);
         }
 
         private static object CreateIcon(RibbonIconKind icon, int pixelSize)
