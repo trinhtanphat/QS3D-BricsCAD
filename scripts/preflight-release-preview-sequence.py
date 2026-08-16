@@ -104,7 +104,7 @@ def main() -> int:
     if "GITHUB_RUN_NUMBER" in dispatcher or "10000 +" in dispatcher:
         fail("automatic dispatcher must not derive public preview ordinals from Actions run numbering")
     for token in (
-        "actions/checkout@v7",
+        "actions/checkout@",
         "git fetch --force --tags origin",
         'series_prefix="v0.1.0-preview."',
         'git tag --list "${series_prefix}*"',
