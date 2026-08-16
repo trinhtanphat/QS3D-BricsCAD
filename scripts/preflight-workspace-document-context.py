@@ -19,9 +19,13 @@ def forbid(text, token, message):
 
 
 def require_order(text, tokens, message):
-    positions = [text.find(token) for token in tokens]
-    if any(position < 0 for position in positions) or positions != sorted(positions):
-        errors.append(message)
+    cursor = 0
+    for token in tokens:
+        position = text.find(token, cursor)
+        if position < 0:
+            errors.append(message)
+            return
+        cursor = position + len(token)
 
 
 context = CONTEXT.read_text(encoding="utf-8") if CONTEXT.is_file() else ""
