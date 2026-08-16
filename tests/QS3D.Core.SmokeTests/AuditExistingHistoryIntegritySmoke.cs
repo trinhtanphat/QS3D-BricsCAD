@@ -13,6 +13,9 @@ namespace QS3D.Core.SmokeTests
             RejectsNonCanonicalExistingActionWithoutMutation();
             RejectsNonUtcExistingTimestampWithoutMutation();
             AcceptsCanonicalHistoryAndNormalizesNewAction();
+            RejectsInvalidHistoryClearWithoutMutation();
+            ClearsCanonicalHistoryAndTouchesOnce();
+            EmptyHistoryClearIsNoOp();
         }
 
         private static void RejectsNonCanonicalExistingActionWithoutMutation()
@@ -63,6 +66,55 @@ namespace QS3D.Core.SmokeTests
             Equal(2, project.AuditEvents.Count, "canonical history count");
             Equal("new.action", project.AuditEvents[1].Action, "new action normalization");
             Equal(DateTimeKind.Utc, project.AuditEvents[1].Utc.Kind, "new audit UTC kind");
+        }
+
+        private static void RejectsInvalidHistoryClearWithoutMutation()
+        {
+            var project = new ProjectState("AUDIT-CLEAR-INVALID", "Audit invalid clear");
+            var invalid = new AuditEvent
+            {
+                Utc = new DateTime(2026, 8, 12, 0, 0, 0, DateTimeKind.Unspecified),
+                Action = "existing.action",
+                ElementId = "E1",
+                Detail = "must survive failed clear"
+            };
+            project.AuditEvents.Add(invalid);
+            var beforeVersion = project.ChangeVersion;
+
+            Throws<InvalidOperationException>(() => AuditTrail.ForProject(project).Clear());
+
+            Equal(beforeVersion, project.ChangeVersion, "invalid clear version");
+            Equal(1, project.AuditEvents.Count, "invalid clear count");
+            Equal(invalid, project.AuditEvents[0], "invalid clear preserves event identity");
+        }
+
+        private static void ClearsCanonicalHistoryAndTouchesOnce()
+        {
+            var project = new ProjectState("AUDIT-CLEAR-VALID", "Audit valid clear");
+            project.AuditEvents.Add(new AuditEvent
+            {
+                Utc = new DateTime(2026, 8, 12, 0, 0, 0, DateTimeKind.Utc),
+                Action = "existing.action",
+                ElementId = "E1",
+                Detail = "clear me"
+            });
+            var beforeVersion = project.ChangeVersion;
+
+            AuditTrail.ForProject(project).Clear();
+
+            Equal(beforeVersion + 1L, project.ChangeVersion, "valid clear version increment");
+            Equal(0, project.AuditEvents.Count, "valid clear count");
+        }
+
+        private static void EmptyHistoryClearIsNoOp()
+        {
+            var project = new ProjectState("AUDIT-CLEAR-EMPTY", "Audit empty clear");
+            var beforeVersion = project.ChangeVersion;
+
+            AuditTrail.ForProject(project).Clear();
+
+            Equal(beforeVersion, project.ChangeVersion, "empty clear version");
+            Equal(0, project.AuditEvents.Count, "empty clear count");
         }
 
         private static void Equal<T>(T expected, T actual, string label)
