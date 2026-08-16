@@ -152,9 +152,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
             if (normalized.Contains("MEP_TAKEOFF") || normalized.Contains("TAKEOFF"))
                 return RibbonIconKind.Takeoff;
 
-            // Draw / edit / measure.
-            if (ContainsAny(normalized, "_POINT", "_LINE", "_ARC", "_RECTANGLE", "DRAW"))
-                return RibbonIconKind.Draw;
+            // Edit / measure. Generic DRAW is intentionally deferred until all semantic domains
+            // have had a chance to classify commands such as DRAW_WALL, DRAW_DOOR and DRAW_REBAR.
             if (ContainsAny(normalized, "_MOVE", "_ROTATE", "_MIRROR", "_COPY", "_BREAK", "_JOIN"))
                 return RibbonIconKind.Transform;
             if (normalized.Contains("MEASURE"))
@@ -189,16 +188,16 @@ namespace QS3D.BricsCAD.V25.Ribbon
             // BIM authoring / modeling.
             if (ContainsAny(normalized, "BUILD3D", "BUILD 3D", "SINH MÔ HÌNH"))
                 return RibbonIconKind.Model3d;
-            if (ContainsAny(normalized, "GLASS_WALL", "_WALL", "TƯỜNG", "VÁCH"))
-                return RibbonIconKind.Wall;
-            if (ContainsAny(normalized, "CURTAIN", "PIER", "JUNCTION", "BEAM", "SLAB", "COLUMN", "FOUNDATION", "KẾT CẤU"))
-                return RibbonIconKind.Structure;
             if (ContainsAny(normalized, "AUTO_HOST", "CUT_OPENINGS", "OPENING", "LỖ MỞ"))
                 return RibbonIconKind.Opening;
             if (normalized.Contains("DOOR") || normalized.Contains("CỬA"))
                 return RibbonIconKind.Door;
             if (normalized.Contains("ROOM") || normalized.Contains("PHÒNG"))
                 return RibbonIconKind.Room;
+            if (ContainsAny(normalized, "GLASS_WALL", "_WALL", "TƯỜNG", "VÁCH"))
+                return RibbonIconKind.Wall;
+            if (ContainsAny(normalized, "CURTAIN", "PIER", "JUNCTION", "BEAM", "SLAB", "COLUMN", "FOUNDATION", "KẾT CẤU"))
+                return RibbonIconKind.Structure;
 
             // Quantity / schedules / data exchange.
             if (ContainsAny(normalized, "REBAR", "BBS", "MESH"))
@@ -231,6 +230,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 return RibbonIconKind.Settings;
             if (ContainsAny(normalized, "REFRESH", "REGEN", "SYNC", "UPDATE"))
                 return RibbonIconKind.Update;
+
+            // Generic drawing is deliberately the last semantic fallback. Otherwise broad DRAW
+            // command names shadow richer intents such as DRAW_WALL, DRAW_REBAR or DRAW_DOOR.
+            if (ContainsAny(normalized, "_POINT", "_LINE", "_ARC", "_RECTANGLE", "DRAW"))
+                return RibbonIconKind.Draw;
 
             return RibbonIconKind.Objects;
         }
