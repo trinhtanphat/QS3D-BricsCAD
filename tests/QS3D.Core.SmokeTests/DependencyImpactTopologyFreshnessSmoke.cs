@@ -50,8 +50,8 @@ namespace QS3D.Core.SmokeTests
         private static ProjectState CreateProject()
         {
             var project = new ProjectState("P1", "Dependency freshness smoke");
-            var root = new ProjectElement("ROOT", ElementCategory.Generic);
-            var dependent = new ProjectElement("DEPENDENT", ElementCategory.Generic);
+            var root = new ProjectElement("ROOT", ElementCategory.CustomQuantity);
+            var dependent = new ProjectElement("DEPENDENT", ElementCategory.CustomQuantity);
             dependent.DependsOn.Add("ROOT");
             project.Elements.Add(root);
             project.Elements.Add(dependent);
