@@ -41,8 +41,17 @@ namespace QS3D.Core.Cost
         {
             get
             {
-                try { return checked(Quantity * UnitRate); }
-                catch (OverflowException ex) { throw new OverflowException("TBQ bill item total cost overflowed decimal arithmetic.", ex); }
+                try
+                {
+                    return CostDecimalMath.MultiplyPreservingNonZero(
+                        Quantity,
+                        UnitRate,
+                        "TBQ bill item total cost");
+                }
+                catch (OverflowException ex)
+                {
+                    throw new OverflowException("TBQ bill item total cost overflowed decimal arithmetic.", ex);
+                }
             }
         }
 
