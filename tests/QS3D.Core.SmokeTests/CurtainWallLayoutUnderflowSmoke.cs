@@ -22,6 +22,9 @@ internal static class CurtainWallLayoutUnderflowSmoke
             throw new InvalidOperationException("Ordinary curtain-wall layout changed unexpectedly.");
         if (!(ordinary.MinimumClearPanelWidthM > 0d) || !(ordinary.MinimumClearPanelHeightM > 0d))
             throw new InvalidOperationException("Ordinary curtain-wall clear dimensions must remain positive.");
+        if (!(ordinary.TotalFrameLengthM > ordinary.VerticalFrameLengthM) ||
+            !(ordinary.TotalFrameLengthM > ordinary.HorizontalFrameLengthM))
+            throw new InvalidOperationException("Ordinary curtain-wall total frame length must retain both positive components.");
 
         var zeroInternalFrames = CurtainWallLayoutPlanner.Plan(new CurtainWallLayoutInput
         {
@@ -57,6 +60,41 @@ internal static class CurtainWallLayoutUnderflowSmoke
             MullionWidthM = 0.1d,
             TransomWidthM = double.Epsilon
         }), "A positive transom width that underflows during half-width division must fail closed.");
+
+        AssertThrows<InvalidOperationException>(() => CurtainWallLayoutPlanner.Plan(new CurtainWallLayoutInput
+        {
+            LengthM = 1e16d,
+            HeightM = 1d,
+            MaxPanelWidthM = 1e16d,
+            MaxPanelHeightM = 1d,
+            PerimeterFrameWidthM = 0.5d,
+            MullionWidthM = 0d,
+            TransomWidthM = 0d
+        }), "A positive perimeter-frame deduction that rounds away at large coordinate magnitude must fail closed.");
+
+        AssertThrows<InvalidOperationException>(() => CurtainWallLayoutPlanner.Plan(new CurtainWallLayoutInput
+        {
+            LengthM = 2e16d,
+            HeightM = 1d,
+            MaxPanelWidthM = 1e16d,
+            MaxPanelHeightM = 1d,
+            PerimeterFrameWidthM = 0d,
+            MullionWidthM = 0.5d,
+            TransomWidthM = 0d
+        }), "A positive internal-frame deduction that rounds away at large bay magnitude must fail closed.");
+
+        var frameLengthCollapse = CurtainWallLayoutPlanner.Plan(new CurtainWallLayoutInput
+        {
+            LengthM = 1e16d,
+            HeightM = 1d,
+            MaxPanelWidthM = 1e16d,
+            MaxPanelHeightM = 1d,
+            PerimeterFrameWidthM = 0d,
+            MullionWidthM = 0d,
+            TransomWidthM = 0d
+        });
+        AssertThrows<OverflowException>(() => _ = frameLengthCollapse.TotalFrameLengthM,
+            "TotalFrameLengthM must fail closed when floating-point addition loses a positive frame-length component.");
     }
 
     private static void AssertThrows<TException>(Action action, string message)
