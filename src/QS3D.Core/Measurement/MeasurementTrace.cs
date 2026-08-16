@@ -172,15 +172,7 @@ namespace QS3D.Core.Measurement
 
             if (string.Equals(RoundingPolicy, "none", StringComparison.Ordinal))
             {
-                var reconciledNetValue = GrossValue;
-                for (var i = 0; i < Adjustments.Count; i++)
-                {
-                    var adjustment = Adjustments[i];
-                    reconciledNetValue = adjustment.Kind == MeasurementTraceAdjustmentKind.Deduction
-                        ? reconciledNetValue - adjustment.Amount
-                        : reconciledNetValue + adjustment.Amount;
-                }
-
+                var reconciledNetValue = ReconcileNetValue(GrossValue, Adjustments);
                 if (double.IsNaN(reconciledNetValue) ||
                     double.IsInfinity(reconciledNetValue) ||
                     !reconciledNetValue.Equals(NetValue))
@@ -190,6 +182,50 @@ namespace QS3D.Core.Measurement
                         nameof(netValue));
                 }
             }
+        }
+
+        private static double ReconcileNetValue(
+            double grossValue,
+            IReadOnlyList<MeasurementTraceAdjustment> adjustments)
+        {
+            var reconciled = grossValue;
+            for (var i = 0; i < adjustments.Count; i++)
+            {
+                var adjustment = adjustments[i];
+                var next = adjustment.Kind == MeasurementTraceAdjustmentKind.Deduction
+                    ? reconciled - adjustment.Amount
+                    : reconciled + adjustment.Amount;
+                if (double.IsNaN(next) || double.IsInfinity(next))
+                    return ReconcileNetValueScaled(grossValue, adjustments);
+                reconciled = next;
+            }
+            return reconciled;
+        }
+
+        private static double ReconcileNetValueScaled(
+            double grossValue,
+            IReadOnlyList<MeasurementTraceAdjustment> adjustments)
+        {
+            var scale = Math.Abs(grossValue);
+            for (var i = 0; i < adjustments.Count; i++)
+                scale = Math.Max(scale, adjustments[i].Amount);
+            if (scale == 0d) return 0d;
+
+            var sum = grossValue / scale;
+            var compensation = 0d;
+            for (var i = 0; i < adjustments.Count; i++)
+            {
+                var adjustment = adjustments[i];
+                var value = adjustment.Amount / scale;
+                if (adjustment.Kind == MeasurementTraceAdjustmentKind.Deduction)
+                    value = -value;
+
+                var corrected = value - compensation;
+                var next = sum + corrected;
+                compensation = (next - sum) - corrected;
+                sum = next;
+            }
+            return sum * scale;
         }
 
         public string SemanticIdentity { get; }
