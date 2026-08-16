@@ -310,8 +310,7 @@ namespace QS3D.BricsCAD.V25.UI
                 case ElementCategory.Slab: return 1;
                 case ElementCategory.Column: return 2;
                 case ElementCategory.StructuralWall:
-                case ElementCategory.ArchitecturalWall:
-                case ElementCategory.LayeredWall: return 3;
+                case ElementCategory.ArchitecturalWall: return 3;
                 case ElementCategory.Foundation: return 4;
                 case ElementCategory.FloorFinish:
                 case ElementCategory.WallFinish:
