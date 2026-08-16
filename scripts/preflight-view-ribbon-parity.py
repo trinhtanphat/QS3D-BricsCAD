@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 import unicodedata
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -123,7 +124,12 @@ if not errors:
         errors.append("canonical QS3D_VIEW / XEM tab contract missing from RibbonBootstrapper")
 
     # Clean-room boundary: vector recreation only; no copied BLT raster/binary asset paths.
-    for forbidden in (".png", ".ico", ".bmp", "private-user-images", "BLT3D.exe", "BLT3D.dll"):
+    # Match raster extensions only inside quoted string literals so normal C# identifiers
+    # such as `spec.Icon` cannot be mistaken for an `.ico` asset reference.
+    quoted_raster = re.compile(r'''["'][^"'\r\n]*\.(?:png|ico|bmp)["']''', re.IGNORECASE)
+    if quoted_raster.search(view):
+        errors.append("XEM augmenter must not embed/copy proprietary raster asset reference")
+    for forbidden in ("private-user-images", "BLT3D.exe", "BLT3D.dll"):
         if forbidden.lower() in view.lower():
             errors.append(f"XEM augmenter must not embed/copy proprietary asset reference: {forbidden}")
 
