@@ -71,8 +71,8 @@ else:
         "BRICSCAD_V25_PINNED_MSI_SHA256: " + PINNED_SHA256,
         "BRICSCAD_V25_MSI_SHA256: ${{ vars.BRICSCAD_V25_MSI_SHA256 }}",
         "bricscad-v25.2.10-x64-en-us-${{ env.BRICSCAD_V25_PINNED_MSI_SHA256 }}",
-        "Name = 'pinned-user-mirror'",
-        "Name = 'pinned-public'",
+        "Name = 'pinned-official-primary'",
+        "Name = 'pinned-official-secondary'",
         "Invoke-WebRequest -Uri $candidate.Url -OutFile $msi -MaximumRedirection 10 -TimeoutSec 1200 -UseBasicParsing",
         "$actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash",
         "[string]::Equals($actual, $env:BRICSCAD_V25_PINNED_MSI_SHA256, [StringComparison]::OrdinalIgnoreCase)",
@@ -105,6 +105,9 @@ else:
         if token not in text:
             errors.append("cloud V25 workflow missing cache/pinning/signature/version/URI/manual-release token: " + token)
 
+    if "http://" in text.lower():
+        errors.append("cloud V25 workflow must not contain plain-HTTP installer sources")
+
     if ".StartsWith($env:BRICSCAD_V25_PUBLIC_MSI_URL" in text:
         errors.append("cloud V25 fallback URI must not use string-prefix matching for pinned-object identity")
 
@@ -116,12 +119,12 @@ else:
         errors.append("BricsCAD installer cache restore must precede acquisition and verified cache save must precede reference validation")
 
     candidates_index = text.find("$candidates = @(", acquire_index if acquire_index >= 0 else 0)
-    mirror_index = text.find("Name = 'pinned-user-mirror'", candidates_index if candidates_index >= 0 else 0)
-    public_index = text.find("Name = 'pinned-public'", candidates_index if candidates_index >= 0 else 0)
-    if min(candidates_index, mirror_index, public_index) < 0:
-        errors.append("cloud V25 workflow must define approved HTTP mirror and pinned HTTPS public candidates")
-    elif not candidates_index < mirror_index < public_index:
-        errors.append("approved mirror must be attempted before the pinned HTTPS public candidate after cache miss")
+    primary_index = text.find("Name = 'pinned-official-primary'", candidates_index if candidates_index >= 0 else 0)
+    secondary_index = text.find("Name = 'pinned-official-secondary'", candidates_index if candidates_index >= 0 else 0)
+    if min(candidates_index, primary_index, secondary_index) < 0:
+        errors.append("cloud V25 workflow must define pinned official HTTPS primary and secondary candidates")
+    elif not candidates_index < primary_index < secondary_index:
+        errors.append("pinned official HTTPS primary must be attempted before the secondary candidate after cache miss")
 
     uri_parse_index = text.find("[Uri]::TryCreate($env:BRICSCAD_V25_MSI_URL")
     uri_path_index = text.find("$fallbackUri.AbsolutePath", uri_parse_index if uri_parse_index >= 0 else 0)
@@ -157,7 +160,7 @@ else:
         PINNED_SHA256,
         "Actions cache",
         "cache hit is re-verified",
-        "approved pinned HTTP mirror",
+        "pinned official HTTPS sources",
         "valid Bricsys Authenticode signer",
         "MSI ProductVersion must identify V25.2.10",
         "download timeout",
@@ -174,4 +177,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: cloud V25 preview remains manual-only; secret fallback is bound to the exact pinned official MSI object except query, the V25.2.10 digest is pinned, cache hits are re-verified, Bricsys Authenticode + MSI identity checks precede bounded extraction, and download/extraction waits are finite.")
+print("PASS: cloud V25 preview remains manual-only; official installer candidates are HTTPS-only, secret fallback is bound to the exact pinned official MSI object except query, the V25.2.10 digest is pinned, cache hits are re-verified, Bricsys Authenticode + MSI identity checks precede bounded extraction, and download/extraction waits are finite.")
