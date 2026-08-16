@@ -5,13 +5,25 @@ using System.Reflection;
 namespace QS3D.BricsCAD.V25.Ribbon
 {
     /// <summary>
-    /// Adds deterministic QS3D-generated icons to the bootstrap-owned Project and Authoring
-    /// tabs without changing command IDs, grouping, or the separately-polished Home ribbon.
+    /// Adds deterministic QS3D-generated icons to every bootstrap-owned ribbon tab except
+    /// the separately-polished Home ribbon, without changing command IDs or panel grouping.
     /// </summary>
     internal static class RibbonBootstrapIconAugmenter
     {
         private const string AssemblyName = "BrxMgd";
-        private static readonly string[] TargetTabIds = { "QS3D_PROJECT", "QS3D_AUTHOR" };
+        private static readonly string[] TargetTabIds =
+        {
+            "QS3D_PROJECT",
+            "QS3D_BIM",
+            "QS3D_RECOGNIZE",
+            "QS3D_DRAW",
+            "QS3D_TOOL",
+            "QS3D_MODELING",
+            "QS3D_VIEW",
+            "QS3D_QTY",
+            "QS3D_REV",
+            "QS3D_AUTHOR"
+        };
         private static bool _initialized;
 
         public static bool TryInitialize()
