@@ -279,6 +279,10 @@ namespace QS3D.Core.Cost
                     aggregate = new TradeAggregate(item.TradeCode);
                     totals.Add(item.TradeCode, aggregate);
                 }
+                else if (string.CompareOrdinal(item.TradeCode, aggregate.TradeCode) < 0)
+                {
+                    aggregate.TradeCode = item.TradeCode;
+                }
                 checked
                 {
                     aggregate.ItemCount++;
@@ -296,7 +300,7 @@ namespace QS3D.Core.Cost
         private sealed class TradeAggregate
         {
             internal TradeAggregate(string tradeCode) { TradeCode = tradeCode; }
-            internal string TradeCode { get; }
+            internal string TradeCode { get; set; }
             internal int ItemCount { get; set; }
             internal decimal TotalCost { get; set; }
         }
