@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Xml;
 
 namespace QS3D.Core.Domain
 {
@@ -30,6 +31,7 @@ namespace QS3D.Core.Domain
             if (text.Length == 0 || text.Length > max) throw new ArgumentException(name + " must contain 1.." + max + " characters.", name);
             if (text.Any(char.IsControl)) throw new ArgumentException(name + " cannot contain control characters.", name);
             RequireWellFormedUnicode(text, name);
+            RequireXmlText(text, name);
             return text;
         }
 
@@ -38,6 +40,7 @@ namespace QS3D.Core.Domain
             var text = (value ?? string.Empty).Trim();
             if (text.Length > max) throw new ArgumentException(name + " must contain at most " + max + " characters.", name);
             RequireWellFormedUnicode(text, name);
+            RequireXmlText(text, name);
             return text;
         }
 
@@ -50,6 +53,18 @@ namespace QS3D.Core.Domain
             catch (EncoderFallbackException)
             {
                 throw new ArgumentException(name + " must contain well-formed Unicode text.", name);
+            }
+        }
+
+        private static void RequireXmlText(string text, string name)
+        {
+            try
+            {
+                XmlConvert.VerifyXmlChars(text);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException(name + " contains characters that are invalid in XML.", name, ex);
             }
         }
     }
