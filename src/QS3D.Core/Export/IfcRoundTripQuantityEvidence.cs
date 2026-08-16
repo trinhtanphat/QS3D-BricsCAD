@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -47,6 +48,8 @@ namespace QS3D.Core.Export
 
     public sealed class IfcRoundTripQuantityEvidenceSet
     {
+        internal const int MaxCandidates = 10000;
+
         private IfcRoundTripQuantityEvidenceSet(IReadOnlyList<IfcRoundTripQuantityEvidenceGroup> groups)
         {
             Groups = groups;
@@ -59,8 +62,17 @@ namespace QS3D.Core.Export
         public static IfcRoundTripQuantityEvidenceSet Create(IEnumerable<IfcRoundTripQuantityEvidence> evidence)
         {
             if (evidence == null) throw new ArgumentNullException(nameof(evidence));
+            if (TryGetKnownCount(evidence, out var knownCount) && knownCount > MaxCandidates)
+                ThrowTooManyCandidates();
 
-            var candidates = evidence.ToList();
+            var candidates = new List<IfcRoundTripQuantityEvidence>();
+            foreach (var candidate in evidence)
+            {
+                if (candidates.Count == MaxCandidates)
+                    ThrowTooManyCandidates();
+                candidates.Add(candidate);
+            }
+
             for (var index = 0; index < candidates.Count; index++)
                 if (candidates[index] == null)
                     throw new ArgumentException("Quantity evidence collection cannot contain null entries.", nameof(evidence));
@@ -90,6 +102,36 @@ namespace QS3D.Core.Export
             }
 
             return new IfcRoundTripQuantityEvidenceSet(Array.AsReadOnly(groups.ToArray()));
+        }
+
+        private static bool TryGetKnownCount(IEnumerable<IfcRoundTripQuantityEvidence> evidence, out int count)
+        {
+            if (evidence is ICollection<IfcRoundTripQuantityEvidence> collection)
+            {
+                count = collection.Count;
+                return true;
+            }
+
+            if (evidence is IReadOnlyCollection<IfcRoundTripQuantityEvidence> readOnlyCollection)
+            {
+                count = readOnlyCollection.Count;
+                return true;
+            }
+
+            if (evidence is ICollection nonGenericCollection)
+            {
+                count = nonGenericCollection.Count;
+                return true;
+            }
+
+            count = 0;
+            return false;
+        }
+
+        private static void ThrowTooManyCandidates()
+        {
+            throw new InvalidOperationException(
+                "IFC round-trip quantity evidence set supports at most " + MaxCandidates + " candidates.");
         }
 
         private static bool SameIdentity(IfcRoundTripQuantityEvidence left, IfcRoundTripQuantityEvidence right)
