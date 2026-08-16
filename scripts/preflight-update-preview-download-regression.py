@@ -192,7 +192,7 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
         self.assert_rejected(
             DOWNLOADER,
             "TryDelete(partialPath);",
-            "// TryDelete(partialPath);",
+            "// partial cleanup removed",
             "missing required preview-download contract: TryDelete(partialPath);",
         )
 
