@@ -75,7 +75,7 @@ def main() -> int:
             "FAIL: Recognition icon polish must run after generic icon decoration and before command fallback"
         )
 
-    require(v26, r'<Compile Include="..\QS3D.BricsCAD.V25\**\*.cs"', "V26 linked V25 Ribbon source")
+    require(v26, r'<Compile Include="..\QS3D.BricsCAD.V25\**\*.cs"'.replace(r'\"', '"'), "V26 linked V25 Ribbon source")
 
     print(
         "PASS: NHẬN DẠNG keeps eight distinct BLT3D-familiar semantic vector icons, "
