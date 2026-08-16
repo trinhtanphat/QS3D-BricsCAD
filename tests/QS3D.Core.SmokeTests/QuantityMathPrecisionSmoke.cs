@@ -7,7 +7,8 @@ namespace QS3D.Core.SmokeTests
     internal static class QuantityMathPrecisionSmoke
     {
         private static readonly Type QuantityMathType =
-            typeof(ProjectState).Assembly.GetType("QS3D.Core.Services.QuantityMath", throwOnError: true);
+            typeof(ProjectState).Assembly.GetType("QS3D.Core.Services.QuantityMath", throwOnError: true)
+            ?? throw new InvalidOperationException("Missing QS3D.Core.Services.QuantityMath type.");
 
         internal static void Run()
         {
@@ -57,7 +58,11 @@ namespace QS3D.Core.SmokeTests
             if (method == null)
                 throw new InvalidOperationException("Missing QuantityMath method: " + methodName + ".");
 
-            return (double)method.Invoke(null, new object[] { first, second, "quantity-math-precision-smoke" });
+            var result = method.Invoke(null, new object[] { first, second, "quantity-math-precision-smoke" });
+            if (result is double value)
+                return value;
+
+            throw new InvalidOperationException("QuantityMath method returned an unexpected result: " + methodName + ".");
         }
 
         private static void ThrowsInvalidOperation(Action action, string scenario)
