@@ -32,6 +32,7 @@ namespace QS3D.BricsCAD.V25
             UpdateBootstrapper.Stop();
             RibbonInitializationCoordinator.Stop();
             DocumentLifecycleCoordinator.Stop();
+            ProjectSetupPaletteCoordinator.Dispose();
             PaletteCoordinator.Dispose();
             RibbonBootstrapIconAugmenter.Reset();
             QuantityReferenceRibbonAugmenter.Reset();
