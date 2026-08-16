@@ -33,7 +33,7 @@ namespace QS3D.BricsCAD.V25
             var extensionType = Type.GetType(ExtensionTypeName, false)
                 ?? throw new InvalidOperationException("BricsCAD ContextMenuExtension type is unavailable.");
             var menuItemType = Type.GetType(MenuItemTypeName, false)
-                ?? throw new InvalidOperationException("BricsCAD MenuItem type is unavailable.");
+                ?? throw new InvalidOperationException("BricsCAD native MenuItem type is unavailable.");
             var runtimeClass = RXObject.GetClass(typeof(Entity))
                 ?? throw new InvalidOperationException("BricsCAD Entity RXClass is unavailable.");
 
@@ -157,8 +157,8 @@ namespace QS3D.BricsCAD.V25
             }
             else
             {
-                // BricsCAD's native MenuItem constructor is (string itemName, System.Drawing.Icon icon).
-                // Keep this reflection-based so QS3D does not need a compile-time System.Drawing UI dependency.
+                // BricsCAD exposes a native MenuItem(string, System.Drawing.Icon) constructor on
+                // supported hosts. Keep this reflection-based so QS3D does not take a UI compile dependency.
                 var stringIconConstructor = menuItemType.GetConstructors(BindingFlags.Instance | BindingFlags.Public)
                     .FirstOrDefault(constructor =>
                     {
