@@ -33,6 +33,9 @@ namespace QS3D.Core.Geometry
             var dy = end.Y - start.Y;
             var midpoint = new Point2(start.X + dx * 0.5d, start.Y + dy * 0.5d);
             ValidatePoint(midpoint, "arcMidpoint");
+            if ((midpoint.X == start.X && midpoint.Y == start.Y) ||
+                (midpoint.X == end.X && midpoint.Y == end.Y))
+                throw new InvalidOperationException("Arc midpoint is not representable between the distinct chord endpoints.");
             var nx = -dy / chord;
             var ny = dx / chord;
             var centerOffset = chord * 0.25d * (1d / bulge - bulge);
