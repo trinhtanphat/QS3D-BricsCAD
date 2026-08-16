@@ -91,7 +91,7 @@ if metrics.exists():
         "TranslatedCrossFinite",
         "RestoreScaledCrossFinite",
         "CrossFinite",
-        "AddFinite",
+        "AddLengthCompensated",
     ):
         if needle not in text: errors.append("stable polyline metric guard missing: " + needle)
 
