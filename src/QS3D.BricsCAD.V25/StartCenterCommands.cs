@@ -19,7 +19,7 @@ namespace QS3D.BricsCAD.V25
             {
                 if (_window == null || !_window.IsLoaded)
                 {
-                    createdWindow = new StartCenterWindow();
+                    createdWindow = new BltStartCenterWindow();
                     _window = createdWindow;
                     createdWindow.Closed += OnStartCenterClosed;
                     SubscribeToDocumentActivation();
