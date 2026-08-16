@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             IdentificationOptions();
             RateReferenceAndBuildUpAnalysis();
             CostAdjustment();
+            HistoricalBenchmarkOverflowSafety();
             TradeAnalysis();
             BqLibraryReuse();
         }
@@ -77,6 +78,29 @@ namespace QS3D.Core.SmokeTests
             var byTotal = service.AdjustToTotal(200m, 230m);
             Equal(15m, byTotal.CombinedRatioPercent, "adjust total derived ratio");
             Equal(230m, byTotal.AdjustedTotal, "adjust total target");
+        }
+
+        private static void HistoricalBenchmarkOverflowSafety()
+        {
+            var catalog = new HistoricalCostCatalog(new[]
+            {
+                new HistoricalCostRecord("H-MAX-1", "MAX-COST", "REGION=TEST", 1m, decimal.MaxValue, "VND", new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+                new HistoricalCostRecord("H-MAX-2", "MAX-COST", "REGION=TEST", 1m, decimal.MaxValue, "VND", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc))
+            });
+
+            var result = new CostBenchmarkService().Analyze(
+                catalog,
+                "MAX-COST",
+                "REGION=TEST",
+                "VND",
+                decimal.MaxValue);
+
+            Equal(2, result.SampleCount, "high-value benchmark sample count");
+            Equal(decimal.MaxValue, result.MinimumUnitCost, "high-value benchmark minimum");
+            Equal(decimal.MaxValue, result.MaximumUnitCost, "high-value benchmark maximum");
+            Equal(decimal.MaxValue, result.AverageUnitCost, "high-value benchmark average");
+            Equal(decimal.MaxValue, result.MedianUnitCost, "high-value benchmark median");
+            Equal(0m, result.DeviationFromAveragePercent!.Value, "high-value benchmark deviation");
         }
 
         private static void TradeAnalysis()
