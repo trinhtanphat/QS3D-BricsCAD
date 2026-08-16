@@ -252,24 +252,37 @@ namespace QS3D.Core.Geometry
 
         private static double ClosedPerimeter(IReadOnlyList<Point2> polygon)
         {
-            var value = 0d;
+            var sum = 0d;
             var compensation = 0d;
             for (var i = 0; i < polygon.Count; i++)
-                AddCompensated(ref value, ref compensation, polygon[i].DistanceTo(polygon[(i + 1) % polygon.Count]), "wall footprint perimeter");
-            return value;
+                AddCompensated(ref sum, ref compensation, polygon[i].DistanceTo(polygon[(i + 1) % polygon.Count]), "wall footprint perimeter");
+            return FinalizeCompensated(sum, compensation, "wall footprint perimeter");
         }
 
         private static void AddCompensated(ref double sum, ref double compensation, double value, string label)
         {
             if (!Finite(sum) || !Finite(compensation) || !Finite(value))
                 throw new OverflowException(label + " contains a non-finite value.");
-            var corrected = value - compensation;
-            if (!Finite(corrected)) throw new OverflowException(label + " overflowed.");
-            var next = sum + corrected;
+
+            var next = sum + value;
             if (!Finite(next)) throw new OverflowException(label + " overflowed.");
-            compensation = (next - sum) - corrected;
-            if (!Finite(compensation)) throw new OverflowException(label + " overflowed.");
-            sum = next;
+            var correction = Math.Abs(sum) >= Math.Abs(value)
+                ? (sum - next) + value
+                : (value - next) + sum;
+            var nextCompensation = compensation + correction;
+            if (!Finite(nextCompensation)) throw new OverflowException(label + " overflowed.");
+
+            sum = next == 0d ? 0d : next;
+            compensation = nextCompensation == 0d ? 0d : nextCompensation;
+        }
+
+        private static double FinalizeCompensated(double sum, double compensation, string label)
+        {
+            if (!Finite(sum) || !Finite(compensation))
+                throw new OverflowException(label + " contains a non-finite value.");
+            var result = sum + compensation;
+            if (!Finite(result)) throw new OverflowException(label + " overflowed.");
+            return result == 0d ? 0d : result;
         }
 
         private static double CheckedAdd(double left, double right, string label)
