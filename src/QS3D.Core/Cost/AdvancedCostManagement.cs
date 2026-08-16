@@ -22,6 +22,14 @@ namespace QS3D.Core.Cost
                 throw new OverflowException("Cost division underflow: " + label + ".");
             return result;
         }
+
+        public static decimal AddPreservingNonZeroContribution(decimal left, decimal right, string label)
+        {
+            var result = checked(left + right);
+            if (right != 0m && result == left)
+                throw new OverflowException("Cost addition precision loss: " + label + ".");
+            return result;
+        }
     }
 
     internal static class AdvancedCostCollectionContract
@@ -134,11 +142,23 @@ namespace QS3D.Core.Cost
             checked
             {
                 for (var i = 0; i < snapshot.Count; i++)
-                    direct += snapshot[i].ExtendedUnitCost;
+                {
+                    direct = CostDecimalMath.AddPreservingNonZeroContribution(
+                        direct,
+                        snapshot[i].ExtendedUnitCost,
+                        "rate build-up direct unit cost");
+                }
                 DirectUnitCost = direct;
                 OverheadUnitCost = CostDecimalMath.MultiplyPreservingNonZero(direct, OverheadPercent / 100m, "overhead unit cost");
-                ProfitUnitCost = CostDecimalMath.MultiplyPreservingNonZero(direct + OverheadUnitCost, ProfitPercent / 100m, "profit unit cost");
-                UnitRate = direct + OverheadUnitCost + ProfitUnitCost;
+                var subtotal = CostDecimalMath.AddPreservingNonZeroContribution(
+                    direct,
+                    OverheadUnitCost,
+                    "rate build-up subtotal");
+                ProfitUnitCost = CostDecimalMath.MultiplyPreservingNonZero(subtotal, ProfitPercent / 100m, "profit unit cost");
+                UnitRate = CostDecimalMath.AddPreservingNonZeroContribution(
+                    subtotal,
+                    ProfitUnitCost,
+                    "rate build-up unit rate");
             }
         }
 
