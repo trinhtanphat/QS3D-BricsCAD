@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import contextlib
+import importlib.util
+import io
+import os
+import subprocess
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[1]
+RUNNER = ROOT / "scripts" / "preflight-all.py"
+
+
+def fail(message):
+    raise AssertionError(message)
+
+
+def require(condition, message):
+    if not condition:
+        fail(message)
+
+
+def load_runner():
+    spec = importlib.util.spec_from_file_location("qs3d_preflight_all_under_test", RUNNER)
+    if spec is None or spec.loader is None:
+        fail("unable to load preflight-all.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def with_fixture(module, root):
+    module.ROOT = root
+    module.SCRIPTS = root / "scripts"
+    module.SELF = (module.SCRIPTS / "preflight-all.py").resolve()
+    module.SCRIPTS.mkdir(parents=True, exist_ok=True)
+    module.SELF.write_text("# fixture aggregate runner\n", encoding="utf-8")
+
+
+def expect_discovery_failure(module, expected):
+    try:
+        module.discover()
+    except RuntimeError as exc:
+        require(expected in str(exc), "unexpected discovery failure: " + str(exc))
+        return
+    fail("expected discovery failure containing: " + expected)
+
+
+def test_deterministic_order_and_self_exclusion(module, root):
+    with_fixture(module, root)
+    for name in ("preflight-z.py", "preflight-B.py", "preflight-a.py"):
+        (module.SCRIPTS / name).write_text("print('ok')\n", encoding="utf-8")
+    names = [path.name for path in module.discover()]
+    require(names == ["preflight-a.py", "preflight-B.py", "preflight-z.py"], "discovery order is not deterministic")
+    require("preflight-all.py" not in names, "aggregate runner recursively discovered itself")
+
+
+def test_non_regular_rejected(module, root):
+    with_fixture(module, root)
+    (module.SCRIPTS / "preflight-directory.py").mkdir()
+    expect_discovery_failure(module, "must be a regular file")
+
+
+def test_symlink_rejected(module, root):
+    with_fixture(module, root)
+    target = module.SCRIPTS / "target.py"
+    target.write_text("print('ok')\n", encoding="utf-8")
+    link = module.SCRIPTS / "preflight-linked.py"
+    try:
+        link.symlink_to(target.name)
+    except (OSError, NotImplementedError):
+        return
+    expect_discovery_failure(module, "must not be a symlink")
+
+
+def test_out_of_root_candidate_rejected(module, root):
+    with_fixture(module, root)
+    outside = root.parent / (root.name + "-preflight-escape.py")
+    outside.write_text("print('outside')\n", encoding="utf-8")
+    real_scripts = module.SCRIPTS
+
+    class EscapingScripts:
+        def glob(self, pattern):
+            require(pattern == "preflight-*.py", "unexpected discovery glob")
+            return [outside]
+
+    module.SCRIPTS = EscapingScripts()
+    try:
+        expect_discovery_failure(module, "escaped repository root")
+    finally:
+        module.SCRIPTS = real_scripts
+
+
+def test_case_collision_rejected(module, root):
+    with_fixture(module, root)
+    first = module.SCRIPTS / "preflight-Case.py"
+    second = module.SCRIPTS / "preflight-case.py"
+    first.write_text("print('one')\n", encoding="utf-8")
+    second.write_text("print('two')\n", encoding="utf-8")
+    try:
+        distinct = first.samefile(second) is False
+    except OSError:
+        distinct = True
+    if not distinct:
+        return
+    expect_discovery_failure(module, "case-insensitive feature preflight filename collision")
+
+
+def test_run_gate_failure_modes(module, root):
+    with_fixture(module, root)
+    gate = module.SCRIPTS / "preflight-child.py"
+    gate.write_text("print('fixture')\n", encoding="utf-8")
+    original = module.subprocess.run
+    try:
+        module.subprocess.run = lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 7)
+        require(module.run_gate(gate, {}) == ("scripts/preflight-child.py", "exit=7"), "nonzero exit was not propagated with a stable path")
+
+        def timeout(*args, **kwargs):
+            raise subprocess.TimeoutExpired(args[0], module.CHILD_TIMEOUT_SECONDS)
+
+        module.subprocess.run = timeout
+        require(module.run_gate(gate, {}) == ("scripts/preflight-child.py", "timeout"), "timeout was not propagated")
+
+        def launch(*args, **kwargs):
+            raise OSError("fixture launch failure")
+
+        module.subprocess.run = launch
+        require(module.run_gate(gate, {}) == ("scripts/preflight-child.py", "launch"), "launch failure was not propagated")
+    finally:
+        module.subprocess.run = original
+
+
+def test_main_executes_each_gate_once(module, root):
+    with_fixture(module, root)
+    for name in ("preflight-B.py", "preflight-a.py"):
+        (module.SCRIPTS / name).write_text("print('fixture')\n", encoding="utf-8")
+
+    calls = []
+    original = module.run_gate
+
+    def record(path, child_env):
+        calls.append((path.name, child_env.get("PYTHONUTF8"), child_env.get("PYTHONIOENCODING")))
+        return None
+
+    module.run_gate = record
+    try:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = module.main()
+    finally:
+        module.run_gate = original
+
+    require(result == 0, "aggregate runner rejected valid fixture gates")
+    require(calls == [("preflight-a.py", "1", "utf-8"), ("preflight-B.py", "1", "utf-8")], "valid gates were not executed exactly once in deterministic order")
+    require("PASS: all 2 discovered feature preflight gates passed." in out.getvalue(), "aggregate success diagnostic missing")
+
+
+def test_actions_escaping(module):
+    require(module.escape_actions_data("a%b\rc\nd") == "a%25b%0Dc%0Ad", "annotation data escaping regressed")
+    require(module.escape_actions_property("a:b,c") == "a%3Ab%2Cc", "annotation property escaping regressed")
+
+    old = os.environ.get("GITHUB_ACTIONS")
+    os.environ["GITHUB_ACTIONS"] = "true"
+    try:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            module.emit_failure_annotation("scripts/a:b,c.py", "bad%reason\nnext")
+        text = out.getvalue()
+        require("file=scripts/a%3Ab%2Cc.py" in text, "annotation file property was not escaped")
+        require("bad%25reason%0Anext" in text, "annotation message was not escaped")
+    finally:
+        if old is None:
+            os.environ.pop("GITHUB_ACTIONS", None)
+        else:
+            os.environ["GITHUB_ACTIONS"] = old
+
+
+def test_main_fails_closed_on_discovery_error(module, root):
+    with_fixture(module, root)
+    (module.SCRIPTS / "preflight-directory.py").mkdir()
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        result = module.main()
+    require(result == 1, "aggregate runner did not fail closed on discovery error")
+    require("feature preflight discovery failed" in out.getvalue(), "discovery failure diagnostic missing")
+
+
+def test_main_fails_closed_on_inspection_error(module, root):
+    with_fixture(module, root)
+    real_scripts = module.SCRIPTS
+
+    class BrokenScripts:
+        def glob(self, pattern):
+            raise OSError("fixture inspection failure")
+
+    module.SCRIPTS = BrokenScripts()
+    try:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = module.main()
+    finally:
+        module.SCRIPTS = real_scripts
+    require(result == 1, "aggregate runner did not fail closed on inspection error")
+    require("fixture inspection failure" in out.getvalue(), "inspection failure diagnostic missing")
+
+
+def main():
+    module = load_runner()
+    with tempfile.TemporaryDirectory(prefix="qs3d-preflight-discovery-") as temp:
+        base = Path(temp)
+        tests = (
+            test_deterministic_order_and_self_exclusion,
+            test_non_regular_rejected,
+            test_symlink_rejected,
+            test_out_of_root_candidate_rejected,
+            test_case_collision_rejected,
+            test_run_gate_failure_modes,
+            test_main_executes_each_gate_once,
+            test_main_fails_closed_on_discovery_error,
+            test_main_fails_closed_on_inspection_error,
+        )
+        for index, test in enumerate(tests):
+            root = base / ("fixture-" + str(index))
+            root.mkdir()
+            test(module, root)
+    test_actions_escaping(module)
+    print("PASS: aggregate product preflight discovery is deterministic, fail-closed, bounded, and hermetically regression-covered.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
