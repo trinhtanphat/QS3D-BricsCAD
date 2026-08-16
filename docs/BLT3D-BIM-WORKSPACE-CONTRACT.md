@@ -38,9 +38,11 @@ The owner-reference VẼ tab keeps the qualified QS3D/BricsCAD commands but uses
 - column 3: `Chia cấu kiện` → `Nối liền` → `Đo khoảng cách`;
 - column 4: `Nối góc` → `Nối chữ T`.
 
-The existing **IFC** panel remains after Vẽ/Công cụ with the qualified import, lightweight import, selective delete and export actions. The compact layout does not take ownership of IFC behavior.
+Every visible button in those two panels has an explicit semantic vector icon. `BltDrawRibbonReferenceIconDecorator` applies the clean-room BLT3D-familiar blue/gray icon language after the compact layout is established: point/line/polyline/arc/rectangle/circle/boundary glyphs for Vẽ, and slope/cut/move/rotate/mirror/copy/break/join/measure/corner/T glyphs for Công cụ. It sets both `Image` and `LargeImage`, but does not change command handlers, command parameters or CAD behavior. No proprietary BLT3D bitmap/resource is copied.
 
-`BltDrawRibbonAugmenter` remains the source of command routing, handlers and icons. `BltDrawRibbonLayoutRefiner` only re-packs those already-created buttons into `RibbonRowPanel` / `RibbonRowBreak` columns. `BltDrawRibbonFailSafe` resets the rich augmenter and restores the captured bootstrap panels if the host cannot apply the compact layout, so a failed presentation upgrade cannot strand the user with a half-built Draw tab.
+The final visible **VẼ** tab ends after **Công cụ**, matching the owner reference and leaving the remaining Ribbon area blank. The qualified **IFC** panel still exists during Ribbon staging only so `MÔ HÌNH BIM` can clone the import, lightweight import, selective delete and export actions before the source IFC panel is removed from `QS3D_DRAW`.
+
+`BltDrawRibbonAugmenter` remains the source of command routing, handlers and fallback icons. `BltDrawRibbonLayoutRefiner` only re-packs those already-created buttons into `RibbonRowPanel` / `RibbonRowBreak` columns. `BltDrawRibbonFailSafe` resets the rich augmenter and restores the captured bootstrap panels if the host cannot apply the compact layout, so a failed presentation upgrade cannot strand the user with a half-built Draw tab. `BltDrawRibbonReferenceIconDecorator` then applies the owner-reference icon set. After `BltBimRibbonMirrorAugmenter` clones the three qualified staging panels, `BltDrawRibbonReferenceFinalizer` removes only `QS3D_DRAW_BLT_IFC_PANEL_SOURCE` from the final visible VẼ tab.
 
 ## 3. MÔ HÌNH BIM ribbon contract
 
@@ -50,7 +52,7 @@ The BIM tab exposes the same qualified BLT3D surface in three panels, in order:
 - **Công cụ** — the compact tool arrangement above;
 - **IFC** — Import IFC, lightweight Import IFC, delete selected IFC entities and IFC export.
 
-`BltBimRibbonMirrorAugmenter` creates independent BIM Ribbon objects while reusing the source command handlers, command parameters, images and sizing. It mirrors `RibbonButton`, `RibbonRowPanel` and `RibbonRowBreak` recursively so BIM does not regress to a flat layout when VẼ is compacted. It must not duplicate geometry or business logic.
+`BltBimRibbonMirrorAugmenter` creates independent BIM Ribbon objects while reusing the source command handlers, command parameters, images and sizing. It mirrors `RibbonButton`, `RibbonRowPanel` and `RibbonRowBreak` recursively so BIM does not regress to a flat layout when VẼ is compacted. The BIM mirror runs after the reference icon decorator, so its Vẽ/Công cụ buttons inherit the same semantic glyphs. The BIM mirror must complete before `BltDrawRibbonReferenceFinalizer` removes the staging IFC source panel from VẼ. It must not duplicate geometry or business logic.
 
 ## 4. MODELING ribbon contract
 
@@ -151,7 +153,7 @@ Deleting/removing drawings continues to use the existing guarded Xref/drawing lo
 
 `BltBimWorkspaceActivationCoordinator` observes the active Ribbon tab on the UI idle dispatcher and opens the BIM shell on a transition into `QS3D_BIM`. It does not force palettes open on every timer tick, so a user who manually closes a palette while staying on BIM is respected. Ribbon teardown stops the coordinator.
 
-`RibbonInitializationCoordinator` builds `BltModelingRibbonAugmenter`, then applies `BltModelingRibbonFunctionRefiner`, then `BltModelingRibbonVisualRefiner` before generic icon/command-parameter fallback. It resets all three on teardown so NETLOAD/unload/retry cannot leave stale MODELING panels, routes or artwork. Draw compacting remains inside `BltDrawRibbonFailSafe`, so the existing coordinator retry boundary also owns layout recovery.
+`RibbonInitializationCoordinator` builds `BltModelingRibbonAugmenter`, then applies `BltModelingRibbonFunctionRefiner`, then `BltModelingRibbonVisualRefiner` before BIM mirroring and generic icon/command-parameter fallback. It resets all three MODELING stages on teardown so NETLOAD/unload/retry cannot leave stale panels, routes or artwork. Draw compacting remains inside `BltDrawRibbonFailSafe`, so the existing coordinator retry boundary also owns layout recovery. The coordinator sequence for VẼ is `BltDrawRibbonFailSafe` → `BltDrawRibbonReferenceIconDecorator` → `BltBimRibbonMirrorAugmenter` → `BltDrawRibbonReferenceFinalizer`. This preserves qualified command wiring, applies all visible icons before BIM cloning, keeps IFC in BIM and guarantees IFC is absent from the final VẼ surface.
 
 ## 10. Regression protection
 
@@ -162,7 +164,9 @@ Deleting/removing drawings continues to use the existing guarded Xref/drawing lo
 - integration with the real Family workspace controls;
 - drawing/layer manager labels;
 - BIM-tab activation lifecycle;
-- Vẽ / Công cụ / IFC ribbon ordering;
+- final VẼ visibility limited to **Vẽ / Công cụ**, with the IFC staging panel removed only after BIM mirroring;
+- explicit icon coverage for all 18 visible VẼ/Công cụ buttons plus `ShowImage`, `Image` and `LargeImage` assignment;
+- BIM **Vẽ / Công cụ / IFC** ribbon ordering;
 - exact VẼ and Công cụ compact column/button ordering, including `Biên dạng` ownership;
 - recursive compact-row mirroring from VẼ into MÔ HÌNH BIM;
 - exact MODELING group and button ordering;
