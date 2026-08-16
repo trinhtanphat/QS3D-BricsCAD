@@ -28,7 +28,8 @@ namespace QS3D.BricsCAD.V25.UI
             if (!(sender is FloorLevelWindow window) ||
                 !(e.OriginalSource is CheckBox checkBox) ||
                 !(checkBox.Tag is BltFloorRow row) ||
-                !window.IsLoaded)
+                !window.IsLoaded ||
+                window.Dispatcher.HasShutdownStarted)
             {
                 return;
             }
@@ -37,7 +38,11 @@ namespace QS3D.BricsCAD.V25.UI
             // the invariant observes the actual post-click state rather than the old one.
             window.Dispatcher.BeginInvoke(
                 DispatcherPriority.Background,
-                new Action(() => window.EnsureBltReferenceInvariant(row)));
+                new Action(() =>
+                {
+                    if (!window.IsLoaded || window.Dispatcher.HasShutdownStarted) return;
+                    window.EnsureBltReferenceInvariant(row);
+                }));
         }
 
         private void EnsureBltReferenceInvariant(BltFloorRow clickedRow)
