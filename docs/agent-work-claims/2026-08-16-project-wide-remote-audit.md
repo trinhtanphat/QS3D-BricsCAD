@@ -35,3 +35,6 @@ Each implemented defect must be independently reproducible from current source, 
 
 ### Curtain opening/frame coordinate-resolution collapse
 `CurtainFrameOpeningPlanner` accepted strictly positive opening/frame dimensions whose endpoint arithmetic collapsed back onto the starting coordinate (for example `1e16 + 1d == 1e16`). That left a semantic positive extent which the clipping arithmetic observed as zero. Opening base bounds and positive clearances now require representable outward movement, frame right/top bounds require strict representable ordering, and deterministic smoke coverage exercises horizontal/vertical size collapse, clearance collapse, frame collapse, plus the ordinary four-fragment interruption path.
+
+### Alternate curtain opening-frame planner coordinate collapse
+`CurtainWallOpeningFramePlanner` had the same representability gap in its mutable opening DTO path: positive finite widths/heights could collapse their right/top endpoints back onto the starting coordinate, and a positive clearance could be rounded away on one side while still being treated as applied. Rectangle validation now requires strict representable right/top movement, positive clearance must expand both sides on each axis, and deterministic smoke coverage preserves the ordinary interruption/area contract while rejecting collapsed opening, frame and clearance inputs.

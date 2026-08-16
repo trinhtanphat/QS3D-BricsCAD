@@ -64,13 +64,26 @@ namespace QS3D.Core.Geometry
             for (var i = 0; i < openings.Count; i++)
             {
                 var opening = openings[i] ?? throw new InvalidOperationException("Curtain opening rectangle cannot be null.");
-                ValidateRect(opening.X_M, opening.Z_M, opening.WidthM, opening.HeightM, "opening[" + i + "]");
+                var label = "opening[" + i + "]";
+                ValidateRect(opening.X_M, opening.Z_M, opening.WidthM, opening.HeightM, label);
+                var openingRight = opening.X_M + opening.WidthM;
+                var openingTop = opening.Z_M + opening.HeightM;
 
                 var expandedX = opening.X_M - clearanceM;
                 var expandedZ = opening.Z_M - clearanceM;
                 var expandedWidth = opening.WidthM + clearanceM * 2d;
                 var expandedHeight = opening.HeightM + clearanceM * 2d;
                 ValidateRect(expandedX, expandedZ, expandedWidth, expandedHeight, "expandedOpening[" + i + "]");
+
+                if (clearanceM > 0d)
+                {
+                    var expandedRight = expandedX + expandedWidth;
+                    var expandedTop = expandedZ + expandedHeight;
+                    if (!(expandedX < opening.X_M) || !(expandedRight > openingRight))
+                        throw new OverflowException(label + " horizontal clearance is below the representable coordinate resolution.");
+                    if (!(expandedZ < opening.Z_M) || !(expandedTop > openingTop))
+                        throw new OverflowException(label + " vertical clearance is below the representable coordinate resolution.");
+                }
 
                 expandedOpenings.Add(new Rect
                 {
@@ -178,8 +191,14 @@ namespace QS3D.Core.Geometry
             Finite(z, label + ".Z_M");
             FinitePositive(width, label + ".WidthM");
             FinitePositive(height, label + ".HeightM");
-            Finite(x + width, label + ".Right");
-            Finite(z + height, label + ".Top");
+            var right = x + width;
+            var top = z + height;
+            Finite(right, label + ".Right");
+            Finite(top, label + ".Top");
+            if (!(right > x))
+                throw new OverflowException(label + " width is below the representable coordinate resolution.");
+            if (!(top > z))
+                throw new OverflowException(label + " height is below the representable coordinate resolution.");
         }
 
         private static void Finite(double value, string label)
