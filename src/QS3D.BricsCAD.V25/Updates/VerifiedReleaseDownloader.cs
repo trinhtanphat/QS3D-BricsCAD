@@ -43,9 +43,13 @@ namespace QS3D.BricsCAD.V25.Updates
             var packagePath = System.IO.Path.Combine(releaseDirectory, GitHubReleaseClient.PackageAssetName);
             if (File.Exists(packagePath))
             {
-                var existingSha256 = ComputeSha256(packagePath);
-                if (string.Equals(existingSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
-                    return new VerifiedReleaseDownload(packagePath, existingSha256);
+                var existingLength = new FileInfo(packagePath).Length;
+                if (existingLength <= MaxPackageBytes)
+                {
+                    var existingSha256 = ComputeSha256(packagePath);
+                    if (string.Equals(existingSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
+                        return new VerifiedReleaseDownload(packagePath, existingSha256);
+                }
 
                 File.Delete(packagePath);
             }
