@@ -25,14 +25,22 @@ namespace QS3D.Core.SmokeTests
 
         private static void PreservesCanonicalMismatchClassification()
         {
+            using var rsa = RSA.Create();
+            rsa.KeySize = 2048;
+            var license = CreateLicense();
+            license.Signature = rsa.SignData(
+                license.CanonicalPayload(),
+                HashAlgorithmName.SHA256,
+                RSASignaturePadding.Pkcs1);
+
             var result = new LicenseVerifier().Verify(
-                CreateLicense(),
-                default(RSAParameters),
+                license,
+                rsa.ExportParameters(false),
                 "OTHER-PRODUCT",
                 VerificationTime());
             if (result.Status != LicenseStatus.ProductMismatch)
                 throw new InvalidOperationException(
-                    "LicenseVerifierProductInputCanonicalitySmoke canonical mismatch expected ProductMismatch, actual=" + result.Status + ".");
+                    "LicenseVerifierProductInputCanonicalitySmoke canonical signed mismatch expected ProductMismatch, actual=" + result.Status + ".");
         }
 
         private static void PreservesCanonicalMatchVerificationFlow()
