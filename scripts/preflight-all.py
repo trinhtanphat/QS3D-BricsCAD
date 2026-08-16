@@ -11,8 +11,7 @@ SELF = Path(__file__).resolve()
 CHILD_TIMEOUT_SECONDS = 180
 
 
-def discover():
-    candidates = [path for path in SCRIPTS.glob("preflight-*.py") if path.resolve() != SELF]
+def validate_candidates(candidates):
     unsafe = []
     by_casefold = {}
 
@@ -42,6 +41,11 @@ def discover():
         raise RuntimeError("unsafe or ambiguous feature preflight discovery: " + "; ".join(messages))
 
     return sorted(candidates, key=lambda path: (path.name.casefold(), path.name))
+
+
+def discover():
+    candidates = [path for path in SCRIPTS.glob("preflight-*.py") if path.resolve() != SELF]
+    return validate_candidates(candidates)
 
 
 def escape_actions_data(value):
