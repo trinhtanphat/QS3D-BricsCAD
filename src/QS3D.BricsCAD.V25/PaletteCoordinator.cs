@@ -170,7 +170,7 @@ namespace QS3D.BricsCAD.V25
 
         public static void RefreshProject()
         {
-            _workspacePanel?.RefreshProject();
+            _workspacePanel?.RefreshProjectForActiveDocument();
             _quantityInsightPanel?.RefreshQuantityInsights();
         }
 
@@ -184,7 +184,7 @@ namespace QS3D.BricsCAD.V25
 
         public static void ResetForUnavailableProject(string status)
         {
-            _workspacePanel?.ClearProject(status);
+            _workspacePanel?.ClearProjectForUnavailableDocument(status);
             _quantityInsightPanel?.ClearQuantityInsights(status);
             try { _rightPanel?.Refresh(); }
             catch { }
