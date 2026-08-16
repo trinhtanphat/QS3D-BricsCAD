@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             CollectivelySignificantSmallMetricsArePreserved();
+            InputOrderDoesNotDropSmallMetrics();
             OrdinaryAggregationRemainsStable();
             NonFiniteAggregationStillFailsClosed();
         }
@@ -32,6 +33,21 @@ namespace QS3D.Core.SmokeTests
             Assert(group.LengthM.Equals(expected), "MEP aggregate length lost collectively significant small contributions.");
             Assert(group.AreaM2.Equals(expected), "MEP aggregate area lost collectively significant small contributions.");
             Assert(group.VolumeM3.Equals(expected), "MEP aggregate volume lost collectively significant small contributions.");
+        }
+
+        private static void InputOrderDoesNotDropSmallMetrics()
+        {
+            const double expected = 10000000000000002d;
+            var groups = Aggregate(
+                Element("small-before", 1, 1d, 1d, 1d),
+                Element("large-middle", 1, 1e16d, 1e16d, 1e16d),
+                Element("small-after", 1, 1d, 1d, 1d));
+
+            Assert(groups.Count == 1, "Input-order regression must remain in one MEP aggregate group.");
+            var group = groups[0];
+            Assert(group.LengthM.Equals(expected), "MEP aggregate length must not depend on huge/small input order.");
+            Assert(group.AreaM2.Equals(expected), "MEP aggregate area must not depend on huge/small input order.");
+            Assert(group.VolumeM3.Equals(expected), "MEP aggregate volume must not depend on huge/small input order.");
         }
 
         private static void OrdinaryAggregationRemainsStable()
