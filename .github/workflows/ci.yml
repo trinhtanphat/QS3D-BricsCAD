@@ -29,6 +29,7 @@ on:
       - "integration/**"
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -106,6 +107,11 @@ jobs:
             Write-Host 'Candidate changed paths:'
             $changed | ForEach-Object { Write-Host " - $_" }
           }
+      - name: PR branch CI admission gate
+        if: ${{ github.event_name == 'pull_request' && github.event.action == 'opened' && github.actor != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository && steps.scope.outputs.source_validation == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/preflight-pr-branch-ci-gate.py
       - name: Generic source guard
         if: ${{ steps.scope.outputs.source_validation == 'true' }}
         run: python scripts/preflight.py
