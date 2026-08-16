@@ -55,6 +55,23 @@ internal static class CurtainWallLayoutUnderflowSmoke
         if (roundedIntegerRatio.BayWidthM > roundedRatioMaxPanelWidthM)
             throw new InvalidOperationException("A rounded integer division ratio must not produce a bay wider than MaxPanelWidthM.");
 
+        var zeroFrameAccumulation = CurtainWallLayoutPlanner.Plan(new CurtainWallLayoutInput
+        {
+            LengthM = 0.3d,
+            HeightM = 1d,
+            MaxPanelWidthM = 0.01d,
+            MaxPanelHeightM = 1d,
+            PerimeterFrameWidthM = 0d,
+            MullionWidthM = 0d,
+            TransomWidthM = 0d
+        });
+        if (zeroFrameAccumulation.Columns != 30)
+            throw new InvalidOperationException("Zero-frame accumulation regression requires thirty curtain columns.");
+        if (!zeroFrameAccumulation.ClearGlassAreaM2.Equals(zeroFrameAccumulation.GrossAreaM2))
+            throw new InvalidOperationException("Zero frame widths must not let accumulated clear spans exceed the curtain gross area.");
+        if (!zeroFrameAccumulation.FrameFaceAreaM2.Equals(0d))
+            throw new InvalidOperationException("Zero frame widths must retain exactly zero curtain frame face area.");
+
         AssertThrows<InvalidOperationException>(() => CurtainWallLayoutPlanner.Plan(new CurtainWallLayoutInput
         {
             LengthM = 6d,
