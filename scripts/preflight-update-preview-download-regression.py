@@ -48,7 +48,12 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
         text = path.read_text(encoding="utf-8")
         self.assertEqual(1, text.count(old), f"mutation anchor must be unique in {relative}: {old}")
         mutated = text.replace(old, new, 1)
-        self.assertNotIn(old, mutated, f"mutation replacement retained guard anchor in {relative}: {old}")
+        self.assertNotEqual(text, mutated, f"mutation must change {relative}: {old}")
+        # Replacement-style mutations remove the guarded anchor entirely. Some
+        # negative tests deliberately inject forbidden behavior next to an
+        # otherwise-valid anchor, so the replacement itself can contain `old`.
+        if old not in new:
+            self.assertNotIn(old, mutated, f"mutation replacement retained guard anchor in {relative}: {old}")
         path.write_text(mutated, encoding="utf-8")
 
     def assert_rejected(self, relative, old, new, expected):
