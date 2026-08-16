@@ -127,6 +127,9 @@ namespace QS3D.Core.Domain
             if (activeRoomIds == null) throw new ArgumentNullException(nameof(activeRoomIds));
             if (selectedSourceHandles == null) throw new ArgumentNullException(nameof(selectedSourceHandles));
             if (utcNow.Kind != DateTimeKind.Utc) throw new ArgumentException("utcNow must have DateTimeKind.Utc.", nameof(utcNow));
+            if (selectedSourceHandles.Count > MaxSourceHandleInputCount)
+                throw new InvalidOperationException(
+                    "Auto Room source handles cannot exceed " + MaxSourceHandleInputCount + " input entries.");
             var inputVersion = project.ChangeVersion;
             var active = new HashSet<string>(activeRoomIds.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()), StringComparer.OrdinalIgnoreCase);
             var selected = new HashSet<string>(selectedSourceHandles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()), StringComparer.OrdinalIgnoreCase);
