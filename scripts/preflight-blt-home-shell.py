@@ -22,8 +22,9 @@ def main():
     ribbon_rel = "src/QS3D.BricsCAD.V25/Ribbon/BltHomeRibbonAugmenter.cs"
     activation_rel = "src/QS3D.BricsCAD.V25/Ribbon/HomeTabActivationCoordinator.cs"
     init_rel = "src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator.cs"
-    shell_rel = "src/QS3D.BricsCAD.V25/UI/BltStartCenterWindow.cs"
+    shell_rel = "src/QS3D.BricsCAD.V25/UI/BltStartCenterPanel.cs"
     command_rel = "src/QS3D.BricsCAD.V25/StartCenterCommands.cs"
+    host_rel = "src/QS3D.BricsCAD.V25/StartCenterPaletteCoordinator.cs"
     project_ui_rel = "src/QS3D.BricsCAD.V25/ProjectFileUiService.cs"
     mutation_rel = "src/QS3D.BricsCAD.V25/ExistingProjectMutationContext.cs"
     context_rel = "src/QS3D.BricsCAD.V25/ProjectContextCoordinator.cs"
@@ -146,7 +147,7 @@ def main():
 
     shell = read(shell_rel)
     for needle in (
-        'Text = "QS3D"',
+        'Text = "BLT3D"',
         'BIM Modeling & Quantity Application',
         'Text = "QUY TRÌNH NHANH"',
         '"Tạo dự án mới"',
@@ -158,8 +159,9 @@ def main():
         'ProjectFileUiService.SaveCurrentProjectAs',
         'Text = "DỰ ÁN GẦN ĐÂY"',
         'Text = "Nhấp vào dự án để mở trực tiếp và bắt đầu làm việc"',
-        'StatusButton("Mô hình", () => new Commands().ShowWorkspace())',
-        'StatusButton("BQ", () => new Commands().ShowQuantitySummary())',
+        'StartCenterPaletteCoordinator.Hide();',
+        'new Commands().ShowWorkspace();',
+        'new Commands().ShowQuantitySummary();',
         'private Button CreateActionCard(',
         'private static readonly ControlTemplate ClickSurfaceTemplate = CreateClickSurfaceTemplate();',
         'private static Button CreateClickSurface(UIElement content, Cursor cursor)',
@@ -171,8 +173,8 @@ def main():
         'presenter.SetValue(ContentPresenter.ContentSourceProperty, "Content");',
         'return new ControlTemplate(typeof(Button))',
         'VisualTree = root',
-        'button.MouseEnter += (_, __) => border.Background = PanelHoverBrush;',
-        'button.MouseLeave += (_, __) => border.Background = PanelBrush;',
+        'button.MouseEnter += (_, __) => frame.Background = PanelHoverBrush;',
+        'button.MouseLeave += (_, __) => frame.Background = PanelBrush;',
         'button.Click += (_, __) => RunUiAction(action);',
         'button.Click += (_, __) => OpenRecentProject(recent);',
         'Application.DocumentManager.Open(normalized, false)',
@@ -194,13 +196,23 @@ def main():
         'FocusVisualStyle = null',
         'Focusable = false',
         'Text = "Nhấp đúp vào dự án để mở trực tiếp và bắt đầu làm việc"',
+        ' : Window',
+        'ShowModelessWindow',
     ):
         forbid(shell, stale, shell_rel)
 
     command = read(command_rel)
-    require(command, "createdWindow = new BltStartCenterWindow();", command_rel)
+    require(command, "StartCenterPaletteCoordinator.Show();", command_rel)
+    forbid(command, "Application.ShowModelessWindow", command_rel)
+    forbid(command, "new BltStartCenterWindow", command_rel)
+    forbid(command, "new StartCenterWindow", command_rel)
 
-    print("PASS: QS3D Home and Start Center keep native WPF Button.Click and keyboard/focus semantics while a QS3D-owned flat Button template suppresses host-theme hover/pressed chrome; action-card hover remains bounded to the intended dark panel, with project and sidecar safety contracts preserved.")
+    host = read(host_rel)
+    require(host, 'new PaletteSet("BLT3D — Khởi đầu"', host_rel)
+    require(host, '_palette.AddVisual("Khởi đầu", _panel, true);', host_rel)
+    require(host, 'Dock = DockSides.Left', host_rel)
+
+    print("PASS: QS3D Home and embedded Start Center keep native WPF Button.Click and keyboard/focus semantics while a QS3D-owned flat Button template suppresses host-theme hover/pressed chrome; action-card hover stays bounded to the intended dark panel, with embedded PaletteSet and project/sidecar safety contracts preserved.")
     return 0
 
 

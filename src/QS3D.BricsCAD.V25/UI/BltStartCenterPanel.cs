@@ -14,10 +14,11 @@ using Application = Bricscad.ApplicationServices.Application;
 namespace QS3D.BricsCAD.V25.UI
 {
     /// <summary>
-    /// Clean-room BLT3D-familiar home shell for the hosted BricsCAD plugin.
-    /// User-facing actions invoke C# APIs directly; the Start Center never dispatches command-line strings.
+    /// BLT3D-familiar Start Center surface designed to live inside a native BricsCAD PaletteSet.
+    /// It deliberately has no top-level Window ownership so invoking KHỞI ĐẦU never creates a
+    /// separate Windows application window.
     /// </summary>
-    public sealed class BltStartCenterWindow : StartCenterWindow
+    internal sealed class BltStartCenterPanel : UserControl
     {
         private static readonly Brush ShellBrush = BrushFromRgb(29, 29, 29);
         private static readonly Brush PanelBrush = BrushFromRgb(39, 39, 39);
@@ -26,24 +27,55 @@ namespace QS3D.BricsCAD.V25.UI
         private static readonly Brush MutedBrush = BrushFromRgb(174, 179, 188);
         private static readonly Brush AccentBrush = BrushFromRgb(20, 113, 236);
         private static readonly Brush TextBrush = Brushes.White;
+        private static readonly ControlTemplate ClickSurfaceTemplate = CreateClickSurfaceTemplate();
 
         private readonly StackPanel _recentPanel = new StackPanel();
         private readonly TextBlock _floorText = new TextBlock();
         private readonly TextBlock _elevationText = new TextBlock();
         private readonly TextBlock _statusText = new TextBlock();
 
-        public BltStartCenterWindow()
+        public BltStartCenterPanel()
         {
-            Title = "QS3D — Khởi đầu";
-            Width = 1180;
-            Height = 700;
-            MinWidth = 900;
-            MinHeight = 560;
             Background = ShellBrush;
             Content = BuildShell();
+            Loaded += (_, __) => RefreshFromActiveDocument();
+        }
 
-            Loaded += (_, __) => RefreshHomeShell(recordActiveDrawing: true);
-            Activated += (_, __) => RefreshHomeShell(recordActiveDrawing: true);
+        public void RefreshFromActiveDocument()
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document != null)
+            {
+                var path = document.Name ?? string.Empty;
+                if (StartCenterUserStateStore.TryNormalizeDwgPath(path, out var normalized))
+                    StartCenterUserStateStore.RecordProject(normalized);
+            }
+
+            _floorText.Text = "Tầng —";
+            _elevationText.Text = "•  Cao độ 0.000 m";
+            if (document != null)
+            {
+                try
+                {
+                    if (ProjectContextCoordinator.TryGetReadOnly(document, out var project) &&
+                        !string.IsNullOrWhiteSpace(project.ActiveFloorId))
+                    {
+                        var floor = project.FindFloor(project.ActiveFloorId);
+                        if (floor != null)
+                        {
+                            if (!string.IsNullOrWhiteSpace(floor.Name))
+                                _floorText.Text = "Tầng " + floor.Name;
+                            _elevationText.Text = "•  Cao độ " + floor.ElevationM.ToString("0.000", CultureInfo.InvariantCulture) + " m";
+                        }
+                    }
+                }
+                catch
+                {
+                    // Start Center is display-only. A project read failure must never mutate CAD state.
+                }
+            }
+
+            RefreshRecentProjects();
         }
 
         private UIElement BuildShell()
@@ -63,7 +95,12 @@ namespace QS3D.BricsCAD.V25.UI
             Grid.SetColumn(left, 0);
             body.Children.Add(left);
 
-            var divider = new Border { Width = 1, Background = ShellBorderBrush, Margin = new Thickness(18, 6, 28, 6) };
+            var divider = new Border
+            {
+                Width = 1,
+                Background = ShellBorderBrush,
+                Margin = new Thickness(18, 6, 28, 6)
+            };
             Grid.SetColumn(divider, 1);
             body.Children.Add(divider);
 
@@ -100,7 +137,7 @@ namespace QS3D.BricsCAD.V25.UI
             var brandText = new StackPanel();
             brandText.Children.Add(new TextBlock
             {
-                Text = "QS3D",
+                Text = "BLT3D",
                 Foreground = TextBrush,
                 FontSize = 27,
                 FontWeight = FontWeights.Bold
@@ -139,10 +176,18 @@ namespace QS3D.BricsCAD.V25.UI
             grid.Children.Add(quickTitle);
 
             var actions = new StackPanel();
-            actions.Children.Add(CreateActionCard("＋", "Tạo dự án mới", "Bắt đầu bản vẽ trắng sạch hoàn toàn", ProjectFileUiService.CreateNewDrawing));
-            actions.Children.Add(CreateActionCard("▱", "Mở tệp dự án...", "Chọn tệp BLT3D/QS3D hiện có từ máy tính", ProjectFileUiService.OpenProjectFromPicker));
+            actions.Children.Add(CreateActionCard(
+                "＋",
+                "Tạo dự án mới",
+                "Bắt đầu bản vẽ trắng sạch hoàn toàn",
+                ProjectFileUiService.CreateNewDrawing));
+            actions.Children.Add(CreateActionCard(
+                "▱",
+                "Mở tệp dự án...",
+                "Chọn tệp BLT3D/QS3D hiện có từ máy tính",
+                ProjectFileUiService.OpenProjectFromPicker));
 
-            var saveRow = new Grid { Margin = new Thickness(0, 0, 0, 0) };
+            var saveRow = new Grid();
             saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) });
             saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -160,7 +205,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             var version = new TextBlock
             {
-                Text = "Phiên bản " + DisplayVersion() + " • QS3D Team",
+                Text = "Phiên bản " + DisplayVersion() + " • BLT3D Team",
                 Foreground = MutedBrush,
                 FontSize = 10,
                 Margin = new Thickness(0, 16, 0, 0)
@@ -221,7 +266,11 @@ namespace QS3D.BricsCAD.V25.UI
             var dock = new DockPanel { LastChildFill = true };
             border.Child = dock;
 
-            var right = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            var right = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
             DockPanel.SetDock(right, Dock.Right);
             right.Children.Add(StatusItem("○ Nền sáng"));
             right.Children.Add(StatusItem("◐ Tương phản"));
@@ -230,8 +279,16 @@ namespace QS3D.BricsCAD.V25.UI
             dock.Children.Add(right);
 
             var left = new StackPanel { Orientation = Orientation.Horizontal };
-            left.Children.Add(StatusButton("Mô hình", () => new Commands().ShowWorkspace()));
-            left.Children.Add(StatusButton("BQ", () => new Commands().ShowQuantitySummary()));
+            left.Children.Add(StatusButton("Mô hình", () =>
+            {
+                StartCenterPaletteCoordinator.Hide();
+                new Commands().ShowWorkspace();
+            }));
+            left.Children.Add(StatusButton("BQ", () =>
+            {
+                StartCenterPaletteCoordinator.Hide();
+                new Commands().ShowQuantitySummary();
+            }));
 
             _floorText.Foreground = MutedBrush;
             _floorText.FontSize = 12;
@@ -257,7 +314,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private Button CreateActionCard(string glyph, string title, string subtitle, Action action, bool compact = false)
         {
-            var border = new Border
+            var frame = new Border
             {
                 Background = PanelBrush,
                 BorderBrush = ShellBorderBrush,
@@ -279,26 +336,42 @@ namespace QS3D.BricsCAD.V25.UI
                 HorizontalAlignment = HorizontalAlignment.Center
             });
 
-            var texts = new StackPanel { Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-            texts.Children.Add(new TextBlock { Text = title, Foreground = TextBrush, FontWeight = FontWeights.SemiBold, FontSize = 14 });
-            texts.Children.Add(new TextBlock { Text = subtitle, Foreground = MutedBrush, FontSize = 11, Margin = new Thickness(0, 2, 0, 0) });
+            var texts = new StackPanel
+            {
+                Margin = new Thickness(10, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            texts.Children.Add(new TextBlock
+            {
+                Text = title,
+                Foreground = TextBrush,
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 14
+            });
+            texts.Children.Add(new TextBlock
+            {
+                Text = subtitle,
+                Foreground = MutedBrush,
+                FontSize = 11,
+                Margin = new Thickness(0, 2, 0, 0)
+            });
             Grid.SetColumn(texts, 1);
             content.Children.Add(texts);
-            border.Child = content;
+            frame.Child = content;
 
-            var button = CreateClickSurface(border, Cursors.Hand);
+            var button = CreateClickSurface(frame, Cursors.Hand);
             button.Margin = new Thickness(0, 0, 0, 11);
             button.MinHeight = compact ? 54 : 58;
             button.ToolTip = title;
-            button.MouseEnter += (_, __) => border.Background = PanelHoverBrush;
-            button.MouseLeave += (_, __) => border.Background = PanelBrush;
+            button.MouseEnter += (_, __) => frame.Background = PanelHoverBrush;
+            button.MouseLeave += (_, __) => frame.Background = PanelBrush;
             button.Click += (_, __) => RunUiAction(action);
             return button;
         }
 
         private UIElement StatusButton(string text, Action action)
         {
-            var border = new Border
+            var frame = new Border
             {
                 Background = AccentBrush,
                 BorderBrush = AccentBrush,
@@ -306,9 +379,15 @@ namespace QS3D.BricsCAD.V25.UI
                 CornerRadius = new CornerRadius(2),
                 Padding = new Thickness(12, 3, 12, 3)
             };
-            border.Child = new TextBlock { Text = text, Foreground = Brushes.White, FontSize = 12, FontWeight = FontWeights.SemiBold };
+            frame.Child = new TextBlock
+            {
+                Text = text,
+                Foreground = Brushes.White,
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold
+            };
 
-            var button = CreateClickSurface(border, Cursors.Hand);
+            var button = CreateClickSurface(frame, Cursors.Hand);
             button.Margin = new Thickness(0, 0, 7, 0);
             button.ToolTip = text;
             button.Click += (_, __) => RunUiAction(action);
@@ -319,6 +398,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             return new Button
             {
+                Template = ClickSurfaceTemplate,
                 Background = Brushes.Transparent,
                 BorderBrush = Brushes.Transparent,
                 BorderThickness = new Thickness(0),
@@ -327,6 +407,23 @@ namespace QS3D.BricsCAD.V25.UI
                 VerticalContentAlignment = VerticalAlignment.Stretch,
                 Cursor = cursor,
                 Content = content
+            };
+        }
+
+        private static ControlTemplate CreateClickSurfaceTemplate()
+        {
+            var root = new FrameworkElementFactory(typeof(Border));
+            root.SetValue(Border.BackgroundProperty, Brushes.Transparent);
+
+            var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+            presenter.SetValue(ContentPresenter.ContentSourceProperty, "Content");
+            presenter.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Stretch);
+            presenter.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Stretch);
+            root.AppendChild(presenter);
+
+            return new ControlTemplate(typeof(Button))
+            {
+                VisualTree = root
             };
         }
 
@@ -341,56 +438,6 @@ namespace QS3D.BricsCAD.V25.UI
                 Margin = new Thickness(16, 0, 0, 0),
                 VerticalAlignment = VerticalAlignment.Center
             };
-        }
-
-        private void RefreshHomeShell(bool recordActiveDrawing)
-        {
-            var document = Application.DocumentManager.MdiActiveDocument;
-            if (document != null)
-            {
-                var path = document.Name ?? string.Empty;
-                if (recordActiveDrawing && StartCenterUserStateStore.TryNormalizeDwgPath(path, out var normalized))
-                    StartCenterUserStateStore.RecordProject(normalized);
-
-                try
-                {
-                    var display = Path.GetFileNameWithoutExtension(path);
-                    Title = string.IsNullOrWhiteSpace(display) ? "QS3D — Khởi đầu" : "QS3D — " + display;
-                }
-                catch
-                {
-                    Title = "QS3D — Khởi đầu";
-                }
-            }
-            else
-            {
-                Title = "QS3D — Khởi đầu";
-            }
-
-            _floorText.Text = "Tầng —";
-            _elevationText.Text = "•  Cao độ 0.000 m";
-            if (document != null)
-            {
-                try
-                {
-                    if (ProjectContextCoordinator.TryGetReadOnly(document, out var project) && !string.IsNullOrWhiteSpace(project.ActiveFloorId))
-                    {
-                        var floor = project.FindFloor(project.ActiveFloorId);
-                        if (floor != null)
-                        {
-                            if (!string.IsNullOrWhiteSpace(floor.Name))
-                                _floorText.Text = "Tầng " + floor.Name;
-                            _elevationText.Text = "•  Cao độ " + floor.ElevationM.ToString("0.000", CultureInfo.InvariantCulture) + " m";
-                        }
-                    }
-                }
-                catch
-                {
-                    // The start shell is display-only; project read failures must not mutate state.
-                }
-            }
-
-            RefreshRecentProjects();
         }
 
         private void RefreshRecentProjects()
@@ -419,12 +466,11 @@ namespace QS3D.BricsCAD.V25.UI
 
         private UIElement CreateRecentRow(StartCenterRecentProject recent)
         {
-            var border = new Border
+            var frame = new Border
             {
                 BorderBrush = BrushFromRgb(42, 42, 42),
                 BorderThickness = new Thickness(0, 0, 0, 1),
-                Padding = new Thickness(12, 12, 6, 12),
-                Tag = recent
+                Padding = new Thickness(12, 12, 6, 12)
             };
 
             var grid = new Grid();
@@ -439,22 +485,23 @@ namespace QS3D.BricsCAD.V25.UI
                 BorderBrush = ShellBorderBrush,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(3),
-                VerticalAlignment = VerticalAlignment.Top
-            };
-            iconFrame.Child = new TextBlock
-            {
-                Text = "▥",
-                Foreground = AccentBrush,
-                FontSize = 17,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Top,
+                Child = new TextBlock
+                {
+                    Text = "▥",
+                    Foreground = AccentBrush,
+                    FontSize = 17,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                }
             };
             grid.Children.Add(iconFrame);
 
-            var text = new StackPanel();
             string fileName;
             try { fileName = Path.GetFileName(recent.Path); }
             catch { fileName = recent.DisplayName; }
+
+            var text = new StackPanel();
             text.Children.Add(new TextBlock
             {
                 Text = fileName,
@@ -483,14 +530,13 @@ namespace QS3D.BricsCAD.V25.UI
             };
             Grid.SetColumn(date, 2);
             grid.Children.Add(date);
-            border.Child = grid;
+            frame.Child = grid;
 
-            var button = CreateClickSurface(border, recent.Exists ? Cursors.Hand : Cursors.Arrow);
+            var button = CreateClickSurface(frame, recent.Exists ? Cursors.Hand : Cursors.Arrow);
             button.IsEnabled = recent.Exists;
-            button.Tag = recent;
             button.ToolTip = recent.Exists ? "Mở " + fileName : "Tệp không còn tồn tại";
-            button.MouseEnter += (_, __) => border.Background = PanelBrush;
-            button.MouseLeave += (_, __) => border.Background = Brushes.Transparent;
+            button.MouseEnter += (_, __) => frame.Background = PanelBrush;
+            button.MouseLeave += (_, __) => frame.Background = Brushes.Transparent;
             button.Click += (_, __) => OpenRecentProject(recent);
             return button;
         }
@@ -523,6 +569,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 action();
                 _statusText.Text = string.Empty;
+                RefreshFromActiveDocument();
             }
             catch (Exception ex)
             {
@@ -532,11 +579,11 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static string DisplayVersion()
         {
-            var informational = typeof(BltStartCenterWindow).Assembly
+            var informational = typeof(BltStartCenterPanel).Assembly
                 .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-            if (!string.IsNullOrWhiteSpace(informational))
-                return informational!.Split('+')[0];
-            return typeof(BltStartCenterWindow).Assembly.GetName().Version?.ToString() ?? "1.0.0";
+            if (informational is string version && !string.IsNullOrWhiteSpace(version))
+                return version.Split('+')[0];
+            return typeof(BltStartCenterPanel).Assembly.GetName().Version?.ToString() ?? "1.0.0";
         }
 
         private static SolidColorBrush BrushFromRgb(byte r, byte g, byte b)
