@@ -348,7 +348,7 @@ namespace QS3D.Core.Export
 
         private static XElement ParseRoot(string text, string expectedName)
         {
-            var document = XDocument.Parse(text, LoadOptions.None);
+            var document = XDocument.Parse(text, LoadOptions.PreserveWhitespace);
             EnsureDocumentContent(document);
             var root = document.Root;
             if (root == null || root.Name.NamespaceName.Length != 0 || !string.Equals(root.Name.LocalName, expectedName, StringComparison.Ordinal)) throw new InvalidDataException("Invalid BCF XML root; expected " + expectedName + ".");
