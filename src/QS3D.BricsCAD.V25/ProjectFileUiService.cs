@@ -20,6 +20,7 @@ namespace QS3D.BricsCAD.V25
     internal static class ProjectFileUiService
     {
         private const string ProjectFilter = "QS3D Project (*.blt3d;*.qsdb)|*.blt3d;*.qsdb|BLT3D Project (*.blt3d)|*.blt3d|QS3D Project (*.qsdb)|*.qsdb";
+        private const string DrawingFilter = "BricsCAD Drawing (*.dwg)|*.dwg";
 
         public static void CreateNewDrawing()
         {
@@ -93,14 +94,17 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var document = RequireActiveDocument();
+                ExistingProjectMutationContext.Require(document, "Lưu dự án");
+
                 var stopwatch = Stopwatch.StartNew();
+                InvokeAcadDocumentMethod(document, "Save");
                 var path = ProjectContextCoordinator.Save(document);
                 stopwatch.Stop();
 
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
                     throw new InvalidOperationException("Dự án vừa lưu không thể được đọc lại để xác nhận.");
 
-                ProjectOperationResultWindow.ShowSaveSuccess(path, project, stopwatch.ElapsedMilliseconds, false);
+                ProjectOperationResultWindow.ShowSaveSuccess(path, project, stopwatch.ElapsedMilliseconds);
             }
             catch (Exception ex)
             {
@@ -113,32 +117,48 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var document = RequireActiveDocument();
-                var project = ExistingProjectMutationContext.Require(document, "Lưu thành");
-                var defaultName = SafeStem(document.Name) + ".blt3d";
+                ExistingProjectMutationContext.Require(document, "Lưu thành");
+                var currentProjectPath = ProjectContextCoordinator.GetProjectPath(document);
+                var defaultName = SafeStem(document.Name) + ".dwg";
                 var dialog = new SaveFileDialog
                 {
-                    Title = "Lưu dự án QS3D thành",
-                    Filter = ProjectFilter,
-                    DefaultExt = ".blt3d",
+                    Title = "Lưu bản vẽ QS3D thành",
+                    Filter = DrawingFilter,
+                    DefaultExt = ".dwg",
                     AddExtension = true,
                     OverwritePrompt = true,
                     FileName = defaultName
                 };
                 if (dialog.ShowDialog() != true) return;
 
-                var stopwatch = Stopwatch.StartNew();
-                var canonicalPath = ProjectContextCoordinator.Save(document);
-                var targetPath = Path.GetFullPath(dialog.FileName);
-                if (!SamePath(canonicalPath, targetPath))
+                var targetDrawingPath = Path.GetFullPath(dialog.FileName);
+                var targetProjectPath = Path.ChangeExtension(targetDrawingPath, ".qsdb");
+                if (!SamePath(currentProjectPath, targetProjectPath)
+                    && (File.Exists(targetProjectPath) || File.Exists(targetProjectPath + ".bak")))
                 {
-                    var targetDirectory = Path.GetDirectoryName(targetPath);
-                    if (!string.IsNullOrWhiteSpace(targetDirectory)) Directory.CreateDirectory(targetDirectory);
-                    if (File.Exists(targetPath)) File.Copy(targetPath, targetPath + ".bak", true);
-                    File.Copy(canonicalPath, targetPath, true);
+                    throw new InvalidOperationException(
+                        "Không thể Lưu thành vì project QS3D đích đã tồn tại (hoặc còn bản .bak): " + targetProjectPath +
+                        ". Hãy chọn tên/vị trí khác để tránh ghi đè dữ liệu project.");
                 }
+
+                var stopwatch = Stopwatch.StartNew();
+                InvokeAcadDocumentMethod(document, "SaveAs", targetDrawingPath, Type.Missing, Type.Missing);
+                if (!SamePath(document.Name, targetDrawingPath))
+                    throw new InvalidOperationException("BricsCAD đã thực hiện Save As nhưng bản vẽ hiện hành không chuyển sang đường dẫn đích.");
+
+                var savedProjectPath = ProjectContextCoordinator.Save(document);
+                if (!SamePath(savedProjectPath, targetProjectPath))
+                    throw new InvalidOperationException("QS3D không thể chuyển liên kết project sang sidecar của DWG mới.");
                 stopwatch.Stop();
 
-                ProjectOperationResultWindow.ShowSaveSuccess(targetPath, project, stopwatch.ElapsedMilliseconds, true);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                    throw new InvalidOperationException("Dự án vừa lưu thành không thể được đọc lại để xác nhận.");
+
+                ProjectOperationResultWindow.ShowSaveAsSuccess(
+                    targetDrawingPath,
+                    savedProjectPath,
+                    project,
+                    stopwatch.ElapsedMilliseconds);
             }
             catch (Exception ex)
             {
@@ -178,8 +198,8 @@ namespace QS3D.BricsCAD.V25
             }
             else
             {
-                Application.DocumentManager.Open(drawingPath, false);
-                document = Application.DocumentManager.MdiActiveDocument;
+                document = Application.DocumentManager.Open(drawingPath, false);
+                Application.DocumentManager.MdiActiveDocument = document;
             }
 
             if (document == null || !SamePath(document.Name, drawingPath))
@@ -243,6 +263,30 @@ namespace QS3D.BricsCAD.V25
         {
             return Application.DocumentManager.MdiActiveDocument
                 ?? throw new InvalidOperationException("BricsCAD chưa có bản vẽ đang hoạt động.");
+        }
+
+        private static void InvokeAcadDocumentMethod(Document document, string methodName, params object[] arguments)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (string.IsNullOrWhiteSpace(methodName)) throw new ArgumentException("Tên phương thức BricsCAD không hợp lệ.", nameof(methodName));
+
+            var property = document.GetType().GetProperty("AcadDocument", BindingFlags.Instance | BindingFlags.Public);
+            var acadDocument = property?.GetValue(document, null)
+                ?? throw new InvalidOperationException("BricsCAD không cung cấp AcadDocument cho bản vẽ hiện hành.");
+
+            try
+            {
+                acadDocument.GetType().InvokeMember(
+                    methodName,
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.InvokeMethod | BindingFlags.OptionalParamBinding,
+                    binder: null,
+                    target: acadDocument,
+                    args: arguments);
+            }
+            catch (TargetInvocationException ex) when (ex.InnerException != null)
+            {
+                throw new InvalidOperationException("BricsCAD không thực hiện được " + methodName + ".", ex.InnerException);
+            }
         }
 
         private static string SafeStem(string path)

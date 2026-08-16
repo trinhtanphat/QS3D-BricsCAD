@@ -38,13 +38,23 @@ namespace QS3D.BricsCAD.V25.UI
             new ProjectOperationResultWindow("Mở dự án", summary, detail).ShowDialog();
         }
 
-        public static void ShowSaveSuccess(string projectPath, ProjectState project, long elapsedMilliseconds, bool savedAsCopy)
+        public static void ShowSaveSuccess(string projectPath, ProjectState project, long elapsedMilliseconds)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var fileName = SafeFileName(projectPath);
-            var summary = (savedAsCopy ? "Đã lưu bản sao \"" : "Đã lưu \"") + fileName + "\" — " + project.Zones.Count + " zone, " + project.Elements.Count + " element.";
-            var detail = "Hoàn tất trong " + elapsedMilliseconds + " ms" + (savedAsCopy ? " • project hiện hành vẫn giữ liên kết với DWG đang mở." : string.Empty);
-            new ProjectOperationResultWindow(savedAsCopy ? "Lưu thành" : "Lưu dự án", summary, detail).ShowDialog();
+            var summary = "Đã lưu \"" + fileName + "\" — " + project.Zones.Count + " zone, " + project.Elements.Count + " element.";
+            var detail = "Đã lưu DWG hiện hành và project QS3D trong " + elapsedMilliseconds + " ms.";
+            new ProjectOperationResultWindow("Lưu dự án", summary, detail).ShowDialog();
+        }
+
+        public static void ShowSaveAsSuccess(string drawingPath, string projectPath, ProjectState project, long elapsedMilliseconds)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var drawingName = SafeFileName(drawingPath);
+            var projectName = SafeFileName(projectPath);
+            var summary = "Đã lưu thành \"" + drawingName + "\" — " + project.Zones.Count + " zone, " + project.Elements.Count + " element.";
+            var detail = "DWG hiện hành đã chuyển sang đường dẫn mới. Project QS3D: " + projectName + "\nHoàn tất trong " + elapsedMilliseconds + " ms.";
+            new ProjectOperationResultWindow("Lưu thành", summary, detail).ShowDialog();
         }
 
         private UIElement BuildContent(string title, string summary, string detail)

@@ -58,22 +58,48 @@ def main():
     project_ui = read(project_ui_rel)
     for needle in (
         'ProjectFilter = "QS3D Project (*.blt3d;*.qsdb)',
+        'DrawingFilter = "BricsCAD Drawing (*.dwg)|*.dwg"',
         'public static void CreateNewDrawing()',
         'method.Name, "Add"',
         'new OpenFileDialog',
         'new SaveFileDialog',
-        'Application.DocumentManager.Open(drawingPath, false)',
+        'InvokeAcadDocumentMethod(document, "Save")',
+        'InvokeAcadDocumentMethod(document, "SaveAs", targetDrawingPath, Type.Missing, Type.Missing)',
+        'Path.ChangeExtension(targetDrawingPath, ".qsdb")',
+        'var savedProjectPath = ProjectContextCoordinator.Save(document);',
+        'document = Application.DocumentManager.Open(drawingPath, false);',
+        'Application.DocumentManager.MdiActiveDocument = document;',
         'ProjectOperationResultWindow.ShowOpenSuccess',
         'ProjectOperationResultWindow.ShowSaveSuccess',
+        'ProjectOperationResultWindow.ShowSaveAsSuccess',
         'QsdbProjectStore',
     ):
         require(project_ui, needle, project_ui_rel)
-    for stale in ('SendStringToExecute', '"_OPEN"', '"_QSAVE"', '"_SAVEAS"'):
+    for stale in (
+        'SendStringToExecute',
+        '"_OPEN"',
+        '"_QSAVE"',
+        '"_SAVEAS"',
+        'File.Copy(canonicalPath, targetPath',
+        'savedAsCopy',
+    ):
         forbid(project_ui, stale, project_ui_rel)
 
     result = read(result_rel)
-    for needle in ('var summary = "Đã mở', '+ fileName +', 'project.Zones.Count', 'project.Elements.Count', 'readMilliseconds', 'totalMilliseconds', 'Content = "OK"'):
+    for needle in (
+        'var summary = "Đã mở',
+        '+ fileName +',
+        'project.Zones.Count',
+        'project.Elements.Count',
+        'readMilliseconds',
+        'totalMilliseconds',
+        'ShowSaveAsSuccess',
+        'DWG hiện hành đã chuyển sang đường dẫn mới.',
+        'Content = "OK"',
+    ):
         require(result, needle, result_rel)
+    for stale in ('savedAsCopy', 'project hiện hành vẫn giữ liên kết với DWG đang mở'):
+        forbid(result, stale, result_rel)
 
     icons = read(icon_rel)
     for needle in ('RenderTargetBitmap', 'RibbonIconKind.OpenProject', 'RibbonIconKind.Save', 'RibbonIconKind.SaveAs', 'RibbonIconKind.Settings'):
@@ -119,7 +145,7 @@ def main():
     command = read(command_rel)
     require(command, "createdWindow = new BltStartCenterWindow();", command_rel)
 
-    print("PASS: QS3D Home and Start Center use unique panels, rasterized icons and direct mouse-first project actions without host command dispatch.")
+    print("PASS: QS3D Home and Start Center use unique panels, rasterized icons and direct mouse-first project actions; Save/Save As persist DWG plus canonical QS3D sidecar without host command dispatch.")
     return 0
 
 
