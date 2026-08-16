@@ -31,7 +31,10 @@ if STORE.is_file():
         "QuantityPaletteWidth = source.QuantityPaletteWidth,",
         "QuantityPaletteHeight = source.QuantityPaletteHeight,",
         "if (Equivalent(_current, next)) return;",
-        'Path.Combine(root, "QS3D", "BricsCAD-V25", "ui-layout-v1.txt")',
+        "#if BRICSCAD_V26",
+        'private const string HostMajorDirectory = "BricsCAD-V26";',
+        'private const string HostMajorDirectory = "BricsCAD-V25";',
+        'Path.Combine(root, "QS3D", HostMajorDirectory, "ui-layout-v1.txt")',
     )
     for needle in required:
         if needle not in text:
