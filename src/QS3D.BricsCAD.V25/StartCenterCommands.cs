@@ -7,7 +7,7 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class StartCenterCommands
     {
-        private const bool UseBltStartCenterShell = true;
+        private static readonly bool UseBltStartCenterShell = true;
         private static StartCenterWindow? _window;
         private static bool _documentActivatedSubscribed;
 
