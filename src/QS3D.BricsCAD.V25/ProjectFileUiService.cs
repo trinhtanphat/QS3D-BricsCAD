@@ -52,7 +52,11 @@ namespace QS3D.BricsCAD.V25
                 if (document == null)
                     throw new InvalidOperationException("BricsCAD không tạo được bản vẽ mới.");
 
+                // This is the only mouse-first workflow that intentionally creates
+                // a new canonical in-memory QS3D project. Save itself remains
+                // existing-project-only and therefore cannot silently bootstrap.
                 ProjectContextCoordinator.Forget(document);
+                _ = ProjectContextCoordinator.GetOrCreate(document);
                 System.Windows.MessageBox.Show(
                     "Đã tạo bản vẽ mới. Khi bắt đầu làm việc với QS3D, project sẽ được liên kết với bản vẽ này và có thể lưu bằng nút Lưu/Lưu thành.",
                     "QS3D — Tạo dự án mới",
