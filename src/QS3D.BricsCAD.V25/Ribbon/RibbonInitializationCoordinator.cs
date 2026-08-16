@@ -50,6 +50,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             Blt3dShellChromeCoordinator.Reset();
             BltHomeRibbonAugmenter.Reset();
             BltDrawRibbonAugmenter.Reset();
+            BltToolRibbonAugmenter.Reset();
             BltRecognitionRibbonAugmenter.Reset();
             BltViewRibbonAugmenter.Reset();
             BltBimRibbonMirrorAugmenter.Reset();
@@ -126,6 +127,12 @@ namespace QS3D.BricsCAD.V25.Ribbon
             // QS3D-owned Home/Draw/Recognition/View groups are deterministic without replacing native tabs.
             ready = BltHomeRibbonAugmenter.TryInitialize() && ready;
             ready = BltDrawRibbonFailSafe.TryInitialize() && ready;
+
+            // TOOL is a dedicated owner-reference topbar. Replace only the old QS3D TOOL
+            // fallback panels with the compact Cọc/Móng/Sàn/MCP/AutoCAD composition while
+            // leaving the BIM-like workspace below the Ribbon unchanged.
+            ready = BltToolRibbonAugmenter.TryInitialize() && ready;
+
             ready = BltRecognitionRibbonAugmenter.TryInitialize() && ready;
             ready = BltViewRibbonAugmenter.TryInitialize() && ready;
 
