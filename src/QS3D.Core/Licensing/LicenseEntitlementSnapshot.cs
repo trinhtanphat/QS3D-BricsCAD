@@ -60,7 +60,7 @@ namespace QS3D.Core.Licensing
 
         public static bool TryDeserialize(string serialized, out LicenseEntitlementSnapshot snapshot)
         {
-            snapshot = null;
+            snapshot = null!;
             if (string.IsNullOrEmpty(serialized) || serialized.Length > MaxSerializedChars)
                 return false;
             if (serialized.IndexOf('\r') >= 0 || serialized.EndsWith("\n", StringComparison.Ordinal))
@@ -89,7 +89,7 @@ namespace QS3D.Core.Licensing
             }
             catch (ArgumentException)
             {
-                snapshot = null;
+                snapshot = null!;
                 return false;
             }
         }
@@ -120,7 +120,7 @@ namespace QS3D.Core.Licensing
 
         private static bool TryReadValue(string line, string prefix, int maxBytes, out string value)
         {
-            value = null;
+            value = null!;
             if (!line.StartsWith(prefix, StringComparison.Ordinal))
                 return false;
             try
@@ -138,7 +138,7 @@ namespace QS3D.Core.Licensing
         private static bool TryReadSeal(string line, out byte[] seal)
         {
             const string Prefix = "sha256:";
-            seal = null;
+            seal = null!;
             if (!line.StartsWith(Prefix, StringComparison.Ordinal))
                 return false;
             var hex = line.Substring(Prefix.Length);
