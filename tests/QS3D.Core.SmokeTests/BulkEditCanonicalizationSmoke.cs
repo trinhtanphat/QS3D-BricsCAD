@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             CorruptProjectFailsBeforeBulkMutation();
             ObjectBasedBulkEditsRejectNullTargets();
             IdBasedBulkEditsRejectIncompleteTargetSets();
+            IdBasedBulkEditsRejectNonCanonicalTargetIds();
             FamilyAssignmentRejectsIncompatibleBatch();
         }
 
@@ -113,6 +114,41 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => service.SetProperty(project, new[] { "W1", "w1" }, "WidthM", "0.25"));
             if (wall.Properties["WidthM"] != "0.2" || project.ChangeVersion != version)
                 throw new Exception("Duplicate bulk target must reject the whole batch before mutation.");
+        }
+
+        private static void IdBasedBulkEditsRejectNonCanonicalTargetIds()
+        {
+            var project = new ProjectState("P-ID-CANONICAL", "Bulk target canonicality");
+            var familyA = new ProjectFamily("F-A", "Wall A", ElementCategory.ArchitecturalWall);
+            var familyB = new ProjectFamily("F-B", "Wall B", ElementCategory.ArchitecturalWall);
+            project.Families.Add(familyA);
+            project.Families.Add(familyB);
+            var wall = new ProjectElement("W1", ElementCategory.ArchitecturalWall, familyA.Id, string.Empty, string.Empty);
+            wall.Properties["WidthM"] = "0.2";
+            wall.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(wall);
+            var service = new BulkEditService();
+            var initialVersion = project.ChangeVersion;
+            var initialDirty = wall.Dirty;
+
+            foreach (var padded in new[] { " W1", "W1 ", " W1 ", "\tW1", "W1\t" })
+            {
+                Throws<ArgumentException>(() => service.SetProperty(project, new[] { padded }, "WidthM", "0.25"));
+                if (wall.Properties["WidthM"] != "0.2" || wall.FamilyId != familyA.Id || wall.Dirty != initialDirty || project.ChangeVersion != initialVersion)
+                    throw new Exception("Non-canonical bulk target id must reject property edit before any semantic mutation: " + padded);
+
+                Throws<ArgumentException>(() => service.AssignFamily(project, new[] { padded }, familyB.Id));
+                if (wall.Properties["WidthM"] != "0.2" || wall.FamilyId != familyA.Id || wall.Dirty != initialDirty || project.ChangeVersion != initialVersion)
+                    throw new Exception("Non-canonical bulk target id must reject family assignment before any semantic mutation: " + padded);
+            }
+
+            var changed = service.SetProperty(project, new[] { "w1" }, "WidthM", "0.25");
+            if (changed != 1 || wall.Properties["WidthM"] != "0.25")
+                throw new Exception("Canonical case-insensitive target identity must remain supported for bulk property edits.");
+
+            var assigned = service.AssignFamily(project, new[] { "w1" }, familyB.Id);
+            if (assigned != 1 || wall.FamilyId != familyB.Id)
+                throw new Exception("Canonical case-insensitive target identity must remain supported for bulk family assignment.");
         }
 
         private static void FamilyAssignmentRejectsIncompatibleBatch()
