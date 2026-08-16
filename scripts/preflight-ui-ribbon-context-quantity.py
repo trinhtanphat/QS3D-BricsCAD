@@ -71,6 +71,12 @@ for token, label in (
     ("selected is Region region", "Region support"),
     ("if (!polyline.Closed)", "closed Polyline validation"),
     ("polyline.GetBulgeAt(index)", "curved Polyline rejection"),
+    ('RequireSimplePolygon(points, "Polyline Móng Bè");', "closed Polyline simple-polygon validation"),
+    ('RequireSimplePolygon(points, "Region Móng Bè");', "Region simple-polygon validation"),
+    ("private static void RequireSimplePolygon", "simple-polygon validator"),
+    ("SegmentsIntersectOrTouch", "non-adjacent edge intersection/touch validation"),
+    ("Math.Abs(area2) <= crossTolerance", "zero-area rejection"),
+    ("self-intersection/touching", "self-intersection refusal"),
     ("region.Explode(exploded);", "exact Region decomposition"),
     ("var line = item as Line;", "linear Region-only contract"),
     ("usedCount != segments.Count", "multi-loop/hole rejection"),
@@ -82,6 +88,15 @@ for token, label in (
     ("transaction.GetObject(result.ObjectId, OpenMode.ForRead, false)", "selected source stays read-only"),
 ):
     require(raft_boundary, token, label)
+
+polyline_validation = raft_boundary.find('RequireSimplePolygon(points, "Polyline Móng Bè");')
+project_bootstrap = raft_boundary.find("ProjectContextCoordinator.GetOrCreate(document)")
+source_clone = raft_boundary.find("CreateExactWcsPolyline(document, boundary)")
+if polyline_validation < 0 or project_bootstrap < 0 or source_clone < 0:
+    fail("raft simple-polygon pre-mutation ordering could not be located")
+if polyline_validation > project_bootstrap or polyline_validation > source_clone:
+    fail("raft simple-polygon validation must precede project bootstrap and source clone mutation")
+
 for token in (
     "GeometricExtents",
     "Extents3d",
@@ -116,4 +131,4 @@ for command in ("QS3DQUANTITYINSIGHT", "QS3DDRAWRAFTFOUNDATION"):
     if registrations != 1:
         fail(f"{command}: expected exactly one CommandMethod registration, found {registrations}")
 
-print("PASS: ribbon-first palettes, exact closed-boundary Móng Bè, and selected-object quantity explanation source contracts")
+print("PASS: ribbon-first palettes, exact simple closed-boundary Móng Bè, and selected-object quantity explanation source contracts")
