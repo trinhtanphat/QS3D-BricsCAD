@@ -229,6 +229,8 @@ namespace QS3D.Core.Geometry
             if (!(denominator > 0d)) throw new InvalidOperationException(label + " denominator must be positive.");
             var result = numerator / denominator;
             if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException(label + " overflowed.");
+            if (result == 0d && numerator != 0d)
+                throw new InvalidOperationException(label + " underflowed to zero.");
             return result;
         }
 
