@@ -15,8 +15,11 @@ namespace QS3D.Core.Geometry
             }
 
             double total = 0d;
-            for (var i = 1; i < points.Count; i++) total = AddFinite(total, points[i - 1].DistanceTo(points[i]));
-            if (closed) total = AddFinite(total, points[points.Count - 1].DistanceTo(points[0]));
+            double compensation = 0d;
+            for (var i = 1; i < points.Count; i++)
+                AddLengthCompensated(ref total, ref compensation, points[i - 1].DistanceTo(points[i]));
+            if (closed)
+                AddLengthCompensated(ref total, ref compensation, points[points.Count - 1].DistanceTo(points[0]));
             return total;
         }
 
@@ -132,6 +135,15 @@ namespace QS3D.Core.Geometry
             if (!Finite(next)) throw new OverflowException("Polyline area exceeds the supported numeric range.");
             compensation = (next - sum) - corrected;
             sum = next;
+        }
+
+        private static void AddLengthCompensated(ref double total, ref double compensation, double value)
+        {
+            var corrected = value - compensation;
+            var next = total + corrected;
+            if (!Finite(next)) throw new OverflowException("Polyline metric exceeds the supported numeric range.");
+            compensation = (next - total) - corrected;
+            total = next;
         }
 
         private static void EnsureFinite(IReadOnlyList<Point2> points)
