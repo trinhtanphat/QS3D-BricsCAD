@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             PreservesRepresentableSmallRowsAfterHugeRow();
+            PreservesSmallRowsAcrossInputOrder();
             OrdinaryTotalsRemainUnchanged();
             InvalidAndOverflowingRowsStillFailClosed();
         }
@@ -23,14 +24,29 @@ namespace QS3D.Core.SmokeTests
                 Row(1d, 1)
             };
 
-            var totals = QuantityReportTotals.FromRows(rows);
-            const double expected = 10000000000000002d;
-            Exact(expected, totals.GrossConcreteM3, "GrossConcreteM3 huge-plus-small total");
-            Exact(expected, totals.DeductionM3, "DeductionM3 huge-plus-small total");
-            Exact(expected, totals.NetConcreteM3, "NetConcreteM3 huge-plus-small total");
-            Exact(expected, totals.FormworkM2, "FormworkM2 huge-plus-small total");
-            Exact(expected, totals.LengthM, "LengthM huge-plus-small total");
-            Exact(expected, totals.DoorAreaM2, "DoorAreaM2 huge-plus-small total");
+            AssertAllTotals(QuantityReportTotals.FromRows(rows), 10000000000000002d, "huge-plus-small total");
+        }
+
+        private static void PreservesSmallRowsAcrossInputOrder()
+        {
+            var rows = new[]
+            {
+                Row(1d, 1),
+                Row(1e16, 1),
+                Row(1d, 1)
+            };
+
+            AssertAllTotals(QuantityReportTotals.FromRows(rows), 10000000000000002d, "small-huge-small total");
+        }
+
+        private static void AssertAllTotals(QuantityReportTotals totals, double expected, string scenario)
+        {
+            Exact(expected, totals.GrossConcreteM3, "GrossConcreteM3 " + scenario);
+            Exact(expected, totals.DeductionM3, "DeductionM3 " + scenario);
+            Exact(expected, totals.NetConcreteM3, "NetConcreteM3 " + scenario);
+            Exact(expected, totals.FormworkM2, "FormworkM2 " + scenario);
+            Exact(expected, totals.LengthM, "LengthM " + scenario);
+            Exact(expected, totals.DoorAreaM2, "DoorAreaM2 " + scenario);
             if (totals.Count != 3)
                 throw new InvalidOperationException("Quantity report compensated totals changed checked row count aggregation.");
         }
