@@ -117,8 +117,28 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     return id;
             }
 
+            // Autodesk/BricsCAD Ribbon variants commonly expose selection on each tab
+            // instead of on RibbonControl. Scan only booleans; never mutate host tabs.
+            if (tabs is IEnumerable enumerable)
+            {
+                foreach (var tab in enumerable)
+                {
+                    if (tab == null)
+                        continue;
+                    if (IsTrue(tab, "IsActive") || IsTrue(tab, "IsSelected") || IsTrue(tab, "Selected"))
+                    {
+                        var id = TabId(tab);
+                        if (!string.IsNullOrWhiteSpace(id))
+                            return id;
+                    }
+                }
+            }
+
             return null;
         }
+
+        private static bool IsTrue(object target, string propertyName) =>
+            GetProperty(target, propertyName) is bool value && value;
 
         private static object? ItemAt(object collection, int index)
         {
