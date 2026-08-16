@@ -47,14 +47,13 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void ApplyReferenceActionLabels()
         {
-            // BLT3D calls this action "Nhập tự động". QS3D intentionally keeps the existing
-            // guarded capture handler: it consumes the current CAD selection and never performs
-            // an unbounded/background drawing scan.
+            // The production handler consumes only the current CAD selection. Keep the visible
+            // label explicit about that bounded behavior instead of implying a whole-DWG scan.
             var import = FindButton("⚡ Nhập từ chọn") ?? FindButton("Bóc chọn");
             if (import != null)
             {
-                import.Content = "⚡ Nhập tự động";
-                import.ToolTip = "Nhập tự động từ selection CAD hiện tại vào đúng nhóm/Family đang làm việc; không quét nền toàn DWG.";
+                import.Content = "⚡ Nhập từ chọn";
+                import.ToolTip = "Nhập các đối tượng đang chọn trong CAD vào đúng nhóm/Family đang làm việc; không quét nền toàn DWG.";
             }
 
             var add = FindButton("+ Add") ?? FindButton("+ Thêm");
