@@ -49,63 +49,33 @@ Before substantive work, read:
 4. `CI_POLICY.md`;
 5. fetch/read the latest `origin/main` and record its exact SHA;
 6. `docs/AGENT-WORK-REGISTRATION.md`;
-7. **for any reported bug/regression/quoted failure, `docs/DEFECT-PROVENANCE-TRIAGE.md` before creating or adopting a source-fix lane**;
-8. relevant open Issues/PRs plus `ACTIVE`/`BLOCKED` historical claims under `docs/agent-work-claims/`;
-9. `docs/REMOTE-AGENT-SCOPE.md`;
-10. the newest current handoff/status docs relevant to the task;
-11. `docs/LOCAL-AGENT-INBOX.md` for LOCAL_ONLY work;
-12. the exact feature/runbook documents required by the assigned lane.
+7. relevant open Issues/PRs plus `ACTIVE`/`BLOCKED` historical claims under `docs/agent-work-claims/`;
+8. `docs/REMOTE-AGENT-SCOPE.md`;
+9. the newest current handoff/status docs relevant to the task;
+10. `docs/LOCAL-AGENT-INBOX.md` for LOCAL_ONLY work;
+11. the exact feature/runbook documents required by the assigned lane.
 
 Current source wins over stale historical handoffs for implementation truth. `docs/LOCAL-AGENT-INBOX.md` is the live LOCAL_ONLY priority index when older local documents disagree on status/priority.
-
-## Mandatory defect-provenance gate
-
-For every task presented as a bug, regression, failing test, copied error, handoff conclusion, research finding, external reference, or quoted assertion, **prove the provenance before creating/adopting a source-fix lane or editing production code**.
-
-Follow `docs/DEFECT-PROVENANCE-TRIAGE.md` and classify the report as one of:
-
-- `REPRODUCED`;
-- `SOURCE_PRESENT`;
-- `ENVIRONMENT_GATED`;
-- `EXTERNAL_REFERENCE`;
-- `SPEC_ONLY / MISSING_SURFACE`.
-
-The fastest required evidence order is:
-
-```text
-exact failure producer/log
-  -> exact current tree
-  -> smallest focused reproducer
-  -> history/refs only if needed
-  -> product-boundary sibling repo only when justified
-  -> docs/spec/handoff provenance
-  -> public web only when external provenance is plausible
-```
-
-A source-fix lane may proceed only when a real current defect surface/reproducer exists (`REPRODUCED`, `SOURCE_PRESENT`, or a known `ENVIRONMENT_GATED` surface), or when the owner explicitly assigns an `EXTERNAL_REFERENCE` as a **new implementation/specification task**. `SPEC_ONLY / MISSING_SURFACE` is a provenance/blocker state, not permission to invent the missing class/test/method or patch a nearby implementation by name similarity.
-
-If both the quoted failure producer and named source/test surface are absent, switch immediately to provenance triage instead of repeatedly searching adjacent source or rerunning broad CI. Record exactly what is missing and what artifact would unblock the task.
 
 ## Mandatory work registration
 
 Before implementation, every normal agent must:
 
 1. fetch/read current `origin/main`;
-2. for reported bugs/regressions, complete the mandatory defect-provenance gate **before** claiming a source-fix lane;
-3. inspect relevant Issues, PRs, branches and active/blocking claims;
-4. choose a non-overlapping lane whose scope matches the proven provenance state;
-5. create/update a GitHub Issue for the lane when practical, unless an existing owner-created issue already uniquely identifies the task;
-6. create a dedicated branch from the latest valid baseline, normally `agent/<agent-id>/<scope>`;
-7. put **all** task changes on that branch, including source, tests, scripts, workflows, docs, Markdown, claim/handoff/status files and chores;
-8. validate, commit and push only that branch;
-9. open/update a PR;
-10. stop before merge unless this session has explicit owner merge/integration authorization.
-
-If an owner-created issue already exists but its stated defect surface cannot be proven, do not silently accept the issue text as implementation truth. Keep/update the issue as `SPEC_ONLY / MISSING_SURFACE` or another accurate provenance state until the real test/source/artifact appears, or until the owner explicitly converts it into a new implementation/spec task.
+2. inspect relevant Issues, PRs, branches and active/blocking claims;
+3. choose a non-overlapping lane;
+4. create/update a GitHub Issue for the lane when practical, unless an existing owner-created issue already uniquely identifies the task;
+5. create a dedicated branch from the latest valid baseline, normally `agent/<agent-id>/<scope>`;
+6. put **all** task changes on that branch, including source, tests, scripts, workflows, docs, Markdown, claim/handoff/status files and chores;
+7. validate, commit and push only that branch;
+8. when watched/integration-relevant paths changed, wait for the automatic shared **branch-push CI on the exact current branch SHA to finish `SUCCESS` before opening a new PR**; a PR or draft PR must not be the first CI attempt;
+9. refresh `origin/main`; if the baseline moved, reconcile safely, push the reconciled branch and obtain fresh green branch CI before PR creation;
+10. open/update the PR; protected-main required checks and PR/integration CI then validate merge-candidate freshness as applicable;
+11. stop before merge unless this session has explicit owner merge/integration authorization.
 
 Historical Markdown work claims may still be used, but new/updated claim files belong on the task branch/PR. A claim does not need to be pushed to `main` before implementation starts.
 
-An Issue plus pushed task branch/PR is the preferred visible coordination surface.
+An Issue plus pushed task branch is the preferred visible coordination surface before PR creation. The PR becomes the review/handoff surface only after the applicable branch-CI gate is green.
 
 ## Mandatory sync discipline
 
@@ -120,7 +90,8 @@ Before each branch push and before PR handoff:
 1. refresh `origin/main` again;
 2. verify whether relevant concurrent work moved;
 3. if needed, rebase/reapply/merge safely on the task branch without discarding newer work;
-4. review the final diff so it contains only intended changes.
+4. review the final diff so it contains only intended changes;
+5. for watched work, make sure the exact final branch SHA has fresh green branch CI before opening the PR.
 
 Never force-push `main`, reset it backwards, silently overwrite another agent's work, or use `ours`/`theirs` blindly to hide semantic conflicts.
 
@@ -140,13 +111,15 @@ For a normal agent, the successful endpoint is generally:
 
 ```text
 latest main read
-  -> defect provenance classified when applicable
   -> issue/reservation checked
   -> agent/<agent-id>/<scope>
   -> implementation/docs/chore commits
   -> validation
   -> branch pushed
+  -> watched branch CI SUCCESS on exact branch SHA
+  -> refresh/reconcile main if needed
   -> PR opened/updated
+  -> protected-main/PR checks as applicable
   -> STOP BEFORE MERGE
 ```
 
@@ -172,7 +145,7 @@ The authorized coordinator must:
 6. run relevant combined-tree remote-safe validation;
 7. inspect the combined diff for accidental reversions and duplicate implementations;
 8. freeze and record the integration candidate SHA;
-9. merge to `main` only within explicit owner authorization;
+9. satisfy the active protected-main rules and merge to `main` only within explicit owner authorization;
 10. fetch `main` again and record the exact resulting SHA.
 
 Authorization to merge one batch is not standing authorization for later batches.
@@ -184,7 +157,9 @@ State **ALL MERGED TO MAIN** only after an authorized integration reviewer verif
 - every required Issue/reservation is terminal or explicitly excluded/superseded;
 - every required implementation/docs commit is represented in current `main`;
 - no required work exists only on an agent branch, local worktree, stash, draft patch or unmerged PR;
+- required branch/PR/integration evidence is green and fresh where applicable;
 - current `main` was refreshed after the authorized landing;
+- current `main` still reports the intended effective protected-main rules or an explicitly owner-approved replacement;
 - the combined tree contains the intended behavior without unresolved merge markers, accidental reversions, duplicate competing implementations or known semantic/API/test collisions;
 - required remote-safe validation passed or environment-gated evidence is explicitly handed off;
 - the exact current `main` SHA is recorded.
@@ -261,7 +236,9 @@ Lack of local capability is a handoff condition, not a reason for repeated remot
 Follow `CI_POLICY.md` strictly.
 
 - Workflows are manual-only by default.
-- The sole owner-approved automatic exception is `.github/workflows/dispatch-v25-cloud-after-main-integration.yml` after an authorized integration-relevant `main` landing.
+- The shared non-publishing branch/PR CI in `.github/workflows/ci.yml` is an owner-approved automatic validation exception.
+- For watched task branches, its branch-push run must be green on the exact final branch SHA before a new PR is opened.
+- The sole owner-approved automatic publishing/dispatch exception is `.github/workflows/dispatch-v25-cloud-after-main-integration.yml` after an authorized integration-relevant `main` landing.
 - Normal task authorization does not authorize manual workflow dispatch/re-run/cancel.
 - Manual CI authorization does not imply `main` merge authorization.
 - `main` merge authorization does not imply unrelated manual CI/release authorization.
@@ -272,11 +249,19 @@ For approved release operations, follow the applicable manual build/release runb
 
 ## GitHub hard protection
 
-Repository policy should be backed by GitHub branch protection/rulesets:
+GitHub ruleset **`protectedMain`** (ruleset ID **`20890901`**) is active on the default branch and is the current hard-enforcement layer for `main`.
 
-- protect `main` from force-push/deletion;
-- require PR-based changes for normal writers;
-- keep owner/admin bypass narrow and deliberate;
-- require stable status checks when appropriate.
+The expected effective contract is:
 
-Until GitHub reports `main` protected/ruleset-enforced, these repository rules remain mandatory but cannot physically stop a credential with write permission from bypassing them. Track hard-enforcement work in the repository governance issue for `main` protection.
+- require PR-based updates to `main`;
+- require stable status checks `preflight` and `core`;
+- strict required-status freshness enabled;
+- block force pushes / non-fast-forward updates;
+- block deletion;
+- bypass list empty.
+
+Repository policy and GitHub hard protection are complementary. The ruleset prevents many invalid writes, while `docs/MAIN-WRITE-AUTHORIZATION.md` decides which session is allowed by the owner to merge.
+
+When protection state matters, verify GitHub's effective rules instead of trusting Markdown alone. If the ruleset stops targeting `main`, required checks disappear, force-push/deletion protection is lost, or an unexpected bypass actor appears, treat it as a governance defect and do not claim hard protection is active.
+
+See `docs/GITHUB-MAIN-PROTECTION.md` for the verification and recovery contract.

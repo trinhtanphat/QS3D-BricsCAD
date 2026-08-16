@@ -98,7 +98,7 @@ function Assert-PostSignSignature {
 
     $signature = Get-AuthenticodeSignature -FilePath $FilePath
     if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-        throw "Post-sign verification failed for $FilePath: $($signature.Status) $($signature.StatusMessage)"
+        throw "Post-sign verification failed for ${FilePath}: $($signature.Status) $($signature.StatusMessage)"
     }
     if (-not $signature.SignerCertificate) {
         throw "Post-sign verification returned no signer certificate for $FilePath."

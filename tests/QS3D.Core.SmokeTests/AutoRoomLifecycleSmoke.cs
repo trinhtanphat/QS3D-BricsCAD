@@ -191,20 +191,24 @@ namespace QS3D.Core.SmokeTests
             room.Properties["LegacyCode"] = "OLD";
             project.Elements.Add(room);
 
+            var beforeFirstSyncVersion = project.ChangeVersion;
             AutoRoomLifecycle.SyncFamilyDefaults(project, room, nextFamily);
             Equal("room-next", room.FamilyId);
             Equal("3.6", room.Properties["HeightM"]);
             Equal("9.0", room.Properties["WidthM"]);
             Equal("A", room.Properties["FireRating"]);
             True(!room.Properties.ContainsKey("LegacyCode"));
+            Equal(checked(beforeFirstSyncVersion + 1L), project.ChangeVersion);
 
             room.Properties["HeightM"] = "4.2";
             nextFamily.Properties["HeightM"] = "4.0";
             nextFamily.Properties.Remove("FireRating");
+            var beforeSecondSyncVersion = project.ChangeVersion;
             AutoRoomLifecycle.SyncFamilyDefaults(project, room, nextFamily);
             Equal("4.2", room.Properties["HeightM"]);
             Equal("9.0", room.Properties["WidthM"]);
             True(!room.Properties.ContainsKey("FireRating"));
+            Equal(checked(beforeSecondSyncVersion + 1L), project.ChangeVersion);
         }
 
         private static void MalformedFamilyDefaultsFailBeforeMutation()
