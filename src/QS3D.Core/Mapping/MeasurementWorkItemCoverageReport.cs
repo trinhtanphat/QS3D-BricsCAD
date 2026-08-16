@@ -40,6 +40,8 @@ namespace QS3D.Core.Mapping
 
     public sealed class MeasurementWorkItemCoverageReport
     {
+        internal const int MaximumFindingCount = 10000;
+
         private MeasurementWorkItemCoverageReport(
             IReadOnlyList<MeasurementWorkItemCoverageReportRow> rows,
             int readyCount,
@@ -73,6 +75,10 @@ namespace QS3D.Core.Mapping
             var index = 0;
             foreach (var finding in findings)
             {
+                if (index >= MaximumFindingCount)
+                    throw new ArgumentException(
+                        "Coverage report input exceeds the maximum supported finding count of " + MaximumFindingCount + ".",
+                        nameof(findings));
                 if (finding == null)
                     throw new ArgumentException("Coverage report input contains a null finding at index " + index + ".", nameof(findings));
                 rows.Add(new MeasurementWorkItemCoverageReportRow(finding));
