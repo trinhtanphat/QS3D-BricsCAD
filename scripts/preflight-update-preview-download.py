@@ -40,8 +40,14 @@ def main():
     for needle in (
         "private const long MaxPackageBytes = 256L * 1024L * 1024L;",
         "private const int MaxChecksumBytes = 64 * 1024;",
+        "private const int MaxRedirects = 8;",
         "EnsureAllowedUri(release.PackageUri);",
         "EnsureAllowedUri(release.PackageChecksumUri);",
+        "private static async Task<HttpWebResponse> GetResponseFollowingRedirectsAsync(Uri uri)",
+        "request.AllowAutoRedirect = false;",
+        "var location = response.Headers[HttpResponseHeader.Location];",
+        "if (!Uri.TryCreate(current, location, out nextUri) || nextUri == null)",
+        "EnsureAllowedUri(nextUri);",
         "if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))",
         'string.Equals(host, "github.com", StringComparison.OrdinalIgnoreCase)',
         'string.Equals(host, "api.github.com", StringComparison.OrdinalIgnoreCase)',
@@ -49,11 +55,18 @@ def main():
         "await DownloadBoundedAsync(release.PackageUri, partialPath, MaxPackageBytes)",
         "var actualSha256 = ComputeSha256(partialPath);",
         "if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))",
+        "if (end < normalized.Length && !char.IsWhiteSpace(normalized[end]))",
         "File.Move(partialPath, packagePath);",
         "TryDelete(partialPath);",
         'Path.Combine(root, "QS3D", "Updates", "Downloads", ToSafePathSegment(tag))',
     ):
         require(downloader, needle, downloader_rel)
+
+    for stale in (
+        "request.AllowAutoRedirect = true;",
+        "request.MaximumAutomaticRedirections",
+    ):
+        forbid(downloader, stale, downloader_rel)
 
     for needle in (
         "if (current.Release.HasVerifiedPreviewPackage)",
@@ -75,9 +88,9 @@ def main():
         forbid(window, needle, window_rel)
 
     print(
-        "PASS: V25 preview fallback discovers the exact package/checksum pair, bounds HTTPS GitHub downloads, "
-        "verifies SHA-256 before retaining the ZIP, stages under LocalApplicationData, and only reveals unsigned "
-        "preview packages while the existing signed-manifest scheduling path remains separate."
+        "PASS: V25 preview fallback discovers the exact package/checksum pair, validates every bounded HTTPS GitHub redirect hop, "
+        "verifies SHA-256 before retaining the ZIP, stages under LocalApplicationData, and only reveals unsigned preview "
+        "packages while the existing signed-manifest scheduling path remains separate."
     )
     return 0
 
