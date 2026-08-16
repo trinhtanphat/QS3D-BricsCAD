@@ -141,7 +141,16 @@ namespace QS3D.Core.Diagnostics
                 if (pathMode)
                 {
                     OptionalInteger(element, "GeneratedCurtainFramePathSegmentCount", false, issues, "CURTAIN_FRAME_PATH_SEGMENTS_INVALID");
-                    OptionalInteger(element, "GeneratedCurtainFrameMappedFrameCount", true, issues, "CURTAIN_FRAME_MAPPED_COUNT_INVALID");
+                    var mappedFrameCount = OptionalInteger(element, "GeneratedCurtainFrameMappedFrameCount", true, issues, "CURTAIN_FRAME_MAPPED_COUNT_INVALID");
+                    if (count.HasValue && mappedFrameCount.HasValue &&
+                        (count.Value < mappedFrameCount.Value || (count.Value > 0 && mappedFrameCount.Value == 0)))
+                    {
+                        issues.Add(new ModelHealthIssue(
+                            "CURTAIN_FRAME_PATH_MAPPED_COUNT_MISMATCH",
+                            HealthSeverity.Warning,
+                            "GeneratedCurtainFrameMappedFrameCount không thể vượt số generated native pieces và không thể bằng 0 khi generated pieces > 0; rebuild curtain frames.",
+                            element.Id));
+                    }
                     var rawSourceKind = element.Properties.TryGetValue("GeneratedCurtainFrameSourceKind", out var sourceKindRaw) ? sourceKindRaw ?? string.Empty : string.Empty;
                     var sourceKind = rawSourceKind.Trim();
                     if (!string.Equals(sourceKind, "OpenPolyline", StringComparison.OrdinalIgnoreCase))
