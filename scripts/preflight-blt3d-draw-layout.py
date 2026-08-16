@@ -4,6 +4,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 REFINER = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "BltDrawRibbonLayoutRefiner.cs"
 FAIL_SAFE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "BltDrawRibbonFailSafe.cs"
+ICONS = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "BltDrawRibbonReferenceIconDecorator.cs"
+FINALIZER = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "BltDrawRibbonReferenceFinalizer.cs"
+INIT = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "RibbonInitializationCoordinator.cs"
 
 
 def fail(message: str) -> None:
@@ -28,13 +31,21 @@ def require_order(text: str, needles: list[str], label: str) -> None:
 
 
 def main() -> int:
-    if not REFINER.is_file():
-        fail("missing BltDrawRibbonLayoutRefiner.cs")
-    if not FAIL_SAFE.is_file():
-        fail("missing BltDrawRibbonFailSafe.cs")
+    for path, label in (
+        (REFINER, "BltDrawRibbonLayoutRefiner.cs"),
+        (FAIL_SAFE, "BltDrawRibbonFailSafe.cs"),
+        (ICONS, "BltDrawRibbonReferenceIconDecorator.cs"),
+        (FINALIZER, "BltDrawRibbonReferenceFinalizer.cs"),
+        (INIT, "RibbonInitializationCoordinator.cs"),
+    ):
+        if not path.is_file():
+            fail(f"missing {label}")
 
     refiner = REFINER.read_text(encoding="utf-8")
     fail_safe = FAIL_SAFE.read_text(encoding="utf-8")
+    icons = ICONS.read_text(encoding="utf-8")
+    finalizer = FINALIZER.read_text(encoding="utf-8")
+    init = INIT.read_text(encoding="utf-8")
 
     require(refiner, 'private const string DrawTabId = "QS3D_DRAW";', "Draw tab ownership")
     require(refiner, 'private const string DrawPanelSourceId = "QS3D_DRAW_BLT_DRAW_PANEL_SOURCE";', "Vẽ panel ownership")
@@ -89,10 +100,68 @@ def main() -> int:
         "owner-reference Công cụ compact columns",
     )
 
-    # IFC remains the qualified rich panel produced by BltDrawRibbonAugmenter. This refiner
-    # is intentionally limited to layout of Vẽ/Công cụ and must not mutate IFC ownership.
+    # Every visible owner-reference button must carry an explicit semantic glyph. The icon
+    # decorator is clean-room vector presentation only; it cannot alter commands or CAD logic.
+    for button_id in (
+        "QS3D_DRAW_BLT_POINT",
+        "QS3D_DRAW_BLT_LINE",
+        "QS3D_DRAW_BLT_TRACE",
+        "QS3D_DRAW_BLT_ARC",
+        "QS3D_DRAW_BLT_RECTANGLE",
+        "QS3D_DRAW_BLT_CIRCLE",
+        "QS3D_DRAW_BLT_BOUNDARY",
+        "QS3D_DRAW_BLT_SLAB_SLOPE",
+        "QS3D_DRAW_BLT_SLAB_CUT",
+        "QS3D_DRAW_BLT_MOVE",
+        "QS3D_DRAW_BLT_ROTATE",
+        "QS3D_DRAW_BLT_MIRROR",
+        "QS3D_DRAW_BLT_COPY",
+        "QS3D_DRAW_BLT_BREAK",
+        "QS3D_DRAW_BLT_JOIN",
+        "QS3D_DRAW_BLT_DISTANCE",
+        "QS3D_DRAW_BLT_CORNER",
+        "QS3D_DRAW_BLT_TEE",
+    ):
+        require(icons, f'"{button_id}"', "VẼ button icon coverage")
+
+    for token in (
+        'private const string DrawPanelSourceId = "QS3D_DRAW_BLT_DRAW_PANEL_SOURCE";',
+        'private const string ToolsPanelSourceId = "QS3D_DRAW_BLT_TOOLS_PANEL_SOURCE";',
+        'SetProperty(button, "ShowImage", true);',
+        'SetProperty(button, "Image", CreateIcon(spec.Value));',
+        'SetProperty(button, "LargeImage", CreateIcon(spec.Value));',
+        'string.Equals(typeName, "RibbonRowPanel", StringComparison.Ordinal)',
+        'new RectangleGeometry(new Rect(0, 0, 32, 32))',
+    ):
+        require(icons, token, "BLT3D-familiar vector icon contract")
+
+    # The compact refiner remains presentation-only for Vẽ/Công cụ. IFC is a staging source
+    # created by the rich augmenter so MÔ HÌNH BIM can mirror it, then the finalizer removes
+    # that panel from the visible VẼ tab to match the owner screenshot's blank ribbon tail.
     if "QS3D_DRAW_BLT_IFC_PANEL_SOURCE" in refiner:
-        fail("compact Draw refiner must not take ownership of the IFC panel")
+        fail("compact Draw refiner must not take ownership of the IFC staging panel")
+
+    for token in (
+        'private const string DrawTabId = "QS3D_DRAW";',
+        'private const string IfcPanelSourceId = "QS3D_DRAW_BLT_IFC_PANEL_SOURCE";',
+        "var ifcPanel = FindPanelBySourceId(panels, IfcPanelSourceId);",
+        "if (ifcPanel == null)",
+        "return true;",
+        "Remove(panels, ifcPanel);",
+        "return FindPanelBySourceId(panels, IfcPanelSourceId) == null;",
+    ):
+        require(finalizer, token, "final visible VẼ panel contract")
+
+    require_order(
+        init,
+        (
+            "BltDrawRibbonFailSafe.TryInitialize()",
+            "BltDrawRibbonReferenceIconDecorator.TryInitialize()",
+            "BltBimRibbonMirrorAugmenter.TryInitialize()",
+            "BltDrawRibbonReferenceFinalizer.TryInitialize()",
+        ),
+        "VẼ layout/icon/BIM/finalization lifecycle",
+    )
 
     require(
         fail_safe,
@@ -116,8 +185,9 @@ def main() -> int:
     )
 
     print(
-        "PASS: QS3D VẼ uses BLT3D-familiar compact three-row columns, keeps Biên dạng in Vẽ, "
-        "preserves Công cụ order, leaves IFC ownership alone, and rolls back safely on host mismatch."
+        "PASS: QS3D VẼ matches the BLT3D compact Vẽ/Công cụ source contract, gives every visible "
+        "button an explicit vector icon, removes the IFC staging panel only after BIM mirroring, "
+        "and preserves fail-safe recovery."
     )
     return 0
 
