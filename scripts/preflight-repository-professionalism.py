@@ -47,16 +47,9 @@ def main() -> int:
     require(
         pr,
         (
-            "## Scope",
-            "Issue:",
-            "Baseline `main` SHA:",
-            "Head SHA:",
-            "## Validation",
-            "PENDING_LOCAL",
-            "## Release impact",
-            "## Merge authorization",
-            "does **not** authorize its own merge",
-            "docs/MAIN-WRITE-AUTHORIZATION.md",
+            "## Scope", "Issue:", "Baseline `main` SHA:", "Head SHA:", "## Validation",
+            "PENDING_LOCAL", "## Release impact", "## Merge authorization",
+            "does **not** authorize its own merge", "docs/MAIN-WRITE-AUTHORIZATION.md",
         ),
         "pull request template",
         failures,
@@ -66,14 +59,11 @@ def main() -> int:
     require(
         codeowners,
         (
-            "/.github/workflows/ @trinhtanphat",
-            "/.github/CODEOWNERS @trinhtanphat",
-            "/AGENTS.md @trinhtanphat",
-            "/CI_POLICY.md @trinhtanphat",
+            "/.github/workflows/ @trinhtanphat", "/.github/CODEOWNERS @trinhtanphat",
+            "/AGENTS.md @trinhtanphat", "/CI_POLICY.md @trinhtanphat",
             "/docs/MAIN-WRITE-AUTHORIZATION.md @trinhtanphat",
             "/scripts/preflight-ci-manual-only.py @trinhtanphat",
-            "/scripts/*release* @trinhtanphat",
-            "/scripts/*sign* @trinhtanphat",
+            "/scripts/*release* @trinhtanphat", "/scripts/*sign* @trinhtanphat",
             "does not grant merge authority",
         ),
         "CODEOWNERS",
@@ -84,12 +74,8 @@ def main() -> int:
     require(
         dependabot,
         (
-            "version: 2",
-            'package-ecosystem: "github-actions"',
-            'package-ecosystem: "nuget"',
-            'interval: "weekly"',
-            'interval: "monthly"',
-            'timezone: "Asia/Ho_Chi_Minh"',
+            "version: 2", 'package-ecosystem: "github-actions"', 'package-ecosystem: "nuget"',
+            'interval: "weekly"', 'interval: "monthly"', 'timezone: "Asia/Ho_Chi_Minh"',
             'prefix: "chore(deps)"',
         ),
         "Dependabot configuration",
@@ -102,14 +88,9 @@ def main() -> int:
     require(
         contributing,
         (
-            "docs/MAIN-WRITE-AUTHORIZATION.md",
-            "AGENTS.md",
-            "CI_POLICY.md",
-            "docs/AGENT-WORK-REGISTRATION.md",
-            "`main` is read-only for normal agents and contributors",
-            "PENDING_LOCAL",
-            "Do not weaken assertions",
-            "does not self-authorize merge",
+            "docs/MAIN-WRITE-AUTHORIZATION.md", "AGENTS.md", "CI_POLICY.md",
+            "docs/AGENT-WORK-REGISTRATION.md", "`main` is read-only for normal agents and contributors",
+            "PENDING_LOCAL", "Do not weaken assertions", "does not self-authorize merge",
         ),
         "CONTRIBUTING.md",
         failures,
@@ -119,11 +100,8 @@ def main() -> int:
     require(
         security,
         (
-            "do **not** report",
-            "GitHub private vulnerability reporting",
-            "@trinhtanphat",
-            "Never include private keys",
-            "fail closed",
+            "do **not** report", "GitHub private vulnerability reporting", "@trinhtanphat",
+            "Never include private keys", "fail closed",
             "Licensed BricsCAD runtime binaries and signing credentials",
         ),
         "SECURITY.md",
@@ -134,15 +112,8 @@ def main() -> int:
     require(
         bug,
         (
-            "name: Bug report",
-            "id: target",
-            "id: release",
-            "id: reproduction",
-            "id: expected",
-            "id: actual",
-            "id: evidence",
-            "id: safety",
-            "confidential customer data",
+            "name: Bug report", "id: target", "id: release", "id: reproduction", "id: expected",
+            "id: actual", "id: evidence", "id: safety", "confidential customer data",
         ),
         "bug issue form",
         failures,
@@ -151,14 +122,7 @@ def main() -> int:
     feature = read(".github/ISSUE_TEMPLATE/feature_request.yml")
     require(
         feature,
-        (
-            "name: Feature request",
-            "id: target",
-            "id: problem",
-            "id: acceptance",
-            "id: coordination",
-            "existing issue/PR",
-        ),
+        ("name: Feature request", "id: target", "id: problem", "id: acceptance", "id: coordination", "existing issue/PR"),
         "feature issue form",
         failures,
     )
@@ -171,8 +135,7 @@ def main() -> int:
     require(
         main_auth,
         (
-            "Default rule: agents treat `main` as read-only",
-            "Explicit authorization required",
+            "Default rule: agents treat `main` as read-only", "Explicit authorization required",
             "A normal agent must never use a direct ref update",
         ),
         "main write authorization",
@@ -180,16 +143,26 @@ def main() -> int:
     )
 
     ci = read(".github/workflows/ci.yml")
-    if "permissions:\n  contents: read" not in ci:
-        failures.append("shared branch/PR CI must retain read-only contents permission")
+    require(
+        ci,
+        (
+            "permissions:\n  contents: read", "persist-credentials: false", '"pull_request":',
+            "Classify validation scope", "full_validation:", "steps.scope.outputs.full_validation",
+            "needs.preflight.outputs.full_validation", "Lightweight governance PR",
+            "python scripts/preflight-repository-professionalism.py",
+            "dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64",
+        ),
+        "shared CI",
+        failures,
+    )
     if "contents: write" in ci:
         failures.append("shared branch/PR CI must not gain contents:write")
+    pr_trigger = ci.split('  "pull_request":', 1)[1].split("\npermissions:", 1)[0] if '  "pull_request":' in ci else ""
+    if "paths:" in pr_trigger or "paths-ignore:" in pr_trigger:
+        failures.append("shared CI pull_request trigger must always emit protected-main required contexts; path filters belong only on branch pushes")
 
     forbidden_merge_tokens = (
-        "pull_request_target:",
-        "gh pr merge",
-        "enablepullrequestautomerge",
-        "enable-pull-request-auto-merge",
+        "pull_request_target:", "gh pr merge", "enablepullrequestautomerge", "enable-pull-request-auto-merge",
     )
     for workflow in sorted((ROOT / ".github" / "workflows").glob("*.y*ml")):
         text = workflow.read_text(encoding="utf-8")
@@ -211,6 +184,7 @@ def main() -> int:
     print(" - security reporting avoids public disclosure of sensitive material")
     print(" - critical governance/release surfaces have explicit ownership")
     print(" - dependency maintenance is bounded and low-noise")
+    print(" - every PR emits stable required contexts while docs-only candidates avoid redundant Core/V25 builds")
     print(" - no workflow implements autonomous PR-to-main merging")
     return 0
 
