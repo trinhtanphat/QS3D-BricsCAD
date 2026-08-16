@@ -64,12 +64,25 @@ def main():
         'ProjectOperationResultWindow.ShowSaveSuccess', 'ProjectOperationResultWindow.ShowSaveAsSuccess', 'QsdbProjectStore',
     ):
         require(project_ui, needle, project_ui_rel)
+    save_guard = 'ExistingProjectMutationContext.Require(document, ExistingProjectMutationContext.SaveProjectOperation);'
+    if project_ui.count(save_guard) != 2:
+        raise SystemExit(
+            f"FAIL: {project_ui_rel} must route both Save and Save As through the invariant SaveProjectOperation guard")
+    collision_guard = 'File.Exists(targetProjectPath) || File.Exists(targetProjectPath + ".bak")'
+    save_as_call = 'InvokeAcadDocumentMethod(document, "SaveAs", targetDrawingPath, Type.Missing, Type.Missing)'
+    require(project_ui, collision_guard, project_ui_rel)
+    if project_ui.index(collision_guard) > project_ui.index(save_as_call):
+        raise SystemExit(
+            f"FAIL: {project_ui_rel} must reject occupied project sidecars before mutating the DWG path")
     for stale in ('SendStringToExecute', '"_OPEN"', '"_QSAVE"', '"_SAVEAS"',
-                  'File.Copy(canonicalPath, targetPath', 'savedAsCopy'):
+                  'File.Copy(canonicalPath, targetPath', 'savedAsCopy',
+                  'ExistingProjectMutationContext.Require(document, "Lưu dự án")',
+                  'ExistingProjectMutationContext.Require(document, "Lưu thành")'):
         forbid(project_ui, stale, project_ui_rel)
 
     mutation = read(mutation_rel)
-    for needle in ('string.Equals(operation, "Save Project", StringComparison.Ordinal)',
+    for needle in ('internal const string SaveProjectOperation = "Save Project";',
+                   'string.Equals(operation, SaveProjectOperation, StringComparison.Ordinal)',
                    'ProjectContextCoordinator.TryGetCached(document, out var cached)',
                    '_ = ProjectContextCoordinator.HasPendingChanges(document);', 'if (!TryGet(document, out var project))',
                    'thao tác này không tạo project mới.'):
