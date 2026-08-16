@@ -7,6 +7,7 @@ namespace QS3D.Core.Formulas
     public sealed class ExpressionEvaluator
     {
         private const int MaxExpressionLength = 4096;
+        private const int MaxVariableCount = 4096;
 
         public double Evaluate(string expression, IReadOnlyDictionary<string, double>? variables = null)
         {
@@ -36,9 +37,16 @@ namespace QS3D.Core.Formulas
         {
             var normalized = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
             if (variables == null) return normalized;
+            if (variables.Count > MaxVariableCount)
+                throw new InvalidOperationException("Expression variable map cannot exceed " + MaxVariableCount + " entries.");
 
+            var inputCount = 0;
             foreach (var pair in variables)
             {
+                if (inputCount >= MaxVariableCount)
+                    throw new InvalidOperationException("Expression variable map cannot exceed " + MaxVariableCount + " entries.");
+                inputCount++;
+
                 if (string.IsNullOrWhiteSpace(pair.Key))
                     throw new InvalidOperationException("Variable names cannot be blank or whitespace-only.");
 
