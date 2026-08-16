@@ -42,22 +42,31 @@ def main():
     for needle in (
         "private const long MaxPackageBytes = 256L * 1024L * 1024L;",
         "private const int MaxChecksumBytes = 64 * 1024;",
+        "private const int NetworkTimeoutMilliseconds = 30000;",
         "private const int MaxRedirects = 8;",
         "private const int MaxReleaseTagPrefixChars = 48;",
         "EnsureAllowedUri(release.PackageUri);",
         "EnsureAllowedUri(release.PackageChecksumUri);",
         "var existingLength = new FileInfo(packagePath).Length;",
         "if (existingLength <= MaxPackageBytes)",
+        "await CopyBoundedAsync(source, buffer, MaxChecksumBytes)",
         "private static async Task<HttpWebResponse> GetResponseFollowingRedirectsAsync(Uri uri)",
         "request.AllowAutoRedirect = false;",
+        "request.Timeout = NetworkTimeoutMilliseconds;",
+        "request.ReadWriteTimeout = NetworkTimeoutMilliseconds;",
         "var location = response.Headers[HttpResponseHeader.Location];",
         "if (!Uri.TryCreate(current, location, out nextUri) || nextUri == null)",
         "EnsureAllowedUri(nextUri);",
+        "EnsureAllowedUri(response.ResponseUri);",
+        "if (response.ContentLength > maxBytes)",
         "if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))",
+        "if (!string.IsNullOrEmpty(uri.UserInfo))",
         'string.Equals(host, "github.com", StringComparison.OrdinalIgnoreCase)',
         'string.Equals(host, "api.github.com", StringComparison.OrdinalIgnoreCase)',
         'host.EndsWith(".githubusercontent.com", StringComparison.OrdinalIgnoreCase)',
         "await DownloadBoundedAsync(release.PackageUri, partialPath, MaxPackageBytes)",
+        "await CopyBoundedAsync(source, target, maxBytes)",
+        "if (total > maxBytes)",
         "var actualSha256 = ComputeSha256(partialPath);",
         "if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))",
         "if (end < normalized.Length && !char.IsWhiteSpace(normalized[end]))",
@@ -136,11 +145,12 @@ def main():
         forbid(start, stale, start_rel)
 
     print(
-        "PASS: V25 preview fallback discovers the exact package/checksum pair, bounds cached and network packages before hashing, "
-        "validates every bounded HTTPS GitHub redirect hop, verifies SHA-256 before retaining the ZIP, escapes Windows reserved "
-        "release-tag cache segments, bounds the readable cache prefix, appends a SHA-256 identity of the exact release tag to prevent "
-        "case/sanitization cache collisions, stages under LocalApplicationData, exposes the Update Center directly from Start Center "
-        "without command dispatch, and only reveals unsigned preview packages while the existing signed-manifest scheduling path remains separate."
+        "PASS: V25 preview fallback discovers the exact package/checksum pair, bounds cached, declared and streamed network bytes before hashing, "
+        "uses bounded request/read-write timeouts, validates every bounded HTTPS GitHub redirect hop and final response URI, rejects URI user-info, "
+        "verifies SHA-256 before retaining the ZIP, escapes Windows reserved release-tag cache segments, bounds the readable cache prefix, appends a "
+        "SHA-256 identity of the exact release tag to prevent case/sanitization cache collisions, stages under LocalApplicationData, exposes the Update "
+        "Center directly from Start Center without command dispatch, and only reveals unsigned preview packages while the existing signed-manifest "
+        "scheduling path remains separate."
     )
     return 0
 
