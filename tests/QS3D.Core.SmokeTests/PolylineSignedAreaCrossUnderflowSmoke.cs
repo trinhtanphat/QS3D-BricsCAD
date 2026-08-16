@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             CounterexampleActuallyUnderflowsDirectProducts();
+            UnrepresentableNonZeroTriangleFailsClosed();
             RepresentablePositiveSubnormalAreaIsPreserved();
             RepresentableNegativeSubnormalAreaIsPreserved();
             LegitimateZeroAreaRemainsZero();
@@ -23,6 +24,19 @@ namespace QS3D.Core.SmokeTests
         {
             if (SmallAxis * LargeAxis != 0d)
                 throw new InvalidOperationException("Polyline cross-underflow smoke no longer exercises direct multiplication underflow.");
+        }
+
+        private static void UnrepresentableNonZeroTriangleFailsClosed()
+        {
+            var points = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(SmallAxis, SmallAxis),
+                new Point2(-LargeAxis, LargeAxis)
+            };
+
+            Throws<OverflowException>(() => PolylineMetrics.SignedArea(points), "terminal signed-area underflow");
+            Throws<OverflowException>(() => PolylineMetrics.Area(points), "terminal absolute-area underflow");
         }
 
         private static void RepresentablePositiveSubnormalAreaIsPreserved()
@@ -81,6 +95,20 @@ namespace QS3D.Core.SmokeTests
         {
             if (actual != expected)
                 throw new InvalidOperationException("Unexpected signed area for " + scenario + ": expected " + expected + ", got " + actual + ".");
+        }
+
+        private static void Throws<TException>(Action action, string scenario) where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException("Expected " + typeof(TException).Name + " for " + scenario + ".");
         }
     }
 }
