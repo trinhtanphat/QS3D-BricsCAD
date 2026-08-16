@@ -7,6 +7,9 @@ CONTRACTS = {
     "src/QS3D.Core/Geometry/CurtainWallLayoutPlanner.cs": (
         'if (result == 0d && numerator != 0d)',
         'label + " underflowed to zero."',
+        'label + " lost a positive contribution at floating-point precision."',
+        'label + " lost a positive deduction at floating-point precision."',
+        'throw new OverflowException("Curtain total frame length lost a positive component at floating-point precision.");',
     ),
     "src/QS3D.Core/Geometry/CurtainFrameOpeningPlanner.cs": (
         "private void EnsureFiniteBounds()",
@@ -28,6 +31,11 @@ CONTRACTS = {
     "tests/QS3D.Core.SmokeTests/CurtainWallLayoutUnderflowRegistration.cs": (
         "[ModuleInitializer]",
         "CurtainWallLayoutUnderflowSmoke.Run();",
+    ),
+    "tests/QS3D.Core.SmokeTests/CurtainWallLayoutUnderflowSmoke.cs": (
+        "positive perimeter-frame deduction that rounds away",
+        "positive internal-frame deduction that rounds away",
+        "TotalFrameLengthM must fail closed",
     ),
     "tests/QS3D.Core.SmokeTests/CurtainFrameOpeningCoordinateCollapseRegistration.cs": (
         "[ModuleInitializer]",
@@ -55,8 +63,8 @@ def main() -> int:
                 raise SystemExit(f"FAIL: {relative} missing curtain numeric safety contract: {needle}")
 
     print(
-        "PASS: curtain layout/detail/opening planners retain fail-closed numeric underflow and "
-        "coordinate-resolution guards with deterministic smoke registration."
+        "PASS: curtain layout/detail/opening planners retain fail-closed numeric underflow, "
+        "precision-collapse, and coordinate-resolution guards with deterministic smoke registration."
     )
     return 0
 
