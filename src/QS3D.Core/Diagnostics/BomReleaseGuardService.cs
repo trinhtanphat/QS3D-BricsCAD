@@ -9,6 +9,8 @@ namespace QS3D.Core.Diagnostics
 {
     public static class BomReleaseGuardService
     {
+        private const int MaxLiveGeneratedHandles = 10000;
+
         public static IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project, ISet<string>? liveGeneratedHandles = null)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -16,6 +18,9 @@ namespace QS3D.Core.Diagnostics
             ISet<string>? liveHandleIndex = null;
             if (liveGeneratedHandles != null)
             {
+                if (liveGeneratedHandles.Count > MaxLiveGeneratedHandles)
+                    throw new InvalidOperationException("BOM release diagnostics cannot inspect more than " + MaxLiveGeneratedHandles + " live generated CAD handles.");
+
                 var index = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var handle in liveGeneratedHandles)
                 {
