@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             DuplicateAndAmbiguousRatesFailClosed();
             LargeSingleScopeUsesIndexedTimestampUniqueness();
             CostRatePercentagePrecisionFailsClosed();
+            ProgressRetentionPercentagePrecisionFailsClosed();
             InvalidInputsFailClosed();
         }
 
@@ -169,6 +170,25 @@ namespace QS3D.Core.SmokeTests
             Equal(10m, normal.OverheadUnitCost, "Normal build-up overhead mismatch.");
             Equal(11m, normal.ProfitUnitCost, "Normal build-up profit mismatch.");
             Equal(121m, normal.UnitRate, "Normal build-up unit rate mismatch.");
+        }
+
+        private static void ProgressRetentionPercentagePrecisionFailsClosed()
+        {
+            var contracts = new[] { new ProgressContractItem("ITEM", "ea", 1m, 100m) };
+            var claims = new[] { new ProgressClaimLine("ITEM", 0m, 1m) };
+            var minimumPositive = 0.0000000000000000000000000001m;
+            var service = new ProgressClaimService();
+
+            Throws<ArgumentOutOfRangeException>(() => service.Evaluate(contracts, claims, minimumPositive));
+
+            var zero = service.Evaluate(contracts, claims, 0m);
+            Equal(100m, zero.GrossCertifiedThisPeriod, "Zero-retention gross value mismatch.");
+            Equal(0m, zero.RetentionThisPeriod, "Zero retention should remain accepted.");
+            Equal(100m, zero.NetCertifiedThisPeriod, "Zero-retention net value mismatch.");
+
+            var normal = service.Evaluate(contracts, claims, 10m);
+            Equal(10m, normal.RetentionThisPeriod, "Normal retention value mismatch.");
+            Equal(90m, normal.NetCertifiedThisPeriod, "Normal retention net value mismatch.");
         }
 
         private static void InvalidInputsFailClosed()
