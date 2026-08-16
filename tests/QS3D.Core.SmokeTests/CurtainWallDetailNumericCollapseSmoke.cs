@@ -19,13 +19,13 @@ internal static class CurtainWallDetailNumericCollapseSmoke
     private static void GeneratedRightFrameCollapseFailsClosed()
     {
         var error = Capture<OverflowException>(() => CurtainWallDetailPlanner.Plan(Input(1e16d, 10d, 1e16d, 10d, 1d, 0d, 0d)));
-        Equal("curtain vertical frame width is below the representable coordinate resolution.", error.Message);
+        Equal("curtain vertical frame right perimeter placement lost a positive deduction at floating-point precision.", error.Message);
     }
 
     private static void GeneratedTopFrameCollapseFailsClosed()
     {
         var error = Capture<OverflowException>(() => CurtainWallDetailPlanner.Plan(Input(10d, 1e16d, 10d, 1e16d, 1d, 0d, 0d)));
-        Equal("curtain horizontal frame height is below the representable coordinate resolution.", error.Message);
+        Equal("curtain horizontal frame top perimeter placement lost a positive deduction at floating-point precision.", error.Message);
     }
 
     private static void InternalVerticalFrameHalfWidthPlacementCollapseFailsClosed()
