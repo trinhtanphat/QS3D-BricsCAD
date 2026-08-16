@@ -47,10 +47,14 @@ for token in ("GetOrCreate(", "Build3D", "TransactionManager", "AppendEntity", "
 context = read("src/QS3D.BricsCAD.V25/QuantityContextMenuCoordinator.cs")
 require(context, '"Diễn giải khối lượng"', "context menu label")
 require(context, 'private const string QuantityCommand = "QS3DQUANTITYINSIGHT";', "context command")
+require(context, 'private const string MenuItemTypeName = "Bricscad.Windows.MenuItem, BrxMgd";', "BricsCAD-native menu item")
+require(context, '"System.Drawing.Icon"', "BricsCAD native MenuItem constructor")
 require(context, "RXObject.GetClass(typeof(Entity))", "entity context class")
 require(context, '"AddObjectContextMenuExtension"', "object context registration")
 require(context, '"RemoveObjectContextMenuExtension"', "object context teardown")
 require(context, "document.SendStringToExecute(QuantityCommand + \" \", true, false, false);", "context dispatch")
+for token in ("System.Windows.Forms.MenuItem", "Windows Forms MenuItem"):
+    forbid(context, token, "quantity context menu must use BricsCAD-native MenuItem")
 for token in ("AddDefaultContextMenuExtension", "RemoveDefaultContextMenuExtension"):
     forbid(context, token, "quantity action must use selected-object context")
 for token in ("GetOrCreate(", "Build3D", "TransactionManager", "AppendEntity", "ProjectRepository"):
