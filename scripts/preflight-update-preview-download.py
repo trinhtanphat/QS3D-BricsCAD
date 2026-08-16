@@ -72,6 +72,8 @@ def main():
         "if (end < normalized.Length && !char.IsWhiteSpace(normalized[end]))",
         "File.Move(partialPath, packagePath);",
         "TryDelete(partialPath);",
+        "var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);",
+        "if (string.IsNullOrWhiteSpace(root))",
         'Path.Combine(root, "QS3D", "Updates", "Downloads", ToSafePathSegment(tag))',
         "var exactTag = value ?? string.Empty;",
         'if (IsWindowsReservedPathSegment(result)) result = "_" + result;',
