@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 using QS3D.Core.Domain;
@@ -25,8 +26,6 @@ namespace QS3D.Core.Revisions
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Revision path is required.", nameof(path));
             if (maximumBytes <= 0L) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
             ValidateSnapshot(snapshot);
-            var document = Serialize(snapshot);
-            ValidateSerializedSize(document, maximumBytes);
             var full = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(full);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
@@ -35,8 +34,9 @@ namespace QS3D.Core.Revisions
             try
             {
                 using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
+                using (var bounded = new BoundedWriteStream(stream, maximumBytes))
                 {
-                    document.Save(stream, SaveOptions.DisableFormatting);
+                    Serialize(snapshot, bounded);
                 }
                 ValidateSerializedFile(temp);
                 if (ShouldPreserveValidatedBackup(full, backup))
@@ -196,14 +196,6 @@ namespace QS3D.Core.Revisions
             }
         }
 
-        private static void ValidateSerializedSize(XDocument document, long maximumBytes)
-        {
-            using (var stream = new BoundedCountingStream(maximumBytes))
-            {
-                document.Save(stream, SaveOptions.DisableFormatting);
-            }
-        }
-
         private void ValidateSerializedFile(string path)
         {
             Load(path);
@@ -231,27 +223,78 @@ namespace QS3D.Core.Revisions
             }
         }
 
-        private static XDocument Serialize(RevisionSnapshot snapshot)
+        private static void Serialize(RevisionSnapshot snapshot, Stream destination)
         {
-            var root = new XElement("qs3dRevision");
-            if (!string.IsNullOrEmpty(snapshot.ProjectId))
+            var settings = new XmlWriterSettings
             {
-                root.Add(
-                    new XAttribute("schemaVersion", "2"),
-                    new XAttribute("projectId", snapshot.ProjectId));
+                Encoding = new UTF8Encoding(false),
+                Indent = false,
+                CloseOutput = false
+            };
+            using (var writer = XmlWriter.Create(destination, settings))
+            {
+                writer.WriteStartDocument();
+                writer.WriteStartElement("qs3dRevision");
+                if (!string.IsNullOrEmpty(snapshot.ProjectId))
+                {
+                    writer.WriteAttributeString("schemaVersion", "2");
+                    writer.WriteAttributeString("projectId", snapshot.ProjectId);
+                }
+                writer.WriteAttributeString("id", snapshot.Id ?? string.Empty);
+                writer.WriteAttributeString("createdUtc", snapshot.CreatedUtc.ToString("O", CultureInfo.InvariantCulture));
+                writer.WriteStartElement("elements");
+                foreach (var element in snapshot.Elements.OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase))
+                {
+                    writer.WriteStartElement("element");
+                    writer.WriteAttributeString("id", element.ElementId);
+                    writer.WriteAttributeString("category", element.Category ?? string.Empty);
+                    writer.WriteAttributeString("familyId", element.FamilyId ?? string.Empty);
+                    writer.WriteAttributeString("floorId", element.FloorId ?? string.Empty);
+                    writer.WriteAttributeString("zoneId", element.ZoneId ?? string.Empty);
+
+                    writer.WriteStartElement("properties");
+                    foreach (var property in element.Properties.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase))
+                    {
+                        writer.WriteStartElement("p");
+                        writer.WriteAttributeString("name", property.Key);
+                        writer.WriteAttributeString("value", property.Value ?? string.Empty);
+                        writer.WriteEndElement();
+                    }
+                    writer.WriteEndElement();
+
+                    writer.WriteStartElement("quantities");
+                    foreach (var quantity in element.Quantities.OrderBy(q => q.Key, StringComparer.OrdinalIgnoreCase))
+                    {
+                        writer.WriteStartElement("q");
+                        writer.WriteAttributeString("name", quantity.Key);
+                        writer.WriteAttributeString("value", Finite(quantity.Value).ToString("R", CultureInfo.InvariantCulture));
+                        writer.WriteEndElement();
+                    }
+                    writer.WriteEndElement();
+
+                    writer.WriteStartElement("sourceHandles");
+                    foreach (var handle in element.SourceHandles.OrderBy(h => h, StringComparer.OrdinalIgnoreCase))
+                    {
+                        writer.WriteStartElement("h");
+                        writer.WriteAttributeString("value", handle);
+                        writer.WriteEndElement();
+                    }
+                    writer.WriteEndElement();
+
+                    writer.WriteStartElement("dependencies");
+                    foreach (var dependency in element.Dependencies.OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
+                    {
+                        writer.WriteStartElement("d");
+                        writer.WriteAttributeString("value", dependency);
+                        writer.WriteEndElement();
+                    }
+                    writer.WriteEndElement();
+                    writer.WriteEndElement();
+                }
+                writer.WriteEndElement();
+                writer.WriteEndElement();
+                writer.WriteEndDocument();
             }
-            root.Add(
-                new XAttribute("id", snapshot.Id ?? string.Empty),
-                new XAttribute("createdUtc", snapshot.CreatedUtc.ToString("O", CultureInfo.InvariantCulture)),
-                new XElement("elements", snapshot.Elements.OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase).Select(x =>
-                    new XElement("element",
-                        new XAttribute("id", x.ElementId), new XAttribute("category", x.Category ?? string.Empty), new XAttribute("familyId", x.FamilyId ?? string.Empty),
-                        new XAttribute("floorId", x.FloorId ?? string.Empty), new XAttribute("zoneId", x.ZoneId ?? string.Empty),
-                        new XElement("properties", x.Properties.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase).Select(p => new XElement("p", new XAttribute("name", p.Key), new XAttribute("value", p.Value ?? string.Empty)))),
-                        new XElement("quantities", x.Quantities.OrderBy(q => q.Key, StringComparer.OrdinalIgnoreCase).Select(q => new XElement("q", new XAttribute("name", q.Key), new XAttribute("value", Finite(q.Value).ToString("R", CultureInfo.InvariantCulture))))),
-                        new XElement("sourceHandles", x.SourceHandles.OrderBy(h => h, StringComparer.OrdinalIgnoreCase).Select(h => new XElement("h", new XAttribute("value", h)))),
-                        new XElement("dependencies", x.Dependencies.OrderBy(d => d, StringComparer.OrdinalIgnoreCase).Select(d => new XElement("d", new XAttribute("value", d))))))));
-            return new XDocument(root);
         }
 
         private static void ValidateSnapshot(RevisionSnapshot snapshot)
@@ -399,13 +442,16 @@ namespace QS3D.Core.Revisions
             return result;
         }
 
-        private sealed class BoundedCountingStream : Stream
+        private sealed class BoundedWriteStream : Stream
         {
+            private readonly Stream _inner;
             private readonly long _maximumBytes;
             private long _length;
 
-            public BoundedCountingStream(long maximumBytes)
+            public BoundedWriteStream(Stream inner, long maximumBytes)
             {
+                _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+                if (!inner.CanWrite) throw new ArgumentException("Destination stream must be writable.", nameof(inner));
                 if (maximumBytes <= 0L) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
                 _maximumBytes = maximumBytes;
             }
@@ -420,8 +466,7 @@ namespace QS3D.Core.Revisions
                 set => throw new NotSupportedException();
             }
 
-            public override void Flush() { }
-
+            public override void Flush() => _inner.Flush();
             public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
             public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
             public override void SetLength(long value) => throw new NotSupportedException();
@@ -434,7 +479,14 @@ namespace QS3D.Core.Revisions
                 if (buffer.Length - offset < count) throw new ArgumentException("Invalid buffer range.");
                 if (_length > _maximumBytes - count)
                     throw new InvalidDataException("QS3D revision exceeds the maximum supported file size of 64 MiB.");
+                _inner.Write(buffer, offset, count);
                 _length += count;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing) _inner.Flush();
+                base.Dispose(disposing);
             }
         }
     }
