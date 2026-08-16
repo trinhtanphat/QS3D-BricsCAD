@@ -140,11 +140,6 @@ try {
         'src/QS3D.Core/QS3D.Core.csproj'
     )
 
-    & git config user.name 'github-actions[bot]'
-    if ($LASTEXITCODE -ne 0) { throw 'Could not configure release commit author name.' }
-    & git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-    if ($LASTEXITCODE -ne 0) { throw 'Could not configure release commit author email.' }
-
     $maxAttempts = 12
     for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
         $releaseBase = Get-RemoteMain
@@ -196,89 +191,31 @@ try {
             throw 'Release-preparation diff failed git diff --check.'
         }
 
+        $workspaceHead = ([string](& git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
+        if ($LASTEXITCODE -ne 0 -or $workspaceHead -ne $releaseBase) {
+            throw "Release workspace HEAD must remain the protected-main source commit. Expected $releaseBase, got $workspaceHead."
+        }
+
+        $latestMain = Get-RemoteMain
+        Assert-ReleaseBaseIsSafe -TargetSha $latestMain
+        if ($latestMain -ne $releaseBase) {
+            if ($attempt -ge $maxAttempts) {
+                throw "main kept advancing through non-release paths during $maxAttempts protected-main release-preparation attempts. Retry from a fresh workflow run."
+            }
+            Write-Host "main advanced through additional non-release paths while preparing the workspace ($releaseBase -> $latestMain); retrying without writing main."
+            continue
+        }
+
         if ($changed.Count -eq 0) {
-            $latestMain = Get-RemoteMain
-            Assert-ReleaseBaseIsSafe -TargetSha $latestMain
-            if ($latestMain -ne $releaseBase) {
-                Write-Host "main advanced through additional non-release paths while checking existing release identity; retrying on $latestMain."
-                continue
-            }
-            Write-Host "Source identity already matches $tag on safe main base $releaseBase."
-            Write-Output $releaseBase
-            return
+            Write-Host "Source identity already matches $tag on protected-main source $releaseBase."
         }
-
-        & git add -- @allowed
-        if ($LASTEXITCODE -ne 0) {
-            throw 'Could not stage synchronized release identity files.'
+        else {
+            Write-Host "Prepared workspace-only preview identity $tag on protected-main source $releaseBase. Modified build inputs:"
+            $changed | ForEach-Object { Write-Host " - $_" }
         }
-        $staged = @(& git diff --cached --name-only --)
-        if ($LASTEXITCODE -ne 0) {
-            throw 'Could not inspect staged release-preparation files.'
-        }
-        $staged = @($staged | ForEach-Object { ([string]$_).Trim().Replace('\', '/') } | Where-Object { $_ } | Sort-Object -Unique)
-        $missingStaged = @($changed | Where-Object { $_ -notin $staged })
-        $unexpectedStaged = @($staged | Where-Object { $_ -notin $changed })
-        if ($missingStaged.Count -ne 0 -or $unexpectedStaged.Count -ne 0) {
-            throw 'Staged release-preparation file set does not exactly match the validated source changes.'
-        }
-        foreach ($path in $staged) {
-            if ($path -notin $allowed) {
-                throw "Unexpected staged release-preparation path: $path"
-            }
-        }
-
-        $postStageStatus = @(Get-ReleaseStatusEntries)
-        foreach ($entry in $postStageStatus) {
-            if ($entry.State -ne 'M ' -or $entry.Path -notin $staged) {
-                throw "Release-preparation working tree changed after staging: '$($entry.State)' at $($entry.Path)."
-            }
-        }
-        & git diff --cached --check
-        if ($LASTEXITCODE -ne 0) {
-            throw 'Staged release-preparation diff failed git diff --cached --check.'
-        }
-
-        & git commit -m "chore(release): prepare $tag"
-        if ($LASTEXITCODE -ne 0) {
-            throw "Could not create the release-preparation commit for $tag."
-        }
-        $releaseCommit = ([string](& git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
-        if ($LASTEXITCODE -ne 0 -or $releaseCommit -notmatch '^[0-9a-f]{40}$' -or $releaseCommit -eq $releaseBase) {
-            throw 'Could not resolve the newly created release-preparation commit.'
-        }
-        $releaseParent = ([string](& git rev-parse --verify 'HEAD^')).Trim().ToLowerInvariant()
-        if ($LASTEXITCODE -ne 0 -or $releaseParent -ne $releaseBase) {
-            throw "Release-preparation commit parent mismatch. Expected safe base $releaseBase, got $releaseParent."
-        }
-
-        $postCommitStatus = @(Get-ReleaseStatusEntries)
-        foreach ($entry in $postCommitStatus) {
-            throw "Release-preparation working tree is not clean after commit: '$($entry.State)' at $($entry.Path)."
-        }
-
-        & git push origin 'HEAD:refs/heads/main'
-        $pushExit = $LASTEXITCODE
-        if ($pushExit -eq 0) {
-            $pushedMain = Get-RemoteMain
-            if ($pushedMain -ne $releaseCommit) {
-                throw "Release-preparation push was not read back exactly. Expected $releaseCommit, got $pushedMain."
-            }
-
-            Write-Host "Prepared exact release source commit $releaseCommit for $tag from safe main base $releaseBase (trigger $dispatch)."
-            Write-Output $releaseCommit
-            return
-        }
-
-        $afterPushMain = Get-RemoteMain
-        Assert-ReleaseBaseIsSafe -TargetSha $afterPushMain
-        if ($afterPushMain -eq $releaseBase) {
-            throw 'Could not fast-forward main with the release-preparation commit even though origin/main did not advance. Check repository write permissions or remote health.'
-        }
-        if ($attempt -ge $maxAttempts) {
-            throw "main kept advancing through non-release paths during $maxAttempts safe release-preparation attempts. Retry from a fresh workflow run."
-        }
-        Write-Host "Release-preparation CAS lost to non-release main drift ($releaseBase -> $afterPushMain); retrying without overwriting concurrent work."
+        Write-Host 'No commit, push, branch-protection bypass, or main mutation was performed by release preparation.'
+        Write-Output $releaseBase
+        return
     }
 
     throw 'Release preparation exhausted its retry loop unexpectedly.'
