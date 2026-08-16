@@ -76,7 +76,19 @@ namespace QS3D.Core.Diagnostics
                     }
                 }
 
-                if (!hasSequenceProperty) continue;
+                if (!hasSequenceProperty)
+                {
+                    if (label.Length > 0)
+                    {
+                        issues.Add(new ModelHealthIssue(
+                            "GRID_LABEL_WITHOUT_SEQUENCE",
+                            HealthSeverity.Error,
+                            "Grid có nhãn semantic nhưng thiếu GridSequenceIndex metadata.",
+                            element.Id));
+                    }
+                    continue;
+                }
+
                 var sequenceRaw = rawSequence ?? string.Empty;
                 var sequenceText = sequenceRaw.Trim();
                 if (!int.TryParse(sequenceText, NumberStyles.None, CultureInfo.InvariantCulture, out var sequenceIndex) ||
