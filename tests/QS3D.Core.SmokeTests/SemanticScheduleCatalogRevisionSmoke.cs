@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
         {
             CatalogMutationTouchesProjectExactlyOnce();
             CatalogUsesLastAvailableRevision();
+            InvalidTemplatesFailAtColumnBoundary();
+            MalformedPersistedTemplateFailsClosedOnLoad();
         }
 
         private static void CatalogMutationTouchesProjectExactlyOnce()
@@ -102,6 +104,25 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void InvalidTemplatesFailAtColumnBoundary()
+        {
+            Throws<FormatException>(() => new SemanticDocumentationColumn("Bad", "{Unsupported}"));
+            Throws<FormatException>(() => new SemanticDocumentationColumn("Bad", "{Id"));
+            Throws<InvalidOperationException>(() => new SemanticDocumentationColumn("Native", "{P:GeneratedSolidHandle}"));
+
+            var valid = new SemanticDocumentationColumn("Mark", "{P:Mark}");
+            Equal("{P:Mark}", valid.Template);
+        }
+
+        private static void MalformedPersistedTemplateFailsClosedOnLoad()
+        {
+            var project = Project();
+            project.Metadata[SemanticScheduleCatalog.MetadataKey] =
+                "<semanticSchedules version=\"1\"><schedule id=\"S1\" name=\"Bad\" title=\"Bad\" floorId=\"\" zoneId=\"\"><categories/><include/><exclude/><columns><column header=\"Bad\" template=\"{Unsupported}\"/></columns></schedule></semanticSchedules>";
+
+            Throws<InvalidDataException>(() => SemanticScheduleCatalog.Load(project));
+        }
+
         private static SemanticScheduleDefinition Definition(string id, string name, string title)
         {
             return new SemanticScheduleDefinition(
@@ -137,6 +158,20 @@ namespace QS3D.Core.SmokeTests
         private static void True(bool condition)
         {
             if (!condition) throw new Exception("Expected condition to be true.");
+        }
+
+        private static void Throws<T>(Action action) where T : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (T)
+            {
+                return;
+            }
+
+            throw new Exception("Expected exception " + typeof(T).Name + ".");
         }
 
         private static void TryDelete(string path)
