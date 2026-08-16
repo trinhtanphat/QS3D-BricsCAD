@@ -50,6 +50,7 @@ namespace QS3D.Core.Rebar
             Finite(left, label); Finite(right, label);
             var value = left * right;
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new OverflowException(label + " overflowed.");
+            if (left != 0d && right != 0d && value == 0d) throw new OverflowException(label + " underflowed.");
             return value;
         }
 
