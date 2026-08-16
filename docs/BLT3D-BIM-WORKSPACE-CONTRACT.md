@@ -1,0 +1,144 @@
+# BLT3D Ribbon + BIM workspace contract
+
+This document is the implementation contract for the QS3D BricsCAD **VẼ**, **MÔ HÌNH BIM** and **MODELING** experiences. It translates owner-provided BLT3D references into production UI behavior; it is not a screenshot mock. The V26 adapter links the V25 Ribbon source, so source-level Ribbon changes are shared, while licensed host rendering still requires local validation in each supported BricsCAD version.
+
+## 1. Topbar contract
+
+QS3D-owned tabs appear as one contiguous group in this order:
+
+1. KHỞI ĐẦU
+2. THIẾT LẬP DỰ ÁN
+3. MÔ HÌNH BIM
+4. NHẬN DẠNG
+5. VẼ
+6. TOOL
+7. MODELING
+8. XEM
+9. ĐỊNH LƯỢNG
+10. BẢN SỬA ĐỔI
+
+Legacy QS3D-owned tabs outside this contract, especially `QS3D_AUTHOR / TẠO MỚI`, are retired. Native and third-party BricsCAD tabs are not removed.
+
+## 2. VẼ ribbon contract
+
+The owner-reference VẼ tab keeps the qualified QS3D/BricsCAD commands but uses compact three-row columns instead of a flat button strip.
+
+**Vẽ** is arranged as:
+
+- column 1: `Điểm` → `Đường thẳng` → `Theo nét CAD`;
+- column 2: `Cung` → `Chữ nhật` → `Đường tròn`;
+- column 3: `Biên dạng`.
+
+`Biên dạng` belongs to the Vẽ group, not Công cụ.
+
+**Công cụ** is arranged as:
+
+- column 1: `Dốc sàn` → `Cắt sàn` → `Di chuyển`;
+- column 2: `Xoay` → `Đối xứng` → `Sao chép`;
+- column 3: `Chia cấu kiện` → `Nối liền` → `Đo khoảng cách`;
+- column 4: `Nối góc` → `Nối chữ T`.
+
+The existing **IFC** panel remains after Vẽ/Công cụ with the qualified import, lightweight import, selective delete and export actions. The compact layout does not take ownership of IFC behavior.
+
+`BltDrawRibbonAugmenter` remains the source of command routing, handlers and icons. `BltDrawRibbonLayoutRefiner` only re-packs those already-created buttons into `RibbonRowPanel` / `RibbonRowBreak` columns. `BltDrawRibbonFailSafe` resets the rich augmenter and restores the captured bootstrap panels if the host cannot apply the compact layout, so a failed presentation upgrade cannot strand the user with a half-built Draw tab.
+
+## 3. MÔ HÌNH BIM ribbon contract
+
+The BIM tab exposes the same qualified BLT3D surface in three panels, in order:
+
+- **Vẽ** — the compact VẼ arrangement above, including `Biên dạng` in the Vẽ group;
+- **Công cụ** — the compact tool arrangement above;
+- **IFC** — Import IFC, lightweight Import IFC, delete selected IFC entities and IFC export.
+
+`BltBimRibbonMirrorAugmenter` creates independent BIM Ribbon objects while reusing the source command handlers, command parameters, images and sizing. It mirrors `RibbonButton`, `RibbonRowPanel` and `RibbonRowBreak` recursively so BIM does not regress to a flat layout when VẼ is compacted. It must not duplicate geometry or business logic.
+
+## 4. MODELING ribbon contract
+
+The QS3D-owned `MODELING` tab matches the owner BLT3D reference as eight groups in this order:
+
+1. **Vật liệu** — one large `Vật liệu` action.
+2. **Kết cấu thép** — large `Mặt cắt thép` and `Tạo chi tiết` actions.
+3. **Mặt phẳng** — one large `Mặt XY` action.
+4. **Vẽ phác** — compact 3-row columns containing `Đường`, `Polyline`, `Chữ nhật`, `Tròn`, `Cung`.
+5. **Chỉnh sửa** — compact 3-row columns containing `Nối polyline`, `Offset`, `Di chuyển`, `Sao chép`, `Theo phương Z`.
+6. **Dựng 3D** — `Extrude`, `Sweep`, `Loft`.
+7. **Cấu kiện** — `Gắn vào Family`.
+8. **Cắt khối** — `Union`, `Subtract`, `Intersect`.
+
+`BltModelingRibbonAugmenter` removes only QS3D-owned `QS3D_MODELING_*` panels, preserves native/third-party content, builds all replacement panels before mutating the live Ribbon, and rolls back to the prior QS3D panels if reconciliation fails.
+
+The visible actions reuse native BricsCAD BIM/modeling commands where they are authoritative:
+
+- `MATERIALS`, `BIMPROFILES`, `BIMCREATEDETAIL`, `UCS World`;
+- `LINE`, `PLINE`, `RECTANG`, `CIRCLE`, `ARC`;
+- `JOIN`, `OFFSET`, `MOVE`, `COPY`;
+- `EXTRUDE`, `SWEEP`, `LOFT`;
+- `UNION`, `SUBTRACT`, `INTERSECT`.
+
+`Gắn vào Family` opens the existing `QS3DFAMILIES` workflow so Family/Type assignment stays in the production Family Manager rather than introducing a screenshot-only duplicate workflow. `Theo phương Z` intentionally routes through `MOVE`; its tooltip instructs the user to enter a displacement in `@0,0,<ΔZ>` form so the operation stays on the Z axis without inventing a second transform engine.
+
+The icon artwork is generated as frozen WPF vector drawings in the plugin. This keeps the blue BLT3D-familiar visual language crisp at both standard/large size without shipping bitmap captures from the reference screenshot. QS3D branding is used only on QS3D-owned surfaces; BricsCAD retains ownership of the host shell/application icon.
+
+## 5. Full BIM workspace contract
+
+Entering `QS3D_BIM` activates the full workspace once per tab transition:
+
+- **Left dock — Mô hình BIM**: working Zone and Floor, model category tree, Family/Type search/list, Add, Delete, guarded import from the current CAD selection, and editable properties.
+- **Center — BricsCAD native viewport**: the real drawing/model viewport remains the preview and interaction surface. PAN, ZOOM, ORBIT, PICK, native visual styles and BricsCAD selection remain authoritative. No duplicate fake 3D renderer is introduced.
+- **Right dock — Quản lý bản vẽ & lớp**: existing Xref/drawing and layer management remains fully functional, with BLT3D-facing labels.
+- **Footer/status**: model/BQ/inspection modes, active floor/elevation and live semantic/viewport status remain available.
+
+The user may resize palettes. The BIM entry contract reasserts left/right dock sides so the native viewport stays centered.
+
+## 6. Left model/category presentation
+
+The visible owner-reference category tail includes:
+
+- Đào đắp
+- Kết cấu thép
+- Cấu kiện khác
+
+QS3D does not currently expose a dedicated steel semantic category/builder. Therefore **Kết cấu thép** is a presentation-compatible grouping backed by `ElementCategory.CustomQuantity` until a real steel domain implementation exists. This explicitly avoids pretending that generic geometry is native steel BIM data.
+
+## 7. Family actions
+
+The production labels are:
+
+- `+ Add`
+- `Delete`
+- `⚡ Nhập từ chọn`
+
+`Nhập từ chọn` deliberately reuses the existing guarded capture-from-current-selection behavior. It must not silently scan or mutate an unbounded whole drawing.
+
+## 8. Right manager presentation
+
+The existing production handlers remain unchanged while labels align to BLT3D:
+
+- **Quản lý bản vẽ** — Thêm, Nạp, Di chuyển, Xóa, Khoanh vùng and existing supported drawing actions.
+- **Quản lý lớp** — search/filter plus Hiện, Ẩn, Đảo, Bỏ chọn.
+
+Deleting/removing drawings continues to use the existing guarded Xref/drawing logic; the visual label does not change command safety semantics.
+
+## 9. Activation and lifecycle
+
+`BltBimWorkspaceActivationCoordinator` observes the active Ribbon tab on the UI idle dispatcher and opens the BIM shell on a transition into `QS3D_BIM`. It does not force palettes open on every timer tick, so a user who manually closes a palette while staying on BIM is respected. Ribbon teardown stops the coordinator.
+
+`RibbonInitializationCoordinator` initializes and resets `BltModelingRibbonAugmenter` with the rest of the Ribbon lifecycle so NETLOAD/unload/retry cannot leave stale MODELING panel objects. Draw compacting remains inside `BltDrawRibbonFailSafe`, so the existing coordinator retry boundary also owns layout recovery.
+
+## 10. Regression protection
+
+`scripts/preflight-blt3d-bim-workspace.py` and `scripts/preflight-blt3d-draw-layout.py` are auto-discovered by `scripts/preflight-all.py`. Together they lock the source-level contracts for:
+
+- dual left/right BIM palette visibility and docking;
+- owner-reference Family/category/footer labels;
+- integration with the real Family workspace controls;
+- drawing/layer manager labels;
+- BIM-tab activation lifecycle;
+- Vẽ / Công cụ / IFC ribbon ordering;
+- exact VẼ and Công cụ compact column/button ordering, including `Biên dạng` ownership;
+- recursive compact-row mirroring from VẼ into MÔ HÌNH BIM;
+- exact MODELING group and button ordering;
+- MODELING command routing, compact `RibbonRowPanel` / `RibbonRowBreak` layout and lifecycle integration;
+- ten-tab QS3D topbar contract using the production tab IDs.
+
+Any future change that breaks these contracts must update both the implementation and this document intentionally.

@@ -68,7 +68,7 @@ namespace QS3D.Core.Rebar
             var identities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             long cutCount = 0L;
             var requiredLength = new CompensatedFiniteSum();
-            var allowanceLengthM = 0d;
+            var allowanceLength = new CompensatedFiniteSum();
 
             foreach (var cut in requiredCuts)
             {
@@ -80,14 +80,16 @@ namespace QS3D.Core.Rebar
                 cuts.Add(cut);
                 checked { cutCount += cut.Quantity; }
 
-                requiredLength.Add(RebarMath.Multiply(cut.LengthM, cut.Quantity, "required rebar cut length"));
-                allowanceLengthM = RebarMath.Add(
-                    allowanceLengthM,
+                requiredLength.Add(
+                    RebarMath.Multiply(cut.LengthM, cut.Quantity, "required rebar cut length"),
+                    "total required rebar cut length");
+                allowanceLength.Add(
                     RebarMath.Multiply(allowancePolicy.AllowancePerRequiredCutM, cut.Quantity, "required rebar cut allowance"),
                     "total required rebar cut allowance");
             }
 
-            var requiredLengthM = requiredLength.Value;
+            var requiredLengthM = requiredLength.Value("total required rebar cut length");
+            var allowanceLengthM = allowanceLength.Value("total required rebar cut allowance");
             RequiredCuts = cuts.AsReadOnly();
             AllowancePolicy = allowancePolicy;
             RequiredCutCount = cutCount;
@@ -125,35 +127,32 @@ namespace QS3D.Core.Rebar
             private double _sum;
             private double _compensation;
 
-            public void Add(double value)
+            public void Add(double value, string label)
             {
                 var next = _sum + value;
-                EnsureFinite(next);
+                EnsureFinite(next, label);
 
                 var correction = Math.Abs(_sum) >= Math.Abs(value)
                     ? (_sum - next) + value
                     : (value - next) + _sum;
                 var compensation = _compensation + correction;
-                EnsureFinite(compensation);
+                EnsureFinite(compensation, label);
 
                 _sum = next;
                 _compensation = compensation;
             }
 
-            public double Value
+            public double Value(string label)
             {
-                get
-                {
-                    var result = _sum + _compensation;
-                    EnsureFinite(result);
-                    return result;
-                }
+                var result = _sum + _compensation;
+                EnsureFinite(result, label);
+                return result;
             }
 
-            private static void EnsureFinite(double value)
+            private static void EnsureFinite(double value, string label)
             {
                 if (double.IsNaN(value) || double.IsInfinity(value))
-                    throw new OverflowException("Rebar addition overflow: total required rebar cut length");
+                    throw new OverflowException("Rebar addition overflow: " + label);
             }
         }
     }
