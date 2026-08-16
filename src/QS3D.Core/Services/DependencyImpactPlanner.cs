@@ -53,8 +53,9 @@ namespace QS3D.Core.Services
             if (sourceElementIds == null) throw new ArgumentNullException(nameof(sourceElementIds));
             var sourceChangeVersion = project.ChangeVersion;
             var sourceElementOwnership = SnapshotElementOwnership(project);
+            var sourceDependencyTopology = SnapshotDependencyTopology(sourceElementOwnership);
             var requestedRoots = CanonicalRoots(sourceElementIds, sourceElementOwnership.Count);
-            RequireProjectFresh(project, sourceChangeVersion, sourceElementOwnership);
+            RequireProjectFresh(project, sourceChangeVersion, sourceElementOwnership, sourceDependencyTopology);
 
             var graph = new DependencyGraph();
             graph.Rebuild(project.Elements);
@@ -97,7 +98,7 @@ namespace QS3D.Core.Services
                 }
             }
 
-            RequireProjectFresh(project, sourceChangeVersion, sourceElementOwnership);
+            RequireProjectFresh(project, sourceChangeVersion, sourceElementOwnership, sourceDependencyTopology);
 
             var ordered = entries
                 .OrderBy(x => x.Depth)
@@ -120,10 +121,23 @@ namespace QS3D.Core.Services
             return result;
         }
 
+        private static IReadOnlyDictionary<string, IReadOnlyList<string>> SnapshotDependencyTopology(
+            IReadOnlyDictionary<string, ProjectElement> ownership)
+        {
+            var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in ownership)
+            {
+                var dependencies = pair.Value.DependsOn ?? new List<string>();
+                result.Add(pair.Key, dependencies.ToArray());
+            }
+            return result;
+        }
+
         private static void RequireProjectFresh(
             ProjectState project,
             long expectedChangeVersion,
-            IReadOnlyDictionary<string, ProjectElement> expectedOwnership)
+            IReadOnlyDictionary<string, ProjectElement> expectedOwnership,
+            IReadOnlyDictionary<string, IReadOnlyList<string>> expectedDependencyTopology)
         {
             if (project.ChangeVersion != expectedChangeVersion)
                 throw new InvalidOperationException("Project changed while dependency impact was being planned; recompute the impact plan.");
@@ -137,13 +151,34 @@ namespace QS3D.Core.Services
                     !expectedOwnership.TryGetValue(element.Id, out var original) ||
                     !ReferenceEquals(original, element))
                     throw StructuralFreshnessError();
+                if (!expectedDependencyTopology.TryGetValue(element.Id, out var expectedDependencies) ||
+                    !DependencyTopologyMatches(element.DependsOn, expectedDependencies))
+                    throw DependencyTopologyFreshnessError();
             }
+        }
+
+        private static bool DependencyTopologyMatches(IReadOnlyList<string> current, IReadOnlyList<string> expected)
+        {
+            if (current == null) return expected == null || expected.Count == 0;
+            if (expected == null || current.Count != expected.Count) return false;
+            for (var index = 0; index < current.Count; index++)
+            {
+                if (!string.Equals(current[index], expected[index], StringComparison.Ordinal))
+                    return false;
+            }
+            return true;
         }
 
         private static InvalidOperationException StructuralFreshnessError()
         {
             return new InvalidOperationException(
                 "Project element ownership changed while dependency impact was being planned; recompute the impact plan.");
+        }
+
+        private static InvalidOperationException DependencyTopologyFreshnessError()
+        {
+            return new InvalidOperationException(
+                "Project dependency topology changed while dependency impact was being planned; recompute the impact plan.");
         }
 
         private static IReadOnlyList<string> CanonicalRoots(IEnumerable<string> sourceElementIds, int maxRootCount)
