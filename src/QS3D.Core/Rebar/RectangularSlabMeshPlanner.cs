@@ -69,8 +69,14 @@ namespace QS3D.Core.Rebar
             var yRadius = RebarMath.Divide(yDiameter, 2000d, "slab Y radius");
             var xEndCover = RebarMath.Add(cover, xRadius, "slab X end center cover");
             var yEndCover = RebarMath.Add(cover, yRadius, "slab Y end center cover");
-            var xLength = spanX - 2d * xEndCover;
-            var yLength = spanY - 2d * yEndCover;
+            var xEndDeduction = 2d * xEndCover;
+            var yEndDeduction = 2d * yEndCover;
+            var xLength = spanX - xEndDeduction;
+            var yLength = spanY - yEndDeduction;
+            if (xEndDeduction > 0d && xLength == spanX)
+                throw new OverflowException("Slab X bar length lost positive end clearance at the current numeric scale.");
+            if (yEndDeduction > 0d && yLength == spanY)
+                throw new OverflowException("Slab Y bar length lost positive end clearance at the current numeric scale.");
             if (!FinitePositive(xLength)) throw new InvalidOperationException("Slab X span is too short for cover + bar radius.");
             if (!FinitePositive(yLength)) throw new InvalidOperationException("Slab Y span is too short for cover + bar radius.");
 

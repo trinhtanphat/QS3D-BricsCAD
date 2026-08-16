@@ -9,6 +9,7 @@ namespace QS3D.Core.Diagnostics
     public sealed class ComprehensiveModelHealthService
     {
         private const int MaximumProviderParallelism = 4;
+        internal const int MaximumLiveHandleInputs = 10000;
         private readonly int _maxDegreeOfParallelism;
 
         private static readonly string[] GeneratedOutputCodeTokens =
@@ -87,7 +88,7 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
 
-            var normalizedLiveSourceHandles = NormalizeHandleSet(liveSourceHandles);
+            var normalizedLiveSourceHandles = NormalizeHandleSet(liveSourceHandles, "source");
             var normalizedLiveGeneratedSolidHandles = NormalizeGeneratedHandleSet(liveGeneratedSolidHandles);
             var modelHealthLiveGeneratedSolidHandles = ExpandGeneratedHandleAliasesForModelHealth(project, normalizedLiveGeneratedSolidHandles);
             var providers = new[]
@@ -193,12 +194,19 @@ namespace QS3D.Core.Diagnostics
             return result;
         }
 
-        private static ISet<string>? NormalizeHandleSet(ISet<string>? handles)
+        private static ISet<string>? NormalizeHandleSet(ISet<string>? handles, string label)
         {
             if (handles == null) return null;
+            RejectKnownOversize(handles, label);
+
             var normalized = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var observedCount = 0;
             foreach (var raw in handles)
             {
+                observedCount++;
+                if (observedCount > MaximumLiveHandleInputs)
+                    throw LiveHandleInputTooLarge(label);
+
                 var handle = (raw ?? string.Empty).Trim();
                 if (handle.Length > 0) normalized.Add(handle);
             }
@@ -208,13 +216,32 @@ namespace QS3D.Core.Diagnostics
         private static ISet<string>? NormalizeGeneratedHandleSet(ISet<string>? handles)
         {
             if (handles == null) return null;
+            RejectKnownOversize(handles, "generated-solid");
+
             var normalized = new HashSet<string>(GeneratedHandleIdentityComparer.Instance);
+            var observedCount = 0;
             foreach (var raw in handles)
             {
+                observedCount++;
+                if (observedCount > MaximumLiveHandleInputs)
+                    throw LiveHandleInputTooLarge("generated-solid");
+
                 var handle = (raw ?? string.Empty).Trim();
                 if (handle.Length > 0) normalized.Add(handle);
             }
             return normalized;
+        }
+
+        private static void RejectKnownOversize(ISet<string> handles, string label)
+        {
+            if (handles.Count > MaximumLiveHandleInputs)
+                throw LiveHandleInputTooLarge(label);
+        }
+
+        private static InvalidOperationException LiveHandleInputTooLarge(string label)
+        {
+            return new InvalidOperationException(
+                "Comprehensive model-health live " + label + " Handle input exceeds the supported bound of " + MaximumLiveHandleInputs + ".");
         }
 
         private static ISet<string>? ExpandGeneratedHandleAliasesForModelHealth(ProjectState project, ISet<string>? liveHandles)
