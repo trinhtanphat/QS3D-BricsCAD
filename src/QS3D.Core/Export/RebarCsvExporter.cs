@@ -73,7 +73,7 @@ namespace QS3D.Core.Export
 
         private static UTF8Encoding CreateStrictUtf8WithBom()
         {
-            var encoding = new UTF8Encoding(true);
+            var encoding = (UTF8Encoding)new UTF8Encoding(true).Clone();
             encoding.EncoderFallback = EncoderFallback.ExceptionFallback;
             encoding.DecoderFallback = DecoderFallback.ExceptionFallback;
             return encoding;
