@@ -57,8 +57,9 @@ def main():
         require(palette, token, "PaletteCoordinator BIM shell")
 
     # Owner-reference family/model chrome while preserving the guarded production handlers.
+    # Import remains explicitly selection-bounded; the label must not imply a whole-DWG scan.
     for token in (
-        "⚡ Nhập tự động",
+        "⚡ Nhập từ chọn",
         "+ Add",
         "Delete",
         "Kết cấu thép",
