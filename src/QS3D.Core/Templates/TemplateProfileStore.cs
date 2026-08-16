@@ -460,7 +460,14 @@ namespace QS3D.Core.Templates
 
         private static IEnumerable<string> SplitColumns(string value) => (value ?? string.Empty).Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase);
         private static bool SameMap(IDictionary<string, string> left, IDictionary<string, string> right) => left.Count == right.Count && left.All(x => right.TryGetValue(x.Key, out var value) && string.Equals(x.Value ?? string.Empty, value ?? string.Empty, StringComparison.Ordinal));
-        private static string Required(XElement element, string name) => !string.IsNullOrWhiteSpace(element.Attribute(name)?.Value) ? element.Attribute(name)!.Value.Trim() : throw new InvalidDataException("Missing attribute: " + name);
+        private static string Required(XElement element, string name)
+        {
+            var raw = element.Attribute(name)?.Value;
+            if (string.IsNullOrWhiteSpace(raw)) throw new InvalidDataException("Missing attribute: " + name);
+            if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("Non-canonical attribute with leading or trailing whitespace: " + name);
+            return raw;
+        }
         private static string Value(XElement element, string name) => element.Attribute(name)?.Value ?? string.Empty;
     }
 }
