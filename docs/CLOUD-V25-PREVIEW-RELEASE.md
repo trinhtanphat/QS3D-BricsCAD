@@ -20,7 +20,7 @@ The workflow pins the exact BricsCAD V25.2.10 x64 en_US MSI digest established b
 
 `F44DF674C0E165D96BF579E243B20A8301E3F395F929779F47BF39A7D9DACDE1`
 
-The workflow contains both the approved pinned HTTP mirror and the pinned official HTTPS object for that exact installer. After an Actions cache miss, the approved pinned HTTP mirror is attempted first, then the pinned official HTTPS object, then an optional same-object signed HTTPS fallback. Plain HTTP is not trusted as transport integrity: every candidate must match the pinned SHA-256 before it can proceed to signature or MSI identity validation.
+The workflow uses pinned official HTTPS sources for that exact installer object. After an Actions cache miss, the pinned official HTTPS primary is attempted first, then the pinned official HTTPS secondary, then an optional same-object signed HTTPS fallback. Plain HTTP installer sources are rejected; every candidate must also match the pinned SHA-256 before it can proceed to signature or MSI identity validation.
 
 If the public object requires a signed query URL in GitHub's network environment, optionally create repository secret:
 
@@ -34,15 +34,15 @@ Do not put a BricsCAD license key in the workflow. The cloud preview workflow do
 
 ## Installer cache and integrity
 
-The workflow restores `.cache/bricscad/BricsCAD-V25.2.10-x64.msi` through `actions/cache/restore@v6` with a cache key that includes the exact pinned SHA-256. A cache hit is re-verified before use; the cache is never trusted merely because GitHub returned it.
+The workflow restores `.cache/bricscad/BricsCAD-V25.2.10-x64.msi` through an immutable pinned revision of `actions/cache` corresponding to v6.1.0, with a cache key that includes the exact pinned SHA-256. A cache hit is re-verified before use; the cache is never trusted merely because GitHub returned it.
 
-On a cache miss, the workflow downloads the installer, requires the exact pinned SHA-256, then verifies a mandatory valid Bricsys Authenticode signer. It also verifies that MSI ProductName identifies BricsCAD and that MSI ProductVersion must identify V25.2.10. Only after those checks may administrative extraction begin.
+On a cache miss, the workflow downloads the installer only from the approved HTTPS candidates, requires the exact pinned SHA-256, then verifies a mandatory valid Bricsys Authenticode signer. It also verifies that MSI ProductName identifies BricsCAD and that MSI ProductVersion must identify V25.2.10. Only after those checks may administrative extraction begin.
 
-After a successful verified acquisition, `actions/cache/save@v6` stores the exact MSI for future workflow runs. The extracted BricsCAD runtime directory is **not** cached and is not uploaded as a QS3D artifact; `BrxMgd.dll` and `TD_Mgd.dll` remain transient compile references only.
+After a successful verified acquisition, the immutable pinned `actions/cache` save action stores the exact MSI for future workflow runs. The extracted BricsCAD runtime directory is **not** cached and is not uploaded as a QS3D artifact; `BrxMgd.dll` and `TD_Mgd.dll` remain transient compile references only.
 
 The download has a finite download timeout and the MSI administrative extraction has a finite administrative extraction timeout with verbose MSI log tail output on failure. This prevents a hosted runner from waiting indefinitely at the installer step.
 
-When the pinned MSI version changes, update the URL, ProductVersion check, pinned SHA-256, cache key, and documentation together. Establish the new installer digest independently before enabling a plain-HTTP mirror for that version.
+When the pinned MSI version changes, update the HTTPS URL, ProductVersion check, pinned SHA-256, cache key, and documentation together. Establish the new installer digest independently and do not reintroduce plain-HTTP installer transport.
 
 ## Run
 
@@ -61,7 +61,7 @@ The workflow performs:
 3. Core Release build;
 4. deterministic Core smoke tests;
 5. restore the exact V25.2.10 MSI from Actions cache when available;
-6. on cache miss, try the approved pinned HTTP mirror, pinned official HTTPS object, then optional same-object signed HTTPS fallback;
+6. on cache miss, try the pinned official HTTPS primary, pinned official HTTPS secondary, then optional same-object signed HTTPS fallback;
 7. require the exact pinned MSI SHA-256 and re-check it even on cache hit;
 8. verify the mandatory valid Bricsys Authenticode signer;
 9. verify MSI ProductName + V25.2.10 ProductVersion;
