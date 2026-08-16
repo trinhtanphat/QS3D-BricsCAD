@@ -24,7 +24,11 @@ namespace QS3D.BricsCAD.V25.Services
 
             if (CadUnitService.TryGetPolicy(document, out _, out var resolution))
             {
-                if (!readOnlyQuantityPreparation)
+                // ED2 preparation must remain mutation-free until the user confirms an export path.
+                // BQ is different: it already requires an existing QS3D project, so a compatible
+                // legacy effective-unit assumption can be migrated to the canonical quantity binding
+                // without creating a project, prompting for a unit, or changing live INSUNITS.
+                if (!readOnlyExportPreparation)
                     PersistLegacyBindingIfNeeded(document, resolution);
                 return true;
             }
