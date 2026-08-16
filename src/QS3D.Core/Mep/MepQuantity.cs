@@ -149,8 +149,11 @@ namespace QS3D.Core.Mep
             private int _elementCount;
             private int _quantityCount;
             private double _lengthM;
+            private double _lengthMCompensation;
             private double _areaM2;
+            private double _areaM2Compensation;
             private double _volumeM3;
+            private double _volumeM3Compensation;
 
             internal AggregateBuilder(MepElement seed)
             {
@@ -167,9 +170,9 @@ namespace QS3D.Core.Mep
                     _elementCount++;
                     _quantityCount += element.Count;
                 }
-                _lengthM = MepContract.CheckedAdd(_lengthM, element.LengthM, "MEP aggregated length");
-                _areaM2 = MepContract.CheckedAdd(_areaM2, element.AreaM2, "MEP aggregated area");
-                _volumeM3 = MepContract.CheckedAdd(_volumeM3, element.VolumeM3, "MEP aggregated volume");
+                AddCompensated(ref _lengthM, ref _lengthMCompensation, element.LengthM, "MEP aggregated length");
+                AddCompensated(ref _areaM2, ref _areaM2Compensation, element.AreaM2, "MEP aggregated area");
+                AddCompensated(ref _volumeM3, ref _volumeM3Compensation, element.VolumeM3, "MEP aggregated volume");
             }
 
             internal MepQuantityGroup Build() => new MepQuantityGroup(
@@ -179,9 +182,19 @@ namespace QS3D.Core.Mep
                 _region,
                 _elementCount,
                 _quantityCount,
-                _lengthM,
-                _areaM2,
-                _volumeM3);
+                MepContract.CheckedAdd(_lengthM, _lengthMCompensation, "MEP aggregated length"),
+                MepContract.CheckedAdd(_areaM2, _areaM2Compensation, "MEP aggregated area"),
+                MepContract.CheckedAdd(_volumeM3, _volumeM3Compensation, "MEP aggregated volume"));
+
+            private static void AddCompensated(ref double sum, ref double compensation, double value, string label)
+            {
+                var next = MepContract.CheckedAdd(sum, value, label);
+                var correction = Math.Abs(sum) >= Math.Abs(value)
+                    ? (sum - next) + value
+                    : (value - next) + sum;
+                compensation = MepContract.CheckedAdd(compensation, correction, label);
+                sum = next;
+            }
         }
     }
 
