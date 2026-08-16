@@ -21,6 +21,10 @@ CONTRACTS = {
         'throw new OverflowException(label + " width is below the representable coordinate resolution.");',
         'throw new OverflowException(label + " horizontal clearance is below the representable coordinate resolution.");',
         'throw new OverflowException(label + " vertical clearance is below the representable coordinate resolution.");',
+        'throw new OverflowException("Curtain frame piece area underflowed to zero.");',
+        'throw new OverflowException(label + " underflowed to zero.");',
+        'throw new OverflowException(label + " lost a positive contribution at floating-point precision.");',
+        'throw new OverflowException("Curtain removed frame area was lost at floating-point precision.");',
     ),
     "src/QS3D.Core/Geometry/CurtainWallDetailPlanner.cs": (
         'throw new OverflowException("Curtain rectangle area underflowed to zero.");',
@@ -49,6 +53,15 @@ CONTRACTS = {
         "[ModuleInitializer]",
         "CurtainWallOpeningFrameCoordinateCollapseSmoke.Run();",
     ),
+    "tests/QS3D.Core.SmokeTests/CurtainWallOpeningFrameAreaPrecisionSmoke.cs": (
+        "[ModuleInitializer]",
+        "FrameAreaUnderflowFailsClosed",
+        "OriginalAreaLostPositiveContributionFailsClosed",
+        "RemainingAreaLostPositiveContributionFailsClosed",
+        "RemovedAreaCollapseFailsClosed",
+        "FramePieceAreaUnderflowFailsClosed",
+        "OrdinaryInterruptionRemainsStable",
+    ),
     "tests/QS3D.Core.SmokeTests/CurtainWallDetailNumericCollapseRegistration.cs": (
         "[ModuleInitializer]",
         "CurtainWallDetailNumericCollapseSmoke.Run();",
@@ -74,7 +87,7 @@ def main() -> int:
 
     print(
         "PASS: curtain layout/detail/opening planners retain fail-closed numeric underflow, "
-        "precision-collapse, placement, and coordinate-resolution guards with deterministic smoke registration."
+        "precision-collapse, area-accounting, placement, and coordinate-resolution guards with deterministic smoke registration."
     )
     return 0
 
