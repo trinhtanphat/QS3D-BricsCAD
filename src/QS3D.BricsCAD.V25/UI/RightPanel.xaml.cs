@@ -170,6 +170,7 @@ namespace QS3D.BricsCAD.V25.UI
                     Kind = "MODEL",
                     LockState = "—",
                     InstanceText = "—",
+                    ScaleText = "—",
                     IsXref = false
                 });
                 foreach (var item in DrawingCatalogReader.ReadReferences(doc))
@@ -180,6 +181,7 @@ namespace QS3D.BricsCAD.V25.UI
                         Kind = "XREF",
                         LockState = item.LockState,
                         InstanceText = item.InstanceCount.ToString(CultureInfo.InvariantCulture),
+                        ScaleText = item.ScaleText,
                         IsXref = true
                     });
                 if (selectedDrawing != null && DrawingList != null)
@@ -296,10 +298,19 @@ namespace QS3D.BricsCAD.V25.UI
             if (!(sender is CheckBox box) || !(box.DataContext is LayerItemViewModel item)) return;
             var doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
+
+            var selected = LayerList.SelectedItems.Cast<LayerItemViewModel>().ToArray();
+            var applyToSelection = selected.Length > 1 && selected.Any(candidate => ReferenceEquals(candidate, item));
+            var names = applyToSelection
+                ? selected.Select(candidate => candidate.Name).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+                : new[] { item.Name };
+
             try
             {
-                LayerVisibilityService.SetVisible(doc, new[] { item.Name }, visible);
-                _viewModel.Status = (visible ? "Hiện " : "Ẩn ") + item.Name;
+                var count = LayerVisibilityService.SetVisible(doc, names, visible);
+                _viewModel.Status = applyToSelection
+                    ? (visible ? "Đã hiện " : "Đã ẩn ") + count + " layer trong cụm đang chọn."
+                    : (visible ? "Hiện " : "Ẩn ") + item.Name;
                 ReloadLayers();
             }
             catch (Exception ex)
