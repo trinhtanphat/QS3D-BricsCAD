@@ -8,6 +8,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             CollectivelySignificantAllowancesArePreserved();
+            InputOrderDoesNotDropAllowances();
             OrdinaryLengthAndQuantityRemainStable();
             OverflowStillFailsClosed();
         }
@@ -34,6 +35,28 @@ namespace QS3D.Core.SmokeTests
             Assert(rows[0].CuttingLengthM == expected, "Rebar schedule cutting length must preserve collectively significant lap/anchor allowances.");
             Assert(rows[0].TotalLengthM == expected, "Rebar schedule total length must inherit the compensated cutting length.");
             Assert(rows[0].NetWeightKg > 0d && rows[0].TotalWeightKg > 0d, "Compensated schedule length must continue to produce positive finite weights.");
+        }
+
+        private static void InputOrderDoesNotDropAllowances()
+        {
+            var rows = RebarScheduleBuilder.Build(new[]
+            {
+                new RebarScheduleInput
+                {
+                    ElementId = "E-ORDER",
+                    BarMark = "B-ORDER",
+                    Notation = "1D16",
+                    CuttingLengthM = 1d,
+                    LapLengthM = 1e16d,
+                    AnchorLengthM = 1d,
+                    HookAllowanceM = 0d
+                }
+            });
+
+            const double expected = 10000000000000002d;
+            Assert(rows.Count == 1, "Expected one input-order rebar schedule row.");
+            Assert(rows[0].CuttingLengthM == expected, "Rebar cutting-length compensation must preserve small contributions around a huge middle allowance.");
+            Assert(rows[0].TotalLengthM == expected, "Rebar total length must inherit input-order-independent compensated cutting length.");
         }
 
         private static void OrdinaryLengthAndQuantityRemainStable()
