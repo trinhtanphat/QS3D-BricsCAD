@@ -24,7 +24,9 @@ namespace QS3D.Core.Geometry
                 var area = WidthM * HeightM;
                 if (double.IsNaN(area) || double.IsInfinity(area))
                     throw new OverflowException("Curtain rectangle area must remain finite.");
-                return area;
+                if (area == 0d && WidthM != 0d && HeightM != 0d)
+                    throw new OverflowException("Curtain rectangle area underflowed to zero.");
+                return area == 0d ? 0d : area;
             }
         }
     }
@@ -161,7 +163,17 @@ namespace QS3D.Core.Geometry
             width = Positive(width, label + " width");
             height = Positive(height, label + " height");
             if (x < -1e-12d || z < -1e-12d) throw new InvalidOperationException(label + " starts outside the curtain wall extent.");
-            return new CurtainWallRect(Math.Max(0d, x), Math.Max(0d, z), width, height);
+
+            var normalizedX = Math.Max(0d, x);
+            var normalizedZ = Math.Max(0d, z);
+            var right = Finite(normalizedX + width, label + " right");
+            var top = Finite(normalizedZ + height, label + " top");
+            if (!(right > normalizedX))
+                throw new OverflowException(label + " width is below the representable coordinate resolution.");
+            if (!(top > normalizedZ))
+                throw new OverflowException(label + " height is below the representable coordinate resolution.");
+
+            return new CurtainWallRect(normalizedX, normalizedZ, width, height);
         }
 
         private static double Positive(double value, string label)
@@ -172,7 +184,16 @@ namespace QS3D.Core.Geometry
         }
 
         private static double Add(double left, double right, string label) => Finite(Finite(left, label + " left") + Finite(right, label + " right"), label);
-        private static double Multiply(double left, double right, string label) => Finite(Finite(left, label + " left") * Finite(right, label + " right"), label);
+
+        private static double Multiply(double left, double right, string label)
+        {
+            left = Finite(left, label + " left");
+            right = Finite(right, label + " right");
+            var result = Finite(left * right, label);
+            if (result == 0d && left != 0d && right != 0d)
+                throw new OverflowException(label + " underflowed to zero.");
+            return result == 0d ? 0d : result;
+        }
 
         private static double SubtractPositive(double left, double right, string label)
         {
