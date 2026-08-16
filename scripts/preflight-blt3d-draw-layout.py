@@ -1,12 +1,21 @@
 #!/usr/bin/env python3
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+AUGMENTER = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "BltDrawRibbonAugmenter.cs"
 REFINER = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "BltDrawRibbonLayoutRefiner.cs"
 FAIL_SAFE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "BltDrawRibbonFailSafe.cs"
 ICONS = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "BltDrawRibbonReferenceIconDecorator.cs"
 FINALIZER = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "BltDrawRibbonReferenceFinalizer.cs"
+FALLBACK = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "RibbonCommandParameterFallback.cs"
 INIT = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "RibbonInitializationCoordinator.cs"
+SLAB_OPEN = ROOT / "src" / "QS3D.BricsCAD.V25" / "DirectDrawSlabOpeningCommands.cs"
+
+BUTTON_SPEC = re.compile(
+    r'new DrawButtonSpec\(\s*"(?P<id>[^"]+)"\s*,\s*"(?P<text>(?:\\.|[^"])*)"\s*,\s*"(?P<command>[^"]+)"',
+    re.MULTILINE,
+)
 
 
 def fail(message: str) -> None:
@@ -30,22 +39,96 @@ def require_order(text: str, needles: list[str], label: str) -> None:
         cursor = index
 
 
+def require_button_commands(augmenter: str) -> None:
+    expected = {
+        "QS3D_DRAW_BLT_POINT": "_.POINT",
+        "QS3D_DRAW_BLT_ARC": "_.ARC",
+        "QS3D_DRAW_BLT_LINE": "_.LINE",
+        "QS3D_DRAW_BLT_RECTANGLE": "_.RECTANG",
+        "QS3D_DRAW_BLT_TRACE": "_.PLINE",
+        "QS3D_DRAW_BLT_CIRCLE": "_.CIRCLE",
+        "QS3D_DRAW_BLT_BOUNDARY": "_.BOUNDARY",
+        "QS3D_DRAW_BLT_SLAB_SLOPE": "_.ROTATE3D",
+        "QS3D_DRAW_BLT_SLAB_CUT": "QS3DDRAWSLABOPEN",
+        "QS3D_DRAW_BLT_MOVE": "_.MOVE",
+        "QS3D_DRAW_BLT_ROTATE": "_.ROTATE",
+        "QS3D_DRAW_BLT_MIRROR": "_.MIRROR",
+        "QS3D_DRAW_BLT_COPY": "_.COPY",
+        "QS3D_DRAW_BLT_BREAK": "_.BREAK",
+        "QS3D_DRAW_BLT_JOIN": "_.JOIN",
+        "QS3D_DRAW_BLT_DISTANCE": "_.DIST",
+        "QS3D_DRAW_BLT_CORNER": "_.FILLET",
+        "QS3D_DRAW_BLT_TEE": "_.EXTEND",
+        "QS3D_DRAW_BLT_IFC_IMPORT": "_.IMPORT",
+        "QS3D_DRAW_BLT_IFC_IMPORT_LIGHT": "_.IMPORT",
+        "QS3D_DRAW_BLT_IFC_DELETE": "_.ERASE",
+        "QS3D_DRAW_BLT_IFC_EXPORT": "_.IFCEXPORT",
+    }
+
+    found: dict[str, str] = {}
+    duplicates: list[str] = []
+    for match in BUTTON_SPEC.finditer(augmenter):
+        button_id = match.group("id")
+        command = match.group("command")
+        if button_id in found:
+            duplicates.append(button_id)
+        found[button_id] = command
+
+    if duplicates:
+        fail("duplicate BLT Draw button ids: " + ", ".join(sorted(set(duplicates))))
+
+    missing = sorted(set(expected) - set(found))
+    if missing:
+        fail("missing BLT Draw button command specs: " + ", ".join(missing))
+
+    wrong = [
+        f"{button_id}: expected {expected[button_id]}, got {found[button_id]}"
+        for button_id in expected
+        if found[button_id] != expected[button_id]
+    ]
+    if wrong:
+        fail("BLT Draw button command mapping drift: " + "; ".join(wrong))
+
+    for button_id, command in expected.items():
+        if button_id == "QS3D_DRAW_BLT_SLAB_CUT":
+            continue
+        if not command.startswith("_."):
+            fail(f"{button_id}: built-in BricsCAD command must use locale-safe '_.': {command}")
+
+
 def main() -> int:
     for path, label in (
+        (AUGMENTER, "BltDrawRibbonAugmenter.cs"),
         (REFINER, "BltDrawRibbonLayoutRefiner.cs"),
         (FAIL_SAFE, "BltDrawRibbonFailSafe.cs"),
         (ICONS, "BltDrawRibbonReferenceIconDecorator.cs"),
         (FINALIZER, "BltDrawRibbonReferenceFinalizer.cs"),
+        (FALLBACK, "RibbonCommandParameterFallback.cs"),
         (INIT, "RibbonInitializationCoordinator.cs"),
+        (SLAB_OPEN, "DirectDrawSlabOpeningCommands.cs"),
     ):
         if not path.is_file():
             fail(f"missing {label}")
 
+    augmenter = AUGMENTER.read_text(encoding="utf-8")
     refiner = REFINER.read_text(encoding="utf-8")
     fail_safe = FAIL_SAFE.read_text(encoding="utf-8")
     icons = ICONS.read_text(encoding="utf-8")
     finalizer = FINALIZER.read_text(encoding="utf-8")
+    fallback = FALLBACK.read_text(encoding="utf-8")
     init = INIT.read_text(encoding="utf-8")
+    slab_open = SLAB_OPEN.read_text(encoding="utf-8")
+
+    # Pin every VẼ/Công cụ/IFC button to the command that its label promises. Built-in
+    # commands stay locale-safe through '_.', while Cắt sàn must remain the guarded QS3D
+    # slabOpen workflow rather than degrading into a generic SLICE/BREAK operation.
+    require_button_commands(augmenter)
+    require(
+        slab_open,
+        '[CommandMethod("QS3DDRAWSLABOPEN", CommandFlags.Modal | CommandFlags.UsePickSet)]',
+        "Cắt sàn command implementation",
+    )
+    require(slab_open, "public void DrawSlabOpening()", "Cắt sàn command entrypoint")
 
     require(refiner, 'private const string DrawTabId = "QS3D_DRAW";', "Draw tab ownership")
     require(refiner, 'private const string DrawPanelSourceId = "QS3D_DRAW_BLT_DRAW_PANEL_SOURCE";', "Vẽ panel ownership")
@@ -155,6 +238,21 @@ def main() -> int:
     ):
         require(finalizer, token, "final visible VẼ panel contract")
 
+    # BricsCAD builds differ in whether CommandParameter is forwarded to ICommand. The
+    # final fallback pass must give BLT Draw buttons a captured command dispatcher, repair
+    # missing handlers, and surface dispatch failures instead of silently swallowing them.
+    for token in (
+        'private const string DrawCommandHandlerTypeName = "DrawRibbonCommandHandler";',
+        "handler is CommandParameterFallbackHandler || handler is CapturedCommandHandler",
+        "handler == null ||",
+        "new CapturedCommandHandler(command)",
+        "private sealed class CapturedCommandHandler : ICommand",
+        "Application.DocumentManager.MdiActiveDocument != null",
+        'document.SendStringToExecute(command.Trim() + " ", true, false, false);',
+        "document.Editor.WriteMessage(",
+    ):
+        require(fallback, token, "Draw button command-dispatch fallback")
+
     require_order(
         init,
         (
@@ -162,8 +260,9 @@ def main() -> int:
             "BltDrawRibbonReferenceIconDecorator.TryInitialize()",
             "BltBimRibbonMirrorAugmenter.TryInitialize()",
             "BltDrawRibbonReferenceFinalizer.TryInitialize()",
+            "RibbonCommandParameterFallback.TryInitialize()",
         ),
-        "VẼ layout/icon/BIM/finalization lifecycle",
+        "VẼ layout/icon/BIM/finalization/command lifecycle",
     )
 
     require(
@@ -188,9 +287,10 @@ def main() -> int:
     )
 
     print(
-        "PASS: QS3D VẼ matches the BLT3D compact Vẽ/Công cụ source contract, gives every visible "
-        "button an explicit vector icon, removes the IFC staging panel only after BIM mirroring, "
-        "and preserves fail-safe recovery."
+        "PASS: QS3D VẼ matches the BLT3D compact Vẽ/Công cụ source contract, pins every button "
+        "to its audited command, gives every visible action a vector icon, keeps Cắt sàn on the "
+        "guarded QS3D slabOpen workflow, removes IFC from VẼ only after BIM mirroring, and repairs "
+        "BricsCAD CommandParameter/handler dispatch failures."
     )
     return 0
 
