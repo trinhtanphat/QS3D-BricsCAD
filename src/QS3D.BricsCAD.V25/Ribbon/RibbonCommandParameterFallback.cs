@@ -33,7 +33,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
                         continue;
 
                     var tabId = GetProperty(tab, "Id") as string;
-                    if (string.IsNullOrWhiteSpace(tabId)
+                    if (tabId == null
+                        || string.IsNullOrWhiteSpace(tabId)
                         || !tabId.StartsWith(Qs3dTabPrefix, StringComparison.OrdinalIgnoreCase))
                     {
                         continue;
@@ -94,7 +95,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
         private static void RepairItem(object item)
         {
             var command = GetProperty(item, "CommandParameter") as string;
-            if (string.IsNullOrWhiteSpace(command))
+            if (command == null || string.IsNullOrWhiteSpace(command))
                 return;
 
             var handler = GetProperty(item, "CommandHandler") as ICommand;
