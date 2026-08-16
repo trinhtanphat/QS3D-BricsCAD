@@ -149,7 +149,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static string NormalizeWhitespace(string value) =>
             string.Join(" ", (value ?? string.Empty)
-                .Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
         private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root) where T : DependencyObject
         {
