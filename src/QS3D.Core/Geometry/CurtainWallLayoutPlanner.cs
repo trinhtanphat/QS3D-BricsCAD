@@ -179,7 +179,20 @@ namespace QS3D.Core.Geometry
             var ceiling = Math.Ceiling(ratio);
             if (double.IsNaN(ceiling) || double.IsInfinity(ceiling) || ceiling < 1d || ceiling > int.MaxValue)
                 throw new InvalidOperationException(label + " is outside supported integer range.");
-            return (int)ceiling;
+
+            var divisions = (int)ceiling;
+            var representedSpanM = Divide(spanM, divisions, label + " represented span");
+            if (representedSpanM > maximumM)
+            {
+                if (divisions == int.MaxValue)
+                    throw new InvalidOperationException(label + " is outside supported integer range.");
+                divisions = checked(divisions + 1);
+                representedSpanM = Divide(spanM, divisions, label + " represented span");
+                if (representedSpanM > maximumM)
+                    throw new InvalidOperationException(label + " could not satisfy the maximum span at floating-point precision.");
+            }
+
+            return divisions;
         }
 
         private static double Positive(double value, string label)
