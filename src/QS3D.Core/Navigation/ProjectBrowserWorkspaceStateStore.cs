@@ -51,6 +51,14 @@ namespace QS3D.Core.Navigation
             if (value == null || string.IsNullOrWhiteSpace(value)) return string.Empty;
             var normalized = value.Trim();
             if (normalized.Length > 160) throw new ArgumentException("Project browser workspace query exceeds 160 characters.", nameof(value));
+            try
+            {
+                XmlConvert.VerifyXmlChars(normalized);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException("Project browser workspace query contains characters that cannot be persisted as XML.", nameof(value), ex);
+            }
             return normalized;
         }
 
