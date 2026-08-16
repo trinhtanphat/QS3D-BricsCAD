@@ -85,8 +85,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 if (panel == null) continue;
                 var source = GetProperty(panel, "Source");
                 var sourceId = source == null ? null : GetProperty(source, "Id") as string;
-                if (!string.IsNullOrWhiteSpace(sourceId)
-                    && sourceId.StartsWith("QS3D_BIM_", StringComparison.OrdinalIgnoreCase))
+                if (sourceId == null || string.IsNullOrWhiteSpace(sourceId))
+                    continue;
+                if (sourceId.StartsWith("QS3D_BIM_", StringComparison.OrdinalIgnoreCase))
                     remove.Add(panel);
             }
 
@@ -135,7 +136,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                              ?? throw new InvalidOperationException("Cannot clone " + source.GetType().FullName + ".");
 
                 var id = GetProperty(source, "Id") as string;
-                if (!string.IsNullOrWhiteSpace(id))
+                if (id != null && !string.IsNullOrWhiteSpace(id))
                 {
                     var mirroredId = id.StartsWith(DrawOwnedPrefix, StringComparison.OrdinalIgnoreCase)
                         ? BimOwnedPrefix + id.Substring(DrawOwnedPrefix.Length)

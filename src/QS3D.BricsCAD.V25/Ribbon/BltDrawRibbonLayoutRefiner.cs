@@ -189,7 +189,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
             foreach (var item in items)
             {
                 var id = GetProperty(item, "Id") as string;
-                if (string.IsNullOrWhiteSpace(id) || result.ContainsKey(id))
+                if (id == null || string.IsNullOrWhiteSpace(id))
+                    throw new InvalidOperationException("Draw ribbon contains a missing or duplicate button id.");
+                if (result.ContainsKey(id))
                     throw new InvalidOperationException("Draw ribbon contains a missing or duplicate button id.");
                 result.Add(id, item);
             }

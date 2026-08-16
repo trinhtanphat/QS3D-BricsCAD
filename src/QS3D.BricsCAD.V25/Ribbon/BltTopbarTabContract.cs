@@ -51,8 +51,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     {
                         if (tab == null) continue;
                         var id = GetProperty(tab, "Id") as string;
-                        if (!string.IsNullOrWhiteSpace(id)
-                            && id.StartsWith(OwnedPrefix, StringComparison.OrdinalIgnoreCase)
+                        if (id == null || string.IsNullOrWhiteSpace(id))
+                            continue;
+                        if (id.StartsWith(OwnedPrefix, StringComparison.OrdinalIgnoreCase)
                             && !allowed.Contains(id))
                             remove.Add(tab);
                     }
