@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             BulgedBoundaryFeedsPolygonalMeshPlanner();
             SelfIntersectionFailsClosed();
             ExcessiveTessellationFailsClosed();
+            LargeCoordinateMidpointCollapseFailsClosed();
         }
 
         private static void StraightPolygonPreservesCanonicalVertices()
@@ -80,6 +81,21 @@ namespace QS3D.Core.SmokeTests
                 new BulgedPolygonVertex2(new Point2(2d, 0d)),
                 new BulgedPolygonVertex2(new Point2(1d, 2d))
             }, 1e-15d));
+        }
+
+        private static void LargeCoordinateMidpointCollapseFailsClosed()
+        {
+            var start = new Point2(1e16d, 0d);
+            var end = new Point2(start.X + 2d, 0d);
+            Require(end.X != start.X, "Regression setup requires distinct representable chord endpoints.");
+
+            var midpoint = new Point2(
+                start.X + (end.X - start.X) * 0.5d,
+                start.Y + (end.Y - start.Y) * 0.5d);
+            Require(midpoint.X == start.X && midpoint.Y == start.Y,
+                "Regression setup requires the finite midpoint to collapse onto the start endpoint.");
+
+            Throws<InvalidOperationException>(() => BulgeArcTessellator.Tessellate(start, end, 1d, 0.01d));
         }
 
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
