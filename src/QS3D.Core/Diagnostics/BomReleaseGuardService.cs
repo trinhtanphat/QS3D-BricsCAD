@@ -9,6 +9,8 @@ namespace QS3D.Core.Diagnostics
 {
     public static class BomReleaseGuardService
     {
+        internal const int MaxLiveGeneratedHandleInputs = 10000;
+
         public static IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project, ISet<string>? liveGeneratedHandles = null)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -16,9 +18,17 @@ namespace QS3D.Core.Diagnostics
             ISet<string>? liveHandleIndex = null;
             if (liveGeneratedHandles != null)
             {
+                if (liveGeneratedHandles.Count > MaxLiveGeneratedHandleInputs)
+                    throw LiveHandleInputTooLarge();
+
                 var index = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var observedHandleCount = 0;
                 foreach (var handle in liveGeneratedHandles)
                 {
+                    observedHandleCount++;
+                    if (observedHandleCount > MaxLiveGeneratedHandleInputs)
+                        throw LiveHandleInputTooLarge();
+
                     var normalized = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
                     if (normalized.Length > 0) index.Add(normalized);
                 }
@@ -133,6 +143,11 @@ namespace QS3D.Core.Diagnostics
             }
 
             return issues.AsReadOnly();
+        }
+
+        private static InvalidOperationException LiveHandleInputTooLarge()
+        {
+            return new InvalidOperationException("BOM live generated Handle input exceeds the supported bound of " + MaxLiveGeneratedHandleInputs + ".");
         }
     }
 }
