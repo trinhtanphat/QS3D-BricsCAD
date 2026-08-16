@@ -68,6 +68,11 @@ namespace QS3D.Core.Geometry
                 var result = VerticalFrameLengthM + HorizontalFrameLengthM;
                 if (double.IsNaN(result) || double.IsInfinity(result))
                     throw new OverflowException("Curtain total frame length overflowed.");
+                if (VerticalFrameLengthM > 0d && HorizontalFrameLengthM > 0d &&
+                    (result == VerticalFrameLengthM || result == HorizontalFrameLengthM))
+                {
+                    throw new OverflowException("Curtain total frame length lost a positive component at floating-point precision.");
+                }
                 return result;
             }
         }
@@ -193,15 +198,23 @@ namespace QS3D.Core.Geometry
 
         private static double Add(double left, double right, string label)
         {
-            var result = Finite(left, label + " left") + Finite(right, label + " right");
+            left = Finite(left, label + " left");
+            right = Finite(right, label + " right");
+            var result = left + right;
             if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException(label + " overflowed.");
+            if (left > 0d && right > 0d && (result == left || result == right))
+                throw new InvalidOperationException(label + " lost a positive contribution at floating-point precision.");
             return result;
         }
 
         private static double Subtract(double left, double right, string label)
         {
-            var result = Finite(left, label + " left") - Finite(right, label + " right");
+            left = Finite(left, label + " left");
+            right = Finite(right, label + " right");
+            var result = left - right;
             if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException(label + " overflowed.");
+            if (right > 0d && result == left)
+                throw new InvalidOperationException(label + " lost a positive deduction at floating-point precision.");
             return result;
         }
 
