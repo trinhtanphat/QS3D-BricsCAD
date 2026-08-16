@@ -16,7 +16,7 @@ namespace QS3D.Core.SmokeTests
         {
             var layout = ColumnTieLayoutPlanner.Plan(Input(8d));
 
-            Assert(layout.Count == 7, "Ordinary column tie layout count changed unexpectedly.");
+            Assert(layout.ElevationsM.Count == 7, "Ordinary column tie layout count changed unexpectedly.");
             Assert(Math.Abs(layout.PathPerimeterM - 3.568d) <= 1e-12d, "Ordinary column tie perimeter changed unexpectedly.");
             Assert(layout.ActualSpacingM <= 0.15d + 1e-12d, "Ordinary column tie spacing exceeds the requested maximum.");
         }
