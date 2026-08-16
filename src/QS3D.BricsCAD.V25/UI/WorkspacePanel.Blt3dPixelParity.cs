@@ -176,8 +176,8 @@ namespace QS3D.BricsCAD.V25.UI
                 // Footer parity is presentation-only and must never break workspace interaction.
             }
 
-            context.Text = "Tầng " + (string.IsNullOrWhiteSpace(floorName) ? "—" : floorName.Trim()) +
-                           "    Cao độ " + elevation;
+            var normalizedFloorName = string.IsNullOrWhiteSpace(floorName) ? "—" : floorName!.Trim();
+            context.Text = "Tầng " + normalizedFloorName + "    Cao độ " + elevation;
             context.TextAlignment = TextAlignment.Left;
             context.Margin = new Thickness(10, 0, 10, 0);
         }
