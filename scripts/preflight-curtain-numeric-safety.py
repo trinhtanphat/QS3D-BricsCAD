@@ -9,6 +9,8 @@ CONTRACTS = {
         'label + " underflowed to zero."',
         'label + " lost a positive contribution at floating-point precision."',
         'label + " lost a positive deduction at floating-point precision."',
+        'label + " represented span"',
+        'label + " could not satisfy the maximum span at floating-point precision."',
         'throw new OverflowException("Curtain total frame length lost a positive component at floating-point precision.");',
     ),
     "src/QS3D.Core/Geometry/CurtainFrameOpeningPlanner.cs": (
@@ -41,6 +43,8 @@ CONTRACTS = {
         "CurtainWallLayoutUnderflowSmoke.Run();",
     ),
     "tests/QS3D.Core.SmokeTests/CurtainWallLayoutUnderflowSmoke.cs": (
+        "rounded integer division ratio",
+        "MaxPanelWidthM",
         "positive perimeter-frame deduction that rounds away",
         "positive internal-frame deduction that rounds away",
         "TotalFrameLengthM must fail closed",
@@ -87,7 +91,7 @@ def main() -> int:
 
     print(
         "PASS: curtain layout/detail/opening planners retain fail-closed numeric underflow, "
-        "precision-collapse, area-accounting, placement, and coordinate-resolution guards with deterministic smoke registration."
+        "precision-collapse, grid-bound, area-accounting, placement, and coordinate-resolution guards with deterministic smoke registration."
     )
     return 0
 
