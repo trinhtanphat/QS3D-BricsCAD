@@ -58,9 +58,10 @@ namespace QS3D.BricsCAD.V25.UI
             if (root == null || root.RowDefinitions.Count < 3)
                 return;
 
-            // Compact only the non-persisted outer chrome. Pane widths/heights are owned by
-            // WorkspacePanel.xaml defaults plus WorkspacePanel.LayoutPersistence.cs and must not
-            // be overwritten here after AttachLayoutPersistence() has restored the user's values.
+            root.MinWidth = 0;
+            WorkspaceOverflow.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+            WorkspaceOverflow.ScrollToHorizontalOffset(0);
+
             root.RowDefinitions[0].Height = new GridLength(40);
             root.RowDefinitions[2].Height = new GridLength(30);
 
@@ -72,10 +73,27 @@ namespace QS3D.BricsCAD.V25.UI
             if (workspace == null)
                 return;
 
-            foreach (var splitter in workspace.Children.OfType<GridSplitter>())
+            // The Family/Type + Properties and Room/Selection dashboard panes are retired.
+            // Keep their named controls instantiated for code-behind compatibility, but remove
+            // every retired column and splitter from the visible layout after persisted widths
+            // have been restored. MaxWidth=0 prevents legacy saved widths from resurfacing them.
+            var primaryColumn = workspace.ColumnDefinitions[0];
+            primaryColumn.MinWidth = 0;
+            primaryColumn.MaxWidth = double.PositiveInfinity;
+            primaryColumn.Width = new GridLength(1, GridUnitType.Star);
+
+            for (var index = 1; index < workspace.ColumnDefinitions.Count; index++)
             {
-                splitter.ShowsPreview = true;
-                splitter.Focusable = false;
+                var retiredColumn = workspace.ColumnDefinitions[index];
+                retiredColumn.MinWidth = 0;
+                retiredColumn.MaxWidth = 0;
+                retiredColumn.Width = new GridLength(0);
+            }
+
+            foreach (UIElement child in workspace.Children)
+            {
+                if (Grid.GetColumn(child) > 0)
+                    child.Visibility = Visibility.Collapsed;
             }
         }
 
