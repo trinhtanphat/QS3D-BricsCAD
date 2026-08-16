@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             CollectivelySignificantSmallAdditionsReconcile();
+            InputOrderDoesNotDropSmallAdjustments();
             OrdinaryAdditionAndDeductionRemainStable();
             NonFiniteReconciliationStillFailsClosed();
         }
@@ -31,6 +32,23 @@ namespace QS3D.Core.SmokeTests
             Assert(
                 trace.NetValue.Equals(expected),
                 "MeasurementTrace must preserve collectively significant small finite adjustments.");
+        }
+
+        private static void InputOrderDoesNotDropSmallAdjustments()
+        {
+            const double expected = 10000000000000002d;
+            var trace = CreateTrace(
+                1d,
+                new[]
+                {
+                    Adjustment(MeasurementTraceAdjustmentKind.Addition, 1e16d, "huge-middle"),
+                    Adjustment(MeasurementTraceAdjustmentKind.Addition, 1d, "small-after")
+                },
+                expected);
+
+            Assert(
+                trace.NetValue.Equals(expected),
+                "MeasurementTrace reconciliation must preserve small finite contributions around a huge middle adjustment.");
         }
 
         private static void OrdinaryAdditionAndDeductionRemainStable()
