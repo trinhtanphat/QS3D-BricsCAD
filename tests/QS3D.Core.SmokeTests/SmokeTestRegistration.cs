@@ -48,6 +48,7 @@ namespace QS3D.Core.SmokeTests
             FormulaVariableNameNormalizationSmoke.Run();
             RebarNotationOverflowSmoke.Run();
             RebarWeightUnderflowSmoke.Run();
+            ColumnTieQuantityUnderflowSmoke.Run();
             RoomBoundaryRegressionSmoke.Run();
             GeometryCompletionSmoke.Run();
             AutoRoomLifecycleSmoke.Run();
