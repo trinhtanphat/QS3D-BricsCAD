@@ -222,8 +222,25 @@ namespace QS3D.Core.Cost
             if (adjustedTotal < 0m) throw new ArgumentOutOfRangeException(nameof(adjustedTotal));
             if (baseTotal == 0m && adjustedTotal != 0m)
                 throw new InvalidOperationException("A zero base total cannot produce a non-zero adjusted total.");
-            var combined = baseTotal == 0m ? 0m : ((adjustedTotal / baseTotal) - 1m) * 100m;
+            var combined = baseTotal == 0m ? 0m : CalculateCombinedRatioPercent(baseTotal, adjustedTotal);
             return new CostAdjustmentResult(baseTotal, combined, 0m, adjustedTotal, combined);
+        }
+
+        private static decimal CalculateCombinedRatioPercent(decimal baseTotal, decimal adjustedTotal)
+        {
+            var delta = adjustedTotal - baseTotal;
+            if (delta == 0m) return 0m;
+
+            try
+            {
+                var scaledDelta = CostDecimalMath.MultiplyPreservingNonZero(delta, 100m, "cost adjustment combined ratio scaled delta");
+                return CostDecimalMath.DividePreservingNonZero(scaledDelta, baseTotal, "cost adjustment combined ratio percent");
+            }
+            catch (OverflowException)
+            {
+                var ratio = CostDecimalMath.DividePreservingNonZero(delta, baseTotal, "cost adjustment combined ratio ratio");
+                return CostDecimalMath.MultiplyPreservingNonZero(ratio, 100m, "cost adjustment combined ratio percent");
+            }
         }
     }
 
@@ -250,7 +267,9 @@ namespace QS3D.Core.Cost
             TradeCode = tradeCode;
             ItemCount = itemCount;
             TotalCost = totalCost;
-            CostPerCfaM2 = cfaM2 == 0m ? (decimal?)null : totalCost / cfaM2;
+            CostPerCfaM2 = cfaM2 == 0m
+                ? (decimal?)null
+                : CostDecimalMath.DividePreservingNonZero(totalCost, cfaM2, "trade cost per CFA");
         }
 
         public string TradeCode { get; }
