@@ -6,11 +6,9 @@ using System.Windows.Threading;
 namespace QS3D.BricsCAD.V25.Ribbon
 {
     /// <summary>
-    /// Watches the selected Ribbon tab and keeps the QS3D Start Center scoped to QS3D_HOME.
-    /// Leaving KHỞI ĐẦU hides the Start Center so normal tabs immediately reveal the existing
-    /// BricsCAD 3D workspace without reloading or resetting the active model. Polling is
-    /// reflection-only so the source stays tolerant of BricsCAD minor-version Ribbon
-    /// event-shape differences.
+    /// Watches the selected Ribbon tab and owns Start Center visibility for the QS3D HOME surface.
+    /// Leaving HOME releases the large embedded Start Center immediately so the native BricsCAD
+    /// viewport and BIM side palettes can reclaim the work area without stale palette overlap.
     /// </summary>
     internal static class HomeTabActivationCoordinator
     {
@@ -73,17 +71,20 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     return;
 
                 _lastSelectedTabId = selectedId;
-                if (string.Equals(selectedId, HomeTabId, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(selectedId, HomeTabId, StringComparison.OrdinalIgnoreCase))
                 {
-                    try { new StartCenterCommands().ShowStartCenter(); }
+                    try { StartCenterPaletteCoordinator.Hide(); }
                     catch { }
                     return;
                 }
 
-                // The Start Center is the only document-area surface owned by KHỞI ĐẦU.
-                // Hiding it is enough to reveal the already-open 3D editor, so tab changes do
-                // not touch the active document, reload geometry, or disturb Project Setup.
-                try { StartCenterPaletteCoordinator.Hide(); }
+                try
+                {
+                    // HOME owns the large Start Center canvas. Release BIM/quantity side palettes
+                    // before opening it so tab transitions never leave competing docked surfaces.
+                    PaletteCoordinator.Hide();
+                    new StartCenterCommands().ShowStartCenter();
+                }
                 catch { }
             }
             catch

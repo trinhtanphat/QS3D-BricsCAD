@@ -46,8 +46,13 @@ def main():
         'new ProjectToolsCommands().ShowProjectTools()',
         'new FamilyManagerCommands().ShowFamilyManager()',
         'SetProperty(button, "ShowImage", true)',
-        'SetProperty(button, "Image", RibbonIconFactory.Create',
-        'SetProperty(button, "LargeImage", RibbonIconFactory.Create',
+        'spec.Icon == RibbonIconKind.Qs3dLogo',
+        'Qs3dBrandIconFactory.Create(16)',
+        'Qs3dBrandIconFactory.Create(32)',
+        'RibbonIconFactory.Create(spec.Icon, 16)',
+        'RibbonIconFactory.Create(spec.Icon, 32)',
+        'SetProperty(button, "Image", smallImage)',
+        'SetProperty(button, "LargeImage", largeImage)',
         'DirectActionHandler',
         'FilePanelSourceId',
         'LegacyProjectPanelSourceId',
@@ -199,7 +204,7 @@ def main():
     require(host, '_palette.AddVisual("Khởi đầu", _panel, true);', host_rel)
     require(host, 'Dock = DockSides.Left', host_rel)
 
-    print("PASS: QS3D Home and embedded Start Center use native WPF Button.Click hit targets, unique panels, rasterized icons and direct mouse-first project actions; Create New explicitly seeds the canonical project, while Save/Save As preserve existing-project and verified sidecar-transition safety.")
+    print("PASS: QS3D Home and embedded Start Center use native WPF Button.Click hit targets, unique panels, branded/rasterized icons and direct mouse-first project actions; Create New explicitly seeds the canonical project, while Save/Save As preserve existing-project and verified sidecar-transition safety.")
     return 0
 
 
