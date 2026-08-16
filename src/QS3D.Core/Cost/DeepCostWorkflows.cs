@@ -209,8 +209,14 @@ namespace QS3D.Core.Cost
             var markupRatio = ScaleRatioPercent(markupRatioPercent, nameof(markupRatioPercent));
             checked
             {
-                var afterAdjustment = baseTotal * (1m + adjustmentRatio);
-                var adjustedTotal = afterAdjustment * (1m + markupRatio);
+                var afterAdjustment = CostDecimalMath.MultiplyPreservingNonZero(
+                    baseTotal,
+                    1m + adjustmentRatio,
+                    "cost adjustment after adjustment ratio");
+                var adjustedTotal = CostDecimalMath.MultiplyPreservingNonZero(
+                    afterAdjustment,
+                    1m + markupRatio,
+                    "cost adjustment after markup ratio");
                 var combined = baseTotal == 0m
                     ? (adjustedTotal == 0m ? 0m : throw new InvalidOperationException("A zero base total cannot produce a non-zero adjusted total."))
                     : CalculateCombinedRatioPercent(baseTotal, adjustedTotal);
