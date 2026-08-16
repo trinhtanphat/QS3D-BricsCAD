@@ -168,7 +168,7 @@ namespace QS3D.Core.Services
             }
         }
 
-        private static bool DependencyTopologyMatches(IReadOnlyList<string> current, IReadOnlyList<string> expected)
+        private static bool DependencyTopologyMatches(IList<string> current, IReadOnlyList<string> expected)
         {
             if (current == null) return expected == null || expected.Count == 0;
             if (expected == null || current.Count != expected.Count) return false;
