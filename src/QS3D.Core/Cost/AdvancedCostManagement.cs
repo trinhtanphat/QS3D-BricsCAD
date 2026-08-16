@@ -230,18 +230,18 @@ namespace QS3D.Core.Cost
                 throw new InvalidOperationException("No historical cost samples match the requested benchmark dimensions.");
 
             var values = new List<decimal>(records.Count);
-            decimal total = 0m;
             for (var i = 0; i < records.Count; i++)
-            {
-                var value = records[i].UnitCost;
-                values.Add(value);
-                checked { total += value; }
-            }
+                values.Add(records[i].UnitCost);
             values.Sort();
-            var average = total / values.Count;
+
+            var average = values[0];
+            for (var i = 1; i < values.Count; i++)
+                average += (values[i] - average) / (decimal)(i + 1);
+
             var median = values.Count % 2 == 1
                 ? values[values.Count / 2]
-                : (values[(values.Count / 2) - 1] + values[values.Count / 2]) / 2m;
+                : values[(values.Count / 2) - 1] +
+                  ((values[values.Count / 2] - values[(values.Count / 2) - 1]) / 2m);
             decimal? deviation = average == 0m
                 ? (currentUnitCost == 0m ? 0m : (decimal?)null)
                 : ((currentUnitCost - average) / average) * 100m;
