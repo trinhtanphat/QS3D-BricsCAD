@@ -7,6 +7,7 @@ namespace QS3D.Core.SmokeTests
     internal static class CostAdjustmentRatioPrecisionSmoke
     {
         private const decimal SmallestNonZeroDecimal = 0.0000000000000000000000000001m;
+        private const decimal SmallestSurvivingPercentage = 0.00000000000000000000000001m;
         private const decimal NearMinusOneHundredPercent = -99.99999999999999999999999999m;
 
         [ModuleInitializer]
@@ -16,6 +17,8 @@ namespace QS3D.Core.SmokeTests
             RejectsMarkupRatioPrecisionCollapse();
             RejectsAdjustmentMultiplicationUnderflow();
             RejectsMarkupMultiplicationUnderflow();
+            RejectsAdjustmentMultiplicationNoOp();
+            RejectsMarkupMultiplicationNoOp();
             PreservesIntentionalMinusOneHundredPercent();
             PreservesOrdinaryRatioArithmetic();
         }
@@ -76,6 +79,42 @@ namespace QS3D.Core.SmokeTests
                 "after markup ratio",
                 error.Message,
                 "Positive cost erased by markup multiplication must fail closed.");
+        }
+
+        private static void RejectsAdjustmentMultiplicationNoOp()
+        {
+            var error = Capture<ArgumentOutOfRangeException>(() =>
+                new CostAdjustmentService().AdjustByRatios(
+                    0.01m,
+                    SmallestSurvivingPercentage,
+                    0m));
+
+            Equal(
+                "adjustmentRatioPercent",
+                error.ParamName,
+                "Rounded-away adjustment ratio must identify adjustmentRatioPercent.");
+            Contains(
+                "too small to affect the value at decimal precision",
+                error.Message,
+                "A representable adjustment ratio that rounds back to the unchanged value must fail closed.");
+        }
+
+        private static void RejectsMarkupMultiplicationNoOp()
+        {
+            var error = Capture<ArgumentOutOfRangeException>(() =>
+                new CostAdjustmentService().AdjustByRatios(
+                    0.01m,
+                    0m,
+                    SmallestSurvivingPercentage));
+
+            Equal(
+                "markupRatioPercent",
+                error.ParamName,
+                "Rounded-away markup ratio must identify markupRatioPercent.");
+            Contains(
+                "too small to affect the value at decimal precision",
+                error.Message,
+                "A representable markup ratio that rounds back to the unchanged value must fail closed.");
         }
 
         private static void PreservesIntentionalMinusOneHundredPercent()

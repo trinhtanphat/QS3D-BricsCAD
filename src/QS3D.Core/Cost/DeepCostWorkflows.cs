@@ -209,13 +209,17 @@ namespace QS3D.Core.Cost
             var markupRatio = ScaleRatioPercent(markupRatioPercent, nameof(markupRatioPercent));
             checked
             {
-                var afterAdjustment = CostDecimalMath.MultiplyPreservingNonZero(
+                var afterAdjustment = ApplyRatio(
                     baseTotal,
-                    1m + adjustmentRatio,
+                    adjustmentRatioPercent,
+                    adjustmentRatio,
+                    nameof(adjustmentRatioPercent),
                     "cost adjustment after adjustment ratio");
-                var adjustedTotal = CostDecimalMath.MultiplyPreservingNonZero(
+                var adjustedTotal = ApplyRatio(
                     afterAdjustment,
-                    1m + markupRatio,
+                    markupRatioPercent,
+                    markupRatio,
+                    nameof(markupRatioPercent),
                     "cost adjustment after markup ratio");
                 var combined = baseTotal == 0m
                     ? (adjustedTotal == 0m ? 0m : throw new InvalidOperationException("A zero base total cannot produce a non-zero adjusted total."))
@@ -243,6 +247,22 @@ namespace QS3D.Core.Cost
                     value,
                     "Non-zero percentage is too small to preserve at decimal precision.");
             return ratio;
+        }
+
+        private static decimal ApplyRatio(
+            decimal value,
+            decimal ratioPercent,
+            decimal ratio,
+            string paramName,
+            string operation)
+        {
+            var result = CostDecimalMath.MultiplyPreservingNonZero(value, 1m + ratio, operation);
+            if (value != 0m && ratioPercent != 0m && result == value)
+                throw new ArgumentOutOfRangeException(
+                    paramName,
+                    ratioPercent,
+                    "Non-zero percentage is too small to affect the value at decimal precision.");
+            return result;
         }
 
         private static decimal CalculateCombinedRatioPercent(decimal baseTotal, decimal adjustedTotal)
