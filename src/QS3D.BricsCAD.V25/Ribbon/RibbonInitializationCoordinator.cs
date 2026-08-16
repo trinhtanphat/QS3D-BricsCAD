@@ -134,10 +134,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
             // Ribbon content remains untouched.
             ready = BltModelingRibbonAugmenter.TryInitialize() && ready;
 
-            // The BLT owner reference shows the same qualified Vẽ/Công cụ/IFC surface under
-            // MÔ HÌNH BIM. Mirror the already-wired Draw panels so behavior, icons and sizing
-            // remain identical while each tab keeps independent Ribbon objects.
+            // MÔ HÌNH BIM keeps the qualified Vẽ/Công cụ/IFC surface. Mirror those staging
+            // panels first; then finalize the owner-reference VẼ tab by removing only its
+            // staging IFC panel, leaving the blank ribbon tail shown in the reference image.
             ready = BltBimRibbonMirrorAugmenter.TryInitialize() && ready;
+            ready = BltDrawRibbonReferenceFinalizer.TryInitialize() && ready;
 
             // Decorate canonical text-only/fallback buttons only after all richer feature
             // augmenters have supplied their own images. This preserves recognition and
