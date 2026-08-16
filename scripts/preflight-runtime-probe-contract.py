@@ -13,9 +13,13 @@ RUNNERS = (
 
 WORKSPACE_ASSERTION = "if (!PaletteCoordinator.IsWorkspaceVisible)"
 RIGHT_PANEL_ASSERTION = "if (PaletteCoordinator.IsRightPanelVisible)"
+QUANTITY_PANEL_ASSERTION = "if (PaletteCoordinator.IsQuantityInsightVisible)"
 STALE_RIGHT_PANEL_ASSERTION = "if (!PaletteCoordinator.IsRightPanelVisible)"
+STALE_QUANTITY_PANEL_ASSERTION = "if (!PaletteCoordinator.IsQuantityInsightVisible)"
 RIGHT_PANEL_MARKER = '"right_palette_visible=false"'
-RUNNER_REQUIREMENT = 'Require-Qs3dMarkerValue -Marker $marker -Key "right_palette_visible" -Expected "false"'
+QUANTITY_PANEL_MARKER = '"quantity_palette_visible=false"'
+RIGHT_RUNNER_REQUIREMENT = 'Require-Qs3dMarkerValue -Marker $marker -Key "right_palette_visible" -Expected "false"'
+QUANTITY_RUNNER_REQUIREMENT = 'Require-Qs3dMarkerValue -Marker $marker -Key "quantity_palette_visible" -Expected "false"'
 
 
 def main():
@@ -26,28 +30,35 @@ def main():
         errors.append("runtime probe no longer requires the Workspace palette to be visible")
     if RIGHT_PANEL_ASSERTION not in probe_text:
         errors.append("runtime probe must fail when the legacy right-side palette is visible")
+    if QUANTITY_PANEL_ASSERTION not in probe_text:
+        errors.append("runtime probe must fail when the quantity insight palette is visible")
     if STALE_RIGHT_PANEL_ASSERTION in probe_text:
         errors.append("runtime probe still requires the legacy right-side palette to be visible")
+    if STALE_QUANTITY_PANEL_ASSERTION in probe_text:
+        errors.append("runtime probe incorrectly requires the quantity insight palette to be visible")
     if RIGHT_PANEL_MARKER not in probe_text:
         errors.append("runtime probe must report right_palette_visible=false on success")
+    if QUANTITY_PANEL_MARKER not in probe_text:
+        errors.append("runtime probe must report quantity_palette_visible=false on success")
     if '"right_palette_visible=true"' in probe_text:
         errors.append("runtime probe still reports the legacy right-side palette as visible")
+    if '"quantity_palette_visible=true"' in probe_text:
+        errors.append("runtime probe reports the quantity insight palette as visible")
 
     for runner in RUNNERS:
         runner_text = runner.read_text(encoding="utf-8")
-        if RUNNER_REQUIREMENT not in runner_text:
-            errors.append(
-                "{} does not enforce right_palette_visible=false".format(
-                    runner.relative_to(ROOT)
-                )
-            )
+        relative = runner.relative_to(ROOT)
+        if RIGHT_RUNNER_REQUIREMENT not in runner_text:
+            errors.append("{} does not enforce right_palette_visible=false".format(relative))
+        if QUANTITY_RUNNER_REQUIREMENT not in runner_text:
+            errors.append("{} does not enforce quantity_palette_visible=false".format(relative))
 
     if errors:
         for error in errors:
             print("[FAIL] {}".format(error))
         return 1
 
-    print("[OK] runtime probe contract: Workspace visible, Right Panel hidden")
+    print("[OK] runtime probe contract: Workspace visible, Right Panel hidden, Quantity Insight hidden")
     return 0
 
 
