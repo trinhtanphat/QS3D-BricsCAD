@@ -4,6 +4,9 @@
         Title="QS3D — Thiết lập dự án" Width="1180" Height="720"
         MinWidth="900" MinHeight="560"
         Background="#1E1E1E"
+        FontFamily="Segoe UI" FontSize="13"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
         WindowStartupLocation="CenterOwner"
         Loaded="OnBltSetupLoaded">
     <Window.Resources>
@@ -16,19 +19,22 @@
             <SolidColorBrush x:Key="BltBg2" Color="#202020"/>
             <SolidColorBrush x:Key="BltBg3" Color="#252525"/>
             <SolidColorBrush x:Key="BltBorder" Color="#3A3A3A"/>
-            <SolidColorBrush x:Key="BltText" Color="#F1F1F1"/>
+            <SolidColorBrush x:Key="BltText" Color="#F3F3F3"/>
             <SolidColorBrush x:Key="BltMuted" Color="#C7C7C7"/>
-            <SolidColorBrush x:Key="BltBlue" Color="#1E56A0"/>
-            <SolidColorBrush x:Key="BltBlue2" Color="#173A6B"/>
+            <SolidColorBrush x:Key="BltBlue" Color="#1D78D5"/>
+            <SolidColorBrush x:Key="BltBlue2" Color="#1C365F"/>
 
             <Style x:Key="BltToolbarButton" TargetType="Button">
                 <Setter Property="Foreground" Value="{StaticResource BltText}"/>
-                <Setter Property="Background" Value="#252525"/>
+                <Setter Property="Background" Value="#242424"/>
                 <Setter Property="BorderBrush" Value="#2D2D2D"/>
                 <Setter Property="BorderThickness" Value="1"/>
-                <Setter Property="Padding" Value="9,4"/>
+                <Setter Property="Padding" Value="8,3"/>
                 <Setter Property="Margin" Value="2,2,2,2"/>
+                <Setter Property="MinHeight" Value="30"/>
                 <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
                 <Setter Property="Cursor" Value="Hand"/>
                 <Style.Triggers>
                     <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#343434"/></Trigger>
@@ -36,12 +42,20 @@
                 </Style.Triggers>
             </Style>
 
+            <Style x:Key="BltToolbarIcon" TargetType="Path">
+                <Setter Property="Stroke" Value="#F3F3F3"/>
+                <Setter Property="StrokeThickness" Value="1.8"/>
+                <Setter Property="StrokeStartLineCap" Value="Square"/>
+                <Setter Property="StrokeEndLineCap" Value="Square"/>
+                <Setter Property="Stretch" Value="Uniform"/>
+            </Style>
+
             <Style x:Key="BltNavButton" TargetType="Button">
                 <Setter Property="Foreground" Value="White"/>
                 <Setter Property="Background" Value="Transparent"/>
                 <Setter Property="BorderBrush" Value="Transparent"/>
                 <Setter Property="BorderThickness" Value="0"/>
-                <Setter Property="Padding" Value="15,8"/>
+                <Setter Property="Padding" Value="6,8"/>
                 <Setter Property="Margin" Value="0"/>
                 <Setter Property="FontSize" Value="13"/>
                 <Setter Property="FontWeight" Value="SemiBold"/>
@@ -49,7 +63,8 @@
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
-                            <Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                            <Border x:Name="Root" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
                                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
                             <ControlTemplate.Triggers>
@@ -60,23 +75,40 @@
                 </Setter>
             </Style>
 
+            <Style x:Key="BltModePill" TargetType="Border">
+                <Setter Property="Background" Value="#0D6EDE"/>
+                <Setter Property="CornerRadius" Value="2"/>
+                <Setter Property="Padding" Value="12,5"/>
+                <Setter Property="Margin" Value="0,0,6,0"/>
+            </Style>
+
+            <Style x:Key="BltStatusToggle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="#F0F0F0"/>
+                <Setter Property="FontSize" Value="12"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="Margin" Value="0,0,17,0"/>
+            </Style>
+
             <Style TargetType="DataGridColumnHeader">
                 <Setter Property="Background" Value="#242424"/>
                 <Setter Property="Foreground" Value="White"/>
                 <Setter Property="BorderBrush" Value="#353535"/>
                 <Setter Property="BorderThickness" Value="0,0,1,1"/>
-                <Setter Property="Padding" Value="7,6"/>
+                <Setter Property="Padding" Value="7,0"/>
+                <Setter Property="FontSize" Value="13"/>
                 <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
             </Style>
             <Style TargetType="DataGridCell">
                 <Setter Property="Foreground" Value="White"/>
-                <Setter Property="Background" Value="#202020"/>
-                <Setter Property="BorderBrush" Value="#242424"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderBrush" Value="#262626"/>
                 <Setter Property="BorderThickness" Value="0,0,0,1"/>
-                <Setter Property="Padding" Value="5,2"/>
+                <Setter Property="Padding" Value="5,0"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
                 <Style.Triggers>
                     <Trigger Property="IsSelected" Value="True">
-                        <Setter Property="Background" Value="#27364B"/>
+                        <Setter Property="Background" Value="Transparent"/>
                         <Setter Property="Foreground" Value="White"/>
                     </Trigger>
                 </Style.Triggers>
@@ -87,7 +119,6 @@
                 <Setter Property="MinHeight" Value="30"/>
                 <Style.Triggers>
                     <Trigger Property="AlternationIndex" Value="1"><Setter Property="Background" Value="#242424"/></Trigger>
-                    <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#27364B"/></Trigger>
                 </Style.Triggers>
             </Style>
             <Style TargetType="TextBox">
@@ -103,7 +134,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="96"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="28"/>
+            <RowDefinition Height="40"/>
         </Grid.RowDefinitions>
 
         <Border Grid.Row="0" Background="#202020" BorderBrush="#3A3A3A" BorderThickness="0,0,0,1">
@@ -121,7 +152,7 @@
                         <Button Grid.Row="0" Style="{StaticResource BltNavButton}" Click="OnBltFloorSettingsClick">
                             <TextBlock Text="Cài đặt&#x0a;tầng" TextAlignment="Center"/>
                         </Button>
-                        <Border Grid.Row="1" Background="#1D78D5"/>
+                        <Border Grid.Row="1" Background="{StaticResource BltBlue}"/>
                     </Grid>
                     <Button Width="61" Style="{StaticResource BltNavButton}" Click="OnBltProjectPropertiesClick">
                         <TextBlock Text="Thuộc tính&#x0a;dự án" TextAlignment="Center"/>
@@ -142,8 +173,22 @@
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="36"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Background="#222222" VerticalAlignment="Stretch">
-                        <Button Content="✚ Thêm" Style="{StaticResource BltToolbarButton}" Click="OnBltAddZoneClick"/>
-                        <Button Content="▥ Xóa" Style="{StaticResource BltToolbarButton}" Click="OnBltDeleteZoneClick"/>
+                        <Button Style="{StaticResource BltToolbarButton}" Click="OnBltAddZoneClick">
+                            <StackPanel Orientation="Horizontal">
+                                <Grid Width="14" Height="14" Margin="0,0,5,0">
+                                    <Path Style="{StaticResource BltToolbarIcon}" Data="M7,1 L7,13 M1,7 L13,7"/>
+                                </Grid>
+                                <TextBlock Text="Thêm" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource BltToolbarButton}" Click="OnBltDeleteZoneClick">
+                            <StackPanel Orientation="Horizontal">
+                                <Grid Width="14" Height="14" Margin="0,0,5,0">
+                                    <Path Style="{StaticResource BltToolbarIcon}" Data="M2,4 L12,4 M5,2 L9,2 M4,4 L4.7,13 L9.3,13 L10,4 M6.2,6 L6.2,11 M8.2,6 L8.2,11"/>
+                                </Grid>
+                                <TextBlock Text="Xóa" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                     <ListBox x:Name="BltZoneList" Grid.Row="1" Background="#202020" BorderThickness="0"
                              Foreground="White" SelectionChanged="OnBltZoneSelectionChanged">
@@ -154,7 +199,7 @@
                                 <Setter Property="Padding" Value="7,6"/>
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                                 <Style.Triggers>
-                                    <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#1C365F"/></Trigger>
+                                    <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{StaticResource BltBlue2}"/></Trigger>
                                     <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#29364A"/></Trigger>
                                 </Style.Triggers>
                             </Style>
@@ -166,16 +211,45 @@
             <Grid Grid.Column="1" Background="#1E1E1E">
                 <Grid.RowDefinitions><RowDefinition Height="36"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                 <StackPanel Grid.Row="0" Orientation="Horizontal" Background="#222222" VerticalAlignment="Stretch">
-                    <Button Content="✚ Chèn sàn" Style="{StaticResource BltToolbarButton}" Click="OnBltInsertFloorClick"/>
-                    <Button Content="↧ Chèn sàn xuống dưới" Style="{StaticResource BltToolbarButton}" Click="OnBltInsertFloorBelowClick"/>
-                    <Button Content="▥ Xóa sàn" Style="{StaticResource BltToolbarButton}" Click="OnBltDeleteFloorClick"/>
-                    <Button Content="☑ Áp dụng thay đổi" Style="{StaticResource BltToolbarButton}" Click="OnBltApplyChangesClick" Margin="10,2,2,2"/>
+                    <Button Style="{StaticResource BltToolbarButton}" Click="OnBltInsertFloorClick">
+                        <StackPanel Orientation="Horizontal">
+                            <Grid Width="14" Height="14" Margin="0,0,5,0">
+                                <Path Style="{StaticResource BltToolbarIcon}" Data="M7,1 L7,13 M1,7 L13,7"/>
+                            </Grid>
+                            <TextBlock Text="Chèn sàn" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource BltToolbarButton}" Click="OnBltInsertFloorBelowClick">
+                        <StackPanel Orientation="Horizontal">
+                            <Grid Width="14" Height="14" Margin="0,0,5,0">
+                                <Path Style="{StaticResource BltToolbarIcon}" Data="M2,3 L12,3 M7,5 L7,12 M4.5,9.5 L7,12 L9.5,9.5"/>
+                            </Grid>
+                            <TextBlock Text="Chèn sàn xuống dưới" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource BltToolbarButton}" Click="OnBltDeleteFloorClick">
+                        <StackPanel Orientation="Horizontal">
+                            <Grid Width="14" Height="14" Margin="0,0,5,0">
+                                <Path Style="{StaticResource BltToolbarIcon}" Data="M2,4 L12,4 M5,2 L9,2 M4,4 L4.7,13 L9.3,13 L10,4 M6.2,6 L6.2,11 M8.2,6 L8.2,11"/>
+                            </Grid>
+                            <TextBlock Text="Xóa sàn" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource BltToolbarButton}" Click="OnBltApplyChangesClick" Margin="10,2,2,2">
+                        <StackPanel Orientation="Horizontal">
+                            <Grid Width="14" Height="14" Margin="0,0,5,0">
+                                <Path Style="{StaticResource BltToolbarIcon}" Data="M1.5,1.5 L12.5,1.5 L12.5,12.5 L1.5,12.5 Z M3.7,7 L6,9.3 L10.5,4.5"/>
+                            </Grid>
+                            <TextBlock Text="Áp dụng thay đổi" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
 
                 <DataGrid x:Name="BltFloorGrid" Grid.Row="1" AutoGenerateColumns="False" CanUserAddRows="False"
                           CanUserDeleteRows="False" CanUserReorderColumns="False" CanUserResizeRows="False"
                           HeadersVisibility="Column" RowHeaderWidth="0" GridLinesVisibility="None"
                           AlternationCount="2" Background="#1E1E1E" BorderThickness="0"
+                          ColumnHeaderHeight="29" RowHeight="30"
                           SelectionMode="Single" SelectionUnit="FullRow">
                     <DataGrid.Columns>
                         <DataGridTemplateColumn Header="Tầng tham chiếu" Width="118">
@@ -199,7 +273,39 @@
         </Grid>
 
         <Border Grid.Row="2" Background="#202020" BorderBrush="#343434" BorderThickness="0,1,0,0" Padding="8,4">
-            <TextBlock x:Name="BltStatusText" Foreground="#CFCFCF" FontSize="11" Text="Sẵn sàng" TextTrimming="CharacterEllipsis"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Style="{StaticResource BltModePill}"><TextBlock Text="Mô hình" Foreground="White" FontWeight="SemiBold"/></Border>
+                    <Border Style="{StaticResource BltModePill}"><TextBlock Text="BQ" Foreground="White" FontWeight="SemiBold"/></Border>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Margin="6,0,12,0" VerticalAlignment="Center">
+                    <TextBlock Foreground="#DDDDDD" FontSize="12" TextTrimming="CharacterEllipsis">
+                        <Run Text="Tầng "/>
+                        <Run Text="{Binding SelectedItem.Name, ElementName=BltFloorGrid, TargetNullValue=—}" FontWeight="SemiBold"/>
+                        <Run Text="   ·   Cao độ "/>
+                        <Run Text="{Binding SelectedItem.ElevationText, ElementName=BltFloorGrid, TargetNullValue=0.000}" FontWeight="SemiBold"/>
+                        <Run Text=" m"/>
+                    </TextBlock>
+                    <TextBlock x:Name="BltStatusText" Foreground="#AFAFAF" FontSize="10.5" Text="Sẵn sàng"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource BltStatusToggle}" Text="○ Nền sáng"/>
+                    <TextBlock Style="{StaticResource BltStatusToggle}" Text="◐ Tương phản"/>
+                    <TextBlock Style="{StaticResource BltStatusToggle}" Text="⌞ Vuông góc"/>
+                    <Border Background="#0D6EDE" CornerRadius="2" Padding="9,4" Margin="0,0,6,0">
+                        <TextBlock Foreground="White" FontSize="12" FontWeight="SemiBold" Text="⌁ Bắt điểm"/>
+                    </Border>
+                </StackPanel>
+            </Grid>
         </Border>
 
         <!-- Hidden compatibility surface: preserves the canonical Level Picker controls,
