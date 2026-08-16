@@ -11,8 +11,8 @@ namespace QS3D.BricsCAD.V25.UI
 {
     /// <summary>
     /// BLT3D-inspired workspace presentation that keeps the QS3D semantic model and native
-    /// BricsCAD mutation paths intact. This layer restores the Family/Properties pane that the
-    /// compact shell used to retire and exposes the existing parameter/Solid3D workflows in-place.
+    /// BricsCAD mutation paths intact. The visible contract is one integrated palette:
+    /// model navigation on the left, Family list above Properties on the right.
     /// </summary>
     public partial class WorkspacePanel
     {
@@ -56,12 +56,14 @@ namespace QS3D.BricsCAD.V25.UI
             if (!Blt3dFamilyWorkspaceBootstrapRegistered || _blt3dFamilyWorkspaceApplied) return;
 
             RestoreBlt3dWorkspaceColumns();
+            RestoreBlt3dFamilyRows();
             EnsureBlt3dFoundationTree();
 
             // Attach the existing production family/subtype workflow first while the original
             // XAML labels are still present, then restyle/relabel and replace only the Add surface.
             AttachFamilySubtypeInteractions();
             ApplyBlt3dWorkspaceLabels();
+            ApplyBlt3dReferencePresentation();
             EnsureBlt3dFamilyModeChooser();
             RewireBlt3dFamilyAddActions();
 
@@ -83,17 +85,21 @@ namespace QS3D.BricsCAD.V25.UI
                     candidate.ColumnDefinitions.Count == 5);
             if (workspace == null) return;
 
-            // BLT3D working layout: model tree | family/properties. The legacy room/inspection
-            // dashboard remains retired so this does not reintroduce the old multi-panel bug.
-            root.MinWidth = 520;
-            workspace.MinWidth = 520;
-            WorkspaceOverflow.HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
+            // Reference layout is ONE docked palette. Never allow a horizontal-scroll state to
+            // push the model tree off-screen and leave Family/Properties looking like two windows.
+            root.MinWidth = 0;
+            workspace.MinWidth = 0;
+            WorkspaceOverflow.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+            WorkspaceOverflow.ScrollToHorizontalOffset(0);
 
             var layout = Services.UserUiLayoutStore.Get();
             var modelColumn = workspace.ColumnDefinitions[0];
-            modelColumn.MinWidth = 180;
-            modelColumn.MaxWidth = 250;
-            modelColumn.Width = new GridLength(Math.Max(modelColumn.MinWidth, Math.Min(modelColumn.MaxWidth, layout.ModelColumnWidth)));
+            modelColumn.MinWidth = 150;
+            modelColumn.MaxWidth = 220;
+            if (layout.ModelColumnWidth > 0)
+                modelColumn.Width = new GridLength(Math.Max(modelColumn.MinWidth, Math.Min(modelColumn.MaxWidth, layout.ModelColumnWidth)));
+            else
+                modelColumn.Width = new GridLength(168);
 
             var familySplitter = workspace.ColumnDefinitions[1];
             familySplitter.MinWidth = 0;
@@ -101,7 +107,7 @@ namespace QS3D.BricsCAD.V25.UI
             familySplitter.Width = new GridLength(4);
 
             var familyColumn = workspace.ColumnDefinitions[2];
-            familyColumn.MinWidth = 270;
+            familyColumn.MinWidth = 0;
             familyColumn.MaxWidth = double.PositiveInfinity;
             familyColumn.Width = new GridLength(1, GridUnitType.Star);
 
@@ -115,6 +121,38 @@ namespace QS3D.BricsCAD.V25.UI
 
             foreach (UIElement child in workspace.Children)
                 child.Visibility = Grid.GetColumn(child) <= 2 ? Visibility.Visible : Visibility.Collapsed;
+
+            HideRetiredDashboardBands(workspace);
+        }
+
+        private static void HideRetiredDashboardBands(Grid workspace)
+        {
+            // Defensive idempotence: the retired room/inspection bands must never surface when a
+            // persisted layout or later visual-tree refresh re-applies child visibility.
+            foreach (UIElement child in workspace.Children)
+            {
+                if (Grid.GetColumn(child) > 2)
+                    child.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void RestoreBlt3dFamilyRows()
+        {
+            var familyGrid = FindVisualChildren<Grid>(this)
+                .FirstOrDefault(grid =>
+                    grid.RowDefinitions.Count == 3 &&
+                    IsVisualDescendant(grid, FamilyList) &&
+                    IsVisualDescendant(grid, PropertyList));
+            if (familyGrid == null) return;
+
+            // Match the reference palette: Family list on top, Properties below, both sharing the
+            // same right-hand column instead of reading as independent stacked panes.
+            familyGrid.RowDefinitions[0].MinHeight = 0;
+            familyGrid.RowDefinitions[0].Height = new GridLength(55, GridUnitType.Star);
+            familyGrid.RowDefinitions[1].MinHeight = 0;
+            familyGrid.RowDefinitions[1].Height = new GridLength(4);
+            familyGrid.RowDefinitions[2].MinHeight = 0;
+            familyGrid.RowDefinitions[2].Height = new GridLength(45, GridUnitType.Star);
         }
 
         private void ApplyBlt3dWorkspaceLabels()
@@ -125,11 +163,129 @@ namespace QS3D.BricsCAD.V25.UI
                     text.Text = "Zone làm việc";
                 else if (string.Equals(text.Text, "Tầng", StringComparison.Ordinal))
                     text.Text = "Tầng làm việc";
+                else if (string.Equals(text.Text, "THUỘC TÍNH", StringComparison.Ordinal))
+                    text.Text = "Thuộc tính";
+                else if (string.Equals(text.Text, "Tìm Family / Type", StringComparison.Ordinal) ||
+                         string.Equals(text.Text, "Tìm thuộc tính", StringComparison.Ordinal))
+                    text.Visibility = Visibility.Collapsed;
             }
 
             RenameBlt3dButton("+ Thêm", "+ Add");
             RenameBlt3dButton("＋  Add", "+ Add");
             RenameBlt3dButton("Xóa", "Delete");
+            // Keep the command truthful: it imports the currently selected CAD entities; there is
+            // no background/autonomous importer behind this button yet.
+            RenameBlt3dButton("Bóc chọn", "⚡ Nhập từ chọn");
+        }
+
+        private void ApplyBlt3dReferencePresentation()
+        {
+            // Left navigation: flatten the old card chrome and keep only the two selectors + tree,
+            // matching the reference screenshot's narrow model-navigation rail.
+            var scopeTitle = FindTextBlock("PHẠM VI LÀM VIỆC");
+            CollapseNearestAncestor<DockPanel>(scopeTitle);
+
+            var scopeCard = FindNearestAncestor<Border>(ZoneCombo);
+            if (scopeCard != null)
+            {
+                scopeCard.Background = Brushes.Transparent;
+                scopeCard.BorderThickness = new Thickness(0);
+                scopeCard.Padding = new Thickness(0);
+                scopeCard.Margin = new Thickness(0, 0, 0, 6);
+            }
+
+            CollapseNearestAncestor<DockPanel>(FindTextBlock("MÔ HÌNH"));
+
+            // Right/top: this is a list area inside the same palette, not a second FAMILY / TYPE
+            // window. Remove the redundant card heading and advanced wall toolbar from this view.
+            CollapseNearestAncestor<DockPanel>(FindTextBlock("FAMILY / TYPE"));
+            CollapseButton("Vẽ 3D");
+
+            var advancedToolbarButton = FindButton("Giao tường");
+            var advancedToolbarBand = FindNearestAncestor<Border>(advancedToolbarButton);
+            if (advancedToolbarBand != null)
+                advancedToolbarBand.Visibility = Visibility.Collapsed;
+            else
+            {
+                CollapseButton("Giao tường");
+                CollapseButton("Snap xem");
+                CollapseButton("Snap áp");
+                CollapseButton("Auto Host");
+            }
+
+            // Keep the three primary actions on the same compact toolbar as the reference.
+            var addButton = FindButton("+ Add");
+            var primaryToolbar = FindNearestAncestor<WrapPanel>(addButton);
+            if (primaryToolbar != null)
+            {
+                primaryToolbar.HorizontalAlignment = HorizontalAlignment.Right;
+                primaryToolbar.Margin = new Thickness(0, 0, 0, 5);
+            }
+
+            var familySearch = FamilySearch;
+            familySearch.Margin = new Thickness(0, 0, 0, 5);
+
+            // Property editing remains fully functional. Only collapse decorative count/legend
+            // chrome; scope/search controls are deliberately retained because they change edit
+            // semantics and must not be silently removed for visual mimicry.
+            var propertyTitle = FindTextBlock("Thuộc tính");
+            var propertyHeader = FindNearestAncestor<DockPanel>(propertyTitle);
+            if (propertyHeader != null)
+            {
+                propertyHeader.Margin = new Thickness(0, 0, 0, 5);
+                var countBadge = propertyHeader.Children.OfType<Border>().FirstOrDefault();
+                if (countBadge != null)
+                    countBadge.Visibility = Visibility.Collapsed;
+            }
+
+            var propertyLegend = FindTextBlock("Family • Kế thừa • Override • CAD/đo • Hệ thống • Selection");
+            var propertyLegendBorder = FindNearestAncestor<Border>(propertyLegend);
+            if (propertyLegendBorder != null)
+                propertyLegendBorder.Visibility = Visibility.Collapsed;
+        }
+
+        private TextBlock? FindTextBlock(string text)
+        {
+            return FindVisualChildren<TextBlock>(this)
+                .FirstOrDefault(candidate => string.Equals(candidate.Text, text, StringComparison.Ordinal));
+        }
+
+        private static T? FindNearestAncestor<T>(DependencyObject? child) where T : DependencyObject
+        {
+            var current = child;
+            while (current != null)
+            {
+                current = VisualTreeHelper.GetParent(current);
+                if (current is T match) return match;
+            }
+
+            return null;
+        }
+
+        private static bool IsVisualDescendant(DependencyObject ancestor, DependencyObject descendant)
+        {
+            var current = descendant;
+            while (current != null)
+            {
+                if (ReferenceEquals(current, ancestor)) return true;
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            return false;
+        }
+
+        private static void CollapseNearestAncestor<T>(DependencyObject? child) where T : FrameworkElement
+        {
+            var ancestor = FindNearestAncestor<T>(child);
+            if (ancestor != null)
+                ancestor.Visibility = Visibility.Collapsed;
+        }
+
+        private void CollapseButton(string text)
+        {
+            var button = FindButton(text);
+            if (button != null)
+                button.Visibility = Visibility.Collapsed;
         }
 
         private void RenameBlt3dButton(string oldText, string newText)
