@@ -359,6 +359,10 @@ namespace QS3D.BricsCAD.V25.UI
                     Title = "QS3D — Khởi đầu";
                 }
             }
+            else
+            {
+                Title = "QS3D — Khởi đầu";
+            }
 
             _floorText.Text = "Tầng —";
             _elevationText.Text = "•  Cao độ 0.000 m";
