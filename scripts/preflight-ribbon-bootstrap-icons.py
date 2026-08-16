@@ -41,7 +41,7 @@ def main():
         require(augmenter, f'"{tab_id}"', augmenter_rel)
 
     for needle in (
-        "if (HasCompleteVisibleIcon(item))",
+        "if (!HasCompleteVisibleIcon(item))",
         "GetProperty(item, \"ShowImage\") is bool showImage",
         'GetProperty(item, "Image") != null',
         'GetProperty(item, "LargeImage") != null',
