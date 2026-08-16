@@ -245,9 +245,23 @@ namespace QS3D.Core.Geometry
         private static double ClosedPerimeter(IReadOnlyList<Point2> polygon)
         {
             var total = 0d;
+            var compensation = 0d;
             for (var index = 0; index < polygon.Count; index++)
-                total = Add(total, polygon[index].DistanceTo(polygon[(index + 1) % polygon.Count]), "wall-pier path perimeter");
+                AddCompensated(ref total, ref compensation, polygon[index].DistanceTo(polygon[(index + 1) % polygon.Count]), "wall-pier path perimeter");
             return total;
+        }
+
+        private static void AddCompensated(ref double sum, ref double compensation, double value, string label)
+        {
+            if (!IsFinite(sum) || !IsFinite(compensation) || !IsFinite(value))
+                throw new OverflowException(label + " contains a non-finite value.");
+            var corrected = value - compensation;
+            if (!IsFinite(corrected)) throw new OverflowException(label + " overflowed.");
+            var next = sum + corrected;
+            if (!IsFinite(next)) throw new OverflowException(label + " overflowed.");
+            compensation = (next - sum) - corrected;
+            if (!IsFinite(compensation)) throw new OverflowException(label + " overflowed.");
+            sum = next;
         }
 
         private static double CoordinateScale(IReadOnlyList<Point2> polygon)
@@ -302,5 +316,7 @@ namespace QS3D.Core.Geometry
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new OverflowException(label + " must be finite.");
             return value;
         }
+
+        private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
     }
 }
