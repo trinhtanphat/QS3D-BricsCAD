@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -103,13 +104,25 @@ namespace QS3D.Core.Export
 
     public sealed class IfcRoundTripProjectionSet
     {
+        internal const int MaxProjections = 10000;
+
         private IfcRoundTripProjectionSet(IReadOnlyList<IfcRoundTripProjection> items) { Items = items; }
         public IReadOnlyList<IfcRoundTripProjection> Items { get; }
 
         public static IfcRoundTripProjectionSet Create(IEnumerable<IfcRoundTripProjection> projections)
         {
             if (projections == null) throw new ArgumentNullException(nameof(projections));
-            var items = projections.ToList();
+            if (TryGetKnownCount(projections, out var knownCount) && knownCount > MaxProjections)
+                ThrowTooManyProjections();
+
+            var items = new List<IfcRoundTripProjection>();
+            foreach (var projection in projections)
+            {
+                if (items.Count == MaxProjections)
+                    ThrowTooManyProjections();
+                items.Add(projection);
+            }
+
             var ifcGlobalIds = new HashSet<string>(StringComparer.Ordinal);
             var qs3dElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (var index = 0; index < items.Count; index++)
@@ -121,6 +134,36 @@ namespace QS3D.Core.Export
             }
             items.Sort(IfcRoundTripProjectionComparer.CanonicalOrder);
             return new IfcRoundTripProjectionSet(Array.AsReadOnly(items.ToArray()));
+        }
+
+        private static bool TryGetKnownCount(IEnumerable<IfcRoundTripProjection> projections, out int count)
+        {
+            if (projections is ICollection<IfcRoundTripProjection> collection)
+            {
+                count = collection.Count;
+                return true;
+            }
+
+            if (projections is IReadOnlyCollection<IfcRoundTripProjection> readOnlyCollection)
+            {
+                count = readOnlyCollection.Count;
+                return true;
+            }
+
+            if (projections is ICollection nonGenericCollection)
+            {
+                count = nonGenericCollection.Count;
+                return true;
+            }
+
+            count = 0;
+            return false;
+        }
+
+        private static void ThrowTooManyProjections()
+        {
+            throw new InvalidOperationException(
+                "IFC round-trip projection set supports at most " + MaxProjections + " projections.");
         }
     }
 
