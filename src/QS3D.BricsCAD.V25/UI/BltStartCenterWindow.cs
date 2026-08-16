@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -375,8 +376,12 @@ namespace QS3D.BricsCAD.V25.UI
                     if (ProjectContextCoordinator.TryGetReadOnly(document, out var project) && !string.IsNullOrWhiteSpace(project.ActiveFloorId))
                     {
                         var floor = project.FindFloor(project.ActiveFloorId);
-                        if (floor != null && !string.IsNullOrWhiteSpace(floor.Name))
-                            _floorText.Text = "Tầng " + floor.Name;
+                        if (floor != null)
+                        {
+                            if (!string.IsNullOrWhiteSpace(floor.Name))
+                                _floorText.Text = "Tầng " + floor.Name;
+                            _elevationText.Text = "•  Cao độ " + floor.ElevationM.ToString("0.000", CultureInfo.InvariantCulture) + " m";
+                        }
                     }
                 }
                 catch
