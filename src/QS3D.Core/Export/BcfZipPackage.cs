@@ -199,6 +199,8 @@ namespace QS3D.Core.Export
 
         private static HashSet<string> ReadUniqueTokens(XElement container, string itemName)
         {
+            EnsureAllowedAttributes(container);
+            EnsureAllowedChildren(container, itemName);
             var result = new HashSet<string>(StringComparer.Ordinal);
             foreach (var child in container.Elements())
             {
@@ -346,10 +348,21 @@ namespace QS3D.Core.Export
 
         private static XElement ParseRoot(string text, string expectedName)
         {
-            var document = XDocument.Parse(text, LoadOptions.None);
+            var document = XDocument.Parse(text, LoadOptions.PreserveWhitespace);
+            EnsureDocumentContent(document);
             var root = document.Root;
             if (root == null || root.Name.NamespaceName.Length != 0 || !string.Equals(root.Name.LocalName, expectedName, StringComparison.Ordinal)) throw new InvalidDataException("Invalid BCF XML root; expected " + expectedName + ".");
             return root;
+        }
+
+        private static void EnsureDocumentContent(XDocument document)
+        {
+            foreach (var node in document.Nodes())
+            {
+                if (node is XElement) continue;
+                if (node is XText text && !(node is XCData) && string.IsNullOrWhiteSpace(text.Value)) continue;
+                throw new InvalidDataException("Unsupported BCF XML document content.");
+            }
         }
 
         private static void EnsureAllowedAttributes(XElement element, params string[] names)
@@ -364,6 +377,7 @@ namespace QS3D.Core.Export
 
         private static void EnsureAllowedChildren(XElement element, params string[] names)
         {
+            EnsureElementOnlyContent(element);
             var allowed = new HashSet<string>(names, StringComparer.Ordinal);
             foreach (var child in element.Elements())
             {
@@ -371,9 +385,19 @@ namespace QS3D.Core.Export
             }
         }
 
+        private static void EnsureElementOnlyContent(XElement element)
+        {
+            foreach (var node in element.Nodes())
+            {
+                if (node is XElement) continue;
+                if (node is XText text && !(node is XCData) && string.IsNullOrWhiteSpace(text.Value)) continue;
+                throw new InvalidDataException("Unexpected BCF XML container content: " + element.Name.LocalName);
+            }
+        }
+
         private static void EnsureNoChildElements(XElement element)
         {
-            if (element.Elements().Any()) throw new InvalidDataException("BCF XML element must not contain child elements: " + element.Name.LocalName);
+            if (element.Nodes().Any()) throw new InvalidDataException("BCF XML element must not contain content: " + element.Name.LocalName);
         }
 
         private static XElement RequiredSingle(XElement parent, string name)
@@ -402,8 +426,17 @@ namespace QS3D.Core.Export
         {
             if (element.HasAttributes)
                 throw new InvalidDataException("BCF XML value element must not contain attributes: " + element.Name.LocalName);
-            EnsureNoChildElements(element);
+            EnsureScalarContent(element);
             return element.Value;
+        }
+
+        private static void EnsureScalarContent(XElement element)
+        {
+            foreach (var node in element.Nodes())
+            {
+                if (node is XText && !(node is XCData)) continue;
+                throw new InvalidDataException("BCF XML value element must contain plain text only: " + element.Name.LocalName);
+            }
         }
 
         private static string RequiredAttribute(XElement element, string name)
