@@ -9,6 +9,8 @@ internal static class CurtainWallDetailNumericCollapseSmoke
     {
         GeneratedRightFrameCollapseFailsClosed();
         GeneratedTopFrameCollapseFailsClosed();
+        InternalVerticalFrameHalfWidthPlacementCollapseFailsClosed();
+        InternalHorizontalFrameHalfHeightPlacementCollapseFailsClosed();
         RectangleAreaUnderflowFailsClosed();
         PanelAreaUnderflowFailsClosed();
         OrdinaryDetailRemainsStable();
@@ -24,6 +26,18 @@ internal static class CurtainWallDetailNumericCollapseSmoke
     {
         var error = Capture<OverflowException>(() => CurtainWallDetailPlanner.Plan(Input(10d, 1e16d, 10d, 1e16d, 1d, 0d, 0d)));
         Equal("curtain horizontal frame height is below the representable coordinate resolution.", error.Message);
+    }
+
+    private static void InternalVerticalFrameHalfWidthPlacementCollapseFailsClosed()
+    {
+        var error = Capture<OverflowException>(() => CurtainWallDetailPlanner.Plan(Input(8e15d, 10d, 3e15d, 10d, 1d, .75d, 0d)));
+        Equal("curtain vertical frame half-width placement lost a positive deduction at floating-point precision.", error.Message);
+    }
+
+    private static void InternalHorizontalFrameHalfHeightPlacementCollapseFailsClosed()
+    {
+        var error = Capture<OverflowException>(() => CurtainWallDetailPlanner.Plan(Input(10d, 8e15d, 10d, 3e15d, 1d, 0d, .75d)));
+        Equal("curtain horizontal frame half-height placement lost a positive deduction at floating-point precision.", error.Message);
     }
 
     private static void RectangleAreaUnderflowFailsClosed()
