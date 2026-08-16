@@ -89,6 +89,7 @@ namespace QS3D.BricsCAD.V25
 
             RequireSingleElevation(points, "Polyline Móng Bè");
             RequireNonDegenerateEdges(points, "Polyline Móng Bè");
+            RequireSimplePolygon(points, "Polyline Móng Bè");
             return points;
         }
 
@@ -119,6 +120,7 @@ namespace QS3D.BricsCAD.V25
                 var points = OrderSingleClosedLoop(segments);
                 RequireSingleElevation(points, "Region Móng Bè");
                 RequireNonDegenerateEdges(points, "Region Móng Bè");
+                RequireSimplePolygon(points, "Region Móng Bè");
                 return points;
             }
             finally
@@ -277,6 +279,7 @@ namespace QS3D.BricsCAD.V25
         {
             RequireSingleElevation(points, "Móng Bè source clone");
             RequireNonDegenerateEdges(points, "Móng Bè source clone");
+            RequireSimplePolygon(points, "Móng Bè source clone");
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
             {
@@ -422,6 +425,92 @@ namespace QS3D.BricsCAD.V25
                 if (SamePoint(points[index], points[next]))
                     throw new InvalidOperationException(label + " chứa hai đỉnh liên tiếp trùng nhau.");
             }
+        }
+
+        private static void RequireSimplePolygon(IReadOnlyList<Point3d> points, string label)
+        {
+            var origin = points[0];
+            var planarScale = 1d;
+            for (var index = 1; index < points.Count; index++)
+            {
+                planarScale = Math.Max(planarScale, Math.Abs(points[index].X - origin.X));
+                planarScale = Math.Max(planarScale, Math.Abs(points[index].Y - origin.Y));
+            }
+            if (double.IsNaN(planarScale) || double.IsInfinity(planarScale))
+                throw new InvalidOperationException(label + " có phạm vi tọa độ WCS XY không hữu hạn.");
+
+            var coordinateTolerance = GeometryTolerance * planarScale;
+            var crossTolerance = GeometryTolerance * planarScale * planarScale;
+            if (double.IsNaN(crossTolerance) || double.IsInfinity(crossTolerance))
+                throw new InvalidOperationException(label + " có phạm vi tọa độ quá lớn để kiểm topology chính xác.");
+
+            for (var leftEdge = 0; leftEdge < points.Count; leftEdge++)
+            {
+                var leftNext = (leftEdge + 1) % points.Count;
+                for (var rightEdge = leftEdge + 1; rightEdge < points.Count; rightEdge++)
+                {
+                    var adjacent = rightEdge == leftEdge + 1 || (leftEdge == 0 && rightEdge == points.Count - 1);
+                    if (adjacent) continue;
+                    var rightNext = (rightEdge + 1) % points.Count;
+                    if (SegmentsIntersectOrTouch(points[leftEdge], points[leftNext], points[rightEdge], points[rightNext], coordinateTolerance, crossTolerance))
+                        throw new InvalidOperationException(label + " tự cắt hoặc chạm chính nó (self-intersection/touching). Chỉ hỗ trợ một polygon đơn không tự giao.");
+                }
+            }
+
+            var area2 = 0d;
+            for (var index = 1; index < points.Count - 1; index++)
+            {
+                area2 += Cross2D(origin, points[index], points[index + 1]);
+                if (double.IsNaN(area2) || double.IsInfinity(area2))
+                    throw new InvalidOperationException(label + " có diện tích WCS XY không hữu hạn.");
+            }
+            if (Math.Abs(area2) <= crossTolerance)
+                throw new InvalidOperationException(label + " có diện tích bằng 0 hoặc các đỉnh gần như thẳng hàng; không thể tạo Móng Bè.");
+        }
+
+        private static bool SegmentsIntersectOrTouch(Point3d a, Point3d b, Point3d c, Point3d d, double coordinateTolerance, double crossTolerance)
+        {
+            var abC = Cross2D(a, b, c);
+            var abD = Cross2D(a, b, d);
+            var cdA = Cross2D(c, d, a);
+            var cdB = Cross2D(c, d, b);
+            if (double.IsNaN(abC) || double.IsInfinity(abC) ||
+                double.IsNaN(abD) || double.IsInfinity(abD) ||
+                double.IsNaN(cdA) || double.IsInfinity(cdA) ||
+                double.IsNaN(cdB) || double.IsInfinity(cdB))
+                throw new InvalidOperationException("Móng Bè có phép kiểm giao cạnh WCS XY không hữu hạn.");
+
+            var abCSign = OrientationSign(abC, crossTolerance);
+            var abDSign = OrientationSign(abD, crossTolerance);
+            var cdASign = OrientationSign(cdA, crossTolerance);
+            var cdBSign = OrientationSign(cdB, crossTolerance);
+
+            if (abCSign == 0 && PointOnSegment(a, b, c, coordinateTolerance)) return true;
+            if (abDSign == 0 && PointOnSegment(a, b, d, coordinateTolerance)) return true;
+            if (cdASign == 0 && PointOnSegment(c, d, a, coordinateTolerance)) return true;
+            if (cdBSign == 0 && PointOnSegment(c, d, b, coordinateTolerance)) return true;
+            return abCSign != abDSign && cdASign != cdBSign;
+        }
+
+        private static int OrientationSign(double cross, double tolerance)
+        {
+            if (cross > tolerance) return 1;
+            if (cross < -tolerance) return -1;
+            return 0;
+        }
+
+        private static bool PointOnSegment(Point3d start, Point3d end, Point3d point, double tolerance)
+        {
+            return point.X >= Math.Min(start.X, end.X) - tolerance &&
+                   point.X <= Math.Max(start.X, end.X) + tolerance &&
+                   point.Y >= Math.Min(start.Y, end.Y) - tolerance &&
+                   point.Y <= Math.Max(start.Y, end.Y) + tolerance;
+        }
+
+        private static double Cross2D(Point3d origin, Point3d first, Point3d second)
+        {
+            return (first.X - origin.X) * (second.Y - origin.Y) -
+                   (first.Y - origin.Y) * (second.X - origin.X);
         }
 
         private static void RequireFinite(Point3d point, string label)
