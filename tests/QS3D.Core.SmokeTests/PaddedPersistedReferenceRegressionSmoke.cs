@@ -45,6 +45,8 @@ namespace QS3D.Core.SmokeTests
                 }
 
                 AssertUnknownCanonicalReferencesStillFail(directory);
+                AssertMalformedPrimaryRecoversFromCanonicalBackup(directory);
+                AssertMalformedPrimaryAndBackupFailClosed(directory);
             }
             finally
             {
@@ -125,6 +127,53 @@ namespace QS3D.Core.SmokeTests
                 var path = Path.Combine(directory, "unknown-" + reference.Attribute + ".qsdb");
                 document.Save(path, SaveOptions.DisableFormatting);
                 AssertInvalidData(path, UnknownReferenceMessage, "Canonical-but-unknown reference was silently accepted: " + reference.Attribute + ".");
+            }
+        }
+
+        private static void AssertMalformedPrimaryRecoversFromCanonicalBackup(string directory)
+        {
+            var path = Path.Combine(directory, "fallback-primary.qsdb");
+            var primary = CreateDocument();
+            Root(primary).SetAttributeValue("activeFloorId", " F1 ");
+            primary.Save(path, SaveOptions.DisableFormatting);
+            CreateDocument().Save(path + ".bak", SaveOptions.DisableFormatting);
+
+            var result = new QsdbProjectStore().LoadWithBackupFallback(path);
+            if (!result.RecoveredFromBackup)
+                throw new InvalidOperationException("Padded primary persisted reference must trigger validated backup recovery.");
+            Equal(path + ".bak", result.SourcePath, "Backup recovery reported the wrong source path.");
+            if (result.PrimaryFailureMessage.IndexOf(CanonicalityMessage, StringComparison.OrdinalIgnoreCase) < 0)
+                throw new InvalidOperationException("Backup recovery must preserve the canonicality failure reason from the primary QSDB.");
+            Equal("F1", result.Project.ActiveFloorId, "Backup recovery returned a normalized value from the corrupt primary instead of the canonical backup.");
+        }
+
+        private static void AssertMalformedPrimaryAndBackupFailClosed(string directory)
+        {
+            var path = Path.Combine(directory, "fallback-both-invalid.qsdb");
+            var primary = CreateDocument();
+            Root(primary).SetAttributeValue("activeZoneId", " Z1 ");
+            primary.Save(path, SaveOptions.DisableFormatting);
+
+            var backup = CreateDocument();
+            Root(backup).Descendants("element").Single().SetAttributeValue("familyId", " FA1 ");
+            backup.Save(path + ".bak", SaveOptions.DisableFormatting);
+
+            try
+            {
+                _ = new QsdbProjectStore().LoadWithBackupFallback(path);
+                throw new InvalidOperationException("Two malformed persisted-reference files must not produce a recovered project.");
+            }
+            catch (InvalidDataException ex)
+            {
+                if (ex.Message.IndexOf("Both the QSDB project and its backup are invalid", StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new InvalidOperationException("Dual invalid persisted-reference recovery returned a non-deterministic diagnostic: " + ex.Message);
+                if (!(ex.InnerException is AggregateException aggregate) || aggregate.InnerExceptions.Count != 2)
+                    throw new InvalidOperationException("Dual invalid persisted-reference recovery must retain both primary and backup failure evidence.");
+                foreach (var inner in aggregate.InnerExceptions)
+                {
+                    if (inner.Message.IndexOf(CanonicalityMessage, StringComparison.OrdinalIgnoreCase) < 0)
+                        throw new InvalidOperationException("Dual invalid recovery lost a persisted-reference canonicality failure: " + inner.Message);
+                }
             }
         }
 
