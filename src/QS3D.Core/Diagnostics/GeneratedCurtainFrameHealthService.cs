@@ -37,9 +37,9 @@ namespace QS3D.Core.Diagnostics
                 var rawHandles = raw ?? string.Empty;
                 var local = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var validCount = 0;
-                if (rawHandles.Length > 0)
+                if (raw != null && rawHandles.Length > 0)
                 {
-                    foreach (var item in rawHandles.Split(new[] { ';' }, StringSplitOptions.None))
+                    foreach (var item in raw.Split(new[] { ';' }, StringSplitOptions.None))
                     {
                         var rawHandle = item ?? string.Empty;
                         var handle = rawHandle.Trim();
