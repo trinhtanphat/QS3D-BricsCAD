@@ -35,6 +35,7 @@ namespace QS3D.Core.Reporting
             var zones = project.Zones.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
             var families = project.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
             var rows = new Dictionary<string, QuantityReportRow>(StringComparer.OrdinalIgnoreCase);
+            var noteValues = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
             var order = new List<string>();
 
             foreach (var element in project.Elements)
@@ -81,12 +82,16 @@ namespace QS3D.Core.Reporting
                         DrawingFingerprint = project.DrawingFingerprint
                     };
                     rows[key] = row;
+                    var distinctNotes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    if (note.Length != 0) distinctNotes.Add(note);
+                    noteValues.Add(key, distinctNotes);
                     order.Add(key);
                     created = true;
                 }
                 else
                 {
-                    row.Note = MergeDistinctText(row.Note, note);
+                    if (note.Length != 0 && noteValues[key].Add(note))
+                        row.Note = AppendText(row.Note, note);
                     row.MassKg = AddHomogeneousMass(row.MassKg, massKg, element.Id + "/MassKg");
                 }
 
@@ -244,11 +249,11 @@ namespace QS3D.Core.Reporting
             return QuantityReportMath.Add(current.Value, value.Value, label);
         }
 
-        private static string MergeDistinctText(string current, string value)
+        private static string AppendText(string current, string value)
         {
             var existing = (current ?? string.Empty).Trim();
             var incoming = (value ?? string.Empty).Trim();
-            if (incoming.Length == 0 || string.Equals(existing, incoming, StringComparison.OrdinalIgnoreCase)) return existing;
+            if (incoming.Length == 0) return existing;
             if (existing.Length == 0) return incoming;
             return existing + " | " + incoming;
         }
