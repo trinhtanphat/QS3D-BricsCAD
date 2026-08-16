@@ -65,10 +65,10 @@ namespace QS3D.Core.SmokeTests
         private static void InvalidCountKeepsInvalidPrecedence()
         {
             var setup = Create("INVALID");
-            setup.Element.Properties["GeneratedCurtainFrameCount"] = "0";
+            setup.Element.Properties["GeneratedCurtainFrameCount"] = "-1";
             var issues = Inspect(setup);
             RequireIssue(issues, setup.Element.Id, "CURTAIN_FRAME_COUNT_INVALID", HealthSeverity.Warning);
-            EnsureAbsent(issues, "CURTAIN_FRAME_INTEGER_METADATA_NON_CANONICAL", "An out-of-domain count must not produce canonicality evidence before validity is established.");
+            EnsureAbsent(issues, "CURTAIN_FRAME_INTEGER_METADATA_NON_CANONICAL", "An out-of-domain negative count must not produce canonicality evidence before validity is established.");
         }
 
         private static void CanonicalCountMismatchKeepsMismatch()
