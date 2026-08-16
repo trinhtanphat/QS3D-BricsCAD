@@ -118,7 +118,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     continue;
 
                 var id = GetProperty(item, "Id") as string;
-                if (string.IsNullOrWhiteSpace(id) || !id.StartsWith(ButtonPrefix, StringComparison.OrdinalIgnoreCase))
+                if (id == null || id.Length == 0 || !id.StartsWith(ButtonPrefix, StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 if (result.ContainsKey(id))
