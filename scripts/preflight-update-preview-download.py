@@ -63,6 +63,14 @@ def main():
         "File.Move(partialPath, packagePath);",
         "TryDelete(partialPath);",
         'Path.Combine(root, "QS3D", "Updates", "Downloads", ToSafePathSegment(tag))',
+        'if (IsWindowsReservedPathSegment(result)) result = "_" + result;',
+        "private static bool IsWindowsReservedPathSegment(string value)",
+        'string.Equals(stem, "CON", StringComparison.OrdinalIgnoreCase)',
+        'string.Equals(stem, "PRN", StringComparison.OrdinalIgnoreCase)',
+        'string.Equals(stem, "AUX", StringComparison.OrdinalIgnoreCase)',
+        'string.Equals(stem, "NUL", StringComparison.OrdinalIgnoreCase)',
+        'stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase)',
+        'stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)',
     ):
         require(downloader, needle, downloader_rel)
 
@@ -70,6 +78,12 @@ def main():
     cache_hash = downloader.index("var existingSha256 = ComputeSha256(packagePath);")
     if cache_size_gate > cache_hash:
         raise SystemExit("FAIL: cached preview package size must be checked before hashing the existing file")
+
+    safe_segment_start = downloader.index("private static string ToSafePathSegment(string value)")
+    reserved_gate = downloader.index('if (IsWindowsReservedPathSegment(result)) result = "_" + result;', safe_segment_start)
+    safe_segment_return = downloader.index("return result;", safe_segment_start)
+    if reserved_gate > safe_segment_return:
+        raise SystemExit("FAIL: Windows reserved release-tag segments must be escaped before the cache path segment is returned")
 
     for stale in (
         "request.AllowAutoRedirect = true;",
@@ -109,9 +123,9 @@ def main():
 
     print(
         "PASS: V25 preview fallback discovers the exact package/checksum pair, bounds cached and network packages before hashing, "
-        "validates every bounded HTTPS GitHub redirect hop, verifies SHA-256 before retaining the ZIP, stages under LocalApplicationData, "
-        "exposes the Update Center directly from Start Center without command dispatch, and only reveals unsigned preview packages while "
-        "the existing signed-manifest scheduling path remains separate."
+        "validates every bounded HTTPS GitHub redirect hop, verifies SHA-256 before retaining the ZIP, escapes Windows reserved "
+        "release-tag cache segments, stages under LocalApplicationData, exposes the Update Center directly from Start Center without "
+        "command dispatch, and only reveals unsigned preview packages while the existing signed-manifest scheduling path remains separate."
     )
     return 0
 
