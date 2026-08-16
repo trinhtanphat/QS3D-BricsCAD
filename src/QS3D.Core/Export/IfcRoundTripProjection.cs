@@ -103,22 +103,54 @@ namespace QS3D.Core.Export
 
     public sealed class IfcRoundTripProjectionSet
     {
+        public const int MaxProjectionCount = 10_000;
+
         private IfcRoundTripProjectionSet(IReadOnlyList<IfcRoundTripProjection> items) { Items = items; }
         public IReadOnlyList<IfcRoundTripProjection> Items { get; }
 
         public static IfcRoundTripProjectionSet Create(IEnumerable<IfcRoundTripProjection> projections)
         {
             if (projections == null) throw new ArgumentNullException(nameof(projections));
-            var items = projections.ToList();
+
+            var projectionCount =
+                projections is ICollection<IfcRoundTripProjection> collection ? collection.Count :
+                projections is IReadOnlyCollection<IfcRoundTripProjection> readOnlyCollection ? readOnlyCollection.Count :
+                0;
+
+            if (projectionCount > MaxProjectionCount)
+            {
+                throw new ArgumentException(
+                    "IFC round-trip projection set cannot contain more than " + MaxProjectionCount +
+                    " projections. First overflow item was at index " + MaxProjectionCount + ".",
+                    nameof(projections));
+            }
+
+            var items = new List<IfcRoundTripProjection>(
+                projectionCount > 0 ? Math.Min(projectionCount, MaxProjectionCount) : 0);
             var ifcGlobalIds = new HashSet<string>(StringComparer.Ordinal);
             var qs3dElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            for (var index = 0; index < items.Count; index++)
+
+            foreach (var item in projections)
             {
-                var item = items[index];
-                if (item == null) throw new ArgumentException("Projection collection cannot contain null entries.", nameof(projections));
-                if (!ifcGlobalIds.Add(item.IfcGlobalId)) throw new InvalidOperationException("Duplicate IFC global identity: " + item.IfcGlobalId);
-                if (!qs3dElementIds.Add(item.Qs3dElementId)) throw new InvalidOperationException("Duplicate QS3D element identity: " + item.Qs3dElementId);
+                var index = items.Count;
+                if (index >= MaxProjectionCount)
+                {
+                    throw new ArgumentException(
+                        "IFC round-trip projection set cannot contain more than " + MaxProjectionCount +
+                        " projections. First overflow item was at index " + index + ".",
+                        nameof(projections));
+                }
+
+                if (item == null)
+                    throw new ArgumentException("Projection at index " + index + " cannot be null.", nameof(projections));
+                if (!ifcGlobalIds.Add(item.IfcGlobalId))
+                    throw new InvalidOperationException("Duplicate IFC global identity at projection index " + index + ": " + item.IfcGlobalId);
+                if (!qs3dElementIds.Add(item.Qs3dElementId))
+                    throw new InvalidOperationException("Duplicate QS3D element identity at projection index " + index + ": " + item.Qs3dElementId);
+
+                items.Add(item);
             }
+
             items.Sort(IfcRoundTripProjectionComparer.CanonicalOrder);
             return new IfcRoundTripProjectionSet(Array.AsReadOnly(items.ToArray()));
         }
