@@ -343,7 +343,14 @@ namespace QS3D.Core.Export
 
         private static string Number(double value) => value.ToString("R", CultureInfo.InvariantCulture);
         private static string Date(DateTime value) => value.ToString("O", CultureInfo.InvariantCulture);
-        private static DateTime ParseUtc(string value) => DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal).UtcDateTime;
+        private static DateTime ParseUtc(string value)
+        {
+            if (!DateTime.TryParseExact(value, "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed) ||
+                parsed.Kind != DateTimeKind.Utc ||
+                !string.Equals(value, parsed.ToString("O", CultureInfo.InvariantCulture), StringComparison.Ordinal))
+                throw new InvalidDataException("BCF timestamp must use canonical UTC round-trip format.");
+            return parsed;
+        }
         private static string Xml(XElement root) => new XDocument(new XDeclaration("1.0", "UTF-8", null), root).ToString(SaveOptions.DisableFormatting);
 
         private static XElement ParseRoot(string text, string expectedName)
