@@ -51,6 +51,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             BltHomeRibbonAugmenter.Reset();
             BltDrawRibbonAugmenter.Reset();
             BltToolRibbonAugmenter.Reset();
+            BltToolRibbonCommandBinder.Reset();
             BltRecognitionRibbonAugmenter.Reset();
             BltViewRibbonAugmenter.Reset();
             BltBimRibbonMirrorAugmenter.Reset();
@@ -130,8 +131,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
             // TOOL is a dedicated owner-reference topbar. Replace only the old QS3D TOOL
             // fallback panels with the compact Cọc/Móng/Sàn/MCP/AutoCAD composition while
-            // leaving the BIM-like workspace below the Ribbon unchanged.
+            // leaving the BIM-like workspace below the Ribbon unchanged. Bind the finished
+            // visual tree to verified runtime commands before the generic fallback wrapper runs.
             ready = BltToolRibbonAugmenter.TryInitialize() && ready;
+            ready = BltToolRibbonCommandBinder.TryInitialize() && ready;
 
             ready = BltRecognitionRibbonAugmenter.TryInitialize() && ready;
             ready = BltViewRibbonAugmenter.TryInitialize() && ready;
