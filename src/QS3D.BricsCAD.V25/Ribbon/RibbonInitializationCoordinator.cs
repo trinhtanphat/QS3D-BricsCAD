@@ -110,6 +110,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
             ready = QuantityReferenceRibbonAugmenter.TryInitialize() && ready;
             ready = UpdateRibbonAugmenter.TryInitialize() && ready;
 
+            // BricsCAD can invoke ICommand without forwarding RibbonButton.CommandParameter.
+            // Wrap every QS3D ribbon handler after all augmenters have reconciled so visible
+            // buttons keep their captured command for both CanExecute and Execute.
+            ready = RibbonCommandParameterFallback.TryInitialize() && ready;
+
             // Run ownership/layout last: native BricsCAD tabs keep their objects and relative
             // order, while every QS3D_* tab becomes one contiguous group on the same tab row.
             ready = Qs3dRibbonTabGroupCoordinator.TryInitialize() && ready;
