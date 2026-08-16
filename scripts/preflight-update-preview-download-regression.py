@@ -16,6 +16,7 @@ FIXTURE_FILES = (
     Path("src/QS3D.BricsCAD.V25/Updates/UpdateCenterWindow.cs"),
     Path("src/QS3D.BricsCAD.V25/UI/BltStartCenterWindow.cs"),
 )
+DOWNLOADER = Path("src/QS3D.BricsCAD.V25/Updates/VerifiedReleaseDownloader.cs")
 
 
 class PreviewDownloadGuardMutationTests(unittest.TestCase):
@@ -65,7 +66,7 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
 
     def test_cached_package_size_gate_cannot_be_bypassed(self):
         self.assert_rejected(
-            Path("src/QS3D.BricsCAD.V25/Updates/VerifiedReleaseDownloader.cs"),
+            DOWNLOADER,
             "if (existingLength <= MaxPackageBytes)",
             "if (true)",
             "missing required preview-download contract: if (existingLength <= MaxPackageBytes)",
@@ -73,7 +74,7 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
 
     def test_automatic_redirects_cannot_be_reenabled(self):
         self.assert_rejected(
-            Path("src/QS3D.BricsCAD.V25/Updates/VerifiedReleaseDownloader.cs"),
+            DOWNLOADER,
             "request.AllowAutoRedirect = false;",
             "request.AllowAutoRedirect = true;",
             "missing required preview-download contract: request.AllowAutoRedirect = false;",
@@ -81,18 +82,50 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
 
     def test_each_redirect_hop_must_remain_host_validated(self):
         self.assert_rejected(
-            Path("src/QS3D.BricsCAD.V25/Updates/VerifiedReleaseDownloader.cs"),
+            DOWNLOADER,
             "                    EnsureAllowedUri(nextUri);\n                    current = nextUri;",
             "                    current = nextUri;",
             "missing required preview-download contract: EnsureAllowedUri(nextUri);",
         )
 
+    def test_https_only_requirement_cannot_be_removed(self):
+        self.assert_rejected(
+            DOWNLOADER,
+            "if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))",
+            "if (false)",
+            "missing required preview-download contract: if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))",
+        )
+
+    def test_githubusercontent_allowlist_cannot_be_removed(self):
+        self.assert_rejected(
+            DOWNLOADER,
+            'host.EndsWith(".githubusercontent.com", StringComparison.OrdinalIgnoreCase)',
+            "false",
+            'missing required preview-download contract: host.EndsWith(".githubusercontent.com", StringComparison.OrdinalIgnoreCase)',
+        )
+
+    def test_checksum_digest_boundary_must_remain_strict(self):
+        self.assert_rejected(
+            DOWNLOADER,
+            "if (end < normalized.Length && !char.IsWhiteSpace(normalized[end]))",
+            "if (false)",
+            "missing required preview-download contract: if (end < normalized.Length && !char.IsWhiteSpace(normalized[end]))",
+        )
+
     def test_release_tag_cache_identity_cannot_be_removed(self):
         self.assert_rejected(
-            Path("src/QS3D.BricsCAD.V25/Updates/VerifiedReleaseDownloader.cs"),
+            DOWNLOADER,
             'return result + "~" + ComputeTagIdentity(exactTag);',
             "return result;",
             'missing required preview-download contract: return result + "~" + ComputeTagIdentity(exactTag);',
+        )
+
+    def test_release_tag_prefix_bound_cannot_be_removed(self):
+        self.assert_rejected(
+            DOWNLOADER,
+            "if (result.Length > MaxReleaseTagPrefixChars)",
+            "if (false)",
+            "missing required preview-download contract: if (result.Length > MaxReleaseTagPrefixChars)",
         )
 
     def test_unsigned_preview_cannot_be_changed_to_direct_execution(self):
