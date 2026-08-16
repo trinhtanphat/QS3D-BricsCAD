@@ -79,8 +79,8 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        // Compatibility entry point used by the QS3D command. The primary authoring flow is now
-        // Ribbon-first, so opening Workspace must not also consume the CAD viewport with the
+        // Compatibility entry point used by the QS3D command. Keep the normal authoring flow
+        // Ribbon-first: opening Workspace must not also consume the CAD viewport with the
         // drawing/layer and quantity palettes.
         public static void Show() => ShowWorkspace();
 
@@ -95,6 +95,25 @@ namespace QS3D.BricsCAD.V25
             catch (Exception)
             {
                 ReportPaletteFailure("Workspace");
+            }
+        }
+
+        // The owner-reference BIM tab intentionally coordinates the two side palettes around the
+        // real BricsCAD viewport. It is explicit so the ordinary Workspace command stays isolated.
+        public static void ShowBimWorkspace()
+        {
+            try
+            {
+                EnsureCreated();
+                EnsureBimDockContract();
+                SetVisibility(workspace: true, right: true, quantityInsight: false);
+                SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
+                _rightPanel?.Refresh();
+                _workspacePanel?.SetStatus("MÔ HÌNH BIM • BLT3D workspace • viewport BricsCAD native ở giữa.");
+            }
+            catch (Exception)
+            {
+                ReportPaletteFailure("MÔ HÌNH BIM");
             }
         }
 
@@ -198,6 +217,8 @@ namespace QS3D.BricsCAD.V25
             var quantityVisible = IsQuantityInsightVisible;
             Dispose();
             EnsureCreated();
+            if (workspaceVisible && rightVisible && !quantityVisible)
+                EnsureBimDockContract();
             SetVisibility(workspaceVisible, rightVisible, quantityVisible);
         }
 
@@ -227,6 +248,14 @@ namespace QS3D.BricsCAD.V25
             {
                 // Native palette teardown is best-effort; one failed palette must not block the others.
             }
+        }
+
+        private static void EnsureBimDockContract()
+        {
+            if (_workspace != null && _workspace.Dock != DockSides.Left)
+                _workspace.Dock = DockSides.Left;
+            if (_right != null && _right.Dock != DockSides.Right)
+                _right.Dock = DockSides.Right;
         }
 
         private static void SetVisibility(bool workspace, bool right, bool quantityInsight)

@@ -6,9 +6,9 @@ using System.Windows.Threading;
 namespace QS3D.BricsCAD.V25.Ribbon
 {
     /// <summary>
-    /// Watches only the selected Ribbon tab and opens the QS3D Start Center directly on a
-    /// transition into QS3D_HOME. Polling is reflection-only so the source stays tolerant of
-    /// BricsCAD minor-version Ribbon event-shape differences.
+    /// Watches the selected Ribbon tab and owns Start Center visibility for the QS3D HOME surface.
+    /// Leaving HOME releases the large embedded Start Center immediately so the native BricsCAD
+    /// viewport and BIM side palettes can reclaim the work area without stale palette overlap.
     /// </summary>
     internal static class HomeTabActivationCoordinator
     {
@@ -72,9 +72,19 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
                 _lastSelectedTabId = selectedId;
                 if (!string.Equals(selectedId, HomeTabId, StringComparison.OrdinalIgnoreCase))
+                {
+                    try { StartCenterPaletteCoordinator.Hide(); }
+                    catch { }
                     return;
+                }
 
-                try { new StartCenterCommands().ShowStartCenter(); }
+                try
+                {
+                    // HOME owns the large Start Center canvas. Release BIM/quantity side palettes
+                    // before opening it so tab transitions never leave competing docked surfaces.
+                    PaletteCoordinator.Hide();
+                    new StartCenterCommands().ShowStartCenter();
+                }
                 catch { }
             }
             catch

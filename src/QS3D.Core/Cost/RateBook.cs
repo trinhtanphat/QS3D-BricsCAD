@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
@@ -104,12 +105,16 @@ namespace QS3D.Core.Cost
 
     public sealed class RateBook
     {
+        internal const int MaxItems = 10000;
+
         private readonly Dictionary<string, List<RateItem>> _byScope;
 
         public RateBook(string rateBookId, IEnumerable<RateItem> items)
         {
             RateBookId = RateBookContract.RequireToken(rateBookId, nameof(rateBookId));
             if (items == null) throw new ArgumentNullException(nameof(items));
+            if (TryGetKnownCount(items, out var knownCount) && knownCount > MaxItems)
+                ThrowTooManyItems();
 
             var snapshot = new List<RateItem>();
             var itemIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -119,6 +124,8 @@ namespace QS3D.Core.Cost
             var index = 0;
             foreach (var item in items)
             {
+                if (index == MaxItems)
+                    ThrowTooManyItems();
                 if (item == null)
                     throw new ArgumentException("Rate book contains a null item at index " + index + ".", nameof(items));
                 if (!itemIds.Add(item.RateItemId))
@@ -176,6 +183,36 @@ namespace QS3D.Core.Cost
             return match == null
                 ? RateBookResolution.Unmatched(costCode, canonicalUnit, canonicalCurrency, canonicalAsOf)
                 : RateBookResolution.Matched(match.CostCode, canonicalUnit, canonicalCurrency, canonicalAsOf, match);
+        }
+
+        private static bool TryGetKnownCount(IEnumerable<RateItem> items, out int count)
+        {
+            if (items is ICollection<RateItem> collection)
+            {
+                count = collection.Count;
+                return true;
+            }
+
+            if (items is IReadOnlyCollection<RateItem> readOnlyCollection)
+            {
+                count = readOnlyCollection.Count;
+                return true;
+            }
+
+            if (items is ICollection nonGenericCollection)
+            {
+                count = nonGenericCollection.Count;
+                return true;
+            }
+
+            count = 0;
+            return false;
+        }
+
+        private static void ThrowTooManyItems()
+        {
+            throw new InvalidOperationException(
+                "Rate book supports at most " + MaxItems + " rate items.");
         }
 
         private static int CompareEffectiveItems(RateItem left, RateItem right)
