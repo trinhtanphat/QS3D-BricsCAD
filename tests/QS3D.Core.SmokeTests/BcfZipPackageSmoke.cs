@@ -23,6 +23,7 @@ namespace QS3D.Core.SmokeTests
             PackageRoundTripPreservesSemanticIdentity();
             UnsafeMalformedAndUnsupportedPackagesFailClosed();
             MalformedLeafStructureFailsClosed();
+            NonCanonicalXmlNodeFormsFailClosed();
         }
 
         private static void PackageIsByteDeterministicAndSchemaShaped()
@@ -114,7 +115,7 @@ namespace QS3D.Core.SmokeTests
             {
                 ["bcf.version"] = "<Version VersionId=\"3.0\" />",
                 ["extensions.xml"] = "<Extensions><TopicTypes><TopicType data-extra=\"1\">Coordination</TopicType></TopicTypes><TopicStatuses><TopicStatus>Open</TopicStatus></TopicStatuses></Extensions>",
-                [TopicA + "/markup.bcf"] = "<Markup><Topic Guid=\"" + TopicA + "\" TopicType=\"Coordination\" TopicStatus=\"Open\"><Title>Unsafe extension leaf</Title><CreationDate>2026-08-14T09:00:00Z</CreationDate><CreationAuthor>qa@qs3d</CreationAuthor></Topic></Markup>"
+                [TopicA + "/markup.bcf"] = MinimalMarkup("Unsafe extension leaf")
             });
             ThrowsInvalidData(() => BcfZipPackage.Read(attributedExtensionLeaf), "BCF extension value leaves with attributes must fail closed.");
 
@@ -133,6 +134,65 @@ namespace QS3D.Core.SmokeTests
                 [TopicA + "/markup.bcf"] = "<Markup><Topic Guid=\"" + TopicA + "\" TopicType=\"Coordination\" TopicStatus=\"Open\"><Title><Injected>Unsafe</Injected></Title><CreationDate>2026-08-14T09:00:00Z</CreationDate><CreationAuthor>qa@qs3d</CreationAuthor></Topic></Markup>"
             });
             ThrowsInvalidData(() => BcfZipPackage.Read(nestedLeaf), "BCF value leaves with nested elements must fail closed.");
+        }
+
+        private static void NonCanonicalXmlNodeFormsFailClosed()
+        {
+            var cdataLeaf = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bcf.version"] = "<Version VersionId=\"3.0\" />",
+                ["extensions.xml"] = "<Extensions><TopicTypes><TopicType><![CDATA[Coordination]]></TopicType></TopicTypes><TopicStatuses><TopicStatus>Open</TopicStatus></TopicStatuses></Extensions>",
+                [TopicA + "/markup.bcf"] = MinimalMarkup("CDATA leaf")
+            });
+            ThrowsInvalidData(() => BcfZipPackage.Read(cdataLeaf), "BCF value leaves must reject CDATA node forms.");
+
+            var commentedLeaf = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bcf.version"] = "<Version VersionId=\"3.0\" />",
+                ["extensions.xml"] = ExtensionsXml(),
+                [TopicA + "/markup.bcf"] = MinimalMarkup("Can<!--unexpected-->onical")
+            });
+            ThrowsInvalidData(() => BcfZipPackage.Read(commentedLeaf), "BCF value leaves must reject comment-mixed text.");
+
+            var processingInstructionLeaf = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bcf.version"] = "<Version VersionId=\"3.0\" />",
+                ["extensions.xml"] = ExtensionsXml(),
+                [TopicA + "/markup.bcf"] = MinimalMarkup("<?qs3d unexpected?>Unsafe")
+            });
+            ThrowsInvalidData(() => BcfZipPackage.Read(processingInstructionLeaf), "BCF value leaves must reject processing instructions.");
+
+            var mixedContainer = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bcf.version"] = "<Version VersionId=\"3.0\" />",
+                ["extensions.xml"] = "<Extensions><TopicTypes>unexpected<TopicType>Coordination</TopicType></TopicTypes><TopicStatuses><TopicStatus>Open</TopicStatus></TopicStatuses></Extensions>",
+                [TopicA + "/markup.bcf"] = MinimalMarkup("Mixed container")
+            });
+            ThrowsInvalidData(() => BcfZipPackage.Read(mixedContainer), "BCF element-only containers must reject non-whitespace mixed text.");
+
+            var attributedTokenContainer = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bcf.version"] = "<Version VersionId=\"3.0\" />",
+                ["extensions.xml"] = "<Extensions><TopicTypes data-extra=\"1\"><TopicType>Coordination</TopicType></TopicTypes><TopicStatuses><TopicStatus>Open</TopicStatus></TopicStatuses></Extensions>",
+                [TopicA + "/markup.bcf"] = MinimalMarkup("Attributed token container")
+            });
+            ThrowsInvalidData(() => BcfZipPackage.Read(attributedTokenContainer), "BCF extension token containers must reject unsupported attributes.");
+
+            var nonEmptyVersion = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bcf.version"] = "<Version VersionId=\"3.0\"> </Version>",
+                ["extensions.xml"] = ExtensionsXml(),
+                [TopicA + "/markup.bcf"] = MinimalMarkup("Non-empty version")
+            });
+            ThrowsInvalidData(() => BcfZipPackage.Read(nonEmptyVersion), "BCF empty elements must reject all content nodes, including whitespace.");
+
+            var documentComment = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bcf.version"] = "<!--unexpected--><Version VersionId=\"3.0\" />",
+                ["extensions.xml"] = ExtensionsXml(),
+                [TopicA + "/markup.bcf"] = MinimalMarkup("Document comment")
+            });
+            ThrowsInvalidData(() => BcfZipPackage.Read(documentComment), "BCF XML documents must reject non-root comments and processing content.");
         }
 
         private static BcfIssueExchange BuildFixture()
@@ -167,6 +227,11 @@ namespace QS3D.Core.SmokeTests
         private static string ExtensionsXml()
         {
             return "<Extensions><TopicTypes><TopicType>Coordination</TopicType></TopicTypes><TopicStatuses><TopicStatus>Open</TopicStatus></TopicStatuses></Extensions>";
+        }
+
+        private static string MinimalMarkup(string titleXml)
+        {
+            return "<Markup><Topic Guid=\"" + TopicA + "\" TopicType=\"Coordination\" TopicStatus=\"Open\"><Title>" + titleXml + "</Title><CreationDate>2026-08-14T09:00:00Z</CreationDate><CreationAuthor>qa@qs3d</CreationAuthor></Topic></Markup>";
         }
 
         private static string ReadEntry(ZipArchive archive, string path)
