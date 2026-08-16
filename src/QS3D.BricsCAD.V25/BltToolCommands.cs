@@ -12,6 +12,7 @@ using Application = Bricscad.ApplicationServices.Application;
 using Bricscad.EditorInput;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.Services;
+using QS3D.Core.Geometry;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
 using Teigha.Runtime;
@@ -105,6 +106,7 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("Giá trị ngàm cọc không hợp lệ.");
 
                 var embedDrawing = CadUnitService.MetersToDrawingUnits(document, embedMillimeters.Value / 1000d);
+                var embedRequestedPositive = embedMillimeters.Value > 0d;
                 var moved = 0;
                 var alreadyAligned = 0;
 
@@ -115,7 +117,12 @@ namespace QS3D.BricsCAD.V25
                     if (cap == null || cap.IsErased)
                         throw new InvalidOperationException("Đài/móng chuẩn không còn tồn tại.");
                     var capExtents = RequireExtents(cap, "đài/móng chuẩn");
-                    var targetPileTopZ = capExtents.MinPoint.Z + embedDrawing;
+                    if (!GeometryOffsetPrecision.TryAddNonNegative(
+                            capExtents.MinPoint.Z,
+                            embedDrawing,
+                            embedRequestedPositive,
+                            out var targetPileTopZ))
+                        throw new InvalidOperationException("Ngàm cọc dương không thể biểu diễn ổn định tại cao độ đài hiện tại.");
 
                     foreach (var id in pileIds)
                     {
@@ -124,6 +131,7 @@ namespace QS3D.BricsCAD.V25
                         if (pile == null || pile.IsErased) continue;
                         var pileExtents = RequireExtents(pile, "cọc " + pile.Handle);
                         var deltaZ = targetPileTopZ - pileExtents.MaxPoint.Z;
+                        RequireFinite(deltaZ, "độ dịch Z cọc");
                         if (Math.Abs(deltaZ) <= 1e-9d)
                         {
                             alreadyAligned++;
@@ -162,6 +170,7 @@ namespace QS3D.BricsCAD.V25
 
                 var thickness = CadUnitService.MetersToDrawingUnits(document, thicknessMm.Value / 1000d);
                 var overhang = CadUnitService.MetersToDrawingUnits(document, overhangMm.Value / 1000d);
+                var overhangRequestedPositive = overhangMm.Value > 0d;
                 string handle;
 
                 using (document.LockDocument())
@@ -171,12 +180,35 @@ namespace QS3D.BricsCAD.V25
                     if (reference == null || reference.IsErased)
                         throw new InvalidOperationException("Móng/đài tham chiếu không còn tồn tại.");
                     var extents = RequireExtents(reference, "móng/đài tham chiếu");
-                    var width = Positive(extents.MaxPoint.X - extents.MinPoint.X + 2d * overhang, "bề rộng bê tông lót");
-                    var depth = Positive(extents.MaxPoint.Y - extents.MinPoint.Y + 2d * overhang, "chiều sâu bê tông lót");
-                    var desiredMin = new Point3d(
-                        extents.MinPoint.X - overhang,
-                        extents.MinPoint.Y - overhang,
-                        extents.MinPoint.Z - thickness);
+                    if (!GeometryOffsetPrecision.TryExpandBoth(
+                            extents.MinPoint.X,
+                            extents.MaxPoint.X,
+                            overhang,
+                            overhangRequestedPositive,
+                            out var minX,
+                            out _,
+                            out var width))
+                        throw new InvalidOperationException("Phần vươn bê tông lót theo X không thể biểu diễn ổn định.");
+                    if (!GeometryOffsetPrecision.TryExpandBoth(
+                            extents.MinPoint.Y,
+                            extents.MaxPoint.Y,
+                            overhang,
+                            overhangRequestedPositive,
+                            out var minY,
+                            out _,
+                            out var depth))
+                        throw new InvalidOperationException("Phần vươn bê tông lót theo Y không thể biểu diễn ổn định.");
+                    if (!GeometryOffsetPrecision.TrySubtractNonNegative(
+                            extents.MinPoint.Z,
+                            thickness,
+                            true,
+                            out var minZ))
+                        throw new InvalidOperationException("Chiều dày bê tông lót không thể biểu diễn ổn định tại cao độ hiện tại.");
+
+                    width = Positive(width, "bề rộng bê tông lót");
+                    depth = Positive(depth, "chiều sâu bê tông lót");
+                    thickness = Positive(thickness, "chiều dày bê tông lót");
+                    var desiredMin = new Point3d(minX, minY, minZ);
                     handle = AppendBox(document, transaction, width, depth, thickness, desiredMin, reference.Layer);
                     transaction.Commit();
                 }
@@ -207,6 +239,8 @@ namespace QS3D.BricsCAD.V25
 
                 var clearance = CadUnitService.MetersToDrawingUnits(document, clearanceMm.Value / 1000d);
                 var extraBottom = CadUnitService.MetersToDrawingUnits(document, extraBottomMm.Value / 1000d);
+                var clearanceRequestedPositive = clearanceMm.Value > 0d;
+                var extraBottomRequestedPositive = extraBottomMm.Value > 0d;
                 string handle;
 
                 using (document.LockDocument())
@@ -216,11 +250,37 @@ namespace QS3D.BricsCAD.V25
                     if (reference == null || reference.IsErased)
                         throw new InvalidOperationException("Móng/đài tham chiếu không còn tồn tại.");
                     var extents = RequireExtents(reference, "móng/đài tham chiếu");
-                    var width = Positive(extents.MaxPoint.X - extents.MinPoint.X + 2d * clearance, "bề rộng hố đào");
-                    var depth = Positive(extents.MaxPoint.Y - extents.MinPoint.Y + 2d * clearance, "chiều sâu hố đào");
-                    var bottomZ = extents.MinPoint.Z - extraBottom;
-                    var height = Positive(extents.MaxPoint.Z - bottomZ, "chiều cao thể tích hố đào");
-                    var desiredMin = new Point3d(extents.MinPoint.X - clearance, extents.MinPoint.Y - clearance, bottomZ);
+                    if (!GeometryOffsetPrecision.TryExpandBoth(
+                            extents.MinPoint.X,
+                            extents.MaxPoint.X,
+                            clearance,
+                            clearanceRequestedPositive,
+                            out var minX,
+                            out _,
+                            out var width))
+                        throw new InvalidOperationException("Khoảng thao tác hố đào theo X không thể biểu diễn ổn định.");
+                    if (!GeometryOffsetPrecision.TryExpandBoth(
+                            extents.MinPoint.Y,
+                            extents.MaxPoint.Y,
+                            clearance,
+                            clearanceRequestedPositive,
+                            out var minY,
+                            out _,
+                            out var depth))
+                        throw new InvalidOperationException("Khoảng thao tác hố đào theo Y không thể biểu diễn ổn định.");
+                    if (!GeometryOffsetPrecision.TryExpandLower(
+                            extents.MinPoint.Z,
+                            extents.MaxPoint.Z,
+                            extraBottom,
+                            extraBottomRequestedPositive,
+                            out var bottomZ,
+                            out var height))
+                        throw new InvalidOperationException("Độ đào sâu thêm không thể biểu diễn ổn định tại cao độ hiện tại.");
+
+                    width = Positive(width, "bề rộng hố đào");
+                    depth = Positive(depth, "chiều sâu hố đào");
+                    height = Positive(height, "chiều cao thể tích hố đào");
+                    var desiredMin = new Point3d(minX, minY, bottomZ);
                     handle = AppendBox(document, transaction, width, depth, height, desiredMin, reference.Layer);
                     transaction.Commit();
                 }

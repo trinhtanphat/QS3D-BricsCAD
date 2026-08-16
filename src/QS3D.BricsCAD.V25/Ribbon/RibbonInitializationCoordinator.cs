@@ -53,8 +53,12 @@ namespace QS3D.BricsCAD.V25.Ribbon
             BltToolRibbonAugmenter.Reset();
             BltToolRibbonCommandBinder.Reset();
             BltRecognitionRibbonAugmenter.Reset();
+            BltRecognitionIconPolisher.Reset();
             BltViewRibbonAugmenter.Reset();
+            BltViewActionOverrideAugmenter.Reset();
             BltBimRibbonMirrorAugmenter.Reset();
+            BltModelingRibbonVisualRefiner.Reset();
+            BltModelingRibbonFunctionRefiner.Reset();
             BltModelingRibbonAugmenter.Reset();
             BltTopbarTabContract.Reset();
             RibbonBootstrapIconAugmenter.Reset();
@@ -129,6 +133,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
             ready = BltHomeRibbonAugmenter.TryInitialize() && ready;
             ready = BltDrawRibbonFailSafe.TryInitialize() && ready;
 
+            // Apply the owner-reference icon language to every visible VẼ/Công cụ button after
+            // compact layout refinement. MÔ HÌNH BIM later mirrors these same decorated buttons.
+            ready = BltDrawRibbonReferenceIconDecorator.TryInitialize() && ready;
+
             // TOOL is a dedicated owner-reference topbar. Replace only the old QS3D TOOL
             // fallback panels with the compact Cọc/Móng/Sàn/MCP/AutoCAD composition while
             // leaving the BIM-like workspace below the Ribbon unchanged. Bind the finished
@@ -138,21 +146,38 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
             ready = BltRecognitionRibbonAugmenter.TryInitialize() && ready;
             ready = BltViewRibbonAugmenter.TryInitialize() && ready;
+            ready = BltViewActionOverrideAugmenter.TryInitialize() && ready;
 
             // MODELING is a separate owner-reference surface. Rebuild only QS3D-owned panels
             // into the BLT3D large-action + compact three-row layout; native/third-party
             // Ribbon content remains untouched.
             ready = BltModelingRibbonAugmenter.TryInitialize() && ready;
 
-            // The BLT owner reference shows the same qualified Vẽ/Công cụ/IFC surface under
-            // MÔ HÌNH BIM. Mirror the already-wired Draw panels so behavior, icons and sizing
-            // remain identical while each tab keeps independent Ribbon objects.
+            // Pin the functional route of all 21 reference buttons before visual finalization.
+            // In particular, Theo phương Z uses QS3DMOVEZ so it is genuinely Z-constrained rather
+            // than falling back to unrestricted MOVE plus manual coordinate instructions.
+            ready = BltModelingRibbonFunctionRefiner.TryInitialize() && ready;
+
+            // Apply the final dark-ribbon artwork only after every MODELING button exists. The
+            // visual refiner requires all 21 reference buttons and refuses a text-only fallback,
+            // while leaving grouping, command routing and native/third-party content unchanged.
+            ready = BltModelingRibbonVisualRefiner.TryInitialize() && ready;
+
+            // MÔ HÌNH BIM keeps the qualified Vẽ/Công cụ/IFC surface. Mirror those staging
+            // panels first; then finalize the owner-reference VẼ tab by removing only its
+            // staging IFC panel, leaving the blank ribbon tail shown in the reference image.
             ready = BltBimRibbonMirrorAugmenter.TryInitialize() && ready;
+            ready = BltDrawRibbonReferenceFinalizer.TryInitialize() && ready;
 
             // Decorate canonical text-only/fallback buttons only after all richer feature
             // augmenters have supplied their own images. This preserves recognition and
             // owner-reference Draw/Modeling/View artwork while filling genuine gaps.
             ready = RibbonBootstrapIconAugmenter.TryInitialize() && ready;
+
+            // Apply the final clean-room BLT3D-familiar Recognition artwork after generic
+            // decoration so all eight compact buttons keep their intended semantic icon,
+            // Image/LargeImage pair and active-vs-disabled visual hierarchy.
+            ready = BltRecognitionIconPolisher.TryInitialize() && ready;
 
             // BricsCAD can invoke ICommand without forwarding RibbonButton.CommandParameter.
             // Wrap every QS3D ribbon handler after all augmenters have reconciled so visible

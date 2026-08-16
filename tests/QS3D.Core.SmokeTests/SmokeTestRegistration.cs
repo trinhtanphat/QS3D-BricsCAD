@@ -40,6 +40,7 @@ namespace QS3D.Core.SmokeTests
             RevisionSnapshotStoreIntegritySmoke.Run();
             WorkflowPersistenceSmoke.Run();
             BbsRegressionSmoke.Run();
+            RebarCsvStrictUtf8Smoke.Run();
             WorkflowSafetySmoke.Run();
             CompletionRegressionSmoke.Run();
             SemanticOverflowSmoke.Run();
@@ -65,6 +66,8 @@ namespace QS3D.Core.SmokeTests
             WallJunctionAdjustmentSmoke.Run();
             PolylineOpeningCutSmoke.Run();
             OpeningCutPlannerClearancePrecisionSmoke.Run();
+            SectionDetailVolumePlannerSmoke.Run();
+            GeometryOffsetPrecisionSmoke.Run();
             ProjectRebarShapeSmoke.Run();
             RebarOwnershipHealthSmoke.Run();
             RebarFabricationQualificationSmoke.Run();
@@ -138,6 +141,7 @@ namespace QS3D.Core.SmokeTests
             SemanticMutationAtomicitySmoke.Run();
             DomainMutationAtomicitySmoke.Run();
             TemplateApplyAtomicitySmoke.Run();
+            TemplateProfileRequiredAttributeCanonicalSmoke.Run();
             StandardFamilyTemplateCatalogSmoke.Run();
             FamilyTemplateImportSmoke.Run();
             ProjectFamilyQuickSchemaSmoke.Run();

@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Windows.Input;
+using Application = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.Ribbon
 {
@@ -14,6 +15,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
     {
         private const string AssemblyName = "BrxMgd";
         private const string Qs3dTabPrefix = "QS3D_";
+        private const string DrawCommandHandlerTypeName = "DrawRibbonCommandHandler";
 
         public static bool TryInitialize()
         {
@@ -99,8 +101,19 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 return;
 
             var handler = GetProperty(item, "CommandHandler") as ICommand;
-            if (handler == null || handler is CommandParameterFallbackHandler)
+            if (handler is CommandParameterFallbackHandler || handler is CapturedCommandHandler)
                 return;
+
+            // The BLT Draw handler is deliberately command-string-only. Replace it with a
+            // captured dispatcher so VẼ/Công cụ/IFC buttons stay executable even on BricsCAD
+            // builds that invoke ICommand with a null/different event parameter. Also repair a
+            // command-bearing QS3D button that somehow lost its handler instead of leaving it dead.
+            if (handler == null ||
+                string.Equals(handler.GetType().Name, DrawCommandHandlerTypeName, StringComparison.Ordinal))
+            {
+                SetProperty(item, "CommandHandler", new CapturedCommandHandler(command));
+                return;
+            }
 
             SetProperty(item, "CommandHandler", new CommandParameterFallbackHandler(handler, command));
         }
@@ -149,6 +162,61 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 property.SetValue(target, value, null);
         }
 
+        private sealed class CapturedCommandHandler : ICommand
+        {
+            private readonly string _fallbackCommand;
+
+            public CapturedCommandHandler(string fallbackCommand)
+            {
+                _fallbackCommand = fallbackCommand ?? throw new ArgumentNullException(nameof(fallbackCommand));
+            }
+
+            public bool CanExecute(object? parameter) =>
+                Application.DocumentManager.MdiActiveDocument != null &&
+                !string.IsNullOrWhiteSpace(ResolveParameter(parameter));
+
+            public void Execute(object? parameter)
+            {
+                var command = ResolveParameter(parameter);
+                if (string.IsNullOrWhiteSpace(command))
+                    return;
+
+                var document = Application.DocumentManager.MdiActiveDocument;
+                if (document == null)
+                    return;
+
+                try
+                {
+                    document.SendStringToExecute(command.Trim() + " ", true, false, false);
+                }
+                catch (Exception ex)
+                {
+                    try
+                    {
+                        document.Editor.WriteMessage(
+                            "\nQS3D Ribbon: không thể chạy lệnh '" + command.Trim() + "': " + ex.Message);
+                    }
+                    catch
+                    {
+                        // The host may already be tearing the document down; never turn a UI
+                        // command-dispatch error into a second exception from diagnostics.
+                    }
+                }
+            }
+
+            private string ResolveParameter(object? parameter)
+            {
+                _ = parameter;
+                return _fallbackCommand;
+            }
+
+            public event EventHandler? CanExecuteChanged
+            {
+                add { }
+                remove { }
+            }
+        }
+
         private sealed class CommandParameterFallbackHandler : ICommand
         {
             private readonly ICommand _inner;
@@ -164,10 +232,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
             public void Execute(object? parameter) => _inner.Execute(ResolveParameter(parameter));
 
-            private string ResolveParameter(object? parameter) =>
-                parameter is string command && !string.IsNullOrWhiteSpace(command)
-                    ? command
-                    : _fallbackCommand;
+            private string ResolveParameter(object? parameter)
+            {
+                _ = parameter;
+                return _fallbackCommand;
+            }
 
             public event EventHandler? CanExecuteChanged
             {
