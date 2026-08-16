@@ -201,14 +201,26 @@ namespace QS3D.Core.Coordination
                 (scaledZ * scaledZ));
         }
 
-        private static double Overlap(double aMin, double aMax, double bMin, double bMax) =>
-            Math.Min(aMax, bMax) - Math.Max(aMin, bMin);
+        private static double Overlap(double aMin, double aMax, double bMin, double bMax)
+        {
+            var upper = Math.Min(aMax, bMax);
+            var lower = Math.Max(aMin, bMin);
+            return SubtractFinite(upper, lower, "Coordination overlap extent");
+        }
 
         private static double Gap(double aMin, double aMax, double bMin, double bMax)
         {
-            if (aMax < bMin) return bMin - aMax;
-            if (bMax < aMin) return aMin - bMax;
+            if (aMax < bMin) return SubtractFinite(bMin, aMax, "Coordination gap extent");
+            if (bMax < aMin) return SubtractFinite(aMin, bMax, "Coordination gap extent");
             return 0d;
+        }
+
+        private static double SubtractFinite(double left, double right, string operation)
+        {
+            var result = left - right;
+            if (double.IsNaN(result) || double.IsInfinity(result))
+                throw new OverflowException(operation + " exceeded the finite double range.");
+            return result == 0d ? 0d : result;
         }
     }
 }
