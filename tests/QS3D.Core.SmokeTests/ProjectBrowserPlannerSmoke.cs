@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             UnassignedReferencesRemainVisible();
             MissingReferencesFailClosed();
             DuplicateIdentityFailsClosed();
+            NonCanonicalElementIdentityFailsClosed();
         }
 
         private static void FloorGroupingIsDeterministic()
@@ -65,6 +66,20 @@ namespace QS3D.Core.SmokeTests
             MustFail(
                 () => ProjectBrowserPlanner.Build(project, ProjectBrowserGrouping.Category),
                 "Project browser must reject duplicate semantic element IDs case-insensitively.");
+        }
+
+        private static void NonCanonicalElementIdentityFailsClosed()
+        {
+            var project = BuildProject();
+            project.Elements.Add(new ProjectElement(" PADDED-001 ", ElementCategory.Room, "", "F-01", "Z-A"));
+            MustFail(
+                () => ProjectBrowserPlanner.Build(project, ProjectBrowserGrouping.Category),
+                "Project browser must reject semantic element IDs with surrounding whitespace instead of emitting an ID downstream selection cannot consume.");
+
+            var canonical = BuildProject();
+            canonical.Elements.Add(new ProjectElement("PADDED-001", ElementCategory.Room, "", "F-01", "Z-A"));
+            var root = ProjectBrowserPlanner.Build(canonical, ProjectBrowserGrouping.Category);
+            Equal(5, root.Count);
         }
 
         private static ProjectState BuildProject()
