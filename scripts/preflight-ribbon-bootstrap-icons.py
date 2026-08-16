@@ -46,8 +46,14 @@ def main():
         'GetProperty(item, "Image") != null',
         'GetProperty(item, "LargeImage") != null',
         'SetProperty(item, "ShowImage", true);',
-        'SetProperty(item, "Image", RibbonIconFactory.Create(icon, 16));',
-        'SetProperty(item, "LargeImage", RibbonIconFactory.Create(icon, 32));',
+        'SetProperty(item, "Image", CreateIcon(icon, 16));',
+        'SetProperty(item, "LargeImage", CreateIcon(icon, 32));',
+        'private static object CreateIcon(RibbonIconKind icon, int pixelSize)',
+        'var thread = Thread.CurrentThread;',
+        'var previous = thread.CurrentCulture;',
+        'thread.CurrentCulture = CultureInfo.InvariantCulture;',
+        'return RibbonIconFactory.Create(icon, pixelSize);',
+        'thread.CurrentCulture = previous;',
         'return RibbonIconKind.UpdateStatus;',
         'return RibbonIconKind.SaveAs;',
         'return RibbonIconKind.Save;',
@@ -82,8 +88,8 @@ def main():
             )
 
     print(
-        "PASS: every canonical QS3D ribbon tab gets deterministic fallback icons for "
-        "text-only command buttons while preserving already-polished Home/Draw/custom images."
+        "PASS: every canonical QS3D ribbon tab gets deterministic culture-safe fallback icons "
+        "for text-only command buttons while preserving already-polished Home/Draw/custom images."
     )
     return 0
 
