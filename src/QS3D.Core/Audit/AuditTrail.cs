@@ -66,7 +66,7 @@ namespace QS3D.Core.Audit
             RequireXmlCharacters(safeDetail, nameof(detail), "Audit detail");
             RequireXmlCharacters(safeActor, nameof(actor), "Audit actor");
             RequireXmlCharacters(safeCorrelationId, nameof(correlationId), "Audit correlation id");
-            ValidateExistingHistoryForRecord();
+            ValidateExistingHistory(" Repair the existing audit history before recording a new event.");
 
             var item = new AuditEvent
             {
@@ -84,17 +84,18 @@ namespace QS3D.Core.Audit
         public void Clear()
         {
             if (_events.Count == 0) return;
+            ValidateExistingHistory(" Repair the existing audit history before clearing it.");
             _project?.Touch();
             _events.Clear();
         }
 
-        private void ValidateExistingHistoryForRecord()
+        private void ValidateExistingHistory(string repairInstruction)
         {
             foreach (var existing in _events)
             {
                 var validationError = GetStoredEventValidationError(existing);
                 if (validationError != null)
-                    throw new InvalidOperationException(validationError + " Repair the existing audit history before recording a new event.");
+                    throw new InvalidOperationException(validationError + repairInstruction);
             }
         }
 
@@ -117,7 +118,7 @@ namespace QS3D.Core.Audit
             if (ContainsInvalidXmlCharacters(item.Detail ?? string.Empty))
                 return "Audit trail contains XML-invalid detail.";
             if (ContainsInvalidXmlCharacters(item.Actor ?? string.Empty))
-                return "Audit trail contains an XML-invalid actor.";
+                return "Audit trail contains XML-invalid actor.";
             if (ContainsInvalidXmlCharacters(item.CorrelationId ?? string.Empty))
                 return "Audit trail contains an XML-invalid correlation id.";
 
