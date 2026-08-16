@@ -74,6 +74,7 @@ checks = {
         'CURTAIN_FRAME_GRID_COUNT_MISMATCH', 'GeneratedCurtainFrameBaseCount', 'GeneratedCurtainFrameOpeningCount',
         'ExpectedPhysicalBaseFrameCount', 'matchingCurrentConfig', 'rawHandles.Length > 0',
         'LineFrameOverlay.OpeningAware', 'CURTAIN_FRAME_OPENING_MODE_MISMATCH',
+        'GeneratedCurtainFrameMappedFrameCount', 'CURTAIN_FRAME_PATH_MAPPED_COUNT_MISMATCH',
         'GeneratedCurtainFrameDepthM', 'GeneratedCurtainFrameSourceLengthM', 'GeneratedCurtainFrameHeightM',
         'GeneratedCurtainFrameConfigFingerprint', 'CurtainWallFrameFingerprint.Compute',
         'CURTAIN_FRAME_CONFIG_FINGERPRINT_MISSING', 'CURTAIN_FRAME_CONFIG_STALE',
@@ -100,6 +101,7 @@ checks = {
     "health_smoke": [
         'ModuleInitializer', 'LaterGeneratedOwnerStillConflictsWithCurtainFrames',
         'ReducedPhysicalFrameCountMatchesNonZeroWidths', 'ZeroFrameSnapshotsRemainInspectable',
+        'PathMappedFrameCountCannotExceedGeneratedPieces', 'CURTAIN_FRAME_PATH_MAPPED_COUNT_MISMATCH',
         'CURTAIN_FRAME_GENERATED_OWNERSHIP_CONFLICT', 'CURTAIN_FRAME_CONFIG_STALE',
     ],
     "logic_smoke": ['CurtainFramesStaleOnLinkRehostAndUnlink', '!wallA.IsGeneratedSolidStale()', '!wallB.IsGeneratedSolidStale()'],
