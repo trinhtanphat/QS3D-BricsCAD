@@ -27,6 +27,21 @@ namespace QS3D.Core.SmokeTests
 
             var blank = new Dictionary<string, double> { [" \t "] = 1.0 };
             Throws<InvalidOperationException>(() => evaluator.Evaluate("1", blank), "blank variable name");
+
+            foreach (var invalidName in new[] { "1abc", "a-b", "a b" })
+            {
+                var invalid = new Dictionary<string, double> { [invalidName] = 1.0 };
+                Throws<InvalidOperationException>(() => evaluator.Evaluate("1", invalid), $"invalid variable name '{invalidName}'");
+            }
+
+            var validIdentifiers = new Dictionary<string, double>
+            {
+                ["_x"] = 1.0,
+                ["A1"] = 2.0,
+                ["a.b"] = 3.0,
+                ["Rate"] = 4.0
+            };
+            Near(10.0, evaluator.Evaluate("_x + A1 + a.b + rate", validIdentifiers), 1e-12, "valid identifier grammar and case-insensitive lookup");
         }
 
         private static void Near(double expected, double actual, double tolerance, string label)
