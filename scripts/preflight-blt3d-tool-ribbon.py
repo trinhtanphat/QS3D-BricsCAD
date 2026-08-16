@@ -9,11 +9,19 @@ COMMANDS = ROOT / "src" / "QS3D.BricsCAD.V25" / "BltToolCommands.cs"
 COORDINATOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "RibbonInitializationCoordinator.cs"
 SLAB_OPENING = ROOT / "src" / "QS3D.BricsCAD.V25" / "DirectDrawSlabOpeningCommands.cs"
 REVIEW = ROOT / "src" / "QS3D.BricsCAD.V25" / "ReviewCommands.cs"
+PRECISION = ROOT / "src" / "QS3D.Core" / "Geometry" / "GeometryOffsetPrecision.cs"
+PRECISION_SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "GeometryOffsetPrecisionSmoke.cs"
+SMOKE_REGISTRATION = ROOT / "tests" / "QS3D.Core.SmokeTests" / "SmokeTestRegistration.cs"
 
 
 def require(text: str, needle: str, errors: list[str], label: str) -> None:
     if needle not in text:
         errors.append(f"missing {label}: {needle}")
+
+
+def forbid(text: str, needle: str, errors: list[str], label: str) -> None:
+    if needle in text:
+        errors.append(f"forbidden {label}: {needle}")
 
 
 def require_order(text: str, needles: list[str], errors: list[str], label: str) -> None:
@@ -40,6 +48,9 @@ def main() -> int:
     coordinator = read_required(COORDINATOR, errors)
     slab_opening = read_required(SLAB_OPENING, errors)
     review = read_required(REVIEW, errors)
+    precision = read_required(PRECISION, errors)
+    precision_smoke = read_required(PRECISION_SMOKE, errors)
+    smoke_registration = read_required(SMOKE_REGISTRATION, errors)
     if errors:
         for error in errors:
             print("ERROR:", error)
@@ -129,11 +140,47 @@ def main() -> int:
     require(commands, "EntitySnapshotReader.ReadCurrentSelection(document)", errors, "pile selection")
     require(commands, "CadUnitService.MetersToDrawingUnits", errors, "drawing-unit conversion")
     require(commands, "Matrix3d.Displacement(new Vector3d(0d, 0d, deltaZ))", errors, "pile Z translation")
-    require(commands, "capExtents.MinPoint.Z + embedDrawing", errors, "pile-cap embed target")
+    require(commands, "GeometryOffsetPrecision.TryAddNonNegative(", errors, "pile embed precision guard")
+    require(commands, "GeometryOffsetPrecision.TryExpandBoth(", errors, "two-sided TOOL precision guard")
+    require(commands, "GeometryOffsetPrecision.TrySubtractNonNegative(", errors, "lean-concrete thickness precision guard")
+    require(commands, "GeometryOffsetPrecision.TryExpandLower(", errors, "excavation depth precision guard")
+    require(commands, 'RequireFinite(deltaZ, "độ dịch Z cọc")', errors, "finite pile displacement")
     require(commands, "solid.CreateBox(width, depth, height);", errors, "generated native TOOL solids")
     require(commands, "TOOL 3D geometry chỉ tạo trong Model Space", errors, "Model Space mutation guard")
     require(commands, "không tự Boolean trừ địa hình", errors, "truthful excavation behavior")
     require(commands, "chưa tự gán semantic Family", errors, "truthful lean-concrete behavior")
+
+    # Reject the previously fail-open arithmetic forms that could silently swallow positive user offsets.
+    for unsafe, label in (
+        ("capExtents.MinPoint.Z + embedDrawing", "unguarded pile embed addition"),
+        ("extents.MaxPoint.X - extents.MinPoint.X + 2d * overhang", "unguarded lean X overhang"),
+        ("extents.MaxPoint.Y - extents.MinPoint.Y + 2d * overhang", "unguarded lean Y overhang"),
+        ("extents.MinPoint.Z - thickness", "unguarded lean thickness subtraction"),
+        ("extents.MaxPoint.X - extents.MinPoint.X + 2d * clearance", "unguarded excavation X clearance"),
+        ("extents.MaxPoint.Y - extents.MinPoint.Y + 2d * clearance", "unguarded excavation Y clearance"),
+        ("extents.MinPoint.Z - extraBottom", "unguarded excavation extra-bottom subtraction"),
+    ):
+        forbid(commands, unsafe, errors, label)
+
+    precision_requirements = (
+        "requirePositiveChange && !(candidate > origin)",
+        "requirePositiveChange && !(candidate < origin)",
+        "requirePositiveChange && !(span > originalSpan)",
+        "TryExpandBoth(",
+        "TryExpandLower(",
+    )
+    for token in precision_requirements:
+        require(precision, token, errors, "binary64 offset precision contract")
+
+    for token in (
+        "LargeCoordinateAddCollapseFailsClosed",
+        "LargeCoordinateSubtractCollapseFailsClosed",
+        "ExpandBothRejectsLostPositiveOffset",
+        "ExpandLowerRejectsLostPositiveDepth",
+        "OverflowAndNonFiniteInputsFailClosed",
+    ):
+        require(precision_smoke, token, errors, "TOOL precision regression")
+    require(smoke_registration, "GeometryOffsetPrecisionSmoke.Run();", errors, "TOOL precision smoke registration")
 
     # MCP/AI buttons must expose real local configuration and transport diagnostics without
     # falsely claiming protocol health when only the socket path is reachable.
@@ -166,7 +213,7 @@ def main() -> int:
 
     print(
         "PASS: BLT3D TOOL contract is pinned: 5 owner-reference panels, 9 icon-bearing actions, "
-        "functional command bindings, guarded geometry mutations, real slab/recognition reuse, and truthful MCP diagnostics."
+        "functional command bindings, fail-closed binary64 geometry offsets, real slab/recognition reuse, and truthful MCP diagnostics."
     )
     return 0
 
