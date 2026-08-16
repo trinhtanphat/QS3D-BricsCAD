@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 
 namespace QS3D.BricsCAD.V25.Ribbon
@@ -68,36 +69,54 @@ namespace QS3D.BricsCAD.V25.Ribbon
             if (!(panels is IEnumerable panelEnumerable)) return false;
 
             var commandButtons = 0;
+            var visited = new HashSet<object>();
             foreach (var panel in panelEnumerable)
             {
                 if (panel == null) continue;
                 var source = GetProperty(panel, "Source");
                 if (source == null) continue;
                 var items = GetProperty(source, "Items");
-                if (!(items is IEnumerable itemEnumerable)) continue;
-
-                foreach (var item in itemEnumerable)
-                {
-                    if (item == null) continue;
-                    if (!(GetProperty(item, "CommandParameter") is string command)
-                        || string.IsNullOrWhiteSpace(command))
-                        continue;
-
-                    commandButtons++;
-                    if (HasCompleteVisibleIcon(item))
-                        continue;
-
-                    var text = (GetProperty(item, "Text") as string)
-                               ?? (GetProperty(item, "Name") as string)
-                               ?? string.Empty;
-                    var icon = ResolveIcon(command, text);
-                    SetProperty(item, "ShowImage", true);
-                    SetProperty(item, "Image", RibbonIconFactory.Create(icon, 16));
-                    SetProperty(item, "LargeImage", RibbonIconFactory.Create(icon, 32));
-                }
+                if (items == null) continue;
+                ApplyIconsToCollection(items, visited, ref commandButtons);
             }
 
             return commandButtons > 0;
+        }
+
+        private static void ApplyIconsToCollection(object collection, HashSet<object> visited, ref int commandButtons)
+        {
+            if (!(collection is IEnumerable enumerable)) return;
+
+            foreach (var item in enumerable)
+            {
+                if (item == null || !visited.Add(item)) continue;
+
+                if (GetProperty(item, "CommandParameter") is string command
+                    && !string.IsNullOrWhiteSpace(command))
+                {
+                    commandButtons++;
+                    if (HasCompleteVisibleIcon(item))
+                    {
+                        // Preserve custom images supplied by richer Ribbon augmenters.
+                    }
+                    else
+                    {
+                        var text = (GetProperty(item, "Text") as string)
+                                   ?? (GetProperty(item, "Name") as string)
+                                   ?? string.Empty;
+                        var icon = ResolveIcon(command, text);
+                        SetProperty(item, "ShowImage", true);
+                        SetProperty(item, "Image", RibbonIconFactory.Create(icon, 16));
+                        SetProperty(item, "LargeImage", RibbonIconFactory.Create(icon, 32));
+                    }
+                }
+
+                // Compact BLT-style panels use RibbonRowPanel containers. Traverse nested
+                // Items so those buttons count toward readiness and retain their own icons.
+                var nestedItems = GetProperty(item, "Items");
+                if (nestedItems != null)
+                    ApplyIconsToCollection(nestedItems, visited, ref commandButtons);
+            }
         }
 
         private static bool HasCompleteVisibleIcon(object item) =>

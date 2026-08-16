@@ -47,6 +47,8 @@ namespace QS3D.Core.Rebar
             var twoEdgeClearanceM = RebarMath.Multiply(edgeClearanceM, 2d, "linear rebar two-side clearance");
             var usableSpanM = spanM - twoEdgeClearanceM;
             if (double.IsNaN(usableSpanM) || double.IsInfinity(usableSpanM)) throw new OverflowException("Linear rebar usable span is not finite.");
+            if (twoEdgeClearanceM > 0d && usableSpanM == spanM)
+                throw new OverflowException("Linear rebar usable span lost positive edge clearance at the current numeric scale.");
             if (usableSpanM < 0d) throw new InvalidOperationException("Cover + bar radius leaves no usable linear rebar span inside the host.");
 
             int count;

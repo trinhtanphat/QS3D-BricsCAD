@@ -15,7 +15,7 @@ namespace QS3D.Core.Domain
                 hex = hex.Substring(2);
             if (hex.Length == 0) return normalized;
 
-            if (!long.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value) || value <= 0L)
+            if (!ulong.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value) || value == 0UL)
                 return normalized;
             return value.ToString("X", CultureInfo.InvariantCulture);
         }
