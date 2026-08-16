@@ -10,7 +10,7 @@ namespace QS3D.Core.SmokeTests
             CanonicalVietnameseAndSupplementaryUnicodeRemainAccepted();
             SurroundingSpacesRemainNormalized();
             ConstructorRejectsControlCharacters();
-            ConstructorRejectsInvalidUtf16();
+            ConstructorRejectsXmlInvalidText();
             MutableNameRejectsInvalidTextAtomically();
             WhitespaceOnlyIdentityRemainsRejected();
         }
@@ -30,6 +30,9 @@ namespace QS3D.Core.SmokeTests
             var profile = new TemplateProfile("  TEMPLATE-01  ", "  Mẫu chuẩn  ");
             Equal("TEMPLATE-01", profile.Id, "Template id trim semantics changed.");
             Equal("Mẫu chuẩn", profile.Name, "Template name trim semantics changed.");
+
+            profile.Name = "  Tên cập nhật  ";
+            Equal("Tên cập nhật", profile.Name, "Mutable template name trim semantics changed.");
         }
 
         private static void ConstructorRejectsControlCharacters()
@@ -41,13 +44,15 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
-        private static void ConstructorRejectsInvalidUtf16()
+        private static void ConstructorRejectsXmlInvalidText()
         {
             var loneHighSurrogate = "ID-" + new string(new[] { '\uD800' });
             var loneLowSurrogate = "Name-" + new string(new[] { '\uDC00' });
+            var nonCharacter = "ID-" + new string(new[] { '\uFFFE' });
 
             Throws<ArgumentException>(() => new TemplateProfile(loneHighSurrogate, "Valid"));
             Throws<ArgumentException>(() => new TemplateProfile("VALID-ID", loneLowSurrogate));
+            Throws<ArgumentException>(() => new TemplateProfile(nonCharacter, "Valid"));
         }
 
         private static void MutableNameRejectsInvalidTextAtomically()
@@ -60,6 +65,10 @@ namespace QS3D.Core.SmokeTests
             var loneSurrogate = "Tên " + new string(new[] { '\uD800' });
             Throws<ArgumentException>(() => profile.Name = loneSurrogate);
             Equal("Tên ban đầu", profile.Name, "Rejected invalid UTF-16 name mutated existing state.");
+
+            var nonCharacter = "Tên " + new string(new[] { '\uFFFF' });
+            Throws<ArgumentException>(() => profile.Name = nonCharacter);
+            Equal("Tên ban đầu", profile.Name, "Rejected XML noncharacter name mutated existing state.");
         }
 
         private static void WhitespaceOnlyIdentityRemainsRejected()
