@@ -40,6 +40,7 @@ namespace QS3D.Core.SmokeTests
             RevisionSnapshotStoreIntegritySmoke.Run();
             WorkflowPersistenceSmoke.Run();
             BbsRegressionSmoke.Run();
+            RebarCsvStrictUtf8Smoke.Run();
             WorkflowSafetySmoke.Run();
             CompletionRegressionSmoke.Run();
             SemanticOverflowSmoke.Run();
@@ -81,7 +82,6 @@ namespace QS3D.Core.SmokeTests
             HealthSummaryReadinessSmoke.Run();
             DependencyHealthMissingTargetSmoke.Run();
             DependencyHealthBlankTargetSmoke.Run();
-            SourceHandleResolverCanonicalRootSmoke.Run();
             LevelReferenceSmoke.Run();
             FloorGeneratedIdentitySmoke.Run();
             ModelHealthIdentityAmbiguitySmoke.Run();

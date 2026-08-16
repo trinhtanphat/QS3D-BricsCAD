@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
 
@@ -10,6 +11,9 @@ namespace QS3D.Core.SmokeTests
     internal static class SourceHandleResolverCanonicalRootSmoke
     {
         private const int MaxRootCount = 10000;
+
+        [ModuleInitializer]
+        internal static void Initialize() => Run();
 
         public static void Run()
         {
