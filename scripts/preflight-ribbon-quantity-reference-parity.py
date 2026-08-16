@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 AUGMENTER = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/QuantityReferenceRibbonAugmenter.cs"
 ICON_FACTORY = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonIconFactory.cs"
 COORDINATOR = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator.cs"
+FALLBACK = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonCommandParameterFallback.cs"
 PLUGIN = ROOT / "src/QS3D.BricsCAD.V25/PluginEntry.cs"
 SETTINGS_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/QuantitySettingsCommands.cs"
 CORE_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/Commands.cs"
@@ -17,6 +18,7 @@ for path in (
     AUGMENTER,
     ICON_FACTORY,
     COORDINATOR,
+    FALLBACK,
     PLUGIN,
     SETTINGS_COMMANDS,
     CORE_COMMANDS,
@@ -127,12 +129,24 @@ if COORDINATOR.is_file():
     raft_pos = text.find("RaftFoundationRibbonAugmenter.TryInitialize()")
     quantity_pos = text.find("QuantityReferenceRibbonAugmenter.TryInitialize()")
     update_pos = text.find("UpdateRibbonAugmenter.TryInitialize()")
-    if min(bootstrap_pos, quick_pos, raft_pos, quantity_pos, update_pos) < 0:
+    fallback_pos = text.find("RibbonCommandParameterFallback.TryInitialize()")
+    if min(bootstrap_pos, quick_pos, raft_pos, quantity_pos, update_pos, fallback_pos) < 0:
         errors.append("RibbonInitializationCoordinator is missing a required quantity initialization stage")
-    elif not bootstrap_pos < quick_pos < raft_pos < quantity_pos < update_pos:
+    elif not bootstrap_pos < quick_pos < raft_pos < quantity_pos < update_pos < fallback_pos:
         errors.append(
-            "QuantityReferenceRibbonAugmenter must run after canonical/quick/raft setup and before Update augmentation"
+            "QuantityReferenceRibbonAugmenter must run after canonical/quick/raft setup, before Update, and before command fallback capture"
         )
+
+if FALLBACK.is_file():
+    text = FALLBACK.read_text(encoding="utf-8")
+    for needle in (
+        'var command = GetProperty(item, "CommandParameter") as string;',
+        'SetProperty(item, "CommandHandler", new CommandParameterFallbackHandler(handler, command));',
+        'public bool CanExecute(object? parameter) => _inner.CanExecute(ResolveParameter(parameter));',
+        'public void Execute(object? parameter) => _inner.Execute(ResolveParameter(parameter));',
+    ):
+        if needle not in text:
+            errors.append("quantity ribbon command-parameter fallback contract missing: " + needle)
 
 if PLUGIN.is_file():
     text = PLUGIN.read_text(encoding="utf-8")
@@ -186,6 +200,7 @@ behavior_contracts = (
         "Diễn giải",
         (
             '[CommandMethod("QS3DQUANTITYINSIGHT", CommandFlags.UsePickSet)]',
+            "EntitySnapshotReader.ReadCurrentSelection(document);",
             "PaletteCoordinator.SetInspection(snapshots);",
             "PaletteCoordinator.ShowQuantityInsight();",
         ),
@@ -209,6 +224,11 @@ for path, action_name, needles in behavior_contracts:
         if needle not in text:
             errors.append(f"{action_name} behavior contract missing: {needle}")
 
+if INSIGHT_COMMANDS.is_file():
+    text = INSIGHT_COMMANDS.read_text(encoding="utf-8")
+    if "EntitySnapshotReader.ReadImpliedSelection(document);" in text:
+        errors.append("Diễn giải ribbon action must prompt when PICKFIRST is empty; implied-selection-only routing is not allowed")
+
 adapter_root = ROOT / "src/QS3D.BricsCAD.V25"
 if adapter_root.is_dir():
     command_source = "\n".join(
@@ -231,6 +251,6 @@ if errors:
 print(
     "PASS: QS3D_QTY is reconciled to the BLT3D reference with exactly two groups, "
     "six large icon buttons, deterministic removal of legacy QS3D quantity panels, "
-    "distinct registered command routing with pinned behavior, coordinated initialization, "
-    "and contained teardown."
+    "distinct registered command routing with pinned behavior and selection prompting, "
+    "command-parameter fallback capture, coordinated initialization, and contained teardown."
 )
