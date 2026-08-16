@@ -50,8 +50,8 @@ namespace QS3D.Core.Rebar
             NonNegative(input.BottomClearanceM, nameof(input.BottomClearanceM));
             NonNegative(input.TopClearanceM, nameof(input.TopClearanceM));
 
-            var diameterM = input.DiameterMm / 1000d;
-            var radiusM = diameterM / 2d;
+            var diameterM = RebarMath.Divide(input.DiameterMm, 1000d, "column tie diameter");
+            var radiusM = RebarMath.Divide(diameterM, 2d, "column tie radius");
             var halfWidth = input.WidthM / 2d - input.CoverM - radiusM;
             var halfDepth = input.DepthM / 2d - input.CoverM - radiusM;
             if (!(halfWidth > 0d) || !(halfDepth > 0d))

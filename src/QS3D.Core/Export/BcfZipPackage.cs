@@ -377,7 +377,12 @@ namespace QS3D.Core.Export
             var allowed = new HashSet<string>(names, StringComparer.Ordinal);
             foreach (var attribute in element.Attributes())
             {
-                if (attribute.IsNamespaceDeclaration || attribute.Name.NamespaceName == "http://www.w3.org/2001/XMLSchema-instance") continue;
+                if (attribute.IsNamespaceDeclaration) continue;
+                if (attribute.Name.NamespaceName == "http://www.w3.org/2001/XMLSchema-instance")
+                {
+                    if (string.Equals(attribute.Name.LocalName, "noNamespaceSchemaLocation", StringComparison.Ordinal)) continue;
+                    throw new InvalidDataException("Unsupported BCF XML schema-instance attribute: " + attribute.Name.LocalName);
+                }
                 if (attribute.Name.NamespaceName.Length != 0 || !allowed.Contains(attribute.Name.LocalName)) throw new InvalidDataException("Unsupported BCF XML attribute: " + attribute.Name.LocalName);
             }
         }

@@ -48,6 +48,7 @@ namespace QS3D.Core.SmokeTests
 
             var version = ReadEntry(archive, "bcf.version");
             Require(version, "VersionId=\"3.0\"");
+            Require(version, "xsi:noNamespaceSchemaLocation=");
             var extensions = ReadEntry(archive, "extensions.xml");
             Require(extensions, "<TopicType>Coordination</TopicType>");
             Require(extensions, "<TopicStatus>Open</TopicStatus>");
@@ -83,6 +84,22 @@ namespace QS3D.Core.SmokeTests
                 ["extensions.xml"] = ExtensionsXml()
             });
             ThrowsInvalidData(() => BcfZipPackage.Read(unsupported), "Unsupported BCF versions must fail closed.");
+
+            var unsupportedXsiNil = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bcf.version"] = "<Version VersionId=\"3.0\" />",
+                ["extensions.xml"] = ExtensionsXml(),
+                [TopicA + "/markup.bcf"] = "<Markup xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:nil=\"true\"><Topic Guid=\"" + TopicA + "\" TopicType=\"Coordination\" TopicStatus=\"Open\"><Title>Unsafe xsi nil</Title><CreationDate>2026-08-14T09:00:00Z</CreationDate><CreationAuthor>qa@qs3d</CreationAuthor></Topic></Markup>"
+            });
+            ThrowsInvalidData(() => BcfZipPackage.Read(unsupportedXsiNil), "Unsupported xsi:nil semantics must fail closed.");
+
+            var unsupportedXsiType = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bcf.version"] = "<Version VersionId=\"3.0\" />",
+                ["extensions.xml"] = ExtensionsXml(),
+                [TopicA + "/markup.bcf"] = "<Markup><Topic xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"InjectedTopic\" Guid=\"" + TopicA + "\" TopicType=\"Coordination\" TopicStatus=\"Open\"><Title>Unsafe xsi type</Title><CreationDate>2026-08-14T09:00:00Z</CreationDate><CreationAuthor>qa@qs3d</CreationAuthor></Topic></Markup>"
+            });
+            ThrowsInvalidData(() => BcfZipPackage.Read(unsupportedXsiType), "Unsupported xsi:type semantics must fail closed.");
 
             var unsafePath = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
             {
