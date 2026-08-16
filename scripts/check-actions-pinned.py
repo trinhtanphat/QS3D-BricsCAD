@@ -8,8 +8,13 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 USES_RE = re.compile(r"^\s*-?\s*uses:\s*([^\s#]+)")
 
+workflow_paths = sorted(
+    [*WORKFLOWS.glob("*.yml"), *WORKFLOWS.glob("*.yaml")],
+    key=lambda path: path.name,
+)
+
 errors: list[str] = []
-for workflow in sorted(WORKFLOWS.glob("*.yml")):
+for workflow in workflow_paths:
     text = workflow.read_text(encoding="utf-8")
     if "pull_request_target:" in text or '"pull_request_target":' in text:
         errors.append(f"{workflow.relative_to(ROOT)}: pull_request_target is forbidden for repository workflows")
