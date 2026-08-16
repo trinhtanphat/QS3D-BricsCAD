@@ -181,6 +181,7 @@ namespace QS3D.Core.SmokeTests
                 "Persisted documentation catalogs above the 10,000-sheet bound must fail closed.");
         }
 
+        // Keep these generated fixtures deliberately compact so count guards, not the 1 MiB XML cap, determine the result.
         private static string BuildPersistedCatalog(int viewCount, int sheetCount)
         {
             var payload = new StringBuilder("<documentation version=\"1\"><views>");
