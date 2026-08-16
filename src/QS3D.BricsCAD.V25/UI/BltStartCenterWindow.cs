@@ -26,6 +26,7 @@ namespace QS3D.BricsCAD.V25.UI
         private static readonly Brush MutedBrush = BrushFromRgb(174, 179, 188);
         private static readonly Brush AccentBrush = BrushFromRgb(20, 113, 236);
         private static readonly Brush TextBrush = Brushes.White;
+        private static readonly ControlTemplate ClickSurfaceTemplate = CreateClickSurfaceTemplate();
 
         private readonly StackPanel _recentPanel = new StackPanel();
         private readonly TextBlock _floorText = new TextBlock();
@@ -319,6 +320,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             return new Button
             {
+                Template = ClickSurfaceTemplate,
                 Background = Brushes.Transparent,
                 BorderBrush = Brushes.Transparent,
                 BorderThickness = new Thickness(0),
@@ -327,6 +329,23 @@ namespace QS3D.BricsCAD.V25.UI
                 VerticalContentAlignment = VerticalAlignment.Stretch,
                 Cursor = cursor,
                 Content = content
+            };
+        }
+
+        private static ControlTemplate CreateClickSurfaceTemplate()
+        {
+            var root = new FrameworkElementFactory(typeof(Border));
+            root.SetValue(Border.BackgroundProperty, Brushes.Transparent);
+
+            var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+            presenter.SetValue(ContentPresenter.ContentSourceProperty, "Content");
+            presenter.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Stretch);
+            presenter.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Stretch);
+            root.AppendChild(presenter);
+
+            return new ControlTemplate(typeof(Button))
+            {
+                VisualTree = root
             };
         }
 
