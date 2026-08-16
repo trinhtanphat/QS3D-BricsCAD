@@ -4,6 +4,7 @@ using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.UI;
+using QS3D.Core.Geometry;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
 using Teigha.Runtime;
@@ -51,7 +52,7 @@ namespace QS3D.BricsCAD.V25
                 var command = BuildDetailCommand(minPoint, maxPoint);
                 if (string.IsNullOrWhiteSpace(command))
                 {
-                    const string boundsMessage = "Cắt theo đối tượng: kích thước đối tượng quá nhỏ để tạo BIM Detail volume ổn định.";
+                    const string boundsMessage = "Cắt theo đối tượng: bounds không hữu hạn/quá nhỏ hoặc padding không thể biểu diễn ổn định; không gửi BIM Detail command.";
                     PaletteCoordinator.SetStatus(boundsMessage);
                     document.Editor.WriteMessage("\nQS3D " + boundsMessage);
                     return;
@@ -153,7 +154,9 @@ namespace QS3D.BricsCAD.V25
                 transaction.Commit();
             }
 
-            if (selectedCount <= 0 || double.IsInfinity(minX) || double.IsInfinity(maxX))
+            if (selectedCount <= 0 ||
+                !Finite(minX) || !Finite(minY) || !Finite(minZ) ||
+                !Finite(maxX) || !Finite(maxY) || !Finite(maxZ))
                 return false;
 
             minPoint = new Point3d(minX, minY, minZ);
@@ -163,22 +166,23 @@ namespace QS3D.BricsCAD.V25
 
         private static string? BuildDetailCommand(Point3d minPoint, Point3d maxPoint)
         {
-            var spanX = Math.Abs(maxPoint.X - minPoint.X);
-            var spanY = Math.Abs(maxPoint.Y - minPoint.Y);
-            var spanZ = Math.Abs(maxPoint.Z - minPoint.Z);
-            var longest = Math.Max(Math.Max(spanX, spanY), spanZ);
-            if (!(longest > 1e-9)) return null;
+            if (!SectionDetailVolumePlanner.TryCreate(
+                    minPoint.X,
+                    minPoint.Y,
+                    minPoint.Z,
+                    maxPoint.X,
+                    maxPoint.Y,
+                    maxPoint.Z,
+                    1e-9d,
+                    out var plan))
+                return null;
 
-            var horizontalSpan = Math.Max(spanX, spanY);
-            var horizontalPadding = Math.Max(horizontalSpan * 0.05, longest * 0.01);
-            var verticalPadding = Math.Max(spanZ * 0.05, longest * 0.01);
-            var baseZ = minPoint.Z - verticalPadding;
-            var height = Math.Max(spanZ + verticalPadding * 2.0, longest * 0.02);
-
-            var first = PointToken(minPoint.X - horizontalPadding, minPoint.Y - horizontalPadding, baseZ);
-            var opposite = PointToken(maxPoint.X + horizontalPadding, maxPoint.Y + horizontalPadding, baseZ);
-            return BimDetailCommand + first + " " + opposite + " " + NumberToken(height) + " ";
+            var first = PointToken(plan.FirstX, plan.FirstY, plan.BaseZ);
+            var opposite = PointToken(plan.OppositeX, plan.OppositeY, plan.BaseZ);
+            return BimDetailCommand + first + " " + opposite + " " + NumberToken(plan.Height) + " ";
         }
+
+        private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
         private static string PointToken(double x, double y, double z) =>
             NumberToken(x) + "," + NumberToken(y) + "," + NumberToken(z);
