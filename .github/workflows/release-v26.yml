@@ -52,15 +52,16 @@ jobs:
       RELEASE_RUN_RUNTIME: ${{ inputs.run_runtime }}
       RELEASE_SIGN_PACKAGE: ${{ inputs.sign_package }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
 
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: "8.0.x"
 
@@ -228,7 +229,7 @@ jobs:
           "$hash  QS3D-BricsCAD-V26.zip" | Set-Content "dist\QS3D-BricsCAD-V26.zip.sha256" -Encoding ASCII
 
       - name: Upload V26 qualification artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: QS3D-BricsCAD-V26-${{ inputs.release_tag }}
           if-no-files-found: error
