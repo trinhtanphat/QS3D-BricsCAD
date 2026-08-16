@@ -77,6 +77,8 @@ namespace QS3D.Core.Services
                 if (double.IsNaN(next) || double.IsInfinity(next)) throw new OverflowException("Bulk property multiplication overflow for " + element.Id + "/" + key);
                 if (next == 0d && current != 0d && factor != 0d)
                     throw new InvalidOperationException("Bulk property multiplication underflow for " + element.Id + "/" + key);
+                if (next.Equals(current) && current != 0d && factor != 1d)
+                    throw new InvalidOperationException("Bulk property multiplication lost a non-unit factor at floating-point precision for " + element.Id + "/" + key);
                 if (next.Equals(current)) continue;
                 var formatted = next.ToString("R", CultureInfo.InvariantCulture);
                 updates.Add(new PendingPropertyUpdate { Element = element, Value = formatted });
