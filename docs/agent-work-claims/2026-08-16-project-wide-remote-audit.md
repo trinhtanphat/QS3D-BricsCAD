@@ -2,7 +2,8 @@
 
 Status: ACTIVE
 Agent/session: chatgpt-gpt56sol
-Baseline: `main@ce0a77575497062da49c5e4b82d591af434a7324`
+Original r4 baseline: `main@ce0a77575497062da49c5e4b82d591af434a7324`
+Latest reconciled main: `main@755266dcf09a5a7d8e47cec9ad677c1cb615cdd2`
 Branch: `agent/chatgpt-gpt56sol/project-wide-audit-20260816-r4`
 Supersedes construction branches: `agent/chatgpt-gpt56sol/project-wide-audit-20260816`, `agent/chatgpt-gpt56sol/project-wide-audit-20260816-r2`, `agent/chatgpt-gpt56sol/project-wide-audit-20260816-r3`
 
@@ -29,5 +30,5 @@ This audit must not duplicate or take over currently reserved/open lanes. Existi
 - no licensed BricsCAD runtime claims;
 - no manual GitHub Actions dispatch unless separately authorized.
 
-## Validation
-The r3 candidate `d98a7c0410c22cab141ead088ecf6f9de9dbffc9` passed automatic shared branch CI run `31933180039` completely: preflight, all discovered feature guards, Core Release build, deterministic smoke, trusted BricsCAD V25 compile-reference validation, and V25 plugin build. This r4 branch is a clean reapplication on newer non-overlapping `main` after BCF PR #1905 landed, and requires its own exact-head branch CI before PR creation.
+## Validation / reconciliation
+Exact r4 head `a8d7a4666e09a8765646ff972c01b418974d262e` passed automatic shared branch CI run `31933470384` completely: preflight, all discovered feature guards, Core Release build, deterministic smoke, trusted BricsCAD V25 compile-reference validation, and V25 plugin build. While that run completed, `main` advanced only through non-overlapping ColumnTieLayout scaling-underflow work (#1909). The branch is being reconciled non-force with `main@755266dcf09a5a7d8e47cec9ad677c1cb615cdd2`; the resulting merge head requires fresh automatic branch CI before PR creation.
