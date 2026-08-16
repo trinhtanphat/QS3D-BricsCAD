@@ -42,17 +42,28 @@ if not errors:
     read_only_export = 'var readOnlyExportPreparation = string.Equals(operation, "QS3DED2", StringComparison.OrdinalIgnoreCase);'
     read_only_bq = 'var readOnlyBqPreparation = string.Equals(operation, "QS3DBQ", StringComparison.OrdinalIgnoreCase);'
     combined = "var readOnlyQuantityPreparation = readOnlyExportPreparation || readOnlyBqPreparation;"
-    resolved_guard = "if (!readOnlyQuantityPreparation)\n                    PersistLegacyBindingIfNeeded(document, resolution);"
+    resolved_guard = "if (!readOnlyExportPreparation)\n                    PersistLegacyBindingIfNeeded(document, resolution);"
     unresolved_guard = "if (readOnlyQuantityPreparation)"
     prompt = "return PromptAndPersist(document);"
     for token, message in (
         (read_only_export, "DrawingUnitWorkflow no longer identifies QS3DED2 read-only export preparation"),
-        (read_only_bq, "DrawingUnitWorkflow no longer identifies QS3DBQ read-only quantity preparation"),
-        (combined, "DrawingUnitWorkflow no longer combines ED2/BQ into shared read-only quantity preparation"),
-        (resolved_guard, "resolved ED2/BQ unit policy can persist legacy project binding during read-only quantity preparation"),
+        (read_only_bq, "DrawingUnitWorkflow no longer identifies QS3DBQ quantity preparation"),
+        (combined, "DrawingUnitWorkflow no longer combines ED2/BQ for unresolved-unit fail-closed preparation"),
+        (resolved_guard, "resolved unit path no longer suppresses legacy binding persistence specifically for ED2 export preparation"),
     ):
         if token not in units:
             errors.append(message)
+
+    resolved = units.find("CadUnitService.TryGetPolicy(document, out _, out var resolution)")
+    resolved_return = units.find("return true;", resolved + 1)
+    if resolved < 0 or resolved_return < 0:
+        errors.append("DrawingUnitWorkflow missing resolved-unit preparation block")
+    else:
+        resolved_block = units[resolved:resolved_return]
+        if "if (!readOnlyQuantityPreparation)" in resolved_block:
+            errors.append("resolved BQ preparation must not suppress compatible legacy binding migration with ED2")
+        if "PromptAndPersist(document)" in resolved_block or "GetOrCreate" in resolved_block:
+            errors.append("resolved ED2/BQ unit block must not prompt for units or create a project")
 
     unresolved = units.find(unresolved_guard)
     prompt_index = units.find(prompt)
@@ -75,4 +86,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: ED2 resolves existing state and unit policy read-only before detached export validation; ED2/BQ resolved legacy binding is suppressed, unresolved units fail closed, and explicit QS3DUNITS owns persistence.")
+print("PASS: ED2 resolves existing state and unit policy read-only before detached export validation; ED2 suppresses legacy binding persistence, compatible BQ preparation may canonicalize an existing legacy binding, unresolved units fail closed, and explicit QS3DUNITS owns unit selection persistence.")

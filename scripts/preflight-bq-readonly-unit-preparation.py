@@ -35,6 +35,10 @@ def main():
     workflow = WORKFLOW.read_text(encoding="utf-8")
     bq = method_slice(commands, "public void ShowQuantitySummary()", "public void ExportEd2Workflow()")
     ensure = method_slice(workflow, "public static bool EnsureResolved(", "public static void Configure(")
+    persist_start = workflow.find("private static void PersistLegacyBindingIfNeeded(")
+    if persist_start < 0:
+        raise AssertionError("Missing PersistLegacyBindingIfNeeded helper")
+    persist = workflow[persist_start:]
 
     require(bq, "DrawingUnitWorkflow.EnsureResolved(doc, \"QS3DBQ\")", "BQ unit preparation")
     require_order(
@@ -46,11 +50,14 @@ def main():
         "CadUnitService.TryGetPolicy(document, out _, out var resolution)")
     require_order(
         ensure,
-        "BQ read-only resolved-unit path",
+        "BQ compatible legacy-binding migration",
         "var readOnlyQuantityPreparation = readOnlyExportPreparation || readOnlyBqPreparation;",
         "CadUnitService.TryGetPolicy(document, out _, out var resolution)",
-        "if (!readOnlyQuantityPreparation)",
+        "if (!readOnlyExportPreparation)",
         "PersistLegacyBindingIfNeeded(document, resolution)")
+    if "if (!readOnlyQuantityPreparation)" in ensure:
+        raise AssertionError("BQ resolved-unit preparation must allow compatible legacy binding migration instead of sharing ED2 persistence suppression.")
+
     require_order(
         ensure,
         "BQ unresolved-unit path",
@@ -62,7 +69,19 @@ def main():
     if "GetOrCreate" in ensure:
         raise AssertionError("EnsureResolved must not directly create a project during BQ/ED2 preparation.")
 
-    print("PASS: QS3DBQ project/unit preparation remains read-only and projectless-fast-fail.")
+    require_order(
+        persist,
+        "legacy binding migration scope",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var observedProject)",
+        "if (observedProject.Elements.Count == 0) return;",
+        "ExistingProjectMutationContext.Require(document, \"Legacy drawing-unit binding\")",
+        "DrawingUnitResolutionPolicy.BindQuantityUnit(project.Metadata, true, resolution.Unit, resolution.Source)",
+        "project.Touch();",
+        "ProjectContextCoordinator.Save(document)")
+    if "GetOrCreate" in persist or "PromptAndPersist" in persist:
+        raise AssertionError("Legacy BQ binding migration must never create a project or prompt for a unit.")
+
+    print("PASS: QS3DBQ projectless/unresolved preparation remains fail-closed; resolved existing projects may only canonicalize a compatible legacy quantity-unit binding, while ED2 persistence remains suppressed.")
     return 0
 
 
