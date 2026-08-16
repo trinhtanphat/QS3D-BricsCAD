@@ -96,12 +96,14 @@ namespace QS3D.Core.Geometry
                 else if (index == layout.Columns)
                 {
                     width = input.PerimeterFrameWidthM;
-                    left = input.LengthM - width;
+                    left = Subtract(input.LengthM, width, "curtain vertical frame right perimeter placement");
                 }
                 else
                 {
                     width = input.MullionWidthM;
-                    left = index * layout.BayWidthM - width / 2d;
+                    var center = Multiply(index, layout.BayWidthM, "curtain vertical frame center");
+                    var halfWidth = Multiply(width, .5d, "curtain vertical frame half width");
+                    left = Subtract(center, halfWidth, "curtain vertical frame half-width placement");
                 }
                 frames.Add(Rect(left, 0d, width, input.HeightM, "curtain vertical frame"));
             }
@@ -123,12 +125,14 @@ namespace QS3D.Core.Geometry
                 else if (index == layout.Rows)
                 {
                     height = input.PerimeterFrameWidthM;
-                    bottom = input.HeightM - height;
+                    bottom = Subtract(input.HeightM, height, "curtain horizontal frame top perimeter placement");
                 }
                 else
                 {
                     height = input.TransomWidthM;
-                    bottom = index * layout.BayHeightM - height / 2d;
+                    var center = Multiply(index, layout.BayHeightM, "curtain horizontal frame center");
+                    var halfHeight = Multiply(height, .5d, "curtain horizontal frame half height");
+                    bottom = Subtract(center, halfHeight, "curtain horizontal frame half-height placement");
                 }
                 frames.Add(Rect(0d, bottom, input.LengthM, height, "curtain horizontal frame"));
             }
@@ -183,7 +187,25 @@ namespace QS3D.Core.Geometry
             return value;
         }
 
-        private static double Add(double left, double right, string label) => Finite(Finite(left, label + " left") + Finite(right, label + " right"), label);
+        private static double Add(double left, double right, string label)
+        {
+            left = Finite(left, label + " left");
+            right = Finite(right, label + " right");
+            var result = Finite(left + right, label);
+            if (left > 0d && right > 0d && (result == left || result == right))
+                throw new OverflowException(label + " lost a positive contribution at floating-point precision.");
+            return result == 0d ? 0d : result;
+        }
+
+        private static double Subtract(double left, double right, string label)
+        {
+            left = Finite(left, label + " left");
+            right = Finite(right, label + " right");
+            var result = Finite(left - right, label);
+            if (right > 0d && result == left)
+                throw new OverflowException(label + " lost a positive deduction at floating-point precision.");
+            return result == 0d ? 0d : result;
+        }
 
         private static double Multiply(double left, double right, string label)
         {
@@ -197,7 +219,7 @@ namespace QS3D.Core.Geometry
 
         private static double SubtractPositive(double left, double right, string label)
         {
-            var result = Finite(Finite(left, label + " left") - Finite(right, label + " right"), label);
+            var result = Subtract(left, right, label);
             if (!(result > 0d)) throw new InvalidOperationException(label + " must be positive.");
             return result;
         }
