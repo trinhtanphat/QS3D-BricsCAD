@@ -45,8 +45,8 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (!(sender is WorkspacePanel panel)) return;
             panel.Dispatcher.BeginInvoke(
-                new Action(panel.ApplyBlt3dFamilyWorkspace),
-                DispatcherPriority.Loaded);
+                DispatcherPriority.Loaded,
+                new Action(panel.ApplyBlt3dFamilyWorkspace));
         }
 
         private void ApplyBlt3dFamilyWorkspace()
