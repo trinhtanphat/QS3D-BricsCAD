@@ -7,12 +7,24 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
+            RejectsCollapsedOpeningHeightAtLargeElevation();
             RejectsCollapsedVerticalClearanceAtLargeElevation();
             RejectsCollapsedTopClearanceAtLargeElevation();
             RejectsCollapsedDimensionExpansionAtLargeMagnitude();
             RejectsSubnormalPositiveClearanceCollapse();
             PreservesOrdinaryPositiveClearance();
             PreservesZeroClearance();
+        }
+
+        private static void RejectsCollapsedOpeningHeightAtLargeElevation()
+        {
+            var input = OrdinaryInput();
+            input.HostHeightM = 10000000000000002d;
+            input.OpeningHeightM = 1d;
+            input.SillHeightM = 10000000000000000d;
+            input.ClearanceM = 0d;
+
+            Throws<OverflowException>(() => OpeningCutPlanner.Plan(input));
         }
 
         private static void RejectsCollapsedVerticalClearanceAtLargeElevation()
