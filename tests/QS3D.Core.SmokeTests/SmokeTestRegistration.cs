@@ -139,6 +139,7 @@ namespace QS3D.Core.SmokeTests
             SemanticMutationAtomicitySmoke.Run();
             DomainMutationAtomicitySmoke.Run();
             TemplateApplyAtomicitySmoke.Run();
+            TemplateProfileRequiredAttributeCanonicalSmoke.Run();
             StandardFamilyTemplateCatalogSmoke.Run();
             FamilyTemplateImportSmoke.Run();
             ProjectFamilyQuickSchemaSmoke.Run();
