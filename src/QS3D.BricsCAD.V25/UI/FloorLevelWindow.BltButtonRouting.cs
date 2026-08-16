@@ -75,7 +75,10 @@ namespace QS3D.BricsCAD.V25.UI
                 _bltProjectPlaceholderSurface.Visibility = Visibility.Collapsed;
 
             ApplyBltProjectNavSelection("Cài đặt tầng");
-            RefreshBltSetup();
+
+            // The grid remains alive underneath the in-window placeholder. Do not reload it just
+            // because the user changes Project Setup sub-tabs: RefreshBltSetup() would overwrite
+            // edits that are intentionally still pending until “Áp dụng thay đổi” is pressed.
             SetBltStatus("Cài đặt tầng: chỉnh dữ liệu trong bảng rồi bấm Áp dụng thay đổi.");
         }
 
