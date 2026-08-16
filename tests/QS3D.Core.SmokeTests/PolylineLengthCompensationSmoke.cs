@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             PreservesRepresentableSmallSegmentsAfterHugeSegment();
+            PreservesRepresentableSmallSegmentsAroundHugeSegment();
             OrdinaryOpenAndClosedLengthsRemainUnchanged();
         }
 
@@ -23,10 +24,20 @@ namespace QS3D.Core.SmokeTests
                 new Point2(1e16, 2d)
             };
 
-            var expected = 10000000000000002d;
-            var actual = PolylineMetrics.Length(points, closed: false);
-            if (actual != expected)
-                throw new InvalidOperationException("Polyline length lost representable small segments after a huge segment: expected " + expected + ", got " + actual + ".");
+            Exact(10000000000000002d, PolylineMetrics.Length(points, closed: false), "huge segment followed by two unit segments");
+        }
+
+        private static void PreservesRepresentableSmallSegmentsAroundHugeSegment()
+        {
+            var points = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(0d, 1d),
+                new Point2(1e16, 1d),
+                new Point2(1e16, 2d)
+            };
+
+            Exact(10000000000000002d, PolylineMetrics.Length(points, closed: false), "unit segments around a huge segment");
         }
 
         private static void OrdinaryOpenAndClosedLengthsRemainUnchanged()
