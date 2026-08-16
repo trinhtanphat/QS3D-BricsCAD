@@ -67,7 +67,7 @@ namespace QS3D.Core.Services
             RequireFiniteNonNegative(thicknessM, nameof(thicknessM));
 
             var grossArea = FiniteProduct(lengthM, heightM, "gross wall area");
-            var openingArea = 0d;
+            var openingAreaSum = new CompensatedFiniteSum();
             if (openings != null)
             {
                 EnsureKnownOpeningCountWithinBound(openings);
@@ -79,11 +79,11 @@ namespace QS3D.Core.Services
                     inputCount++;
                     if (opening == null)
                         throw new ArgumentException("Wall opening collection cannot contain null entries.", nameof(openings));
-                    openingArea += opening.AreaM2;
-                    if (double.IsNaN(openingArea) || double.IsInfinity(openingArea)) throw new OverflowException("Total opening area is not finite.");
+                    openingAreaSum.Add(opening.AreaM2);
                 }
             }
 
+            var openingArea = openingAreaSum.Value;
             var clampedOpeningArea = Math.Min(grossArea, openingArea);
             var netArea = grossArea - clampedOpeningArea;
             var grossVolume = FiniteProduct(grossArea, thicknessM, "gross wall volume");
@@ -187,6 +187,43 @@ namespace QS3D.Core.Services
             if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException(label + " is not finite.");
             if (left != 0d && right != 0d && result == 0d) throw new OverflowException(label + " underflowed to zero.");
             return result == 0d ? 0d : result;
+        }
+
+        private struct CompensatedFiniteSum
+        {
+            private double _sum;
+            private double _compensation;
+
+            public void Add(double value)
+            {
+                var next = _sum + value;
+                EnsureFinite(next);
+
+                var correction = Math.Abs(_sum) >= Math.Abs(value)
+                    ? (_sum - next) + value
+                    : (value - next) + _sum;
+                var compensation = _compensation + correction;
+                EnsureFinite(compensation);
+
+                _sum = next;
+                _compensation = compensation;
+            }
+
+            public double Value
+            {
+                get
+                {
+                    var result = _sum + _compensation;
+                    EnsureFinite(result);
+                    return result;
+                }
+            }
+
+            private static void EnsureFinite(double value)
+            {
+                if (double.IsNaN(value) || double.IsInfinity(value))
+                    throw new OverflowException("Total opening area is not finite.");
+            }
         }
     }
 }
