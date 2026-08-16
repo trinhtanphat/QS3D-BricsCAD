@@ -28,6 +28,12 @@ def forbid(text: str, token: str, label: str) -> None:
         fail(f"{label}: forbidden source contract is still present: {token}")
 
 
+def section(text: str, start: str, end: str, label: str) -> str:
+    if start not in text or end not in text:
+        fail(f"{label}: could not isolate source section")
+    return text.split(start, 1)[1].split(end, 1)[0]
+
+
 def main() -> int:
     xaml = read(XAML)
     setup = read(SETUP)
@@ -76,12 +82,33 @@ def main() -> int:
         "Project Properties top-nav must not launch a second modeless surface",
     )
 
+    # Switching among Project Setup sub-tabs must not destructively reload the live floor grid.
+    # Initial window load already populates it, while Apply Changes remains the explicit commit.
+    floor_surface = section(
+        routing,
+        "private void ShowBltFloorSettingsSurface()",
+        "private void OpenDedicatedBltProjectProperties()",
+        "Floor Settings routed surface",
+    )
+    forbid(
+        floor_surface,
+        "RefreshBltSetup();",
+        "Floor Settings navigation must preserve unapplied edits",
+    )
+    require(setup, "private void OnBltSetupLoaded", "initial Project Setup load")
+    loaded_surface = section(
+        setup,
+        "private void OnBltSetupLoaded",
+        "private void OnBltProjectInfoClick",
+        "Project Setup initial load",
+    )
+    require(loaded_surface, "RefreshBltSetup();", "initial floor-grid population")
+
     # The legacy instance handlers remain source-compatible, but the class route above owns all
     # visible top-nav actions before those handlers can open duplicate windows.
     require(setup, 'OnBltProjectInfoClick(object sender, RoutedEventArgs e)', "Project Info legacy handler remains available")
     require(setup, 'OnBltFloorSettingsClick', "Floor Settings legacy handler remains available")
     require(setup, 'OnBltProjectPropertiesClick(object sender, RoutedEventArgs e) => OpenDedicatedBltProjectProperties()', "Project Properties canonical handler")
-    require(setup, 'RefreshBltSetup();', "Floor Settings refresh")
 
     # Zone toolbar actions must mutate real ProjectState through the canonical service and keep
     # active-zone semantics consistent when selection/deletion changes.
@@ -112,7 +139,7 @@ def main() -> int:
     # The visible reference checkbox remains radio-like even though BLT3D renders a CheckBox.
     require(setup, 'checkBox.IsChecked != true', "reference click only promotes checked row")
 
-    print("PASS: BLT3D Project Setup top-nav stays in one bounded surface and all floor/zone actions remain production-backed.")
+    print("PASS: BLT3D Project Setup preserves unapplied floor edits across sub-tabs and all actions remain production-backed.")
     return 0
 
 
