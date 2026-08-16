@@ -205,13 +205,25 @@ namespace QS3D.Core.Cost
             if (baseTotal < 0m) throw new ArgumentOutOfRangeException(nameof(baseTotal));
             if (adjustmentRatioPercent < -100m) throw new ArgumentOutOfRangeException(nameof(adjustmentRatioPercent));
             if (markupRatioPercent < -100m) throw new ArgumentOutOfRangeException(nameof(markupRatioPercent));
+            var adjustmentRatio = ScaleRatioPercent(adjustmentRatioPercent, nameof(adjustmentRatioPercent));
+            var markupRatio = ScaleRatioPercent(markupRatioPercent, nameof(markupRatioPercent));
             checked
             {
-                var afterAdjustment = baseTotal * (1m + (adjustmentRatioPercent / 100m));
-                var adjustedTotal = afterAdjustment * (1m + (markupRatioPercent / 100m));
+                var afterAdjustment = ApplyRatio(
+                    baseTotal,
+                    adjustmentRatioPercent,
+                    adjustmentRatio,
+                    nameof(adjustmentRatioPercent),
+                    "cost adjustment after adjustment ratio");
+                var adjustedTotal = ApplyRatio(
+                    afterAdjustment,
+                    markupRatioPercent,
+                    markupRatio,
+                    nameof(markupRatioPercent),
+                    "cost adjustment after markup ratio");
                 var combined = baseTotal == 0m
                     ? (adjustedTotal == 0m ? 0m : throw new InvalidOperationException("A zero base total cannot produce a non-zero adjusted total."))
-                    : ((adjustedTotal / baseTotal) - 1m) * 100m;
+                    : CalculateCombinedRatioPercent(baseTotal, adjustedTotal);
                 return new CostAdjustmentResult(baseTotal, adjustmentRatioPercent, markupRatioPercent, adjustedTotal, combined);
             }
         }
@@ -224,6 +236,33 @@ namespace QS3D.Core.Cost
                 throw new InvalidOperationException("A zero base total cannot produce a non-zero adjusted total.");
             var combined = baseTotal == 0m ? 0m : CalculateCombinedRatioPercent(baseTotal, adjustedTotal);
             return new CostAdjustmentResult(baseTotal, combined, 0m, adjustedTotal, combined);
+        }
+
+        private static decimal ScaleRatioPercent(decimal value, string paramName)
+        {
+            var ratio = value / 100m;
+            if (value != 0m && ratio == 0m)
+                throw new ArgumentOutOfRangeException(
+                    paramName,
+                    value,
+                    "Non-zero percentage is too small to preserve at decimal precision.");
+            return ratio;
+        }
+
+        private static decimal ApplyRatio(
+            decimal value,
+            decimal ratioPercent,
+            decimal ratio,
+            string paramName,
+            string operation)
+        {
+            var result = CostDecimalMath.MultiplyPreservingNonZero(value, 1m + ratio, operation);
+            if (value != 0m && ratioPercent != 0m && result == value)
+                throw new ArgumentOutOfRangeException(
+                    paramName,
+                    ratioPercent,
+                    "Non-zero percentage is too small to affect the value at decimal precision.");
+            return result;
         }
 
         private static decimal CalculateCombinedRatioPercent(decimal baseTotal, decimal adjustedTotal)
