@@ -16,9 +16,9 @@ using Teigha.Runtime;
 namespace QS3D.BricsCAD.V25
 {
     /// <summary>
-    /// Direct authoring for the exact slabOpen Family. The user selects or preselects exactly one
-    /// semantic Slab source, draws one closed footprint, then the command records HostSlabId and
-    /// applies the dedicated negative-Z Boolean subtraction in the same guarded operation.
+    /// Direct authoring for the exact slabOpen Family. The user preselects exactly one semantic
+    /// Slab source, draws one closed footprint, then the command records HostSlabId and applies
+    /// the dedicated negative-Z Boolean subtraction in the same guarded operation.
     /// </summary>
     public sealed class DirectDrawSlabOpeningCommands
     {
@@ -39,11 +39,10 @@ namespace QS3D.BricsCAD.V25
             Guard(document, operation, () =>
             {
                 RequireModelSpace(document);
-                var selectedHostIds = CadSelectionGuard.AcquireCurrentSelection(document);
-                if (selectedHostIds.Length == 0) return;
+                var selectedHostIds = CadSelectionGuard.ReadImpliedSelection(document);
                 if (selectedHostIds.Length != 1)
                     throw new InvalidOperationException(
-                        "slabOpen yêu cầu chọn đúng một source Slab semantic; hiện có " +
+                        "slabOpen yêu cầu PICKFIRST đúng một source Slab semantic trước khi chạy lệnh; hiện có " +
                         selectedHostIds.Length + ".");
                 var selectedHostHandle = selectedHostIds[0].Handle.ToString();
 
@@ -100,7 +99,7 @@ namespace QS3D.BricsCAD.V25
                 .ToList();
             if (hostMatches.Count != 1)
                 throw new InvalidOperationException(
-                    "Lựa chọn phải trỏ tới đúng một source của semantic Slab; tìm được " + hostMatches.Count + ".");
+                    "PICKFIRST phải trỏ tới đúng một source của semantic Slab; tìm được " + hostMatches.Count + ".");
             var host = hostMatches[0];
 
             // Direct Draw promises first-use auto subtraction. If this Slab has never had native 3D,
