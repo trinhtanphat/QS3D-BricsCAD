@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             ClashDetectionLargeFiniteClearance();
             RateBuildUp();
             HistoricalBenchmark();
+            TradeCostAnalysisCaseDeterminism();
             TenderEvaluation();
             ProgressClaim();
             CubicostDeepParitySmoke.Run();
@@ -104,6 +105,27 @@ namespace QS3D.Core.SmokeTests
             Equal(11m, result.AverageUnitCost, "benchmark average");
             Equal(11m, result.MedianUnitCost, "benchmark median");
             Equal(10m, result.DeviationFromAveragePercent!.Value, "benchmark deviation");
+        }
+
+        private static void TradeCostAnalysisCaseDeterminism()
+        {
+            var service = new TradeCostAnalysisService();
+            var lowerCase = new TradeCostItem("T-1", "mep", 100m);
+            var upperCase = new TradeCostItem("T-2", "MEP", 50m);
+
+            var forward = service.Analyze(new[] { lowerCase, upperCase }, 10m);
+            var reverse = service.Analyze(new[] { upperCase, lowerCase }, 10m);
+
+            Equal(1, forward.Count, "trade analysis forward row count");
+            Equal(1, reverse.Count, "trade analysis reverse row count");
+            Equal("MEP", forward[0].TradeCode, "trade analysis stable canonical code");
+            Equal(forward[0].TradeCode, reverse[0].TradeCode, "trade analysis permutation code");
+            Equal(forward[0].ItemCount, reverse[0].ItemCount, "trade analysis permutation count");
+            Equal(forward[0].TotalCost, reverse[0].TotalCost, "trade analysis permutation total");
+            Equal(forward[0].CostPerCfaM2, reverse[0].CostPerCfaM2, "trade analysis permutation CFA rate");
+            Equal(2, forward[0].ItemCount, "trade analysis item count");
+            Equal(150m, forward[0].TotalCost, "trade analysis total");
+            Equal(15m, forward[0].CostPerCfaM2!.Value, "trade analysis CFA rate");
         }
 
         private static void TenderEvaluation()
