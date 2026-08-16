@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
         {
             PreservesRepresentableSmallSegmentsAfterHugeSegment();
             PreservesRepresentableSmallSegmentsAroundHugeSegment();
+            PreservesSmallClosingContributionOnClosedPolyline();
+            RejectsNonFiniteCoordinatesBeforeAccumulation();
             OrdinaryOpenAndClosedLengthsRemainUnchanged();
         }
 
@@ -38,6 +40,40 @@ namespace QS3D.Core.SmokeTests
             };
 
             Exact(10000000000000002d, PolylineMetrics.Length(points, closed: false), "unit segments around a huge segment");
+        }
+
+        private static void PreservesSmallClosingContributionOnClosedPolyline()
+        {
+            const double huge = 4503599627370496d; // 2^52, so the two unit edges remain representable in the final sum.
+            var points = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(huge, 0d),
+                new Point2(huge, 1d),
+                new Point2(0d, 1d)
+            };
+
+            Exact(9007199254740994d, PolylineMetrics.Length(points, closed: true), "closed rectangle with unit edges around huge edges");
+        }
+
+        private static void RejectsNonFiniteCoordinatesBeforeAccumulation()
+        {
+            var points = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(double.NaN, 1d)
+            };
+
+            try
+            {
+                PolylineMetrics.Length(points, closed: false);
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException("Polyline length must reject non-finite coordinates before compensated accumulation.");
         }
 
         private static void OrdinaryOpenAndClosedLengthsRemainUnchanged()
