@@ -290,7 +290,7 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: QS3D-BricsCAD-V25-commercial-${{ inputs.release_tag }}-${{ github.sha }}
           path: commercial-candidate
