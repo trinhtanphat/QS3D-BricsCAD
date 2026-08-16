@@ -19,7 +19,18 @@ namespace QS3D.Core.Geometry
         public double Z_M { get; set; }
         public double WidthM { get; set; }
         public double HeightM { get; set; }
-        public double AreaM2 => WidthM * HeightM;
+        public double AreaM2
+        {
+            get
+            {
+                var area = WidthM * HeightM;
+                if (double.IsNaN(area) || double.IsInfinity(area))
+                    throw new OverflowException("Curtain frame piece area overflowed.");
+                if (area == 0d && WidthM != 0d && HeightM != 0d)
+                    throw new OverflowException("Curtain frame piece area underflowed to zero.");
+                return area == 0d ? 0d : area;
+            }
+        }
     }
 
     public sealed class CurtainWallOpeningFramePlan
@@ -142,6 +153,8 @@ namespace QS3D.Core.Geometry
             var remainingArea = 0d;
             foreach (var piece in output)
                 remainingArea = CheckedAdd(remainingArea, CheckedMultiply(piece.WidthM, piece.HeightM, "frame piece area"), "remaining frame area");
+            if (interrupted > 0 && !(remainingArea < originalArea))
+                throw new OverflowException("Curtain removed frame area was lost at floating-point precision.");
 
             return new CurtainWallOpeningFramePlan
             {
@@ -222,14 +235,18 @@ namespace QS3D.Core.Geometry
         {
             var value = a * b;
             Finite(value, label);
-            return value;
+            if (value == 0d && a != 0d && b != 0d)
+                throw new OverflowException(label + " underflowed to zero.");
+            return value == 0d ? 0d : value;
         }
 
         private static double CheckedAdd(double a, double b, string label)
         {
             var value = a + b;
             Finite(value, label);
-            return value;
+            if (a > 0d && b > 0d && (value == a || value == b))
+                throw new OverflowException(label + " lost a positive contribution at floating-point precision.");
+            return value == 0d ? 0d : value;
         }
     }
 }
