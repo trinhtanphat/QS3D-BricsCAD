@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 ALLOWED_INTERNAL_PREFIXES = ("agent/", "integration/")
 DEPENDABOT_LOGIN = "dependabot[bot]"
+RUNTIME_ENV = "QS3D_PR_BRANCH_CI_RUNTIME"
 
 
 def fail(message: str) -> int:
@@ -110,6 +111,7 @@ def validate_static_contract() -> list[str]:
         "github.actor != 'dependabot[bot]'",
         "github.event.pull_request.head.repo.full_name == github.repository",
         "steps.scope.outputs.source_validation == 'true'",
+        'QS3D_PR_BRANCH_CI_RUNTIME: "1"',
         "GITHUB_TOKEN: ${{ github.token }}",
         "python scripts/preflight-pr-branch-ci-gate.py",
     )
@@ -167,9 +169,16 @@ def main() -> int:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    if os.environ.get("GITHUB_EVENT_NAME") != "pull_request":
-        print("PR branch CI admission gate: static contract/self-tests PASS; runtime check not applicable.")
+    # This file is auto-discovered by preflight-all.py. Aggregate execution must
+    # remain hermetic and exercise only self-tests/static workflow contracts.
+    # The dedicated PR admission workflow step opts into the live GitHub API
+    # check explicitly and is the only place that receives a token.
+    if os.environ.get(RUNTIME_ENV) != "1":
+        print("PR branch CI admission gate: static contract/self-tests PASS; live admission check not requested.")
         return 0
+
+    if os.environ.get("GITHUB_EVENT_NAME") != "pull_request":
+        return fail("live PR branch CI admission check requires a pull_request event")
 
     try:
         event = read_event()
@@ -177,8 +186,7 @@ def main() -> int:
         return fail(str(exc))
 
     if event.get("action") != "opened":
-        print("PR branch CI admission gate: PR was not newly opened; pre-PR admission check not applicable.")
-        return 0
+        return fail("live PR branch CI admission check requires pull_request action=opened")
 
     pr = event.get("pull_request")
     if not isinstance(pr, dict):
