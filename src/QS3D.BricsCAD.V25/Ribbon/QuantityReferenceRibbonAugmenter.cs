@@ -85,7 +85,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             new ButtonSpec(
                 "QS3D_QTY_BLT_EXPLAIN",
                 "Diễn\ngiải",
-                "QS3DBQ",
+                "QS3DQUANTITYINSIGHT",
                 RibbonIconKind.QuantityExplain),
             new ButtonSpec(
                 "QS3D_QTY_BLT_COMPARE",
