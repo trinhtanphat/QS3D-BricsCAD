@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RIBBON = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "RibbonBootstrapper.cs"
 START = ROOT / "src" / "QS3D.BricsCAD.V25" / "StartCenterCommands.cs"
+HOST = ROOT / "src" / "QS3D.BricsCAD.V25" / "StartCenterPaletteCoordinator.cs"
 
 
 def require(text, token, label):
@@ -11,12 +12,25 @@ def require(text, token, label):
         raise AssertionError(f"{label} missing token: {token}")
 
 
+def forbid(text, token, label):
+    if token in text:
+        raise AssertionError(f"{label} must not contain: {token}")
+
+
 def main():
     ribbon = RIBBON.read_text(encoding="utf-8")
     start = START.read_text(encoding="utf-8")
+    host = HOST.read_text(encoding="utf-8")
 
     require(start, '[CommandMethod("QS3DSTART", CommandFlags.Modal)]', "Start Center command registration")
-    require(start, "Application.ShowModelessWindow", "BricsCAD-hosted modeless Start Center")
+    require(start, "StartCenterPaletteCoordinator.Show();", "native embedded Start Center dispatch")
+    forbid(start, "Application.ShowModelessWindow", "Start Center command")
+    forbid(start, "new StartCenterWindow", "Start Center command")
+    forbid(start, "new BltStartCenterWindow", "Start Center command")
+
+    require(host, 'new PaletteSet("BLT3D — Khởi đầu"', "native BricsCAD Start Center host")
+    require(host, "Dock = DockSides.Left", "native BricsCAD Start Center docking")
+    require(host, '_palette.AddVisual("Khởi đầu", _panel, true);', "embedded Start Center visual")
 
     binding = 'Button("Start Center", "QS3DSTART")'
     if ribbon.count(binding) != 1:
@@ -35,7 +49,7 @@ def main():
     require(ribbon, 'Button("Lưu", "QS3DSAVE")', "existing home Save binding")
     require(ribbon, "Application.DocumentManager.MdiActiveDocument?.SendStringToExecute", "click-time Ribbon dispatch")
 
-    print("PASS: QS3DSTART is exposed exactly once in KHỞI ĐẦU / Dự án and retains BricsCAD click-time dispatch.")
+    print("PASS: QS3DSTART is exposed exactly once in KHỞI ĐẦU / Dự án, opens the native embedded PaletteSet, and retains BricsCAD click-time ribbon dispatch.")
     return 0
 
 

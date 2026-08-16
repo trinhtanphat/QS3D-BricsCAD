@@ -36,8 +36,15 @@ namespace QS3D.Core.Mep
 
         private static decimal ToDecimal(double value, string label)
         {
-            try { return value == 0d ? 0m : checked((decimal)value); }
+            if (value == 0d) return 0m;
+
+            decimal converted;
+            try { converted = checked((decimal)value); }
             catch (OverflowException ex) { throw new OverflowException(label + " cannot be represented by TBQ decimal arithmetic.", ex); }
+
+            if (converted == 0m)
+                throw new OverflowException(label + " cannot be represented by TBQ decimal arithmetic.");
+            return converted;
         }
     }
 

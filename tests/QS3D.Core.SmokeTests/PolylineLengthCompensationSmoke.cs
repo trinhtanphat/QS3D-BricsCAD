@@ -12,10 +12,14 @@ namespace QS3D.Core.SmokeTests
             PreservesRepresentableSmallSegmentsAfterHugeSegment();
             PreservesRepresentableSmallSegmentsAroundHugeSegment();
             PreservesSmallClosingContributionOnClosedPolyline();
+            PreservesSmallSegmentsWhenHugeSegmentComesLast();
             ZeroLengthSegmentsDoNotDisturbCompensation();
+            SinglePointAndEmptyInputsRemainCanonical();
             RejectsNonFiniteCoordinatesBeforeAccumulation();
             RejectsInfiniteCoordinatesBeforeAccumulation();
+            RejectsFiniteSegmentsWhoseAccumulatedLengthOverflows();
             OrdinaryOpenAndClosedLengthsRemainUnchanged();
+            SignedAreaRemainsUnchanged();
         }
 
         private static void PreservesRepresentableSmallSegmentsAfterHugeSegment()
@@ -46,7 +50,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void PreservesSmallClosingContributionOnClosedPolyline()
         {
-            const double huge = 4503599627370496d; // 2^52, so the two unit edges remain representable in the final sum.
+            const double huge = 4503599627370496d;
             var points = new[]
             {
                 new Point2(0d, 0d),
@@ -56,6 +60,19 @@ namespace QS3D.Core.SmokeTests
             };
 
             Exact(9007199254740994d, PolylineMetrics.Length(points, closed: true), "closed rectangle with unit edges around huge edges");
+        }
+
+        private static void PreservesSmallSegmentsWhenHugeSegmentComesLast()
+        {
+            var points = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(0d, 1d),
+                new Point2(0d, 2d),
+                new Point2(1e16, 2d)
+            };
+
+            Exact(10000000000000002d, PolylineMetrics.Length(points, closed: false), "two unit segments before a huge segment");
         }
 
         private static void ZeroLengthSegmentsDoNotDisturbCompensation()
@@ -73,26 +90,49 @@ namespace QS3D.Core.SmokeTests
             Exact(10000000000000002d, PolylineMetrics.Length(points, closed: false), "duplicate vertices around compensated small segments");
         }
 
+        private static void SinglePointAndEmptyInputsRemainCanonical()
+        {
+            Exact(0d, PolylineMetrics.Length(Array.Empty<Point2>(), closed: false), "empty polyline");
+            Exact(0d, PolylineMetrics.Length(new[] { new Point2(3d, 4d) }, closed: true), "single-point closed polyline");
+        }
+
         private static void RejectsNonFiniteCoordinatesBeforeAccumulation()
         {
-            var points = new[]
-            {
-                new Point2(0d, 0d),
-                new Point2(double.NaN, 1d)
-            };
-
-            ThrowsInvalidCoordinates(points, "NaN coordinate");
+            ThrowsInvalidCoordinates(
+                new[] { new Point2(0d, 0d), new Point2(double.NaN, 1d) },
+                "NaN coordinate");
         }
 
         private static void RejectsInfiniteCoordinatesBeforeAccumulation()
         {
+            ThrowsInvalidCoordinates(
+                new[] { new Point2(0d, 0d), new Point2(double.PositiveInfinity, 1d) },
+                "infinite coordinate");
+            ThrowsInvalidCoordinates(
+                new[] { new Point2(double.NegativeInfinity, 0d), new Point2(0d, 1d) },
+                "negative infinite coordinate");
+        }
+
+        private static void RejectsFiniteSegmentsWhoseAccumulatedLengthOverflows()
+        {
             var points = new[]
             {
                 new Point2(0d, 0d),
-                new Point2(double.PositiveInfinity, 1d)
+                new Point2(9e307, 0d),
+                new Point2(0d, 0d),
+                new Point2(9e307, 0d)
             };
 
-            ThrowsInvalidCoordinates(points, "infinite coordinate");
+            try
+            {
+                PolylineMetrics.Length(points, closed: false);
+            }
+            catch (OverflowException)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException("Polyline length must fail closed when finite segment lengths overflow during accumulation.");
         }
 
         private static void OrdinaryOpenAndClosedLengthsRemainUnchanged()
@@ -106,6 +146,19 @@ namespace QS3D.Core.SmokeTests
 
             Exact(10d, PolylineMetrics.Length(points, closed: false), "ordinary open polyline");
             Exact(20d, PolylineMetrics.Length(points, closed: true), "ordinary closed polyline");
+        }
+
+        private static void SignedAreaRemainsUnchanged()
+        {
+            var points = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(4d, 0d),
+                new Point2(4d, 3d),
+                new Point2(0d, 3d)
+            };
+
+            Exact(12d, PolylineMetrics.SignedArea(points), "adjacent signed-area invariant");
         }
 
         private static void ThrowsInvalidCoordinates(Point2[] points, string scenario)
@@ -125,7 +178,7 @@ namespace QS3D.Core.SmokeTests
         private static void Exact(double expected, double actual, string scenario)
         {
             if (actual != expected)
-                throw new InvalidOperationException("Unexpected polyline length for " + scenario + ": expected " + expected + ", got " + actual + ".");
+                throw new InvalidOperationException("Unexpected polyline metric for " + scenario + ": expected " + expected + ", got " + actual + ".");
         }
     }
 }

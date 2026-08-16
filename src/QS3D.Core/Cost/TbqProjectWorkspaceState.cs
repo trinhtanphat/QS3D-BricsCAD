@@ -59,6 +59,11 @@ namespace QS3D.Core.Cost
 
     public sealed class TbqProjectWorkspaceState
     {
+        internal const int MaxBillItems = 10000;
+        internal const int MaxBuildUpRates = 10000;
+        internal const int MaxRateReferences = 50000;
+        internal const int MaxLibraryEntries = 10000;
+
         public TbqProjectWorkspaceState(
             string currency,
             decimal cfaM2,
@@ -77,8 +82,16 @@ namespace QS3D.Core.Cost
 
             BillItems = SnapshotBillItems(billItems);
             BuildUpRates = SnapshotBuildUpRates(buildUpRates);
-            RateReferences = new RateReferenceGraph(rateReferences ?? throw new ArgumentNullException(nameof(rateReferences)));
-            Library = new BqLibraryCatalog(LibraryId, libraryEntries ?? throw new ArgumentNullException(nameof(libraryEntries)));
+            RateReferences = new RateReferenceGraph(Bounded(
+                rateReferences ?? throw new ArgumentNullException(nameof(rateReferences)),
+                MaxRateReferences,
+                "rate references"));
+            Library = new BqLibraryCatalog(
+                LibraryId,
+                Bounded(
+                    libraryEntries ?? throw new ArgumentNullException(nameof(libraryEntries)),
+                    MaxLibraryEntries,
+                    "BQ library entries"));
 
             new CostAdjustmentService().AdjustByRatios(0m, adjustmentRatioPercent, markupRatioPercent);
             AdjustmentRatioPercent = adjustmentRatioPercent == 0m ? 0m : adjustmentRatioPercent;
@@ -157,6 +170,8 @@ namespace QS3D.Core.Cost
             var index = 0;
             foreach (var item in items)
             {
+                if (index == MaxBillItems)
+                    throw new InvalidOperationException("TBQ workspace supports at most " + MaxBillItems + " bill items.");
                 if (item == null) throw new ArgumentException("TBQ workspace contains a null bill item at index " + index + ".", nameof(items));
                 if (!ids.Add(item.ItemCode)) throw new ArgumentException("Duplicate TBQ bill item code: " + item.ItemCode + ".", nameof(items));
                 snapshot.Add(item);
@@ -174,6 +189,8 @@ namespace QS3D.Core.Cost
             var index = 0;
             foreach (var rate in rates)
             {
+                if (index == MaxBuildUpRates)
+                    throw new InvalidOperationException("TBQ workspace supports at most " + MaxBuildUpRates + " build-up rates.");
                 if (rate == null) throw new ArgumentException("TBQ workspace contains a null build-up rate at index " + index + ".", nameof(rates));
                 if (!ids.Add(rate.RateCode)) throw new ArgumentException("Duplicate TBQ build-up rate code: " + rate.RateCode + ".", nameof(rates));
                 snapshot.Add(rate);
@@ -181,6 +198,18 @@ namespace QS3D.Core.Cost
             }
             snapshot.Sort(CompareBuildUps);
             return new ReadOnlyCollection<BuildUpRateSnapshot>(snapshot.ToArray());
+        }
+
+        private static IEnumerable<T> Bounded<T>(IEnumerable<T> source, int maximum, string label)
+        {
+            var count = 0;
+            foreach (var item in source)
+            {
+                if (count == maximum)
+                    throw new InvalidOperationException("TBQ workspace supports at most " + maximum + " " + label + ".");
+                count++;
+                yield return item;
+            }
         }
 
         private static int CompareBillItems(TbqBillItem left, TbqBillItem right)
