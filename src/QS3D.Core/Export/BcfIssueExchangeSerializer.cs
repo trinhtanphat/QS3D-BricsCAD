@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -76,14 +77,18 @@ namespace QS3D.Core.Export
             {
                 var document = XDocument.Parse(payload, LoadOptions.None);
                 var root = document.Root;
-                if (root == null || !string.Equals(root.Name.LocalName, "BcfIssueExchange", StringComparison.Ordinal))
+                if (root == null || root.Name.NamespaceName.Length != 0 || !string.Equals(root.Name.LocalName, "BcfIssueExchange", StringComparison.Ordinal))
                     throw new InvalidDataException("BCF payload root is invalid.");
+                EnsureAllowedAttributes(root, "schemaVersion");
+                EnsureAllowedChildren(root, "Topic");
                 if (!string.Equals(RequiredAttribute(root, "schemaVersion"), BcfIssueExchange.SchemaVersion, StringComparison.Ordinal))
                     throw new InvalidDataException("Unsupported BCF schema version.");
 
                 var topics = new List<BcfTopic>();
                 foreach (var topicElement in root.Elements("Topic"))
                 {
+                    EnsureAllowedAttributes(topicElement, "id", "status", "type", "creationAuthor", "creationDateUtc");
+                    EnsureAllowedChildren(topicElement, "Title", "Description", "Viewpoints", "Comments");
                     var viewpoints = ReadViewpoints(topicElement);
                     var comments = ReadComments(topicElement);
                     topics.Add(
@@ -109,12 +114,17 @@ namespace QS3D.Core.Export
 
         private static IReadOnlyList<BcfViewpoint> ReadViewpoints(XElement topicElement)
         {
-            var container = topicElement.Element("Viewpoints");
-            if (container == null) throw new InvalidDataException("BCF topic is missing Viewpoints.");
+            var container = RequiredSingle(topicElement, "Viewpoints");
+            EnsureAllowedAttributes(container);
+            EnsureAllowedChildren(container, "Viewpoint");
             var viewpoints = new List<BcfViewpoint>();
             foreach (var viewpointElement in container.Elements("Viewpoint"))
             {
-                var cameraElement = viewpointElement.Element("OrthogonalCamera") ?? throw new InvalidDataException("BCF viewpoint is missing OrthogonalCamera.");
+                EnsureAllowedAttributes(viewpointElement, "id");
+                EnsureAllowedChildren(viewpointElement, "OrthogonalCamera", "Component");
+                var cameraElement = RequiredSingle(viewpointElement, "OrthogonalCamera");
+                EnsureAllowedAttributes(cameraElement);
+                EnsureAllowedChildren(cameraElement, "ViewPoint", "Direction", "UpVector", "ViewToWorldScale", "AspectRatio");
                 var camera = new BcfOrthogonalCamera(
                     ReadPoint(cameraElement, "ViewPoint"),
                     ReadPoint(cameraElement, "Direction"),
@@ -124,6 +134,8 @@ namespace QS3D.Core.Export
                 var components = new List<BcfComponentReference>();
                 foreach (var componentElement in viewpointElement.Elements("Component"))
                 {
+                    EnsureAllowedAttributes(componentElement, "qs3dElementId", "ifcGlobalId");
+                    EnsureNoChildElements(componentElement);
                     components.Add(new BcfComponentReference(RequiredAttribute(componentElement, "qs3dElementId"), RequiredAttribute(componentElement, "ifcGlobalId")));
                 }
                 viewpoints.Add(new BcfViewpoint(RequiredAttribute(viewpointElement, "id"), camera, components));
@@ -133,11 +145,14 @@ namespace QS3D.Core.Export
 
         private static IReadOnlyList<BcfComment> ReadComments(XElement topicElement)
         {
-            var container = topicElement.Element("Comments");
-            if (container == null) throw new InvalidDataException("BCF topic is missing Comments.");
+            var container = RequiredSingle(topicElement, "Comments");
+            EnsureAllowedAttributes(container);
+            EnsureAllowedChildren(container, "Comment");
             var comments = new List<BcfComment>();
             foreach (var commentElement in container.Elements("Comment"))
             {
+                EnsureAllowedAttributes(commentElement, "id", "author", "createdUtc", "viewpointId");
+                EnsureAllowedChildren(commentElement, "Text");
                 comments.Add(
                     new BcfComment(
                         RequiredAttribute(commentElement, "id"),
@@ -154,7 +169,9 @@ namespace QS3D.Core.Export
 
         private static BcfPoint3 ReadPoint(XElement parent, string name)
         {
-            var point = parent.Element(name) ?? throw new InvalidDataException("Missing BCF camera point: " + name);
+            var point = RequiredSingle(parent, name);
+            EnsureAllowedAttributes(point, "x", "y", "z");
+            EnsureNoChildElements(point);
             return new BcfPoint3(ParseNumber(RequiredAttribute(point, "x")), ParseNumber(RequiredAttribute(point, "y")), ParseNumber(RequiredAttribute(point, "z")));
         }
 
@@ -181,6 +198,38 @@ namespace QS3D.Core.Export
 
         private static string Number(double value) => value.ToString("R", CultureInfo.InvariantCulture);
 
+        private static void EnsureAllowedAttributes(XElement element, params string[] names)
+        {
+            var allowed = new HashSet<string>(names, StringComparer.Ordinal);
+            foreach (var attribute in element.Attributes())
+            {
+                if (attribute.IsNamespaceDeclaration || attribute.Name.NamespaceName.Length != 0 || !allowed.Contains(attribute.Name.LocalName))
+                    throw new InvalidDataException("Unsupported BCF attribute: " + attribute.Name.LocalName);
+            }
+        }
+
+        private static void EnsureAllowedChildren(XElement element, params string[] names)
+        {
+            var allowed = new HashSet<string>(names, StringComparer.Ordinal);
+            foreach (var child in element.Elements())
+            {
+                if (child.Name.NamespaceName.Length != 0 || !allowed.Contains(child.Name.LocalName))
+                    throw new InvalidDataException("Unsupported BCF element: " + child.Name.LocalName);
+            }
+        }
+
+        private static void EnsureNoChildElements(XElement element)
+        {
+            if (element.Elements().Any()) throw new InvalidDataException("BCF value element must not contain child elements: " + element.Name.LocalName);
+        }
+
+        private static XElement RequiredSingle(XElement parent, string name)
+        {
+            var elements = parent.Elements(name).ToList();
+            if (elements.Count != 1) throw new InvalidDataException("Expected exactly one BCF element: " + name);
+            return elements[0];
+        }
+
         private static string RequiredAttribute(XElement element, string name)
         {
             var attribute = element.Attribute(name);
@@ -196,8 +245,9 @@ namespace QS3D.Core.Export
 
         private static string RequiredElementValue(XElement parent, string name)
         {
-            var element = parent.Element(name);
-            if (element == null) throw new InvalidDataException("Missing required BCF element: " + name);
+            var element = RequiredSingle(parent, name);
+            EnsureAllowedAttributes(element);
+            EnsureNoChildElements(element);
             return element.Value;
         }
     }
