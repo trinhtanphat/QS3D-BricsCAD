@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             SnapshotIsolationAndReadOnlyView();
             DuplicateAndAmbiguousRatesFailClosed();
             LargeSingleScopeUsesIndexedTimestampUniqueness();
+            CostRatePercentagePrecisionFailsClosed();
             InvalidInputsFailClosed();
         }
 
@@ -145,6 +146,29 @@ namespace QS3D.Core.SmokeTests
 
             items.Add(Item("RATE-LARGE-DUP", "conc", "m3", "VND", 1m, start.AddTicks(count - 1), "v2"));
             Throws<ArgumentException>(() => new RateBook("BOOK-LARGE-DUP", items));
+        }
+
+        private static void CostRatePercentagePrecisionFailsClosed()
+        {
+            var component = new CostResourceComponent("MAT", "Material", "ea", 1m, 100m);
+            var components = new[] { component };
+            var minimumPositive = 0.0000000000000000000000000001m;
+
+            Throws<ArgumentOutOfRangeException>(() =>
+                new CostRateBuildUp("BUILD-OH", new CostCode("CONC"), "ea", "VND", components, minimumPositive, 0m));
+            Throws<ArgumentOutOfRangeException>(() =>
+                new CostRateBuildUp("BUILD-PROFIT", new CostCode("CONC"), "ea", "VND", components, 0m, minimumPositive));
+
+            var zero = new CostRateBuildUp("BUILD-ZERO", new CostCode("CONC"), "ea", "VND", components);
+            Equal(0m, zero.OverheadUnitCost, "Zero overhead should remain accepted.");
+            Equal(0m, zero.ProfitUnitCost, "Zero profit should remain accepted.");
+            Equal(100m, zero.UnitRate, "Zero percentage build-up rate changed.");
+
+            var normal = new CostRateBuildUp("BUILD-NORMAL", new CostCode("CONC"), "ea", "VND", components, 10m, 10m);
+            Equal(100m, normal.DirectUnitCost, "Normal build-up direct cost mismatch.");
+            Equal(10m, normal.OverheadUnitCost, "Normal build-up overhead mismatch.");
+            Equal(11m, normal.ProfitUnitCost, "Normal build-up profit mismatch.");
+            Equal(121m, normal.UnitRate, "Normal build-up unit rate mismatch.");
         }
 
         private static void InvalidInputsFailClosed()
