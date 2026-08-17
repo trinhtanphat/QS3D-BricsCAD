@@ -49,7 +49,7 @@ Before substantive work, read:
 4. `CI_POLICY.md`;
 5. fetch/read the latest `origin/main` and record its exact SHA;
 6. `docs/AGENT-WORK-REGISTRATION.md`;
-7. `docs/AGENT-LANE-LOCK.md`;
+7. `docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md`;
 8. relevant open Issues/PRs plus `ACTIVE`/`BLOCKED` historical claims under `docs/agent-work-claims/`;
 9. `docs/REMOTE-AGENT-SCOPE.md`;
 10. the newest current handoff/status docs relevant to the task;
@@ -81,13 +81,12 @@ An Issue plus pushed task branch is the preferred visible coordination surface b
 
 ### Single-owner / single-carrier invariant
 
-`docs/AGENT-LANE-LOCK.md` is mandatory for all concurrent agents and chat sessions.
+`docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md` is mandatory for all concurrent agents and chat sessions.
 
 - One Lane-Key has at most one ACTIVE owner, one canonical task branch and one open canonical PR.
 - Stale, red, queued, behind or inconvenient work remains owned until explicitly released/superseded; another session must not create a cleaner competing carrier.
 - If a replacement carrier is genuinely required, explicitly record supersession first and close the old open PR before the replacement is represented as canonical.
 - Do **not** create branch-to-branch/internal PRs whose only purpose is to sync/replay `main` or another branch into the task branch. Reconcile the canonical task branch non-force, or rebuild one explicitly superseding carrier from current `main`.
-- In controller rounds, workers must not self-select replacement tasks. If an assignment is stale/already landed/blocked/zero-defect, report `STALE_OR_BLOCKED / NO MUTATION`; only CONTROL may issue an explicit replacement after a fresh collision scan and a fresh Lane-Key assignment.
 - Umbrella audit Issues do not authorize multiple sessions to create equivalent concrete fixes. Every concrete implementation needs its own unique Lane-Key, and an equivalent active lane is an automatic stop.
 
 A clean Git merge does not prove semantic non-overlap. Same production-file ownership or equivalent behavior remains a collision signal even when Lane-Keys differ.
