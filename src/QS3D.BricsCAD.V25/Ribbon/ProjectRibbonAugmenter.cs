@@ -108,6 +108,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     SetProperty(button, "ShowImage", true);
                     SetProperty(button, "Image", CreateIcon(spec.Icon, 16));
                     SetProperty(button, "LargeImage", CreateIcon(spec.Icon, 32));
+                    // Match BricsCAD's native full-height Ribbon buttons so the host consumes
+                    // the existing 32 px LargeImage instead of presenting the 16 px fallback.
+                    SetEnumProperty(button, "Size", "Large");
                     SetProperty(button, "CommandParameter", spec.Command);
                     SetProperty(button, "CommandHandler", new CommandHandler());
                     Add(items, button);
@@ -248,6 +251,21 @@ namespace QS3D.BricsCAD.V25.Ribbon
             if (property == null || !property.CanWrite) return;
             if (property.PropertyType.IsInstanceOfType(value) || property.PropertyType == value.GetType())
                 property.SetValue(target, value, null);
+        }
+
+        private static void SetEnumProperty(object target, string name, string value)
+        {
+            var property = target.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public);
+            if (property == null || !property.CanWrite || !property.PropertyType.IsEnum) return;
+            try
+            {
+                property.SetValue(target, Enum.Parse(property.PropertyType, value, true), null);
+            }
+            catch
+            {
+                // Keep the small/large image fallback intact if a host version exposes a
+                // different enum surface; Ribbon initialization must remain best-effort.
+            }
         }
 
         private static void Add(object collection, object item)
