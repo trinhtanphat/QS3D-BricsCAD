@@ -266,10 +266,17 @@ def _split_flow_scalars(raw: str):
 
 def _find_root_flow_mapping(text: str):
     for line_number, original in enumerate(text.splitlines(), start=1):
-        code = _strip_yaml_comment(original).strip()
+        code = _strip_yaml_comment(original).strip().lstrip("\ufeff")
         if not code:
             continue
-        if code in ("---", "..."):
+        if code.startswith("%"):
+            continue
+        if code.startswith("---") and (len(code) == 3 or code[3].isspace()):
+            code = code[3:].strip()
+            if not code:
+                continue
+        code = _strip_yaml_anchor_prefix(code)
+        if not code:
             continue
         return line_number if code.startswith("{") else None
     return None
