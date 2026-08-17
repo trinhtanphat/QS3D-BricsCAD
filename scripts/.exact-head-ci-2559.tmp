@@ -1,0 +1,1 @@
+Transient automatic CI trigger for issue #2559 after reconciling with current main. Removed immediately so final semantic diff remains the two-file Core fix.
