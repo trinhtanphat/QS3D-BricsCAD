@@ -15,6 +15,9 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             ReplacementDuringSubsetEnumerationFailsFreshness();
+            PropertyMutationDuringSubsetEnumerationFailsFreshness();
+            DependencyMutationDuringSubsetEnumerationFailsFreshness();
+            DirtyStateMutationDuringSubsetEnumerationFailsFreshness();
             StableSubsetStillPreviews();
         }
 
@@ -32,11 +35,67 @@ namespace QS3D.Core.SmokeTests
                 yield return "B1";
             }
 
-            ThrowsStructuralFreshness(() => new RegenerationPreviewService().PreviewSubset(project, Targets()));
+            ThrowsOwnershipFreshness(() => new RegenerationPreviewService().PreviewSubset(project, Targets()));
             Equal(beforeVersion, project.ChangeVersion, "direct replacement must leave ChangeVersion unchanged");
             if (ReferenceEquals(project.Elements[index], original))
                 throw new InvalidOperationException("RegenerationPreviewStructuralFreshnessSmoke replacement fixture did not change element ownership.");
-            True(!project.FindElement("B1")!.Quantities.ContainsKey("NetVolumeM3"), "failed preview must not mutate live target quantities");
+            True(!project.FindElement("B1")!.Quantities.ContainsKey("NetVolumeM3"), "failed replacement preview must not mutate live target quantities");
+        }
+
+        private static void PropertyMutationDuringSubsetEnumerationFailsFreshness()
+        {
+            var project = Fixture();
+            var beforeVersion = project.ChangeVersion;
+            var target = project.FindElement("B1")!;
+
+            IEnumerable<string> Targets()
+            {
+                target.Properties["LengthM"] = "600";
+                yield return "B1";
+            }
+
+            ThrowsStateFreshness(() => new RegenerationPreviewService().PreviewSubset(project, Targets()), "B1");
+            Equal(beforeVersion, project.ChangeVersion, "direct property mutation must leave ChangeVersion unchanged");
+            Equal("600", target.Properties["LengthM"], "property mutation fixture must remain observable");
+            True(!target.Quantities.ContainsKey("NetVolumeM3"), "failed property-race preview must not mutate live target quantities");
+        }
+
+        private static void DependencyMutationDuringSubsetEnumerationFailsFreshness()
+        {
+            var project = Fixture();
+            var beforeVersion = project.ChangeVersion;
+            var target = project.FindElement("B1")!;
+
+            IEnumerable<string> Targets()
+            {
+                target.DependsOn.Add("B2");
+                yield return "B1";
+            }
+
+            ThrowsStateFreshness(() => new RegenerationPreviewService().PreviewSubset(project, Targets()), "B1");
+            Equal(beforeVersion, project.ChangeVersion, "direct dependency mutation must leave ChangeVersion unchanged");
+            Equal(1, target.DependsOn.Count, "dependency mutation fixture count");
+            Equal("B2", target.DependsOn[0], "dependency mutation fixture value");
+            True(!target.Quantities.ContainsKey("NetVolumeM3"), "failed dependency-race preview must not mutate live target quantities");
+        }
+
+        private static void DirtyStateMutationDuringSubsetEnumerationFailsFreshness()
+        {
+            var project = Fixture();
+            var beforeVersion = project.ChangeVersion;
+            var target = project.FindElement("B1")!;
+            Equal(ElementDirtyFlags.All, target.Dirty, "dirty-state fixture starts dirty");
+
+            IEnumerable<string> Targets()
+            {
+                target.MarkClean(ElementDirtyFlags.All);
+                yield return "B1";
+            }
+
+            ThrowsStateFreshness(() => new RegenerationPreviewService().PreviewSubset(project, Targets()), "B1");
+            Equal(beforeVersion, project.ChangeVersion, "direct dirty-state mutation must leave ChangeVersion unchanged");
+            Equal(ElementDirtyFlags.None, target.Dirty, "dirty-state mutation fixture must remain observable");
+            True(!target.Quantities.ContainsKey("NetVolumeM3"), "failed dirty-state-race preview must not mutate live target quantities");
         }
 
         private static void StableSubsetStillPreviews()
@@ -75,7 +134,7 @@ namespace QS3D.Core.SmokeTests
             return beam;
         }
 
-        private static void ThrowsStructuralFreshness(Action action)
+        private static void ThrowsOwnershipFreshness(Action action)
         {
             try
             {
@@ -84,10 +143,27 @@ namespace QS3D.Core.SmokeTests
             catch (InvalidOperationException ex)
             {
                 if (ex.Message.IndexOf("element ownership changed", StringComparison.Ordinal) >= 0) return;
-                throw new InvalidOperationException("Unexpected regeneration preview structural-freshness error.", ex);
+                throw new InvalidOperationException("Unexpected regeneration preview ownership-freshness error.", ex);
             }
 
-            throw new InvalidOperationException("Expected regeneration preview structural-freshness rejection.");
+            throw new InvalidOperationException("Expected regeneration preview ownership-freshness rejection.");
+        }
+
+        private static void ThrowsStateFreshness(Action action, string elementId)
+        {
+            try
+            {
+                action();
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("element state changed", StringComparison.Ordinal) >= 0 &&
+                    ex.Message.IndexOf(elementId, StringComparison.OrdinalIgnoreCase) >= 0)
+                    return;
+                throw new InvalidOperationException("Unexpected regeneration preview element-state freshness error.", ex);
+            }
+
+            throw new InvalidOperationException("Expected regeneration preview element-state freshness rejection.");
         }
 
         private static void Equal<T>(T expected, T actual, string label)
