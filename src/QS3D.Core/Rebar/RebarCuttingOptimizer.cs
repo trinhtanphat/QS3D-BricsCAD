@@ -72,6 +72,7 @@ namespace QS3D.Core.Rebar
     {
         private const int MaxExpandedPieces = 10000;
         private const double FitToleranceM = 1e-12d;
+        private const double FloatingRoundoffToleranceM = 1e-14d;
 
         public static RebarCuttingOptimizationResult Plan(RebarStockDemand demand)
         {
@@ -92,7 +93,7 @@ namespace QS3D.Core.Rebar
                     var metrics = Evaluate(
                         demand.StockLengthM,
                         demand.AllowancePolicy.KerfPerCutM,
-                        bars[index].AllocatedLengthBeforeKerfM,
+                        bars[index].AllocatedLengthBeforeKerf,
                         bars[index].Pieces.Count,
                         piece.EffectiveLengthM);
                     if (!metrics.Fits) continue;
@@ -109,7 +110,7 @@ namespace QS3D.Core.Rebar
                     var metrics = Evaluate(
                         demand.StockLengthM,
                         demand.AllowancePolicy.KerfPerCutM,
-                        0d,
+                        CompensatedLength.Zero,
                         0,
                         piece.EffectiveLengthM);
                     if (!metrics.Fits)
@@ -142,7 +143,7 @@ namespace QS3D.Core.Rebar
                     index + 1,
                     demand.StockLengthM,
                     cuts.AsReadOnly(),
-                    state.AllocatedLengthBeforeKerfM,
+                    state.AllocatedLengthBeforeKerf.Value("cutting optimisation allocated length"),
                     state.Metrics.CutOperationCount,
                     state.Metrics.KerfLengthM,
                     state.Metrics.OffCutLengthM));
@@ -187,30 +188,32 @@ namespace QS3D.Core.Rebar
         private static BarMetrics Evaluate(
             double stockLengthM,
             double kerfPerCutM,
-            double existingAllocatedLengthM,
+            CompensatedLength existingAllocatedLength,
             int existingPieceCount,
             double nextPieceLengthM)
         {
-            var allocatedLengthM = RebarMath.Add(existingAllocatedLengthM, nextPieceLengthM, "cutting optimisation stock allocation");
+            var allocatedLength = existingAllocatedLength.Add(nextPieceLengthM, "cutting optimisation stock allocation");
             var pieceCount = checked(existingPieceCount + 1);
 
             var exactFillCutCount = Math.Max(0, pieceCount - 1);
             var exactFillKerfM = RebarMath.Multiply(kerfPerCutM, exactFillCutCount, "cutting optimisation exact-fill kerf");
-            var exactFillConsumedM = RebarMath.Add(allocatedLengthM, exactFillKerfM, "cutting optimisation exact-fill consumption");
-            if (exactFillConsumedM <= stockLengthM && stockLengthM - exactFillConsumedM <= FitToleranceM)
-                return new BarMetrics(true, allocatedLengthM, exactFillCutCount, exactFillKerfM, 0d);
-            if (exactFillConsumedM > stockLengthM)
+            var exactFillConsumed = allocatedLength.Add(exactFillKerfM, "cutting optimisation exact-fill consumption");
+            var exactFillDeltaM = exactFillConsumed.SignedDifferenceFrom(stockLengthM, "cutting optimisation exact-fill comparison");
+            if (exactFillDeltaM > FloatingRoundoffToleranceM)
                 return BarMetrics.DoesNotFit;
+            if (exactFillDeltaM >= -FitToleranceM)
+                return new BarMetrics(true, allocatedLength, exactFillCutCount, exactFillKerfM, 0d);
 
             var tailCutCount = pieceCount;
             var tailKerfM = RebarMath.Multiply(kerfPerCutM, tailCutCount, "cutting optimisation tail kerf");
-            var consumedM = RebarMath.Add(allocatedLengthM, tailKerfM, "cutting optimisation stock consumption");
-            if (consumedM > stockLengthM)
+            var consumed = allocatedLength.Add(tailKerfM, "cutting optimisation stock consumption");
+            var tailDeltaM = consumed.SignedDifferenceFrom(stockLengthM, "cutting optimisation tail comparison");
+            if (tailDeltaM > FloatingRoundoffToleranceM)
                 return BarMetrics.DoesNotFit;
 
-            var offCutLengthM = stockLengthM - consumedM;
+            var offCutLengthM = tailDeltaM >= 0d ? 0d : -tailDeltaM;
             if (offCutLengthM <= FitToleranceM) offCutLengthM = 0d;
-            return new BarMetrics(true, allocatedLengthM, tailCutCount, tailKerfM, offCutLengthM);
+            return new BarMetrics(true, allocatedLength, tailCutCount, tailKerfM, offCutLengthM);
         }
 
         private sealed class Piece
@@ -234,35 +237,83 @@ namespace QS3D.Core.Rebar
         private sealed class BarState
         {
             public List<Piece> Pieces { get; } = new List<Piece>();
-            public double AllocatedLengthBeforeKerfM { get; private set; }
+            public CompensatedLength AllocatedLengthBeforeKerf { get; private set; }
             public BarMetrics Metrics { get; private set; }
 
             public void Add(Piece piece, BarMetrics metrics)
             {
                 Pieces.Add(piece);
-                AllocatedLengthBeforeKerfM = metrics.AllocatedLengthBeforeKerfM;
+                AllocatedLengthBeforeKerf = metrics.AllocatedLengthBeforeKerf;
                 Metrics = metrics;
             }
         }
 
         private struct BarMetrics
         {
-            public static readonly BarMetrics DoesNotFit = new BarMetrics(false, 0d, 0, 0d, 0d);
+            public static readonly BarMetrics DoesNotFit = new BarMetrics(false, CompensatedLength.Zero, 0, 0d, 0d);
 
-            public BarMetrics(bool fits, double allocatedLengthBeforeKerfM, int cutOperationCount, double kerfLengthM, double offCutLengthM)
+            public BarMetrics(bool fits, CompensatedLength allocatedLengthBeforeKerf, int cutOperationCount, double kerfLengthM, double offCutLengthM)
             {
                 Fits = fits;
-                AllocatedLengthBeforeKerfM = allocatedLengthBeforeKerfM;
+                AllocatedLengthBeforeKerf = allocatedLengthBeforeKerf;
                 CutOperationCount = cutOperationCount;
                 KerfLengthM = kerfLengthM;
                 OffCutLengthM = offCutLengthM;
             }
 
             public bool Fits { get; }
-            public double AllocatedLengthBeforeKerfM { get; }
+            public CompensatedLength AllocatedLengthBeforeKerf { get; }
             public int CutOperationCount { get; }
             public double KerfLengthM { get; }
             public double OffCutLengthM { get; }
+        }
+
+        private struct CompensatedLength
+        {
+            private double _sum;
+            private double _compensation;
+
+            public static CompensatedLength Zero => default(CompensatedLength);
+
+            public CompensatedLength Add(double value, string label)
+            {
+                var result = this;
+                var next = result._sum + value;
+                EnsureFinite(next, label);
+
+                var correction = Math.Abs(result._sum) >= Math.Abs(value)
+                    ? (result._sum - next) + value
+                    : (value - next) + result._sum;
+                var compensation = result._compensation + correction;
+                EnsureFinite(compensation, label);
+
+                result._sum = next;
+                result._compensation = compensation;
+                return result;
+            }
+
+            public double SignedDifferenceFrom(double value, string label)
+            {
+                EnsureFinite(value, label);
+                var difference = _sum - value;
+                EnsureFinite(difference, label);
+                var result = difference + _compensation;
+                EnsureFinite(result, label);
+                return result;
+            }
+
+            public double Value(string label)
+            {
+                var value = _sum + _compensation;
+                EnsureFinite(value, label);
+                return value;
+            }
+
+            private static void EnsureFinite(double value, string label)
+            {
+                if (double.IsNaN(value) || double.IsInfinity(value))
+                    throw new OverflowException("Rebar addition overflow: " + label);
+            }
         }
     }
 }

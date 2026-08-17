@@ -84,6 +84,7 @@ namespace QS3D.Core.SmokeTests
             DependencyHealthMissingTargetSmoke.Run();
             DependencyHealthBlankTargetSmoke.Run();
             LevelReferenceSmoke.Run();
+            ElementVerticalPlacementAdditivePrecisionSmoke.Run();
             FloorGeneratedIdentitySmoke.Run();
             ModelHealthIdentityAmbiguitySmoke.Run();
             ModelHealthSourceHandleSmoke.Run();
@@ -140,6 +141,7 @@ namespace QS3D.Core.SmokeTests
             BulkEditCanonicalizationSmoke.Run();
             SemanticMutationAtomicitySmoke.Run();
             DomainMutationAtomicitySmoke.Run();
+            FamilyDefinitionPersistedTextSmoke.Run();
             TemplateApplyAtomicitySmoke.Run();
             TemplateProfileRequiredAttributeCanonicalSmoke.Run();
             StandardFamilyTemplateCatalogSmoke.Run();
@@ -148,6 +150,7 @@ namespace QS3D.Core.SmokeTests
             ProjectFamilyActivationRevisionSmoke.Run();
             RegenerationAtomicitySmoke.Run();
             HostLinkCanonicalizationSmoke.Run();
+            MeasurementWorkItemMappingCatalogBoundSmoke.Run();
             ProjectFamilyAssignmentAtomicitySmoke.Run();
             ProjectSessionAuditSmoke.Run();
             ProjectInterchangeValidationSmoke.Run();

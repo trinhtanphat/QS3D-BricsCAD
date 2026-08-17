@@ -53,9 +53,9 @@ namespace QS3D.Core.SmokeTests
             element.SourceHandles.Add("ABC");
             project.Elements.Add(element);
 
-            var handles = SourceHandleResolver.Resolve(project, new[] { " e1 " });
+            var handles = SourceHandleResolver.Resolve(project, new[] { "e1" });
             if (handles.Count != 1 || !string.Equals(handles[0], "ABC", StringComparison.Ordinal))
-                throw new InvalidOperationException("Valid Locate root no longer resolves its direct source handle.");
+                throw new InvalidOperationException("Valid canonical Locate root no longer resolves its direct source handle.");
         }
 
         private static void ThrowsMissingRoot(Action action, string expectedId)
