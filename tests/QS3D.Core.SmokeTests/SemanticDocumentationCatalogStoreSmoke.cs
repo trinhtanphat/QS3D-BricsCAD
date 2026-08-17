@@ -19,6 +19,7 @@ namespace QS3D.Core.SmokeTests
             UnsafeXmlFailsClosed();
             PersistedViewCountBound();
             PersistedSheetCountBound();
+            PersistedPlacementCountBound();
             EmptyCatalogClearsMetadata();
         }
 
@@ -181,6 +182,25 @@ namespace QS3D.Core.SmokeTests
                 "Persisted documentation catalogs above the 10,000-sheet bound must fail closed.");
         }
 
+        private static void PersistedPlacementCountBound()
+        {
+            var store = new SemanticDocumentationCatalogStore();
+            var project = BuildProject();
+            var exact = BuildPersistedPlacementCatalog(128);
+            if (exact.Length >= 1024 * 1024)
+                throw new Exception("Placement count-bound fixture must remain below the metadata character cap.");
+
+            project.Metadata[SemanticDocumentationCatalogStore.MetadataKey] = exact;
+            var catalog = store.Load(project);
+            Equal(1, catalog.Sheets.Count);
+            Equal(128, catalog.Sheets[0].Placements.Count);
+
+            project.Metadata[SemanticDocumentationCatalogStore.MetadataKey] = BuildPersistedPlacementCatalog(129);
+            MustFailLoad(
+                () => store.Load(project),
+                "Persisted documentation sheets above the 128-placement bound must fail closed at the persisted-data boundary.");
+        }
+
         // Keep these generated fixtures deliberately compact so count guards, not the 1 MiB XML cap, determine the result.
         private static string BuildPersistedCatalog(int viewCount, int sheetCount)
         {
@@ -200,6 +220,26 @@ namespace QS3D.Core.SmokeTests
                     .Append("\" widthMm=\"1\" heightMm=\"1\" titleBlockName=\"\"/>");
             }
             return payload.Append("</sheets></documentation>").ToString();
+        }
+
+        private static string BuildPersistedPlacementCatalog(int placementCount)
+        {
+            var payload = new StringBuilder("<documentation version=\"1\"><views>");
+            for (var i = 0; i < placementCount; i++)
+            {
+                payload.Append("<view id=\"PV").Append(i)
+                    .Append("\" name=\"PV").Append(i)
+                    .Append("\" kind=\"Plan\" floorId=\"\" zoneId=\"\"/>");
+            }
+
+            payload.Append("</views><sheets><sheet id=\"PS\" number=\"PS-1\" name=\"Placement Bound\" widthMm=\"256\" heightMm=\"1\" titleBlockName=\"\"><placements>");
+            for (var i = 0; i < placementCount; i++)
+            {
+                payload.Append("<placement viewId=\"PV").Append(i)
+                    .Append("\" xMm=\"").Append(i)
+                    .Append("\" yMm=\"0\" widthMm=\"1\" heightMm=\"1\"/>");
+            }
+            return payload.Append("</placements></sheet></sheets></documentation>").ToString();
         }
 
         private static void EmptyCatalogClearsMetadata()
