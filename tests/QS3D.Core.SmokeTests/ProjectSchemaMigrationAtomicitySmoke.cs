@@ -89,7 +89,8 @@ namespace QS3D.Core.SmokeTests
 
         private static XDocument Migrate(XDocument document)
         {
-            var type = typeof(QsdbProjectStore).Assembly.GetType("QS3D.Core.Persistence.ProjectSchemaMigrator", throwOnError: true);
+            var type = typeof(QsdbProjectStore).Assembly.GetType("QS3D.Core.Persistence.ProjectSchemaMigrator", throwOnError: true)
+                ?? throw new Exception("ProjectSchemaMigrator type was not found.");
             var method = type.GetMethod("MigrateToCurrent", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
                 ?? throw new Exception("ProjectSchemaMigrator.MigrateToCurrent was not found.");
             try
