@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             AcceptsExactBoundAndPreservesOrdinaryGraphBehavior();
             RejectsKnownOversizedSourcesBeforeEnumeration();
             RejectsKnownReadOnlyOversizedSourcesBeforeEnumeration();
+            RejectsDishonestKnownCountSourcesAtLimitPlusOne();
             RebuildStopsLazySourceAtLimitPlusOneAndPreservesCommittedGraph();
             DirtyOrderStopsLazySourceAtLimitPlusOne();
         }
@@ -67,6 +68,18 @@ namespace QS3D.Core.SmokeTests
             ThrowsLimit(() => graph.TopologicalDirtyOrder(known), "known read-only oversized dirty order");
             if (known.Enumerated)
                 throw new InvalidOperationException("DependencyGraphBoundedInputSmoke known read-only oversized dirty order enumerated the source.");
+        }
+
+        private static void RejectsDishonestKnownCountSourcesAtLimitPlusOne()
+        {
+            var graph = new DependencyGraph();
+            var rebuild = new DishonestKnownCollection(Limit + 5);
+            ThrowsLimit(() => graph.Rebuild(rebuild), "dishonest-count rebuild");
+            Equal(Limit + 1, rebuild.Seen, "dishonest-count rebuild enumeration count");
+
+            var dirtyOrder = new DishonestKnownCollection(Limit + 5);
+            ThrowsLimit(() => graph.TopologicalDirtyOrder(dirtyOrder), "dishonest-count dirty order");
+            Equal(Limit + 1, dirtyOrder.Seen, "dishonest-count dirty-order enumeration count");
         }
 
         private static void RebuildStopsLazySourceAtLimitPlusOneAndPreservesCommittedGraph()
@@ -140,6 +153,36 @@ namespace QS3D.Core.SmokeTests
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class DishonestKnownCollection : ICollection<ProjectElement>
+        {
+            private readonly int _actualCount;
+
+            public DishonestKnownCollection(int actualCount)
+            {
+                _actualCount = actualCount;
+            }
+
+            public int Count => 1;
+            public bool IsReadOnly => true;
+            public int Seen { get; private set; }
+
+            public IEnumerator<ProjectElement> GetEnumerator()
+            {
+                for (var index = 0; index < _actualCount; index++)
+                {
+                    Seen++;
+                    yield return new ProjectElement("DISHONEST-" + index, ElementCategory.CustomQuantity);
+                }
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public bool Contains(ProjectElement item) => false;
+            public void CopyTo(ProjectElement[] array, int arrayIndex) { }
+            public void Add(ProjectElement item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Remove(ProjectElement item) => throw new NotSupportedException();
         }
 
         private sealed class OversizedKnownCollection : ICollection<ProjectElement>
