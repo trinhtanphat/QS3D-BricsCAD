@@ -98,19 +98,21 @@ namespace QS3D.Core.Selection
         public SemanticSelectionBulkEditResult AssignFamily(ProjectState project, IEnumerable<string> elementIds, string familyId)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            if (string.IsNullOrWhiteSpace(familyId)) throw new ArgumentException("Family id is required.", nameof(familyId));
+            var canonicalFamilyId = RequireCanonicalFamilyId(familyId, nameof(familyId));
             var selection = ResolveSelection(project, elementIds);
-            var normalizedFamilyId = familyId.Trim();
-            var family = project.FindFamily(normalizedFamilyId) ?? throw new KeyNotFoundException("Unknown family: " + normalizedFamilyId);
+            var family = project.FindFamily(canonicalFamilyId) ?? throw new KeyNotFoundException("Unknown family: " + canonicalFamilyId);
             if (!Enum.IsDefined(typeof(ElementCategory), family.Category))
                 throw new InvalidOperationException("Target family has an undefined category: " + family.Id + ".");
 
             foreach (var element in selection.Elements)
+            {
+                RequireCanonicalExistingFamilyId(element.FamilyId, element.Id);
                 if (element.Category != family.Category)
                     throw new InvalidOperationException("Cannot assign family " + family.Id + " to mixed/incompatible selection; element " + element.Id + " is " + element.Category + " while family is " + family.Category + ".");
+            }
 
             var changedIds = selection.Elements
-                .Where(x => !string.Equals((x.FamilyId ?? string.Empty).Trim(), family.Id, StringComparison.OrdinalIgnoreCase))
+                .Where(x => !string.Equals(x.FamilyId ?? string.Empty, family.Id, StringComparison.OrdinalIgnoreCase))
                 .Select(x => x.Id)
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x, StringComparer.Ordinal)
@@ -137,7 +139,7 @@ namespace QS3D.Core.Selection
                 return instanceValue ?? string.Empty;
             }
 
-            var familyId = (element.FamilyId ?? string.Empty).Trim();
+            var familyId = RequireCanonicalExistingFamilyId(element.FamilyId, element.Id);
             if (familyId.Length > 0)
             {
                 var family = project.FindFamily(familyId) ?? throw new InvalidOperationException("Selected element references missing family id: " + element.Id + "/" + familyId + ".");
@@ -150,6 +152,24 @@ namespace QS3D.Core.Selection
 
             present = false;
             return string.Empty;
+        }
+
+        private static string RequireCanonicalFamilyId(string familyId, string parameterName)
+        {
+            if (string.IsNullOrWhiteSpace(familyId))
+                throw new ArgumentException("Family id is required.", parameterName);
+            if (!string.Equals(familyId, familyId.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Family id must be canonical and contain no leading or trailing whitespace.", parameterName);
+            return familyId;
+        }
+
+        private static string RequireCanonicalExistingFamilyId(string familyId, string elementId)
+        {
+            var value = familyId ?? string.Empty;
+            if (value.Length == 0) return string.Empty;
+            if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Element " + elementId + " references a non-canonical family id: '" + value + "'. Repair the relation before bulk editing.");
+            return value;
         }
 
         private static bool HasNonZeroSignificand(string value)

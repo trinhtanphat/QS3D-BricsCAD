@@ -31,13 +31,20 @@ for token in (
         errors.append("ProjectFamilyService dangling-relation guard missing token: " + token)
 
 for token in (
-    "var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();",
+    "var previousFamilyId = RequireCanonicalExistingFamilyId(element);",
+    "!string.Equals(value, value.Trim(), StringComparison.Ordinal)",
     "previousFamily = project.FindFamily(previousFamilyId) ??",
     "references missing family id:",
     "Repair the relation before bulk reassignment.",
 ):
     if token not in bulk_edit_service:
-        errors.append("BulkEditService dangling-relation guard missing token: " + token)
+        errors.append("BulkEditService dangling/canonical-relation guard missing token: " + token)
+
+canonical = bulk_edit_service.find("var previousFamilyId = RequireCanonicalExistingFamilyId(element);")
+lookup = bulk_edit_service.find("previousFamily = project.FindFamily(previousFamilyId) ??", canonical if canonical >= 0 else 0)
+mutation = bulk_edit_service.find("element.FamilyId = family.Id;")
+if min(canonical, lookup, mutation) < 0 or not canonical < lookup < mutation:
+    errors.append("BulkEditService must reject a non-canonical previous Family identity and resolve dangling relations before the first FamilyId mutation.")
 
 for token in (
     "DanglingPreviousFamilyBlocksWholeAssignmentBatch",
@@ -55,4 +62,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: project-aware family reassignment fails closed on dangling source family references before mutating any batch target.")
+print("PASS: project-aware family reassignment fails closed on non-canonical or dangling source family references before mutating any batch target.")
