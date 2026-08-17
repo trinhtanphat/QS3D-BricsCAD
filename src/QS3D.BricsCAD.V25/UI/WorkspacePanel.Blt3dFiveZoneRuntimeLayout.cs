@@ -21,15 +21,6 @@ namespace QS3D.BricsCAD.V25.UI
     {
         private static readonly bool Blt3dFiveZoneRuntimeLayoutRegistered = RegisterBlt3dFiveZoneRuntimeLayout();
 
-        // Force CLR type initialization before the first WorkspacePanel instance is constructed.
-        // Without an explicit static constructor this partial class is marked beforefieldinit, so
-        // the class-handler registrations below are allowed to run too late for the first Loaded
-        // event. The explicit constructor makes both this registration and the runtime-repair
-        // registration in the sibling partial deterministic for every first palette instance.
-        static WorkspacePanel()
-        {
-        }
-
         private static bool RegisterBlt3dFiveZoneRuntimeLayout()
         {
             EventManager.RegisterClassHandler(
