@@ -14,22 +14,40 @@ $ErrorActionPreference = 'Stop'
 $null = $PluginPath
 $null = $BricscadDirectory
 
+$maximumXamlBytes = 1MB
 $root = Split-Path -Parent $PSScriptRoot
-$workspacePath = Join-Path $root 'src\QS3D.BricsCAD.V25\UI\WorkspacePanel.xaml'
-$rightPanelPath = Join-Path $root 'src\QS3D.BricsCAD.V25\UI\RightPanel.xaml'
+$paletteRoot = [System.IO.Path]::GetFullPath((Join-Path $root 'src\QS3D.BricsCAD.V25\UI'))
+$workspacePath = Join-Path $paletteRoot 'WorkspacePanel.xaml'
+$rightPanelPath = Join-Path $paletteRoot 'RightPanel.xaml'
 
 function Read-XamlDocument {
     param([Parameter(Mandatory = $true)][string]$Path)
 
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $rootPrefix = $paletteRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $fullPath.StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Palette XAML source escaped the canonical UI root: $Path"
+    }
+
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
         throw "Required palette XAML source is missing: $Path"
     }
 
+    $sourceFile = Get-Item -LiteralPath $fullPath -Force
+    if (($sourceFile.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Palette XAML source must not be a reparse point: $Path"
+    }
+    if ($sourceFile.Length -gt $maximumXamlBytes) {
+        throw "Palette XAML source exceeds the $maximumXamlBytes-byte offline qualification limit: $Path"
+    }
+
     try {
-        return [xml](Get-Content -LiteralPath $Path -Raw -Encoding UTF8)
+        $strictUtf8 = [System.Text.UTF8Encoding]::new($false, $true)
+        $text = [System.IO.File]::ReadAllText($fullPath, $strictUtf8)
+        return [xml]$text
     }
     catch {
-        throw "Palette XAML is not well-formed XML: $Path :: $($_.Exception.Message)"
+        throw "Palette XAML is not valid strict UTF-8 / well-formed XML: $Path :: $($_.Exception.Message)"
     }
 }
 
@@ -102,5 +120,5 @@ $rightTheme = Require-Node $rightPanel $rightNs "//p:ResourceDictionary[@Source=
 $null = $rightTheme
 Write-Host 'PASS: RightPanel source contract is structurally valid without loading BricsCAD/plugin assemblies.'
 
-Write-Host 'PASS: offline palette qualification completed using source/XAML checks only.'
+Write-Host 'PASS: offline palette qualification completed using bounded strict source/XAML checks only.'
 Write-Host 'Licensed in-host BricsCAD V25 runtime remains the authority for palette construction, layout, host theme, HiDPI, and native integration.'
