@@ -47,11 +47,21 @@ def main():
         require(layout, token, LAYOUT_REL)
     require(layout, "using System.Windows.Data;", LAYOUT_REL)
 
-    # The Workspace itself must visibly carry the original QS3D red-X / green-V identity. Keep
-    # LOCAL-012 as the real licensed BricsCAD/HiDPI visual qualification gate; this source guard
-    # only proves that the clean-room mark and its deterministic geometry remain wired in source.
+    # The Workspace itself must visibly carry the original QS3D red-X / green-V identity. Guard
+    # not only the vector art but also the Loaded lifecycle and deterministic insertion point so a
+    # future carrier/rebase cannot silently keep the file while disconnecting it from the live UI.
+    # LOCAL-012 remains the real licensed BricsCAD/HiDPI visual qualification gate.
     for token in (
         "Qs3dWorkspaceBrandMark",
+        "EventManager.RegisterClassHandler(",
+        "FrameworkElement.LoadedEvent",
+        "OnQs3dWorkspaceBrandLoaded",
+        "DispatcherPriority.Loaded",
+        "EnsureQs3dWorkspaceBrandMark",
+        "WorkspaceContentRoot.Children",
+        "Grid.GetRow(child) == 0",
+        "Grid.GetColumn(child) == 0",
+        "RegisterName(Qs3dWorkspaceBrandName, mark);",
         "X đỏ / V xanh",
         "Color.FromRgb(232, 74, 74)",
         "Color.FromRgb(82, 190, 108)",
@@ -105,7 +115,7 @@ def main():
 
     print(
         "PASS: Workspace breaks the zero-viewport width loop, restores visible two-column BIM content, "
-        "and QS3D Workspace/shell/repository branding uses original red-X green-V artwork."
+        "and QS3D Workspace/shell/repository branding uses original red-X green-V artwork with live UI wiring."
     )
     return 0
 
