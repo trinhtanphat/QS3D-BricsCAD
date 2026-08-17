@@ -49,12 +49,13 @@ Before substantive work, read:
 4. `CI_POLICY.md`;
 5. fetch/read the latest `origin/main` and record its exact SHA;
 6. `docs/AGENT-WORK-REGISTRATION.md`;
-7. `docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md`;
-8. relevant open Issues/PRs plus `ACTIVE`/`BLOCKED` historical claims under `docs/agent-work-claims/`;
-9. `docs/REMOTE-AGENT-SCOPE.md`;
-10. the newest current handoff/status docs relevant to the task;
-11. `docs/LOCAL-AGENT-INBOX.md` for LOCAL_ONLY work;
-12. the exact feature/runbook documents required by the assigned lane.
+7. `docs/AGENT-PROMPT-TO-RELEASE-CONTRACT.md`;
+8. `docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md`;
+9. relevant open Issues/PRs plus `ACTIVE`/`BLOCKED` historical claims under `docs/agent-work-claims/`;
+10. `docs/REMOTE-AGENT-SCOPE.md`;
+11. the newest current handoff/status docs relevant to the task;
+12. `docs/LOCAL-AGENT-INBOX.md` for LOCAL_ONLY work;
+13. the exact feature/runbook documents required by the assigned lane.
 
 Current source wins over stale historical handoffs for implementation truth. `docs/LOCAL-AGENT-INBOX.md` is the live LOCAL_ONLY priority index when older local documents disagree on status/priority.
 
@@ -90,6 +91,41 @@ An Issue plus pushed task branch is the preferred visible coordination surface b
 - Umbrella audit Issues do not authorize multiple sessions to create equivalent concrete fixes. Every concrete implementation needs its own unique Lane-Key, and an equivalent active lane is an automatic stop.
 
 A clean Git merge does not prove semantic non-overlap. Same production-file ownership or equivalent behavior remains a collision signal even when Lane-Keys differ.
+
+## Mandatory per-prompt continuation and status reporting
+
+Every owner prompt that asks an AI agent/chat session to change, continue, fix, validate, integrate, merge, or release repository work must be treated as a continuation of the **current canonical GitHub lifecycle**, not as a fresh isolated coding attempt.
+
+Before mutation, the session must determine from current GitHub state whether the requested behavior already has a matching Issue/Lane-Key, branch, PR, landed implementation, pending CI, pending merge, or pending release. If a canonical carrier exists, continue it when authorized; do not create a duplicate carrier. If another session owns it, obey `DUPLICATE_CARRIER / NO MUTATION` unless explicitly reassigned.
+
+The following states are distinct and must never be reported as equivalent:
+
+```text
+edited locally
+  != committed
+  != pushed branch
+  != branch CI green
+  != PR ready/open
+  != PR/protected candidate green
+  != merged to main
+  != exact-main validated
+  != released/published
+```
+
+At the end of every such owner prompt, the agent must report the exact state using the mandatory form in `docs/AGENT-PROMPT-TO-RELEASE-CONTRACT.md`, including at minimum:
+
+- Issue and Lane-Key;
+- canonical owner/session and branch;
+- baseline/current `main` SHA as applicable;
+- latest task commit SHA(s);
+- exact branch-CI run/status and tested SHA;
+- canonical PR and protected-check status;
+- whether the work is actually merged to current `main` and the exact landed SHA;
+- whether a release is required and the exact release/publish result for that landed SHA, or `N/A` with reason;
+- LOCAL/runtime evidence state;
+- exact blocker and next lifecycle action.
+
+A generic `done`, `fixed`, or `completed` statement is forbidden when work is only local, unpushed, CI-red/pending, unmerged, or unreleased. Repeated prompts for one feature should advance the same canonical carrier toward completion rather than create disconnected Issues/branches/PRs.
 
 ## Mandatory sync discipline
 
