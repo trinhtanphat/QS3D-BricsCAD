@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Selection;
 using QS3D.Core.Services;
@@ -189,7 +190,7 @@ namespace QS3D.Core.SmokeTests
 
             var paddedCurrent = BuildProject();
             var paddedCurrentElement = paddedCurrent.FindElement("B-1")!;
-            paddedCurrentElement.FamilyId = " F-B ";
+            SetRawFamilyId(paddedCurrentElement, " F-B ");
             var paddedCurrentVersion = paddedCurrent.ChangeVersion;
             MustFail(() => semantic.AssignFamily(paddedCurrent, new[] { "B-1" }, "F-B2"));
             Equal(" F-B ", paddedCurrentElement.FamilyId);
@@ -197,7 +198,7 @@ namespace QS3D.Core.SmokeTests
 
             var inherited = BuildProject();
             var inheritedElement = inherited.FindElement("B-1")!;
-            inheritedElement.FamilyId = " F-B ";
+            SetRawFamilyId(inheritedElement, " F-B ");
             var inheritedVersion = inherited.ChangeVersion;
             MustFail(() => semantic.MultiplyNumericProperty(inherited, new[] { "B-1" }, "WidthM", 2d));
             Equal(false, inheritedElement.Properties.ContainsKey("WidthM"));
@@ -212,11 +213,25 @@ namespace QS3D.Core.SmokeTests
 
             var directCurrent = BuildProject();
             var directCurrentElement = directCurrent.FindElement("B-1")!;
-            directCurrentElement.FamilyId = " F-B ";
+            SetRawFamilyId(directCurrentElement, " F-B ");
             var directCurrentVersion = directCurrent.ChangeVersion;
             MustFail(() => new BulkEditService().AssignFamily(directCurrent, new[] { "B-1" }, "F-B2"));
             Equal(" F-B ", directCurrentElement.FamilyId);
             Equal(directCurrentVersion, directCurrent.ChangeVersion);
+
+            var noFamily = BuildProject();
+            var noFamilyElement = noFamily.FindElement("B-1")!;
+            noFamilyElement.FamilyId = string.Empty;
+            var noFamilyChanged = semantic.AssignFamily(noFamily, new[] { "B-1" }, "F-B2");
+            Equal(1, noFamilyChanged.ChangedCount);
+            Equal("F-B2", noFamilyElement.FamilyId);
+        }
+
+        private static void SetRawFamilyId(ProjectElement element, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_familyId", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectElement._familyId reflection hook is unavailable for malformed-state regression setup.");
+            field.SetValue(element, value);
         }
 
         private static void DuplicateSelectionFailsBeforeMutation()
