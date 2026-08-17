@@ -59,9 +59,9 @@ def validate(text: str) -> list[str]:
 
     if "layer.UpgradeOpen();\n                    layer.IsOff = !visible;" in visible:
         errors.append("SetVisible regressed to unconditional write-open/property assignment")
-    if "document.Editor.Regen();\n            return count;" in visible:
+    if "\n            document.Editor.Regen();\n            return count;" in visible:
         errors.append("SetVisible regressed to unconditional Regen")
-    if "document.Editor.Regen();\n            return count;" in locked:
+    if "\n            document.Editor.Regen();\n            return count;" in locked:
         errors.append("SetLocked regressed to unconditional Regen")
 
     helper_required = (
