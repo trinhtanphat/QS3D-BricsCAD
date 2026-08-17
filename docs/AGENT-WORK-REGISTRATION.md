@@ -2,7 +2,7 @@
 
 **Owner rule:** normal AI agents/chat sessions treat `origin/main` as read-only. Every task—including source, tests, scripts, workflows, documentation, Markdown, claim/handoff/status and chores—must be done on a dedicated issue/branch/PR. Only an agent/session explicitly authorized by the repository owner as an integration/merge coordinator may change `main`.
 
-`docs/MAIN-WRITE-AUTHORIZATION.md` is authoritative for `main` write permission. This file is the canonical work-registration and batch-integration protocol. `CI_POLICY.md` is authoritative for CI behavior. `docs/GITHUB-MAIN-PROTECTION.md` records the current hard-protection contract.
+`docs/MAIN-WRITE-AUTHORIZATION.md` is authoritative for `main` write permission. This file is the canonical work-registration and batch-integration protocol. `docs/AGENT-LANE-LOCK.md` is authoritative for concurrent Lane-Key ownership and canonical-carrier uniqueness. `CI_POLICY.md` is authoritative for CI behavior. `docs/GITHUB-MAIN-PROTECTION.md` records the current hard-protection contract.
 
 ## Source of truth for reservations
 
@@ -17,15 +17,43 @@ New or updated Markdown claims may still be used for repository history, but the
 A reservation should identify:
 
 - status (`ACTIVE`, `BLOCKED`, `COMPLETED`, or `RELEASED`);
+- stable **Lane-Key**, normally `issue-<number>`;
 - stable agent/session identity;
 - exact baseline `main` SHA;
 - exact scope and exclusions;
 - expected files/symbols/tests/runtime surfaces;
 - validation plan;
-- task branch and PR when created;
+- the one canonical task branch and PR when created;
+- explicit supersession of any historical carrier;
 - related issue and integration batch when known.
 
 `ACTIVE` and `BLOCKED` reservations remain owned until completed, released, superseded, or explicitly reassigned by the owner/coordinator.
+
+## Canonical Lane-Key / carrier lock
+
+Every concrete task has one stable Lane-Key. For normal issue-backed work use `issue-<number>`. An umbrella audit Issue is not a shared Lane-Key for every discovered implementation; each concrete fix needs its own unique task Issue/Lane-Key.
+
+At any time a Lane-Key may have at most:
+
+- one ACTIVE owner/session;
+- one canonical task branch;
+- one open canonical PR.
+
+If an equivalent active carrier already exists, the required status is:
+
+```text
+DUPLICATE_CARRIER / NO MUTATION
+```
+
+Do not create a second implementation because another carrier is stale, red, behind `main`, queued, slower, less clean, or owned by another agent model/chat session. Those states do not release ownership.
+
+When rebuilding a carrier is genuinely required, explicit supersession/reassignment must be recorded first. Close the old open PR before representing the replacement as canonical, preserve the Lane-Key, and keep only one active carrier.
+
+Do not create branch-to-branch/internal PRs solely to sync/replay `main` or another task branch into an agent branch. Reconcile the canonical task branch non-force, or explicitly supersede it and create exactly one replacement carrier.
+
+For scheduled/controller lanes, a stale/already-landed/blocked/zero-defect assignment is not permission for a worker to invent competing work under the same scope. Follow the current controller contract and the Lane-Key ownership recorded on GitHub; the repository's collision rule remains authoritative regardless of session history.
+
+The shared PR preflight enforces Lane-Key uniqueness for same-repository `agent/**` and `integration/**` carriers. PR metadata must include `Lane-Key`, canonical owner/session, canonical carrier, and explicit supersession information.
 
 ## Strict lane non-interference — highest priority for normal agents
 
@@ -33,7 +61,7 @@ A normal AI agent/chat session owns **only its assigned/reserved lane**. Work ow
 
 A normal agent must **not** opportunistically inspect, audit, review, validate, fix, merge, close, modify, reassign, manually rerun CI for, or otherwise manage another agent/session's work. Automatic shared branch/PR CI running because a branch or PR changed is repository infrastructure, not a cross-agent takeover.
 
-Cross-agent visibility is limited to the **minimum coordination metadata necessary to avoid an obvious collision**, for example: whether a lane/file/symbol is already reserved and the reservation's stated scope/exclusions. Once another owner is identified, stop there and choose a different non-overlapping lane unless the owner explicitly assigns coordination with that agent.
+Cross-agent visibility is limited to the **minimum coordination metadata necessary to avoid an obvious collision**, for example: Lane-Key, whether a lane/file/symbol is already reserved, canonical carrier identity, and the reservation's stated scope/exclusions. Once another owner is identified, stop there and choose a different non-overlapping lane unless the owner explicitly assigns coordination with that agent.
 
 For normal agents:
 
@@ -41,34 +69,38 @@ For normal agents:
 - do not read another agent's local/runtime evidence unless the owner explicitly asks this session to review that exact evidence;
 - do not monitor another agent's branch commits, CI runs, draft status, or completion status;
 - do not merge/close/update another agent's PR or Issue;
-- do not take over another agent's lane because it appears stale, slow, blocked, or incomplete;
+- do not take over another agent's lane because it appears stale, slow, blocked, red, behind, or incomplete;
+- do not create a competing carrier for an existing Lane-Key;
 - do not "continue all" by sweeping unrelated agents' open work;
 - do not treat LOCAL_ONLY work owned by local agents as this session's backlog;
 - if another agent's already-landed work on current `main` overlaps this lane, inspect **current `main` only** as implementation truth; do not backtrack into that agent's branch/PR history unless explicitly authorized.
 
-The only normal exception is a **minimal collision check** against visible reservations. Any broader cross-agent inspection requires explicit owner wording such as `review PR #...`, `coordinate with agent ...`, `merge this named batch`, or `you are the integration coordinator`.
+The only normal exception is a **minimal collision check** against visible reservations and canonical-carrier metadata. Any broader cross-agent inspection requires explicit owner wording such as `review PR #...`, `coordinate with agent ...`, `merge this named batch`, or `you are the integration coordinator`.
 
 ## Mandatory sequence for a normal agent
 
 1. Fetch/read current `origin/main` and record the exact SHA.
-2. Read `AGENTS.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, `CI_POLICY.md`, this file, and the Issue/claim/runbook for **this lane**.
+2. Read `AGENTS.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, `CI_POLICY.md`, this file, `docs/AGENT-LANE-LOCK.md`, and the Issue/claim/runbook for **this lane**.
 3. Perform only the minimal reservation/collision check needed to verify that this lane is not already owned; do not audit other agents' work.
-4. Choose a non-overlapping lane.
-5. Create or update a GitHub Issue to register the lane, unless an existing owner-created issue already uniquely identifies it.
-6. Create a dedicated branch from the latest valid baseline, normally:
+4. Determine the stable Lane-Key and verify there is no equivalent ACTIVE owner/canonical carrier. If one exists, stop as `DUPLICATE_CARRIER / NO MUTATION`.
+5. Choose a non-overlapping lane.
+6. Create or update a GitHub Issue to register the lane, unless an existing owner-created issue already uniquely identifies it.
+7. Create a dedicated branch from the latest valid baseline, normally:
 
    ```text
    agent/<agent-id>/<scope>
    ```
 
-7. Put every repository change for the task on that branch, including docs/Markdown/claims/chores.
-8. Implement only the reserved lane.
-9. Run relevant local/static/unit/smoke validation available to this lane.
-10. Push the task branch. When watched integration-relevant paths changed, the shared branch CI must automatically validate the exact branch SHA.
-11. **Before opening a new PR for watched/integration-relevant work, wait for the exact current branch SHA to reach terminal branch-CI `SUCCESS`.** A PR or draft PR must not be used as the first CI attempt. If the branch run fails, fix it on the branch and obtain a new green run first.
-12. Re-fetch `origin/main`. If it moved, reconcile against current `main` safely without inspecting or overwriting another agent's unmerged work, push the reconciled branch, and obtain fresh branch-CI `SUCCESS` again before opening the PR.
-13. Open/update a PR targeting the intended integration branch or `main`. GitHub's PR CI and protected-main rules validate the merge candidate/freshness when applicable.
-14. Stop before merge unless the owner explicitly authorized this session to merge/integrate.
+   Do not create a second task branch when the Lane-Key already has an active canonical carrier unless explicit supersession was recorded first.
+
+8. Put every repository change for the task on that one canonical branch, including docs/Markdown/claims/chores.
+9. Implement only the reserved lane.
+10. Run relevant local/static/unit/smoke validation available to this lane.
+11. Push the task branch. When watched integration-relevant paths changed, the shared branch CI must automatically validate the exact branch SHA.
+12. **Before opening a new PR for watched/integration-relevant work, wait for the exact current branch SHA to reach terminal branch-CI `SUCCESS`.** A PR or draft PR must not be used as the first CI attempt. If the branch run fails, fix it on the branch and obtain a new green run first.
+13. Re-fetch `origin/main`. If it moved, reconcile the same canonical carrier against current `main` safely without inspecting or overwriting another agent's unmerged work, push the reconciled branch, and obtain fresh branch-CI `SUCCESS` again before opening the PR.
+14. Open/update the one canonical PR targeting the intended integration branch or `main`. Include `Lane-Key`, canonical owner/session, canonical carrier, and `Supersedes` metadata. GitHub's PR CI and protected-main rules validate the merge candidate/freshness when applicable.
+15. Stop before merge unless the owner explicitly authorized this session to merge/integrate.
 
 A chat message, local patch, or unpushed branch is not a visible reservation. An Issue plus pushed task branch is the preferred coordination surface before PR creation; after branch CI is green, the PR becomes the handoff/review surface.
 
@@ -101,14 +133,16 @@ Every normal agent must:
 
 1. base its branch on the latest valid `main` baseline;
 2. periodically refresh `origin/main` without auditing other agents' branches/PRs;
-3. keep edits inside the reserved scope;
-4. make coherent lane/request-level commits rather than file-by-file noise;
-5. never force-push or reset shared `main`;
-6. never update the `main` ref directly;
-7. never use the GitHub contents API against `main` for docs, claims, chores or code;
-8. for watched/integration-relevant work, obtain green branch CI on the exact current branch SHA before opening a new PR;
-9. never merge its own PR unless explicit owner merge authorization was granted;
-10. record its branch/commit/PR and actual validation evidence in the Issue or task handoff.
+3. keep edits inside the reserved scope and Lane-Key;
+4. keep exactly one canonical active carrier for the Lane-Key;
+5. make coherent lane/request-level commits rather than file-by-file noise;
+6. never force-push or reset shared `main`;
+7. never update the `main` ref directly;
+8. never use the GitHub contents API against `main` for docs, claims, chores or code;
+9. never create transport/reconciliation PRs solely to move `main` or another branch into the canonical carrier;
+10. for watched/integration-relevant work, obtain green branch CI on the exact current branch SHA before opening a new PR;
+11. never merge its own PR unless explicit owner merge authorization was granted;
+12. record its Lane-Key, branch/commit/PR and actual validation evidence in the Issue or task handoff.
 
 A pushed branch, open PR, or green branch CI run is **not** `ALL MERGED TO MAIN`.
 
@@ -120,13 +154,14 @@ For watched integration-relevant paths:
 
 - push to `agent/**` validates the exact branch tree and is the mandatory pre-PR gate;
 - a PR targeting `main` or `integration/**` validates GitHub's merge candidate against that target when the workflow applies;
+- PR preflight rejects a same-repository `agent/**` or `integration/**` PR that omits required Lane-Key metadata or duplicates another open carrier with the same Lane-Key;
 - push to `integration/**` validates the exact combined tree assembled by an authorized coordinator.
 
-Shared CI is non-publishing: it has read-only repository permission and must not create tags/releases, sign packages, dispatch release workflows, mutate Issues, or write `main`.
+Shared CI is non-publishing: it has read-only repository/Actions/PR metadata permission and must not create tags/releases, sign packages, dispatch release workflows, mutate Issues, or write `main`.
 
 A green agent branch proves only the exact tested branch SHA. A green PR merge candidate proves only that merge candidate. A green integration branch proves only the combined integration tree. Use each evidence class for the tree it actually tested.
 
-The pre-PR rule does not mean the repository conceptually requires two arbitrary identical full runs. Branch CI is the isolated-candidate admission gate. PR CI / required checks are merge-candidate and freshness evidence. If `main` moves or the candidate tree changes, fresh applicable evidence is mandatory.
+The pre-PR rule does not mean the repository conceptually requires two arbitrary identical full runs. Branch CI is the isolated-candidate admission gate. PR CI / required checks are merge-candidate, Lane-Key-uniqueness and freshness evidence. If `main` moves or the candidate tree changes, fresh applicable evidence is mandatory.
 
 ## Active `main` hard protection
 
@@ -173,17 +208,18 @@ The coordinator exception begins **only after explicit owner authorization**. On
 The coordinator must:
 
 1. refresh latest `origin/main`;
-2. identify the exact authorized participating Issues/PRs/branches;
+2. identify the exact authorized participating Issues/PRs/branches and their Lane-Keys/canonical carriers;
 3. verify participating watched lanes had green branch CI before their PRs were opened under the current policy, unless they predate the policy and are explicitly handled as legacy candidates;
-4. merge/cherry-pick/rebase required agent branches into the integration branch without silently dropping commits;
-5. resolve semantic/API/test conflicts deliberately rather than choosing `ours`/`theirs` blindly;
-6. verify no required work remains only on an unmerged branch/PR;
-7. obtain green **combined-tree CI** on the exact frozen `integration/**` SHA when watched paths changed;
-8. inspect the final diff for accidental reversions, duplicate implementations and contract mismatches;
-9. freeze and record the integration candidate SHA;
-10. merge to `main` only within the owner's explicit authorization and only when GitHub protected-main requirements are satisfied;
-11. fetch `main` again and record the exact resulting SHA;
-12. require the applicable **exact-main release CI** before claiming cloud/release completion.
+4. reject duplicate active carriers before assembly; explicitly resolve/supersede one carrier rather than integrating both;
+5. merge/cherry-pick/rebase required agent branches into the integration branch without silently dropping commits;
+6. resolve semantic/API/test conflicts deliberately rather than choosing `ours`/`theirs` blindly;
+7. verify no required work remains only on an unmerged branch/PR;
+8. obtain green **combined-tree CI** on the exact frozen `integration/**` SHA when watched paths changed;
+9. inspect the final diff for accidental reversions, duplicate implementations and contract mismatches;
+10. freeze and record the integration candidate SHA;
+11. merge to `main` only within the owner's explicit authorization and only when GitHub protected-main requirements are satisfied;
+12. fetch `main` again and record the exact resulting SHA;
+13. require the applicable **exact-main release CI** before claiming cloud/release completion.
 
 Do not assemble a multi-agent batch by independently landing each agent PR on `main` unless the owner explicitly requests that specific integration strategy.
 
@@ -196,7 +232,7 @@ agent/** push
   -> shared branch CI on exact branch SHA
   -> SUCCESS required before opening PR for watched work
 PR -> main or integration/**
-  -> protected candidate / required-check freshness evidence
+  -> Lane-Key uniqueness + protected candidate / required-check freshness evidence
 integration/** push
   -> combined-tree CI on frozen integration SHA
 owner-authorized protected-main landing
@@ -214,6 +250,7 @@ Licensed/native runtime evidence is independent and remains `PENDING_LOCAL` unti
 For a specific owner request, state **ALL MERGED TO MAIN** only after an **owner-authorized integration reviewer/coordinator** freshly verifies:
 
 - every required Issue/reservation in the explicitly authorized batch is terminal or explicitly excluded/superseded;
+- every Lane-Key has one winning canonical implementation and no duplicate open carrier;
 - every required implementation/docs commit is represented in the integrated result and reachable from current `main`;
 - no required work for that authorized batch exists only on an agent branch, worktree, stash, draft patch or unmerged PR;
 - required participating branch/PR CI evidence is green and fresh where applicable;
@@ -234,24 +271,25 @@ Branch deletion, Issue state, PR UI state, or a previous CI run is not sufficien
 If work expands beyond the registered scope:
 
 1. stop before touching the added implementation surface;
-2. refresh `main` and perform only the minimum collision check for the added scope;
+2. refresh `main` and perform only the minimum collision check for the added scope/Lane-Key;
 3. update the task Issue and branch claim/handoff with the added scope;
-4. if the added scope is owned by another agent, do not inspect or take it over; keep it excluded unless the owner explicitly reassigns it;
-5. continue on the same task branch or a new dedicated branch as appropriate.
+4. if the added scope or equivalent Lane-Key is owned by another agent, do not inspect or take it over; keep it excluded unless the owner explicitly reassigns it;
+5. continue on the same canonical task branch, or explicitly supersede before creating a replacement carrier when genuinely required.
 
 Do not push a claim amendment to `main` merely to reserve the expanded scope.
 
-If another agent should continue, leave exact completed state, remaining work, branch/commit/PR references and successor boundary in **this lane's** Issue/PR/handoff; do not manage the successor's execution.
+If another agent should continue, leave exact completed state, remaining work, Lane-Key, canonical branch/commit/PR references and successor boundary in **this lane's** Issue/PR/handoff; do not manage the successor's execution.
 
 ## Closing a task
 
 Before an authorized merge, update the Issue/PR with:
 
-- branch name;
+- Lane-Key and canonical owner/session;
+- canonical branch name and any explicit supersession;
 - implementation/docs commit SHA(s);
 - validation actually executed;
 - mandatory pre-PR branch-CI run identity and exact tested SHA when applicable;
-- PR/integration CI evidence and freshness when applicable;
+- PR/integration CI evidence, Lane-Key uniqueness result and freshness when applicable;
 - known LOCAL_ONLY/policy gates belonging to this lane;
 - intended integration batch when known.
 
@@ -261,6 +299,7 @@ After the authorized merge, the coordinator may close/update the Issue and, when
 
 - Never force-push `main` or reset it backwards.
 - Never silently overwrite another agent's work.
+- Never create a duplicate carrier for an ACTIVE Lane-Key.
 - Never inspect/manage another agent's work beyond the minimum collision metadata unless the owner explicitly authorizes that cross-agent role.
 - Normal task authorization never implies `main` merge authorization.
 - Automatic branch/PR CI never implies `main` merge authorization.
