@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -16,6 +17,7 @@ namespace QS3D.Core.Domain
 
         private const int MaxFloors = 2000;
         private const int MaxNameLength = 120;
+        private const int MaxMutationTargetCount = 10000;
         private static readonly double MaxElevationNoOpToleranceM = new GeometryTolerancePolicy().PointToleranceM;
 
         public static FloorDefinition Create(ProjectState project, string id, string name, double elevationM)
@@ -281,13 +283,21 @@ namespace QS3D.Core.Domain
 
         private static IReadOnlyList<ProjectElement> ResolveOwnedElements(ProjectState project, IEnumerable<ProjectElement> elements)
         {
+            var targetEnumerationVersion = project.ChangeVersion;
+            RejectKnownOversizeTargetCollection(elements);
+            if (project.ChangeVersion != targetEnumerationVersion)
+                throw new InvalidOperationException("Project changed while Floor mutation targets were being counted. Retry the operation against the current project state.");
+
             var projectElements = ResolveProjectElements(project)
                 .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
 
-            var targetEnumerationVersion = project.ChangeVersion;
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            var observed = 0;
             foreach (var element in elements)
             {
+                observed++;
+                if (observed > MaxMutationTargetCount)
+                    throw new InvalidOperationException("Floor mutation target collection exceeds the supported " + MaxMutationTargetCount + " element limit.");
                 if (element == null)
                     throw new InvalidOperationException("Floor mutation target collection contains a null element.");
                 if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
@@ -305,6 +315,16 @@ namespace QS3D.Core.Domain
                     throw new InvalidOperationException("Element no longer belongs to the project after Floor mutation target enumeration: " + pair.Key + ".");
             }
             return unique.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+        }
+
+        private static void RejectKnownOversizeTargetCollection(IEnumerable<ProjectElement> elements)
+        {
+            if (elements is ICollection<ProjectElement> collection && collection.Count > MaxMutationTargetCount)
+                throw new InvalidOperationException("Floor mutation target collection exceeds the supported " + MaxMutationTargetCount + " element limit.");
+            if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection && readOnlyCollection.Count > MaxMutationTargetCount)
+                throw new InvalidOperationException("Floor mutation target collection exceeds the supported " + MaxMutationTargetCount + " element limit.");
+            if (elements is ICollection nonGenericCollection && nonGenericCollection.Count > MaxMutationTargetCount)
+                throw new InvalidOperationException("Floor mutation target collection exceeds the supported " + MaxMutationTargetCount + " element limit.");
         }
 
         private static IReadOnlyList<ProjectElement> ResolveProjectElements(ProjectState project)
