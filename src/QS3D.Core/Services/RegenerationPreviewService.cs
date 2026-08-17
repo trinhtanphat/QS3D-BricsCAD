@@ -111,12 +111,15 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
             var sourceChangeVersion = project.ChangeVersion;
+            var sourceElementOwnership = SnapshotElementOwnership(project);
             var sourceElementState = SnapshotElementFreshness(project);
-            var targets = CanonicalPreviewTargets(elementIds, sourceElementState.Count);
+            var targets = CanonicalPreviewTargets(elementIds, sourceElementOwnership.Count);
             if (targets.Count == 0) throw new ArgumentException("Subset regeneration preview requires at least one target element id.", nameof(elementIds));
-            RequireProjectFresh(project, sourceChangeVersion, sourceElementState);
+            RequireProjectFresh(project, sourceChangeVersion, sourceElementOwnership);
+            RequireElementStateFresh(project, sourceElementState);
             var preview = PreviewInternal(project, targets, sourceChangeVersion);
-            RequireProjectFresh(project, sourceChangeVersion, sourceElementState);
+            RequireProjectFresh(project, sourceChangeVersion, sourceElementOwnership);
+            RequireElementStateFresh(project, sourceElementState);
             return preview;
         }
 
@@ -191,6 +194,20 @@ namespace QS3D.Core.Services
                 health.Compare(beforeHealth, afterHealth));
         }
 
+        private static IReadOnlyDictionary<string, ProjectElement> SnapshotElementOwnership(ProjectState project)
+        {
+            var result = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry while regeneration preview scope is being established.");
+                if (result.ContainsKey(element.Id))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id while regeneration preview scope is being established: " + element.Id + ".");
+                result.Add(element.Id, element);
+            }
+            return result;
+        }
+
         private static IReadOnlyDictionary<string, ElementFreshnessSnapshot> SnapshotElementFreshness(ProjectState project)
         {
             var result = new Dictionary<string, ElementFreshnessSnapshot>(StringComparer.OrdinalIgnoreCase);
@@ -208,17 +225,33 @@ namespace QS3D.Core.Services
         private static void RequireProjectFresh(
             ProjectState project,
             long expectedChangeVersion,
-            IReadOnlyDictionary<string, ElementFreshnessSnapshot> expectedElements)
+            IReadOnlyDictionary<string, ProjectElement> expectedOwnership)
         {
             if (project.ChangeVersion != expectedChangeVersion)
                 throw new InvalidOperationException("Project changed while regeneration preview scope was being established; recompute preview.");
-            if (project.Elements.Count != expectedElements.Count)
+            if (project.Elements.Count != expectedOwnership.Count)
                 throw StructuralFreshnessError();
 
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
                 if (element == null || !seen.Add(element.Id) ||
+                    !expectedOwnership.TryGetValue(element.Id, out var original) ||
+                    !ReferenceEquals(original, element))
+                    throw StructuralFreshnessError();
+            }
+        }
+
+        private static void RequireElementStateFresh(
+            ProjectState project,
+            IReadOnlyDictionary<string, ElementFreshnessSnapshot> expectedElements)
+        {
+            if (project.Elements.Count != expectedElements.Count)
+                throw StructuralFreshnessError();
+
+            foreach (var element in project.Elements)
+            {
+                if (element == null ||
                     !expectedElements.TryGetValue(element.Id, out var snapshot) ||
                     !ReferenceEquals(snapshot.Owner, element))
                     throw StructuralFreshnessError();
