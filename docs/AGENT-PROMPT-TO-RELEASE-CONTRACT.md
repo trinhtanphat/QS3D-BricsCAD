@@ -92,6 +92,20 @@ owner prompt
 
 A watched branch must not use a new PR or draft PR as its first CI attempt. Fix branch failures on the canonical branch until the exact current branch SHA is green, then create/update the PR according to repository policy.
 
+## CI gates are lifecycle dependencies, not idle time
+
+When repository policy says a branch must **wait for CI**, **await CI**, or cannot advance until CI is `SUCCESS`, that wording describes a lifecycle/admission condition. It does **not** instruct an AI agent/chat session to sit idle, repeatedly poll GitHub Actions, or spend the remainder of the prompt doing nothing while a queued/in-progress run executes.
+
+For every queued or running CI gate:
+
+1. Check and record the exact run/status/head SHA once when the current work reaches that gate.
+2. In the owner-facing report, make the pending state visually obvious with the mandatory waiting marker, for example `⏳ Branch CI: IN_PROGRESS — run 123 / abc1234` or `⏳ PR checks: QUEUED — candidate abc1234`. Do not write a plain unmarked sentence such as `đang chờ CI`, `waiting for CI`, or `CI is running` as the lifecycle status.
+3. Continue other **already authorized, non-overlapping, race-safe work** that does not depend on the pending CI result when useful work exists. Examples include same-lane audit/regression review, current-main/collision review, handoff/report preparation, or another explicitly assigned non-overlapping lane. Pending CI does not grant permission to take over someone else's lane or invent filler work.
+4. Do not bypass the gate: do not open a PR before required exact-head branch CI is green, do not claim a pending run passed, and do not manually rerun/dispatch/cancel Actions unless separately authorized.
+5. If no other safe authorized work remains, end the current prompt with the exact `⏳` pending status instead of idling or polling indefinitely. A future continuation prompt/session rechecks the run and advances the same canonical carrier from the new evidence.
+
+A normal queued/in-progress CI run is therefore usually an `ACTIVE` lifecycle with a `⏳` gate, not a reason to report the whole task as `BLOCKED`. Use `BLOCKED` only when a real blocker prevents all currently authorized progress.
+
 ## Merge authorization boundary
 
 Normal prompts such as `fix`, `continue`, `update code`, `commit push git`, `fix CI`, or repeated requests for the same feature authorize work on the canonical task carrier but do not by themselves authorize a write/merge to `main`.
@@ -138,14 +152,15 @@ Every lifecycle/status line in the final per-prompt report must begin with one o
 - `⏳` — pending, queued, in progress, waiting for an allowed next gate, or an explicitly task-gating `PENDING_LOCAL`;
 - `➖` — genuinely not applicable; include the reason when it is not obvious.
 
-Do not use `✅` for assumptions, stale runs, chat-memory claims, or work that merely appears likely to pass. Do not use `❌` for ordinary in-progress work when the correct state is `⏳`.
+Do not use `✅` for assumptions, stale runs, chat-memory claims, or work that merely appears likely to pass. Do not use `❌` for ordinary in-progress work when the correct state is `⏳`. A queued/running CI line **must** use `⏳`; do not omit the marker even when the surrounding prose already says the run is pending.
 
 For yes/no lifecycle questions, make the meaning visually explicit. Examples:
 
 ```text
 ✅ Branch pushed: YES — abc1234
 ✅ Branch CI: SUCCESS — run 123 / abc1234
-⏳ PR: not opened yet — waiting for required branch CI
+⏳ Branch CI: IN_PROGRESS — run 124 / def5678; report the gate and continue other authorized work instead of idling
+⏳ PR: not opened yet — required exact-head branch CI is still pending
 ❌ PR/protected checks: FAILURE — required check core failed
 ❌ Merged to main: NO — PR not merged
 ⏳ First release containing this change: PENDING — merged but release pipeline not complete
