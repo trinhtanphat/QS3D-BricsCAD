@@ -11,6 +11,10 @@ namespace QS3D.Core.SmokeTests
 
         internal static void Run()
         {
+            KnownGenericNegativeFailsBeforeEnumerationOrMutation();
+            KnownReadOnlyNegativeFailsBeforeEnumeration();
+            KnownNonGenericNegativeFailsBeforeEnumeration();
+            SharedMutationEntryPointsRejectNegativeKnownCountBeforeEnumeration();
             KnownGenericOversizeFailsBeforeEnumerationOrMutation();
             KnownReadOnlyOversizeFailsBeforeEnumeration();
             KnownNonGenericOversizeFailsBeforeEnumeration();
@@ -18,6 +22,99 @@ namespace QS3D.Core.SmokeTests
             DishonestCountStopsAtFirstDisallowedEntry();
             ExactBoundaryRemainsAcceptedAndDeduplicated();
             ForeignTargetStillFailsWithoutMutation();
+        }
+
+        private static void KnownGenericNegativeFailsBeforeEnumerationOrMutation()
+        {
+            var fixture = NewFixture();
+            var targets = new ProbeCollection(
+                fixture.Element,
+                reportedCount: -1,
+                yieldedCount: 1,
+                failIfEnumerated: true);
+            var beforeVersion = fixture.Project.ChangeVersion;
+            var beforeFloor = fixture.Element.FloorId;
+            var beforeDirty = fixture.Element.Dirty;
+
+            var error = Capture<InvalidOperationException>(() =>
+                ProjectFloorService.Assign(fixture.Project, fixture.TargetFloor.Id, targets));
+
+            Contains("invalid negative known count", error.Message, "Negative generic Floor target Count must fail closed.");
+            Equal(0, targets.ObservedEntries, "Negative generic ICollection input must fail before enumeration.");
+            Equal(beforeVersion, fixture.Project.ChangeVersion, "Negative generic Count must fail before project mutation.");
+            Equal(beforeFloor, fixture.Element.FloorId, "Negative generic Count must preserve FloorId.");
+            Equal(beforeDirty, fixture.Element.Dirty, "Negative generic Count must preserve dirty state.");
+        }
+
+        private static void KnownReadOnlyNegativeFailsBeforeEnumeration()
+        {
+            var fixture = NewFixture();
+            var targets = new ReadOnlyProbeCollection(
+                fixture.Element,
+                reportedCount: -1,
+                failIfEnumerated: true);
+            var beforeVersion = fixture.Project.ChangeVersion;
+
+            var error = Capture<InvalidOperationException>(() =>
+                ProjectFloorService.Assign(fixture.Project, fixture.TargetFloor.Id, targets));
+
+            Contains("invalid negative known count", error.Message, "Negative IReadOnlyCollection Count must fail closed.");
+            Equal(0, targets.ObservedEntries, "Negative IReadOnlyCollection input must fail before enumeration.");
+            Equal(beforeVersion, fixture.Project.ChangeVersion, "Negative read-only Count rejection must be atomic.");
+        }
+
+        private static void KnownNonGenericNegativeFailsBeforeEnumeration()
+        {
+            var fixture = NewFixture();
+            var targets = new NonGenericProbeCollection(
+                fixture.Element,
+                reportedCount: -1,
+                failIfEnumerated: true);
+            var beforeVersion = fixture.Project.ChangeVersion;
+
+            var error = Capture<InvalidOperationException>(() =>
+                ProjectFloorService.Assign(fixture.Project, fixture.TargetFloor.Id, targets));
+
+            Contains("invalid negative known count", error.Message, "Negative non-generic ICollection Count must fail closed.");
+            Equal(0, targets.ObservedEntries, "Negative non-generic ICollection input must fail before enumeration.");
+            Equal(beforeVersion, fixture.Project.ChangeVersion, "Negative non-generic Count rejection must be atomic.");
+        }
+
+        private static void SharedMutationEntryPointsRejectNegativeKnownCountBeforeEnumeration()
+        {
+            AssertNegativeEntryPointRejectsBeforeEnumeration((fixture, targets) =>
+                ProjectFloorService.Assign(fixture.Project, fixture.TargetFloor.Id, targets), "Assign");
+            AssertNegativeEntryPointRejectsBeforeEnumeration((fixture, targets) =>
+                ProjectFloorService.AssignBottomLevel(fixture.Project, fixture.TargetFloor.Id, targets), "AssignBottomLevel");
+            AssertNegativeEntryPointRejectsBeforeEnumeration((fixture, targets) =>
+                ProjectFloorService.AssignTopLevel(fixture.Project, fixture.TargetFloor.Id, targets), "AssignTopLevel");
+            AssertNegativeEntryPointRejectsBeforeEnumeration((fixture, targets) =>
+                ProjectFloorService.ClearVerticalLevels(fixture.Project, targets), "ClearVerticalLevels");
+        }
+
+        private static void AssertNegativeEntryPointRejectsBeforeEnumeration(
+            Action<Fixture, ProbeCollection> action,
+            string label)
+        {
+            var fixture = NewFixture();
+            var targets = new ProbeCollection(
+                fixture.Element,
+                reportedCount: -1,
+                yieldedCount: 1,
+                failIfEnumerated: true);
+            var beforeVersion = fixture.Project.ChangeVersion;
+            var beforeFloor = fixture.Element.FloorId;
+            var beforeBottom = fixture.Element.Properties[ProjectFloorService.BottomLevelIdKey];
+            var beforeTop = fixture.Element.Properties[ProjectFloorService.TopLevelIdKey];
+
+            var error = Capture<InvalidOperationException>(() => action(fixture, targets));
+
+            Contains("invalid negative known count", error.Message, label + " must report the negative known-count contract.");
+            Equal(0, targets.ObservedEntries, label + " must reject negative known Count before enumeration.");
+            Equal(beforeVersion, fixture.Project.ChangeVersion, label + " negative-count rejection must not mutate project version.");
+            Equal(beforeFloor, fixture.Element.FloorId, label + " negative-count rejection must preserve FloorId.");
+            Equal(beforeBottom, fixture.Element.Properties[ProjectFloorService.BottomLevelIdKey], label + " negative-count rejection must preserve Bottom Level.");
+            Equal(beforeTop, fixture.Element.Properties[ProjectFloorService.TopLevelIdKey], label + " negative-count rejection must preserve Top Level.");
         }
 
         private static void KnownGenericOversizeFailsBeforeEnumerationOrMutation()
