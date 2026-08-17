@@ -24,17 +24,28 @@ namespace QS3D.Core.Geometry
             double maximumSagitta = 0.002d)
         {
             if (vertices == null) throw new ArgumentNullException(nameof(vertices));
-            if (vertices.Count < 3) throw new ArgumentException("Closed bulged polygon requires at least three vertices.", nameof(vertices));
-            if (vertices.Count > MaxVertices) throw new ArgumentException("Closed bulged polygon exceeds the supported " + MaxVertices + " source vertex limit.", nameof(vertices));
+
+            var sourceCount = vertices.Count;
+            if (sourceCount < 3) throw new ArgumentException("Closed bulged polygon requires at least three vertices.", nameof(vertices));
+            if (sourceCount > MaxVertices) throw new ArgumentException("Closed bulged polygon exceeds the supported " + MaxVertices + " source vertex limit.", nameof(vertices));
             if (!Finite(maximumSagitta) || maximumSagitta <= 0d) throw new ArgumentOutOfRangeException(nameof(maximumSagitta));
 
-            var result = new List<Point2>(Math.Min(vertices.Count * 2, MaxVertices));
-            for (var index = 0; index < vertices.Count; index++)
+            var source = new BulgedPolygonVertex2[sourceCount];
+            for (var index = 0; index < sourceCount; index++)
             {
-                var current = vertices[index] ?? throw new ArgumentException("Closed bulged polygon contains a null vertex at index " + index + ".", nameof(vertices));
-                var next = vertices[(index + 1) % vertices.Count] ?? throw new ArgumentException("Closed bulged polygon contains a null vertex at index " + ((index + 1) % vertices.Count) + ".", nameof(vertices));
-                if (!Finite(current.BulgeToNext)) throw new ArgumentOutOfRangeException(nameof(vertices), "Polyline bulge must be finite at vertex " + index + ".");
+                var vertex = vertices[index] ?? throw new ArgumentException("Closed bulged polygon contains a null vertex at index " + index + ".", nameof(vertices));
+                if (!Finite(vertex.BulgeToNext)) throw new ArgumentOutOfRangeException(nameof(vertices), "Polyline bulge must be finite at vertex " + index + ".");
+                source[index] = vertex;
+            }
 
+            if (vertices.Count != sourceCount)
+                throw new ArgumentException("Closed bulged polygon source changed while it was being validated.", nameof(vertices));
+
+            var result = new List<Point2>(Math.Min(sourceCount * 2, MaxVertices));
+            for (var index = 0; index < sourceCount; index++)
+            {
+                var current = source[index];
+                var next = source[(index + 1) % sourceCount];
                 var segment = BulgeArcTessellator.Tessellate(current.Point, next.Point, current.BulgeToNext, maximumSagitta);
                 for (var pointIndex = 0; pointIndex < segment.Count - 1; pointIndex++)
                 {
