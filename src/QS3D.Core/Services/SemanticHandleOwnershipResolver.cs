@@ -41,8 +41,11 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             var normalizedHandle = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(sourceHandle);
             if (normalizedHandle.Length == 0) throw new ArgumentException("Source handle is required.", nameof(sourceHandle));
-            var normalizedId = (canonicalId ?? string.Empty).Trim();
+            var rawId = canonicalId ?? string.Empty;
+            var normalizedId = rawId.Trim();
             if (normalizedId.Length == 0) throw new ArgumentException("Canonical element ID is required.", nameof(canonicalId));
+            if (!string.Equals(rawId, normalizedId, StringComparison.Ordinal))
+                throw new ArgumentException("Canonical element ID must not contain leading or trailing whitespace.", nameof(canonicalId));
 
             var sourceOwner = ResolveUniqueSourceOwner(project, normalizedHandle);
             if (sourceOwner != null && sourceOwner.Category != category)
@@ -101,9 +104,6 @@ namespace QS3D.Core.Services
                 foreach (var entry in GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element))
                     Add(entry.Key, element, entry.Value, selected, owners, channels);
 
-                // Auto Room boundaries are selection provenance, not global generated ownership.
-                // Preserve the historical Workspace alias only when explicit SourceHandles do not exist;
-                // shared boundaries still fail closed through Add when more than one Room matches.
                 if (element.SourceHandles.Count == 0 &&
                     AutoRoomLifecycle.IsAutoRoom(element) &&
                     element.Properties.TryGetValue(AutoRoomLifecycle.BoundarySourceHandlesKey, out var boundaryHandles) &&
