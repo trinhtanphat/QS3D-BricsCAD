@@ -23,37 +23,42 @@ else:
     reset = method("private static void ResetPreservingVisibility()", "public static void Dispose()")
     dock = method("private static void EnsureBimDockContract()", "private static void SetVisibility(")
 
-    if "SetVisibility(workspace: true, right: false, quantityInsight: false);" not in workspace:
-        errors.append("ordinary Workspace must remain Ribbon-first and isolated")
+    if "SetVisibility(workspace: true, properties: false, right: false, quantityInsight: false);" not in workspace:
+        errors.append("ordinary Workspace must remain Ribbon-first and isolated from the dedicated Properties/side palettes")
     if "EnsureBimDockContract();" not in bim:
         errors.append("BIM workspace must repair the dock contract before visibility")
-    if "SetVisibility(workspace: true, right: true, quantityInsight: true);" not in bim:
-        errors.append("BIM workspace must show Workspace + Management + Quantity Insight together")
+    if "SetVisibility(workspace: true, properties: true, right: true, quantityInsight: true);" not in bim:
+        errors.append("BIM workspace must show Workspace + QS3D Properties + Management + Quantity Insight together")
     if "_quantityInsightPanel?.RefreshQuantityInsights();" not in bim:
         errors.append("BIM workspace must refresh Quantity Insight when it becomes visible")
-    if "SetVisibility(workspace: false, right: true, quantityInsight: false);" not in management:
+    if "SetVisibility(workspace: false, properties: false, right: true, quantityInsight: false);" not in management:
         errors.append("standalone Management command isolation changed")
-    if "SetVisibility(workspace: false, right: false, quantityInsight: true);" not in quantity:
+    if "SetVisibility(workspace: false, properties: false, right: false, quantityInsight: true);" not in quantity:
         errors.append("standalone Quantity Insight command isolation changed")
 
     required_dock = (
         "_workspace.Dock != DockSides.Left",
         "_workspace.Dock = DockSides.Left;",
+        "_properties.Dock != DockSides.Left",
+        "_properties.Dock = DockSides.Left;",
         "_right.Dock != DockSides.Right",
         "_right.Dock = DockSides.Right;",
         "_quantityInsight.Dock != DockSides.Right",
         "_quantityInsight.Dock = DockSides.Right;",
+        "ReassertPersistedPaletteSizes();",
     )
     for token in required_dock:
         if token not in dock:
             errors.append("BIM dock contract missing: " + token)
 
-    if "if (workspaceVisible && rightVisible)" not in reset or "EnsureBimDockContract();" not in reset:
-        errors.append("palette recreation must reapply the BIM dock contract while the coordinated side palettes remain visible")
-    if "SetVisibility(workspaceVisible, rightVisible, quantityVisible);" not in reset:
-        errors.append("palette recreation must preserve the user's actual visibility state")
+    if "if (workspaceVisible && propertiesVisible)" not in reset:
+        errors.append("palette recreation must preserve the paired left QS3D surfaces")
+    if "if (rightVisible && quantityVisible) EnsureBimDockContract();" not in reset:
+        errors.append("palette recreation must reapply the full BIM dock contract when all coordinated palettes remain visible")
+    if "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);" not in reset:
+        errors.append("palette recreation must preserve the user's actual four-palette visibility state")
 
-    legacy_hidden_bim = "SetVisibility(workspace: true, right: true, quantityInsight: false);"
+    legacy_hidden_bim = "SetVisibility(workspace: true, properties: true, right: true, quantityInsight: false);"
     if legacy_hidden_bim in bim:
         errors.append("regression: BIM workspace still hides Quantity Insight")
 
@@ -64,4 +69,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: explicit BIM mode shows the complete palette set around the native BricsCAD viewport, preserves isolated commands, and reapplies left/right docking after palette recreation.")
+print("PASS: explicit BIM mode shows Model + dedicated QS3D Properties + native BricsCAD viewport + Management + Quantity regions, preserves isolated commands, and reapplies deterministic left/right docking after palette recreation.")
