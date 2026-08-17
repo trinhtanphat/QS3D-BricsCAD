@@ -92,6 +92,20 @@ owner prompt
 
 A watched branch must not use a new PR or draft PR as its first CI attempt. Fix branch failures on the canonical branch until the exact current branch SHA is green, then create/update the PR according to repository policy.
 
+## CI gates are lifecycle dependencies, not idle time
+
+When repository policy says a branch must **wait for CI**, **await CI**, or cannot advance until CI is `SUCCESS`, that wording describes a lifecycle/admission condition. It does **not** instruct an AI agent/chat session to sit idle, repeatedly poll GitHub Actions, or spend the remainder of the prompt doing nothing while a queued/in-progress run executes.
+
+For every queued or running CI gate:
+
+1. Check and record the exact run/status/head SHA once when the current work reaches that gate.
+2. In the owner-facing report, make the pending state visually obvious with the mandatory waiting marker, for example `⏳ Branch CI: IN_PROGRESS — run 123 / abc1234` or `⏳ PR checks: QUEUED — candidate abc1234`. Do not write a plain unmarked sentence such as `đang chờ CI`, `waiting for CI`, or `CI is running` as the lifecycle status.
+3. Continue other **already authorized, non-overlapping, race-safe work** that does not depend on the pending CI result when useful work exists. Examples include same-lane audit/regression review, current-main/collision review, handoff/report preparation, or another explicitly assigned non-overlapping lane. Pending CI does not grant permission to take over someone else's lane or invent filler work.
+4. Do not bypass the gate: do not open a PR before required exact-head branch CI is green, do not claim a pending run passed, and do not manually rerun/dispatch/cancel Actions unless separately authorized.
+5. If no other safe authorized work remains, end the current prompt with the exact `⏳` pending status instead of idling or polling indefinitely. A future continuation prompt/session rechecks the run and advances the same canonical carrier from the new evidence.
+
+A normal queued/in-progress CI run is therefore usually an `ACTIVE` lifecycle with a `⏳` gate, not a reason to report the whole task as `BLOCKED`. Use `BLOCKED` only when a real blocker prevents all currently authorized progress.
+
 ## Merge authorization boundary
 
 Normal prompts such as `fix`, `continue`, `update code`, `commit push git`, `fix CI`, or repeated requests for the same feature authorize work on the canonical task carrier but do not by themselves authorize a write/merge to `main`.
@@ -127,7 +141,7 @@ If the change is merged to `main` but has not yet appeared in a published releas
 
 If the change does not require a product release under `CI_POLICY.md`, report `Release required: ➖ N/A` and `First release containing this change: ➖ N/A` with the reason instead of pretending a release occurred.
 
-Licensed BricsCAD runtime validation remains separate. Remote/source-only agents must follow `docs/LOCAL-ONLY-RUNTIME-REPORTING.md`: once a LOCAL_ONLY gate is parked, report it compactly as `LOCAL_ONLY/PARKED` and do not recheck it remotely. Use `PENDING_LOCAL` only when the specific owner/task acceptance explicitly makes that local evidence the current completion gate; only compatible local evidence tied to the exact tested SHA may be reported as `LOCAL_PASS`.
+Licensed BricsCAD runtime validation remains separate. Remote/source-only agents must follow `docs/LOCAL-ONLY-RUNTIME-REPORTING.md`: once a LOCAL_ONLY gate is parked, do not recheck it remotely **and do not routinely include a LOCAL/runtime status line in owner-facing reports**. Routine local/runtime evidence is reported by compatible local-machine agents when they actually execute or report local work. A remote agent may mention an exact local gate only when the owner explicitly asks about local validation/status or when that evidence is an explicit current acceptance/blocking gate for the request. Only compatible local evidence tied to the exact tested SHA may be reported as `LOCAL_PASS`.
 
 ## Mandatory visual status markers
 
@@ -136,21 +150,21 @@ Every lifecycle/status line in the final per-prompt report must begin with one o
 - `✅` — verified satisfied/successful/reached using current evidence;
 - `❌` — verified failed, red, rejected, or a required condition is currently unsatisfied;
 - `⏳` — pending, queued, in progress, waiting for an allowed next gate, or an explicitly task-gating `PENDING_LOCAL`;
-- `➖` — genuinely not applicable or a parked LOCAL_ONLY disposition that is outside the remote execution scope; include the reason when it is not obvious.
+- `➖` — genuinely not applicable; include the reason when it is not obvious.
 
-Do not use `✅` for assumptions, stale runs, chat-memory claims, or work that merely appears likely to pass. Do not use `❌` for ordinary in-progress work when the correct state is `⏳`.
+Do not use `✅` for assumptions, stale runs, chat-memory claims, or work that merely appears likely to pass. Do not use `❌` for ordinary in-progress work when the correct state is `⏳`. A queued/running CI line **must** use `⏳`; do not omit the marker even when the surrounding prose already says the run is pending.
 
 For yes/no lifecycle questions, make the meaning visually explicit. Examples:
 
 ```text
 ✅ Branch pushed: YES — abc1234
 ✅ Branch CI: SUCCESS — run 123 / abc1234
-⏳ PR: not opened yet — waiting for required branch CI
+⏳ Branch CI: IN_PROGRESS — run 124 / def5678; report the gate and continue other authorized work instead of idling
+⏳ PR: not opened yet — required exact-head branch CI is still pending
 ❌ PR/protected checks: FAILURE — required check core failed
 ❌ Merged to main: NO — PR not merged
 ⏳ First release containing this change: PENDING — merged but release pipeline not complete
-➖ Local/runtime: LOCAL_ONLY/PARKED — owned by local agents; not rechecked remotely
-➖ Local/runtime evidence: N/A — docs-only change
+➖ Local/runtime evidence: N/A — docs-only change (local-agent report or explicitly requested local status only)
 ```
 
 ## Durable owner corrections and owner-facing brevity
@@ -187,12 +201,17 @@ At the end of **every owner prompt that asks an agent/chat session to change, co
 <marker> First release containing this change: <version/tag/PENDING/NONE/N/A>
 <marker> Release source/commit: <sha or N/A>
 <marker> Release: <run/tag/artifact/deployment + SUCCESS/FAILURE/PENDING/N/A>
-<marker> Local/runtime evidence: <LOCAL_PASS | PENDING_LOCAL | LOCAL_ONLY/PARKED | N/A; never infer LOCAL_PASS>
 <marker> Remaining blocker: <exact blocker or none>
 <marker> Next exact action: <one concrete next lifecycle action or none>
 ```
 
-For a remote/source-only agent, a parked local gate uses `➖ Local/runtime: LOCAL_ONLY/PARKED — owned by local agents; not rechecked remotely`. It must not become the overall `Prompt result`, `Remaining blocker`, or reason to withhold an otherwise eligible remote PR/merge unless that prompt's explicit acceptance requires the local evidence before completion/merge. `PENDING_LOCAL` remains valid only for such explicit task-gating cases or for compatible local execution that is actually pending.
+For a compatible local-machine agent, append the local evidence line when local work is actually in scope or being reported:
+
+```text
+<marker> Local/runtime evidence: <LOCAL_PASS | PENDING_LOCAL | exact local failure/blocker | N/A; never infer LOCAL_PASS>
+```
+
+For a remote/hybrid/source-only agent, **omit the local/runtime field entirely by default**. This is the required exception to any generic minimum-field wording in `AGENTS.md`. Do not print `LOCAL_ONLY/PARKED` merely to prove awareness of a parked local gate. Mention local status only if the owner explicitly asks for it or the exact local evidence is an explicit current blocker/acceptance requirement; in that exceptional case, report only the exact task-gating state needed for the current request. A parked local gate must not become the overall `Prompt result`, `Remaining blocker`, or reason to withhold an otherwise eligible remote PR/merge unless the prompt's explicit acceptance requires the local evidence before completion/merge.
 
 The report must use real GitHub/CI/release evidence from the current carrier and current published state. Do not fill unknown fields with guessed identifiers, predicted versions, or stale conversation state.
 
@@ -223,7 +242,7 @@ Use completion language precisely:
 - `PR_GREEN`: current PR/protected candidate is green, but it is not merged.
 - `MERGED_MAIN`: owner-authorized merge completed and exact current `main` contains the work; release may still be pending.
 - `RELEASED`: only when release is required and the applicable exact-main release/publish outcome for the landed SHA is verified successful, including the exact release/version/tag that contains it.
-- `PENDING_LOCAL`: use only when required licensed/private/runtime evidence is explicitly the current completion gate for this prompt or is actually pending under a compatible local agent; a merely parked LOCAL_ONLY item is not enough.
+- `PENDING_LOCAL`: use only when required licensed/private/runtime evidence is explicitly the current completion gate for this prompt or is actually pending under a compatible local agent; a merely parked LOCAL_ONLY item is not enough and remote agents do not emit it routinely.
 - `DUPLICATE_CARRIER`: another canonical owner/carrier already owns the same lane; no overlapping mutation was performed.
 
 Never say `ALL MERGED TO MAIN`, `released`, `production complete`, or equivalent unless the repository's stricter definitions and evidence requirements are actually satisfied.
