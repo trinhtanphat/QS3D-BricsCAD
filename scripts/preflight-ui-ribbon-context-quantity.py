@@ -30,20 +30,20 @@ def fail(message: str) -> None:
 
 
 palette = read("src/QS3D.BricsCAD.V25/PaletteCoordinator.cs")
-# #2450 intentionally kept Show() isolated only until #2399 landed as a complete dedicated
-# Properties implementation. With the real QS3D editor now dynamically reparented, owner-facing
-# QS3D activation restores BIM again while the explicit ShowWorkspace() helper remains isolated.
-require(palette, "public static void Show() => ShowBimWorkspace();", "completed #2399 owner activation")
+# Owner-facing QS3D activation restores the BIM arrangement while preserving the BricsCAD host.
+# The latest owner reference keeps Properties embedded below Family and leaves Quantity Insight
+# on-demand; the dedicated Properties PaletteSet remains an optional capability rather than default.
+require(palette, "public static void Show() => ShowBimWorkspace();", "owner BIM activation")
 require(palette, "public static void ShowWorkspace()", "workspace mode")
-require(palette, "_workspacePanel?.SetDedicatedPropertiesPaletteActive(false);", "workspace embedded properties")
+require(palette, "_workspacePanel?.SetDedicatedPropertiesPaletteActive(false);", "embedded properties")
 require(palette, "SetVisibility(workspace: true, right: false, quantityInsight: false);", "workspace mode")
 require(palette, "public static bool ShowBimWorkspace()", "BIM mode with bounded host-settle retry contract")
-require(palette, "_workspacePanel?.SetDedicatedPropertiesPaletteActive(true);", "BIM dedicated properties")
-require(palette, "private static readonly Guid PropertiesGuid", "dedicated properties palette")
+require(palette, "SetVisibility(workspace: true, right: true, quantityInsight: false);", "owner-reference BIM visibility")
+require(palette, "private static readonly Guid PropertiesGuid", "optional dedicated properties palette")
 require(palette, "public static bool IsPropertiesVisible", "dedicated properties visibility")
 require(palette, "public static void ShowQuantityInsight()", "quantity mode")
 require(palette, "SetVisibility(workspace: false, right: false, quantityInsight: true);", "quantity mode")
-forbid(palette, "_right.Visible = true;\n                _quantityInsight.Visible = true;", "all-palettes takeover")
+forbid(palette, "SetVisibility(workspace: true, right: true, quantityInsight: true);", "default BIM quantity takeover")
 
 quantity = read("src/QS3D.BricsCAD.V25/QuantityInsightCommands.cs")
 require(quantity, '[CommandMethod("QS3DQUANTITYINSIGHT", CommandFlags.UsePickSet)]', "quantity command")
@@ -139,4 +139,4 @@ for command in ("QS3DQUANTITYINSIGHT", "QS3DDRAWRAFTFOUNDATION"):
     if registrations != 1:
         fail(f"{command}: expected exactly one CommandMethod registration, found {registrations}")
 
-print("PASS: completed #2399 owner BIM activation with an isolated ShowWorkspace helper, exact simple closed-boundary Móng Bè, and selected-object quantity explanation source contracts")
+print("PASS: owner-reference embedded BIM activation, exact simple closed-boundary Móng Bè, and selected-object quantity explanation source contracts")

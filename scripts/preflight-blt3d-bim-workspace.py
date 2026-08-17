@@ -36,6 +36,7 @@ def fail(message):
 def main():
     palette = read("src/QS3D.BricsCAD.V25/PaletteCoordinator.cs")
     workspace = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dBimReferenceShell.cs")
+    runtime_layout = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs")
     family_workspace = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dFamilyWorkspace.cs")
     right = read("src/QS3D.BricsCAD.V25/UI/RightPanel.Blt3dReferenceShell.cs")
     activation = read("src/QS3D.BricsCAD.V25/Ribbon/BltBimWorkspaceActivationCoordinator.cs")
@@ -44,22 +45,57 @@ def main():
     modeling = read("src/QS3D.BricsCAD.V25/Ribbon/BltModelingRibbonAugmenter.cs")
     topbar = read("src/QS3D.BricsCAD.V25/Ribbon/BltTopbarTabContract.cs")
 
-    # Full BIM workspace: real QS3D workspace left, native BricsCAD viewport centre,
-    # production drawing/layer manager and quantity explanation palettes right.
+    # Default owner BIM shell: integrated two-column Workspace left, native BricsCAD viewport
+    # center, Drawing/Layer Management right. Optional dedicated Properties/Quantity stay hidden.
     for token in (
         "public static bool ShowBimWorkspace()",
         "EnsureBimDockContract();",
-        "SetVisibility(workspace: true, right: true, quantityInsight: true);",
+        "SetVisibility(workspace: true, right: true, quantityInsight: false);",
+        "_workspacePanel?.SetDedicatedPropertiesPaletteActive(false);",
         "_workspace.Dock = DockSides.Left",
         "_right.Dock = DockSides.Right",
-        "_quantityInsight.Dock = DockSides.Right",
-        "_quantityInsightPanel?.RefreshQuantityInsights();",
         "viewport BricsCAD native ở giữa",
     ):
         require(palette, token, "PaletteCoordinator BIM shell")
+    if "SetVisibility(workspace: true, right: true, quantityInsight: true);" in palette:
+        fail("default BIM must not auto-open Quantity Insight")
 
-    # Owner-reference family/model chrome while preserving the guarded production handlers.
-    # Import remains explicitly selection-bounded; the label must not imply a whole-DWG scan.
+    for token in (
+        "Grid.SetColumn(modelPane, 0);",
+        "Grid.SetColumn(columnSplitter, 1);",
+        "Grid.SetColumn(familyPane, 2);",
+        "columnSplitter.ResizeDirection = GridResizeDirection.Columns;",
+        "familyPane.RowDefinitions[0].Height = new GridLength(56, GridUnitType.Star);",
+        "familyPane.RowDefinitions[2].Height = new GridLength(44, GridUnitType.Star);",
+    ):
+        require(runtime_layout, token, "BLT3D side-by-side Workspace runtime layout")
+    if "Grid.SetRow(familyPane, 2);" in runtime_layout:
+        fail("default BIM must not stack Family/Properties below Model")
+
+    # BLT3D parity is implemented inside BricsCAD. The activation/coordinator/layout path may
+    # coordinate QS3D-owned palettes, but it must never construct a replacement top-level host or
+    # fake CAD viewport. Guard all three runtime authorities so the boundary cannot move sideways.
+    hosted_runtime_sources = (
+        ("PaletteCoordinator", palette),
+        ("BIM activation", activation),
+        ("BIM runtime layout", runtime_layout),
+    )
+    for source_name, source in hosted_runtime_sources:
+        for forbidden in (
+            "new Viewport",
+            "Viewport3D",
+            "new Window",
+            "WindowStyle",
+            "ShowDialog(",
+            "Application.Run(",
+            "Topmost =",
+        ):
+            if forbidden in source:
+                fail(
+                    "BricsCAD host UI/modelspace must remain host-owned; "
+                    f"{source_name} contains forbidden standalone-host token: {forbidden}"
+                )
+
     for token in (
         "⚡ Nhập từ chọn",
         "+ Add",
@@ -71,9 +107,6 @@ def main():
     ):
         require(workspace, token, "Workspace BLT3D shell")
 
-    # Guard the actual controls and production hooks consumed by the BLT3D family-workspace partial.
-    # Historical aliases such as FamilySearchBox/PropertyGrid/FloorCombo are not members of this
-    # implementation and made the source guard fail even while the real workspace integration held.
     for token in (
         "WorkspaceContentRoot",
         "WorkspaceOverflow",
@@ -107,9 +140,7 @@ def main():
     require(init, "BltModelingRibbonAugmenter.TryInitialize()", "MODELING ribbon initialization")
     require(init, "BltModelingRibbonAugmenter.Reset();", "MODELING ribbon teardown")
 
-    # BIM ribbon mirrors the exact qualified Vẽ / Công cụ / IFC source panels in owner order.
-    # The Draw surface can now contain compact RibbonRowPanel/RibbonRowBreak columns, so the
-    # mirror must clone nested row items instead of assuming a flat list of RibbonButton objects.
+    # Keep the already-qualified owner Ribbon: Vẽ / Công cụ / IFC.
     require_order(
         bim_ribbon,
         (
@@ -127,7 +158,6 @@ def main():
     ):
         require(bim_ribbon, token, "BIM compact Draw mirror")
 
-    # MODELING mirrors the owner screenshot: three lead groups followed by compact stacked groups.
     require_order(
         modeling,
         (
@@ -144,60 +174,23 @@ def main():
     )
 
     for token in (
-        '"Vật\\nliệu"',
-        '"Mặt cắt\\nthép"',
-        '"Tạo chi\\ntiết"',
-        '"Mặt\\nXY"',
-        '"Đường"',
-        '"Polyline"',
-        '"Chữ nhật"',
-        '"Tròn"',
-        '"Cung"',
-        '"Nối polyline"',
-        '"Offset"',
-        '"Di chuyển"',
-        '"Sao chép"',
-        '"Theo phương Z"',
-        '"Extrude"',
-        '"Sweep"',
-        '"Loft"',
-        '"Gắn vào Family"',
-        '"Union"',
-        '"Subtract"',
-        '"Intersect"',
-        '"Bricscad.Windows.RibbonRowPanel"',
-        '"Bricscad.Windows.RibbonRowBreak"',
-        'spec.Large ? "Large" : "Standard"',
-        'private const string OwnedPrefix = "QS3D_MODELING_";',
+        '"Vật\\nliệu"', '"Mặt cắt\\nthép"', '"Tạo chi\\ntiết"', '"Mặt\\nXY"',
+        '"Đường"', '"Polyline"', '"Chữ nhật"', '"Tròn"', '"Cung"',
+        '"Nối polyline"', '"Offset"', '"Di chuyển"', '"Sao chép"', '"Theo phương Z"',
+        '"Extrude"', '"Sweep"', '"Loft"', '"Gắn vào Family"', '"Union"', '"Subtract"', '"Intersect"',
+        '"Bricscad.Windows.RibbonRowPanel"', '"Bricscad.Windows.RibbonRowBreak"',
+        'spec.Large ? "Large" : "Standard"', 'private const string OwnedPrefix = "QS3D_MODELING_";',
     ):
         require(modeling, token, "MODELING owner-reference surface")
 
     for token in (
-        '"_.MATERIALS"',
-        '"_.BIMPROFILES"',
-        '"_.BIMCREATEDETAIL"',
-        '"_.UCS _World"',
-        '"_.LINE"',
-        '"_.PLINE"',
-        '"_.RECTANG"',
-        '"_.CIRCLE"',
-        '"_.ARC"',
-        '"_.JOIN"',
-        '"_.OFFSET"',
-        '"_.MOVE"',
-        '"_.COPY"',
-        '"_.EXTRUDE"',
-        '"_.SWEEP"',
-        '"_.LOFT"',
-        '"QS3DFAMILIES"',
-        '"_.UNION"',
-        '"_.SUBTRACT"',
-        '"_.INTERSECT"',
+        '"_.MATERIALS"', '"_.BIMPROFILES"', '"_.BIMCREATEDETAIL"', '"_.UCS _World"',
+        '"_.LINE"', '"_.PLINE"', '"_.RECTANG"', '"_.CIRCLE"', '"_.ARC"', '"_.JOIN"',
+        '"_.OFFSET"', '"_.MOVE"', '"_.COPY"', '"_.EXTRUDE"', '"_.SWEEP"', '"_.LOFT"',
+        '"QS3DFAMILIES"', '"_.UNION"', '"_.SUBTRACT"', '"_.INTERSECT"',
     ):
         require(modeling, token, "MODELING command routing")
 
-    # Topbar remains the exact ten-tab IDs emitted by RibbonBootstrapper and may not silently
-    # resurrect QS3D_AUTHOR. Guard the production IDs, not stale aliases from older prototypes.
     require_order(
         topbar,
         (
@@ -217,7 +210,7 @@ def main():
     if 'new TabSpec("QS3D_AUTHOR"' in topbar:
         fail("Topbar owner contract must not resurrect QS3D_AUTHOR")
 
-    print("PASS: BLT3D BIM + MODELING owner-reference source contract is intact.")
+    print("PASS: BLT3D BIM owner-reference workspace + Ribbon + MODELING contract is intact without replacing BricsCAD host UI.")
     return 0
 
 
