@@ -5,11 +5,11 @@ using System.Windows.Threading;
 namespace QS3D.BricsCAD.V25.UI
 {
     /// <summary>
-    /// Repairs the owner-reference WorkspacePanel after BricsCAD has finished applying its own
-    /// palette/workspace layout. Several legacy presentation passes intentionally share Loaded;
-    /// host docking can still resize/reparent the palette after their first ApplicationIdle pass.
-    /// Reapplying the authoritative reference layout for two bounded settle ticks keeps the real
-    /// model tree + Family/Properties surface visible without introducing a fake model viewport.
+    /// Repairs the owner-approved BLT3D five-zone WorkspacePanel after BricsCAD has finished
+    /// applying its own palette/workspace layout. Several legacy presentation passes intentionally
+    /// share Loaded; host docking can still resize/reparent the palette after their first idle pass.
+    /// Reapplying the final five-zone runtime layout for two bounded settle ticks keeps the real
+    /// model tree + dedicated QS3D Family/Properties region visible without a fake viewport.
     /// </summary>
     public partial class WorkspacePanel
     {
@@ -83,10 +83,10 @@ namespace QS3D.BricsCAD.V25.UI
             if (!IsLoaded)
                 return;
 
-            // This is the same authoritative pass used by the owner-reference Loaded handler:
-            // Menu/model tree at left, Family list above Properties beside it. Columns 3/4 remain
-            // retired because the centre region belongs to BricsCAD's native modelspace viewport.
-            ApplyReferencePaletteLayout();
+            // The later owner screenshot contract supersedes the old side-by-side reference
+            // interpretation: retain the host-owned modelspace in the centre and restore the
+            // compact left QS3D rail with Model above the dedicated Family/Properties region.
+            ApplyBlt3dFiveZoneRuntimeLayout();
         }
 
         private void StopBlt3dRuntimeLayoutRepairTimer()

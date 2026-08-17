@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PALETTE = ROOT / "src" / "QS3D.BricsCAD.V25" / "PaletteCoordinator.cs"
 ACTIVATION = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "BltBimWorkspaceActivationCoordinator.cs"
 REPAIR = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.Blt3dRuntimeLayoutRepair.cs"
-REFERENCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.ReferencePaletteLayout.cs"
+FIVE_ZONE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
 errors = []
 
 
@@ -20,7 +20,7 @@ def read(path: Path) -> str:
 palette = read(PALETTE)
 activation = read(ACTIVATION)
 repair = read(REPAIR)
-reference = read(REFERENCE)
+five_zone = read(FIVE_ZONE)
 
 for token in (
     "SetVisibility(workspace: true, right: false, quantityInsight: false);",
@@ -49,26 +49,28 @@ for token in (
     "TimeSpan.FromMilliseconds(250)",
     "DispatcherPriority.ApplicationIdle",
     "ReassertBlt3dRuntimeLayout",
-    "ApplyReferencePaletteLayout();",
+    "ApplyBlt3dFiveZoneRuntimeLayout();",
     "if (!IsLoaded)",
     "StopBlt3dRuntimeLayoutRepairTimer();",
 ):
     if token not in repair:
         errors.append("WorkspacePanel runtime repair missing: " + token)
 
-# The authoritative reference layout must continue to expose Menu/model tree + Family/Properties
-# in the left plugin palette and retire only legacy duplicate bands. The centre remains host-owned.
-for token in (
-    "modelColumn.Width = new GridLength(168);",
-    "familyColumn.Width = new GridLength(1, GridUnitType.Star);",
-    "RestoreReferenceFamilyRows();",
-    "Grid.GetColumn(child) <= 2",
-):
-    if token not in reference:
-        errors.append("BLT3D reference layout contract missing: " + token)
+if "ApplyReferencePaletteLayout();" in repair:
+    errors.append("runtime settle repair must not restore the superseded side-by-side reference layout")
 
-if "new Viewport" in repair or "Viewport3D" in repair:
-    errors.append("runtime repair must not create a fake second 3D viewport")
+for token in (
+    "ApplyBlt3dFiveZoneRuntimeLayout",
+    "workspace.RowDefinitions.Add",
+    "GridResizeDirection.Rows",
+    "ReferenceEquals(child, familyPropertiesPane)",
+    "PropertyList.MinHeight = 120",
+):
+    if token not in five_zone:
+        errors.append("owner five-zone runtime layout missing: " + token)
+
+if "new Viewport" in repair or "Viewport3D" in repair or "new Viewport" in five_zone or "Viewport3D" in five_zone:
+    errors.append("runtime layout must not create a fake second 3D viewport")
 
 print("QS3D BLT3D BIM runtime layout reassert preflight")
 if errors:
@@ -77,4 +79,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BIM activation reasserts all QS3D side palettes through a bounded BricsCAD docking settle window, while WorkspacePanel replays the authoritative Menu + Family/Properties layout and keeps native modelspace as the centre viewport.")
+print("PASS: BIM activation reasserts all QS3D side palettes through a bounded BricsCAD docking settle window and reapplies the owner-approved five-zone WorkspacePanel layout without replacing native modelspace.")
