@@ -70,12 +70,10 @@ namespace QS3D.Core.Export
             {
                 if (candidates.Count == MaxCandidates)
                     ThrowTooManyCandidates();
+                if (candidate == null)
+                    throw new ArgumentException("Quantity evidence collection cannot contain null entries.", nameof(evidence));
                 candidates.Add(candidate);
             }
-
-            for (var index = 0; index < candidates.Count; index++)
-                if (candidates[index] == null)
-                    throw new ArgumentException("Quantity evidence collection cannot contain null entries.", nameof(evidence));
 
             candidates.Sort(IfcRoundTripQuantityEvidenceComparer.Instance);
             var groups = new List<IfcRoundTripQuantityEvidenceGroup>();
