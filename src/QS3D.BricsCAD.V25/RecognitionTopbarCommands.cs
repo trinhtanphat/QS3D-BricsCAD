@@ -7,8 +7,8 @@ namespace QS3D.BricsCAD.V25
 {
     /// <summary>
     /// Host-safe command adapters for the BLT3D-familiar NHẬN DẠNG ribbon.
-    /// These commands deliberately reuse qualified QS3D workflows instead of leaving
-    /// enabled ribbon buttons pointed at missing or unrelated command names.
+    /// These commands reuse only recognition-compatible QS3D workflows; an action with no
+    /// matching generic workflow fails closed instead of dispatching an unrelated command.
     /// </summary>
     public sealed class RecognitionTopbarCommands
     {
@@ -31,7 +31,10 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
-            Queue(document, "QS3DMEPREVIEW");
+
+            document.Editor.WriteMessage(
+                "\nQS3D Nhận dạng: Tùy chọn nhận dạng chưa có workflow generic tương ứng; " +
+                "không mở MEP Review/Takeoff thay thế.");
         }
 
         [CommandMethod("QS3DRECOGNITIONBOUNDARY", CommandFlags.UsePickSet)]
@@ -45,7 +48,7 @@ namespace QS3D.BricsCAD.V25
 
             document.Editor.SetImpliedSelection(ids);
             document.Editor.WriteMessage("\nQS3D Nhận dạng: boundary selection=" + ids.Length + ".");
-            Queue(document, "QS3DTAKEOFF");
+            Queue(document, "QS3DRECOGNIZE");
         }
 
         [CommandMethod("QS3DRECOGNITIONLABEL", CommandFlags.UsePickSet)]
@@ -73,7 +76,7 @@ namespace QS3D.BricsCAD.V25
 
             document.Editor.SetImpliedSelection(ids);
             document.Editor.WriteMessage("\nQS3D Nhận dạng: tự động xử lý selection=" + ids.Length + ".");
-            Queue(document, "QS3DTAKEOFF");
+            Queue(document, "QS3DRECOGNIZEAUTO");
         }
 
         private static Teigha.DatabaseServices.ObjectId[]? ResolveSelection(Document document, string prompt)
