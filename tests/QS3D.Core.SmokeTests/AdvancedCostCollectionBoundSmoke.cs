@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             CountedBuildUpOversizeFailsBeforeEnumeration();
+            ConflictingBuildUpHiddenOversizeFailsBeforeEnumeration();
+            ConflictingBuildUpInBoundCountsFailBeforeEnumeration();
             StreamingBuildUpOversizeStopsAtFirstDisallowedEntry();
             ExactBuildUpBoundaryPreservesArithmetic();
             CountedHistoricalOversizeFailsBeforeEnumeration();
@@ -34,6 +36,24 @@ namespace QS3D.Core.SmokeTests
 
             Equal(0, source.GetEnumeratorCalls, "Oversized counted rate build-up input must fail before enumeration.");
             Contains("at most 10000", error.Message, "Counted build-up oversize failure must report the component bound.");
+        }
+
+        private static void ConflictingBuildUpHiddenOversizeFailsBeforeEnumeration()
+        {
+            var source = new MultiCountNeverEnumerated<CostResourceComponent>(1, MaximumEntries + 1, 1);
+            var error = Capture<InvalidOperationException>(() => BuildUp("BUILDUP-HIDDEN-OVERSIZE", source));
+
+            Equal(0, source.GetEnumeratorCalls, "An oversized secondary Count contract must fail before enumeration.");
+            Contains("at most 10000", error.Message, "Hidden oversized Count must preserve the component capacity failure.");
+        }
+
+        private static void ConflictingBuildUpInBoundCountsFailBeforeEnumeration()
+        {
+            var source = new MultiCountNeverEnumerated<CostResourceComponent>(1, 2, 1);
+            var error = Capture<InvalidOperationException>(() => BuildUp("BUILDUP-CONFLICTING-COUNTS", source));
+
+            Equal(0, source.GetEnumeratorCalls, "Conflicting in-bound Count contracts must fail before enumeration.");
+            Contains("conflicting known counts", error.Message, "Conflicting Count contracts must fail closed explicitly.");
         }
 
         private static void StreamingBuildUpOversizeStopsAtFirstDisallowedEntry()
@@ -271,6 +291,42 @@ namespace QS3D.Core.SmokeTests
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class MultiCountNeverEnumerated<T> : ICollection<T>, IReadOnlyCollection<T>, ICollection
+        {
+            private readonly int _genericCount;
+            private readonly int _readOnlyCount;
+            private readonly int _nonGenericCount;
+
+            internal MultiCountNeverEnumerated(int genericCount, int readOnlyCount, int nonGenericCount)
+            {
+                _genericCount = genericCount;
+                _readOnlyCount = readOnlyCount;
+                _nonGenericCount = nonGenericCount;
+            }
+
+            int ICollection<T>.Count => _genericCount;
+            int IReadOnlyCollection<T>.Count => _readOnlyCount;
+            int ICollection.Count => _nonGenericCount;
+            bool ICollection<T>.IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+            internal int GetEnumeratorCalls { get; private set; }
+
+            public IEnumerator<T> GetEnumerator()
+            {
+                GetEnumeratorCalls++;
+                throw new InvalidOperationException("Conflicting counted source must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            void ICollection<T>.Add(T item) => throw new NotSupportedException();
+            void ICollection<T>.Clear() => throw new NotSupportedException();
+            bool ICollection<T>.Contains(T item) => false;
+            void ICollection<T>.CopyTo(T[] array, int arrayIndex) => throw new NotSupportedException();
+            bool ICollection<T>.Remove(T item) => throw new NotSupportedException();
+            void ICollection.CopyTo(Array array, int index) => throw new NotSupportedException();
         }
 
         private sealed class StreamingComponents : IEnumerable<CostResourceComponent>
