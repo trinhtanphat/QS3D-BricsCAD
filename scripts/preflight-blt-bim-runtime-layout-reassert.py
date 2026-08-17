@@ -7,6 +7,7 @@ PALETTE = ROOT / "src" / "QS3D.BricsCAD.V25" / "PaletteCoordinator.cs"
 ACTIVATION = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "BltBimWorkspaceActivationCoordinator.cs"
 REPAIR = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.Blt3dRuntimeLayoutRepair.cs"
 FIVE_ZONE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
+PROPERTIES = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.DedicatedPropertiesPalette.cs"
 errors = []
 
 
@@ -21,14 +22,22 @@ palette = read(PALETTE)
 activation = read(ACTIVATION)
 repair = read(REPAIR)
 five_zone = read(FIVE_ZONE)
+properties = read(PROPERTIES)
 
 for token in (
     "SetVisibility(workspace: true, right: false, quantityInsight: false);",
     "SetVisibility(workspace: true, right: true, quantityInsight: true);",
+    "private static readonly Guid PropertiesGuid",
+    'new PaletteSet("QS3D — Thuộc tính", PropertiesGuid)',
+    "public static bool IsPropertiesVisible",
+    "_properties.Dock = DockSides.Left;",
+    "_workspacePanel?.SetDedicatedPropertiesPaletteActive(false);",
+    "_workspacePanel?.SetDedicatedPropertiesPaletteActive(true);",
+    "Thuộc tính QS3D palette riêng bên trái",
     "viewport BricsCAD native ở giữa",
 ):
     if token not in palette:
-        errors.append("PaletteCoordinator contract missing: " + token)
+        errors.append("PaletteCoordinator four-palette BIM contract missing: " + token)
 
 for token in (
     "public static bool ShowBimWorkspace()",
@@ -85,20 +94,36 @@ for token in (
     "ApplyBlt3dFiveZoneRuntimeLayout",
     "workspace.RowDefinitions.Add",
     "GridResizeDirection.Rows",
-    "ReferenceEquals(child, familyPropertiesPane)",
-    "PropertyList.MinHeight = 120",
+    "ReferenceEquals(child, familyPane)",
+    "if (_dedicatedPropertiesPaletteActive)",
+    "familyPane.RowDefinitions[2].Height = new GridLength(0);",
+    "familyPane.RowDefinitions[2].Height = new GridLength(58, GridUnitType.Star);",
 ):
     if token not in five_zone:
-        errors.append("owner five-zone runtime layout missing: " + token)
+        errors.append("owner dynamic Model/Family/Properties runtime layout missing: " + token)
+
+for token in (
+    "CreatePropertiesPaletteVisual",
+    "SetDedicatedPropertiesPaletteActive(bool active)",
+    "ownerGrid.Children.Remove(region);",
+    "host.Children.Add(region);",
+    "host.Children.Remove(region);",
+    "ownerGrid.Children.Add(region);",
+    "BindingOperations.SetBinding",
+    "CollapseEmbeddedPropertiesSlot",
+    "RestoreEmbeddedPropertiesSlot",
+):
+    if token not in properties:
+        errors.append("dynamic dedicated QS3D Properties reparenting missing: " + token)
 
 if "new Viewport" in repair or "Viewport3D" in repair or "new Viewport" in five_zone or "Viewport3D" in five_zone:
     errors.append("runtime layout must not create a fake second 3D viewport")
 
-print("QS3D BLT3D BIM runtime layout reassert preflight")
+print("QS3D BLT3D BIM dynamic dedicated Properties runtime layout preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BIM activation reasserts all QS3D side palettes through a bounded BricsCAD docking settle window, preserves retries across transient reassert failures, restarts that bounded repair after palette unload/reload, and reapplies the owner-approved five-zone WorkspacePanel layout without replacing native modelspace.")
+print("PASS: BIM activation reasserts Workspace + dedicated QS3D Properties + Management + Quantity through a bounded BricsCAD docking settle window, consumes settle retries only after successful palette restoration, ordinary ShowWorkspace restores the same real editor in-place, manual palette close is not selection-driven, and the native modelspace viewport remains host-owned.")

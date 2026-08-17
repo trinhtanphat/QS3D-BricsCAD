@@ -59,10 +59,10 @@ if COORDINATOR.is_file():
         "if (quantitySize.HasValue)",
         "layout.QuantityPaletteWidth = checked((int)Math.Round(quantitySize.Value.Width, MidpointRounding.AwayFromZero));",
         "layout.QuantityPaletteHeight = checked((int)Math.Round(quantitySize.Value.Height, MidpointRounding.AwayFromZero));",
-        "if (_workspace == null && _right == null && _quantityInsight == null) return;",
+        "if (_workspace == null && _properties == null && _right == null && _quantityInsight == null) return;",
         "var quantityVisible = IsQuantityInsightVisible;",
-        "SetVisibility(workspaceVisible, rightVisible, quantityVisible);",
-        "private static void SetVisibility(bool workspace, bool right, bool quantityInsight)",
+        "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);",
+        "private static void SetVisibility(bool workspace, bool properties, bool right, bool quantityInsight)",
         "if (_quantityInsight != null) _quantityInsight.Visible = quantityInsight;",
     )
     for needle in required:
@@ -88,4 +88,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Quantity Insight has independent per-user dimensions and centralized visibility restore/persist wiring without QSDB mutation.")
+print("PASS: Quantity Insight has independent per-user dimensions and four-palette visibility restore/persist wiring without QSDB mutation.")
