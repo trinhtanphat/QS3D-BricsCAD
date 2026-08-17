@@ -43,6 +43,9 @@ namespace QS3D.Core.SmokeTests
             var source = new MultiCountNeverEnumerated<CostResourceComponent>(1, MaximumEntries + 1, 1);
             var error = Capture<InvalidOperationException>(() => BuildUp("BUILDUP-HIDDEN-OVERSIZE", source));
 
+            Equal(1, source.GenericCountReads, "Hidden-oversize validation must inspect ICollection<T>.Count exactly once.");
+            Equal(1, source.ReadOnlyCountReads, "Hidden-oversize validation must inspect IReadOnlyCollection<T>.Count exactly once.");
+            Equal(1, source.NonGenericCountReads, "Hidden-oversize validation must inspect ICollection.Count exactly once.");
             Equal(0, source.GetEnumeratorCalls, "An oversized secondary Count contract must fail before enumeration.");
             Contains("at most 10000", error.Message, "Hidden oversized Count must preserve the component capacity failure.");
         }
@@ -52,6 +55,9 @@ namespace QS3D.Core.SmokeTests
             var source = new MultiCountNeverEnumerated<CostResourceComponent>(1, 2, 1);
             var error = Capture<InvalidOperationException>(() => BuildUp("BUILDUP-CONFLICTING-COUNTS", source));
 
+            Equal(1, source.GenericCountReads, "Conflicting-count validation must inspect ICollection<T>.Count exactly once.");
+            Equal(1, source.ReadOnlyCountReads, "Conflicting-count validation must inspect IReadOnlyCollection<T>.Count exactly once.");
+            Equal(1, source.NonGenericCountReads, "Conflicting-count validation must inspect ICollection.Count exactly once.");
             Equal(0, source.GetEnumeratorCalls, "Conflicting in-bound Count contracts must fail before enumeration.");
             Contains("conflicting known counts", error.Message, "Conflicting Count contracts must fail closed explicitly.");
         }
@@ -306,12 +312,39 @@ namespace QS3D.Core.SmokeTests
                 _nonGenericCount = nonGenericCount;
             }
 
-            int ICollection<T>.Count => _genericCount;
-            int IReadOnlyCollection<T>.Count => _readOnlyCount;
-            int ICollection.Count => _nonGenericCount;
+            int ICollection<T>.Count
+            {
+                get
+                {
+                    GenericCountReads++;
+                    return _genericCount;
+                }
+            }
+
+            int IReadOnlyCollection<T>.Count
+            {
+                get
+                {
+                    ReadOnlyCountReads++;
+                    return _readOnlyCount;
+                }
+            }
+
+            int ICollection.Count
+            {
+                get
+                {
+                    NonGenericCountReads++;
+                    return _nonGenericCount;
+                }
+            }
+
             bool ICollection<T>.IsReadOnly => true;
             bool ICollection.IsSynchronized => false;
             object ICollection.SyncRoot => this;
+            internal int GenericCountReads { get; private set; }
+            internal int ReadOnlyCountReads { get; private set; }
+            internal int NonGenericCountReads { get; private set; }
             internal int GetEnumeratorCalls { get; private set; }
 
             public IEnumerator<T> GetEnumerator()
