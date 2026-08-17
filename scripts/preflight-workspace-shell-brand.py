@@ -4,6 +4,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 LAYOUT_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
+WORKSPACE_BRAND_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Qs3dBrandMark.cs"
 SHELL_REL = "src/QS3D.BricsCAD.V25/Ribbon/Blt3dShellChromeCoordinator.cs"
 ACTIVATION_REL = "src/QS3D.BricsCAD.V25/Ribbon/BltBimWorkspaceActivationCoordinator.cs"
 LOGO_REL = "assets/branding/qs3d-logo.svg"
@@ -25,12 +26,13 @@ def forbid(text, needle, scope):
 
 def main():
     layout = read(LAYOUT_REL)
+    workspace_brand = read(WORKSPACE_BRAND_REL)
     shell = read(SHELL_REL)
     activation = read(ACTIVATION_REL)
     logo = read(LOGO_REL)
 
-    # The host PaletteSet can report zero viewport width during initial measure. The final runtime
-    # pass must break the old ViewportWidth-width feedback loop and make the real workspace visible.
+    # BricsCAD PaletteSet can transiently report zero viewport width during initial measure. The
+    # final runtime pass must break the old ViewportWidth feedback loop and expose real content.
     for token in (
         "BindingOperations.ClearBinding(root, FrameworkElement.WidthProperty);",
         "root.Width = double.NaN;",
@@ -44,6 +46,22 @@ def main():
     ):
         require(layout, token, LAYOUT_REL)
     require(layout, "using System.Windows.Data;", LAYOUT_REL)
+
+    # The Workspace itself must visibly carry the original QS3D red-X / green-V identity. Keep
+    # LOCAL-012 as the real licensed BricsCAD/HiDPI visual qualification gate; this source guard
+    # only proves that the clean-room mark and its deterministic geometry remain wired in source.
+    for token in (
+        "Qs3dWorkspaceBrandMark",
+        "X đỏ / V xanh",
+        "Color.FromRgb(232, 74, 74)",
+        "Color.FromRgb(82, 190, 108)",
+        'Geometry.Parse("M 5,4 L 13,13 M 13,4 L 5,13")',
+        'Geometry.Parse("M 17,8 L 21,13 L 27,4")',
+        "left.Children.Insert(0, mark);",
+    ):
+        require(workspace_brand, token, WORKSPACE_BRAND_REL)
+    for stale in ("BLT3D.exe", "BLT3D.dll", "private-user-images", "screenshot crop"):
+        forbid(workspace_brand, stale, WORKSPACE_BRAND_REL)
 
     # Shell branding must be QS3D-owned clean-room artwork, not screenshot-cropped BLT pixels.
     for token in (
@@ -87,7 +105,7 @@ def main():
 
     print(
         "PASS: Workspace breaks the zero-viewport width loop, restores visible two-column BIM content, "
-        "and QS3D shell/repository branding uses an original red-X green-V mark with transition reassertion."
+        "and QS3D Workspace/shell/repository branding uses original red-X green-V artwork."
     )
     return 0
 
