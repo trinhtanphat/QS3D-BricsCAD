@@ -14,9 +14,21 @@ The authoritative operating rules remain `AGENTS.md`, `docs/REMOTE-AGENT-SCOPE.m
 - Remote/static/CI evidence must never be promoted to `LOCAL_PASS`. Only a compatible local agent with real evidence tied to the exact tested SHA may record `LOCAL_PASS`.
 - If a remote source change materially changes the local scenario, update the canonical local inbox item in the same task branch/PR, then stop remote execution of that local gate again.
 
+## Mandatory reporting-contract interpretation for remote agents
+
+For remote/hybrid/source-only agents, this rule is the required interpretation of the generic `Local/runtime evidence` field in `docs/AGENT-PROMPT-TO-RELEASE-CONTRACT.md`:
+
+- do **not** query, rerun, or re-audit a parked LOCAL_ONLY gate merely to fill that field;
+- render the field as `➖ Local/runtime: LOCAL_ONLY/PARKED — owned by local agents; not rechecked remotely` when the local gate is relevant but not part of the remote execution scope;
+- do **not** use `PENDING_LOCAL` as the overall `Prompt result`, `Remaining blocker`, or reason to withhold an otherwise eligible remote PR/merge solely because a parked local gate remains open;
+- use `PENDING_LOCAL` only when the owner/task explicitly makes that local evidence the current completion gate for this prompt, or when a compatible local agent is actually executing/awaiting that gate;
+- a recorded `LOCAL_PASS` still requires real compatible-local evidence tied to the exact tested SHA.
+
+This interpretation resolves the generic reporting template without weakening the local qualification requirement and keeps `docs/REMOTE-AGENT-SCOPE.md` / `docs/LOCAL-AGENT-INBOX.md` as the execution boundary.
+
 ## Reporting shorthand
 
-For remote-agent reports, use a compact disposition such as:
+For remote-agent reports, use this compact disposition when relevant:
 
 ```text
 ➖ Local/runtime: LOCAL_ONLY/PARKED — owned by local agents; not rechecked remotely.
