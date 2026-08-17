@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             NonCanonicalPropertyKeyBlocksRelease();
             NonCanonicalQuantityKeyBlocksRelease();
             MalformedDiagnosticKeysBlockReleaseAndAreRedacted();
+            MalformedQuantityKeysSuppressValueDiagnostics();
             CanonicalUnicodeDiagnosticKeysRemainValid();
             RoomFinishProvenanceReachesReleaseGuard();
             ProvenanceConflictDoesNotCrashReleaseGuard();
@@ -125,6 +126,34 @@ namespace QS3D.Core.SmokeTests
                 Equal(0, Count(quantityIssues, "BOM_QUANTITY_NONFINITE"));
                 AssertKeyNotReflected(quantityIssues, invalidKey);
             }
+        }
+
+        private static void MalformedQuantityKeysSuppressValueDiagnostics()
+        {
+            var malformedCases = new[]
+            {
+                (Key: " BadFinite ", Value: 1.25d),
+                (Key: "Bad\nNaN", Value: double.NaN),
+                (Key: "Bad\u0085PositiveInfinity", Value: double.PositiveInfinity),
+                (Key: "Bad" + ((char)0xffff) + "NegativeInfinity", Value: double.NegativeInfinity)
+            };
+
+            foreach (var malformedCase in malformedCases)
+            {
+                var project = ProjectWithBeam("bom-precedence", "beam-precedence", addCanonicalQuantity: false);
+                project.Elements[0].Quantities[malformedCase.Key] = malformedCase.Value;
+
+                var issues = BomReleaseGuardService.Inspect(project);
+                Equal(1, Count(issues, "BOM_QUANTITY_KEY_INVALID"));
+                Equal(0, Count(issues, "BOM_QUANTITY_NONFINITE"));
+                AssertKeyNotReflected(issues, malformedCase.Key);
+            }
+
+            var canonical = ProjectWithBeam("bom-canonical-nonfinite", "beam-canonical-nonfinite", addCanonicalQuantity: false);
+            canonical.Elements[0].Quantities["NetConcreteM3"] = double.PositiveInfinity;
+            var canonicalIssues = BomReleaseGuardService.Inspect(canonical);
+            Equal(0, Count(canonicalIssues, "BOM_QUANTITY_KEY_INVALID"));
+            Equal(1, Count(canonicalIssues, "BOM_QUANTITY_NONFINITE"));
         }
 
         private static void CanonicalUnicodeDiagnosticKeysRemainValid()
