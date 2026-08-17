@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Selection;
@@ -7,6 +9,8 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class SemanticSelectionInspectorSmoke
     {
+        private const int MaxSelection = 100000;
+
         public static void Run()
         {
             CommonAndMixedValuesAreStable();
@@ -21,6 +25,9 @@ namespace QS3D.Core.SmokeTests
             MissingSemanticReferenceFailsClosed();
             FamilyCategoryMismatchFailsClosed();
             DuplicateProjectIdentityFailsClosed();
+            OversizedKnownCountsRejectBeforeEnumeration();
+            NegativeKnownCountsRejectBeforeEnumeration();
+            ExactBoundKnownCountReachesEnumeration();
             EmptySelectionIsSupported();
         }
 
@@ -260,6 +267,134 @@ namespace QS3D.Core.SmokeTests
             MustFail(
                 () => SemanticSelectionInspector.Inspect(project, new[] { "B-001" }),
                 "Duplicate project element IDs must fail closed before inspection.");
+        }
+
+        private static void OversizedKnownCountsRejectBeforeEnumeration()
+        {
+            var generic = new GenericKnownCountSource(MaxSelection + 1);
+            KnownCountRejectedBeforeEnumeration(generic, () => generic.EnumeratorRequested, "supports at most");
+
+            var readOnly = new ReadOnlyKnownCountSource(MaxSelection + 1);
+            KnownCountRejectedBeforeEnumeration(readOnly, () => readOnly.EnumeratorRequested, "supports at most");
+
+            var nonGeneric = new NonGenericKnownCountSource(MaxSelection + 1);
+            KnownCountRejectedBeforeEnumeration(nonGeneric, () => nonGeneric.EnumeratorRequested, "supports at most");
+        }
+
+        private static void NegativeKnownCountsRejectBeforeEnumeration()
+        {
+            var generic = new GenericKnownCountSource(-1);
+            KnownCountRejectedBeforeEnumeration(generic, () => generic.EnumeratorRequested, "invalid negative known count");
+
+            var readOnly = new ReadOnlyKnownCountSource(-1);
+            KnownCountRejectedBeforeEnumeration(readOnly, () => readOnly.EnumeratorRequested, "invalid negative known count");
+
+            var nonGeneric = new NonGenericKnownCountSource(-1);
+            KnownCountRejectedBeforeEnumeration(nonGeneric, () => nonGeneric.EnumeratorRequested, "invalid negative known count");
+        }
+
+        private static void ExactBoundKnownCountReachesEnumeration()
+        {
+            var project = BuildProject();
+            var beforeVersion = project.ChangeVersion;
+            var source = new GenericKnownCountSource(MaxSelection);
+            try
+            {
+                SemanticSelectionInspector.Inspect(project, source);
+            }
+            catch (ExactBoundEnumerationReachedException)
+            {
+                Equal(true, source.EnumeratorRequested);
+                Equal(beforeVersion, project.ChangeVersion);
+                return;
+            }
+
+            throw new Exception("Exact-bound semantic selection Count must reach enumeration instead of failing the known-count preflight.");
+        }
+
+        private static void KnownCountRejectedBeforeEnumeration(
+            IEnumerable<string> source,
+            Func<bool> enumeratorRequested,
+            string expectedMessageFragment)
+        {
+            var project = BuildProject();
+            var beforeVersion = project.ChangeVersion;
+            try
+            {
+                SemanticSelectionInspector.Inspect(project, source);
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf(expectedMessageFragment, StringComparison.Ordinal) < 0)
+                    throw new Exception("Unexpected semantic selection known-count rejection: " + ex.Message);
+                Equal(false, enumeratorRequested());
+                Equal(beforeVersion, project.ChangeVersion);
+                return;
+            }
+
+            throw new Exception("Expected semantic selection known-count source to fail before enumeration.");
+        }
+
+        private sealed class GenericKnownCountSource : ICollection<string>
+        {
+            internal GenericKnownCountSource(int count) => Count = count;
+
+            public int Count { get; }
+            public bool IsReadOnly => true;
+            internal bool EnumeratorRequested { get; private set; }
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                EnumeratorRequested = true;
+                if (Count == MaxSelection) throw new ExactBoundEnumerationReachedException();
+                throw new Exception("Rejected generic known-count semantic selection source must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void Add(string item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(string item) => false;
+            public void CopyTo(string[] array, int arrayIndex) => throw new NotSupportedException();
+            public bool Remove(string item) => throw new NotSupportedException();
+        }
+
+        private sealed class ReadOnlyKnownCountSource : IReadOnlyCollection<string>
+        {
+            internal ReadOnlyKnownCountSource(int count) => Count = count;
+
+            public int Count { get; }
+            internal bool EnumeratorRequested { get; private set; }
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                EnumeratorRequested = true;
+                throw new Exception("Rejected read-only known-count semantic selection source must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class NonGenericKnownCountSource : IEnumerable<string>, ICollection
+        {
+            internal NonGenericKnownCountSource(int count) => Count = count;
+
+            public int Count { get; }
+            public bool IsSynchronized => false;
+            public object SyncRoot => this;
+            internal bool EnumeratorRequested { get; private set; }
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                EnumeratorRequested = true;
+                throw new Exception("Rejected non-generic known-count semantic selection source must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void CopyTo(Array array, int index) => throw new NotSupportedException();
+        }
+
+        private sealed class ExactBoundEnumerationReachedException : Exception
+        {
         }
 
         private static void EmptySelectionIsSupported()
