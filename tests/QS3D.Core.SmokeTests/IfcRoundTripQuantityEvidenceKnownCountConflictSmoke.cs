@@ -12,6 +12,10 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             RejectsOversizedSecondaryKnownCountBeforeEnumeration();
+            RejectsOversizedKnownCountBeforeNegativeDiagnostic();
+            RejectsNegativeGenericKnownCountBeforeEnumeration();
+            RejectsNegativeReadOnlyKnownCountBeforeEnumeration();
+            RejectsNegativeNonGenericKnownCountBeforeEnumeration();
             RejectsConflictingInBoundKnownCountsBeforeEnumeration();
             EqualKnownCountContractsRemainAccepted();
         }
@@ -23,6 +27,51 @@ namespace QS3D.Core.SmokeTests
 
             Contains(failure.Message, "supports at most 10000 candidates", "oversized secondary Count diagnostic");
             AssertAllCountsReadExactlyOnceWithoutEnumeration(source, "oversized secondary Count");
+        }
+
+        private static void RejectsOversizedKnownCountBeforeNegativeDiagnostic()
+        {
+            var source = new MultiCountCollection(-1, 10001, -1, true, Array.Empty<IfcRoundTripQuantityEvidence>());
+            var failure = CaptureFailure(() => IfcRoundTripQuantityEvidenceSet.Create(source));
+
+            Contains(failure.Message, "supports at most 10000 candidates", "oversized Count precedence over negative Count");
+            AssertAllCountsReadExactlyOnceWithoutEnumeration(source, "oversized Count with negative peer");
+        }
+
+        private static void RejectsNegativeGenericKnownCountBeforeEnumeration()
+        {
+            var source = new MultiCountCollection(-1, 2, 2, true, Array.Empty<IfcRoundTripQuantityEvidence>());
+            var failure = CaptureFailure(() => IfcRoundTripQuantityEvidenceSet.Create(source));
+
+            Equal(
+                "IFC round-trip quantity evidence source exposes an invalid negative known Count value.",
+                failure.Message,
+                "negative generic Count diagnostic");
+            AssertAllCountsReadExactlyOnceWithoutEnumeration(source, "negative generic Count");
+        }
+
+        private static void RejectsNegativeReadOnlyKnownCountBeforeEnumeration()
+        {
+            var source = new MultiCountCollection(2, -1, 2, true, Array.Empty<IfcRoundTripQuantityEvidence>());
+            var failure = CaptureFailure(() => IfcRoundTripQuantityEvidenceSet.Create(source));
+
+            Equal(
+                "IFC round-trip quantity evidence source exposes an invalid negative known Count value.",
+                failure.Message,
+                "negative read-only Count diagnostic");
+            AssertAllCountsReadExactlyOnceWithoutEnumeration(source, "negative read-only Count");
+        }
+
+        private static void RejectsNegativeNonGenericKnownCountBeforeEnumeration()
+        {
+            var source = new MultiCountCollection(2, 2, -1, true, Array.Empty<IfcRoundTripQuantityEvidence>());
+            var failure = CaptureFailure(() => IfcRoundTripQuantityEvidenceSet.Create(source));
+
+            Equal(
+                "IFC round-trip quantity evidence source exposes an invalid negative known Count value.",
+                failure.Message,
+                "negative non-generic Count diagnostic");
+            AssertAllCountsReadExactlyOnceWithoutEnumeration(source, "negative non-generic Count");
         }
 
         private static void RejectsConflictingInBoundKnownCountsBeforeEnumeration()

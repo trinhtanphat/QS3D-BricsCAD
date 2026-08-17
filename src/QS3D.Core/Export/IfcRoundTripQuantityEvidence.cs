@@ -62,9 +62,11 @@ namespace QS3D.Core.Export
         public static IfcRoundTripQuantityEvidenceSet Create(IEnumerable<IfcRoundTripQuantityEvidence> evidence)
         {
             if (evidence == null) throw new ArgumentNullException(nameof(evidence));
-            var knownCount = TryGetKnownCount(evidence, out var conflictingKnownCounts);
+            var knownCount = TryGetKnownCount(evidence, out var conflictingKnownCounts, out var negativeKnownCount);
             if (knownCount.HasValue && knownCount.Value > MaxCandidates)
                 ThrowTooManyCandidates();
+            if (negativeKnownCount)
+                throw new InvalidOperationException("IFC round-trip quantity evidence source exposes an invalid negative known Count value.");
             if (conflictingKnownCounts)
                 throw new InvalidOperationException("IFC round-trip quantity evidence source exposes conflicting known Count values.");
 
@@ -107,23 +109,31 @@ namespace QS3D.Core.Export
 
         private static int? TryGetKnownCount(
             IEnumerable<IfcRoundTripQuantityEvidence> evidence,
-            out bool conflictingKnownCounts)
+            out bool conflictingKnownCounts,
+            out bool negativeKnownCount)
         {
             conflictingKnownCounts = false;
+            negativeKnownCount = false;
             int? knownCount = null;
 
             if (evidence is ICollection<IfcRoundTripQuantityEvidence> collection)
-                knownCount = ObserveKnownCount(knownCount, collection.Count, ref conflictingKnownCounts);
+                knownCount = ObserveKnownCount(knownCount, collection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
             if (evidence is IReadOnlyCollection<IfcRoundTripQuantityEvidence> readOnlyCollection)
-                knownCount = ObserveKnownCount(knownCount, readOnlyCollection.Count, ref conflictingKnownCounts);
+                knownCount = ObserveKnownCount(knownCount, readOnlyCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
             if (evidence is ICollection nonGenericCollection)
-                knownCount = ObserveKnownCount(knownCount, nonGenericCollection.Count, ref conflictingKnownCounts);
+                knownCount = ObserveKnownCount(knownCount, nonGenericCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
 
             return knownCount;
         }
 
-        private static int ObserveKnownCount(int? current, int observed, ref bool conflictingKnownCounts)
+        private static int ObserveKnownCount(
+            int? current,
+            int observed,
+            ref bool conflictingKnownCounts,
+            ref bool negativeKnownCount)
         {
+            if (observed < 0)
+                negativeKnownCount = true;
             if (current.HasValue && current.Value != observed)
                 conflictingKnownCounts = true;
             return !current.HasValue || observed > current.Value ? observed : current.Value;

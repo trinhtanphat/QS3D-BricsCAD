@@ -57,8 +57,8 @@ def main():
     require(ribbon, 'internal const string ProjectTabGroupId = TabId;', "Project tab identity")
     require(activation, "ProjectRibbonAugmenter.ProjectTabGroupId", "Project tab activation")
     require(activation, "internal static void NotifyActiveTabChanged(string tabId)", "deterministic tab activation hook")
-    require(ribbon, 'new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\\ndự án", "QS3DPROJECTINFO")', "Project Information ribbon route")
-    require(ribbon, 'new ButtonSpec("QS3D_PROJECT_PROPERTIES", "Thuộc tính\\ndự án", "QS3DPROJECTPROPERTIES")', "Project Properties ribbon route")
+    require(ribbon, 'new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\\ndự án", "QS3DPROJECTINFO",', "Project Information ribbon route")
+    require(ribbon, 'new ButtonSpec("QS3D_PROJECT_PROPERTIES", "Thuộc tính\\ndự án", "QS3DPROJECTPROPERTIES",', "Project Properties ribbon route")
 
     # Activation starts only after the Project ribbon has reconciled and is torn down with it.
     require(ribbon, "ProjectTabActivationCoordinator.Start();", "Project Information activation lifecycle")
