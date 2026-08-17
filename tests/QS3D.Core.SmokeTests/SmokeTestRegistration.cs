@@ -49,6 +49,7 @@ namespace QS3D.Core.SmokeTests
             FormulaFiniteSafetySmoke.Run();
             FormulaVariableCaseSmoke.Run();
             FormulaVariableNameNormalizationSmoke.Run();
+            FormulaVariableKnownCountContractSmoke.Run();
             RebarNotationOverflowSmoke.Run();
             RebarWeightUnderflowSmoke.Run();
             ColumnTieQuantityUnderflowSmoke.Run();
