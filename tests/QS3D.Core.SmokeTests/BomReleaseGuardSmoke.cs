@@ -13,6 +13,9 @@ namespace QS3D.Core.SmokeTests
             BasicBomGuard();
             NonCanonicalPropertyKeyBlocksRelease();
             NonCanonicalQuantityKeyBlocksRelease();
+            MalformedPersistedKeysBlockReleaseWithoutEcho();
+            ControlFamiliesAndXmlInvalidKeysFailClosed();
+            ValidSupplementaryUnicodeKeysRemainAccepted();
             RoomFinishProvenanceReachesReleaseGuard();
             ProvenanceConflictDoesNotCrashReleaseGuard();
             NullSemanticEntryBlocksReleaseWithoutCrashing();
@@ -95,6 +98,92 @@ namespace QS3D.Core.SmokeTests
             Has(issues, "BOM_QUANTITY_KEY_INVALID");
             if (!issues.Any(x => x.Code == "BOM_QUANTITY_KEY_INVALID" && x.Severity == HealthSeverity.Error && x.ElementId == element.Id))
                 throw new Exception("Non-canonical quantity key must be an Error-level BOM release blocker for its owning element.");
+        }
+
+        private static void MalformedPersistedKeysBlockReleaseWithoutEcho()
+        {
+            var project = new ProjectState("bom-malformed-keys", "BOM malformed key guard");
+            project.Families.Add(new ProjectFamily("beam", "Beam", ElementCategory.Beam));
+            var element = new ProjectElement("beam-malformed-keys", ElementCategory.Beam, "beam", string.Empty, string.Empty);
+            element.SourceHandles.Add("1D");
+            element.Properties["Bad\nProperty"] = "C30";
+            element.Properties["Bad" + '\uD800'] = "C40";
+            element.Quantities["Bad\0Quantity"] = double.NaN;
+            element.Quantities["Bad" + '\uDFFF'] = 1.25d;
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+
+            var issues = BomReleaseGuardService.Inspect(project);
+            Equal(2, Count(issues, "BOM_PROPERTY_KEY_INVALID"));
+            Equal(2, Count(issues, "BOM_QUANTITY_KEY_INVALID"));
+            Equal(0, Count(issues, "BOM_QUANTITY_NONFINITE"));
+
+            if (issues.Any(x => (x.Message ?? string.Empty).IndexOf("Bad\0Quantity", StringComparison.Ordinal) >= 0 ||
+                                (x.Message ?? string.Empty).IndexOf("Bad\nProperty", StringComparison.Ordinal) >= 0))
+                throw new Exception("Malformed persisted keys must not be echoed into BOM diagnostic messages.");
+        }
+
+        private static void ControlFamiliesAndXmlInvalidKeysFailClosed()
+        {
+            var project = new ProjectState("bom-malformed-families", "BOM malformed key family guard");
+            project.Families.Add(new ProjectFamily("beam", "Beam", ElementCategory.Beam));
+            var element = new ProjectElement("beam-malformed-families", ElementCategory.Beam, "beam", string.Empty, string.Empty);
+            element.SourceHandles.Add("1F");
+
+            var invalidProperties = new[]
+            {
+                "C0" + '\u0001',
+                "Tab" + '\u0009',
+                "UnitSeparator" + '\u001F',
+                "Delete" + '\u007F',
+                "NextLine" + '\u0085',
+                "C1" + '\u009F',
+                "NonCharacter" + '\uFFFE'
+            };
+            foreach (var key in invalidProperties) element.Properties[key] = "x";
+
+            var invalidQuantities = new[]
+            {
+                "Q0" + '\u0000',
+                "QLine" + '\u000A',
+                "QDelete" + '\u007F',
+                "QNextLine" + '\u0085',
+                "QC1" + '\u009F',
+                "QNonCharacter" + '\uFFFF',
+                "QLoneHigh" + '\uD800',
+                "QLoneLow" + '\uDFFF'
+            };
+            foreach (var key in invalidQuantities) element.Quantities[key] = double.NaN;
+
+            element.SetProperty("VậtLiệu😀", "C30");
+            element.SetQuantity("KhốiLượng😀", 1.25d);
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+
+            var issues = BomReleaseGuardService.Inspect(project);
+            Equal(invalidProperties.Length, Count(issues, "BOM_PROPERTY_KEY_INVALID"));
+            Equal(invalidQuantities.Length, Count(issues, "BOM_QUANTITY_KEY_INVALID"));
+            Equal(0, Count(issues, "BOM_QUANTITY_NONFINITE"));
+
+            foreach (var invalidKey in invalidProperties.Concat(invalidQuantities))
+                if (issues.Any(x => (x.Message ?? string.Empty).IndexOf(invalidKey, StringComparison.Ordinal) >= 0))
+                    throw new Exception("Malformed BOM key text must never be reflected in release diagnostics.");
+        }
+
+        private static void ValidSupplementaryUnicodeKeysRemainAccepted()
+        {
+            var project = new ProjectState("bom-unicode-keys", "BOM Unicode key guard");
+            project.Families.Add(new ProjectFamily("beam", "Beam", ElementCategory.Beam));
+            var element = new ProjectElement("beam-unicode-keys", ElementCategory.Beam, "beam", string.Empty, string.Empty);
+            element.SourceHandles.Add("1E");
+            element.SetProperty("VậtLiệu😀", "C30");
+            element.SetQuantity("KhốiLượng😀", 1.25d);
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+
+            var issues = BomReleaseGuardService.Inspect(project);
+            Equal(0, Count(issues, "BOM_PROPERTY_KEY_INVALID"));
+            Equal(0, Count(issues, "BOM_QUANTITY_KEY_INVALID"));
         }
 
         private static void RoomFinishProvenanceReachesReleaseGuard()
