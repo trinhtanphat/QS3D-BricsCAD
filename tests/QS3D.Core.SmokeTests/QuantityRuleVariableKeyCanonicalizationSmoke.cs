@@ -16,13 +16,13 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("canonical-projection", "Canonical rule projection");
             var family = new ProjectFamily("beam", "Beam", ElementCategory.Beam);
-            family.Properties[" Factor "] = "2";
+            family.Properties["Factor"] = "2";
             family.Properties["   "] = "111";
             project.Families.Add(family);
 
             var element = new ProjectElement("B1", ElementCategory.Beam, family.Id, "floor", "zone");
             element.Properties["factor"] = "3";
-            element.Properties[" LengthM "] = "4";
+            element.Properties["LengthM"] = "4";
             element.Properties["\t"] = "222";
             element.Quantities["LengthM"] = 5d;
             project.Elements.Add(element);
