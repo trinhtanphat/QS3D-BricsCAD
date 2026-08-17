@@ -27,11 +27,15 @@ def main():
         'string.Equals(Property(element, TopLevelIdKey), normalizedFloorId, StringComparison.OrdinalIgnoreCase)',
     ], "floor", missing)
     require(zone, [
-        'string.Equals((project.ActiveZoneId ?? string.Empty).Trim(), zone.Id, StringComparison.OrdinalIgnoreCase)',
+        'RequireCanonicalOptionalReference(project.ActiveZoneId, "ActiveZoneId");',
         '.Where(x => ReferencesZone(x, zone.Id))',
         'ResolveProjectElements(project).Count(x => ReferencesZone(x, zone.Id))',
         'private static bool ReferencesZone(ProjectElement element, string zoneId)',
-        'string.Equals((element.ZoneId ?? string.Empty).Trim(), zoneId, StringComparison.OrdinalIgnoreCase)',
+        'RequireCanonicalOptionalReference(element.ZoneId, "Element ZoneId");',
+        'private static string RequireCanonicalOptionalReference(string value, string fieldName)',
+        'private static string RequiredCanonicalId(string value, string parameterName, int maxLength)',
+        'if (!string.Equals(raw, canonical, StringComparison.Ordinal))',
+        'if (!string.Equals(raw, normalized, StringComparison.Ordinal))',
     ], "zone", missing)
     require(smoke, [
         'FloorReferenceIdentityIsCanonical();',
@@ -39,9 +43,9 @@ def main():
         'ZoneReferenceIdentityIsCanonical();',
         'PaddedActiveZoneBlocksDelete();',
         'FloorId = "  f-01  "',
-        'ZoneId = "  z-01  "',
-        'ProjectFloorService.ReferenceCount(project, " F-01 ")',
-        'ProjectZoneService.ReferenceCount(project, " Z-01 ")',
+        'ZoneId = "z-01"',
+        'ThrowsArgument(() => ProjectZoneService.ReferenceCount(project, " Z-01 "));',
+        'ProjectZoneService.ReferenceCount(project, "z-01")',
         'ProjectFloorService.Update(project, floor.Id, floor.Name, 0.25d);',
         'ProjectZoneService.Update(project, zone.Id, "Zone 01 renamed");',
     ], "smoke", missing)
@@ -73,11 +77,13 @@ def main():
     if floor_delete.find('.Trim()') < 0 or floor_delete.find('.Trim()') > floor_delete.find('project.Touch();'):
         print("ERROR: active Floor canonical guard must run before mutation.")
         return 1
-    if zone_delete.find('.Trim()') < 0 or zone_delete.find('.Trim()') > zone_delete.find('project.Touch();'):
-        print("ERROR: active Zone canonical guard must run before mutation.")
+    zone_guard = zone_delete.find('RequireCanonicalOptionalReference(project.ActiveZoneId, "ActiveZoneId");')
+    zone_touch = zone_delete.find('project.Touch();')
+    if zone_guard < 0 or zone_touch < 0 or zone_guard > zone_touch:
+        print("ERROR: active Zone canonical validation must run before comparison/mutation.")
         return 1
 
-    print("PASS: Floor/Zone mutable references and active ids use canonical trimmed identity in update/reference/delete safety paths with module-registered smoke coverage.")
+    print("PASS: Floor retains canonical trimmed-reference behavior while Zone rejects noncanonical semantic references before comparison/mutation, with module-registered smoke coverage.")
     return 0
 
 
