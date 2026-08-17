@@ -65,6 +65,14 @@ for token in (
     if token not in dedicated:
         errors.append("single-editor reparenting contract missing: " + token)
 
+for token in (
+    "if (propertiesVisible && !bimSurfaceActive)",
+    "_workspacePanel?.SetDedicatedPropertiesPaletteActive(true);",
+    "_workspacePanel?.SetDedicatedPropertiesPaletteActive(bimSurfaceActive);",
+):
+    if token not in palette:
+        errors.append("standalone/dedicated Properties reset-host contract missing: " + token)
+
 if "new WorkspaceViewModel" in dedicated:
     errors.append("dedicated Properties host must not create a second WorkspaceViewModel")
 if "new PropertiesPanel" in palette or "PropertiesPanel(" in palette:
@@ -77,4 +85,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: #2399 has one authoritative editable QS3D Properties editor; BIM mode reparents that existing Workspace visual into its dedicated palette and no duplicate PropertiesPanel/ViewModel authority exists.")
+print("PASS: #2399 has one authoritative editable QS3D Properties editor; BIM mode reparents that existing Workspace visual into its dedicated palette, standalone Properties visibility survives coordinator reset, and no duplicate PropertiesPanel/ViewModel authority exists.")
