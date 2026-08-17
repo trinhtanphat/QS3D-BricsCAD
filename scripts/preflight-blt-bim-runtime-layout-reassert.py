@@ -44,6 +44,11 @@ for token in (
 if "string.Equals(currentId, _lastTabId" in activation and "_bimSettleTicksRemaining > 0" not in activation:
     errors.append("same-tab polling still returns without a bounded BricsCAD dock-settle repair")
 
+successful_retry_order = "ReassertBimWorkspace();\n                        _bimSettleTicksRemaining--;"
+consumed_before_retry = "_bimSettleTicksRemaining--;\n                        ReassertBimWorkspace();"
+if successful_retry_order not in activation or consumed_before_retry in activation:
+    errors.append("same-tab settle retry must be consumed only after a successful BIM workspace reassert")
+
 for token in (
     "Blt3dRuntimeSettlePasses = 2",
     "TimeSpan.FromMilliseconds(250)",
@@ -83,4 +88,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BIM activation reasserts all QS3D side palettes through a bounded BricsCAD docking settle window, restarts that bounded repair after palette unload/reload, and reapplies the owner-approved five-zone WorkspacePanel layout without replacing native modelspace.")
+print("PASS: BIM activation reasserts all QS3D side palettes through a bounded BricsCAD docking settle window, preserves retries across transient reassert failures, restarts that bounded repair after palette unload/reload, and reapplies the owner-approved five-zone WorkspacePanel layout without replacing native modelspace.")
