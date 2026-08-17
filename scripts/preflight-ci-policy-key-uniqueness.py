@@ -47,10 +47,9 @@ def duplicate_keys(lines: list[str], indentation: int) -> list[str]:
         name = parse_mapping_key(line, indentation)
         if name is None:
             continue
-        canonical = name.casefold()
-        if canonical in seen and canonical not in duplicates:
-            duplicates.append(canonical)
-        seen.add(canonical)
+        if name in seen and name not in duplicates:
+            duplicates.append(name)
+        seen.add(name)
     return duplicates
 
 
