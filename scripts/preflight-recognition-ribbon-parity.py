@@ -131,7 +131,9 @@ def main() -> int:
         raise SystemExit("FAIL: recognition options must fail closed instead of dispatching another workflow")
     require(options, "không mở MEP Review/Takeoff thay thế", "recognition options fail-closed message")
 
+    require(boundary, "document.Editor.SetImpliedSelection(ids)", "boundary PICKFIRST preservation")
     require(boundary, 'Queue(document, "QS3DRECOGNIZE")', "boundary recognition route")
+    require(auto, "document.Editor.SetImpliedSelection(ids)", "auto PICKFIRST preservation")
     require(auto, 'Queue(document, "QS3DRECOGNIZEAUTO")', "auto recognition route")
     require(review, '[CommandMethod("QS3DRECOGNIZE", CommandFlags.UsePickSet)]', "manual recognition workflow")
     require(review, '[CommandMethod("QS3DRECOGNIZEAUTO", CommandFlags.UsePickSet)]', "atomic auto-recognition workflow")
