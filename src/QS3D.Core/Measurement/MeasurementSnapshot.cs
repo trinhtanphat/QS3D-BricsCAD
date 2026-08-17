@@ -57,12 +57,22 @@ namespace QS3D.Core.Measurement
 
         private static void RequireSupportedCount(IEnumerable<MeasurementTrace> traces, string paramName)
         {
-            if (traces is ICollection<MeasurementTrace> collection && collection.Count > MaximumTraceCount)
+            int? knownCount = null;
+            if (traces is ICollection<MeasurementTrace> collection)
+                ValidateKnownCount(collection.Count, ref knownCount, paramName);
+            if (traces is IReadOnlyCollection<MeasurementTrace> readOnlyCollection)
+                ValidateKnownCount(readOnlyCollection.Count, ref knownCount, paramName);
+            if (traces is System.Collections.ICollection nonGenericCollection)
+                ValidateKnownCount(nonGenericCollection.Count, ref knownCount, paramName);
+        }
+
+        private static void ValidateKnownCount(int count, ref int? knownCount, string paramName)
+        {
+            if (count > MaximumTraceCount)
                 throw TraceCountError(paramName);
-            if (traces is IReadOnlyCollection<MeasurementTrace> readOnlyCollection && readOnlyCollection.Count > MaximumTraceCount)
-                throw TraceCountError(paramName);
-            if (traces is System.Collections.ICollection nonGenericCollection && nonGenericCollection.Count > MaximumTraceCount)
-                throw TraceCountError(paramName);
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new ArgumentException("Measurement snapshot count contracts disagree.", paramName);
+            knownCount = count;
         }
 
         private static ArgumentException TraceCountError(string paramName)
