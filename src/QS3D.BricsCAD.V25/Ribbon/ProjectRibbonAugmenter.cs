@@ -22,10 +22,18 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private sealed class ButtonSpec
         {
-            public ButtonSpec(string id, string text, string command) { Id = id; Text = text; Command = command; }
+            public ButtonSpec(string id, string text, string command, ProjectSetupIconKind? icon = null)
+            {
+                Id = id;
+                Text = text;
+                Command = command;
+                Icon = icon;
+            }
+
             public string Id { get; }
             public string Text { get; }
             public string Command { get; }
+            public ProjectSetupIconKind? Icon { get; }
         }
 
         // Keep the canonical project command inventory in source so established workflows and
@@ -47,9 +55,21 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private static readonly ButtonSpec[] BltButtons =
         {
-            new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\ndự án", "QS3DPROJECTTOOLS"),
-            new ButtonSpec("QS3D_PROJECT_FLOORS", "Cài đặt\ntầng", "QS3DLEVELS"),
-            new ButtonSpec("QS3D_PROJECT_PROPERTIES", "Thuộc tính\ndự án", "QS3DPROJECTPROPERTIES")
+            new ButtonSpec(
+                "QS3D_PROJECT_INFO",
+                "Thông tin\ndự án",
+                "QS3DPROJECTINFO",
+                ProjectSetupIconKind.ProjectInformation),
+            new ButtonSpec(
+                "QS3D_PROJECT_FLOORS",
+                "Cài đặt\ntầng",
+                "QS3DLEVELS",
+                ProjectSetupIconKind.FloorSettings),
+            new ButtonSpec(
+                "QS3D_PROJECT_PROPERTIES",
+                "Thuộc tính\ndự án",
+                "QS3DPROJECTPROPERTIES",
+                ProjectSetupIconKind.ProjectProperties)
         };
 
         public static bool TryInitialize()
@@ -75,7 +95,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 var panels = GetProperty(projectTab, "Panels");
                 if (panels == null) return false;
 
-                // BLT3D exposes one compact Project group with exactly three entry points.
+                // BLT3D exposes one compact Project group with exactly three large icon actions.
                 // Clear only this QS3D-owned tab after RibbonBootstrapper has created it; all
                 // legacy commands remain available through their command names/Project Tools.
                 Clear(panels);
@@ -85,14 +105,20 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
                 foreach (var spec in BltButtons)
                 {
+                    if (!spec.Icon.HasValue)
+                        throw new InvalidOperationException("BLT project setup button is missing its dedicated icon: " + spec.Id);
+
                     var button = Create("Bricscad.Windows.RibbonButton");
                     SetProperty(button, "Id", spec.Id);
                     SetProperty(button, "Name", spec.Text.Replace("\n", " "));
                     SetProperty(button, "Text", spec.Text);
                     SetProperty(button, "ShowText", true);
-                    SetProperty(button, "ShowImage", false);
+                    SetProperty(button, "ShowImage", true);
+                    SetProperty(button, "Image", ProjectSetupIconFactory.Create(spec.Icon.Value, 16));
+                    SetProperty(button, "LargeImage", ProjectSetupIconFactory.Create(spec.Icon.Value, 32));
                     SetProperty(button, "CommandParameter", spec.Command);
                     SetProperty(button, "CommandHandler", new CommandHandler());
+                    SetEnumProperty(button, "Size", "Large");
                     Add(items, button);
                 }
 
@@ -207,6 +233,20 @@ namespace QS3D.BricsCAD.V25.Ribbon
             if (property == null || !property.CanWrite) return;
             if (property.PropertyType.IsInstanceOfType(value) || property.PropertyType == value.GetType())
                 property.SetValue(target, value, null);
+        }
+
+        private static void SetEnumProperty(object target, string name, string enumValue)
+        {
+            var property = target.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public);
+            if (property == null || !property.CanWrite || !property.PropertyType.IsEnum) return;
+            try
+            {
+                property.SetValue(target, Enum.Parse(property.PropertyType, enumValue, true), null);
+            }
+            catch
+            {
+                // Older BricsCAD Ribbon implementations can expose a different enum surface.
+            }
         }
 
         private static void Add(object collection, object item)
