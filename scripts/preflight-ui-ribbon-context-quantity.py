@@ -30,7 +30,7 @@ def fail(message: str) -> None:
 
 
 palette = read("src/QS3D.BricsCAD.V25/PaletteCoordinator.cs")
-require(palette, "public static void Show() => ShowBimWorkspace();", "owner BIM activation")
+require(palette, "public static void Show() => ShowWorkspace();", "palette isolation")
 require(palette, "public static void ShowWorkspace()", "workspace mode")
 require(palette, "SetVisibility(workspace: true, right: false, quantityInsight: false);", "workspace mode")
 require(palette, "public static void ShowQuantityInsight()", "quantity mode")
@@ -131,4 +131,4 @@ for command in ("QS3DQUANTITYINSIGHT", "QS3DDRAWRAFTFOUNDATION"):
     if registrations != 1:
         fail(f"{command}: expected exactly one CommandMethod registration, found {registrations}")
 
-print("PASS: owner BIM activation plus isolated Workspace helper, exact simple closed-boundary Móng Bè, and selected-object quantity explanation source contracts")
+print("PASS: ribbon-first palettes, exact simple closed-boundary Móng Bè, and selected-object quantity explanation source contracts")
