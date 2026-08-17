@@ -32,13 +32,13 @@ def main():
     # production routes distinct: Info -> dedicated Project Information host, Floors -> Level UI,
     # Properties -> the bounded Project Properties surface already landed by #2104.
     for token in (
-        'new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\\ndự án", "QS3DPROJECTINFO")',
-        'new ButtonSpec("QS3D_PROJECT_FLOORS", "Cài đặt\\ntầng", "QS3DLEVELS")',
-        'new ButtonSpec("QS3D_PROJECT_PROPERTIES", "Thuộc tính\\ndự án", "QS3DPROJECTPROPERTIES")',
+        'new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\\ndự án", "QS3DPROJECTINFO",',
+        'new ButtonSpec("QS3D_PROJECT_FLOORS", "Cài đặt\\ntầng", "QS3DLEVELS",',
+        'new ButtonSpec("QS3D_PROJECT_PROPERTIES", "Thuộc tính\\ndự án", "QS3DPROJECTPROPERTIES",',
     ):
         require(ribbon, token, "Project Setup ribbon routing")
 
-    wrong_route = 'new ButtonSpec("QS3D_PROJECT_PROPERTIES", "Thuộc tính\\ndự án", "QS3DPROJECTTOOLS")'
+    wrong_route = 'new ButtonSpec("QS3D_PROJECT_PROPERTIES", "Thuộc tính\\ndự án", "QS3DPROJECTTOOLS",'
     if wrong_route in ribbon:
         fail("Project Properties must not route to the broad QS3DPROJECTTOOLS dashboard")
 

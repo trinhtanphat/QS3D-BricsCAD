@@ -35,12 +35,21 @@ for token in (
         errors.append("PaletteCoordinator contract missing: " + token)
 
 for token in (
+    "public static bool ShowBimWorkspace()",
+    'ReportPaletteFailure("MÔ HÌNH BIM");',
+    "return true;",
+    "return false;",
+):
+    if token not in palette:
+        errors.append("BIM palette success contract missing: " + token)
+
+for token in (
     'private const string BimTabId = "QS3D_BIM";',
     "private const int BimSettleTicks = 2;",
     "_bimSettleTicksRemaining--",
-    "ReassertBimWorkspace();",
+    "private static bool ReassertBimWorkspace()",
     "StartCenterPaletteCoordinator.Hide();",
-    "PaletteCoordinator.ShowBimWorkspace();",
+    "return PaletteCoordinator.ShowBimWorkspace();",
 ):
     if token not in activation:
         errors.append("BIM activation settle contract missing: " + token)
@@ -48,10 +57,14 @@ for token in (
 if "string.Equals(currentId, _lastTabId" in activation and "_bimSettleTicksRemaining > 0" not in activation:
     errors.append("same-tab polling still returns without a bounded BricsCAD dock-settle repair")
 
-successful_retry_order = "ReassertBimWorkspace();\n                        _bimSettleTicksRemaining--;"
-consumed_before_retry = "_bimSettleTicksRemaining--;\n                        ReassertBimWorkspace();"
-if successful_retry_order not in activation or consumed_before_retry in activation:
+compact_activation = " ".join(activation.split())
+successful_retry = "if (ReassertBimWorkspace()) { _bimSettleTicksRemaining--; }"
+consumed_before_retry = "_bimSettleTicksRemaining--; ReassertBimWorkspace();"
+initial_retry_setup = "_bimSettleTicksRemaining = BimSettleTicks; ReassertBimWorkspace();"
+if successful_retry not in compact_activation or consumed_before_retry in compact_activation:
     errors.append("same-tab settle retry must be consumed only after a successful BIM workspace reassert")
+if initial_retry_setup not in compact_activation:
+    errors.append("initial BIM activation must preserve the configured follow-up settle retry budget")
 
 for token in (
     "Blt3dRuntimeSettlePasses = 2",
@@ -102,4 +115,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BIM activation reasserts separate Model/Family, QS3D Properties, Management and Quantity native palettes through the bounded docking-settle window while preserving native BricsCAD modelspace.")
+print("PASS: BIM activation reasserts separate Model/Family, QS3D Properties, Management and Quantity native palettes through the bounded docking-settle window, preserves retries across transient failures, and keeps native BricsCAD modelspace.")

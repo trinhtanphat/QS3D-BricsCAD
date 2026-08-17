@@ -17,8 +17,8 @@ else:
         return text[start:end] if start >= 0 and end > start else ""
 
     workspace = method("public static void ShowWorkspace()", "public static void ShowProperties()")
-    properties = method("public static void ShowProperties()", "public static void ShowBimWorkspace()")
-    bim = method("public static void ShowBimWorkspace()", "public static void ShowDrawingManagement()")
+    properties = method("public static void ShowProperties()", "public static bool ShowBimWorkspace()")
+    bim = method("public static bool ShowBimWorkspace()", "public static void ShowDrawingManagement()")
     management = method("public static void ShowDrawingManagement()", "public static void ShowQuantityInsight()")
     quantity = method("public static void ShowQuantityInsight()", "public static void Hide()")
     reset = method("private static void ResetPreservingVisibility()", "public static void Dispose()")
@@ -31,9 +31,11 @@ else:
     if "EnsureBimDockContract();" not in bim:
         errors.append("BIM workspace must repair the dock contract before visibility")
     if "SetVisibility(workspace: true, right: true, quantityInsight: true);" not in bim:
-        errors.append("BIM workspace must request the coordinated Workspace + Management + Quantity combination")
+        errors.append("BIM workspace must request the coordinated Workspace + Properties + Management + Quantity combination")
     if "_quantityInsightPanel?.RefreshQuantityInsights();" not in bim:
         errors.append("BIM workspace must refresh Quantity Insight when it becomes visible")
+    if "return true;" not in bim or "return false;" not in bim:
+        errors.append("BIM workspace must report success/failure to bounded settle callers")
     if "SetVisibility(workspace: false, right: true, quantityInsight: false);" not in management:
         errors.append("standalone Management command isolation changed")
     if "SetVisibility(workspace: false, right: false, quantityInsight: true);" not in quantity:
@@ -62,12 +64,11 @@ else:
             errors.append("BIM visibility compatibility contract missing: " + token)
 
     if "if (workspaceVisible && propertiesVisible && rightVisible)" not in reset or "EnsureBimDockContract();" not in reset:
-        errors.append("palette recreation must reapply the BIM dock contract while coordinated left/right plugin regions remain visible")
+        errors.append("palette recreation must reapply the BIM dock contract while coordinated plugin regions remain visible")
     if "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);" not in reset:
         errors.append("palette recreation must preserve all four QS3D palette visibility states")
 
-    legacy_hidden_bim = "SetVisibility(workspace: true, right: true, quantityInsight: false);"
-    if legacy_hidden_bim in bim:
+    if "SetVisibility(workspace: true, right: true, quantityInsight: false);" in bim:
         errors.append("regression: BIM workspace still hides Quantity Insight")
 
 print("QS3D BLT3D BIM five-region layout preflight")
@@ -77,4 +78,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BIM mode coordinates four distinct QS3D plugin regions around the native BricsCAD center viewport, preserves isolated commands, and reapplies deterministic left/right docking after palette recreation.")
+print("PASS: BIM mode coordinates four distinct QS3D plugin palettes around the native BricsCAD viewport, reports settle success/failure, preserves isolated commands, and reapplies deterministic left/right docking after palette recreation.")
