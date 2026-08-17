@@ -183,8 +183,11 @@ namespace QS3D.Core.Export
 
         private static double ParseNumber(string value)
         {
-            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) || double.IsNaN(parsed) || double.IsInfinity(parsed))
-                throw new InvalidDataException("BCF numeric value is invalid.");
+            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ||
+                double.IsNaN(parsed) ||
+                double.IsInfinity(parsed) ||
+                !string.Equals(value, Number(parsed), StringComparison.Ordinal))
+                throw new InvalidDataException("BCF numeric value must use canonical invariant round-trip format.");
             return parsed;
         }
 
