@@ -11,12 +11,69 @@ namespace QS3D.Core.SmokeTests
 
         public static void Run()
         {
+            GenericNegativeCountFailsBeforeEnumeration();
+            ReadOnlyNegativeCountFailsBeforeEnumeration();
+            NonGenericNegativeCountFailsBeforeEnumeration();
             CountedOversizeFailsBeforeEnumeration();
             NonGenericCountedOversizeFailsBeforeEnumeration();
             ConflictingCountInterfacesFailBeforeEnumeration();
             CountVersionMutationFailsBeforeEnumeration();
             LazyOversizeStopsAtFirstImpossibleEntry();
             ExactBoundDuplicatesRemainSupported();
+        }
+
+        private static void GenericNegativeCountFailsBeforeEnumeration()
+        {
+            var fixture = NewFixture("negative-generic");
+            var beforeVersion = fixture.Project.ChangeVersion;
+            var beforeUtc = fixture.Project.UpdatedUtc;
+            var source = new NoEnumerationCollection(fixture.Element, -1);
+
+            var error = Capture<InvalidOperationException>(() =>
+                ProjectZoneService.Assign(fixture.Project, fixture.TargetZone.Id, source));
+
+            Contains("invalid negative known count", error.Message, "Negative generic Zone assignment Count must fail closed.");
+            Equal(0, source.EnumerationAttempts, "Negative generic Zone assignment enumerated the source.");
+            Equal(beforeVersion, fixture.Project.ChangeVersion, "Negative generic Zone assignment changed project version.");
+            Equal(beforeUtc, fixture.Project.UpdatedUtc, "Negative generic Zone assignment changed project timestamp.");
+            Equal(fixture.SourceZone.Id, fixture.Element.ZoneId, "Negative generic Zone assignment changed ZoneId.");
+            Equal(ElementDirtyFlags.None, fixture.Element.Dirty, "Negative generic Zone assignment dirtied the element.");
+        }
+
+        private static void ReadOnlyNegativeCountFailsBeforeEnumeration()
+        {
+            var fixture = NewFixture("negative-readonly");
+            var beforeVersion = fixture.Project.ChangeVersion;
+            var beforeUtc = fixture.Project.UpdatedUtc;
+            var source = new ReadOnlyNoEnumerationCollection(fixture.Element, -1);
+
+            var error = Capture<InvalidOperationException>(() =>
+                ProjectZoneService.Assign(fixture.Project, fixture.TargetZone.Id, source));
+
+            Contains("invalid negative known count", error.Message, "Negative read-only Zone assignment Count must fail closed.");
+            Equal(0, source.EnumerationAttempts, "Negative IReadOnlyCollection Zone assignment enumerated the source.");
+            Equal(beforeVersion, fixture.Project.ChangeVersion, "Negative read-only Zone assignment changed project version.");
+            Equal(beforeUtc, fixture.Project.UpdatedUtc, "Negative read-only Zone assignment changed project timestamp.");
+            Equal(fixture.SourceZone.Id, fixture.Element.ZoneId, "Negative read-only Zone assignment changed ZoneId.");
+            Equal(ElementDirtyFlags.None, fixture.Element.Dirty, "Negative read-only Zone assignment dirtied the element.");
+        }
+
+        private static void NonGenericNegativeCountFailsBeforeEnumeration()
+        {
+            var fixture = NewFixture("negative-non-generic");
+            var beforeVersion = fixture.Project.ChangeVersion;
+            var beforeUtc = fixture.Project.UpdatedUtc;
+            var source = new NonGenericNoEnumerationCollection(fixture.Element, -1);
+
+            var error = Capture<InvalidOperationException>(() =>
+                ProjectZoneService.Assign(fixture.Project, fixture.TargetZone.Id, source));
+
+            Contains("invalid negative known count", error.Message, "Negative non-generic Zone assignment Count must fail closed.");
+            Equal(0, source.EnumerationAttempts, "Negative non-generic Zone assignment enumerated the source.");
+            Equal(beforeVersion, fixture.Project.ChangeVersion, "Negative non-generic Zone assignment changed project version.");
+            Equal(beforeUtc, fixture.Project.UpdatedUtc, "Negative non-generic Zone assignment changed project timestamp.");
+            Equal(fixture.SourceZone.Id, fixture.Element.ZoneId, "Negative non-generic Zone assignment changed ZoneId.");
+            Equal(ElementDirtyFlags.None, fixture.Element.Dirty, "Negative non-generic Zone assignment dirtied the element.");
         }
 
         private static void CountedOversizeFailsBeforeEnumeration()
@@ -161,18 +218,29 @@ namespace QS3D.Core.SmokeTests
                 yield return element;
         }
 
-        private static void Throws<T>(Action action) where T : Exception
+        private static T Capture<T>(Action action) where T : Exception
         {
             try
             {
                 action();
             }
-            catch (T)
+            catch (T ex)
             {
-                return;
+                return ex;
             }
 
             throw new Exception("Expected exception " + typeof(T).Name + ".");
+        }
+
+        private static void Throws<T>(Action action) where T : Exception
+        {
+            Capture<T>(action);
+        }
+
+        private static void Contains(string expected, string actual, string message)
+        {
+            if (actual == null || actual.IndexOf(expected, StringComparison.Ordinal) < 0)
+                throw new Exception(message + " Actual=" + (actual ?? "<null>") + ".");
         }
 
         private static void Equal<T>(T expected, T actual, string message)
@@ -219,7 +287,7 @@ namespace QS3D.Core.SmokeTests
             public IEnumerator<ProjectElement> GetEnumerator()
             {
                 EnumerationAttempts++;
-                throw new Exception("Counted oversize source must be rejected before enumeration.");
+                throw new Exception("Counted source must be rejected before enumeration.");
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -228,6 +296,28 @@ namespace QS3D.Core.SmokeTests
             public void Add(ProjectElement item) => throw new NotSupportedException();
             public void Clear() => throw new NotSupportedException();
             public bool Remove(ProjectElement item) => throw new NotSupportedException();
+        }
+
+        private sealed class ReadOnlyNoEnumerationCollection : IReadOnlyCollection<ProjectElement>
+        {
+            private readonly ProjectElement _element;
+
+            public ReadOnlyNoEnumerationCollection(ProjectElement element, int count)
+            {
+                _element = element;
+                Count = count;
+            }
+
+            public int EnumerationAttempts { get; private set; }
+            public int Count { get; }
+
+            public IEnumerator<ProjectElement> GetEnumerator()
+            {
+                EnumerationAttempts++;
+                throw new Exception("Read-only counted source must be rejected before enumeration.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private sealed class NonGenericNoEnumerationCollection : IEnumerable<ProjectElement>, ICollection
@@ -248,7 +338,7 @@ namespace QS3D.Core.SmokeTests
             public IEnumerator<ProjectElement> GetEnumerator()
             {
                 EnumerationAttempts++;
-                throw new Exception("Non-generic counted oversize source must be rejected before enumeration.");
+                throw new Exception("Non-generic counted source must be rejected before enumeration.");
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
