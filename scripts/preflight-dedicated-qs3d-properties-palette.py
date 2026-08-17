@@ -48,6 +48,23 @@ for token in (
     if token not in palette:
         errors.append("PaletteCoordinator dedicated Properties contract missing: " + token)
 
+# Explicit BIM activation must repair invalid host-restored dimensions without overwriting valid
+# user-resized palettes, and one corrupt host size must not prevent other valid sizes persisting.
+for token in (
+    "EnsurePaletteSize(",
+    "new WpfSize(layout.PropertiesPaletteWidth, layout.PropertiesPaletteHeight)",
+    "UserUiLayoutStore.PropertiesPaletteMinWidth",
+    "UserUiLayoutStore.PropertiesPaletteMinHeight",
+    "double.IsNaN(size.Width)",
+    "double.IsInfinity(size.Height)",
+    "size.Width < minWidth || size.Height < minHeight",
+    "TryGetPersistableSize",
+    "hasPropertiesSize",
+    "value.Width > int.MaxValue || value.Height > int.MaxValue",
+):
+    if token not in palette:
+        errors.append("deterministic palette size fallback/persistence guard missing: " + token)
+
 # The exact existing editor visual moves between Workspace and the dedicated palette. This preserves
 # ordinary ShowWorkspace behavior while BIM gets a distinct native plugin palette without cloning
 # ViewModel state or edit handlers.
@@ -115,4 +132,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BIM mode owns a distinct QS3D Properties PaletteSet by dynamically reparenting the existing project-aware PropertyList editor with its original WorkspaceViewModel/scope/search/typed-edit/reset behavior; ordinary ShowWorkspace restores the same editor in-place, selection changes respect manual close, and native BricsCAD Properties is not used as a substitute.")
+print("PASS: BIM mode owns a distinct QS3D Properties PaletteSet by dynamically reparenting the existing project-aware PropertyList editor with its original WorkspaceViewModel/scope/search/typed-edit/reset behavior; explicit BIM activation repairs invalid host-restored palette sizes from normalized per-user fallbacks, corrupt dimensions cannot poison persistence of other palettes, ordinary ShowWorkspace restores the same editor in-place, selection changes respect manual close, and native BricsCAD Properties is not used as a substitute.")
