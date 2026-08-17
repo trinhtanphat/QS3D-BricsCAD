@@ -245,7 +245,12 @@ namespace QS3D.BricsCAD.V25
             var bimSurfaceActive = workspaceVisible && rightVisible && quantityVisible;
             Dispose();
             EnsureCreated();
-            _workspacePanel?.SetDedicatedPropertiesPaletteActive(bimSurfaceActive);
+            // A manually visible Properties palette must keep owning the real editor even when
+            // the other BIM palettes are not all visible; otherwise reset recreates a visible but empty palette.
+            if (propertiesVisible && !bimSurfaceActive)
+                _workspacePanel?.SetDedicatedPropertiesPaletteActive(true);
+            else
+                _workspacePanel?.SetDedicatedPropertiesPaletteActive(bimSurfaceActive);
             if (bimSurfaceActive)
                 EnsureBimDockContract();
             SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);
