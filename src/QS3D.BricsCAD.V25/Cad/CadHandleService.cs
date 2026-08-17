@@ -59,9 +59,11 @@ namespace QS3D.BricsCAD.V25.Cad
         public static string? NormalizeHexHandle(string? text)
         {
             if (string.IsNullOrWhiteSpace(text)) return null;
-            if (!string.Equals(text, text!.Trim(), StringComparison.Ordinal)) return null;
 
-            var normalized = text;
+            var nonNullText = text!;
+            if (!string.Equals(nonNullText, nonNullText.Trim(), StringComparison.Ordinal)) return null;
+
+            var normalized = nonNullText;
             if (normalized.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) normalized = normalized.Substring(2);
             if (normalized.Length == 0 || !long.TryParse(normalized, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value) || value <= 0L) return null;
             return value.ToString("X", CultureInfo.InvariantCulture);
