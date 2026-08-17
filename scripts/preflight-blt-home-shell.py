@@ -151,7 +151,8 @@ def main():
         'button.Click += (_, __) => RunUiAction(action);', 'button.Click += (_, __) => OpenRecentProject(recent);',
         'Application.DocumentManager.Open(normalized, false)',
         'private const int ObjectSnapSuppressedBit = 16384;',
-        'StatusToggleButton(', '"○ Nền sáng"', '"◐ Tương phản"', '"⌞ Vuông góc"', '"⌖ Bắt điểm"',
+        'private Button StatusToggleButton(TextBlock label, string text, string toolTip, Action action)',
+        '"○ Nền sáng"', '"◐ Tương phản"', '"⌞ Vuông góc"', '"⌖ Bắt điểm"',
         'ToggleLightTheme', 'ToggleLinearContrast', 'ToggleOrtho', 'ToggleEntitySnap',
         'RefreshStatusControls();', 'Application.GetSystemVariable(name)',
         'Application.SetSystemVariable("COLORTHEME",', 'Application.SetSystemVariable("LINEARCONTRAST",',
@@ -161,6 +162,21 @@ def main():
         'RibbonIconFactory.Create(RibbonIconKind.OpenProject, 20)',
     ):
         require(shell, needle, shell_rel)
+    status_toggle_block = shell.split(
+        'private Button StatusToggleButton(TextBlock label, string text, string toolTip, Action action)', 1)[1].split(
+        'private void RefreshStatusControls()', 1)[0]
+    require(status_toggle_block, 'var button = CreateClickSurface(label, Cursors.Hand);', shell_rel + '::StatusToggleButton')
+    require(status_toggle_block, 'button.Click += (_, __) => RunUiAction(action);', shell_rel + '::StatusToggleButton')
+    toggle_snap_block = shell.split('private static void ToggleEntitySnap()', 1)[1].split(
+        'private static Button CreateClickSurface(UIElement content, Cursor cursor)', 1)[0]
+    for needle in (
+        'var current = ReadRequiredSystemVariableInt("OSMODE");',
+        '(current & ObjectSnapSuppressedBit) == 0',
+        'current | ObjectSnapSuppressedBit',
+        'current & ~ObjectSnapSuppressedBit',
+        'Application.SetSystemVariable("OSMODE", (short)next);',
+    ):
+        require(toggle_snap_block, needle, shell_rel + '::ToggleEntitySnap')
     for stale in ('SendStringToExecute', '"_.OPEN', '"_.NEW', '"_.QSAVE', '"_.SAVEAS',
                   'border.MouseLeftButtonUp', 'border.MouseLeftButtonDown', 'FocusVisualStyle = null',
                   'Focusable = false', 'Text = "Nhấp đúp vào dự án để mở trực tiếp và bắt đầu làm việc"',
@@ -184,7 +200,7 @@ def main():
     require(host, '_palette.AddVisual("Khởi đầu", _panel, true);', host_rel)
     require(host, 'Dock = DockSides.Left', host_rel)
 
-    print("PASS: QS3D KHỞI ĐẦU matches the BLT3D reference surface with Dự án + Cấu hình ribbon groups, semantic vector icons, and exactly four embedded quick actions, while preserving branded/rasterized Ribbon icons, native WPF Button.Click and keyboard/focus semantics, responsive embedded PaletteSet layout, project/sidecar safety, truthful dynamic versioning, recent projects, and actionable host-synchronized bottom status routing.")
+    print("PASS: QS3D KHỞI ĐẦU matches the BLT3D reference surface with Dự án + Cấu hình ribbon groups, semantic vector icons, and exactly four embedded quick actions, while preserving branded/rasterized Ribbon icons, native WPF Button.Click and keyboard/focus semantics, responsive embedded PaletteSet layout, project/sidecar safety, truthful dynamic versioning, recent projects, and bottom status routing with scoped native Button and OSMODE preservation guards.")
     return 0
 
 
