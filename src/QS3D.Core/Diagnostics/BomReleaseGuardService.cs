@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml;
 using QS3D.Core.Domain;
 using QS3D.Core.Reporting;
 using QS3D.Core.Services;
@@ -93,15 +94,16 @@ namespace QS3D.Core.Diagnostics
                     issues.Add(new ModelHealthIssue("BOM_QUANTITY_EMPTY", HealthSeverity.Warning, "Cấu kiện chưa có quantity đã tính để đưa vào bảng khối lượng.", element.Id));
 
                 foreach (var property in element.Properties)
-                    if (string.IsNullOrWhiteSpace(property.Key) ||
-                        !string.Equals(property.Key, property.Key.Trim(), StringComparison.Ordinal))
-                        issues.Add(new ModelHealthIssue("BOM_PROPERTY_KEY_INVALID", HealthSeverity.Error, "Property key phải là tên canonical, không rỗng và không có khoảng trắng bao quanh.", element.Id));
+                    if (!IsCanonicalPersistedKey(property.Key))
+                        issues.Add(new ModelHealthIssue("BOM_PROPERTY_KEY_INVALID", HealthSeverity.Error, "Property key phải là tên canonical, không rỗng, không chứa ký tự điều khiển/XML-invalid và không có khoảng trắng bao quanh.", element.Id));
 
                 foreach (var quantity in element.Quantities)
                 {
-                    if (string.IsNullOrWhiteSpace(quantity.Key) ||
-                        !string.Equals(quantity.Key, quantity.Key.Trim(), StringComparison.Ordinal))
-                        issues.Add(new ModelHealthIssue("BOM_QUANTITY_KEY_INVALID", HealthSeverity.Error, "Quantity key phải là tên canonical, không rỗng và không có khoảng trắng bao quanh.", element.Id));
+                    if (!IsCanonicalPersistedKey(quantity.Key))
+                    {
+                        issues.Add(new ModelHealthIssue("BOM_QUANTITY_KEY_INVALID", HealthSeverity.Error, "Quantity key phải là tên canonical, không rỗng, không chứa ký tự điều khiển/XML-invalid và không có khoảng trắng bao quanh.", element.Id));
+                        continue;
+                    }
                     if (double.IsNaN(quantity.Value) || double.IsInfinity(quantity.Value))
                         issues.Add(new ModelHealthIssue("BOM_QUANTITY_NONFINITE", HealthSeverity.Error, "Quantity " + quantity.Key + " không phải số hữu hạn.", element.Id));
                 }
@@ -143,6 +145,24 @@ namespace QS3D.Core.Diagnostics
             }
 
             return issues.AsReadOnly();
+        }
+
+        private static bool IsCanonicalPersistedKey(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) ||
+                !string.Equals(value, value.Trim(), StringComparison.Ordinal) ||
+                value.Any(char.IsControl))
+                return false;
+
+            try
+            {
+                XmlConvert.VerifyXmlChars(value);
+                return true;
+            }
+            catch (XmlException)
+            {
+                return false;
+            }
         }
 
         private static InvalidOperationException LiveHandleInputTooLarge()
