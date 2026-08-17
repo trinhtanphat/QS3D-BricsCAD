@@ -319,11 +319,19 @@ namespace QS3D.Core.Domain
 
         private static void RejectKnownOversizeTargetCollection(IEnumerable<ProjectElement> elements)
         {
-            if (elements is ICollection<ProjectElement> collection && collection.Count > MaxMutationTargetCount)
-                throw new InvalidOperationException("Floor mutation target collection exceeds the supported " + MaxMutationTargetCount + " element limit.");
-            if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection && readOnlyCollection.Count > MaxMutationTargetCount)
-                throw new InvalidOperationException("Floor mutation target collection exceeds the supported " + MaxMutationTargetCount + " element limit.");
-            if (elements is ICollection nonGenericCollection && nonGenericCollection.Count > MaxMutationTargetCount)
+            if (elements is ICollection<ProjectElement> collection)
+                RejectInvalidKnownTargetCount(collection.Count);
+            if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection)
+                RejectInvalidKnownTargetCount(readOnlyCollection.Count);
+            if (elements is ICollection nonGenericCollection)
+                RejectInvalidKnownTargetCount(nonGenericCollection.Count);
+        }
+
+        private static void RejectInvalidKnownTargetCount(int count)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Floor mutation target collection reported an invalid negative known count.");
+            if (count > MaxMutationTargetCount)
                 throw new InvalidOperationException("Floor mutation target collection exceeds the supported " + MaxMutationTargetCount + " element limit.");
         }
 
