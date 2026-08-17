@@ -3,6 +3,7 @@ using System.Collections;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace QS3D.BricsCAD.V25.Ribbon
 {
@@ -94,13 +95,17 @@ namespace QS3D.BricsCAD.V25.Ribbon
             // BricsCAD builds that omit ICommand parameters still execute the intended action.
             SetProperty(button, "CommandParameter", spec.Command);
 
-            var icon = CreateIcon(spec.Icon);
-            SetProperty(button, "Image", icon);
-            SetProperty(button, "LargeImage", icon);
+            // BricsCAD V25's Ribbon is most reliable with frozen bitmap image sources. Preserve
+            // the clean-room vector drawing language, but rasterize at each slot's exact target
+            // size instead of assigning a direct DrawingImage to both Image/LargeImage.
+            SetProperty(button, "Image", CreateIcon(spec.Icon, 16));
+            SetProperty(button, "LargeImage", CreateIcon(spec.Icon, 32));
         }
 
-        private static ImageSource CreateIcon(ActionIconKind kind)
+        private static ImageSource CreateIcon(ActionIconKind kind, int pixelSize)
         {
+            if (pixelSize <= 0) throw new ArgumentOutOfRangeException(nameof(pixelSize));
+
             var blue = FrozenBrush(36, 132, 230);
             var dark = FrozenBrush(31, 58, 92);
             var pale = FrozenBrush(219, 238, 255);
@@ -139,9 +144,20 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     break;
             }
 
-            var image = new DrawingImage(group);
-            if (image.CanFreeze) image.Freeze();
-            return image;
+            if (group.CanFreeze) group.Freeze();
+
+            var visual = new DrawingVisual();
+            using (var drawing = visual.RenderOpen())
+            {
+                drawing.PushTransform(new ScaleTransform(pixelSize / 32.0, pixelSize / 32.0));
+                drawing.DrawDrawing(group);
+                drawing.Pop();
+            }
+
+            var bitmap = new RenderTargetBitmap(pixelSize, pixelSize, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(visual);
+            bitmap.Freeze();
+            return bitmap;
         }
 
         private static void AddCube(DrawingGroup group, Brush edge, Brush dark, Brush fill, double x, double y, double size)
