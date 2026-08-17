@@ -1,5 +1,4 @@
 using System;
-using System.Runtime.CompilerServices;
 using QS3D.Core.Cost;
 
 namespace QS3D.Core.SmokeTests
@@ -11,21 +10,15 @@ namespace QS3D.Core.SmokeTests
 
         internal static void Run()
         {
-            var catalog = new HistoricalCostCatalog(new[]
-            {
-                Record("MEDIAN-0", HighMiddle - 4m, 0),
-                Record("MEDIAN-1", HighMiddle, 1),
-                Record("MEDIAN-2", HighMiddle + 1m, 2),
-                Record("MEDIAN-3", HighMiddle + 3m, 3),
-            });
+            HighMagnitudeEvenMedianFailsClosed();
+            OrdinaryEvenMedianRemainsStable();
+            OddMedianRemainsStable();
+        }
 
+        private static void HighMagnitudeEvenMedianFailsClosed()
+        {
             var error = Capture<OverflowException>(() =>
-                new CostBenchmarkService().Analyze(
-                    catalog,
-                    "BUILDING",
-                    "OFFICE",
-                    "VND",
-                    HighMiddle));
+                Analyze(HighMiddle, HighMiddle - 4m, HighMiddle, HighMiddle + 1m, HighMiddle + 3m));
 
             Contains(
                 "Cost addition precision loss: benchmark median.",
@@ -33,16 +26,53 @@ namespace QS3D.Core.SmokeTests
                 "Even-sample benchmark median must fail closed when a non-zero half-difference cannot affect the lower middle value.");
         }
 
-        private static HistoricalCostRecord Record(string id, decimal unitCost, int tickOffset)
+        private static void OrdinaryEvenMedianRemainsStable()
         {
-            return new HistoricalCostRecord(
-                id,
+            var result = Analyze(25m, 10m, 20m, 30m, 40m);
+
+            Equal(4, result.SampleCount, "Ordinary even benchmark sample count changed.");
+            Equal(10m, result.MinimumUnitCost, "Ordinary even benchmark minimum changed.");
+            Equal(40m, result.MaximumUnitCost, "Ordinary even benchmark maximum changed.");
+            Equal(25m, result.AverageUnitCost, "Ordinary even benchmark average changed.");
+            Equal(25m, result.MedianUnitCost, "Ordinary even benchmark median changed.");
+            Equal(25m, result.CurrentUnitCost, "Ordinary even benchmark current value changed.");
+            Equal<decimal?>(0m, result.DeviationFromAveragePercent, "Ordinary even benchmark deviation changed.");
+        }
+
+        private static void OddMedianRemainsStable()
+        {
+            var result = Analyze(20m, 10m, 20m, 30m);
+
+            Equal(3, result.SampleCount, "Odd benchmark sample count changed.");
+            Equal(10m, result.MinimumUnitCost, "Odd benchmark minimum changed.");
+            Equal(30m, result.MaximumUnitCost, "Odd benchmark maximum changed.");
+            Equal(20m, result.AverageUnitCost, "Odd benchmark average changed.");
+            Equal(20m, result.MedianUnitCost, "Odd benchmark median changed.");
+            Equal(20m, result.CurrentUnitCost, "Odd benchmark current value changed.");
+            Equal<decimal?>(0m, result.DeviationFromAveragePercent, "Odd benchmark deviation changed.");
+        }
+
+        private static CostBenchmarkResult Analyze(decimal currentUnitCost, params decimal[] unitCosts)
+        {
+            var records = new HistoricalCostRecord[unitCosts.Length];
+            for (var index = 0; index < unitCosts.Length; index++)
+            {
+                records[index] = new HistoricalCostRecord(
+                    "MEDIAN-" + index,
+                    "BUILDING",
+                    "OFFICE",
+                    1m,
+                    unitCosts[index],
+                    "VND",
+                    StartUtc.AddTicks(index));
+            }
+
+            return new CostBenchmarkService().Analyze(
+                new HistoricalCostCatalog(records),
                 "BUILDING",
                 "OFFICE",
-                1m,
-                unitCost,
                 "VND",
-                StartUtc.AddTicks(tickOffset));
+                currentUnitCost);
         }
 
         private static TException Capture<TException>(Action action)
@@ -65,14 +95,11 @@ namespace QS3D.Core.SmokeTests
             if (actual == null || actual.IndexOf(expected, StringComparison.Ordinal) < 0)
                 throw new InvalidOperationException(message + " Actual: " + actual);
         }
-    }
 
-    internal static class CostBenchmarkMedianPrecisionRegistration
-    {
-        [ModuleInitializer]
-        internal static void Initialize()
+        private static void Equal<T>(T expected, T actual, string message)
         {
-            CostBenchmarkMedianPrecisionSmoke.Run();
+            if (!Equals(expected, actual))
+                throw new InvalidOperationException(message + " Expected=" + expected + ", actual=" + actual + ".");
         }
     }
 }

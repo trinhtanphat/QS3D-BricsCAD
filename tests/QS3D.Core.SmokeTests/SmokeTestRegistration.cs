@@ -30,6 +30,7 @@ namespace QS3D.Core.SmokeTests
             PersistenceHardeningSmoke.Run();
             LicenseVerifierSmoke.Run();
             AdvancedDomainSmoke.Run();
+            CostBenchmarkMedianPrecisionSmoke.Run();
             HardeningRegressionSmoke.Run();
             ReviewHardeningSmoke.Run();
             Ed2NumericParitySmoke.Run();
