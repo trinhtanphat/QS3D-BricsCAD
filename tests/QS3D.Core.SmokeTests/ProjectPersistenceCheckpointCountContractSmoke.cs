@@ -17,6 +17,8 @@ namespace QS3D.Core.SmokeTests
             HiddenOversizedSecondaryCountFailsBeforeEnumeration();
             ConflictingInBoundCountsFailBeforeEnumeration();
             OversizeTakesPrecedenceOverConflict();
+            NegativeKnownCountsFailBeforeEnumeration();
+            NegativeCountTakesPrecedenceOverConflict();
             ConsistentMultiContractCountRemainsAccepted();
             AllKnownCountContractsAreObservedBeforeEnumeration();
         }
@@ -49,6 +51,26 @@ namespace QS3D.Core.SmokeTests
             AssertAllCountsReadOnce(source, "Oversize/conflict validation");
             Equal(0, source.GetEnumeratorCalls, "Oversized conflicting Count contracts must reject before enumeration.");
             Contains("10000", error.Message, "Capacity rejection must take precedence when any known Count is oversized.");
+        }
+
+        private static void NegativeKnownCountsFailBeforeEnumeration()
+        {
+            var project = BuildSingleElementProject("P-NEGATIVE");
+            var source = MultiCountCollection.NeverEnumerate(-1, -1, -1);
+            var error = Capture<InvalidOperationException>(() => ProjectPersistenceCheckpoint.Capture(project, source));
+            AssertAllCountsReadOnce(source, "Negative-count validation");
+            Equal(0, source.GetEnumeratorCalls, "Negative Count contracts must reject before enumeration.");
+            Contains("negative known count", error.Message, "Negative Count contracts must fail closed explicitly.");
+        }
+
+        private static void NegativeCountTakesPrecedenceOverConflict()
+        {
+            var project = BuildSingleElementProject("P-NEGATIVE-CONFLICT");
+            var source = MultiCountCollection.NeverEnumerate(-1, 1, 1);
+            var error = Capture<InvalidOperationException>(() => ProjectPersistenceCheckpoint.Capture(project, source));
+            AssertAllCountsReadOnce(source, "Negative/conflict validation");
+            Equal(0, source.GetEnumeratorCalls, "Negative conflicting Count contracts must reject before enumeration.");
+            Contains("negative known count", error.Message, "Malformed negative evidence must take precedence over ordinary conflict diagnostics.");
         }
 
         private static void ConsistentMultiContractCountRemainsAccepted()
