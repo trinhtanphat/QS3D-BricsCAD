@@ -300,8 +300,10 @@ namespace QS3D.Core.Documentation
         {
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Value is required.", name);
             var normalized = value!.Trim();
-            if (normalized.Length > MaxIdLength) throw new ArgumentException("Value exceeds " + MaxIdLength + " characters.", name);
-            return normalized;
+            if (!string.Equals(value, normalized, StringComparison.Ordinal))
+                throw new ArgumentException("Value must not contain leading or trailing whitespace.", name);
+            if (value.Length > MaxIdLength) throw new ArgumentException("Value exceeds " + MaxIdLength + " characters.", name);
+            return value;
         }
 
         private static void PositiveFinite(double value, string name)
