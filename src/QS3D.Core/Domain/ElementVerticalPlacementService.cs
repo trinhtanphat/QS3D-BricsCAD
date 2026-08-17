@@ -184,7 +184,10 @@ namespace QS3D.Core.Domain
         {
             if (element == null) throw new ArgumentNullException(nameof(element));
             if (string.IsNullOrWhiteSpace(key)) throw new ArgumentException("Property key is required.", nameof(key));
-            return OptionalFiniteProperty(element, key.Trim(), 0d);
+            var canonicalKey = key.Trim();
+            if (!string.Equals(key, canonicalKey, StringComparison.Ordinal))
+                throw new ArgumentException("Property key must be canonical and must not contain surrounding whitespace.", nameof(key));
+            return OptionalFiniteProperty(element, canonicalKey, 0d);
         }
 
         private static FloorDefinition FindFloor(ProjectState project, string floorId, string label)
