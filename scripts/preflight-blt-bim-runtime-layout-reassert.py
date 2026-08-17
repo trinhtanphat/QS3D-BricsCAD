@@ -23,8 +23,9 @@ repair = read(REPAIR)
 five_zone = read(FIVE_ZONE)
 
 for token in (
-    "SetVisibility(workspace: true, right: false, quantityInsight: false);",
-    "SetVisibility(workspace: true, right: true, quantityInsight: true);",
+    "SetVisibility(workspace: true, properties: false, right: false, quantityInsight: false);",
+    "SetVisibility(workspace: true, properties: true, right: true, quantityInsight: true);",
+    "_properties.Dock = DockSides.Left;",
     "viewport BricsCAD native ở giữa",
 ):
     if token not in palette:
@@ -88,4 +89,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BIM activation reasserts all QS3D side palettes through a bounded BricsCAD docking settle window, preserves retries across transient reassert failures, restarts that bounded repair after palette unload/reload, and reapplies the owner-approved five-zone WorkspacePanel layout without replacing native modelspace.")
+print("PASS: BIM activation reasserts the dedicated QS3D Model + Properties left palettes and Management + Quantity right palettes through a bounded BricsCAD docking settle window, preserves retries across transient reassert failures, restarts that bounded repair after palette unload/reload, and does not replace native modelspace.")
