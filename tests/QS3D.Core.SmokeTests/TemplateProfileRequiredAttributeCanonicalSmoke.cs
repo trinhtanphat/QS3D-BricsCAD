@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             PaddedRequiredAttributesAreRejected();
             TemplateIdentityTextRejectsControlAndXmlInvalidCharacters();
             TemplateIdentityTextPreservesValidUnicodeAndSetterAtomicity();
+            OversizedSavePayloadsAreRejectedWithoutPublication();
         }
 
         private static void CanonicalRequiredAttributesRoundTrip()
@@ -79,6 +80,33 @@ namespace QS3D.Core.SmokeTests
             Equal("Tên mẫu mới", profile.Name, "Rejected mutable template name must not replace the previous canonical value.");
             Throws<ArgumentException>(() => profile.Name = "Tên mẫu mới\t", "Mutable template name must reject trailing control characters before trim normalization.");
             Equal("Tên mẫu mới", profile.Name, "Rejected edge-control template name must not replace the previous canonical value.");
+        }
+
+        private static void OversizedSavePayloadsAreRejectedWithoutPublication()
+        {
+            AssertOversizedSaveRejected(new string('x', 9 * 1024 * 1024), "Raw oversized template payload must fail before publication.");
+            AssertOversizedSaveRejected(new string('&', 2 * 1024 * 1024), "Escaping-expanded template payload must be bounded while serialization is writing.");
+        }
+
+        private static void AssertOversizedSaveRejected(string propertyValue, string message)
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-template-bounded-save-" + Guid.NewGuid().ToString("N") + ".xml");
+            try
+            {
+                var profile = new TemplateProfile("TPL-BOUND", "Bounded save");
+                var family = new ProjectFamily("F-BOUND", "Bounded family", ElementCategory.ArchitecturalWall);
+                family.Properties["Payload"] = propertyValue;
+                profile.Families.Add(family);
+
+                Throws<InvalidDataException>(() => new TemplateProfileStore().Save(profile, path), message);
+                if (File.Exists(path)) throw new Exception("Rejected oversized template save must not publish the target file.");
+            }
+            finally
+            {
+                TryDelete(path);
+                TryDelete(path + ".bak");
+                TryDelete(path + ".tmp");
+            }
         }
 
         private static void AssertRejected(string label, Action<XDocument> mutate)
