@@ -56,7 +56,9 @@ namespace QS3D.BricsCAD.V25.Cad
             var pending = new List<PendingUpdate>();
             var processedElements = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var rollback = ProjectStateSnapshot.Capture(project);
+            var rollbackStamp = SourceReconcileUndoCoordinator.ProjectRevisionStamp.Capture(project);
             var cadCommitted = false;
+            SourceReconcileUndoCoordinator.PendingTransition? undoTransition = null;
 
             try
             {
@@ -78,6 +80,19 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (matches.Count > 1) throw new InvalidOperationException("CAD source handle " + handle + " đang thuộc nhiều QS3D " + category + " element.");
                         var element = matches[0];
                         if (!processedElements.Add(element.Id)) throw new InvalidOperationException(category + " element " + element.Id + " có nhiều source đang được chọn. Tách/capture từng source thành element riêng trước khi Vẽ 3D.");
+
+                        if (undoTransition == null)
+                        {
+                            undoTransition = SourceReconcileUndoCoordinator.BeginTransition(
+                                document,
+                                transaction,
+                                project,
+                                rollback,
+                                rollbackStamp);
+                            // Stage the native revision before PrepareReplacement erases
+                            // the retiring solid, so Undo restores the matching semantic snapshot.
+                            undoTransition.StageNativeMarker();
+                        }
 
                         var family = project.FindFamily(element.FamilyId);
                         Solid3d solid;
@@ -161,8 +176,16 @@ namespace QS3D.BricsCAD.V25.Cad
                             update.AppliedSlabOpeningIds);
                     }
 
-                    if (pending.Count > 0) project.Touch();
+                    if (pending.Count > 0)
+                    {
+                        project.Touch();
+                        var afterSnapshot = ProjectStateSnapshot.Capture(project);
+                        if (undoTransition == null)
+                            throw new InvalidOperationException("Structural semantic Undo transition was not initialized for pending generated geometry.");
+                        undoTransition.StageAfter(project, afterSnapshot);
+                    }
                     transaction.Commit();
+                    undoTransition?.ConfirmCommitted();
                     cadCommitted = true;
                 }
             }
@@ -179,6 +202,10 @@ namespace QS3D.BricsCAD.V25.Cad
                     }
                 }
                 throw;
+            }
+            finally
+            {
+                undoTransition?.Dispose();
             }
 
             if (pending.Count > 0)
