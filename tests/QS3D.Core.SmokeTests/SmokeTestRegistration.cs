@@ -128,6 +128,7 @@ namespace QS3D.Core.SmokeTests
             ProjectInterchangeSnapshotDiffSmoke.Run();
             ProjectInterchangeImportResolutionPlannerSmoke.Run();
             ProjectInterchangeAppendOnlyImporterSmoke.Run();
+            IfcRoundTripQuantityEvidenceNullFailFastSmoke.Run();
             BcfIssueExchangeSmoke.Run();
             BcfZipPackageSmoke.Run();
             RegenerationSubsetSmoke.Run();
