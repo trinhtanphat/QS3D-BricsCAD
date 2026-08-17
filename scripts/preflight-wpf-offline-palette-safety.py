@@ -1,3 +1,4 @@
+# integration transport marker: temporary automatic-CI trigger; reverted in next commit
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
