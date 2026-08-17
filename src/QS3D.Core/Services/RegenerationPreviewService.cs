@@ -54,6 +54,51 @@ namespace QS3D.Core.Services
 
     public sealed class RegenerationPreviewService
     {
+        private sealed class ElementFreshnessSnapshot
+        {
+            private readonly IReadOnlyList<string?> _sourceHandles;
+            private readonly IReadOnlyList<string?> _dependsOn;
+            private readonly IReadOnlyDictionary<string, string?> _properties;
+            private readonly IReadOnlyDictionary<string, double> _quantities;
+
+            internal ElementFreshnessSnapshot(ProjectElement element)
+            {
+                Owner = element ?? throw new ArgumentNullException(nameof(element));
+                Category = element.Category;
+                FamilyId = element.FamilyId;
+                FloorId = element.FloorId;
+                ZoneId = element.ZoneId;
+                DrawingFingerprint = element.DrawingFingerprint;
+                Dirty = element.Dirty;
+                _sourceHandles = element.SourceHandles.Select(x => x).ToList().AsReadOnly();
+                _dependsOn = element.DependsOn.Select(x => x).ToList().AsReadOnly();
+                _properties = new Dictionary<string, string?>(element.Properties.ToDictionary(x => x.Key, x => (string?)x.Value), StringComparer.OrdinalIgnoreCase);
+                _quantities = new Dictionary<string, double>(element.Quantities, StringComparer.OrdinalIgnoreCase);
+            }
+
+            internal ProjectElement Owner { get; }
+            private ElementCategory Category { get; }
+            private string FamilyId { get; }
+            private string FloorId { get; }
+            private string ZoneId { get; }
+            private string DrawingFingerprint { get; }
+            private ElementDirtyFlags Dirty { get; }
+
+            internal bool Matches(ProjectElement element)
+            {
+                return element.Category == Category &&
+                       string.Equals(element.FamilyId, FamilyId, StringComparison.Ordinal) &&
+                       string.Equals(element.FloorId, FloorId, StringComparison.Ordinal) &&
+                       string.Equals(element.ZoneId, ZoneId, StringComparison.Ordinal) &&
+                       string.Equals(element.DrawingFingerprint, DrawingFingerprint, StringComparison.Ordinal) &&
+                       element.Dirty == Dirty &&
+                       StringListEquivalent(_sourceHandles, element.SourceHandles) &&
+                       StringListEquivalent(_dependsOn, element.DependsOn) &&
+                       StringMapEquivalent(_properties, element.Properties) &&
+                       DoubleMapEquivalent(_quantities, element.Quantities);
+            }
+        }
+
         public RegenerationPreview Preview(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -66,12 +111,12 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
             var sourceChangeVersion = project.ChangeVersion;
-            var sourceElementOwnership = SnapshotElementOwnership(project);
-            var targets = CanonicalPreviewTargets(elementIds, sourceElementOwnership.Count);
+            var sourceElementState = SnapshotElementFreshness(project);
+            var targets = CanonicalPreviewTargets(elementIds, sourceElementState.Count);
             if (targets.Count == 0) throw new ArgumentException("Subset regeneration preview requires at least one target element id.", nameof(elementIds));
-            RequireProjectFresh(project, sourceChangeVersion, sourceElementOwnership);
+            RequireProjectFresh(project, sourceChangeVersion, sourceElementState);
             var preview = PreviewInternal(project, targets, sourceChangeVersion);
-            RequireProjectFresh(project, sourceChangeVersion, sourceElementOwnership);
+            RequireProjectFresh(project, sourceChangeVersion, sourceElementState);
             return preview;
         }
 
@@ -146,16 +191,16 @@ namespace QS3D.Core.Services
                 health.Compare(beforeHealth, afterHealth));
         }
 
-        private static IReadOnlyDictionary<string, ProjectElement> SnapshotElementOwnership(ProjectState project)
+        private static IReadOnlyDictionary<string, ElementFreshnessSnapshot> SnapshotElementFreshness(ProjectState project)
         {
-            var result = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            var result = new Dictionary<string, ElementFreshnessSnapshot>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
                 if (element == null)
                     throw new InvalidOperationException("Project contains a null semantic element entry while regeneration preview scope is being established.");
                 if (result.ContainsKey(element.Id))
                     throw new InvalidOperationException("Project contains duplicate semantic element id while regeneration preview scope is being established: " + element.Id + ".");
-                result.Add(element.Id, element);
+                result.Add(element.Id, new ElementFreshnessSnapshot(element));
             }
             return result;
         }
@@ -163,20 +208,22 @@ namespace QS3D.Core.Services
         private static void RequireProjectFresh(
             ProjectState project,
             long expectedChangeVersion,
-            IReadOnlyDictionary<string, ProjectElement> expectedOwnership)
+            IReadOnlyDictionary<string, ElementFreshnessSnapshot> expectedElements)
         {
             if (project.ChangeVersion != expectedChangeVersion)
                 throw new InvalidOperationException("Project changed while regeneration preview scope was being established; recompute preview.");
-            if (project.Elements.Count != expectedOwnership.Count)
+            if (project.Elements.Count != expectedElements.Count)
                 throw StructuralFreshnessError();
 
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
                 if (element == null || !seen.Add(element.Id) ||
-                    !expectedOwnership.TryGetValue(element.Id, out var original) ||
-                    !ReferenceEquals(original, element))
+                    !expectedElements.TryGetValue(element.Id, out var snapshot) ||
+                    !ReferenceEquals(snapshot.Owner, element))
                     throw StructuralFreshnessError();
+                if (!snapshot.Matches(element))
+                    throw ElementStateFreshnessError(element.Id);
             }
         }
 
@@ -184,6 +231,38 @@ namespace QS3D.Core.Services
         {
             return new InvalidOperationException(
                 "Project element ownership changed while regeneration preview scope was being established; recompute preview.");
+        }
+
+        private static InvalidOperationException ElementStateFreshnessError(string elementId)
+        {
+            return new InvalidOperationException(
+                "Project element state changed while regeneration preview scope was being established: " + elementId + ". Recompute preview.");
+        }
+
+        private static bool StringListEquivalent(IReadOnlyList<string?> expected, IList<string> actual)
+        {
+            if (expected.Count != actual.Count) return false;
+            for (var i = 0; i < expected.Count; i++)
+                if (!string.Equals(expected[i], actual[i], StringComparison.Ordinal)) return false;
+            return true;
+        }
+
+        private static bool StringMapEquivalent(IReadOnlyDictionary<string, string?> expected, IDictionary<string, string> actual)
+        {
+            if (expected.Count != actual.Count) return false;
+            foreach (var pair in expected)
+                if (!actual.TryGetValue(pair.Key, out var value) || !string.Equals(pair.Value, value, StringComparison.Ordinal))
+                    return false;
+            return true;
+        }
+
+        private static bool DoubleMapEquivalent(IReadOnlyDictionary<string, double> expected, IDictionary<string, double> actual)
+        {
+            if (expected.Count != actual.Count) return false;
+            foreach (var pair in expected)
+                if (!actual.TryGetValue(pair.Key, out var value) || !pair.Value.Equals(value))
+                    return false;
+            return true;
         }
 
         private static IReadOnlyList<string> CanonicalPreviewTargets(IEnumerable<string> elementIds, int maxCount)
