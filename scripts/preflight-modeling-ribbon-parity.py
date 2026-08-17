@@ -130,10 +130,12 @@ def main():
         'if (result.ContainsKey(id))',
         'SetProperty(button, "ShowText", true);',
         'SetProperty(button, "ShowImage", true);',
+        'var icon = CreateReferenceIcon(expected.Value, 16);',
+        'var largeIcon = CreateReferenceIcon(expected.Value, 32);',
         'SetProperty(button, "Image", icon);',
-        'SetProperty(button, "LargeImage", icon);',
-        'if (!(GetProperty(button, "Image") is ImageSource)',
-        '|| !(GetProperty(button, "LargeImage") is ImageSource))',
+        'SetProperty(button, "LargeImage", largeIcon);',
+        'if (!(GetProperty(button, "Image") is RenderTargetBitmap)',
+        '|| !(GetProperty(button, "LargeImage") is RenderTargetBitmap))',
     ):
         require(visual, token, "MODELING final image contract")
 
@@ -142,20 +144,31 @@ def main():
         require(visual, f'ButtonPrefix + "{suffix}"', f"MODELING large action {suffix}")
     require(visual, 'LargeButtons.Contains(expected.Key) ? "Large" : "Standard"', "MODELING size split")
 
-    # Vector artwork is intentionally optimized for the dark Ribbon: fixed 32x32 logical bounds,
-    # blue + light-outline palette, no copied bitmap/binary BLT3D asset, and no red subtract glyph.
+    # Artwork stays clean-room vector geometry on a fixed 32x32 logical canvas, then is rasterized
+    # to exact host-facing 16px/32px frozen bitmaps. BricsCAD has already required this form for the
+    # QS3D brand mark; pin it here so MODELING cannot regress to raw DrawingImage delivery again.
     for token in (
+        'using System.Windows.Media.Imaging;',
         'Color.FromRgb(35, 132, 242)',
         'Color.FromRgb(15, 82, 178)',
         'Color.FromRgb(111, 184, 255)',
         'Color.FromRgb(205, 214, 225)',
         'new RectangleGeometry(new Rect(0, 0, 32, 32))',
-        'var image = new DrawingImage(group);',
+        'if (pixelSize != 16 && pixelSize != 32)',
+        'var visual = new DrawingVisual();',
+        'drawing.PushTransform(new ScaleTransform(pixelSize / 32.0, pixelSize / 32.0));',
+        'drawing.DrawDrawing(group);',
+        'var image = new RenderTargetBitmap(pixelSize, pixelSize, 96, 96, PixelFormats.Pbgra32);',
+        'image.Render(visual);',
         'image.Freeze();',
         'BooleanMode.Subtract',
         'BooleanMode.Intersect',
     ):
-        require(visual, token, "MODELING vector artwork")
+        require(visual, token, "MODELING host-bitmap artwork")
+    if "new DrawingImage(group)" in visual:
+        fail("MODELING final artwork must not expose raw DrawingImage to the BricsCAD Ribbon host")
+    if 'SetProperty(button, "LargeImage", icon);' in visual:
+        fail("MODELING final artwork must provide a distinct 32px LargeImage")
     if "Color.FromRgb(224, 69, 69)" in visual:
         fail("MODELING final artwork must not reintroduce the old red subtract accent")
 
@@ -176,7 +189,7 @@ def main():
     # V26 links every V25 C# source file, so this same visual contract is compiled into both host lanes.
     require(v26, '<Compile Include="..\\QS3D.BricsCAD.V25\\**\\*.cs"', "V26 shared Ribbon source")
 
-    print("PASS: MODELING BLT3D topbar layout + 21-button vector icon contract is intact.")
+    print("PASS: MODELING BLT3D layout + 21-button exact-size BricsCAD bitmap icon contract is intact.")
     return 0
 
 
