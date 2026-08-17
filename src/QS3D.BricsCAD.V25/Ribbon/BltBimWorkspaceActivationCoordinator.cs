@@ -63,8 +63,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     if (string.Equals(currentId, BimTabId, StringComparison.OrdinalIgnoreCase) &&
                         _bimSettleTicksRemaining > 0)
                     {
-                        ReassertBimWorkspace();
-                        _bimSettleTicksRemaining--;
+                        if (ReassertBimWorkspace())
+                        {
+                            _bimSettleTicksRemaining--;
+                        }
                     }
                     return;
                 }
@@ -89,10 +91,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
             }
         }
 
-        private static void ReassertBimWorkspace()
+        private static bool ReassertBimWorkspace()
         {
             StartCenterPaletteCoordinator.Hide();
-            PaletteCoordinator.ShowBimWorkspace();
+            return PaletteCoordinator.ShowBimWorkspace();
         }
 
         private static string ResolveCurrentTabId(object control)
