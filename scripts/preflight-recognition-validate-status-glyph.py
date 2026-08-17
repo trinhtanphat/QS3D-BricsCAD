@@ -13,6 +13,11 @@ def require(text: str, needle: str, label: str) -> None:
         raise SystemExit(f"FAIL: {label} missing required contract: {needle}")
 
 
+def forbid(text: str, needle: str, label: str) -> None:
+    if needle in text:
+        raise SystemExit(f"FAIL: {label} contains forbidden status-derived X/V contract: {needle}")
+
+
 def section(text: str, start: str, end: str, label: str) -> str:
     begin = text.find(start)
     if begin < 0:
@@ -23,18 +28,16 @@ def section(text: str, start: str, end: str, label: str) -> str:
     return text[begin:finish]
 
 
-def spec_block(text: str, button_id: str) -> str:
+def spec_line(text: str, button_id: str) -> str:
     marker = f'"{button_id}"'
     pos = text.find(marker)
     if pos < 0:
         raise SystemExit(f"FAIL: {button_id} missing from Recognition Ribbon surface")
-    start = text.rfind("new RecognitionButtonSpec(", 0, pos)
-    if start < 0:
-        raise SystemExit(f"FAIL: {button_id} missing RecognitionButtonSpec start")
-    end = text.find(")", pos)
+    start = text.rfind("\n", 0, pos) + 1
+    end = text.find("\n", pos)
     if end < 0:
-        raise SystemExit(f"FAIL: {button_id} missing RecognitionButtonSpec end")
-    return text[start:end + 1]
+        end = len(text)
+    return text[start:end]
 
 
 def main() -> int:
@@ -43,38 +46,35 @@ def main() -> int:
     finalizer = FINALIZER.read_text(encoding="utf-8")
     init = INIT.read_text(encoding="utf-8")
 
-    require(polisher, "var statusRed = FrozenBrush(Color.FromRgb(224, 62, 62));", "red validation status brush")
-    require(polisher, "var statusGreen = FrozenBrush(Color.FromRgb(55, 176, 90));", "green validation status brush")
-
     validate = section(polisher, "case IconKind.Validate:", "break;", "Validate icon block")
-    require(validate, 'Stroke(statusRed, 3.0, Geometry.Parse(', "red X stroke")
-    require(validate, '"M8,11 L14,17 M14,11 L8,17"', "red X geometry")
-    require(validate, 'Stroke(statusGreen, 3.0, Geometry.Parse(', "green V/check stroke")
-    require(validate, '"M17,18 L21,22 L27,12"', "green V/check geometry")
-    require(validate, 'Stroke(neutral, 1.6, Geometry.Parse(', "Recognition target-frame cue")
+    require(validate, "Neutral inspection sheet + check mark", "neutral Validate semantics")
+    require(validate, "new Rect(6, 5, 19, 22)", "neutral inspection sheet")
+    require(validate, 'Stroke(graphite, 2.4, Geometry.Parse("M10,20 L14,24 L23,14"))', "neutral validation check")
+    require(validate, "new EllipseGeometry(new Point(25, 7), 2.2, 2.2)", "neutral inspection detail")
 
-    for legacy in (
-        "Neutral inspection sheet + check mark",
-        'Stroke(graphite, 2.4, Geometry.Parse("M10,20 L14,24 L23,14"))',
-        "new EllipseGeometry(new Point(25, 7), 2.2, 2.2)",
+    for forbidden in (
+        "statusRed",
+        "statusGreen",
+        "red X",
+        "green V",
+        "X / V semantic cue",
+        '"M8,11 L14,17 M14,11 L8,17"',
+        '"M17,18 L21,22 L27,12"',
     ):
-        if legacy in validate:
-            raise SystemExit(f"FAIL: Validate icon retained legacy neutral-only artwork: {legacy}")
+        forbid(polisher, forbidden, "Recognition semantic artwork")
 
-    validate_spec = spec_block(ribbon, "QS3D_RECOGNIZE_BLT_VALIDATE")
+    validate_spec = spec_line(ribbon, "QS3D_RECOGNIZE_BLT_VALIDATE")
     require(validate_spec, "string.Empty", "Validate remains without a command")
-    require(validate_spec, "enabled: false", "Validate executable-command authority stays disabled")
-    require(validate_spec, "preserveSourceColorWhenNonInteractive: true", "Validate source-color host presentation exception")
-
-    for button_id in ("QS3D_RECOGNIZE_BLT_TEXT", "QS3D_RECOGNIZE_BLT_TABLE"):
-        disabled_spec = spec_block(ribbon, button_id)
-        require(disabled_spec, "enabled: false", f"{button_id} existing disabled hierarchy")
-        if "preserveSourceColorWhenNonInteractive: true" in disabled_spec:
-            raise SystemExit(f"FAIL: {button_id} must not inherit the Validate-only source-color presentation exception")
-
-    require(ribbon, "public bool PreserveSourceColorWhenNonInteractive { get; }", "separate non-interactive source-color presentation state")
-    require(ribbon, 'SetProperty(button, "IsEnabled", spec.Enabled || spec.PreserveSourceColorWhenNonInteractive);', "host presentation decoupled from command authority")
+    require(validate_spec, "enabled: false", "Validate remains disabled")
+    require(ribbon, 'SetProperty(button, "IsEnabled", spec.Enabled)', "host disabled-state mapping")
     require(ribbon, "if (spec.Enabled && !string.IsNullOrWhiteSpace(spec.Command))", "command routing remains gated by executable authority")
+
+    for forbidden in (
+        "PreserveSourceColorWhenNonInteractive",
+        "preserveSourceColorWhenNonInteractive",
+        "spec.Enabled || spec.PreserveSourceColorWhenNonInteractive",
+    ):
+        forbid(ribbon, forbidden, "Recognition host presentation")
 
     require(finalizer, "private const int ExpectedButtonCount = 8;", "eight-button host finalizer")
     require(finalizer, "var smallBitmap = Rasterize(source, 16);", "16px host bitmap")
@@ -88,9 +88,9 @@ def main() -> int:
         raise SystemExit("FAIL: Recognition bitmap finalizer must run after semantic icon polish")
 
     print(
-        "PASS: NHẬN DẠNG validation keeps the owner-requested red X + green V/check pair, "
-        "preserves their source color at the BricsCAD host presentation boundary while remaining "
-        "without a command, and still reaches the host as exact frozen 16px/32px bitmaps."
+        "PASS: NHẬN DẠNG Validate uses the neutral inspection/check artwork, remains non-commanding "
+        "and host-disabled, contains no status-derived red-X/green-V exception, and still reaches "
+        "BricsCAD through the frozen 16px/32px bitmap finalizer."
     )
     return 0
 
