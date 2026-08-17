@@ -11,6 +11,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
     {
         private const string AssemblyName = "BrxMgd";
         private const string TabId = "QS3D_PROJECT";
+        internal const string ProjectTabGroupId = TabId;
 
         // Compatibility identities retained for the existing source/preflight contract. The
         // BLT3D runtime surface below intentionally replaces this legacy panel presentation.
@@ -47,7 +48,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private static readonly ButtonSpec[] BltButtons =
         {
-            new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\ndự án", "QS3DPROJECTTOOLS"),
+            new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\ndự án", "QS3DPROJECTINFO"),
             new ButtonSpec("QS3D_PROJECT_FLOORS", "Cài đặt\ntầng", "QS3DLEVELS"),
             new ButtonSpec("QS3D_PROJECT_PROPERTIES", "Thuộc tính\ndự án", "QS3DPROJECTPROPERTIES")
         };
@@ -97,6 +98,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 }
 
                 _initialized = true;
+                ProjectTabActivationCoordinator.Start();
                 return true;
             }
             catch
@@ -105,7 +107,12 @@ namespace QS3D.BricsCAD.V25.Ribbon
             }
         }
 
-        public static void Reset() => _initialized = false;
+        public static void Reset()
+        {
+            ProjectTabActivationCoordinator.Stop();
+            ProjectSetupPaletteCoordinator.Dispose();
+            _initialized = false;
+        }
 
         // Retain the established Project Tools reconciliation implementation as a compile-time
         // compatibility contract. It is deliberately not invoked by TryInitialize because the
