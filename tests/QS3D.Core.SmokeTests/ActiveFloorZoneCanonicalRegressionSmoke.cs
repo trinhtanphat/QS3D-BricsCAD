@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 
@@ -38,7 +39,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("P-ACTIVE-ZONE-CANONICAL", "Active zone canonical regression");
             var zone = ProjectZoneService.Create(project, "zone-a", "Zone A");
-            project.ActiveZoneId = " ZONE-A ";
+            SetRawActiveZoneId(project, " ZONE-A ");
             var malformedStateVersion = project.ChangeVersion;
 
             Throws<InvalidOperationException>(() => ProjectZoneService.SetActive(project, zone.Id));
@@ -57,6 +58,14 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => ProjectZoneService.SetActive(project, "missing-zone"));
             Equal(zone.Id, project.ActiveZoneId, "zone missing-id state");
             Equal(canonicalVersion, project.ChangeVersion, "zone missing-id version");
+        }
+
+        private static void SetRawActiveZoneId(ProjectState project, string value)
+        {
+            var field = typeof(ProjectState).GetField("_activeZoneId", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null)
+                throw new InvalidOperationException("ProjectState._activeZoneId field was not found.");
+            field.SetValue(project, value);
         }
 
         private static void Equal<T>(T expected, T actual, string label)
