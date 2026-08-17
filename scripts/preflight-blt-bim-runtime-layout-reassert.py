@@ -26,27 +26,30 @@ properties = read(PROPERTIES)
 
 for token in (
     "SetVisibility(workspace: true, right: false, quantityInsight: false);",
-    "SetVisibility(workspace: true, right: true, quantityInsight: true);",
+    "SetVisibility(workspace: true, right: true, quantityInsight: false);",
     "private static readonly Guid PropertiesGuid",
     'new PaletteSet("QS3D — Thuộc tính", PropertiesGuid)',
     "public static bool IsPropertiesVisible",
-    "_properties.Dock = DockSides.Left;",
-    "_workspacePanel?.SetDedicatedPropertiesPaletteActive(false);",
-    "_workspacePanel?.SetDedicatedPropertiesPaletteActive(true);",
-    "Thuộc tính QS3D palette riêng bên trái",
+    "_workspace.Dock = DockSides.Left;",
+    "_right.Dock = DockSides.Right;",
     "viewport BricsCAD native ở giữa",
 ):
     if token not in palette:
-        errors.append("PaletteCoordinator four-palette BIM contract missing: " + token)
+        errors.append("PaletteCoordinator embedded BIM contract missing: " + token)
 
+bim_start = palette.find("public static bool ShowBimWorkspace()")
+bim_end = palette.find("public static void ShowDrawingManagement()", bim_start)
+bim = palette[bim_start:bim_end]
 for token in (
-    "public static bool ShowBimWorkspace()",
+    "_workspacePanel?.SetDedicatedPropertiesPaletteActive(false);",
     'ReportPaletteFailure("MÔ HÌNH BIM");',
     "return true;",
     "return false;",
 ):
-    if token not in palette:
-        errors.append("BIM palette success contract missing: " + token)
+    if token not in bim:
+        errors.append("BIM palette success/default contract missing: " + token)
+if "quantityInsight: true" in bim or "SetDedicatedPropertiesPaletteActive(true)" in bim:
+    errors.append("default BIM reassert must not reopen optional dedicated Properties/Quantity palettes")
 
 for token in (
     'private const string BimTabId = "QS3D_BIM";',
@@ -59,17 +62,11 @@ for token in (
     if token not in activation:
         errors.append("BIM activation settle contract missing: " + token)
 
-if "string.Equals(currentId, _lastTabId" in activation and "_bimSettleTicksRemaining > 0" not in activation:
-    errors.append("same-tab polling still returns without a bounded BricsCAD dock-settle repair")
-
 compact_activation = " ".join(activation.split())
-successful_retry = "if (ReassertBimWorkspace()) { _bimSettleTicksRemaining--; }"
-consumed_before_retry = "_bimSettleTicksRemaining--; ReassertBimWorkspace();"
-initial_retry_setup = "_bimSettleTicksRemaining = BimSettleTicks; ReassertBimWorkspace();"
-if successful_retry not in compact_activation or consumed_before_retry in compact_activation:
+if "if (ReassertBimWorkspace()) { _bimSettleTicksRemaining--; }" not in compact_activation:
     errors.append("same-tab settle retry must be consumed only after a successful BIM workspace reassert")
-if initial_retry_setup not in compact_activation:
-    errors.append("initial BIM activation must preserve the configured follow-up settle retry budget")
+if "_bimSettleTicksRemaining = BimSettleTicks; ReassertBimWorkspace();" not in compact_activation:
+    errors.append("initial BIM activation must preserve follow-up settle retries")
 
 for token in (
     "Blt3dRuntimeSettlePasses = 2",
@@ -81,49 +78,40 @@ for token in (
     "StopBlt3dRuntimeLayoutRepairTimer();",
     "FrameworkElement.UnloadedEvent",
     "OnBlt3dRuntimeLayoutUnloaded",
-    "_blt3dRuntimeSettlePassesRemaining = 0;",
-    "_blt3dRuntimeLayoutRepairStarted = false;",
 ):
     if token not in repair:
         errors.append("WorkspacePanel runtime repair missing: " + token)
 
-if "ApplyReferencePaletteLayout();" in repair:
-    errors.append("runtime settle repair must not restore the superseded side-by-side reference layout")
-
 for token in (
-    "ApplyBlt3dFiveZoneRuntimeLayout",
-    "workspace.RowDefinitions.Add",
-    "GridResizeDirection.Rows",
-    "ReferenceEquals(child, familyPane)",
-    "if (_dedicatedPropertiesPaletteActive)",
-    "familyPane.RowDefinitions[2].Height = new GridLength(0);",
-    "familyPane.RowDefinitions[2].Height = new GridLength(58, GridUnitType.Star);",
+    "_blt3dRuntimeColumnSplitter",
+    "Grid.SetColumn(modelPane, 0);",
+    "Grid.SetColumn(columnSplitter, 1);",
+    "Grid.SetColumn(familyPane, 2);",
+    "columnSplitter.ResizeDirection = GridResizeDirection.Columns;",
+    "familyPane.RowDefinitions[0].Height = new GridLength(56, GridUnitType.Star);",
+    "familyPane.RowDefinitions[2].Height = new GridLength(44, GridUnitType.Star);",
 ):
     if token not in five_zone:
-        errors.append("owner dynamic Model/Family/Properties runtime layout missing: " + token)
+        errors.append("owner side-by-side runtime layout missing: " + token)
 
 for token in (
     "CreatePropertiesPaletteVisual",
     "SetDedicatedPropertiesPaletteActive(bool active)",
-    "ownerGrid.Children.Remove(region);",
-    "host.Children.Add(region);",
-    "host.Children.Remove(region);",
-    "ownerGrid.Children.Add(region);",
-    "BindingOperations.SetBinding",
-    "CollapseEmbeddedPropertiesSlot",
     "RestoreEmbeddedPropertiesSlot",
 ):
     if token not in properties:
-        errors.append("dynamic dedicated QS3D Properties reparenting missing: " + token)
+        errors.append("optional dedicated Properties support missing: " + token)
 
+if "Grid.SetRow(familyPane, 2);" in five_zone or "ResizeDirection = GridResizeDirection.Rows" in five_zone:
+    errors.append("runtime settle must not restore the obsolete vertically stacked left workspace")
 if "new Viewport" in repair or "Viewport3D" in repair or "new Viewport" in five_zone or "Viewport3D" in five_zone:
     errors.append("runtime layout must not create a fake second 3D viewport")
 
-print("QS3D BLT3D BIM dynamic dedicated Properties runtime layout preflight")
+print("QS3D BLT3D BIM embedded runtime layout preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BIM activation reasserts Workspace + dedicated QS3D Properties + Management + Quantity through a bounded BricsCAD docking settle window, reports transient reassert success/failure without consuming retries early, ordinary ShowWorkspace restores the same real editor in-place, manual palette close is not selection-driven, and native modelspace remains host-owned.")
+print("PASS: BIM activation/retry reasserts the integrated side-by-side Workspace plus Management around native BricsCAD modelspace without reopening optional dedicated Properties/Quantity surfaces.")
