@@ -61,30 +61,11 @@ namespace QS3D.BricsCAD.V25
 
         public static void Refresh(Document? document)
         {
-            if (document == null || !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
-            {
-                DedicatedPropertiesPaletteCoordinator.Hide();
-                return;
-            }
-            if (!PaletteCoordinator.IsWorkspaceVisible)
-            {
-                DedicatedPropertiesPaletteCoordinator.Hide();
-                return;
-            }
-
-            // Show the distinct QS3D Properties plugin palette only when the coordinated BIM
-            // Workspace + Management + Quantity surface is active. This keeps ordinary isolated
-            // Workspace commands isolated while making explicit QS3D/BIM activation deterministic.
-            DedicatedPropertiesPaletteCoordinator.SyncVisibility();
-
+            if (document == null || !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
+            if (!PaletteCoordinator.IsWorkspaceVisible) return;
             StopPending(document);
             if (!Refreshing.Add(document)) return;
-            try
-            {
-                var snapshots = EntitySnapshotReader.ReadImpliedSelection(document);
-                PaletteCoordinator.SetInspection(snapshots);
-                DedicatedPropertiesPaletteCoordinator.SetInspection(snapshots);
-            }
+            try { PaletteCoordinator.SetInspection(EntitySnapshotReader.ReadImpliedSelection(document)); }
             catch (Exception ex) { PaletteCoordinator.SetStatus("Selection sync lỗi: " + ex.Message); }
             finally { Refreshing.Remove(document); }
         }
@@ -95,7 +76,6 @@ namespace QS3D.BricsCAD.V25
             foreach (var timer in Pending.Values.ToArray()) timer.Stop();
             Pending.Clear();
             Refreshing.Clear();
-            DedicatedPropertiesPaletteCoordinator.Dispose();
         }
 
         private static void OnImpliedSelectionChanged(object sender, EventArgs e)
@@ -110,7 +90,6 @@ namespace QS3D.BricsCAD.V25
             if (!PaletteCoordinator.IsWorkspaceVisible)
             {
                 StopPending(document);
-                DedicatedPropertiesPaletteCoordinator.Hide();
                 return;
             }
 

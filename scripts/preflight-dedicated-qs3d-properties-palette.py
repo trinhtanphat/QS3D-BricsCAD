@@ -3,9 +3,11 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-PALETTE = ROOT / "src" / "QS3D.BricsCAD.V25" / "DedicatedPropertiesPaletteCoordinator.cs"
-SELECTION = ROOT / "src" / "QS3D.BricsCAD.V25" / "SelectionSyncCoordinator.cs"
-BASE = ROOT / "src" / "QS3D.BricsCAD.V25" / "PaletteCoordinator.cs"
+PALETTE = ROOT / "src" / "QS3D.BricsCAD.V25" / "PaletteCoordinator.cs"
+PROPERTIES = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.DedicatedPropertiesPalette.cs"
+LAYOUT = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
+STORE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Services" / "UserUiLayoutStore.cs"
+WORKSPACE_XAML = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.xaml"
 errors = []
 
 
@@ -16,57 +18,78 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-dedicated = read(PALETTE)
-selection = read(SELECTION)
-base = read(BASE)
+palette = read(PALETTE)
+properties = read(PROPERTIES)
+layout = read(LAYOUT)
+store = read(STORE)
+workspace_xaml = read(WORKSPACE_XAML)
 
 for token in (
-    "internal static class DedicatedPropertiesPaletteCoordinator",
-    'new Guid("43E4BCFA-1697-43D4-95EF-90B88C59D61A")',
+    "private static readonly Guid PropertiesGuid",
+    "private static PaletteSet? _properties;",
+    "public static bool IsPropertiesVisible",
     'new PaletteSet("QS3D — Thuộc tính", PropertiesGuid)',
-    'AddVisual("Thuộc tính QS3D", _panel, true)',
-    "Dock = DockSides.Left",
-    "MinimumSize = new DrawingSize(260, 320)",
-    "_palette.DeviceIndependentSize = DefaultSize;",
-    "if (_palette.Dock != DockSides.Left)",
-    "PaletteCoordinator.IsWorkspaceVisible",
-    "PaletteCoordinator.IsRightPanelVisible",
-    "PaletteCoordinator.IsQuantityInsightVisible",
-    "internal sealed class DedicatedPropertiesPanel : UserControl",
-    "QS3D plugin inspector",
-    "— nhiều giá trị —",
+    'AddVisual("Thuộc tính", _propertiesVisual, true)',
+    "_workspacePanel.DetachPropertiesPaletteVisual()",
+    "_properties.Dock = DockSides.Left;",
+    "PropertiesPaletteMinWidth",
+    "PropertiesPaletteMinHeight",
+    "layout.PropertiesPaletteWidth",
+    "layout.PropertiesPaletteHeight",
+    "propertiesVisible = IsPropertiesVisible",
+    "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);",
 ):
-    if token not in dedicated:
-        errors.append("dedicated QS3D Properties contract missing: " + token)
+    if token not in palette:
+        errors.append("PaletteCoordinator dedicated Properties contract missing: " + token)
 
 for token in (
-    "DedicatedPropertiesPaletteCoordinator.SyncVisibility();",
-    "DedicatedPropertiesPaletteCoordinator.SetInspection(snapshots);",
-    "DedicatedPropertiesPaletteCoordinator.Hide();",
-    "DedicatedPropertiesPaletteCoordinator.Dispose();",
+    "DetachPropertiesPaletteVisual",
+    "PropertyList",
+    "ownerGrid.Children.Remove(propertiesRegion);",
+    "BindingOperations.SetBinding",
+    "new Binding(nameof(DataContext))",
+    "CollapseEmbeddedPropertiesSlot",
 ):
-    if token not in selection:
-        errors.append("selection/BIM integration missing: " + token)
+    if token not in properties:
+        errors.append("real QS3D Properties reparenting missing: " + token)
 
-# Existing #2396 behavior must remain intact: explicit QS3D activation restores the coordinated
-# BIM surface, while the standalone Workspace command remains isolated. The fourth dedicated
-# Properties palette is layered on through selection/BIM synchronization instead of weakening it.
+# Lock the real editor semantics. A generic reflection-only inspector must not substitute for the
+# existing project-aware QS3D property editor with scope, search, typed editors and override reset.
 for token in (
-    "public static void Show() => ShowBimWorkspace();",
-    "SetVisibility(workspace: true, right: false, quantityInsight: false);",
-    "SetVisibility(workspace: true, right: true, quantityInsight: true);",
+    'x:Name="PropertyList"',
+    'ItemsSource="{Binding Properties}"',
+    'ItemsSource="{Binding PropertyScopes}"',
+    'x:Name="PropertySearch"',
+    'Click="OnResetPropertyClick"',
+    'Value="Boolean"',
+    'Value="Choice"',
 ):
-    if token not in base:
-        errors.append("existing BIM/isolated-workspace contract regressed: " + token)
+    if token not in workspace_xaml:
+        errors.append("real QS3D Properties editor contract missing from WorkspacePanel.xaml: " + token)
 
-if "new Viewport" in dedicated or "Viewport3D" in dedicated:
-    errors.append("dedicated Properties palette must not create or replace the native BricsCAD viewport")
+for token in (
+    "PropertiesPaletteWidth",
+    "PropertiesPaletteHeight",
+    "PropertiesPaletteMinWidth",
+    "PropertiesPaletteMinHeight",
+):
+    if token not in store:
+        errors.append("dedicated Properties layout persistence missing: " + token)
 
-print("QS3D dedicated Properties palette preflight")
+if "IsVisualDescendant(child, PropertyList)" in layout:
+    errors.append("regression: five-zone Workspace layout still treats Properties as embedded")
+if "PropertyList.MinHeight" in layout:
+    errors.append("regression: Workspace layout still sizes the detached Properties editor")
+if "DedicatedPropertiesPanel" in palette or "QS3D plugin inspector" in palette:
+    errors.append("regression: dedicated palette must host the real QS3D editor, not a reflection inspector")
+if "new Viewport" in properties or "Viewport3D" in properties:
+    errors.append("dedicated Properties palette must not create or replace native BricsCAD modelspace")
+
+print("QS3D dedicated real Properties palette preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BIM activation owns a distinct left-docked QS3D Properties plugin palette with deterministic size fallback and selection inspection, while isolated Workspace behavior and native BricsCAD modelspace remain unchanged.")
+print("PASS: BIM mode owns a distinct QS3D Properties PaletteSet that reparents the existing project-aware PropertyList editor with its original WorkspaceViewModel, scope/search/typed-edit/reset behavior and deterministic persisted fallback sizing; native BricsCAD Properties is not used as a substitute.")
