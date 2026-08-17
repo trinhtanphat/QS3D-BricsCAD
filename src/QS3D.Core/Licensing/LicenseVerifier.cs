@@ -97,7 +97,7 @@ namespace QS3D.Core.Licensing
     {
         private readonly LicenseDocument _license;
 
-        public LicenseVerificationResult(LicenseStatus status, LicenseDocument license)
+        internal LicenseVerificationResult(LicenseStatus status, LicenseDocument license)
         {
             if (!Enum.IsDefined(typeof(LicenseStatus), status))
                 throw new ArgumentOutOfRangeException(nameof(status), status, "License verification status is not defined.");
