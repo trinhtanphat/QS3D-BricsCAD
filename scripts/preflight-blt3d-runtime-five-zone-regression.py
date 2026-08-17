@@ -50,9 +50,10 @@ for token in (
     "DispatcherPriority.SystemIdle",
     "ApplyBlt3dFiveZoneRuntimeLayout",
     "Grid.GetColumn(child) == 0",
-    "Grid.GetColumn(child) == 2",
     "IsVisualDescendant(child, FamilyList)",
     "IsVisualDescendant(child, PropertyList)",
+    "_blt3dRuntimeVerticalSplitter",
+    "ReferenceEquals(verticalSplitter.Parent, workspace)",
     "Grid.SetRow(modelPane, 0);",
     "Grid.SetRow(verticalSplitter, 1);",
     "Grid.SetRow(familyPropertiesPane, 2);",
@@ -61,6 +62,12 @@ for token in (
 ):
     if token not in layout:
         errors.append("left Model/Properties region contract missing: " + token)
+
+# ApplyBlt3dFiveZoneRuntimeLayout is intentionally called repeatedly during the bounded host-docking
+# settle window. After pass 1, Family/Properties has already moved from column 2 to column 0; tying
+# rediscovery to the original column would make every later reassert a silent no-op.
+if "Grid.GetColumn(child) == 2" in layout:
+    errors.append("runtime reassert must rediscover Family/Properties independently of its original column")
 
 if "public static void Show() => ShowWorkspace();" in palette:
     errors.append("regression: owner-facing QS3D activation must restore the coordinated BIM surface")
@@ -75,4 +82,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: owner-facing QS3D/BIM activation restores the coordinated BLT3D surface while the dedicated ShowWorkspace helper remains isolated; first-load class handlers are registered deterministically, Model + QS3D Properties stay distinct on the left, and Management + Quantity stay on the right of native BricsCAD modelspace.")
+print("PASS: owner-facing QS3D/BIM activation restores the coordinated BLT3D surface while the dedicated ShowWorkspace helper remains isolated; first-load class handlers are registered deterministically, repeated settle passes remain idempotent after the Family/Properties pane moves, Model + QS3D Properties stay distinct on the left, and Management + Quantity stay on the right of native BricsCAD modelspace.")
