@@ -125,10 +125,13 @@ namespace QS3D.Core.Export
         {
             if (results == null) throw new ArgumentNullException(nameof(results));
 
-            if (results is ICollection<IfcRoundTripExchangeResult> collection && collection.Count > MaxResultsPerCollection)
+            var knownCount = TryGetKnownCount(results, out var conflictingKnownCounts, out var negativeKnownCount);
+            if (knownCount.HasValue && knownCount.Value > MaxResultsPerCollection)
                 throw ResultCollectionTooLarge();
-            if (results is IReadOnlyCollection<IfcRoundTripExchangeResult> readOnlyCollection && readOnlyCollection.Count > MaxResultsPerCollection)
-                throw ResultCollectionTooLarge();
+            if (negativeKnownCount)
+                throw new InvalidOperationException("IFC exchange result source exposes an invalid negative known Count value.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("IFC exchange result source exposes conflicting known Count values.");
 
             var byExternalIdentity = new Dictionary<string, IfcRoundTripExchangeResult>(StringComparer.Ordinal);
             var observedResultCount = 0;
@@ -157,6 +160,38 @@ namespace QS3D.Core.Export
             var items = byExternalIdentity.Values.ToList();
             items.Sort(IfcRoundTripExchangeResultComparer.Instance);
             return new IfcRoundTripExchangeResultSet(Array.AsReadOnly(items.ToArray()));
+        }
+
+        private static int? TryGetKnownCount(
+            IEnumerable<IfcRoundTripExchangeResult> results,
+            out bool conflictingKnownCounts,
+            out bool negativeKnownCount)
+        {
+            conflictingKnownCounts = false;
+            negativeKnownCount = false;
+            int? knownCount = null;
+
+            if (results is ICollection<IfcRoundTripExchangeResult> collection)
+                knownCount = ObserveKnownCount(knownCount, collection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+            if (results is IReadOnlyCollection<IfcRoundTripExchangeResult> readOnlyCollection)
+                knownCount = ObserveKnownCount(knownCount, readOnlyCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+            if (results is System.Collections.ICollection nonGenericCollection)
+                knownCount = ObserveKnownCount(knownCount, nonGenericCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+
+            return knownCount;
+        }
+
+        private static int ObserveKnownCount(
+            int? current,
+            int observed,
+            ref bool conflictingKnownCounts,
+            ref bool negativeKnownCount)
+        {
+            if (observed < 0)
+                negativeKnownCount = true;
+            if (current.HasValue && current.Value != observed)
+                conflictingKnownCounts = true;
+            return !current.HasValue || observed > current.Value ? observed : current.Value;
         }
 
         private static InvalidOperationException ResultCollectionTooLarge()
