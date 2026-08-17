@@ -103,10 +103,7 @@ namespace QS3D.Core.Export
 
         private static string F(double value)
         {
-            var formatted = value.ToString("0.######", CultureInfo.InvariantCulture);
-            if (value != 0d && string.Equals(formatted, "0", StringComparison.Ordinal))
-                return value.ToString("R", CultureInfo.InvariantCulture);
-            return formatted;
+            return value == 0d ? "0" : value.ToString("R", CultureInfo.InvariantCulture);
         }
 
         private static string Q(string value)
