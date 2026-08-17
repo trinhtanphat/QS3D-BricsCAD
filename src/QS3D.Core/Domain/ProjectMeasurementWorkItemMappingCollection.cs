@@ -31,6 +31,7 @@ namespace QS3D.Core.Domain
             var key = ProjectMeasurementWorkItemMappingCodec.Key(item);
             var value = ProjectMeasurementWorkItemMappingCodec.Value(item);
             if (_metadata.ContainsKey(key)) throw new ArgumentException("Duplicate measurement/work-item mapping id: " + item.MappingId + ".", nameof(item));
+            _metadata.EnsureCanAddOwned(key);
             _project.Touch();
             _metadata.AddOwned(key, value);
         }
