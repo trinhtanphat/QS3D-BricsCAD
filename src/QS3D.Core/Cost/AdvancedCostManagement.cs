@@ -38,26 +38,38 @@ namespace QS3D.Core.Cost
 
         internal static bool TryGetKnownCount<T>(IEnumerable<T> items, out int count)
         {
-            if (items is ICollection<T> collection)
-            {
-                count = collection.Count;
-                return true;
-            }
-
-            if (items is IReadOnlyCollection<T> readOnlyCollection)
-            {
-                count = readOnlyCollection.Count;
-                return true;
-            }
-
-            if (items is ICollection nonGenericCollection)
-            {
-                count = nonGenericCollection.Count;
-                return true;
-            }
-
+            var hasKnownCount = false;
             count = 0;
-            return false;
+
+            if (items is ICollection<T> collection)
+                ObserveKnownCount(collection.Count, ref hasKnownCount, ref count);
+            if (items is IReadOnlyCollection<T> readOnlyCollection)
+                ObserveKnownCount(readOnlyCollection.Count, ref hasKnownCount, ref count);
+            if (items is ICollection nonGenericCollection)
+                ObserveKnownCount(nonGenericCollection.Count, ref hasKnownCount, ref count);
+
+            return hasKnownCount;
+        }
+
+        private static void ObserveKnownCount(int candidate, ref bool hasKnownCount, ref int count)
+        {
+            if (!hasKnownCount)
+            {
+                count = candidate;
+                hasKnownCount = true;
+                return;
+            }
+
+            if (candidate == count)
+                return;
+
+            if (candidate > MaximumEntries || count > MaximumEntries)
+            {
+                count = Math.Max(count, candidate);
+                return;
+            }
+
+            throw new InvalidOperationException("Collection reports conflicting known counts.");
         }
 
         internal static void ThrowTooManyEntries(string collectionLabel)
