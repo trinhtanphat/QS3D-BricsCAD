@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
             PreservesIndependentVolumeOverride();
             RemovesPolicyOwnedVolumesWhenCategoryBecomesUnsupported();
             CleanupMarksPreviouslyCleanElementQuantityDirty();
+            RejectsPaddedPersistedMetricsAtomically();
+            PreservesCanonicalPersistedMetrics();
             RejectsNumericLiteralUnderflowAtomically();
             PreservesZeroAndRepresentableSubnormalMetrics();
             NoRemovalLeavesCleanElementClean();
@@ -73,6 +75,63 @@ namespace QS3D.Core.SmokeTests
             Missing(element, "MeasuredSolidVolumeM3");
             Missing(element, "GrossVolumeM3");
             Missing(element, "NetVolumeM3");
+        }
+
+        private static void RejectsPaddedPersistedMetricsAtomically()
+        {
+            RejectsPaddedMetricAtomically(
+                "B-padded-volume",
+                MeasuredSolidQuantityPolicy.VolumeProperty,
+                "\t12.5",
+                MeasuredSolidQuantityPolicy.SurfaceAreaProperty,
+                "25");
+            RejectsPaddedMetricAtomically(
+                "B-padded-surface",
+                MeasuredSolidQuantityPolicy.SurfaceAreaProperty,
+                "25 \r\n",
+                MeasuredSolidQuantityPolicy.VolumeProperty,
+                "12.5");
+        }
+
+        private static void RejectsPaddedMetricAtomically(
+            string id,
+            string paddedKey,
+            string paddedValue,
+            string otherKey,
+            string otherValue)
+        {
+            var element = new ProjectElement(id, ElementCategory.Beam);
+            element.SetProperty(paddedKey, paddedValue);
+            element.SetProperty(otherKey, otherValue);
+            element.SetQuantity("MeasuredSurfaceAreaM2", 7d);
+            element.SetQuantity("MeasuredSolidVolumeM3", 8d);
+            element.SetQuantity("GrossVolumeM3", 9d);
+            element.SetQuantity("NetVolumeM3", 10d);
+            element.MarkClean(ElementDirtyFlags.All);
+
+            var error = Capture<InvalidOperationException>(() => MeasuredSolidQuantityPolicy.Apply(element));
+            Contains(id + "/" + paddedKey + " must not contain surrounding whitespace.", error.Message);
+            Exact(7d, element.Quantities["MeasuredSurfaceAreaM2"]);
+            Exact(8d, element.Quantities["MeasuredSolidVolumeM3"]);
+            Exact(9d, element.Quantities["GrossVolumeM3"]);
+            Exact(10d, element.Quantities["NetVolumeM3"]);
+            if (element.Dirty != ElementDirtyFlags.None)
+                throw new Exception("Rejected padded measured metric must not mutate dirty state.");
+        }
+
+        private static void PreservesCanonicalPersistedMetrics()
+        {
+            var element = new ProjectElement("B-canonical", ElementCategory.Beam);
+            element.SetProperty(MeasuredSolidQuantityPolicy.SurfaceAreaProperty, "25.75");
+            element.SetProperty(MeasuredSolidQuantityPolicy.VolumeProperty, "12.5");
+
+            if (!MeasuredSolidQuantityPolicy.Apply(element))
+                throw new Exception("Canonical measured-solid persisted metrics must remain valid.");
+
+            Exact(25.75d, element.Quantities["MeasuredSurfaceAreaM2"]);
+            Exact(12.5d, element.Quantities["MeasuredSolidVolumeM3"]);
+            Exact(12.5d, element.Quantities["GrossVolumeM3"]);
+            Exact(12.5d, element.Quantities["NetVolumeM3"]);
         }
 
         private static void RejectsNumericLiteralUnderflowAtomically()
