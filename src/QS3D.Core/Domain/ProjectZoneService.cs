@@ -9,6 +9,7 @@ namespace QS3D.Core.Domain
     {
         private const int MaxZones = 2000;
         private const int MaxNameLength = 120;
+        private const int MaxAssignmentTargets = 10000;
 
         public static ZoneDefinition Create(ProjectState project, string id, string name)
         {
@@ -61,6 +62,7 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elements == null) throw new ArgumentNullException(nameof(elements));
+            ValidateAssignmentTargetCount(elements);
             var zone = FindRequired(project, zoneId);
 
             var projectElements = ResolveProjectElements(project)
@@ -68,8 +70,12 @@ namespace QS3D.Core.Domain
 
             var targetEnumerationVersion = project.ChangeVersion;
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            var targetCount = 0;
             foreach (var element in elements)
             {
+                targetCount++;
+                if (targetCount > MaxAssignmentTargets)
+                    throw new InvalidOperationException("Zone assignment supports at most " + MaxAssignmentTargets + " target entries.");
                 if (element == null)
                     throw new InvalidOperationException("Zone assignment target collection contains a null element.");
                 if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
@@ -112,6 +118,14 @@ namespace QS3D.Core.Domain
             if (project == null) throw new ArgumentNullException(nameof(project));
             var zone = FindRequired(project, zoneId);
             return ResolveProjectElements(project).Count(x => ReferencesZone(x, zone.Id));
+        }
+
+        private static void ValidateAssignmentTargetCount(IEnumerable<ProjectElement> elements)
+        {
+            if (elements is ICollection<ProjectElement> collection && collection.Count > MaxAssignmentTargets)
+                throw new InvalidOperationException("Zone assignment supports at most " + MaxAssignmentTargets + " target entries.");
+            if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection && readOnlyCollection.Count > MaxAssignmentTargets)
+                throw new InvalidOperationException("Zone assignment supports at most " + MaxAssignmentTargets + " target entries.");
         }
 
         private static bool ReferencesZone(ProjectElement element, string zoneId)
