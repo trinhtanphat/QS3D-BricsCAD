@@ -76,9 +76,11 @@ def main() -> int:
         ('SetRequiredProperty(item, "Image", Rasterize(vector, 16));', "16px Ribbon Image"),
         ('SetRequiredProperty(item, "LargeImage", Rasterize(vector, 32));', "32px Ribbon LargeImage"),
         ('SetRequiredProperty(item, "ShowImage", true);', "visible TOOL bitmap icons"),
+        ('private static ImageSource Rasterize(ImageSource vector, int pixelSize)', "bitmap-returning TOOL rasterizer"),
         ('var bitmap = new RenderTargetBitmap(', "bitmap rasterization"),
         ('PixelFormats.Pbgra32', "BricsCAD-compatible bitmap format"),
         ('bitmap.Freeze();', "frozen host-facing bitmap"),
+        ('return bitmap;', "host-facing bitmap return contract"),
         ('if (polished.Count != IconKinds.Count)', "all-nine TOOL fail-closed count"),
         ('throw new InvalidOperationException("Duplicate TOOL ribbon button id: " + id);', "duplicate TOOL id rejection"),
     ):
