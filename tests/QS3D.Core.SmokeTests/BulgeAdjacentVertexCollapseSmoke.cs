@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             AdjacentPrecisionCollapseFailsClosed();
+            FinalEndpointPrecisionCollapseFailsClosed();
             RepresentableSemicircleStillTessellates();
         }
 
@@ -43,6 +44,26 @@ namespace QS3D.Core.SmokeTests
             }
 
             throw new Exception("Expected adjacent tessellation vertex precision collapse to fail closed.");
+        }
+
+        private static void FinalEndpointPrecisionCollapseFailsClosed()
+        {
+            var start = new Point2(1e12d, 1e12d);
+            var end = new Point2(1000000000000.0005d, 1000000000000.001d);
+            if (end.Equals(start)) throw new Exception("Final-endpoint collapse fixture requires distinct representable endpoints.");
+
+            try
+            {
+                BulgeArcTessellator.Tessellate(start, end, 0.5d, 0.1d);
+            }
+            catch (InvalidOperationException error)
+            {
+                if (error.Message.IndexOf("collapsed adjacent vertices", StringComparison.Ordinal) < 0)
+                    throw new Exception("Expected the final-endpoint precision-collapse guard to reject the tessellation.", error);
+                return;
+            }
+
+            throw new Exception("Expected final tessellation endpoint precision collapse to fail closed.");
         }
 
         private static void RepresentableSemicircleStillTessellates()
