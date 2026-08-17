@@ -70,7 +70,7 @@ for token in (
     "Resolve-Path -LiteralPath $uiRoot",
     "($memory.Length + $read) -gt $maxXamlBytes",
 ):
-    mutated = palette.replace(token, token + "__REMOVED__", 1)
+    mutated = palette.replace(token, "__REMOVED_CONTRACT__", 1)
     require(palette_contract_errors(mutated), f"mutation self-check did not detect removal of: {token}")
 
 for token in (
