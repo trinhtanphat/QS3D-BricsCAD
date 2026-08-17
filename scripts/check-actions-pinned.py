@@ -264,6 +264,24 @@ def _split_flow_scalars(raw: str):
     return decoded
 
 
+def _find_root_flow_mapping(text: str):
+    for line_number, original in enumerate(text.splitlines(), start=1):
+        code = _strip_yaml_comment(original).strip().lstrip("\ufeff")
+        if not code:
+            continue
+        if code.startswith("%"):
+            continue
+        if code.startswith("---") and (len(code) == 3 or code[3].isspace()):
+            code = code[3:].strip()
+            if not code:
+                continue
+        code = _strip_yaml_anchor_prefix(code)
+        if not code:
+            continue
+        return line_number if code.startswith("{") else None
+    return None
+
+
 def _find_on_alias(text: str):
     for line_number, original in enumerate(text.splitlines(), start=1):
         code = _strip_yaml_comment(original).rstrip()
@@ -369,6 +387,14 @@ def parse_uses_target(raw: str):
 
 def scan_workflow_text(label: str, text: str):
     errors: list[str] = []
+
+    root_flow_line = _find_root_flow_mapping(text)
+    if root_flow_line is not None:
+        errors.append(
+            f"{label}:{root_flow_line}: root flow-style workflow mapping cannot be safety-checked; "
+            "use a block-style top-level workflow mapping"
+        )
+
     on_alias_line = _find_on_alias(text)
     if on_alias_line is not None:
         errors.append(
@@ -421,7 +447,10 @@ def main():
             print(f" - {error}")
         return 1
 
-    print("PASS: every external workflow action is pinned to a full commit SHA; pull_request_target and plaintext HTTP are absent.")
+    print(
+        "PASS: every external workflow action is pinned to a full commit SHA; "
+        "pull_request_target, root flow-style workflow mappings, and plaintext HTTP are absent."
+    )
     return 0
 
 
