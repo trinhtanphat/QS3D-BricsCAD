@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
         {
             CountedOversizeFailsBeforeEnumeration();
             NonGenericCountedOversizeFailsBeforeEnumeration();
+            ConflictingKnownCountsFailBeforeEnumeration();
+            ConsistentKnownCountsRemainAccepted();
             StreamingOversizeStopsAtFirstDisallowedTrace();
             ExactBoundaryRemainsAccepted();
             CanonicalOrderingAndValidationRemainStable();
@@ -36,6 +38,26 @@ namespace QS3D.Core.SmokeTests
 
             Equal(0, source.GetEnumeratorCalls, "Oversized non-generic ICollection snapshot input must fail before enumeration.");
             Contains("at most 10000", error.Message, "Non-generic counted snapshot oversize failure must report the trace bound.");
+        }
+
+        private static void ConflictingKnownCountsFailBeforeEnumeration()
+        {
+            var source = new MultiCountedTraces(1, 2, 1, new[] { Trace(0) });
+            var error = Capture<ArgumentException>(() => new MeasurementSnapshot(source));
+
+            Equal(0, source.GetEnumeratorCalls, "Conflicting known snapshot counts must fail before enumeration.");
+            Contains("count contracts disagree", error.Message, "Conflicting known snapshot counts must report the contract mismatch.");
+        }
+
+        private static void ConsistentKnownCountsRemainAccepted()
+        {
+            var source = new MultiCountedTraces(3, 3, 3, new[] { Trace(2), Trace(0), Trace(1) });
+            var snapshot = new MeasurementSnapshot(source);
+
+            Equal(1, source.GetEnumeratorCalls, "Consistent known snapshot counts must remain enumerable exactly once.");
+            Equal(3, snapshot.Traces.Count, "Consistent multi-contract snapshot count changed.");
+            Equal("SEM-00000", snapshot.Traces[0].SemanticIdentity, "Consistent multi-contract snapshot ordering changed.");
+            Equal("SEM-00002", snapshot.Traces[2].SemanticIdentity, "Consistent multi-contract snapshot final identity changed.");
         }
 
         private static void StreamingOversizeStopsAtFirstDisallowedTrace()
@@ -156,6 +178,45 @@ namespace QS3D.Core.SmokeTests
             {
                 GetEnumeratorCalls++;
                 throw new InvalidOperationException("Oversized counted source must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class MultiCountedTraces : ICollection<MeasurementTrace>, IReadOnlyCollection<MeasurementTrace>, ICollection
+        {
+            private readonly int _genericCount;
+            private readonly int _readOnlyCount;
+            private readonly int _nonGenericCount;
+            private readonly MeasurementTrace[] _items;
+
+            internal MultiCountedTraces(int genericCount, int readOnlyCount, int nonGenericCount, MeasurementTrace[] items)
+            {
+                _genericCount = genericCount;
+                _readOnlyCount = readOnlyCount;
+                _nonGenericCount = nonGenericCount;
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+            }
+
+            int ICollection<MeasurementTrace>.Count => _genericCount;
+            int IReadOnlyCollection<MeasurementTrace>.Count => _readOnlyCount;
+            int ICollection.Count => _nonGenericCount;
+            bool ICollection<MeasurementTrace>.IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+            internal int GetEnumeratorCalls { get; private set; }
+
+            void ICollection<MeasurementTrace>.Add(MeasurementTrace item) => throw new NotSupportedException();
+            void ICollection<MeasurementTrace>.Clear() => throw new NotSupportedException();
+            bool ICollection<MeasurementTrace>.Contains(MeasurementTrace item) => Array.IndexOf(_items, item) >= 0;
+            void ICollection<MeasurementTrace>.CopyTo(MeasurementTrace[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
+            bool ICollection<MeasurementTrace>.Remove(MeasurementTrace item) => throw new NotSupportedException();
+            void ICollection.CopyTo(Array array, int index) => _items.CopyTo(array, index);
+
+            public IEnumerator<MeasurementTrace> GetEnumerator()
+            {
+                GetEnumeratorCalls++;
+                return ((IEnumerable<MeasurementTrace>)_items).GetEnumerator();
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();

@@ -5,6 +5,7 @@ namespace QS3D.Core.SmokeTests
         internal static void RunAll()
         {
             ProjectQuantitySmoke.Run();
+            QuantityRuleCanonicalNumericKeySmoke.Run();
             QuantityReportDistinctNoteSmoke.Run();
             QuantityRuleTokenXmlPersistabilitySmoke.Run();
             QuantityReportFamilyCategorySmoke.Run();
@@ -30,6 +31,7 @@ namespace QS3D.Core.SmokeTests
             PersistenceHardeningSmoke.Run();
             LicenseVerifierSmoke.Run();
             AdvancedDomainSmoke.Run();
+            CostBenchmarkMedianPrecisionSmoke.Run();
             HardeningRegressionSmoke.Run();
             ReviewHardeningSmoke.Run();
             Ed2NumericParitySmoke.Run();
@@ -126,6 +128,7 @@ namespace QS3D.Core.SmokeTests
             ProjectInterchangeSnapshotDiffSmoke.Run();
             ProjectInterchangeImportResolutionPlannerSmoke.Run();
             ProjectInterchangeAppendOnlyImporterSmoke.Run();
+            IfcRoundTripQuantityEvidenceNullFailFastSmoke.Run();
             BcfIssueExchangeSmoke.Run();
             BcfZipPackageSmoke.Run();
             RegenerationSubsetSmoke.Run();
@@ -138,6 +141,7 @@ namespace QS3D.Core.SmokeTests
             ProjectPersistenceCheckpointSmoke.Run();
             ProjectMetadataBoundSmoke.Run();
             ProjectZoneAssignmentBoundSmoke.Run();
+            ProjectFamilyAssignmentBoundSmoke.Run();
             ProjectElementCategoryIntegritySmoke.Run();
             SelectionStateSmoke.Run();
             BulkEditCanonicalizationSmoke.Run();

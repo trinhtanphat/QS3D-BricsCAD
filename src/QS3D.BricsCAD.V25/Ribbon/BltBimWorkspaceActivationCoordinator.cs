@@ -7,24 +7,27 @@ namespace QS3D.BricsCAD.V25.Ribbon
 {
     /// <summary>
     /// Keeps the BLT3D-style BIM palettes coupled to the QS3D MÔ HÌNH BIM tab without relying on
-    /// a BricsCAD-version-specific Ribbon event signature. We sample the selected tab only while
-    /// the plugin is loaded and react once per tab transition; manually closing palettes while
-    /// staying on BIM is therefore respected.
+    /// a BricsCAD-version-specific Ribbon event signature. A tab transition opens the coordinated
+    /// BIM palettes immediately and for two bounded settle ticks while BricsCAD applies native
+    /// docking. After that window, manually closing palettes while staying on BIM is respected.
     /// </summary>
     internal static class BltBimWorkspaceActivationCoordinator
     {
         private const string AssemblyName = "BrxMgd";
         private const string BimTabId = "QS3D_BIM";
+        private const int BimSettleTicks = 2;
         private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(250);
 
         private static DispatcherTimer? _timer;
         private static string _lastTabId = string.Empty;
+        private static int _bimSettleTicksRemaining;
 
         public static void Start()
         {
             if (_timer != null) return;
 
             _lastTabId = string.Empty;
+            _bimSettleTicksRemaining = 0;
             var timer = new DispatcherTimer(DispatcherPriority.ApplicationIdle)
             {
                 Interval = PollInterval
@@ -39,6 +42,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             var timer = _timer;
             _timer = null;
             _lastTabId = string.Empty;
+            _bimSettleTicksRemaining = 0;
             if (timer == null) return;
             try { timer.Stop(); } catch { }
             try { timer.Tick -= OnTick; } catch { }
@@ -51,25 +55,46 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 var control = FindRibbonControl();
                 if (control == null) return;
                 var currentId = ResolveCurrentTabId(control);
-                if (string.IsNullOrWhiteSpace(currentId) ||
-                    string.Equals(currentId, _lastTabId, StringComparison.OrdinalIgnoreCase))
+                if (string.IsNullOrWhiteSpace(currentId)) return;
+
+                var changed = !string.Equals(currentId, _lastTabId, StringComparison.OrdinalIgnoreCase);
+                if (!changed)
+                {
+                    if (string.Equals(currentId, BimTabId, StringComparison.OrdinalIgnoreCase) &&
+                        _bimSettleTicksRemaining > 0)
+                    {
+                        if (ReassertBimWorkspace())
+                        {
+                            _bimSettleTicksRemaining--;
+                        }
+                    }
                     return;
+                }
 
                 _lastTabId = currentId;
                 if (!string.Equals(currentId, BimTabId, StringComparison.OrdinalIgnoreCase))
+                {
+                    _bimSettleTicksRemaining = 0;
                     return;
+                }
 
                 // The embedded HOME Start Center owns a large docked surface. Release it before
                 // showing the left/right BIM palettes so the real BricsCAD viewport is visible in
                 // the centre instead of leaving the HOME canvas covering the model workspace.
-                StartCenterPaletteCoordinator.Hide();
-                PaletteCoordinator.ShowBimWorkspace();
+                _bimSettleTicksRemaining = BimSettleTicks;
+                ReassertBimWorkspace();
             }
             catch
             {
                 // Ribbon polling is presentation-only. A host/Ribbon transient must never break
-                // CAD commands or initialization; the next tick retries naturally.
+                // CAD commands or initialization; a pending settle tick retries naturally.
             }
+        }
+
+        private static bool ReassertBimWorkspace()
+        {
+            StartCenterPaletteCoordinator.Hide();
+            return PaletteCoordinator.ShowBimWorkspace();
         }
 
         private static string ResolveCurrentTabId(object control)
