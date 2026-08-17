@@ -74,8 +74,8 @@ if not errors:
         'SetProperty(button, "ShowImage", true);',
         'SetEnumProperty(button, "Size", "Large");',
         'SetProperty(button, "CommandParameter", spec.Command);',
-        'SetProperty(button, "Image", icon);',
-        'SetProperty(button, "LargeImage", icon);',
+        'SetProperty(button, "Image", CreateIcon(spec.Icon, 16));',
+        'SetProperty(button, "LargeImage", CreateIcon(spec.Icon, 32));',
     )
     for token in required_override_tokens:
         if token not in override:
