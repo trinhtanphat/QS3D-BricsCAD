@@ -114,7 +114,7 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        public static void ShowBimWorkspace()
+        public static bool ShowBimWorkspace()
         {
             try
             {
@@ -125,10 +125,12 @@ namespace QS3D.BricsCAD.V25
                 _rightPanel?.Refresh();
                 _quantityInsightPanel?.RefreshQuantityInsights();
                 _workspacePanel?.SetStatus("MÔ HÌNH BIM • BLT3D workspace • Mô hình + QS3D Properties tách riêng bên trái • viewport BricsCAD native ở giữa • Quản lý + Diễn giải bên phải.");
+                return true;
             }
             catch (Exception)
             {
                 ReportPaletteFailure("MÔ HÌNH BIM");
+                return false;
             }
         }
 
