@@ -219,7 +219,7 @@ namespace QS3D.BricsCAD.V25
             var quantityVisible = IsQuantityInsightVisible;
             Dispose();
             EnsureCreated();
-            if (workspaceVisible && rightVisible && quantityVisible)
+            if (workspaceVisible && rightVisible)
                 EnsureBimDockContract();
             SetVisibility(workspaceVisible, rightVisible, quantityVisible);
         }

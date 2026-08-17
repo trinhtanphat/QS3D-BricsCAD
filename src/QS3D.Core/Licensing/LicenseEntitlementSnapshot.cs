@@ -145,6 +145,12 @@ namespace QS3D.Core.Licensing
             var hex = line.Substring(Prefix.Length);
             if (hex.Length != 64)
                 return false;
+            for (var i = 0; i < hex.Length; i++)
+            {
+                var ch = hex[i];
+                if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f')))
+                    return false;
+            }
             var bytes = new byte[32];
             for (var i = 0; i < bytes.Length; i++)
             {

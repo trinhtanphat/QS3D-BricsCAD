@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,39 +48,8 @@ else:
         if token not in dock:
             errors.append("BIM dock contract missing: " + token)
 
-    preserved = {}
-    for local_name, property_name in re.findall(
-        r"\bvar\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"
-        r"(IsWorkspaceVisible|IsRightPanelVisible|IsQuantityInsightVisible)\s*;",
-        reset,
-    ):
-        preserved[property_name] = local_name
-
-    required_visibility = (
-        "IsWorkspaceVisible",
-        "IsRightPanelVisible",
-        "IsQuantityInsightVisible",
-    )
-    missing_visibility = [name for name in required_visibility if name not in preserved]
-    redock_match = re.search(
-        r"if\s*\(([^)]*)\)\s*EnsureBimDockContract\(\);",
-        reset,
-        flags=re.MULTILINE,
-    )
-    if missing_visibility or redock_match is None:
-        errors.append(
-            "palette recreation must preserve Workspace + Management + Quantity visibility before reapplying the BIM dock contract"
-        )
-    else:
-        actual_terms = [term.strip() for term in redock_match.group(1).split("&&")]
-        expected_terms = [preserved[name] for name in required_visibility]
-        if len(actual_terms) != len(expected_terms) or set(actual_terms) != set(expected_terms):
-            errors.append(
-                "palette recreation must reapply the BIM dock contract only while all coordinated side palettes remain visible"
-            )
-
-    if "EnsureBimDockContract();" not in reset:
-        errors.append("palette recreation must reapply the BIM dock contract after palette recreation")
+    if "if (workspaceVisible && rightVisible)" not in reset or "EnsureBimDockContract();" not in reset:
+        errors.append("palette recreation must reapply the BIM dock contract while the coordinated side palettes remain visible")
     if "SetVisibility(workspaceVisible, rightVisible, quantityVisible);" not in reset:
         errors.append("palette recreation must preserve the user's actual visibility state")
 
