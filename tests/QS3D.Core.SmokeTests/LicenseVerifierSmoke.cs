@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             ProductAndTimeWindowsAreEnforced();
             FeatureDelimiterIsRejected();
             CanonicalTokenWhitespaceIsRejected();
+            EntitlementSnapshotIdentityCanonicalityIsEnforced();
             LoadedCanonicalTokenWhitespaceIsRejected();
             NamespacedLicenseRootsAreRejected();
             DuplicateLicenseSectionsAreRejected();
@@ -80,6 +81,27 @@ namespace QS3D.Core.SmokeTests
             var paddedFeature = License();
             paddedFeature.Features.Add(" admin ");
             Throws<InvalidDataException>(() => paddedFeature.CanonicalPayload());
+        }
+
+        private static void EntitlementSnapshotIdentityCanonicalityIsEnforced()
+        {
+            var persistedAt = Utc(2026, 8, 10);
+            Throws<ArgumentException>(() => LicenseEntitlementSnapshot.Create(" QS3D-BricsCAD-V25", "25.2", "machine-1", "payload", persistedAt));
+            Throws<ArgumentException>(() => LicenseEntitlementSnapshot.Create("QS3D-BricsCAD-V25", "25.2 ", "machine-1", "payload", persistedAt));
+            Throws<ArgumentException>(() => LicenseEntitlementSnapshot.Create("QS3D-BricsCAD-V25", "25.2", "machine-1\nshadow", "payload", persistedAt));
+            Throws<ArgumentException>(() => LicenseEntitlementSnapshot.Create("QS3D-BricsCAD-V25", "25.2", "machine-\uD800", "payload", persistedAt));
+            Throws<ArgumentException>(() => LicenseEntitlementSnapshot.Create("QS3D-BricsCAD-V25", "25.2", "machine-1", "payload-\uD800", persistedAt));
+
+            var canonical = LicenseEntitlementSnapshot.Create("QS3D-BricsCAD-V25", "25.2-đúng", "máy-01", " signed payload \n preserved ", persistedAt);
+            Equal("QS3D-BricsCAD-V25", canonical.Product);
+            Equal("25.2-đúng", canonical.ProductVersion);
+            Equal("máy-01", canonical.MachineId);
+            Equal(" signed payload \n preserved ", canonical.EntitlementPayload);
+            True(LicenseEntitlementSnapshot.TryDeserialize(canonical.Serialize(), out var roundTrip));
+            Equal(canonical.Product, roundTrip.Product);
+            Equal(canonical.ProductVersion, roundTrip.ProductVersion);
+            Equal(canonical.MachineId, roundTrip.MachineId);
+            Equal(canonical.EntitlementPayload, roundTrip.EntitlementPayload);
         }
 
         private static void LoadedCanonicalTokenWhitespaceIsRejected()
