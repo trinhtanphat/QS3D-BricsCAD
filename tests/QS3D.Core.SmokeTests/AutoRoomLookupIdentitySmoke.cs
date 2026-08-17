@@ -9,6 +9,9 @@ namespace QS3D.Core.SmokeTests
         {
             RejectsNullEntryBeforeLookupResult();
             RejectsDuplicateIdsBeforeLookupResult();
+            CanonicalRoomReferenceResolvesCaseInsensitively();
+            RejectsPaddedRoomReferenceProperty();
+            RejectsPaddedDependencyRoomReference();
         }
 
         private static void RejectsNullEntryBeforeLookupResult()
@@ -41,6 +44,61 @@ namespace QS3D.Core.SmokeTests
             Equal(AutoRoomLifecycle.BoundaryStateActive, duplicate.Properties[AutoRoomLifecycle.BoundaryStateKey]);
         }
 
+        private static void CanonicalRoomReferenceResolvesCaseInsensitively()
+        {
+            var project = Project();
+            var room = AutoRoom("ROOM-A", "A;B");
+            var finish = Finish("FINISH-CANONICAL");
+            finish.Properties[AutoRoomLifecycle.RoomSourceIdKey] = "room-a";
+            finish.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(room);
+            project.Elements.Add(finish);
+            var version = project.ChangeVersion;
+
+            var excluded = AutoRoomLifecycle.IsExcludedFromQuantity(project, finish);
+
+            Equal(false, excluded);
+            Equal(version, project.ChangeVersion);
+            Equal(ElementDirtyFlags.None, finish.Dirty);
+            Equal("room-a", finish.Properties[AutoRoomLifecycle.RoomSourceIdKey]);
+        }
+
+        private static void RejectsPaddedRoomReferenceProperty()
+        {
+            var project = Project();
+            var room = AutoRoom("ROOM-A", "A;B");
+            var finish = Finish("FINISH-PROPERTY-PAD");
+            finish.Properties[AutoRoomLifecycle.RoomSourceIdKey] = " ROOM-A ";
+            finish.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(room);
+            project.Elements.Add(finish);
+            var version = project.ChangeVersion;
+
+            Throws<InvalidOperationException>(() => AutoRoomLifecycle.IsExcludedFromQuantity(project, finish));
+
+            Equal(version, project.ChangeVersion);
+            Equal(ElementDirtyFlags.None, finish.Dirty);
+            Equal(" ROOM-A ", finish.Properties[AutoRoomLifecycle.RoomSourceIdKey]);
+        }
+
+        private static void RejectsPaddedDependencyRoomReference()
+        {
+            var project = Project();
+            var room = AutoRoom("ROOM-A", "A;B");
+            var finish = Finish("FINISH-DEPENDENCY-PAD");
+            finish.DependsOn.Add("\tROOM-A ");
+            finish.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(room);
+            project.Elements.Add(finish);
+            var version = project.ChangeVersion;
+
+            Throws<InvalidOperationException>(() => AutoRoomLifecycle.IsExcludedFromQuantity(project, finish));
+
+            Equal(version, project.ChangeVersion);
+            Equal(ElementDirtyFlags.None, finish.Dirty);
+            Equal("\tROOM-A ", finish.DependsOn[0]);
+        }
+
         private static ProjectState Project()
         {
             return new ProjectState("AUTO-LOOKUP", "Auto room lookup");
@@ -54,6 +112,11 @@ namespace QS3D.Core.SmokeTests
             room.Properties[AutoRoomLifecycle.BoundarySourceSignatureKey] = AutoRoomLifecycle.NormalizeSourceHandles(handles.Split(';'));
             room.Properties[AutoRoomLifecycle.BoundaryStateKey] = AutoRoomLifecycle.BoundaryStateActive;
             return room;
+        }
+
+        private static ProjectElement Finish(string id)
+        {
+            return new ProjectElement(id, ElementCategory.FloorFinish, string.Empty, "F", "Z");
         }
 
         private static void Equal<T>(T expected, T actual)
