@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using QS3D.Core.Cost;
 using QS3D.Core.Domain;
 using QS3D.Core.Mapping;
 using QS3D.Core.Persistence;
@@ -16,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             PublicMutationStopsAtBoundAndPreservesUpdates();
             PersistenceReplacementStopsAtBoundAndIsAtomic();
             OwnedMappingCapacityFailureDoesNotTouchProject();
+            OwnedTbqCapacityFailureDoesNotTouchProject();
             SnapshotSupportsExactBoundary();
         }
 
@@ -88,6 +90,31 @@ namespace QS3D.Core.SmokeTests
             Equal(changeVersion, project.ChangeVersion, "failed owned metadata mutation change version");
             Equal(MaximumEntries, project.Metadata.Count, "failed owned metadata mutation count");
             Equal(0, project.MeasurementWorkItemMappings.Count, "failed owned mapping collection count");
+        }
+
+        private static void OwnedTbqCapacityFailureDoesNotTouchProject()
+        {
+            var project = NewProject("tbq-owned");
+            for (var i = 0; i < MaximumEntries; i++)
+                project.Metadata.Add(Key(i), "v");
+
+            var workspace = ProjectTbqWorkspace.Open(project);
+            var state = new TbqProjectWorkspaceState(
+                "VND",
+                0m,
+                Array.Empty<TbqBillItem>(),
+                Array.Empty<BuildUpRateSnapshot>(),
+                Array.Empty<RateReferenceEdge>(),
+                "PROJECT",
+                Array.Empty<BqLibraryEntry>());
+            var changeVersion = project.ChangeVersion;
+
+            Throws<InvalidOperationException>(
+                () => workspace.Replace(state),
+                "owned TBQ workspace metadata entry 10001");
+            Equal(changeVersion, project.ChangeVersion, "failed TBQ metadata mutation change version");
+            Equal(MaximumEntries, project.Metadata.Count, "failed TBQ metadata mutation count");
+            Equal(false, workspace.HasValue, "failed TBQ metadata mutation workspace state");
         }
 
         private static void SnapshotSupportsExactBoundary()
