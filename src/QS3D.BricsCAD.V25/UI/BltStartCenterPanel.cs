@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using QS3D.BricsCAD.V25.Ribbon;
@@ -26,6 +27,9 @@ namespace QS3D.BricsCAD.V25.UI
         private static readonly Brush ShellBorderBrush = BrushFromRgb(67, 67, 67);
         private static readonly Brush MutedBrush = BrushFromRgb(174, 179, 188);
         private static readonly Brush AccentBrush = BrushFromRgb(20, 113, 236);
+        private static readonly Brush ScrollTrackBrush = BrushFromRgb(34, 34, 34);
+        private static readonly Brush ScrollThumbBrush = BrushFromRgb(86, 91, 99);
+        private static readonly Brush ScrollThumbHoverBrush = BrushFromRgb(116, 122, 132);
         private static readonly Brush TextBrush = Brushes.White;
         private static readonly ControlTemplate ClickSurfaceTemplate = CreateClickSurfaceTemplate();
 
@@ -92,13 +96,7 @@ namespace QS3D.BricsCAD.V25.UI
             root.Children.Add(body);
 
             var leftContent = BuildLeftPane();
-            var left = new ScrollViewer
-            {
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                CanContentScroll = false,
-                Content = leftContent
-            };
+            var left = CreateVerticalScrollViewer(leftContent);
             left.SizeChanged += (_, e) => leftContent.MinHeight = Math.Max(0d, e.NewSize.Height);
             Grid.SetColumn(left, 0);
             body.Children.Add(left);
@@ -268,15 +266,61 @@ namespace QS3D.BricsCAD.V25.UI
             Grid.SetRow(help, 1);
             grid.Children.Add(help);
 
+            var scroll = CreateVerticalScrollViewer(_recentPanel);
+            Grid.SetRow(scroll, 2);
+            grid.Children.Add(scroll);
+            return grid;
+        }
+
+        private static ScrollViewer CreateVerticalScrollViewer(UIElement content)
+        {
             var scroll = new ScrollViewer
             {
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                Content = _recentPanel
+                CanContentScroll = false,
+                PanningMode = PanningMode.VerticalOnly,
+                PanningDeceleration = 0.001,
+                Content = content
             };
-            Grid.SetRow(scroll, 2);
-            grid.Children.Add(scroll);
-            return grid;
+
+            scroll.Resources[typeof(ScrollBar)] = CreateCompactScrollBarStyle();
+            scroll.Resources[typeof(Thumb)] = CreateCompactScrollThumbStyle();
+            return scroll;
+        }
+
+        private static Style CreateCompactScrollBarStyle()
+        {
+            var style = new Style(typeof(ScrollBar));
+            style.Setters.Add(new Setter(Control.BackgroundProperty, ScrollTrackBrush));
+            style.Setters.Add(new Setter(Control.ForegroundProperty, ScrollThumbBrush));
+            style.Setters.Add(new Setter(Control.BorderBrushProperty, Brushes.Transparent));
+            style.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(0)));
+            style.Setters.Add(new Setter(FrameworkElement.WidthProperty, 10d));
+            style.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 10d));
+            style.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(4, 0, 0, 0)));
+            return style;
+        }
+
+        private static Style CreateCompactScrollThumbStyle()
+        {
+            var style = new Style(typeof(Thumb));
+            style.Setters.Add(new Setter(Control.BackgroundProperty, ScrollThumbBrush));
+            style.Setters.Add(new Setter(Control.BorderBrushProperty, Brushes.Transparent));
+            style.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(0)));
+            style.Setters.Add(new Setter(FrameworkElement.MinHeightProperty, 30d));
+            style.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 6d));
+            style.Setters.Add(new Setter(UIElement.OpacityProperty, 0.82d));
+
+            var hover = new Trigger
+            {
+                Property = UIElement.IsMouseOverProperty,
+                Value = true
+            };
+            hover.Setters.Add(new Setter(Control.BackgroundProperty, ScrollThumbHoverBrush));
+            hover.Setters.Add(new Setter(UIElement.OpacityProperty, 1d));
+            style.Triggers.Add(hover);
+            return style;
         }
 
         private Border BuildStatusBar()
