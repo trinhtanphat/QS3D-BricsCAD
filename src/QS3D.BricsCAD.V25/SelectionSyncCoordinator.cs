@@ -14,6 +14,9 @@ namespace QS3D.BricsCAD.V25
         private static readonly Dictionary<Document, DispatcherTimer> Pending = new Dictionary<Document, DispatcherTimer>();
         private static readonly TimeSpan RefreshDelay = TimeSpan.FromMilliseconds(80d);
 
+        private static bool IsSelectionSurfaceVisible =>
+            PaletteCoordinator.IsWorkspaceVisible || PaletteCoordinator.IsPropertiesVisible;
+
         public static void Attach(Document? document)
         {
             if (document == null || Attached.Contains(document)) return;
@@ -62,7 +65,7 @@ namespace QS3D.BricsCAD.V25
         public static void Refresh(Document? document)
         {
             if (document == null || !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
-            if (!PaletteCoordinator.IsWorkspaceVisible) return;
+            if (!IsSelectionSurfaceVisible) return;
             StopPending(document);
             if (!Refreshing.Add(document)) return;
             try { PaletteCoordinator.SetInspection(EntitySnapshotReader.ReadImpliedSelection(document)); }
@@ -87,7 +90,7 @@ namespace QS3D.BricsCAD.V25
 
         private static void ScheduleRefresh(Document document)
         {
-            if (!PaletteCoordinator.IsWorkspaceVisible)
+            if (!IsSelectionSurfaceVisible)
             {
                 StopPending(document);
                 return;

@@ -4,6 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PALETTE = ROOT / "src" / "QS3D.BricsCAD.V25" / "PaletteCoordinator.cs"
+SELECTION_SYNC = ROOT / "src" / "QS3D.BricsCAD.V25" / "SelectionSyncCoordinator.cs"
 LAYOUT_STORE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Services" / "UserUiLayoutStore.cs"
 WORKSPACE_LAYOUT = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
 PROPERTIES_XAML = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "Qs3dPropertiesPanel.xaml"
@@ -19,6 +20,7 @@ def read(path: Path) -> str:
 
 
 palette = read(PALETTE)
+selection_sync = read(SELECTION_SYNC)
 layout_store = read(LAYOUT_STORE)
 workspace_layout = read(WORKSPACE_LAYOUT)
 properties_xaml = read(PROPERTIES_XAML)
@@ -42,6 +44,15 @@ for token in (
 ):
     if token not in palette:
         errors.append("dedicated PaletteSet contract missing: " + token)
+
+for token in (
+    "private static bool IsSelectionSurfaceVisible =>",
+    "PaletteCoordinator.IsWorkspaceVisible || PaletteCoordinator.IsPropertiesVisible;",
+    "if (!IsSelectionSurfaceVisible) return;",
+    "if (!IsSelectionSurfaceVisible)",
+):
+    if token not in selection_sync:
+        errors.append("standalone Properties live-selection contract missing: " + token)
 
 for token in (
     "PropertiesPaletteWidth",
@@ -98,4 +109,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3D Properties is a separately dockable/resizable native PaletteSet bound to the live WorkspaceViewModel; the embedded Workspace property region is retired and native BricsCAD modelspace remains untouched.")
+print("PASS: QS3D Properties is a separately dockable/resizable native PaletteSet bound to the live WorkspaceViewModel with standalone live selection; the embedded Workspace property region is retired and native BricsCAD modelspace remains untouched.")
