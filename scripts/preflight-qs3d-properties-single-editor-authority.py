@@ -30,10 +30,7 @@ palette = read(PALETTE)
 
 for path in DUPLICATE_VISUALS:
     if path.exists():
-        errors.append(
-            "duplicate QS3D Properties visual authority is forbidden; use the existing Workspace editor: "
-            + str(path.relative_to(ROOT))
-        )
+        errors.append("duplicate QS3D Properties visual authority is forbidden: " + str(path.relative_to(ROOT)))
 
 for token in (
     'x:Name="PropertyList"',
@@ -43,15 +40,11 @@ for token in (
     'Click="OnResetPropertyClick"',
 ):
     if token not in workspace_xaml:
-        errors.append("authoritative Workspace Properties editor contract missing: " + token)
+        errors.append("authoritative Workspace Properties editor missing: " + token)
 
-for token in (
-    "OnResetPropertyClick",
-    "button.CommandParameter is PropertyRowViewModel row",
-    "row.ResetValue();",
-):
+for token in ("OnResetPropertyClick", "button.CommandParameter is PropertyRowViewModel row", "row.ResetValue();"):
     if token not in workspace_code:
-        errors.append("authoritative Workspace Properties write-back/reset handler missing: " + token)
+        errors.append("authoritative Properties write-back/reset handler missing: " + token)
 
 for token in (
     "CreatePropertiesPaletteVisual",
@@ -63,15 +56,23 @@ for token in (
     "new Binding(nameof(DataContext))",
 ):
     if token not in dedicated:
-        errors.append("single-editor reparenting contract missing: " + token)
+        errors.append("single-editor optional reparenting contract missing: " + token)
 
 for token in (
-    "if (propertiesVisible && !bimSurfaceActive)",
-    "_workspacePanel?.SetDedicatedPropertiesPaletteActive(true);",
-    "_workspacePanel?.SetDedicatedPropertiesPaletteActive(bimSurfaceActive);",
+    "var propertiesVisible = IsPropertiesVisible;",
+    "_workspacePanel?.SetDedicatedPropertiesPaletteActive(propertiesVisible);",
+    "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);",
 ):
     if token not in palette:
-        errors.append("standalone/dedicated Properties reset-host contract missing: " + token)
+        errors.append("single-editor reset-host contract missing: " + token)
+
+bim_start = palette.find("public static bool ShowBimWorkspace()")
+bim_end = palette.find("public static void ShowDrawingManagement()", bim_start)
+bim = palette[bim_start:bim_end]
+if "SetDedicatedPropertiesPaletteActive(false)" not in bim:
+    errors.append("default BIM must host the authoritative editor in Workspace")
+if "SetDedicatedPropertiesPaletteActive(true)" in bim:
+    errors.append("default BIM must not create the separated Properties presentation")
 
 if "new WorkspaceViewModel" in dedicated:
     errors.append("dedicated Properties host must not create a second WorkspaceViewModel")
@@ -85,4 +86,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: #2399 has one authoritative editable QS3D Properties editor; BIM mode reparents that existing Workspace visual into its dedicated palette, standalone Properties visibility survives coordinator reset, and no duplicate PropertiesPanel/ViewModel authority exists.")
+print("PASS: one authoritative editable QS3D Properties editor remains; default BIM keeps it embedded under Family, while the existing dedicated palette can reparent that same visual only when explicitly visible.")
