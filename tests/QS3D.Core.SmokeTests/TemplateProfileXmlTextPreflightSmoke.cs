@@ -21,7 +21,17 @@ namespace QS3D.Core.SmokeTests
 
         private static void InvalidTemplateIdFailsBeforeFilesystemMutation()
         {
-            AssertPreflightFailure(Profile("TPL-\u0001"), "invalid-id");
+            var root = TempRoot("invalid-id");
+            try
+            {
+                Throws<ArgumentException>(() => Profile("TPL-\u0001"));
+                if (Directory.Exists(root))
+                    throw new InvalidOperationException("Invalid template identity text mutated the filesystem before constructor rejection.");
+            }
+            finally
+            {
+                DeleteTree(root);
+            }
         }
 
         private static void InvalidPropertyValueFailsBeforeFilesystemMutation()
