@@ -79,10 +79,12 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        // Compatibility entry point used by the QS3D command. Keep the normal authoring flow
-        // Ribbon-first: opening Workspace must not also consume the CAD viewport with the
-        // drawing/layer and quantity palettes.
-        public static void Show() => ShowWorkspace();
+        // The explicit QS3D command is the owner-facing workspace activation entry point. Fresh
+        // runtime evidence showed that routing it through the isolated legacy Workspace path left
+        // only one QS3D palette visible and made native BricsCAD Properties look like part of QS3D.
+        // Always restore the coordinated BLT3D-style surface here; standalone palette commands
+        // below remain available when an intentionally isolated tool window is needed.
+        public static void Show() => ShowBimWorkspace();
 
         public static void ShowWorkspace()
         {
@@ -99,8 +101,8 @@ namespace QS3D.BricsCAD.V25
         }
 
         // The owner-reference BIM tab intentionally coordinates all three QS3D palettes around
-        // the real BricsCAD viewport. It is explicit so the ordinary Workspace command stays
-        // isolated while the BLT3D-familiar BIM surface restores the complete five-region view.
+        // the real BricsCAD viewport. The left workspace now exposes its own Model + Properties
+        // regions vertically, while Management and Quantity remain native QS3D palettes right.
         public static void ShowBimWorkspace()
         {
             try
@@ -111,7 +113,7 @@ namespace QS3D.BricsCAD.V25
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
                 _rightPanel?.Refresh();
                 _quantityInsightPanel?.RefreshQuantityInsights();
-                _workspacePanel?.SetStatus("MÔ HÌNH BIM • BLT3D workspace • viewport BricsCAD native ở giữa • Quản lý + Diễn giải bên phải.");
+                _workspacePanel?.SetStatus("MÔ HÌNH BIM • BLT3D workspace • Mô hình + Thuộc tính QS3D bên trái • viewport BricsCAD native ở giữa • Quản lý + Diễn giải bên phải.");
             }
             catch (Exception)
             {
