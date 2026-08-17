@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             CountedOversizeFailsBeforeEnumeration();
+            NonGenericCountedOversizeFailsBeforeEnumeration();
+            CountVersionMutationFailsBeforeEnumeration();
             LazyOversizeStopsAtFirstImpossibleEntry();
             ExactBoundDuplicatesRemainSupported();
         }
@@ -31,6 +33,39 @@ namespace QS3D.Core.SmokeTests
             Equal(beforeUtc, fixture.Project.UpdatedUtc, "Counted oversize Zone assignment changed project timestamp.");
             Equal(fixture.SourceZone.Id, fixture.Element.ZoneId, "Counted oversize Zone assignment changed ZoneId.");
             Equal(ElementDirtyFlags.None, fixture.Element.Dirty, "Counted oversize Zone assignment dirtied the element.");
+        }
+
+        private static void NonGenericCountedOversizeFailsBeforeEnumeration()
+        {
+            var fixture = NewFixture("non-generic-counted");
+            var beforeVersion = fixture.Project.ChangeVersion;
+            var beforeUtc = fixture.Project.UpdatedUtc;
+            var source = new NonGenericNoEnumerationCollection(fixture.Element, AssignmentTargetLimit + 1);
+
+            Throws<InvalidOperationException>(() =>
+                ProjectZoneService.Assign(fixture.Project, fixture.TargetZone.Id, source));
+
+            Equal(0, source.EnumerationAttempts, "Non-generic counted oversize Zone assignment enumerated the source.");
+            Equal(beforeVersion, fixture.Project.ChangeVersion, "Non-generic counted oversize Zone assignment changed project version.");
+            Equal(beforeUtc, fixture.Project.UpdatedUtc, "Non-generic counted oversize Zone assignment changed project timestamp.");
+            Equal(fixture.SourceZone.Id, fixture.Element.ZoneId, "Non-generic counted oversize Zone assignment changed ZoneId.");
+            Equal(ElementDirtyFlags.None, fixture.Element.Dirty, "Non-generic counted oversize Zone assignment dirtied the element.");
+        }
+
+        private static void CountVersionMutationFailsBeforeEnumeration()
+        {
+            var fixture = NewFixture("count-version");
+            var beforeVersion = fixture.Project.ChangeVersion;
+            var source = new VersionMutatingCountCollection(fixture.Project, fixture.Element);
+
+            Throws<InvalidOperationException>(() =>
+                ProjectZoneService.Assign(fixture.Project, fixture.TargetZone.Id, source));
+
+            Equal(1, source.CountReads, "Version-mutating counted source did not read Count exactly once.");
+            Equal(0, source.EnumerationAttempts, "Version-mutating counted source was enumerated after ChangeVersion drift.");
+            Equal(beforeVersion + 1L, fixture.Project.ChangeVersion, "Count fixture did not produce the expected single ChangeVersion drift.");
+            Equal(fixture.SourceZone.Id, fixture.Element.ZoneId, "Version-mutating Count changed ZoneId through assignment.");
+            Equal(ElementDirtyFlags.None, fixture.Element.Dirty, "Version-mutating Count caused Zone assignment dirty flags.");
         }
 
         private static void LazyOversizeStopsAtFirstImpossibleEntry()
@@ -167,6 +202,69 @@ namespace QS3D.Core.SmokeTests
             {
                 EnumerationAttempts++;
                 throw new Exception("Counted oversize source must be rejected before enumeration.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public bool Contains(ProjectElement item) => ReferenceEquals(item, _element);
+            public void CopyTo(ProjectElement[] array, int arrayIndex) => throw new NotSupportedException();
+            public void Add(ProjectElement item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Remove(ProjectElement item) => throw new NotSupportedException();
+        }
+
+        private sealed class NonGenericNoEnumerationCollection : IEnumerable<ProjectElement>, ICollection
+        {
+            private readonly ProjectElement _element;
+
+            public NonGenericNoEnumerationCollection(ProjectElement element, int count)
+            {
+                _element = element;
+                Count = count;
+            }
+
+            public int EnumerationAttempts { get; private set; }
+            public int Count { get; }
+            public bool IsSynchronized => false;
+            public object SyncRoot => this;
+
+            public IEnumerator<ProjectElement> GetEnumerator()
+            {
+                EnumerationAttempts++;
+                throw new Exception("Non-generic counted oversize source must be rejected before enumeration.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void CopyTo(Array array, int index) => throw new NotSupportedException();
+        }
+
+        private sealed class VersionMutatingCountCollection : ICollection<ProjectElement>
+        {
+            private readonly ProjectState _project;
+            private readonly ProjectElement _element;
+
+            public VersionMutatingCountCollection(ProjectState project, ProjectElement element)
+            {
+                _project = project;
+                _element = element;
+            }
+
+            public int CountReads { get; private set; }
+            public int EnumerationAttempts { get; private set; }
+            public int Count
+            {
+                get
+                {
+                    CountReads++;
+                    if (CountReads == 1) _project.Touch();
+                    return 1;
+                }
+            }
+            public bool IsReadOnly => true;
+
+            public IEnumerator<ProjectElement> GetEnumerator()
+            {
+                EnumerationAttempts++;
+                throw new Exception("Version-mutating counted source must be rejected before enumeration.");
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
