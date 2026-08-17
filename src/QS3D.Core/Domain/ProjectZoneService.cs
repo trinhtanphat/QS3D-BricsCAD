@@ -64,13 +64,13 @@ namespace QS3D.Core.Domain
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var zone = FindRequired(project, zoneId);
 
-            var projectElements = ResolveProjectElements(project)
-                .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
-
             var targetEnumerationVersion = project.ChangeVersion;
             RequireAssignmentTargetCountWithinLimit(elements);
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Zone assignment targets were being counted. Retry assignment against the current project state.");
+
+            var projectElements = ResolveProjectElements(project)
+                .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
 
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             var observedEntries = 0;
@@ -130,11 +130,19 @@ namespace QS3D.Core.Domain
 
         private static void RequireAssignmentTargetCountWithinLimit(IEnumerable<ProjectElement> elements)
         {
-            if (elements is ICollection<ProjectElement> collection && collection.Count > MaxAssignmentTargetEntries)
-                throw AssignmentTargetLimitExceeded();
-            if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection && readOnlyCollection.Count > MaxAssignmentTargetEntries)
-                throw AssignmentTargetLimitExceeded();
-            if (elements is System.Collections.ICollection nonGenericCollection && nonGenericCollection.Count > MaxAssignmentTargetEntries)
+            if (elements is ICollection<ProjectElement> collection)
+                RequireValidAssignmentTargetKnownCount(collection.Count);
+            if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection)
+                RequireValidAssignmentTargetKnownCount(readOnlyCollection.Count);
+            if (elements is System.Collections.ICollection nonGenericCollection)
+                RequireValidAssignmentTargetKnownCount(nonGenericCollection.Count);
+        }
+
+        private static void RequireValidAssignmentTargetKnownCount(int count)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Zone assignment target collection reported an invalid negative known count.");
+            if (count > MaxAssignmentTargetEntries)
                 throw AssignmentTargetLimitExceeded();
         }
 
