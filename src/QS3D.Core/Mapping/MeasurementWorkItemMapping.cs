@@ -72,11 +72,14 @@ namespace QS3D.Core.Mapping
 
     public sealed class MeasurementWorkItemMappingCatalog
     {
+        private const int MaximumEntries = 10000;
         private readonly Dictionary<ElementCategory, Dictionary<string, MeasurementWorkItemMapping>> _byCategory;
 
         public MeasurementWorkItemMappingCatalog(IEnumerable<MeasurementWorkItemMapping> mappings)
         {
             if (mappings == null) throw new ArgumentNullException(nameof(mappings));
+            if (TryGetKnownCount(mappings, out var knownCount) && knownCount > MaximumEntries)
+                throw new InvalidOperationException("Measurement/work-item mapping catalog supports at most " + MaximumEntries + " entries.");
 
             var items = new List<MeasurementWorkItemMapping>();
             var mappingIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -85,6 +88,8 @@ namespace QS3D.Core.Mapping
             var index = 0;
             foreach (var mapping in mappings)
             {
+                if (index == MaximumEntries)
+                    throw new InvalidOperationException("Measurement/work-item mapping catalog supports at most " + MaximumEntries + " entries.");
                 if (mapping == null)
                     throw new ArgumentException("Measurement/work-item mapping collection contains a null entry at index " + index + ".", nameof(mappings));
                 if (!mappingIds.Add(mapping.MappingId))
@@ -122,6 +127,24 @@ namespace QS3D.Core.Mapping
                 return MeasurementWorkItemMappingResolution.Mapped(mapping);
 
             return MeasurementWorkItemMappingResolution.Unmapped(canonicalCategory, canonicalMeasurementItemId);
+        }
+
+        private static bool TryGetKnownCount(IEnumerable<MeasurementWorkItemMapping> mappings, out int count)
+        {
+            if (mappings is ICollection<MeasurementWorkItemMapping> genericCollection)
+            {
+                count = genericCollection.Count;
+                return true;
+            }
+
+            if (mappings is System.Collections.ICollection collection)
+            {
+                count = collection.Count;
+                return true;
+            }
+
+            count = 0;
+            return false;
         }
 
         private static int CompareMappings(MeasurementWorkItemMapping left, MeasurementWorkItemMapping right)
