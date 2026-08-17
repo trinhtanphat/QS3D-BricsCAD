@@ -135,6 +135,7 @@ namespace QS3D.Core.SmokeTests
             GeneratedHandleOwnershipIndexSmoke.Run();
             GeneratedHandleOwnershipPolicyIdentitySmoke.Run();
             DependencyGraphDirectDependentsSmoke.Run();
+            DependencyGraphKnownCountContractSmoke.Run();
             ProjectStateLookupSmoke.Run();
             ProjectStateSnapshotElementIdentitySmoke.Run();
             ProjectStateSnapshotFamilyIdentitySmoke.Run();
