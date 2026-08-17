@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             AssignmentRejectsSpoofedSameIdElement();
             DeleteGuardsActiveAndReferencedZones();
             CorruptElementCollectionFailsClosed();
+            NoncanonicalSemanticReferencesFailClosed();
             RejectsDuplicateNames();
         }
 
@@ -26,8 +27,8 @@ namespace QS3D.Core.SmokeTests
 
             var element = new ProjectElement("e", ElementCategory.Room, "fam", "floor", z1.Id);
             project.Elements.Add(element);
-            var changed = ProjectZoneService.Assign(project, z2.Id, new[] { element, element });
-            if (changed != 1 || element.ZoneId != z2.Id) throw new Exception("Zone assignment must be distinct and deterministic.");
+            var changed = ProjectZoneService.Assign(project, "Z2", new[] { element, element });
+            if (changed != 1 || element.ZoneId != z2.Id) throw new Exception("Zone assignment must be distinct, case-insensitive, and deterministic.");
             ProjectZoneService.Assign(project, z1.Id, new[] { element });
             ProjectZoneService.SetActive(project, z1.Id);
             ProjectZoneService.Update(project, z2.Id, "Khu kỹ thuật");
@@ -92,6 +93,64 @@ namespace QS3D.Core.SmokeTests
 
             Throws<InvalidOperationException>(() => ProjectZoneService.Assign(project, z2.Id, Array.Empty<ProjectElement>()));
             if (project.ActiveZoneId != z1.Id) throw new Exception("Rejected zone operations must not change the active zone.");
+        }
+
+        private static void NoncanonicalSemanticReferencesFailClosed()
+        {
+            RejectsPaddedProjectElementId();
+            RejectsPaddedPersistedZoneReference();
+            RejectsPaddedActiveZoneReference();
+        }
+
+        private static void RejectsPaddedProjectElementId()
+        {
+            foreach (var id in new[] { " e1", "e1 ", " e1 ", "\te1" })
+            {
+                var project = new ProjectState("p-id", "Zone canonical element id");
+                var z1 = ProjectZoneService.Create(project, "z1", "Khu A");
+                var z2 = ProjectZoneService.Create(project, "z2", "Khu B");
+                var element = new ProjectElement(id, ElementCategory.Room, "fam", "floor", z1.Id);
+                project.Elements.Add(element);
+                var before = project.ChangeVersion;
+
+                Throws<InvalidOperationException>(() => ProjectZoneService.Assign(project, z2.Id, new[] { element }));
+                if (project.ChangeVersion != before || element.ZoneId != z1.Id)
+                    throw new Exception("Rejected padded semantic id must not mutate Zone assignment state.");
+                Throws<InvalidOperationException>(() => ProjectZoneService.ReferenceCount(project, z1.Id));
+            }
+        }
+
+        private static void RejectsPaddedPersistedZoneReference()
+        {
+            foreach (var zoneId in new[] { " z1", "z1 ", " z1 ", "\tz1" })
+            {
+                var project = new ProjectState("p-ref", "Zone canonical reference");
+                var z1 = ProjectZoneService.Create(project, "z1", "Khu A");
+                var z2 = ProjectZoneService.Create(project, "z2", "Khu B");
+                var element = new ProjectElement("e1", ElementCategory.Room, "fam", "floor", zoneId);
+                project.Elements.Add(element);
+                var before = project.ChangeVersion;
+
+                Throws<InvalidOperationException>(() => ProjectZoneService.ReferenceCount(project, z1.Id));
+                Throws<InvalidOperationException>(() => ProjectZoneService.Delete(project, z1.Id));
+                Throws<InvalidOperationException>(() => ProjectZoneService.Assign(project, z2.Id, new[] { element }));
+                if (project.ChangeVersion != before || element.ZoneId != zoneId)
+                    throw new Exception("Rejected padded Zone reference must remain atomic.");
+            }
+        }
+
+        private static void RejectsPaddedActiveZoneReference()
+        {
+            var project = new ProjectState("p-active", "Zone canonical active reference");
+            var z1 = ProjectZoneService.Create(project, "z1", "Khu A");
+            var z2 = ProjectZoneService.Create(project, "z2", "Khu B");
+            ProjectZoneService.SetActive(project, z2.Id);
+            project.ActiveZoneId = " z2 ";
+            var before = project.ChangeVersion;
+
+            Throws<InvalidOperationException>(() => ProjectZoneService.Delete(project, z1.Id));
+            if (project.ChangeVersion != before || !ReferenceEquals(project.FindZone(z1.Id), z1))
+                throw new Exception("Rejected noncanonical active Zone reference must not mutate project state.");
         }
 
         private static void RejectsDuplicateNames()
