@@ -7,6 +7,13 @@ SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "SemanticScheduleFilterCanonic
 REGISTRATION = ROOT / "tests" / "QS3D.Core.SmokeTests" / "SemanticScheduleFilterCanonicalitySmokeRegistration.cs"
 
 
+def require_any(build, label, tokens):
+    if any(token in build for token in tokens):
+        return True
+    print("ERROR: missing semantic schedule canonical filter contract: " + label)
+    return False
+
+
 def main():
     source = SOURCE.read_text(encoding="utf-8")
     smoke = SMOKE.read_text(encoding="utf-8")
@@ -22,8 +29,6 @@ def main():
     required = [
         'project.FindFloor(normalized.FloorId)',
         'project.FindZone(normalized.ZoneId)',
-        'string.Equals((x.FloorId ?? string.Empty).Trim(), normalized.FloorId, StringComparison.OrdinalIgnoreCase)',
-        'string.Equals((x.ZoneId ?? string.Empty).Trim(), normalized.ZoneId, StringComparison.OrdinalIgnoreCase)',
         'SemanticDocumentationTableBuilder.Build(project, normalized.Title, ids, normalized.Columns, allowEmpty: true)',
     ]
     for token in required:
@@ -31,9 +36,28 @@ def main():
             print("ERROR: missing semantic schedule canonical filter contract: " + token)
             return 1
 
+    if not require_any(
+        build,
+        "trimmed case-insensitive FloorId comparison",
+        [
+            'string.Equals((x.FloorId ?? string.Empty).Trim(), normalized.FloorId, StringComparison.OrdinalIgnoreCase)',
+            'string.Equals((element.FloorId ?? string.Empty).Trim(), normalized.FloorId, StringComparison.OrdinalIgnoreCase)',
+        ]):
+        return 1
+    if not require_any(
+        build,
+        "trimmed case-insensitive ZoneId comparison",
+        [
+            'string.Equals((x.ZoneId ?? string.Empty).Trim(), normalized.ZoneId, StringComparison.OrdinalIgnoreCase)',
+            'string.Equals((element.ZoneId ?? string.Empty).Trim(), normalized.ZoneId, StringComparison.OrdinalIgnoreCase)',
+        ]):
+        return 1
+
     legacy = [
         'string.Equals(x.FloorId, normalized.FloorId, StringComparison.OrdinalIgnoreCase)',
         'string.Equals(x.ZoneId, normalized.ZoneId, StringComparison.OrdinalIgnoreCase)',
+        'string.Equals(element.FloorId, normalized.FloorId, StringComparison.OrdinalIgnoreCase)',
+        'string.Equals(element.ZoneId, normalized.ZoneId, StringComparison.OrdinalIgnoreCase)',
     ]
     for token in legacy:
         if token in build:
