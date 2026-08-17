@@ -137,6 +137,7 @@ namespace QS3D.Core.SmokeTests
             ProjectStateSnapshotFamilyIdentitySmoke.Run();
             ProjectPersistenceCheckpointSmoke.Run();
             ProjectMetadataBoundSmoke.Run();
+            ProjectZoneAssignmentBoundSmoke.Run();
             ProjectElementCategoryIntegritySmoke.Run();
             SelectionStateSmoke.Run();
             BulkEditCanonicalizationSmoke.Run();

@@ -115,7 +115,7 @@ namespace QS3D.Core.Documentation
             for (var i = 0; i < materialized.Count; i++)
             {
                 var item = materialized[i] ?? throw new ArgumentException("Semantic schedule placement item cannot be null at index " + i + ".", nameof(items));
-                var scheduleId = RequiredCanonicalId(item.ScheduleId, "items[" + i + "].ScheduleId");
+                var scheduleId = Required(item.ScheduleId, "items[" + i + "].ScheduleId");
                 if (!uniqueIds.Add(scheduleId))
                     throw new InvalidOperationException("Semantic schedule placement contains duplicate schedule id: " + scheduleId + ".");
                 if (!scheduleIndex.ContainsKey(scheduleId))
@@ -165,7 +165,7 @@ namespace QS3D.Core.Documentation
                 if (count > MaxItems)
                     throw new InvalidOperationException("Semantic schedule placement supports at most " + MaxItems + " available schedules.");
                 if (schedule == null) throw new ArgumentException("Available semantic schedule cannot be null.", nameof(schedules));
-                var id = RequiredCanonicalId(schedule.Id, "availableSchedules.Id");
+                var id = Required(schedule.Id, "availableSchedules.Id");
                 if (result.ContainsKey(id)) throw new InvalidOperationException("Available semantic schedules contain duplicate id: " + id + ".");
                 result.Add(id, schedule);
             }
@@ -300,16 +300,10 @@ namespace QS3D.Core.Documentation
         {
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Value is required.", name);
             var normalized = value!.Trim();
-            if (normalized.Length > MaxIdLength) throw new ArgumentException("Value exceeds " + MaxIdLength + " characters.", name);
-            return normalized;
-        }
-
-        private static string RequiredCanonicalId(string? value, string name)
-        {
-            var normalized = Required(value, name);
             if (!string.Equals(value, normalized, StringComparison.Ordinal))
-                throw new ArgumentException("Value must not contain surrounding whitespace.", name);
-            return normalized;
+                throw new ArgumentException("Value must not contain leading or trailing whitespace.", name);
+            if (value.Length > MaxIdLength) throw new ArgumentException("Value exceeds " + MaxIdLength + " characters.", name);
+            return value;
         }
 
         private static void PositiveFinite(double value, string name)

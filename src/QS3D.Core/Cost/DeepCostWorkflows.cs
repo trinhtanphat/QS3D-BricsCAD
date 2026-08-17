@@ -43,16 +43,23 @@ namespace QS3D.Core.Cost
 
     public sealed class RateReferenceGraph
     {
+        private const int MaximumEdges = TbqProjectWorkspaceState.MaxRateReferences;
         private readonly IReadOnlyList<RateReferenceEdge> _edges;
 
         public RateReferenceGraph(IEnumerable<RateReferenceEdge> edges)
         {
             if (edges == null) throw new ArgumentNullException(nameof(edges));
+            if (AdvancedCostCollectionContract.TryGetKnownCount(edges, out var knownEdgeCount) &&
+                knownEdgeCount > MaximumEdges)
+                ThrowTooManyEdges();
+
             var snapshot = new List<RateReferenceEdge>();
             var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var edge in edges)
             {
+                if (index == MaximumEdges)
+                    ThrowTooManyEdges();
                 if (edge == null)
                     throw new ArgumentException("Rate reference graph contains a null edge at index " + index + ".", nameof(edges));
                 var key = edge.SourceRateCode + "\u001f" + ((int)edge.TargetKind) + "\u001f" + edge.TargetId;
@@ -106,6 +113,12 @@ namespace QS3D.Core.Cost
             if (compare != 0) return compare;
             return StringComparer.OrdinalIgnoreCase.Compare(left.TargetId, right.TargetId);
         }
+
+        private static void ThrowTooManyEdges()
+        {
+            throw new InvalidOperationException(
+                "Rate reference edge collection supports at most " + MaximumEdges + " entries.");
+        }
     }
 
     public sealed class BuildUpRateSnapshot
@@ -150,11 +163,17 @@ namespace QS3D.Core.Cost
         {
             if (rates == null) throw new ArgumentNullException(nameof(rates));
             if (references == null) throw new ArgumentNullException(nameof(references));
+            if (AdvancedCostCollectionContract.TryGetKnownCount(rates, out var knownRateCount) &&
+                knownRateCount > AdvancedCostCollectionContract.MaximumEntries)
+                AdvancedCostCollectionContract.ThrowTooManyEntries("Build-up analysis rate collection");
+
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var result = new List<BuildUpAnalysisLine>();
             var index = 0;
             foreach (var rate in rates)
             {
+                if (index == AdvancedCostCollectionContract.MaximumEntries)
+                    AdvancedCostCollectionContract.ThrowTooManyEntries("Build-up analysis rate collection");
                 if (rate == null)
                     throw new ArgumentException("Build-up analysis contains a null rate at index " + index + ".", nameof(rates));
                 if (!ids.Add(rate.RateCode))
@@ -323,11 +342,17 @@ namespace QS3D.Core.Cost
         {
             if (items == null) throw new ArgumentNullException(nameof(items));
             if (cfaM2 < 0m) throw new ArgumentOutOfRangeException(nameof(cfaM2));
+            if (AdvancedCostCollectionContract.TryGetKnownCount(items, out var knownItemCount) &&
+                knownItemCount > AdvancedCostCollectionContract.MaximumEntries)
+                AdvancedCostCollectionContract.ThrowTooManyEntries("Trade analysis item collection");
+
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var totals = new Dictionary<string, TradeAggregate>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var item in items)
             {
+                if (index == AdvancedCostCollectionContract.MaximumEntries)
+                    AdvancedCostCollectionContract.ThrowTooManyEntries("Trade analysis item collection");
                 if (item == null)
                     throw new ArgumentException("Trade analysis contains a null item at index " + index + ".", nameof(items));
                 if (!ids.Add(item.ItemCode))
@@ -404,11 +429,17 @@ namespace QS3D.Core.Cost
         {
             LibraryId = RateBookContract.RequireToken(libraryId, nameof(libraryId));
             if (entries == null) throw new ArgumentNullException(nameof(entries));
+            if (AdvancedCostCollectionContract.TryGetKnownCount(entries, out var knownEntryCount) &&
+                knownEntryCount > AdvancedCostCollectionContract.MaximumEntries)
+                AdvancedCostCollectionContract.ThrowTooManyEntries("BQ library entry collection");
+
             var snapshot = new List<BqLibraryEntry>();
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var entry in entries)
             {
+                if (index == AdvancedCostCollectionContract.MaximumEntries)
+                    AdvancedCostCollectionContract.ThrowTooManyEntries("BQ library entry collection");
                 if (entry == null)
                     throw new ArgumentException("BQ library contains a null entry at index " + index + ".", nameof(entries));
                 if (!ids.Add(entry.ItemCode))
@@ -426,12 +457,18 @@ namespace QS3D.Core.Cost
         public BqLibraryCatalog ImportFromProject(IEnumerable<BqLibraryEntry> projectEntries, bool replaceExisting)
         {
             if (projectEntries == null) throw new ArgumentNullException(nameof(projectEntries));
+            if (AdvancedCostCollectionContract.TryGetKnownCount(projectEntries, out var knownProjectEntryCount) &&
+                knownProjectEntryCount > AdvancedCostCollectionContract.MaximumEntries)
+                AdvancedCostCollectionContract.ThrowTooManyEntries("BQ project import collection");
+
             var merged = new Dictionary<string, BqLibraryEntry>(StringComparer.OrdinalIgnoreCase);
             for (var i = 0; i < _entries.Count; i++) merged.Add(_entries[i].ItemCode, _entries[i]);
             var incomingIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var entry in projectEntries)
             {
+                if (index == AdvancedCostCollectionContract.MaximumEntries)
+                    AdvancedCostCollectionContract.ThrowTooManyEntries("BQ project import collection");
                 if (entry == null)
                     throw new ArgumentException("Project import contains a null BQ entry at index " + index + ".", nameof(projectEntries));
                 if (!incomingIds.Add(entry.ItemCode))
