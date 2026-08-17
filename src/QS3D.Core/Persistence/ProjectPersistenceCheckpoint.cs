@@ -124,12 +124,16 @@ namespace QS3D.Core.Persistence
             var expectedCount = knownCounts[0];
             var maximumCount = expectedCount;
             var hasConflict = false;
+            var hasNegative = expectedCount < 0;
             for (var index = 1; index < knownCounts.Count; index++)
             {
+                if (knownCounts[index] < 0) hasNegative = true;
                 if (knownCounts[index] != expectedCount) hasConflict = true;
                 if (knownCounts[index] > maximumCount) maximumCount = knownCounts[index];
             }
 
+            if (hasNegative)
+                throw new InvalidOperationException("Persistence checkpoint target collection reports a negative known count.");
             if (maximumCount > MaximumElementCount)
                 throw ElementCountError();
             if (hasConflict)
