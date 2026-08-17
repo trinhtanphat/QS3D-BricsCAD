@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace QS3D.BricsCAD.V25.Ribbon
 {
@@ -118,14 +119,17 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     SetProperty(button, "ShowImage", true);
                     SetEnumProperty(button, "Size", LargeButtons.Contains(expected.Key) ? "Large" : "Standard");
 
-                    // DrawingImage stays vector-based, so the host can render the same artwork at
-                    // both compact and large Ribbon sizes without bitmap blur or proprietary assets.
-                    var icon = CreateReferenceIcon(expected.Value);
+                    // BricsCAD reliably consumes exact-size frozen bitmaps for Ribbon images. Keep
+                    // the clean-room 32x32 vector geometry as the artwork source, but rasterize it
+                    // separately for the host's compact and large slots instead of handing the host
+                    // one raw DrawingImage for both properties.
+                    var icon = CreateReferenceIcon(expected.Value, 16);
+                    var largeIcon = CreateReferenceIcon(expected.Value, 32);
                     SetProperty(button, "Image", icon);
-                    SetProperty(button, "LargeImage", icon);
+                    SetProperty(button, "LargeImage", largeIcon);
 
-                    if (!(GetProperty(button, "Image") is ImageSource)
-                        || !(GetProperty(button, "LargeImage") is ImageSource))
+                    if (!(GetProperty(button, "Image") is RenderTargetBitmap)
+                        || !(GetProperty(button, "LargeImage") is RenderTargetBitmap))
                         return false;
                 }
 
@@ -192,8 +196,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
             }
         }
 
-        private static ImageSource CreateReferenceIcon(IconKind kind)
+        private static ImageSource CreateReferenceIcon(IconKind kind, int pixelSize)
         {
+            if (pixelSize != 16 && pixelSize != 32)
+                throw new ArgumentOutOfRangeException(nameof(pixelSize));
+
             var blue = FrozenBrush(Color.FromRgb(35, 132, 242));
             var blueDark = FrozenBrush(Color.FromRgb(15, 82, 178));
             var blueSoft = FrozenBrush(Color.FromRgb(111, 184, 255));
@@ -332,7 +339,17 @@ namespace QS3D.BricsCAD.V25.Ribbon
             }
 
             group.Freeze();
-            var image = new DrawingImage(group);
+
+            var visual = new DrawingVisual();
+            using (var drawing = visual.RenderOpen())
+            {
+                drawing.PushTransform(new ScaleTransform(pixelSize / 32.0, pixelSize / 32.0));
+                drawing.DrawDrawing(group);
+                drawing.Pop();
+            }
+
+            var image = new RenderTargetBitmap(pixelSize, pixelSize, 96, 96, PixelFormats.Pbgra32);
+            image.Render(visual);
             image.Freeze();
             return image;
         }
