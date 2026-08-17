@@ -158,19 +158,20 @@ namespace QS3D.Core.Licensing
         private static string RequireCanonicalIdentity(string value, string parameterName, int maxBytes)
         {
             if (value == null) throw new ArgumentNullException(parameterName);
-            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Value must not be blank.", parameterName);
-            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+            var normalized = value.Trim();
+            if (normalized.Length == 0) throw new ArgumentException("Value must not be blank.", parameterName);
+            if (!string.Equals(value, normalized, StringComparison.Ordinal))
                 throw new ArgumentException("Value must not contain leading or trailing whitespace.", parameterName);
 
-            for (var i = 0; i < value.Length; i++)
+            for (var i = 0; i < normalized.Length; i++)
             {
-                if (char.IsControl(value[i]))
+                if (char.IsControl(normalized[i]))
                     throw new ArgumentException("Value must not contain control characters.", parameterName);
             }
 
             try
             {
-                if (StrictUtf8.GetByteCount(value) > maxBytes)
+                if (StrictUtf8.GetByteCount(normalized) > maxBytes)
                     throw new ArgumentException("Value exceeds the persistence bound.", parameterName);
             }
             catch (EncoderFallbackException)
@@ -178,7 +179,7 @@ namespace QS3D.Core.Licensing
                 throw new ArgumentException("Value contains invalid Unicode.", parameterName);
             }
 
-            return value;
+            return normalized;
         }
 
         private static string RequirePayload(string payload)
