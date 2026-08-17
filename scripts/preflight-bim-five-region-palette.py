@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +21,72 @@ def require(text, token, label):
 def forbid(text, token, label):
     if token in text:
         fail(label + ": stale/forbidden source contract found: " + token)
+
+
+def method_block(text, signature, next_signature, label):
+    start = text.find(signature)
+    if start < 0:
+        fail(label + ": method signature not found: " + signature)
+    end = text.find(next_signature, start + len(signature))
+    if end < 0:
+        fail(label + ": method boundary not found: " + next_signature)
+    return text[start:end]
+
+
+def require_reset_dock_contract(source):
+    reset = method_block(
+        source,
+        "private static void ResetPreservingVisibility()",
+        "public static void Dispose()",
+        "BIM reset contract",
+    )
+
+    captures = {}
+    for local_name, property_name in re.findall(
+        r"\bvar\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"
+        r"(IsWorkspaceVisible|IsRightPanelVisible|IsQuantityInsightVisible)\s*;",
+        reset,
+    ):
+        captures[property_name] = local_name
+
+    expected_properties = (
+        "IsWorkspaceVisible",
+        "IsRightPanelVisible",
+        "IsQuantityInsightVisible",
+    )
+    missing = [name for name in expected_properties if name not in captures]
+    if missing:
+        fail("BIM reset contract: missing preserved visibility source(s): " + ", ".join(missing))
+
+    condition_match = re.search(
+        r"if\s*\(([^)]*)\)\s*EnsureBimDockContract\(\);",
+        reset,
+        flags=re.MULTILINE,
+    )
+    if condition_match is None:
+        fail("BIM reset contract: EnsureBimDockContract must be guarded after palette recreation")
+
+    actual_terms = [term.strip() for term in condition_match.group(1).split("&&")]
+    expected_terms = [captures[name] for name in expected_properties]
+    if len(actual_terms) != len(expected_terms) or set(actual_terms) != set(expected_terms):
+        fail(
+            "BIM reset contract: re-dock condition must require preserved Workspace + Management + "
+            "Quantity visibility, independent of local variable names"
+        )
+
+    visibility_match = re.search(
+        r"SetVisibility\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)\s*;",
+        reset,
+    )
+    if visibility_match is None:
+        fail("BIM reset contract: preserved visibility must be restored after recreation")
+
+    actual_args = [group.strip() for group in visibility_match.groups()]
+    if actual_args != expected_terms:
+        fail(
+            "BIM reset contract: SetVisibility must restore the captured Workspace, Management, "
+            "and Quantity visibility values in order"
+        )
 
 
 def main():
@@ -55,14 +122,9 @@ def main():
         "_right.Dock = DockSides.Right;",
         "if (_quantityInsight != null && _quantityInsight.Dock != DockSides.Right)",
         "_quantityInsight.Dock = DockSides.Right;",
-        "if (workspaceVisible && rightVisible && quantityVisible)",
     ):
-        require(source, token, "BIM docking/reset contract")
-    forbid(
-        source,
-        "if (workspaceVisible && rightVisible && !quantityVisible)",
-        "stale BIM reset visibility contract",
-    )
+        require(source, token, "BIM docking contract")
+    require_reset_dock_contract(source)
 
     # Keep the ribbon-first isolated commands unchanged: only MÔ HÌNH BIM shows the full set.
     for token in (
