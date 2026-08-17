@@ -9,9 +9,9 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
-            RelinkCollapsesLegacyDependencyVariants();
-            RehostRemovesLegacyPreviousHostVariants();
-            UnlinkRemovesLegacyHostVariants();
+            NonCanonicalRelinkFailsBeforeMutation();
+            NonCanonicalRehostFailsBeforeMutation();
+            NonCanonicalUnlinkFailsBeforeMutation();
             AmbiguousPreviousHostFailsBeforeMutation();
             CanonicalRelinkIsSideEffectFree();
             MissingHostUnlinkIsSideEffectFree();
@@ -20,48 +20,68 @@ namespace QS3D.Core.SmokeTests
             StaleAutoHostCleanupAdvancesRevisionOnce();
         }
 
-        private static void RelinkCollapsesLegacyDependencyVariants()
+        private static void NonCanonicalRelinkFailsBeforeMutation()
         {
             var project = Project(out var wallA, out _, out var opening);
             opening.Properties["HostWallId"] = " wall-a ";
             opening.DependsOn.Add(" WALL-A ");
             opening.DependsOn.Add("wall-a");
+            var version = project.ChangeVersion;
+            var audits = project.AuditEvents.Count;
 
-            new HostLinkService().LinkOpening(project, " opening ", " wall-a ");
+            Throws<InvalidOperationException>(() => new HostLinkService().LinkOpening(project, " opening ", " wall-a "));
 
-            Equal("WALL-A", opening.Properties["HostWallId"]);
-            Equal(1, opening.DependsOn.Count);
-            Equal(wallA.Id, opening.DependsOn.Single());
+            Equal(" wall-a ", opening.Properties["HostWallId"]);
+            Equal(2, opening.DependsOn.Count);
+            Equal(" WALL-A ", opening.DependsOn[0]);
+            Equal("wall-a", opening.DependsOn[1]);
+            Equal(version, project.ChangeVersion);
+            Equal(audits, project.AuditEvents.Count);
+            Equal(ElementDirtyFlags.All, opening.Dirty);
+            Equal(ElementDirtyFlags.All, wallA.Dirty);
         }
 
-        private static void RehostRemovesLegacyPreviousHostVariants()
+        private static void NonCanonicalRehostFailsBeforeMutation()
         {
             var project = Project(out var wallA, out var wallB, out var opening);
             opening.Properties["HostWallId"] = " wall-a ";
             opening.DependsOn.Add(" WALL-A ");
             opening.DependsOn.Add("wall-a");
+            var version = project.ChangeVersion;
+            var audits = project.AuditEvents.Count;
 
-            new HostLinkService().LinkOpening(project, opening.Id, " wall-b ");
+            Throws<InvalidOperationException>(() => new HostLinkService().LinkOpening(project, opening.Id, " wall-b "));
 
-            Equal(wallB.Id, opening.Properties["HostWallId"]);
-            Equal(1, opening.DependsOn.Count);
-            Equal(wallB.Id, opening.DependsOn.Single());
-            if (opening.DependsOn.Any(x => string.Equals(x.Trim(), wallA.Id, StringComparison.OrdinalIgnoreCase)))
-                throw new Exception("Re-host must remove every legacy dependency variant of the previous wall.");
+            Equal(" wall-a ", opening.Properties["HostWallId"]);
+            Equal(2, opening.DependsOn.Count);
+            Equal(" WALL-A ", opening.DependsOn[0]);
+            Equal("wall-a", opening.DependsOn[1]);
+            Equal(version, project.ChangeVersion);
+            Equal(audits, project.AuditEvents.Count);
+            Equal(ElementDirtyFlags.All, opening.Dirty);
+            Equal(ElementDirtyFlags.All, wallA.Dirty);
+            Equal(ElementDirtyFlags.All, wallB.Dirty);
         }
 
-        private static void UnlinkRemovesLegacyHostVariants()
+        private static void NonCanonicalUnlinkFailsBeforeMutation()
         {
             var project = Project(out var wallA, out _, out var opening);
             opening.Properties["HostWallId"] = " wall-a ";
             opening.DependsOn.Add(" WALL-A ");
             opening.DependsOn.Add("wall-a");
+            var version = project.ChangeVersion;
+            var audits = project.AuditEvents.Count;
 
-            new HostLinkService().UnlinkOpening(project, " OPENING ");
+            Throws<InvalidOperationException>(() => new HostLinkService().UnlinkOpening(project, " OPENING "));
 
-            if (opening.Properties.ContainsKey("HostWallId")) throw new Exception("Unlink must clear HostWallId.");
-            if (opening.DependsOn.Any(x => string.Equals(x.Trim(), wallA.Id, StringComparison.OrdinalIgnoreCase)))
-                throw new Exception("Unlink must remove every legacy dependency variant of the host wall.");
+            Equal(" wall-a ", opening.Properties["HostWallId"]);
+            Equal(2, opening.DependsOn.Count);
+            Equal(" WALL-A ", opening.DependsOn[0]);
+            Equal("wall-a", opening.DependsOn[1]);
+            Equal(version, project.ChangeVersion);
+            Equal(audits, project.AuditEvents.Count);
+            Equal(ElementDirtyFlags.All, opening.Dirty);
+            Equal(ElementDirtyFlags.All, wallA.Dirty);
         }
 
         private static void AmbiguousPreviousHostFailsBeforeMutation()
@@ -147,17 +167,13 @@ namespace QS3D.Core.SmokeTests
             var service = new HostLinkService();
             var beforeLinkVersion = project.ChangeVersion;
             var beforeLinkAudits = project.AuditEvents.Count;
-
             service.LinkOpening(project, opening.Id, wallA.Id);
-
             Equal(beforeLinkVersion + 1L, project.ChangeVersion);
             Equal(beforeLinkAudits + 1, project.AuditEvents.Count);
             Equal("host.link", project.AuditEvents.Last().Action);
-
             var beforeUnlinkVersion = project.ChangeVersion;
             var beforeUnlinkAudits = project.AuditEvents.Count;
             service.UnlinkOpening(project, opening.Id);
-
             Equal(beforeUnlinkVersion + 1L, project.ChangeVersion);
             Equal(beforeUnlinkAudits + 1, project.AuditEvents.Count);
             Equal("host.unlink", project.AuditEvents.Last().Action);
@@ -170,9 +186,7 @@ namespace QS3D.Core.SmokeTests
             opening.Properties["AutoHostGapM"] = "0.01";
             var beforeVersion = project.ChangeVersion;
             var beforeAudits = project.AuditEvents.Count;
-
             new HostLinkService().UnlinkOpening(project, opening.Id);
-
             Equal(beforeVersion + 1L, project.ChangeVersion);
             Equal(beforeAudits + 1, project.AuditEvents.Count);
             Equal("host.auto-provenance.clear", project.AuditEvents.Last().Action);
