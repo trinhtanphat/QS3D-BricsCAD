@@ -39,7 +39,11 @@ function New-XamlNamespaceManager {
     $manager = [System.Xml.XmlNamespaceManager]::new($Document.NameTable)
     $manager.AddNamespace('p', 'http://schemas.microsoft.com/winfx/2006/xaml/presentation')
     $manager.AddNamespace('x', 'http://schemas.microsoft.com/winfx/2006/xaml')
-    return $manager
+
+    # XmlNamespaceManager is enumerable. PowerShell normally unrolls enumerable
+    # return values into the success pipeline, which changes the function result
+    # into Object[] and breaks Require-Node's strongly typed parameter.
+    return ,$manager
 }
 
 function Require-Node {

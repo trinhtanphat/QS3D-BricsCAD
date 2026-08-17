@@ -87,7 +87,10 @@ namespace QS3D.Core.Cost
             decimal estimatingQuantity;
             try
             {
-                estimatingQuantity = checked(measuredQuantity + canonicalCommercialAdjustmentQuantity);
+                estimatingQuantity = CostDecimalMath.AddPreservingNonZeroContribution(
+                    measuredQuantity,
+                    canonicalCommercialAdjustmentQuantity,
+                    "estimate line estimating quantity");
             }
             catch (OverflowException ex)
             {
