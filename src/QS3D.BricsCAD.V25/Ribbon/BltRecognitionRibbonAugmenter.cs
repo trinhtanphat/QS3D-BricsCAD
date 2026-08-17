@@ -28,14 +28,30 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private sealed class RecognitionButtonSpec
         {
-            public RecognitionButtonSpec(string id, string text, string command, IconKind icon, bool enabled = true, double width = 136d)
-            { Id = id; Text = text; Command = command; Icon = icon; Enabled = enabled; Width = width; }
+            public RecognitionButtonSpec(
+                string id,
+                string text,
+                string command,
+                IconKind icon,
+                bool enabled = true,
+                double width = 136d,
+                bool preserveSourceColorWhenNonInteractive = false)
+            {
+                Id = id;
+                Text = text;
+                Command = command;
+                Icon = icon;
+                Enabled = enabled;
+                Width = width;
+                PreserveSourceColorWhenNonInteractive = preserveSourceColorWhenNonInteractive;
+            }
             public string Id { get; }
             public string Text { get; }
             public string Command { get; }
             public IconKind Icon { get; }
             public bool Enabled { get; }
             public double Width { get; }
+            public bool PreserveSourceColorWhenNonInteractive { get; }
         }
 
         public static bool TryInitialize()
@@ -77,7 +93,14 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     },
                     new[]
                     {
-                        new RecognitionButtonSpec("QS3D_RECOGNIZE_BLT_VALIDATE", "Xác định Kiểm tra", string.Empty, IconKind.Validate, enabled: false, width: 136d)
+                        new RecognitionButtonSpec(
+                            "QS3D_RECOGNIZE_BLT_VALIDATE",
+                            "Xác định Kiểm tra",
+                            string.Empty,
+                            IconKind.Validate,
+                            enabled: false,
+                            width: 136d,
+                            preserveSourceColorWhenNonInteractive: true)
                     });
 
                 _initialized = true;
@@ -110,7 +133,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
         {
             var button = Create("Bricscad.Windows.RibbonButton");
             SetProperty(button, "Id", spec.Id); SetProperty(button, "Name", spec.Text); SetProperty(button, "Text", spec.Text);
-            SetProperty(button, "ShowText", true); SetProperty(button, "ShowImage", true); SetProperty(button, "IsEnabled", spec.Enabled); SetProperty(button, "Width", spec.Width);
+            SetProperty(button, "ShowText", true); SetProperty(button, "ShowImage", true);
+            SetProperty(button, "IsEnabled", spec.Enabled || spec.PreserveSourceColorWhenNonInteractive);
+            SetProperty(button, "Width", spec.Width);
             SetEnumProperty(button, "Size", "Standard");
             var image = CreateIcon(spec.Icon); SetProperty(button, "Image", image); SetProperty(button, "LargeImage", image);
             if (spec.Enabled && !string.IsNullOrWhiteSpace(spec.Command)) { SetProperty(button, "CommandParameter", spec.Command); SetProperty(button, "CommandHandler", new RecognitionRibbonCommandHandler()); }
