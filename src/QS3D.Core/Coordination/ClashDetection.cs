@@ -49,7 +49,7 @@ namespace QS3D.Core.Coordination
             string region,
             AxisAlignedBox bounds)
         {
-            ElementId = RequireText(elementId, nameof(elementId));
+            ElementId = RequireCanonicalId(elementId, nameof(elementId));
             Discipline = RequireText(discipline, nameof(discipline));
             Category = RequireText(category, nameof(category));
             System = RequireText(system, nameof(system));
@@ -63,6 +63,16 @@ namespace QS3D.Core.Coordination
         public string System { get; }
         public string Region { get; }
         public AxisAlignedBox Bounds { get; }
+
+        private static string RequireCanonicalId(string value, string parameterName)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException("Coordination element id is required.", parameterName);
+            var normalized = value.Trim();
+            if (!string.Equals(value, normalized, StringComparison.Ordinal))
+                throw new ArgumentException("Coordination element id must not contain surrounding whitespace.", parameterName);
+            return value;
+        }
 
         private static string RequireText(string value, string parameterName)
         {
