@@ -22,11 +22,11 @@ activation = read(ACTIVATION)
 layout = read(LAYOUT)
 compact = read(COMPACT)
 
-# The explicit QS3D owner-facing command and BIM ribbon activation restore the coordinated BLT3D
-# surface. The dedicated ShowWorkspace() helper itself remains isolated for callers that explicitly
-# request only the Workspace palette.
+# #2396 is specifically the BIM-tab host-settle repair. Keep the ordinary QS3D/Workspace entry
+# point isolated; the separate #2399 follow-up owns any owner-facing activation change and a
+# distinct QS3D Properties plugin region/palette.
 for token in (
-    "public static void Show() => ShowBimWorkspace();",
+    "public static void Show() => ShowWorkspace();",
     "public static void ShowWorkspace()",
     "SetVisibility(workspace: true, right: false, quantityInsight: false);",
     "EnsureBimDockContract();",
@@ -34,7 +34,6 @@ for token in (
     "_workspace.Dock = DockSides.Left;",
     "_right.Dock = DockSides.Right;",
     "_quantityInsight.Dock = DockSides.Right;",
-    "Mô hình + Thuộc tính QS3D bên trái",
     "viewport BricsCAD native ở giữa",
 ):
     if token not in palette:
@@ -78,8 +77,8 @@ for token in (
 if "Grid.GetColumn(child) == 2" in layout:
     errors.append("runtime reassert must rediscover Family/Properties independently of its original column")
 
-if "public static void Show() => ShowWorkspace();" in palette:
-    errors.append("regression: owner-facing QS3D activation must restore the coordinated BIM surface")
+if "public static void Show() => ShowBimWorkspace();" in palette:
+    errors.append("#2396 must not absorb #2399 owner-facing QS3D activation semantics")
 
 if "new Viewport" in layout or "Viewport3D" in layout:
     errors.append("runtime layout must not create a fake second 3D viewport")
@@ -91,4 +90,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: owner-facing QS3D/BIM activation restores the coordinated BLT3D surface while the dedicated ShowWorkspace helper remains isolated; first-load class handlers are registered deterministically through the existing WorkspacePanel type initializer, repeated settle passes remain idempotent after the Family/Properties pane moves, Model + QS3D Properties stay distinct on the left, and Management + Quantity stay on the right of native BricsCAD modelspace.")
+print("PASS: BIM-tab activation restores the coordinated BLT3D settle layout while ordinary QS3D/Workspace activation remains isolated for #2396; first-load class handlers are registered deterministically through the existing WorkspacePanel type initializer, repeated settle passes remain idempotent after the Family/Properties pane moves, and native BricsCAD modelspace remains the center viewport. Dedicated owner-facing QS3D activation / Properties-palette work remains #2399.")
