@@ -72,6 +72,13 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 }
 
                 _lastTabId = currentId;
+
+                // BricsCAD may reconstruct its top-level Ribbon/window chrome on workspace or tab
+                // transitions after the one-time Ribbon initializer has stopped. Reassert only
+                // QS3D-owned shell presentation here; the operation is idempotent and does not
+                // rebuild feature panels or take ownership of native tabs.
+                Blt3dShellChromeCoordinator.Reassert();
+
                 if (!string.Equals(currentId, BimTabId, StringComparison.OrdinalIgnoreCase))
                 {
                     _bimSettleTicksRemaining = 0;
@@ -93,6 +100,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private static bool ReassertBimWorkspace()
         {
+            Blt3dShellChromeCoordinator.Reassert();
             StartCenterPaletteCoordinator.Hide();
             return PaletteCoordinator.ShowBimWorkspace();
         }
