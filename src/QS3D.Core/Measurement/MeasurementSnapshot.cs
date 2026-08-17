@@ -55,6 +55,8 @@ namespace QS3D.Core.Measurement
             return builder.ToString();
         }
 
+        // Inspect every exposed known-count contract before acquiring an enumerator so
+        // contradictory in-bound counts fail closed without consuming any trace data.
         private static void RequireSupportedCount(IEnumerable<MeasurementTrace> traces, string paramName)
         {
             int? knownCount = null;
