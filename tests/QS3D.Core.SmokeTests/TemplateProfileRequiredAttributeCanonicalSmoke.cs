@@ -53,8 +53,12 @@ namespace QS3D.Core.SmokeTests
             var controls = new[] { '\0', '\t', '\n', '\u007F', '\u0085' };
             foreach (var control in controls)
             {
-                Throws<ArgumentException>(() => new TemplateProfile("TPL" + control + "1", "Name"), "Template id must reject control characters.");
-                Throws<ArgumentException>(() => new TemplateProfile("TPL-1", "Na" + control + "me"), "Template name must reject control characters.");
+                Throws<ArgumentException>(() => new TemplateProfile("TPL" + control + "1", "Name"), "Template id must reject embedded control characters.");
+                Throws<ArgumentException>(() => new TemplateProfile(control + "TPL-1", "Name"), "Template id must reject leading control characters before trim normalization.");
+                Throws<ArgumentException>(() => new TemplateProfile("TPL-1" + control, "Name"), "Template id must reject trailing control characters before trim normalization.");
+                Throws<ArgumentException>(() => new TemplateProfile("TPL-1", "Na" + control + "me"), "Template name must reject embedded control characters.");
+                Throws<ArgumentException>(() => new TemplateProfile("TPL-1", control + "Name"), "Template name must reject leading control characters before trim normalization.");
+                Throws<ArgumentException>(() => new TemplateProfile("TPL-1", "Name" + control), "Template name must reject trailing control characters before trim normalization.");
             }
 
             var invalidSurrogate = new string(new[] { '\uD800' });
@@ -71,8 +75,10 @@ namespace QS3D.Core.SmokeTests
             profile.Name = " Tên mẫu mới ";
             Equal("Tên mẫu mới", profile.Name, "Valid Unicode template name setter should normalize surrounding whitespace.");
 
-            Throws<ArgumentException>(() => profile.Name = "Tên\nkhông hợp lệ", "Mutable template name must reject control characters.");
+            Throws<ArgumentException>(() => profile.Name = "Tên\nkhông hợp lệ", "Mutable template name must reject embedded control characters.");
             Equal("Tên mẫu mới", profile.Name, "Rejected mutable template name must not replace the previous canonical value.");
+            Throws<ArgumentException>(() => profile.Name = "Tên mẫu mới\t", "Mutable template name must reject trailing control characters before trim normalization.");
+            Equal("Tên mẫu mới", profile.Name, "Rejected edge-control template name must not replace the previous canonical value.");
         }
 
         private static void AssertRejected(string label, Action<XDocument> mutate)
