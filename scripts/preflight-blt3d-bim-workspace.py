@@ -44,13 +44,14 @@ def main():
     modeling = read("src/QS3D.BricsCAD.V25/Ribbon/BltModelingRibbonAugmenter.cs")
     topbar = read("src/QS3D.BricsCAD.V25/Ribbon/BltTopbarTabContract.cs")
 
-    # Full BIM workspace: real QS3D workspace left, native BricsCAD viewport centre,
+    # Full BIM workspace: model + dedicated QS3D Properties left, native BricsCAD viewport centre,
     # production drawing/layer manager and quantity explanation palettes right.
     for token in (
         "public static void ShowBimWorkspace()",
         "EnsureBimDockContract();",
-        "SetVisibility(workspace: true, right: true, quantityInsight: true);",
+        "SetVisibility(workspace: true, properties: true, right: true, quantityInsight: true);",
         "_workspace.Dock = DockSides.Left",
+        "_properties.Dock = DockSides.Left",
         "_right.Dock = DockSides.Right",
         "_quantityInsight.Dock = DockSides.Right",
         "_quantityInsightPanel?.RefreshQuantityInsights();",
@@ -72,8 +73,8 @@ def main():
         require(workspace, token, "Workspace BLT3D shell")
 
     # Guard the actual controls and production hooks consumed by the BLT3D family-workspace partial.
-    # Historical aliases such as FamilySearchBox/PropertyGrid/FloorCombo are not members of this
-    # implementation and made the source guard fail even while the real workspace integration held.
+    # The Workspace property list remains a compatibility mirror while the owner-facing BIM surface
+    # exposes a separate QS3D Properties PaletteSet bound to the same WorkspaceViewModel.
     for token in (
         "WorkspaceContentRoot",
         "WorkspaceOverflow",
@@ -217,7 +218,7 @@ def main():
     if 'new TabSpec("QS3D_AUTHOR"' in topbar:
         fail("Topbar owner contract must not resurrect QS3D_AUTHOR")
 
-    print("PASS: BLT3D BIM + MODELING owner-reference source contract is intact.")
+    print("PASS: BLT3D BIM + dedicated QS3D Properties + MODELING owner-reference source contract is intact.")
     return 0
 
 
