@@ -34,11 +34,14 @@ def main():
 
     assert gate.normalize_lane_key("#2305") == "issue-2305"
     assert gate.normalize_lane_key("Issue: 2305") == "issue-2305"
+    assert gate.normalize_lane_key("issue-2305 <!-- template hint -->") == "issue-2305"
     assert gate.normalize_lane_key("BATCH-UI-AUG17") == "batch-ui-aug17"
     expect_raises(lambda: gate.normalize_lane_key("x"), "3-81")
     expect_raises(lambda: gate.normalize_lane_key("bad/key"), "3-81")
 
     assert gate.extract_lane_key("Lane-Key: issue-2305\nIssue: #999") == "issue-2305"
+    assert gate.extract_lane_key("Lane-Key: issue-2305 <!-- REQUIRED hint -->\nIssue: #999") == "issue-2305"
+    assert gate.extract_lane_key("Lane-Key: <!-- REQUIRED: issue-123 -->\nIssue: #2305") == "issue-2305"
     assert gate.extract_lane_key("Issue: #2305\n") == "issue-2305"
     assert gate.extract_lane_key("Fixes #2305") == "issue-2305"
     assert gate.extract_lane_key("Fixes #2305 and closes #2305") == "issue-2305"
@@ -86,7 +89,7 @@ def main():
         "sender": {"login": "trinhtanphat"},
         "pull_request": {
             "number": 99,
-            "body": "Lane-Key: issue-2305\nCanonical carrier: agent/chatgpt/task-2305",
+            "body": "Lane-Key: issue-2305 <!-- template hint -->\nCanonical carrier: agent/chatgpt/task-2305",
             "head": {
                 "ref": "agent/chatgpt/task-2305",
                 "repo": {"full_name": "trinhtanphat/QS3D-BricsCAD"},
