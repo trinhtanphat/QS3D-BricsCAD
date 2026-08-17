@@ -4,6 +4,7 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void RunAll()
         {
+            Blt3dRuntimeLayoutSourceContractSmoke.Run();
             ProjectQuantitySmoke.Run();
             QuantityReportDistinctNoteSmoke.Run();
             QuantityRuleTokenXmlPersistabilitySmoke.Run();
