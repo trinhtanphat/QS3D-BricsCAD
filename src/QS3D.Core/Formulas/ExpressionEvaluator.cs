@@ -37,7 +37,11 @@ namespace QS3D.Core.Formulas
         {
             var normalized = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
             if (variables == null) return normalized;
-            if (variables.Count > MaxVariableCount)
+
+            var reportedCount = variables.Count;
+            if (reportedCount < 0)
+                throw new InvalidOperationException("Variable source reports an invalid negative count.");
+            if (reportedCount > MaxVariableCount)
                 throw new InvalidOperationException($"Variable count exceeds the supported maximum of {MaxVariableCount}.");
 
             var variableCount = 0;
