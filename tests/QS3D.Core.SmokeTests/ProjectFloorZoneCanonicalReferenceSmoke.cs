@@ -64,12 +64,13 @@ namespace QS3D.Core.SmokeTests
             project.ActiveZoneId = fallback.Id;
             var element = new ProjectElement("E-ZONE", ElementCategory.Beam)
             {
-                ZoneId = "  z-01  "
+                ZoneId = "z-01"
             };
             element.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(element);
 
-            Equal(1, ProjectZoneService.ReferenceCount(project, " Z-01 "));
+            ThrowsArgument(() => ProjectZoneService.ReferenceCount(project, " Z-01 "));
+            Equal(1, ProjectZoneService.ReferenceCount(project, "z-01"));
             ProjectZoneService.Update(project, zone.Id, "Zone 01 renamed");
             True((element.Dirty & ElementDirtyFlags.Relations) != 0);
             True((element.Dirty & ElementDirtyFlags.Quantity) != 0);
@@ -86,11 +87,14 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("P-ZONE-ACTIVE", "Zone active test");
             var zone = ProjectZoneService.Create(project, "Zone-A", "Zone A");
-            project.ActiveZoneId = "  zONE-a  ";
+            project.ActiveZoneId = "zONE-a";
             var beforeVersion = project.ChangeVersion;
 
-            ThrowsActiveZone(() => ProjectZoneService.Delete(project, " zone-A "));
+            ThrowsArgument(() => ProjectZoneService.Delete(project, " zone-A "));
+            Equal(beforeVersion, project.ChangeVersion);
+            Same(zone, project.FindZone(zone.Id));
 
+            ThrowsActiveZone(() => ProjectZoneService.Delete(project, "ZONE-A"));
             Equal(beforeVersion, project.ChangeVersion);
             Same(zone, project.FindZone(zone.Id));
             Equal("zONE-a", project.ActiveZoneId);
@@ -114,6 +118,20 @@ namespace QS3D.Core.SmokeTests
         private static void ThrowsActiveZone(Action action)
         {
             ThrowsInvalid(action, "Cannot delete the active zone. Activate another zone first.");
+        }
+
+        private static void ThrowsArgument(Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (ArgumentException)
+            {
+                return;
+            }
+
+            throw new Exception("Expected ArgumentException for noncanonical Zone identity.");
         }
 
         private static void ThrowsInvalid(Action action, string expectedMessagePart)
