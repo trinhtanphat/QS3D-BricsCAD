@@ -10,7 +10,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             RepairsFloorAliasAndPreservesCanonicalNoOp();
-            RepairsZoneAliasAndPreservesCanonicalNoOp();
+            RejectsPaddedZoneLookupAndCanonicalizesCase();
         }
 
         private static void RepairsFloorAliasAndPreservesCanonicalNoOp()
@@ -34,17 +34,21 @@ namespace QS3D.Core.SmokeTests
             Equal(canonicalVersion, project.ChangeVersion, "floor missing-id version");
         }
 
-        private static void RepairsZoneAliasAndPreservesCanonicalNoOp()
+        private static void RejectsPaddedZoneLookupAndCanonicalizesCase()
         {
             var project = new ProjectState("P-ACTIVE-ZONE-CANONICAL", "Active zone canonical regression");
             var zone = ProjectZoneService.Create(project, "zone-a", "Zone A");
-            project.ActiveZoneId = " ZONE-A ";
-            var beforeRepair = project.ChangeVersion;
+            project.ActiveZoneId = "ZONE-A";
+            var beforeReject = project.ChangeVersion;
 
-            ProjectZoneService.SetActive(project, " Zone-A ");
+            Throws<ArgumentException>(() => ProjectZoneService.SetActive(project, " Zone-A "));
 
-            Equal(zone.Id, project.ActiveZoneId, "zone canonical repair");
-            Equal(beforeRepair + 1L, project.ChangeVersion, "zone repair version");
+            Equal("ZONE-A", project.ActiveZoneId, "zone padded lookup state");
+            Equal(beforeReject, project.ChangeVersion, "zone padded lookup version");
+
+            ProjectZoneService.SetActive(project, "ZONE-A");
+            Equal(zone.Id, project.ActiveZoneId, "zone canonical case normalization");
+            Equal(beforeReject + 1L, project.ChangeVersion, "zone case normalization version");
 
             var canonicalVersion = project.ChangeVersion;
             ProjectZoneService.SetActive(project, zone.Id);
