@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             CountedOversizeFailsBeforeEnumeration();
+            ConflictingOversizedCountContractsFailBeforeEnumeration();
+            ConflictingInBoundCountContractsFailBeforeEnumeration();
             StreamingOversizeStopsAtFirstDisallowedItem();
             ExactBoundaryRemainsAccepted();
         }
@@ -26,6 +28,24 @@ namespace QS3D.Core.SmokeTests
 
             Equal(0, source.GetEnumeratorCalls, "Oversized counted RateBook input must fail before enumeration.");
             Contains("at most 10000", error.Message, "Counted oversize failure must report the RateBook item bound.");
+        }
+
+        private static void ConflictingOversizedCountContractsFailBeforeEnumeration()
+        {
+            var source = new MultiContractNeverEnumerated(1, 1, MaximumItems + 1);
+            var error = Capture<InvalidOperationException>(() => new RateBook("BOOK-CONFLICTING-OVERSIZE", source));
+
+            Equal(0, source.GetEnumeratorCalls, "An oversized RateBook count contract must fail before enumeration even when another contract reports a small count.");
+            Contains("at most 10000", error.Message, "Conflicting oversize failure must preserve the RateBook item-bound failure.");
+        }
+
+        private static void ConflictingInBoundCountContractsFailBeforeEnumeration()
+        {
+            var source = new MultiContractNeverEnumerated(1, 2, 1);
+            var error = Capture<InvalidOperationException>(() => new RateBook("BOOK-CONFLICTING-IN-BOUND", source));
+
+            Equal(0, source.GetEnumeratorCalls, "Conflicting in-bound RateBook count contracts must fail before enumeration.");
+            Contains("conflicting known counts", error.Message, "Conflicting in-bound counts must fail closed instead of selecting one contract.");
         }
 
         private static void StreamingOversizeStopsAtFirstDisallowedItem()
@@ -119,6 +139,47 @@ namespace QS3D.Core.SmokeTests
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class MultiContractNeverEnumerated : ICollection<RateItem>, IReadOnlyCollection<RateItem>, ICollection
+        {
+            private readonly int _genericCount;
+            private readonly int _readOnlyCount;
+            private readonly int _nonGenericCount;
+
+            internal MultiContractNeverEnumerated(int genericCount, int readOnlyCount, int nonGenericCount)
+            {
+                _genericCount = genericCount;
+                _readOnlyCount = readOnlyCount;
+                _nonGenericCount = nonGenericCount;
+            }
+
+            int ICollection<RateItem>.Count => _genericCount;
+            int IReadOnlyCollection<RateItem>.Count => _readOnlyCount;
+            int ICollection.Count => _nonGenericCount;
+            bool ICollection<RateItem>.IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+            internal int GetEnumeratorCalls { get; private set; }
+
+            IEnumerator<RateItem> IEnumerable<RateItem>.GetEnumerator()
+            {
+                GetEnumeratorCalls++;
+                throw new InvalidOperationException("Conflicting counted source must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                GetEnumeratorCalls++;
+                throw new InvalidOperationException("Conflicting counted source must not be enumerated.");
+            }
+
+            void ICollection<RateItem>.Add(RateItem item) => throw new NotSupportedException();
+            void ICollection<RateItem>.Clear() => throw new NotSupportedException();
+            bool ICollection<RateItem>.Contains(RateItem item) => false;
+            void ICollection<RateItem>.CopyTo(RateItem[] array, int arrayIndex) => throw new NotSupportedException();
+            bool ICollection<RateItem>.Remove(RateItem item) => throw new NotSupportedException();
+            void ICollection.CopyTo(Array array, int index) => throw new NotSupportedException();
         }
 
         private sealed class StreamingRateItems : IEnumerable<RateItem>
