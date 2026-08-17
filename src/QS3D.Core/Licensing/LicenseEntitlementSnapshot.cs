@@ -41,16 +41,16 @@ namespace QS3D.Core.Licensing
             string entitlementPayload,
             DateTime persistedAt)
         {
-            var normalizedProduct = RequireBounded(product, nameof(product), MaxProductBytes);
-            var normalizedVersion = RequireBounded(productVersion, nameof(productVersion), MaxVersionBytes);
-            var normalizedMachineId = RequireBounded(machineId, nameof(machineId), MaxMachineIdBytes);
+            var canonicalProduct = RequireCanonicalIdentity(product, nameof(product), MaxProductBytes);
+            var canonicalVersion = RequireCanonicalIdentity(productVersion, nameof(productVersion), MaxVersionBytes);
+            var canonicalMachineId = RequireCanonicalIdentity(machineId, nameof(machineId), MaxMachineIdBytes);
             var payload = RequirePayload(entitlementPayload);
 
             if (persistedAt.Kind == DateTimeKind.Unspecified)
                 throw new ArgumentException("Persistence timestamp must have an explicit time zone.", nameof(persistedAt));
 
             var persistedAtUtc = persistedAt.Kind == DateTimeKind.Utc ? persistedAt : persistedAt.ToUniversalTime();
-            return new LicenseEntitlementSnapshot(normalizedProduct, normalizedVersion, normalizedMachineId, payload, persistedAtUtc);
+            return new LicenseEntitlementSnapshot(canonicalProduct, canonicalVersion, canonicalMachineId, payload, persistedAtUtc);
         }
 
         public string Serialize()
@@ -155,12 +155,30 @@ namespace QS3D.Core.Licensing
             return true;
         }
 
-        private static string RequireBounded(string value, string parameterName, int maxBytes)
+        private static string RequireCanonicalIdentity(string value, string parameterName, int maxBytes)
         {
             if (value == null) throw new ArgumentNullException(parameterName);
             var normalized = value.Trim();
             if (normalized.Length == 0) throw new ArgumentException("Value must not be blank.", parameterName);
-            if (StrictUtf8.GetByteCount(normalized) > maxBytes) throw new ArgumentException("Value exceeds the persistence bound.", parameterName);
+            if (!string.Equals(value, normalized, StringComparison.Ordinal))
+                throw new ArgumentException("Value must not contain leading or trailing whitespace.", parameterName);
+
+            for (var i = 0; i < normalized.Length; i++)
+            {
+                if (char.IsControl(normalized[i]))
+                    throw new ArgumentException("Value must not contain control characters.", parameterName);
+            }
+
+            try
+            {
+                if (StrictUtf8.GetByteCount(normalized) > maxBytes)
+                    throw new ArgumentException("Value exceeds the persistence bound.", parameterName);
+            }
+            catch (EncoderFallbackException)
+            {
+                throw new ArgumentException("Value contains invalid Unicode.", parameterName);
+            }
+
             return normalized;
         }
 
