@@ -17,53 +17,116 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def palette_contract_errors(source: str) -> list[str]:
+    errors: list[str] = []
+
+    forbidden_palette_tokens = (
+        "Assembly]::LoadFrom",
+        "AssemblyResolve",
+        "add_AssemblyResolve",
+        "Activator]::CreateInstance",
+        "LoadFile(",
+        "LoadFrom(",
+        "Start-Process",
+        "System.Diagnostics.Process",
+        "PresentationFramework",
+        "PresentationCore",
+        "WindowsBase",
+        "System.Xaml",
+        "System.Windows.Controls",
+        "System.Windows.UIElement",
+        "Get-Content -LiteralPath $Path -Raw",
+    )
+    for token in forbidden_palette_tokens:
+        if token in source:
+            errors.append(f"offline palette smoke must not contain hosted/unbounded source primitive: {token}")
+
+    required_source_contracts = (
+        "WorkspacePanel.xaml",
+        "RightPanel.xaml",
+        "Read-XamlDocument",
+        "$maximumXamlBytes = 1MB",
+        "[System.IO.Path]::GetFullPath",
+        "StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)",
+        "Palette XAML source escaped the canonical UI root",
+        "Test-Path -LiteralPath $fullPath -PathType Leaf",
+        "Get-Item -LiteralPath $fullPath -Force",
+        "[System.IO.FileAttributes]::ReparsePoint",
+        "Palette XAML source must not be a reparse point",
+        "$sourceFile.Length -gt $maximumXamlBytes",
+        "Palette XAML source exceeds the $maximumXamlBytes-byte offline qualification limit",
+        "[System.Text.UTF8Encoding]::new($false, $true)",
+        "[System.IO.File]::ReadAllText($fullPath, $strictUtf8)",
+        "Palette XAML is not valid strict UTF-8 / well-formed XML",
+        "WorkspaceOverflow",
+        "WorkspaceContentRoot",
+        "FamilySearch",
+        "PropertySearch",
+        "DrawingList",
+        "LayerList",
+        "Theme.xaml",
+        "bounded strict source/XAML checks only",
+        "Licensed in-host BricsCAD V25 runtime remains the authority",
+    )
+    for token in required_source_contracts:
+        if token not in source:
+            errors.append(f"offline palette source/failure contract missing: {token}")
+
+    ordering_contracts = (
+        (
+            "StartsWith($rootPrefix",
+            "Test-Path -LiteralPath $fullPath -PathType Leaf",
+            "canonical-root containment must be checked before source existence/read",
+        ),
+        (
+            "[System.IO.FileAttributes]::ReparsePoint",
+            "$sourceFile.Length -gt $maximumXamlBytes",
+            "reparse-point rejection must precede source materialization/size acceptance",
+        ),
+        (
+            "$sourceFile.Length -gt $maximumXamlBytes",
+            "[System.IO.File]::ReadAllText($fullPath, $strictUtf8)",
+            "source size must be bounded before materialization",
+        ),
+    )
+    for first, second, message in ordering_contracts:
+        first_index = source.find(first)
+        second_index = source.find(second)
+        if first_index < 0 or second_index < 0 or first_index >= second_index:
+            errors.append(message)
+
+    return errors
+
+
+def require_palette_contract(source: str) -> None:
+    errors = palette_contract_errors(source)
+    require(not errors, errors[0] if errors else "offline palette source contract failed")
+
+
+def require_mutation_rejected(source: str, old: str, new: str, description: str) -> None:
+    require(old in source, f"mutation fixture missing source token: {description}")
+    mutated = source.replace(old, new, 1)
+    require(bool(palette_contract_errors(mutated)), f"mutation unexpectedly survived offline palette guard: {description}")
+
+
 palette = read(PALETTE)
 wrapper = read(WRAPPER)
 qualification = read(QUALIFICATION)
 v26_project = read(V26_PROJECT)
 
 # This script executes in standalone PowerShell. It must remain incapable of
-# constructing WPF controls, constructing the hosted plugin, or resolving
-# BricsCAD managed/native UI dependencies.
-forbidden_palette_tokens = (
-    "Assembly]::LoadFrom",
-    "AssemblyResolve",
-    "add_AssemblyResolve",
-    "Activator]::CreateInstance",
-    "LoadFile(",
-    "LoadFrom(",
-    "Start-Process",
-    "System.Diagnostics.Process",
-    "PresentationFramework",
-    "PresentationCore",
-    "WindowsBase",
-    "System.Xaml",
-    "System.Windows.Controls",
-    "System.Windows.UIElement",
-)
-for token in forbidden_palette_tokens:
-    require(token not in palette, f"offline palette smoke must not contain hosted/native UI load primitive: {token}")
+# constructing WPF controls, constructing the hosted plugin, resolving BricsCAD
+# managed/native UI dependencies, or materializing unbounded/redirected XAML.
+require_palette_contract(palette)
 
-required_source_contracts = (
-    "WorkspacePanel.xaml",
-    "RightPanel.xaml",
-    "Read-XamlDocument",
-    "Test-Path -LiteralPath $Path -PathType Leaf",
-    "Get-Content -LiteralPath $Path -Raw -Encoding UTF8",
-    "Required palette XAML source is missing",
-    "Palette XAML is not well-formed XML",
-    "WorkspaceOverflow",
-    "WorkspaceContentRoot",
-    "FamilySearch",
-    "PropertySearch",
-    "DrawingList",
-    "LayerList",
-    "Theme.xaml",
-    "source/XAML checks only",
-    "Licensed in-host BricsCAD V25 runtime remains the authority",
-)
-for token in required_source_contracts:
-    require(token in palette, f"offline palette source/failure contract missing: {token}")
+for old, new, description in (
+    ("$maximumXamlBytes = 1MB", "$maximumXamlBytes = [int]::MaxValue", "remove bounded XAML source ceiling"),
+    ("[System.IO.FileAttributes]::ReparsePoint", "[System.IO.FileAttributes]::Hidden", "remove reparse-point rejection"),
+    ("[System.Text.UTF8Encoding]::new($false, $true)", "[System.Text.UTF8Encoding]::new($false, $false)", "disable strict UTF-8 decoding"),
+    ("StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)", "StartsWith('', [System.StringComparison]::OrdinalIgnoreCase)", "remove canonical-root containment"),
+    ("[System.IO.File]::ReadAllText($fullPath, $strictUtf8)", "Get-Content -LiteralPath $Path -Raw -Encoding UTF8", "restore unbounded Get-Content materialization"),
+):
+    require_mutation_rejected(palette, old, new, description)
 
 # V26 deliberately links the V25 UI XAML as its shared source of truth. Keep the
 # offline parser pointed at that canonical source and fail CI if V26 silently
@@ -103,6 +166,6 @@ require(
 )
 
 print(
-    "PASS: offline palette smoke remains source/XAML-only with deterministic missing/malformed-file diagnostics, "
-    "V26 still consumes the same canonical palette XAML, and aggregate qualification retains the separate licensed in-host runtime gate."
+    "PASS: offline palette smoke remains source/XAML-only with bounded repository-contained strict-UTF8 input, "
+    "deterministic missing/malformed/reparse diagnostics, mutation coverage, shared V26 XAML, and the separate licensed in-host runtime gate."
 )
