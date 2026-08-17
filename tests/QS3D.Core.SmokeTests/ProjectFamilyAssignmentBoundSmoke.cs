@@ -11,6 +11,9 @@ namespace QS3D.Core.SmokeTests
 
         public static void Run()
         {
+            GenericNegativeCountFailsBeforeEnumeration();
+            ReadOnlyNegativeCountFailsBeforeEnumeration();
+            NonGenericNegativeCountFailsBeforeEnumeration();
             CountedOversizeFailsBeforeEnumeration();
             ReadOnlyCountedOversizeFailsBeforeEnumeration();
             NonGenericCountedOversizeFailsBeforeEnumeration();
@@ -18,6 +21,51 @@ namespace QS3D.Core.SmokeTests
             CountVersionMutationFailsBeforeEnumeration();
             LazyOversizeStopsAtFirstImpossibleEntry();
             ExactBoundDuplicatesRemainSupported();
+        }
+
+        private static void GenericNegativeCountFailsBeforeEnumeration()
+        {
+            var fixture = NewFixture("negative-generic");
+            var beforeVersion = fixture.Project.ChangeVersion;
+            var beforeUtc = fixture.Project.UpdatedUtc;
+            var source = new NoEnumerationCollection(fixture.Element, -1);
+
+            var error = Capture<InvalidOperationException>(() =>
+                ProjectFamilyService.Assign(fixture.Project, fixture.TargetFamily.Id, source));
+
+            Contains("invalid negative known count", error.Message, "Negative generic Family assignment Count must fail closed.");
+            Equal(0, source.EnumerationAttempts, "Negative generic Family assignment enumerated the source.");
+            AssertRejectedAssignmentUnchanged(fixture, beforeVersion, beforeUtc, "Negative generic Family assignment");
+        }
+
+        private static void ReadOnlyNegativeCountFailsBeforeEnumeration()
+        {
+            var fixture = NewFixture("negative-readonly");
+            var beforeVersion = fixture.Project.ChangeVersion;
+            var beforeUtc = fixture.Project.UpdatedUtc;
+            var source = new ReadOnlyNoEnumerationCollection(fixture.Element, -1);
+
+            var error = Capture<InvalidOperationException>(() =>
+                ProjectFamilyService.Assign(fixture.Project, fixture.TargetFamily.Id, source));
+
+            Contains("invalid negative known count", error.Message, "Negative read-only Family assignment Count must fail closed.");
+            Equal(0, source.EnumerationAttempts, "Negative IReadOnlyCollection Family assignment enumerated the source.");
+            AssertRejectedAssignmentUnchanged(fixture, beforeVersion, beforeUtc, "Negative read-only Family assignment");
+        }
+
+        private static void NonGenericNegativeCountFailsBeforeEnumeration()
+        {
+            var fixture = NewFixture("negative-non-generic");
+            var beforeVersion = fixture.Project.ChangeVersion;
+            var beforeUtc = fixture.Project.UpdatedUtc;
+            var source = new NonGenericNoEnumerationCollection(fixture.Element, -1);
+
+            var error = Capture<InvalidOperationException>(() =>
+                ProjectFamilyService.Assign(fixture.Project, fixture.TargetFamily.Id, source));
+
+            Contains("invalid negative known count", error.Message, "Negative non-generic Family assignment Count must fail closed.");
+            Equal(0, source.EnumerationAttempts, "Negative non-generic Family assignment enumerated the source.");
+            AssertRejectedAssignmentUnchanged(fixture, beforeVersion, beforeUtc, "Negative non-generic Family assignment");
         }
 
         private static void CountedOversizeFailsBeforeEnumeration()
@@ -181,18 +229,29 @@ namespace QS3D.Core.SmokeTests
                 yield return element;
         }
 
-        private static void Throws<T>(Action action) where T : Exception
+        private static T Capture<T>(Action action) where T : Exception
         {
             try
             {
                 action();
             }
-            catch (T)
+            catch (T ex)
             {
-                return;
+                return ex;
             }
 
             throw new Exception("Expected exception " + typeof(T).Name + ".");
+        }
+
+        private static void Throws<T>(Action action) where T : Exception
+        {
+            Capture<T>(action);
+        }
+
+        private static void Contains(string expected, string actual, string message)
+        {
+            if (actual == null || actual.IndexOf(expected, StringComparison.Ordinal) < 0)
+                throw new Exception(message + " Actual=" + (actual ?? "<null>") + ".");
         }
 
         private static void Equal<T>(T expected, T actual, string message)
@@ -234,7 +293,7 @@ namespace QS3D.Core.SmokeTests
             public IEnumerator<ProjectElement> GetEnumerator()
             {
                 EnumerationAttempts++;
-                throw new Exception("Counted oversize Family source must be rejected before enumeration.");
+                throw new Exception("Counted Family source must be rejected before enumeration.");
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -261,7 +320,7 @@ namespace QS3D.Core.SmokeTests
             public IEnumerator<ProjectElement> GetEnumerator()
             {
                 EnumerationAttempts++;
-                throw new Exception("Read-only counted oversize Family source must be rejected before enumeration.");
+                throw new Exception("Read-only counted Family source must be rejected before enumeration.");
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -285,7 +344,7 @@ namespace QS3D.Core.SmokeTests
             public IEnumerator<ProjectElement> GetEnumerator()
             {
                 EnumerationAttempts++;
-                throw new Exception("Non-generic counted oversize Family source must be rejected before enumeration.");
+                throw new Exception("Non-generic counted Family source must be rejected before enumeration.");
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
