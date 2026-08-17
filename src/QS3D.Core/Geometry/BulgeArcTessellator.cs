@@ -80,10 +80,18 @@ namespace QS3D.Core.Geometry
                 var angle = startAngle + theta * index / segmentCount;
                 var point = new Point2(center.X + radius * Math.Cos(angle), center.Y + radius * Math.Sin(angle));
                 ValidatePoint(point, "tessellatedPoint");
-                points.Add(point);
+                AddNonDegenerateVertexOrThrow(points, point);
             }
-            points.Add(end);
+            AddNonDegenerateVertexOrThrow(points, end);
             return points.AsReadOnly();
+        }
+
+        private static void AddNonDegenerateVertexOrThrow(List<Point2> points, Point2 point)
+        {
+            var previous = points[points.Count - 1];
+            if (previous.X == point.X && previous.Y == point.Y)
+                throw new InvalidOperationException("Bulge arc tessellation collapsed adjacent vertices at the current numeric precision.");
+            points.Add(point);
         }
 
         private static void ValidatePoint(Point2 point, string name)
