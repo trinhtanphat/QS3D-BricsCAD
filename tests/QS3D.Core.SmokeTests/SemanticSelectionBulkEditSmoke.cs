@@ -1,7 +1,9 @@
 using System;
 using System.Globalization;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Selection;
+using QS3D.Core.Services;
 
 namespace QS3D.Core.SmokeTests
 {
@@ -16,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             NumericMultiplyUnderflowIsAtomic();
             NumericMultiplyPreservesLegitimateZeroAndSubnormal();
             FamilyAssignmentIsAllOrNothingAcrossCategories();
+            FamilyIdentityMustBeCanonicalAndAtomic();
             DuplicateSelectionFailsBeforeMutation();
         }
 
@@ -173,6 +176,62 @@ namespace QS3D.Core.SmokeTests
             Equal(2, changed.ChangedCount);
             Equal("F-B2", project.FindElement("B-1")!.FamilyId);
             Equal("F-B2", project.FindElement("B-2")!.FamilyId);
+        }
+
+        private static void FamilyIdentityMustBeCanonicalAndAtomic()
+        {
+            var semantic = new SemanticSelectionBulkEditService();
+
+            var paddedTarget = BuildProject();
+            var paddedTargetVersion = paddedTarget.ChangeVersion;
+            MustFail(() => semantic.AssignFamily(paddedTarget, new[] { "B-1" }, " F-B2 "));
+            Equal("F-B", paddedTarget.FindElement("B-1")!.FamilyId);
+            Equal(paddedTargetVersion, paddedTarget.ChangeVersion);
+
+            var paddedCurrent = BuildProject();
+            var paddedCurrentElement = paddedCurrent.FindElement("B-1")!;
+            SetRawFamilyId(paddedCurrentElement, " F-B ");
+            var paddedCurrentVersion = paddedCurrent.ChangeVersion;
+            MustFail(() => semantic.AssignFamily(paddedCurrent, new[] { "B-1" }, "F-B2"));
+            Equal(" F-B ", paddedCurrentElement.FamilyId);
+            Equal(paddedCurrentVersion, paddedCurrent.ChangeVersion);
+
+            var inherited = BuildProject();
+            var inheritedElement = inherited.FindElement("B-1")!;
+            SetRawFamilyId(inheritedElement, " F-B ");
+            var inheritedVersion = inherited.ChangeVersion;
+            MustFail(() => semantic.MultiplyNumericProperty(inherited, new[] { "B-1" }, "WidthM", 2d));
+            Equal(false, inheritedElement.Properties.ContainsKey("WidthM"));
+            Equal(" F-B ", inheritedElement.FamilyId);
+            Equal(inheritedVersion, inherited.ChangeVersion);
+
+            var directTarget = BuildProject();
+            var directTargetVersion = directTarget.ChangeVersion;
+            MustFail(() => new BulkEditService().AssignFamily(directTarget, new[] { "B-1" }, " F-B2 "));
+            Equal("F-B", directTarget.FindElement("B-1")!.FamilyId);
+            Equal(directTargetVersion, directTarget.ChangeVersion);
+
+            var directCurrent = BuildProject();
+            var directCurrentElement = directCurrent.FindElement("B-1")!;
+            SetRawFamilyId(directCurrentElement, " F-B ");
+            var directCurrentVersion = directCurrent.ChangeVersion;
+            MustFail(() => new BulkEditService().AssignFamily(directCurrent, new[] { "B-1" }, "F-B2"));
+            Equal(" F-B ", directCurrentElement.FamilyId);
+            Equal(directCurrentVersion, directCurrent.ChangeVersion);
+
+            var noFamily = BuildProject();
+            var noFamilyElement = noFamily.FindElement("B-1")!;
+            noFamilyElement.FamilyId = string.Empty;
+            var noFamilyChanged = semantic.AssignFamily(noFamily, new[] { "B-1" }, "F-B2");
+            Equal(1, noFamilyChanged.ChangedCount);
+            Equal("F-B2", noFamilyElement.FamilyId);
+        }
+
+        private static void SetRawFamilyId(ProjectElement element, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_familyId", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectElement._familyId reflection hook is unavailable for malformed-state regression setup.");
+            field.SetValue(element, value);
         }
 
         private static void DuplicateSelectionFailsBeforeMutation()
