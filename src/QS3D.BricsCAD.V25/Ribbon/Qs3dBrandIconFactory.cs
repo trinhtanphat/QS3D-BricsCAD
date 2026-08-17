@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Threading;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace QS3D.BricsCAD.V25.Ribbon
 {
@@ -10,7 +11,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
     /// Compact WPF-vector rendering of the repository-owned QS3D cube mark from
     /// assets/branding/qs3d-logo.svg. The small Ribbon variant intentionally omits the
     /// QS3D/CAD wordmark because text is not legible at 16-32 px; the cube geometry and
-    /// approved dark/cyan/blue palette remain recognizable and DPI-independent.
+    /// approved dark/cyan/blue palette remain recognizable while the final host-facing
+    /// image is rasterized to the exact Ribbon pixel size.
     /// </summary>
     internal static class Qs3dBrandIconFactory
     {
@@ -71,7 +73,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     "M21.5,12.06 L21.5,16.81 17.375,19.25 17.375,16.5 20.625,14.625")));
 
             // Very light alignment ticks from the master mark; they remain subtle at 32 px and
-            // disappear naturally at 16 px without relying on bitmap downsampling.
+            // disappear naturally at 16 px after rasterization.
             var guidePen = new Pen(guide, 0.45)
             {
                 StartLineCap = PenLineCap.Round,
@@ -83,16 +85,23 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 guidePen,
                 Geometry.Parse("M5.9,10.5 L8.9,10.5 M23.1,10.5 L26.1,10.5 M16,3.9 L16,6.9 M16,23.8 L16,28.1")));
 
-            if (pixelSize != 32)
+            group.Freeze();
+
+            // BricsCAD's Ribbon reliably consumes the bitmap form used by RibbonIconFactory.
+            // Returning the raw DrawingImage here can make the host replace this logo with its
+            // missing-image '?' placeholder, even though the vector itself is valid WPF.
+            var visual = new DrawingVisual();
+            using (var drawing = visual.RenderOpen())
             {
-                var scale = pixelSize / 32.0;
-                group.Transform = new ScaleTransform(scale, scale);
+                drawing.PushTransform(new ScaleTransform(pixelSize / 32.0, pixelSize / 32.0));
+                drawing.DrawDrawing(group);
+                drawing.Pop();
             }
 
-            group.Freeze();
-            var image = new DrawingImage(group);
-            image.Freeze();
-            return image;
+            var bitmap = new RenderTargetBitmap(pixelSize, pixelSize, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(visual);
+            bitmap.Freeze();
+            return bitmap;
         }
 
         private static SolidColorBrush FrozenBrush(Color color)
