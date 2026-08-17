@@ -35,6 +35,7 @@ Before changing source, tests, docs, workflows, configuration, or release metada
 5. Check the minimum active claim/reservation metadata needed to detect another owner/session.
 6. Determine whether the requested behavior already landed on current `main`.
 7. Determine whether applicable CI, exact-main validation, packaging, or release work is still pending.
+8. When the task is product/release relevant, determine the currently published release/version and whether any published release already contains the exact landed change.
 
 Use semantic behavior, Lane-Key, expected files/symbols and acceptance criteria—not only titles or branch names—to decide whether work is the same lane.
 
@@ -85,6 +86,7 @@ owner prompt
   -> refresh and record exact resulting main SHA
   -> applicable exact-main validation/release pipeline
   -> verify release/publish outcome when release is part of acceptance
+  -> identify the exact published version/tag that first contains the change
   -> report exact state using the mandatory form below
 ```
 
@@ -98,7 +100,7 @@ Only explicit owner merge/integration authorization permits the session to merge
 
 If merge authorization is absent, the correct endpoint is a validated canonical branch/PR plus an exact report that merge/release remain pending.
 
-## Release completion boundary
+## Release completion and version provenance boundary
 
 After an authorized merge, first refresh `main` and record the exact landed SHA.
 
@@ -108,36 +110,77 @@ When the task's acceptance includes packaging, cloud build, publish, tag, releas
 - PR CI is not release proof;
 - merge success is not release proof;
 - an older successful release run is not proof for the newly landed SHA;
-- verify the applicable exact-main release pipeline and its artifact/tag/publish result for the landed SHA before reporting `RELEASED`.
+- the latest public release is not automatically proof that it contains the change;
+- verify the applicable exact-main release pipeline and its artifact/tag/publish result for the landed SHA before reporting `RELEASED`;
+- identify the exact release/version/tag that first contains the landed change whenever such a release exists;
+- record the release commit/source SHA and enough ancestry/manifest evidence to show that the release actually contains the change.
 
-If the change does not require a product release under `CI_POLICY.md`, report `Release: N/A` with the reason instead of pretending a release occurred.
+Every release-relevant per-prompt report must distinguish:
+
+```text
+Current/latest published release: <version/tag or none>
+First release containing this change: <version/tag | PENDING | NONE/N/A>
+Release source/commit: <sha or N/A>
+```
+
+If the change is merged to `main` but has not yet appeared in a published release, report `First release containing this change: ⏳ PENDING`; do not name a future version unless it is already formally defined by repository/release metadata.
+
+If the change does not require a product release under `CI_POLICY.md`, report `Release required: ➖ N/A` and `First release containing this change: ➖ N/A` with the reason instead of pretending a release occurred.
 
 Licensed BricsCAD runtime validation remains separate and must be reported as `PENDING_LOCAL` unless actually executed in the required environment.
+
+## Mandatory visual status markers
+
+Every lifecycle/status line in the final per-prompt report must begin with one of these markers so the owner can scan the state without interpreting prose:
+
+- `✅` — verified satisfied/successful/reached using current evidence;
+- `❌` — verified failed, red, rejected, or a required condition is currently unsatisfied;
+- `⏳` — pending, queued, in progress, waiting for an allowed next gate, or `PENDING_LOCAL`;
+- `➖` — genuinely not applicable; include the reason when it is not obvious.
+
+Do not use `✅` for assumptions, stale runs, chat-memory claims, or work that merely appears likely to pass. Do not use `❌` for ordinary in-progress work when the correct state is `⏳`.
+
+For yes/no lifecycle questions, make the meaning visually explicit. Examples:
+
+```text
+✅ Branch pushed: YES — abc1234
+✅ Branch CI: SUCCESS — run 123 / abc1234
+⏳ PR: not opened yet — waiting for required branch CI
+❌ PR/protected checks: FAILURE — required check core failed
+❌ Merged to main: NO — PR not merged
+⏳ First release containing this change: PENDING — merged but release pipeline not complete
+➖ Local/runtime evidence: N/A — docs-only change
+```
 
 ## Mandatory per-prompt status report
 
 At the end of **every owner prompt that asks an agent/chat session to change, continue, fix, validate, integrate, merge, or release repository work**, report the exact current state in this form. Do not replace it with a generic `done`, `fixed`, or `completed` statement.
 
 ```text
-Prompt result: <ACTIVE | DUPLICATE_CARRIER | BRANCH_GREEN | PR_OPEN | PR_GREEN | MERGED_MAIN | RELEASED | BLOCKED | PENDING_LOCAL>
-Issue: #<number> — <title/status>
-Lane-Key: issue-<number>
-Canonical owner/session: <id>
-Canonical branch: <branch or N/A>
-Baseline main: <sha used to start/currently reconciled base>
-Latest task commit: <sha(s) or N/A>
-Branch CI: <run/job + exact tested SHA + SUCCESS/FAILURE/PENDING/N/A>
-PR: #<number or N/A> — <OPEN/DRAFT/READY/MERGED/CLOSED>
-PR/protected checks: <SUCCESS/FAILURE/PENDING/N/A + exact candidate when known>
-Merged to main: <NO | YES, main@sha>
-Release required: <YES | NO/N/A + reason>
-Release: <run/tag/artifact/deployment + SUCCESS/FAILURE/PENDING/N/A>
-Local/runtime evidence: <PASS | PENDING_LOCAL | N/A, never infer PASS>
-Remaining blocker: <exact blocker or none>
-Next exact action: <one concrete next lifecycle action or none>
+<marker> Prompt result: <ACTIVE | DUPLICATE_CARRIER | BRANCH_GREEN | PR_OPEN | PR_GREEN | MERGED_MAIN | RELEASED | BLOCKED | PENDING_LOCAL>
+<marker> Issue: #<number> — <title/status>
+<marker> Lane-Key: issue-<number>
+<marker> Canonical owner/session: <id>
+<marker> Canonical branch: <branch or N/A>
+<marker> Baseline/current main: <sha used to start/currently reconciled base>
+<marker> Latest task commit: <sha(s) or N/A>
+<marker> Branch pushed: <YES/NO + exact head SHA>
+<marker> Branch CI: <run/job + exact tested SHA + SUCCESS/FAILURE/PENDING/N/A>
+<marker> PR: #<number or N/A> — <OPEN/DRAFT/READY/MERGED/CLOSED/NOT_OPENED>
+<marker> PR/protected checks: <SUCCESS/FAILURE/PENDING/N/A + exact candidate when known>
+<marker> Merged to main: <NO | YES, main@sha>
+<marker> Exact-main validation: <run + landed SHA + SUCCESS/FAILURE/PENDING/N/A>
+<marker> Release required: <YES | NO/N/A + reason>
+<marker> Current/latest published release: <version/tag/none/N/A>
+<marker> First release containing this change: <version/tag/PENDING/NONE/N/A>
+<marker> Release source/commit: <sha or N/A>
+<marker> Release: <run/tag/artifact/deployment + SUCCESS/FAILURE/PENDING/N/A>
+<marker> Local/runtime evidence: <PASS | PENDING_LOCAL | N/A, never infer PASS>
+<marker> Remaining blocker: <exact blocker or none>
+<marker> Next exact action: <one concrete next lifecycle action or none>
 ```
 
-The report must use real GitHub/CI evidence from the current carrier. Do not fill unknown fields with guessed identifiers or stale conversation state.
+The report must use real GitHub/CI/release evidence from the current carrier and current published state. Do not fill unknown fields with guessed identifiers, predicted versions, or stale conversation state.
 
 ## Completion wording rules
 
@@ -147,7 +190,7 @@ Use completion language precisely:
 - `PR_OPEN`: canonical PR exists; do not imply its protected candidate is green unless verified.
 - `PR_GREEN`: current PR/protected candidate is green, but it is not merged.
 - `MERGED_MAIN`: owner-authorized merge completed and exact current `main` contains the work; release may still be pending.
-- `RELEASED`: only when release is required and the applicable exact-main release/publish outcome for the landed SHA is verified successful.
+- `RELEASED`: only when release is required and the applicable exact-main release/publish outcome for the landed SHA is verified successful, including the exact release/version/tag that contains it.
 - `PENDING_LOCAL`: source-safe work may be complete but required licensed/private/runtime evidence has not been executed.
 - `DUPLICATE_CARRIER`: another canonical owner/carrier already owns the same lane; no overlapping mutation was performed.
 
@@ -163,7 +206,8 @@ A future agent receiving another prompt for the same function should be able to 
 2. which one branch/PR is canonical;
 3. what exact commit and CI evidence exist;
 4. whether it is merged into current `main`;
-5. whether a release is required and, if so, whether that exact landed SHA was released;
-6. what single next action remains.
+5. what the current published release is;
+6. whether a release is required and, if so, the exact first published version/tag that contains the landed change, or that it is still pending;
+7. what single next action remains.
 
 That traceability is part of the deliverable, not optional reporting overhead.
