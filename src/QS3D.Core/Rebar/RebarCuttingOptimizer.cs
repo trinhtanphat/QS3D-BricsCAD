@@ -72,6 +72,7 @@ namespace QS3D.Core.Rebar
     {
         private const int MaxExpandedPieces = 10000;
         private const double FitToleranceM = 1e-12d;
+        private const double FloatingRoundoffToleranceM = 1e-14d;
 
         public static RebarCuttingOptimizationResult Plan(RebarStockDemand demand)
         {
@@ -197,25 +198,20 @@ namespace QS3D.Core.Rebar
             var exactFillCutCount = Math.Max(0, pieceCount - 1);
             var exactFillKerfM = RebarMath.Multiply(kerfPerCutM, exactFillCutCount, "cutting optimisation exact-fill kerf");
             var exactFillConsumed = allocatedLength.Add(exactFillKerfM, "cutting optimisation exact-fill consumption");
-            var exactFillComparison = exactFillConsumed.CompareTo(stockLengthM);
-            if (exactFillComparison <= 0)
-            {
-                var exactFillRemainder = exactFillConsumed.RemainingIn(stockLengthM, "cutting optimisation exact-fill remainder");
-                if (exactFillRemainder <= FitToleranceM)
-                    return new BarMetrics(true, allocatedLength, exactFillCutCount, exactFillKerfM, 0d);
-            }
-            else
-            {
+            var exactFillDeltaM = exactFillConsumed.SignedDifferenceFrom(stockLengthM, "cutting optimisation exact-fill comparison");
+            if (exactFillDeltaM > FloatingRoundoffToleranceM)
                 return BarMetrics.DoesNotFit;
-            }
+            if (exactFillDeltaM >= -FitToleranceM)
+                return new BarMetrics(true, allocatedLength, exactFillCutCount, exactFillKerfM, 0d);
 
             var tailCutCount = pieceCount;
             var tailKerfM = RebarMath.Multiply(kerfPerCutM, tailCutCount, "cutting optimisation tail kerf");
             var consumed = allocatedLength.Add(tailKerfM, "cutting optimisation stock consumption");
-            if (consumed.CompareTo(stockLengthM) > 0)
+            var tailDeltaM = consumed.SignedDifferenceFrom(stockLengthM, "cutting optimisation tail comparison");
+            if (tailDeltaM > FloatingRoundoffToleranceM)
                 return BarMetrics.DoesNotFit;
 
-            var offCutLengthM = consumed.RemainingIn(stockLengthM, "cutting optimisation off-cut");
+            var offCutLengthM = tailDeltaM >= 0d ? 0d : -tailDeltaM;
             if (offCutLengthM <= FitToleranceM) offCutLengthM = 0d;
             return new BarMetrics(true, allocatedLength, tailCutCount, tailKerfM, offCutLengthM);
         }
@@ -296,34 +292,14 @@ namespace QS3D.Core.Rebar
                 return result;
             }
 
-            public int CompareTo(double value)
+            public double SignedDifferenceFrom(double value, string label)
             {
-                EnsureFinite(value, "cutting optimisation comparison");
+                EnsureFinite(value, label);
                 var difference = _sum - value;
-                EnsureFinite(difference, "cutting optimisation comparison");
-                if (difference == 0d) return _compensation.CompareTo(0d);
-
-                var correctionNeeded = -difference;
-                if (_compensation < correctionNeeded) return -1;
-                if (_compensation > correctionNeeded) return 1;
-                return 0;
-            }
-
-            public double RemainingIn(double stockLengthM, string label)
-            {
-                if (CompareTo(stockLengthM) > 0)
-                    throw new InvalidOperationException("Compensated rebar allocation exceeds stock length: " + label + ".");
-
-                var difference = stockLengthM - _sum;
                 EnsureFinite(difference, label);
-                var remainder = difference - _compensation;
-                EnsureFinite(remainder, label);
-                if (remainder < 0d)
-                {
-                    if (remainder >= -FitToleranceM) return 0d;
-                    throw new InvalidOperationException("Compensated rebar allocation produced a negative stock remainder: " + label + ".");
-                }
-                return remainder;
+                var result = difference + _compensation;
+                EnsureFinite(result, label);
+                return result;
             }
 
             public double Value(string label)
