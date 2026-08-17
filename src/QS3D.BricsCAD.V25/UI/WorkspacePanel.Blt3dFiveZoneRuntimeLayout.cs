@@ -22,15 +22,10 @@ namespace QS3D.BricsCAD.V25.UI
         private static readonly bool Blt3dFiveZoneRuntimeLayoutRegistered = RegisterBlt3dFiveZoneRuntimeLayout();
         private GridSplitter? _blt3dRuntimeVerticalSplitter;
 
-        // Force CLR type initialization before the first WorkspacePanel instance is constructed.
-        // Without an explicit static constructor this partial class is marked beforefieldinit, so
-        // the class-handler registrations below are allowed to run too late for the first Loaded
-        // event. The explicit constructor makes both this registration and the runtime-repair
-        // registration in the sibling partial deterministic for every first palette instance.
-        static WorkspacePanel()
-        {
-        }
-
+        // WorkspacePanel.CompactShell.cs already owns the type's single explicit static constructor.
+        // That constructor removes beforefieldinit for the complete partial type, so this field
+        // initializer and the runtime-repair registration execute deterministically before the
+        // first WorkspacePanel instance without declaring a duplicate static constructor here.
         private static bool RegisterBlt3dFiveZoneRuntimeLayout()
         {
             EventManager.RegisterClassHandler(
