@@ -253,8 +253,10 @@ namespace QS3D.Core.Export
             Func<QuantityReportRow, double> selector,
             string field)
         {
-            var expected = 0d;
-            foreach (var detail in group) expected = AddFinite(expected, selector(detail), field);
+            var accumulator = new QuantityReportMath.FiniteAccumulator();
+            foreach (var detail in group)
+                AddCompensatedEd2(ref accumulator, selector(detail), field);
+            var expected = ValueCompensatedEd2(ref accumulator, field);
             RequireFinite(actual, field);
             if (actual != expected) throw NumericParityError(field);
         }
@@ -275,17 +277,60 @@ namespace QS3D.Core.Export
 
         private static void RequireMassParity(QuantityReportRow summary, IReadOnlyList<QuantityReportRow> group)
         {
-            double? expected = 0d;
+            var accumulator = new QuantityReportMath.FiniteAccumulator();
+            var hasNullMass = false;
             foreach (var detail in group)
             {
                 ValidateMass(detail.MassKg);
-                if (expected.HasValue && detail.MassKg.HasValue)
-                    expected = AddFinite(expected.Value, detail.MassKg.Value, "MassKg");
-                else
-                    expected = null;
+                if (!detail.MassKg.HasValue)
+                {
+                    hasNullMass = true;
+                    continue;
+                }
+                if (!hasNullMass)
+                    AddCompensatedEd2(ref accumulator, detail.MassKg.Value, "MassKg");
             }
+            double? expected = hasNullMass ? (double?)null : ValueCompensatedEd2(ref accumulator, "MassKg");
             ValidateMass(summary.MassKg);
             if (!NullableEqual(summary.MassKg, expected)) throw NumericParityError("MassKg");
+        }
+
+        private static void AddCompensatedEd2(
+            ref QuantityReportMath.FiniteAccumulator accumulator,
+            double value,
+            string field)
+        {
+            RequireFinite(value, field);
+            try
+            {
+                accumulator.Add(value, "ED2/" + field);
+            }
+            catch (OverflowException ex)
+            {
+                throw new InvalidDataException("ED2 " + field + " aggregate exceeds the supported numeric range.", ex);
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new InvalidDataException("ED2 " + field + " aggregate must be finite.", ex);
+            }
+        }
+
+        private static double ValueCompensatedEd2(
+            ref QuantityReportMath.FiniteAccumulator accumulator,
+            string field)
+        {
+            try
+            {
+                return accumulator.Value("ED2/" + field);
+            }
+            catch (OverflowException ex)
+            {
+                throw new InvalidDataException("ED2 " + field + " aggregate exceeds the supported numeric range.", ex);
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new InvalidDataException("ED2 " + field + " aggregate must be finite.", ex);
+            }
         }
 
         private static void ValidateDensity(double? value)
@@ -300,15 +345,6 @@ namespace QS3D.Core.Export
             if (!value.HasValue) return;
             RequireFinite(value.Value, "MassKg");
             if (value.Value < 0d) throw new InvalidDataException("ED2 mass must be non-negative when present.");
-        }
-
-        private static double AddFinite(double left, double right, string field)
-        {
-            RequireFinite(left, field);
-            RequireFinite(right, field);
-            var total = left + right;
-            RequireFinite(total, field);
-            return total;
         }
 
         private static void RequireFinite(double value, string field)
