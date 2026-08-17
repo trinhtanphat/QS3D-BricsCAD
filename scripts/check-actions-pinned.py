@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import re
+import stat
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
+MAX_WORKFLOW_SOURCE_BYTES = 1024 * 1024
 SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 PLAIN_KEY_RE = re.compile(r"[A-Za-z0-9_.-]+")
 TOP_LEVEL_ON_RE = re.compile(r"^(?:on|\"on\"|'on')\s*:\s*(.*)$")
@@ -430,16 +432,86 @@ def scan_workflow_text(label: str, text: str):
     return errors
 
 
-def main():
-    workflow_paths = sorted(
-        [*WORKFLOWS.glob("*.yml"), *WORKFLOWS.glob("*.yaml")],
-        key=lambda path: path.name,
-    )
-
+def discover_workflow_paths(workflows_dir: Path):
     errors: list[str] = []
-    for workflow in workflow_paths:
-        text = workflow.read_text(encoding="utf-8")
-        errors.extend(scan_workflow_text(str(workflow.relative_to(ROOT)), text))
+    try:
+        entries = list(workflows_dir.iterdir())
+    except OSError as exc:
+        return [], [f"{workflows_dir}: cannot enumerate workflows: {exc}"]
+
+    candidates = [path for path in entries if path.suffix in {".yml", ".yaml"}]
+    candidates.sort(key=lambda path: (path.name.casefold(), path.name))
+
+    try:
+        workflow_root = workflows_dir.resolve(strict=True)
+    except OSError as exc:
+        return [], [f"{workflows_dir}: cannot resolve workflow directory: {exc}"]
+
+    seen_names: dict[str, str] = {}
+    validated: list[Path] = []
+    for candidate in candidates:
+        collision_key = candidate.name.casefold()
+        previous = seen_names.get(collision_key)
+        if previous is not None and previous != candidate.name:
+            errors.append(
+                f"{candidate}: case-insensitive workflow filename collision with {previous}"
+            )
+        else:
+            seen_names[collision_key] = candidate.name
+
+        try:
+            metadata = candidate.lstat()
+        except OSError as exc:
+            errors.append(f"{candidate}: cannot inspect workflow candidate: {exc}")
+            continue
+        if stat.S_ISLNK(metadata.st_mode):
+            errors.append(f"{candidate}: workflow candidate must not be a symlink")
+            continue
+        if not stat.S_ISREG(metadata.st_mode):
+            errors.append(f"{candidate}: workflow candidate must be a regular file")
+            continue
+        if metadata.st_size > MAX_WORKFLOW_SOURCE_BYTES:
+            errors.append(
+                f"{candidate}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes"
+            )
+            continue
+
+        try:
+            resolved = candidate.resolve(strict=True)
+            resolved.relative_to(workflow_root)
+        except (OSError, ValueError) as exc:
+            errors.append(f"{candidate}: workflow candidate escapes workflow directory: {exc}")
+            continue
+        validated.append(candidate)
+
+    if errors:
+        return [], errors
+    return validated, []
+
+
+def read_workflow_source(workflow: Path):
+    try:
+        with workflow.open("rb") as stream:
+            raw = stream.read(MAX_WORKFLOW_SOURCE_BYTES + 1)
+    except OSError as exc:
+        return None, f"{workflow}: cannot read workflow source: {exc}"
+    if len(raw) > MAX_WORKFLOW_SOURCE_BYTES:
+        return None, f"{workflow}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes"
+    try:
+        return raw.decode("utf-8"), None
+    except UnicodeDecodeError as exc:
+        return None, f"{workflow}: workflow source is not valid UTF-8: {exc}"
+
+
+def main():
+    workflow_paths, errors = discover_workflow_paths(WORKFLOWS)
+    if not errors:
+        for workflow in workflow_paths:
+            text, read_error = read_workflow_source(workflow)
+            if read_error is not None:
+                errors.append(read_error)
+                continue
+            errors.extend(scan_workflow_text(str(workflow.relative_to(ROOT)), text))
 
     if errors:
         print("GitHub Actions supply-chain preflight FAILED:")
@@ -448,8 +520,8 @@ def main():
         return 1
 
     print(
-        "PASS: every external workflow action is pinned to a full commit SHA; "
-        "pull_request_target, root flow-style workflow mappings, and plaintext HTTP are absent."
+        "PASS: workflow discovery is deterministic and bounded; every external workflow action is pinned "
+        "to a full commit SHA; pull_request_target, root flow-style workflow mappings, and plaintext HTTP are absent."
     )
     return 0
 
