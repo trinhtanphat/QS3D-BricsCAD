@@ -78,6 +78,7 @@ namespace QS3D.Core.Selection
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
             var inspectionVersion = project.ChangeVersion;
+            RequireSelectionKnownCountWithinLimit(elementIds);
             var projectIndex = BuildUniqueProjectIndex(project);
             var familyIndex = BuildUniqueFamilyIndex(project);
             var requested = new List<string>();
@@ -116,6 +117,24 @@ namespace QS3D.Core.Selection
                 InspectQuantities(selected));
             RequireProjectFresh(project, inspectionVersion, projectIndex, familyIndex);
             return inspection;
+        }
+
+        private static void RequireSelectionKnownCountWithinLimit(IEnumerable<string> elementIds)
+        {
+            if (elementIds is ICollection<string> collection)
+                RequireValidSelectionKnownCount(collection.Count);
+            if (elementIds is IReadOnlyCollection<string> readOnlyCollection)
+                RequireValidSelectionKnownCount(readOnlyCollection.Count);
+            if (elementIds is System.Collections.ICollection nonGenericCollection)
+                RequireValidSelectionKnownCount(nonGenericCollection.Count);
+        }
+
+        private static void RequireValidSelectionKnownCount(int count)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Semantic property inspector selection source exposes an invalid negative known count.");
+            if (count > MaxSelection)
+                throw new InvalidOperationException("Semantic property inspector supports at most " + MaxSelection + " selected elements.");
         }
 
         private static Dictionary<string, ProjectElement> BuildUniqueProjectIndex(ProjectState project)
