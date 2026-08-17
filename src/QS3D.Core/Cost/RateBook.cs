@@ -260,3 +260,53 @@ namespace QS3D.Core.Cost
             return CompareEffectiveItems(left, right);
         }
     }
+
+    internal static class RateBookContract
+    {
+        internal static string RequireToken(string value, string parameterName)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException("Rate identity token is required.", parameterName);
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Rate identity token must not contain surrounding whitespace.", parameterName);
+
+            for (var i = 0; i < value.Length; i++)
+            {
+                if (char.IsControl(value[i]) || char.IsWhiteSpace(value[i]))
+                    throw new ArgumentException("Rate identity token must not contain whitespace or control characters.", parameterName);
+            }
+            return value;
+        }
+
+        internal static string RequireLowerToken(string value, string parameterName)
+        {
+            value = RequireToken(value, parameterName);
+            if (!string.Equals(value, value.ToLowerInvariant(), StringComparison.Ordinal))
+                throw new ArgumentException("Rate unit token must use canonical lower-case text.", parameterName);
+            return value;
+        }
+
+        internal static string RequireCurrency(string value, string parameterName)
+        {
+            value = RequireToken(value, parameterName);
+            if (value.Length != 3)
+                throw new ArgumentException("Rate currency must contain exactly three upper-case ASCII letters.", parameterName);
+            for (var i = 0; i < value.Length; i++)
+            {
+                if (value[i] < 'A' || value[i] > 'Z')
+                    throw new ArgumentException("Rate currency must contain exactly three upper-case ASCII letters.", parameterName);
+            }
+            return value;
+        }
+
+        internal static DateTime RequireUtc(DateTime value, string parameterName)
+        {
+            if (value.Kind != DateTimeKind.Utc)
+                throw new ArgumentException("Rate effective and lookup timestamps must be UTC.", parameterName);
+            return value;
+        }
+
+        internal static string ScopeKey(CostCode costCode, string unit, string currency) =>
+            costCode.Value + "\u001f" + unit + "\u001f" + currency;
+    }
+}
