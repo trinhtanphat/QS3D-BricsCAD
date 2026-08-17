@@ -21,30 +21,47 @@ namespace QS3D.Core.Persistence
             if (schema <= 0) throw new InvalidDataException("Unsupported QSDB schema version: " + schema.ToString(CultureInfo.InvariantCulture));
             if (schema > ProjectState.CurrentSchemaVersion) throw new InvalidDataException("QSDB schema is newer than this QS3D build: " + schema.ToString(CultureInfo.InvariantCulture));
 
+            if (schema == ProjectState.CurrentSchemaVersion)
+            {
+                ValidateCurrentPersistenceState(root);
+                QsdbProjectXmlSchemaValidator.ValidateCurrent(root);
+                return document;
+            }
+
+            // Legacy migrations are transactional with respect to the caller-owned
+            // document. Migration and final validation may both reject malformed
+            // persisted state, so do all speculative mutations on a detached copy.
+            var workingDocument = new XDocument(document);
+            var workingRoot = workingDocument.Root ?? throw new InvalidDataException("QSDB has no root element.");
+
             while (schema < ProjectState.CurrentSchemaVersion)
             {
                 switch (schema)
                 {
                     case 1:
-                        MigrateV1ToV2(root);
+                        MigrateV1ToV2(workingRoot);
                         schema = 2;
                         break;
                     case 2:
-                        MigrateV2ToV3(root);
+                        MigrateV2ToV3(workingRoot);
                         schema = 3;
                         break;
                     case 3:
-                        MigrateV3ToV4(root);
+                        MigrateV3ToV4(workingRoot);
                         schema = 4;
                         break;
                     default:
                         throw new InvalidDataException("No migration path exists from QSDB schema " + schema.ToString(CultureInfo.InvariantCulture));
                 }
-                root.SetAttributeValue("schema", schema.ToString(CultureInfo.InvariantCulture));
+                workingRoot.SetAttributeValue("schema", schema.ToString(CultureInfo.InvariantCulture));
             }
 
-            ValidateCurrentPersistenceState(root);
-            QsdbProjectXmlSchemaValidator.ValidateCurrent(root);
+            ValidateCurrentPersistenceState(workingRoot);
+            QsdbProjectXmlSchemaValidator.ValidateCurrent(workingRoot);
+
+            // Publish the already-validated root in one replacement so successful
+            // callers retain the existing in-place XDocument contract.
+            root.ReplaceWith(new XElement(workingRoot));
             return document;
         }
 
