@@ -142,12 +142,16 @@ namespace QS3D.BricsCAD.V25.Ribbon
         {
             // Palette follows the visible reference language: saturated CAD blue for active
             // recognition actions, amber/orange for auto/selection emphasis, neutral graphite
-            // for commands that BricsCAD additionally greys while disabled.
+            // for commands that BricsCAD additionally greys while disabled. The owner-requested
+            // validation status pair deliberately keeps saturated red/green source artwork so
+            // the final host bitmap still carries an unmistakable X / V semantic cue.
             var blue = FrozenBrush(Color.FromRgb(33, 132, 221));
             var blueDeep = FrozenBrush(Color.FromRgb(0, 86, 164));
             var blueLight = FrozenBrush(Color.FromRgb(152, 211, 249));
             var amber = FrozenBrush(Color.FromRgb(241, 164, 38));
             var orange = FrozenBrush(Color.FromRgb(228, 111, 31));
+            var statusRed = FrozenBrush(Color.FromRgb(224, 62, 62));
+            var statusGreen = FrozenBrush(Color.FromRgb(55, 176, 90));
             var graphite = FrozenBrush(Color.FromRgb(78, 88, 99));
             var neutral = FrozenBrush(Color.FromRgb(154, 164, 174));
             var neutralLight = FrozenBrush(Color.FromRgb(218, 224, 230));
@@ -241,13 +245,15 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     break;
 
                 case IconKind.Validate:
-                    // Neutral inspection sheet + check mark; reference-disabled so the host
-                    // keeps the same grey visual hierarchy as the supplied screenshot.
-                    group.Children.Add(Fill(paper, new RectangleGeometry(new Rect(6, 5, 19, 22), 1.8, 1.8)));
-                    group.Children.Add(Stroke(graphite, 1.8, new RectangleGeometry(new Rect(6, 5, 19, 22), 1.8, 1.8)));
-                    group.Children.Add(Stroke(neutral, 1.5, Geometry.Parse("M10,10 H21 M10,14 H18")));
-                    group.Children.Add(Stroke(graphite, 2.4, Geometry.Parse("M10,20 L14,24 L23,14")));
-                    group.Children.Add(Fill(neutral, new EllipseGeometry(new Point(25, 7), 2.2, 2.2)));
+                    // Compact clean-room status pair requested by the owner: a red X and green
+                    // V/check inside the same corner-target language as the Recognition reference.
+                    // Keep the unsupported command disabled; this artwork only restores the cue.
+                    group.Children.Add(Stroke(neutral, 1.6, Geometry.Parse(
+                        "M4,10 V5 H9 M23,5 H28 V10 M28,22 V27 H23 M9,27 H4 V22")));
+                    group.Children.Add(Stroke(statusRed, 3.0, Geometry.Parse(
+                        "M8,11 L14,17 M14,11 L8,17")));
+                    group.Children.Add(Stroke(statusGreen, 3.0, Geometry.Parse(
+                        "M17,18 L21,22 L27,12")));
                     break;
             }
 
