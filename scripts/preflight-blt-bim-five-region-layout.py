@@ -50,10 +50,16 @@ else:
         if token not in dock:
             errors.append("BIM dock contract missing: " + token)
 
-    if "if (workspaceVisible && propertiesVisible && rightVisible)" not in reset or "EnsureBimDockContract();" not in reset:
-        errors.append("palette recreation must reapply the BIM dock contract while the coordinated four-palette surface remains visible")
+    for token in (
+        "var bimSurfaceActive = workspaceVisible && rightVisible && quantityVisible;",
+        "_workspacePanel?.SetDedicatedPropertiesPaletteActive(bimSurfaceActive);",
+        "if (bimSurfaceActive)",
+        "EnsureBimDockContract();",
+    ):
+        if token not in reset:
+            errors.append("palette recreation must reapply BIM editor hosting/docking from the coordinated legacy surface state: " + token)
     if "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);" not in reset:
-        errors.append("palette recreation must preserve the user's actual four-palette visibility state")
+        errors.append("palette recreation must preserve the user's actual four-palette visibility state, including a manually closed Properties palette")
 
     if "var properties = workspace && right && quantityInsight;" not in text:
         errors.append("legacy three-argument BIM visibility path must enable dedicated QS3D Properties only for the coordinated BIM state")
@@ -71,4 +77,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: explicit BIM mode shows Workspace + dedicated QS3D Properties + Management + Quantity around the native BricsCAD viewport, preserves isolated commands, and reapplies docking after palette recreation.")
+print("PASS: explicit BIM mode shows Workspace + dedicated QS3D Properties + Management + Quantity around native BricsCAD modelspace; recreation restores editor hosting/docking from BIM surface state while preserving the user's actual Properties visibility, and isolated commands remain isolated.")

@@ -20,7 +20,7 @@ else:
         "var layout = UserUiLayoutStore.Get();",
         "try",
         "_workspacePanel = new WorkspacePanel();",
-        "_propertiesVisual = _workspacePanel.DetachPropertiesPaletteVisual();",
+        "_propertiesVisual = _workspacePanel.CreatePropertiesPaletteVisual();",
         "_rightPanel = new RightPanel();",
         "_quantityInsightPanel = new QuantityInsightPanel();",
         '_workspace = new PaletteSet("QS3D — Mô hình", WorkspaceGuid)',
@@ -117,4 +117,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: four-palette creation rolls back partial ownership without persisting incomplete dimensions; teardown isolates native Dispose and reset visibility flows through one centralized helper.")
+print("PASS: four-palette creation builds the stable Properties host before publishing palettes, rolls back partial ownership without persisting incomplete dimensions, isolates native Dispose, and preserves reset visibility through one centralized helper.")
