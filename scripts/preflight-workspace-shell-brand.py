@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 LAYOUT_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
+WORKSPACE_XAML_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml"
 WORKSPACE_BRAND_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Qs3dBrandMark.cs"
 SHELL_REL = "src/QS3D.BricsCAD.V25/Ribbon/Blt3dShellChromeCoordinator.cs"
 ACTIVATION_REL = "src/QS3D.BricsCAD.V25/Ribbon/BltBimWorkspaceActivationCoordinator.cs"
@@ -25,6 +26,7 @@ def forbid(text, needle, scope):
 
 def main():
     layout = read(LAYOUT_REL)
+    workspace_xaml = read(WORKSPACE_XAML_REL)
     shell = read(SHELL_REL)
     activation = read(ACTIVATION_REL)
     logo = read(LOGO_REL)
@@ -51,6 +53,19 @@ def main():
         raise SystemExit(
             f"FAIL: {WORKSPACE_BRAND_REL} is status-derived product artwork and must remain removed"
         )
+
+    # The cancelled #2617 carrier attempted to make the same status-derived mark declarative in
+    # WorkspacePanel.xaml. Guard that exact regression path too so a future merge/replay cannot
+    # bypass the removed runtime partial while still restoring the rejected product pixels.
+    for stale in (
+        'x:Name="Qs3dWorkspaceBrandMark"',
+        'x:Name="Qs3dBrandRedX"',
+        'x:Name="Qs3dBrandGreenV"',
+        'ToolTip="QS3D • X đỏ / V xanh"',
+        'Stroke="#FFE84A4A"',
+        'Stroke="#FF52BE6C"',
+    ):
+        forbid(workspace_xaml, stale, WORKSPACE_XAML_REL)
 
     # Preserve compact shell chrome/reassert behavior, but leave application icon ownership to the
     # BricsCAD host. Never restore the old screenshot-cropped BLT3D payload or the status-derived X/V ICO.
@@ -103,8 +118,8 @@ def main():
 
     print(
         "PASS: Workspace blank rendering and shell lifecycle behavior remain guarded, the host retains "
-        "application-icon ownership, status-derived Workspace/shell X/V artwork is absent, and the "
-        "repository uses the independent QS3D cube mark."
+        "application-icon ownership, status-derived Workspace/shell X/V artwork is absent from both "
+        "runtime and declarative paths, and the repository uses the independent QS3D cube mark."
     )
     return 0
 
