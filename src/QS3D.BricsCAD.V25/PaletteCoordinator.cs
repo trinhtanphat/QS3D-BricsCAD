@@ -95,11 +95,9 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        // The explicit QS3D command is the owner-facing workspace activation entry point. Fresh
-        // runtime evidence showed that routing it through the isolated legacy Workspace path left
-        // only one QS3D palette visible and made native BricsCAD Properties look like part of QS3D.
-        // Always restore the coordinated BLT3D-style surface here; standalone palette commands
-        // below remain available when an intentionally isolated tool window is needed.
+        // The explicit QS3D command is the owner-facing workspace activation entry point. Keep the
+        // BricsCAD host shell and native modelspace intact; ShowBimWorkspace only coordinates QS3D
+        // palettes around that host-owned center surface.
         public static void Show() => ShowBimWorkspace();
 
         public static void ShowWorkspace()
@@ -117,21 +115,21 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        // The owner-reference BIM tab coordinates four QS3D plugin palettes around the real
-        // BricsCAD viewport. The exact Workspace property editor is reparented into a distinct
-        // left-side PaletteSet, while Management + Quantity remain on the right.
+        // Owner-reference BIM layout: one integrated two-column QS3D Workspace on the left,
+        // native BricsCAD modelspace in the center, and Drawing/Layer Management on the right.
+        // The dedicated Properties and Quantity palettes remain available on demand, but do not
+        // auto-open in BIM because the reference keeps Properties embedded below Family.
         public static bool ShowBimWorkspace()
         {
             try
             {
                 EnsureCreated();
-                _workspacePanel?.SetDedicatedPropertiesPaletteActive(true);
+                _workspacePanel?.SetDedicatedPropertiesPaletteActive(false);
                 EnsureBimDockContract();
-                SetVisibility(workspace: true, right: true, quantityInsight: true);
+                SetVisibility(workspace: true, right: true, quantityInsight: false);
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
                 _rightPanel?.Refresh();
-                _quantityInsightPanel?.RefreshQuantityInsights();
-                _workspacePanel?.SetStatus("MÔ HÌNH BIM • BLT3D workspace • Mô hình bên trái • Thuộc tính QS3D palette riêng bên trái • viewport BricsCAD native ở giữa • Quản lý + Diễn giải bên phải.");
+                _workspacePanel?.SetStatus("MÔ HÌNH BIM • BLT3D workspace • Zone/Tầng/Mô hình + Family/Thuộc tính bên trái • viewport BricsCAD native ở giữa • Quản lý bản vẽ/lớp bên phải.");
                 return true;
             }
             catch (Exception)
@@ -244,14 +242,11 @@ namespace QS3D.BricsCAD.V25
             var propertiesVisible = IsPropertiesVisible;
             var rightVisible = IsRightPanelVisible;
             var quantityVisible = IsQuantityInsightVisible;
-            var bimSurfaceActive = workspaceVisible && rightVisible && quantityVisible;
+            var ownerReferenceBimActive = workspaceVisible && rightVisible && !propertiesVisible && !quantityVisible;
             Dispose();
             EnsureCreated();
-            if (propertiesVisible && !bimSurfaceActive)
-                _workspacePanel?.SetDedicatedPropertiesPaletteActive(true);
-            else
-                _workspacePanel?.SetDedicatedPropertiesPaletteActive(bimSurfaceActive);
-            if (bimSurfaceActive)
+            _workspacePanel?.SetDedicatedPropertiesPaletteActive(propertiesVisible);
+            if (ownerReferenceBimActive)
                 EnsureBimDockContract();
             SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);
         }
@@ -348,13 +343,12 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        // Keep the established three-argument call sites source-compatible. The only state that
-        // turns all three legacy palettes on is the BIM workspace, so that state also enables the
-        // dedicated QS3D Properties palette. Isolated legacy commands keep Properties hidden.
+        // Legacy three-argument call sites represent integrated/isolated owner surfaces. Keep the
+        // dedicated Properties PaletteSet opt-in only; the default BIM reference embeds Properties
+        // in Workspace and therefore leaves the dedicated palette hidden.
         private static void SetVisibility(bool workspace, bool right, bool quantityInsight)
         {
-            var properties = workspace && right && quantityInsight;
-            SetVisibility(workspace, properties, right, quantityInsight);
+            SetVisibility(workspace, properties: false, right, quantityInsight);
         }
 
         private static void SetVisibility(bool workspace, bool properties, bool right, bool quantityInsight)
