@@ -259,6 +259,7 @@ namespace QS3D.Core.SmokeTests
             RejectsConflictingKnownCountsBeforeEnumeration();
             RejectsOversizedNonGenericKnownCountBeforeEnumeration();
             AcceptsConsistentKnownCountsAndPreservesCanonicalOrdering();
+            PreservesNullRejection();
             PreservesExactBoundAndDuplicateCollapse();
             PreservesStreamingBound();
         }
@@ -306,6 +307,25 @@ namespace QS3D.Core.SmokeTests
             if (!string.Equals(set.Items[0].ExternalObjectId, "A", StringComparison.Ordinal)
                 || !string.Equals(set.Items[1].ExternalObjectId, "B", StringComparison.Ordinal))
                 throw new InvalidOperationException("Known-count hardening changed canonical IFC exchange-result ordering.");
+        }
+
+        private static void PreservesNullRejection()
+        {
+            var values = new IfcRoundTripExchangeResult[] { NewResult("A"), null! };
+
+            try
+            {
+                IfcRoundTripExchangeResultSet.Create(values);
+            }
+            catch (ArgumentException ex)
+            {
+                if (!string.Equals(ex.ParamName, "results", StringComparison.Ordinal)
+                    || ex.Message.IndexOf("cannot contain null entries", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Known-count hardening changed IFC exchange-result null validation.", ex);
+                return;
+            }
+
+            throw new InvalidOperationException("Known-count hardening must preserve IFC exchange-result null rejection.");
         }
 
         private static void PreservesExactBoundAndDuplicateCollapse()
