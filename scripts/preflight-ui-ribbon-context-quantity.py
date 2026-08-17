@@ -37,7 +37,7 @@ require(palette, "public static void Show() => ShowBimWorkspace();", "completed 
 require(palette, "public static void ShowWorkspace()", "workspace mode")
 require(palette, "_workspacePanel?.SetDedicatedPropertiesPaletteActive(false);", "workspace embedded properties")
 require(palette, "SetVisibility(workspace: true, right: false, quantityInsight: false);", "workspace mode")
-require(palette, "public static void ShowBimWorkspace()", "BIM mode")
+require(palette, "public static bool ShowBimWorkspace()", "BIM mode with bounded host-settle retry contract")
 require(palette, "_workspacePanel?.SetDedicatedPropertiesPaletteActive(true);", "BIM dedicated properties")
 require(palette, "private static readonly Guid PropertiesGuid", "dedicated properties palette")
 require(palette, "public static bool IsPropertiesVisible", "dedicated properties visibility")
