@@ -333,6 +333,8 @@ namespace QS3D.Core.Selection
                     }
                     if (double.IsNaN(value) || double.IsInfinity(value))
                         throw new InvalidOperationException("Selected element contains a non-finite quantity: " + element.Id + "/" + key + ".");
+                    if (value < 0d)
+                        throw new InvalidOperationException("Selected element contains a negative quantity: " + element.Id + "/" + key + ".");
                     value = value == 0d ? 0d : value;
                     present++;
                     if (!first.HasValue) first = value;
