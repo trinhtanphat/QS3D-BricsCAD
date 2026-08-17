@@ -67,6 +67,42 @@ def extract_lane_key(body: str | None) -> str | None:
     return _unique_or_error(closing, "closing reference")
 
 
+def extract_lane_evidence(body: str | None) -> list[str]:
+    """Collect individually valid Lane-Key evidence even when peer metadata conflicts.
+
+    A malformed open carrier must not evade collision detection merely because its own
+    preflight is red. This helper is intentionally weaker than ``extract_lane_key``:
+    it does not decide which key is canonical; it only identifies keys that the peer
+    visibly claims so a matching current lane can fail closed until the peer is fixed,
+    closed, or explicitly superseded.
+    """
+    text = body or ""
+    evidence: list[str] = []
+
+    for match in EXPLICIT_LANE_RE.finditer(text):
+        raw = _strip_inline_comment(match.group(1))
+        if not raw:
+            continue
+        try:
+            key = normalize_lane_key(raw)
+        except ValueError:
+            continue
+        if key not in evidence:
+            evidence.append(key)
+
+    for match in ISSUE_FIELD_RE.finditer(text):
+        key = "issue-" + match.group(1)
+        if key not in evidence:
+            evidence.append(key)
+
+    for number in CLOSING_RE.findall(text):
+        key = "issue-" + number
+        if key not in evidence:
+            evidence.append(key)
+
+    return evidence
+
+
 def requires_lane_lock(head_ref: str, head_repo: str, repository: str, actor: str) -> bool:
     if actor == "dependabot[bot]":
         return False
@@ -84,17 +120,23 @@ def find_duplicate_carriers(current_number: int, current_key: str, open_prs: lis
             continue
         if number == current_number:
             continue
+        head = ((candidate.get("head") or {}).get("ref") or "<unknown>").strip()
         try:
             peer_key = extract_lane_key(candidate.get("body"))
         except ValueError as exc:
-            # Malformed metadata on another PR cannot safely establish ownership.
-            # Ignore it here; that PR's own preflight is responsible for rejecting it.
-            print(f"WARN: PR #{number} has malformed lane metadata: {exc}")
+            peer_evidence = extract_lane_evidence(candidate.get("body"))
+            if current_key in peer_evidence:
+                print(
+                    f"WARN: PR #{number} has malformed lane metadata but visibly claims "
+                    f"Lane-Key '{current_key}': {exc}"
+                )
+                conflicts.append((number, head))
+            else:
+                print(f"WARN: PR #{number} has malformed lane metadata unrelated to '{current_key}': {exc}")
             continue
         if peer_key == current_key:
-            head = ((candidate.get("head") or {}).get("ref") or "<unknown>").strip()
             conflicts.append((number, head))
-    return sorted(conflicts)
+    return sorted(set(conflicts))
 
 
 def _request_json(url: str, token: str) -> object:
