@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 using QS3D.Core.Domain;
@@ -91,8 +92,16 @@ namespace QS3D.Core.SmokeTests
         private static void NonCanonicalProjectElementIdsFailBeforeResolution()
         {
             var fixture = CreateFixture(includeOpeningA: false);
-            var malformed = new ProjectElement(" opening-a ", ElementCategory.Door);
+            var malformed = new ProjectElement("opening-a", ElementCategory.Door);
             malformed.Properties["HostWallId"] = fixture.Host.Id;
+
+            // ProjectElement's public constructor canonicalizes IDs, so emulate a corrupted in-memory
+            // instance that bypassed that boundary in order to exercise the codec's defense-in-depth check.
+            var idField = typeof(ProjectElement).GetField("<Id>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (idField == null)
+                throw new Exception("ProjectElement Id backing field was unavailable for corruption regression setup.");
+            idField.SetValue(malformed, " opening-a ");
+
             fixture.Project.Elements.Add(malformed);
             var version = fixture.Project.ChangeVersion;
 
