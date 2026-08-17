@@ -102,23 +102,40 @@ for token in (
     require(quantity, token, "large icon-first quantity button")
 
 # v160 had source-level Image/LargeImage assignments but no runtime read-back gate. The dedicated
-# final pass must own all six exact reference IDs, reapply image properties, request native Large
-# presentation, and refuse to mark the pass initialized unless BricsCAD exposes both images back.
+# final pass must own all six exact reference IDs, reapply distinct 16/32 bitmap image properties,
+# request native Large presentation, and refuse to mark the pass initialized unless BricsCAD
+# exposes both images back.
 for button_id in button_ids:
     require(quantity_icons, f'case "{button_id}":', "quantity icon ID ownership")
 
 for token in (
     'if (polished != 6)',
-    'SetProperty(item, "Image", image);',
-    'SetProperty(item, "LargeImage", image);',
+    'SetProperty(item, "Image", CreateIcon(kind, 16));',
+    'SetProperty(item, "LargeImage", CreateIcon(kind, 32));',
     'SetProperty(item, "ShowImage", true);',
     'SetEnumProperty(item, "Size", "Large");',
     'private static bool HasCompleteVisibleIcon(object item)',
     'GetProperty(item, "Image") != null',
     'GetProperty(item, "LargeImage") != null',
-    'var image = new DrawingImage(group);',
+    'private static ImageSource CreateIcon(IconKind kind, int pixelSize)',
+    'using System.Windows.Media.Imaging;',
+    'new DrawingVisual()',
+    'drawing.PushTransform(new ScaleTransform(pixelSize / 32.0, pixelSize / 32.0));',
+    'new RenderTargetBitmap(pixelSize, pixelSize, 96, 96, PixelFormats.Pbgra32)',
+    'bitmap.Render(visual);',
+    'bitmap.Freeze();',
 ):
-    require(quantity_icons, token, "quantity final icon/read-back contract")
+    require(quantity_icons, token, "quantity final bitmap/read-back contract")
+
+if "new DrawingImage(" in quantity_icons:
+    fail("quantity final icon pass must not assign direct DrawingImage sources to BricsCAD Ribbon buttons")
+
+for forbidden in (
+    'SetProperty(item, "Image", image);',
+    'SetProperty(item, "LargeImage", image);',
+):
+    if forbidden in quantity_icons:
+        fail(f"quantity final icon pass must not reuse one unsized image for both Ribbon slots: {forbidden}")
 
 # Distinct screenshot-familiar cues are clean-room vector geometry, not embedded owner assets.
 for cue in (
@@ -153,6 +170,6 @@ if stop_start < 0 or reset < 0 or try_initialize_all < 0 or reset >= try_initial
 
 print(
     "PASS: ĐỊNH LƯỢNG keeps the two-panel BLT3D-reference layout and exact command order, "
-    "reapplies six clean-room screenshot-familiar vector icons, verifies native Image/LargeImage "
-    "read-back before initialization, and remains restart-safe."
+    "reapplies six clean-room screenshot-familiar vector icons as distinct frozen 16/32 bitmaps, "
+    "verifies native Image/LargeImage read-back before initialization, and remains restart-safe."
 )
