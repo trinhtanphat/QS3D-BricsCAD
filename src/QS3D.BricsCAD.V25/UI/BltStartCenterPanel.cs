@@ -21,6 +21,7 @@ namespace QS3D.BricsCAD.V25.UI
     /// </summary>
     internal sealed class BltStartCenterPanel : UserControl
     {
+        private const int ObjectSnapSuppressedBit = 16384;
         private static readonly Brush ShellBrush = BrushFromRgb(29, 29, 29);
         private static readonly Brush PanelBrush = BrushFromRgb(39, 39, 39);
         private static readonly Brush PanelHoverBrush = BrushFromRgb(47, 47, 47);
@@ -37,6 +38,10 @@ namespace QS3D.BricsCAD.V25.UI
         private readonly TextBlock _floorText = new TextBlock();
         private readonly TextBlock _elevationText = new TextBlock();
         private readonly TextBlock _statusText = new TextBlock();
+        private readonly TextBlock _lightThemeStatusText = new TextBlock();
+        private readonly TextBlock _contrastStatusText = new TextBlock();
+        private readonly TextBlock _orthoStatusText = new TextBlock();
+        private readonly TextBlock _snapStatusText = new TextBlock();
 
         public BltStartCenterPanel()
         {
@@ -79,6 +84,7 @@ namespace QS3D.BricsCAD.V25.UI
                 }
             }
 
+            RefreshStatusControls();
             RefreshRecentProjects();
         }
 
@@ -342,10 +348,26 @@ namespace QS3D.BricsCAD.V25.UI
                 HorizontalAlignment = HorizontalAlignment.Right
             };
             DockPanel.SetDock(right, Dock.Right);
-            right.Children.Add(StatusItem("○ Nền sáng"));
-            right.Children.Add(StatusItem("◐ Tương phản"));
-            right.Children.Add(StatusItem("⌞ Vuông góc"));
-            right.Children.Add(StatusItem("⌖ Bắt điểm", highlighted: true));
+            right.Children.Add(StatusToggleButton(
+                _lightThemeStatusText,
+                "○ Nền sáng",
+                "Chuyển giao diện BricsCAD giữa nền sáng và nền tối",
+                ToggleLightTheme));
+            right.Children.Add(StatusToggleButton(
+                _contrastStatusText,
+                "◐ Tương phản",
+                "Bật/tắt tương phản tuyến tính của viewport",
+                ToggleLinearContrast));
+            right.Children.Add(StatusToggleButton(
+                _orthoStatusText,
+                "⌞ Vuông góc",
+                "Bật/tắt chế độ vẽ vuông góc (ORTHOMODE)",
+                ToggleOrtho));
+            right.Children.Add(StatusToggleButton(
+                _snapStatusText,
+                "⌖ Bắt điểm",
+                "Bật/tắt bắt điểm nhưng giữ nguyên các kiểu bắt điểm đã cấu hình",
+                ToggleEntitySnap));
             dock.Children.Add(right);
 
             var left = new StackPanel { Orientation = Orientation.Horizontal };
@@ -466,6 +488,94 @@ namespace QS3D.BricsCAD.V25.UI
             return button;
         }
 
+        private Button StatusToggleButton(TextBlock label, string text, string toolTip, Action action)
+        {
+            label.Text = text;
+            label.Foreground = MutedBrush;
+            label.FontSize = 12;
+            label.FontWeight = FontWeights.Normal;
+            label.VerticalAlignment = VerticalAlignment.Center;
+
+            var button = CreateClickSurface(label, Cursors.Hand);
+            button.Margin = new Thickness(16, 0, 0, 0);
+            button.ToolTip = toolTip;
+            button.Click += (_, __) => RunUiAction(action);
+            return button;
+        }
+
+        private void RefreshStatusControls()
+        {
+            SetStatusLabelState(_lightThemeStatusText,
+                TryReadSystemVariableInt("COLORTHEME", out var colorTheme) && colorTheme == 1);
+            SetStatusLabelState(_contrastStatusText,
+                TryReadSystemVariableInt("LINEARCONTRAST", out var contrast) && contrast != 0);
+            SetStatusLabelState(_orthoStatusText,
+                TryReadSystemVariableInt("ORTHOMODE", out var orthoMode) && orthoMode != 0);
+            SetStatusLabelState(_snapStatusText,
+                TryReadSystemVariableInt("OSMODE", out var osMode) &&
+                (osMode & ObjectSnapSuppressedBit) == 0 &&
+                (osMode & ~ObjectSnapSuppressedBit) != 0);
+        }
+
+        private static void SetStatusLabelState(TextBlock label, bool active)
+        {
+            label.Foreground = active ? TextBrush : MutedBrush;
+            label.FontWeight = active ? FontWeights.SemiBold : FontWeights.Normal;
+        }
+
+        private static bool TryReadSystemVariableInt(string name, out int value)
+        {
+            try
+            {
+                value = Convert.ToInt32(Application.GetSystemVariable(name), CultureInfo.InvariantCulture);
+                return true;
+            }
+            catch
+            {
+                value = 0;
+                return false;
+            }
+        }
+
+        private static int ReadRequiredSystemVariableInt(string name)
+        {
+            try
+            {
+                return Convert.ToInt32(Application.GetSystemVariable(name), CultureInfo.InvariantCulture);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Không thể đọc biến hệ thống BricsCAD " + name + ".", ex);
+            }
+        }
+
+        private static void ToggleLightTheme()
+        {
+            var current = ReadRequiredSystemVariableInt("COLORTHEME");
+            Application.SetSystemVariable("COLORTHEME", (short)(current == 1 ? 0 : 1));
+        }
+
+        private static void ToggleLinearContrast()
+        {
+            var current = ReadRequiredSystemVariableInt("LINEARCONTRAST");
+            Application.SetSystemVariable("LINEARCONTRAST", (short)(current == 0 ? 10 : 0));
+        }
+
+        private static void ToggleOrtho()
+        {
+            var current = ReadRequiredSystemVariableInt("ORTHOMODE");
+            Application.SetSystemVariable("ORTHOMODE", (short)(current == 0 ? 1 : 0));
+        }
+
+        private static void ToggleEntitySnap()
+        {
+            var current = ReadRequiredSystemVariableInt("OSMODE");
+            var next = (current & ObjectSnapSuppressedBit) == 0
+                ? current | ObjectSnapSuppressedBit
+                : current & ~ObjectSnapSuppressedBit;
+            Application.SetSystemVariable("OSMODE", (short)next);
+        }
+
         private static Button CreateClickSurface(UIElement content, Cursor cursor)
         {
             return new Button
@@ -496,19 +606,6 @@ namespace QS3D.BricsCAD.V25.UI
             return new ControlTemplate(typeof(Button))
             {
                 VisualTree = root
-            };
-        }
-
-        private TextBlock StatusItem(string text, bool highlighted = false)
-        {
-            return new TextBlock
-            {
-                Text = text,
-                Foreground = highlighted ? TextBrush : MutedBrush,
-                FontSize = 12,
-                FontWeight = highlighted ? FontWeights.SemiBold : FontWeights.Normal,
-                Margin = new Thickness(16, 0, 0, 0),
-                VerticalAlignment = VerticalAlignment.Center
             };
         }
 
@@ -648,6 +745,7 @@ namespace QS3D.BricsCAD.V25.UI
             catch (Exception ex)
             {
                 _statusText.Text = ex.Message;
+                RefreshStatusControls();
             }
         }
 
