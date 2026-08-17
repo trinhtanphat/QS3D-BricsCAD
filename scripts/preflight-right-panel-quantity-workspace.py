@@ -98,8 +98,8 @@ for needle in (
     "_quantityInsightPanel?.SetInspectionReadOnly(snapshots, project);",
     "_quantityInsightPanel?.RefreshQuantityInsights();",
     "_quantityInsightPanel?.ClearQuantityInsights(status);",
-    "SetVisibility(workspace: false, right: false, quantityInsight: true);",
-    "private static void SetVisibility(bool workspace, bool right, bool quantityInsight)",
+    "SetVisibility(workspace: false, properties: false, right: false, quantityInsight: true);",
+    "private static void SetVisibility(bool workspace, bool properties, bool right, bool quantityInsight)",
     "if (_quantityInsight != null) _quantityInsight.Visible = quantityInsight;",
 ):
     if needle not in palette:
