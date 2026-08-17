@@ -98,10 +98,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 drawing.Pop();
             }
 
-            var bitmap = new RenderTargetBitmap(pixelSize, pixelSize, 96, 96, PixelFormats.Pbgra32);
-            bitmap.Render(visual);
-            bitmap.Freeze();
-            return bitmap;
+            var image = new RenderTargetBitmap(pixelSize, pixelSize, 96, 96, PixelFormats.Pbgra32);
+            image.Render(visual);
+            image.Freeze();
+            return image;
         }
 
         private static SolidColorBrush FrozenBrush(Color color)
