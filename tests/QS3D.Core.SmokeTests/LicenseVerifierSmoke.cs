@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             ProductAndTimeWindowsAreEnforced();
             FeatureDelimiterIsRejected();
             CanonicalTokenWhitespaceIsRejected();
+            EntitlementSnapshotIdentityCanonicalityIsEnforced();
             LoadedCanonicalTokenWhitespaceIsRejected();
             NamespacedLicenseRootsAreRejected();
             DuplicateLicenseSectionsAreRejected();
@@ -80,6 +81,40 @@ namespace QS3D.Core.SmokeTests
             var paddedFeature = License();
             paddedFeature.Features.Add(" admin ");
             Throws<InvalidDataException>(() => paddedFeature.CanonicalPayload());
+        }
+
+        private static void EntitlementSnapshotIdentityCanonicalityIsEnforced()
+        {
+            const string product = "QS3D-BricsCAD-ĐịnhLượng";
+            const string version = "V25-β";
+            const string machineId = "MÁY-01";
+            const string payload = "signed-payload\nline-2";
+            var persistedAt = Utc(2026, 8, 17);
+
+            var snapshot = LicenseEntitlementSnapshot.Create(product, version, machineId, payload, persistedAt);
+            Equal(product, snapshot.Product);
+            Equal(version, snapshot.ProductVersion);
+            Equal(machineId, snapshot.MachineId);
+            Equal(payload, snapshot.EntitlementPayload);
+
+            LicenseEntitlementSnapshot restored;
+            True(LicenseEntitlementSnapshot.TryDeserialize(snapshot.Serialize(), out restored));
+            Equal(product, restored.Product);
+            Equal(version, restored.ProductVersion);
+            Equal(machineId, restored.MachineId);
+            Equal(payload, restored.EntitlementPayload);
+
+            Throws<ArgumentException>(() => LicenseEntitlementSnapshot.Create(" " + product, version, machineId, payload, persistedAt));
+            Throws<ArgumentException>(() => LicenseEntitlementSnapshot.Create(product + " ", version, machineId, payload, persistedAt));
+            Throws<ArgumentException>(() => LicenseEntitlementSnapshot.Create(product, " " + version, machineId, payload, persistedAt));
+            Throws<ArgumentException>(() => LicenseEntitlementSnapshot.Create(product, version + " ", machineId, payload, persistedAt));
+            Throws<ArgumentException>(() => LicenseEntitlementSnapshot.Create(product, version, " " + machineId, payload, persistedAt));
+            Throws<ArgumentException>(() => LicenseEntitlementSnapshot.Create(product, version, machineId + " ", payload, persistedAt));
+
+            Throws<ArgumentException>(() => LicenseEntitlementSnapshot.Create(product + "\u0001", version, machineId, payload, persistedAt));
+            Throws<ArgumentException>(() => LicenseEntitlementSnapshot.Create(product, version + "\u0001", machineId, payload, persistedAt));
+            Throws<ArgumentException>(() => LicenseEntitlementSnapshot.Create(product, version, machineId + "\u0001", payload, persistedAt));
+            Throws<ArgumentException>(() => LicenseEntitlementSnapshot.Create("QS3D-\uD800", version, machineId, payload, persistedAt));
         }
 
         private static void LoadedCanonicalTokenWhitespaceIsRejected()
