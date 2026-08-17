@@ -182,6 +182,24 @@ At the end of **every owner prompt that asks an agent/chat session to change, co
 
 The report must use real GitHub/CI/release evidence from the current carrier and current published state. Do not fill unknown fields with guessed identifiers, predicted versions, or stale conversation state.
 
+## Mandatory `Hướng làm gì tiếp theo` section
+
+Immediately after the mandatory lifecycle/status report above, every final per-prompt report must include a dedicated section with the exact heading:
+
+```text
+## Hướng làm gì tiếp theo
+```
+
+The section is mandatory even when the task is blocked or already complete.
+
+- State **1–3 concrete next actions in priority order**. The first action must agree with the `Next exact action` lifecycle field above; do not give two different next actions in the same report.
+- If progress depends on a gate or blocker, name the exact condition first (for example: branch CI `SUCCESS` on the current head, PR protected checks green, merge authorization, exact-main validation, or required LOCAL_ONLY evidence), then state what action follows when that condition is satisfied.
+- If this session can perform the next lifecycle action under current repository authorization and tooling, the report should say that action will be continued on the same canonical carrier rather than asking the owner to repeat an already-authorized instruction.
+- Do not use vague wording such as `continue`, `check later`, `wait`, `monitor`, or `do more` without naming the concrete carrier/gate/action.
+- If no repository action remains, write exactly: `Không còn hành động repository bắt buộc; chờ prompt mới của owner.`
+
+This section is owner-facing guidance, while `Next exact action` remains the compact lifecycle field used for traceability. Both must stay consistent.
+
 ## Completion wording rules
 
 Use completion language precisely:
