@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PALETTE = ROOT / "src" / "QS3D.BricsCAD.V25" / "PaletteCoordinator.cs"
 ACTIVATION = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "BltBimWorkspaceActivationCoordinator.cs"
 LAYOUT = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
+COMPACT_SHELL = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.CompactShell.cs"
 errors = []
 
 
@@ -19,6 +20,7 @@ def read(path: Path) -> str:
 palette = read(PALETTE)
 activation = read(ACTIVATION)
 layout = read(LAYOUT)
+compact_shell = read(COMPACT_SHELL)
 
 # The explicit QS3D owner-facing command and BIM ribbon activation restore the coordinated BLT3D
 # surface. The dedicated ShowWorkspace() helper itself remains isolated for callers that explicitly
@@ -45,8 +47,16 @@ for token in (
     if token not in activation:
         errors.append("BIM activation contract missing: " + token)
 
+# WorkspacePanel is a partial type. CompactShell already owns its one legal static constructor,
+# which removes beforefieldinit for the entire type and therefore makes the sibling static field
+# registrations deterministic before the first instance. Do not add a second static constructor
+# to a sibling partial: C# rejects duplicate type initializers with CS0111.
+if "static WorkspacePanel()" not in compact_shell:
+    errors.append("WorkspacePanel deterministic type initializer missing from CompactShell")
+if "static WorkspacePanel()" in layout:
+    errors.append("BLT3D layout must reuse the existing WorkspacePanel static constructor instead of declaring a duplicate")
+
 for token in (
-    "static WorkspacePanel()",
     "DispatcherPriority.SystemIdle",
     "ApplyBlt3dFiveZoneRuntimeLayout",
     "Grid.GetColumn(child) == 0",
@@ -75,4 +85,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: owner-facing QS3D/BIM activation restores the coordinated BLT3D surface while the dedicated ShowWorkspace helper remains isolated; first-load class handlers are registered deterministically, Model + QS3D Properties stay distinct on the left, and Management + Quantity stay on the right of native BricsCAD modelspace.")
+print("PASS: owner-facing QS3D/BIM activation restores the coordinated BLT3D surface while the dedicated ShowWorkspace helper remains isolated; the existing WorkspacePanel type initializer makes first-load class handlers deterministic, Model + QS3D Properties stay distinct on the left, and Management + Quantity stay on the right of native BricsCAD modelspace.")
