@@ -45,7 +45,7 @@ def main() -> None:
     require(source, "if (string.IsNullOrWhiteSpace(text)) return null;", "blank handle skip contract is missing")
     require(
         source,
-        "if (!string.Equals(text, text.Trim(), StringComparison.Ordinal)) return null;",
+        "if (!string.Equals(text, text!.Trim(), StringComparison.Ordinal)) return null;",
         "padded nonblank handle rejection is missing",
     )
     if "var normalized = (text ?? string.Empty).Trim();" in source:
