@@ -14,17 +14,17 @@ namespace QS3D.Core.Persistence
         public static XDocument MigrateToCurrent(XDocument document)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
-            var root = document.Root ?? throw new InvalidDataException("QSDB has no root element.");
-            if (!string.Equals(root.Name.LocalName, "qs3d", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("QSDB root element must be qs3d.");
+            var callerRoot = document.Root ?? throw new InvalidDataException("QSDB has no root element.");
+            if (!string.Equals(callerRoot.Name.LocalName, "qs3d", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("QSDB root element must be qs3d.");
 
-            var schema = ReadSchema(root);
+            var schema = ReadSchema(callerRoot);
             if (schema <= 0) throw new InvalidDataException("Unsupported QSDB schema version: " + schema.ToString(CultureInfo.InvariantCulture));
             if (schema > ProjectState.CurrentSchemaVersion) throw new InvalidDataException("QSDB schema is newer than this QS3D build: " + schema.ToString(CultureInfo.InvariantCulture));
 
             if (schema == ProjectState.CurrentSchemaVersion)
             {
-                ValidateCurrentPersistenceState(root);
-                QsdbProjectXmlSchemaValidator.ValidateCurrent(root);
+                ValidateCurrentPersistenceState(callerRoot);
+                QsdbProjectXmlSchemaValidator.ValidateCurrent(callerRoot);
                 return document;
             }
 
@@ -32,36 +32,36 @@ namespace QS3D.Core.Persistence
             // document. Migration and final validation may both reject malformed
             // persisted state, so do all speculative mutations on a detached copy.
             var workingDocument = new XDocument(document);
-            var workingRoot = workingDocument.Root ?? throw new InvalidDataException("QSDB has no root element.");
+            var root = workingDocument.Root ?? throw new InvalidDataException("QSDB has no root element.");
 
             while (schema < ProjectState.CurrentSchemaVersion)
             {
                 switch (schema)
                 {
                     case 1:
-                        MigrateV1ToV2(workingRoot);
+                        MigrateV1ToV2(root);
                         schema = 2;
                         break;
                     case 2:
-                        MigrateV2ToV3(workingRoot);
+                        MigrateV2ToV3(root);
                         schema = 3;
                         break;
                     case 3:
-                        MigrateV3ToV4(workingRoot);
+                        MigrateV3ToV4(root);
                         schema = 4;
                         break;
                     default:
                         throw new InvalidDataException("No migration path exists from QSDB schema " + schema.ToString(CultureInfo.InvariantCulture));
                 }
-                workingRoot.SetAttributeValue("schema", schema.ToString(CultureInfo.InvariantCulture));
+                root.SetAttributeValue("schema", schema.ToString(CultureInfo.InvariantCulture));
             }
 
-            ValidateCurrentPersistenceState(workingRoot);
-            QsdbProjectXmlSchemaValidator.ValidateCurrent(workingRoot);
+            ValidateCurrentPersistenceState(root);
+            QsdbProjectXmlSchemaValidator.ValidateCurrent(root);
 
             // Publish the already-validated root in one replacement so successful
             // callers retain the existing in-place XDocument contract.
-            root.ReplaceWith(new XElement(workingRoot));
+            callerRoot.ReplaceWith(new XElement(root));
             return document;
         }
 
