@@ -55,8 +55,11 @@ namespace QS3D.Core.Cost
             count = counts[0];
             var maximumCount = count;
             var hasConflict = false;
+            var hasNegative = count < 0;
             for (var i = 1; i < counts.Count; i++)
             {
+                if (counts[i] < 0)
+                    hasNegative = true;
                 if (counts[i] != count)
                     hasConflict = true;
                 if (counts[i] > maximumCount)
@@ -68,6 +71,9 @@ namespace QS3D.Core.Cost
                 count = maximumCount;
                 return true;
             }
+
+            if (hasNegative)
+                throw new InvalidOperationException("Collection reports an invalid negative known count.");
 
             if (hasConflict)
                 throw new InvalidOperationException("Collection reports conflicting known counts.");
