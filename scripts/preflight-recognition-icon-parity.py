@@ -60,7 +60,8 @@ def main() -> int:
         ("M6,23 L7,10 L16,6 L27,12 L24,25 Z", "boundary polyline"),
         ("M5,9 L18,9 L27,16 L18,24 L5,24 Z", "label tag"),
         ("M25,3 L27,8 L31,10", "auto recognition sparkle"),
-        ("M10,20 L14,24 L23,14", "validation check"),
+        ("M8,11 L14,17 M14,11 L8,17", "validation red X"),
+        ("M17,18 L21,22 L27,12", "validation green V/check"),
     ):
         require(icons, marker, label)
 

@@ -119,6 +119,12 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 AddPanel(panels, SettingsPanelSourceId, "Cài đặt", SettingsButtons);
                 AddPanel(panels, QuantityPanelSourceId, "Khối lượng", QuantityButtons);
 
+                // Do not accept source-level Image/LargeImage assignment as proof that BricsCAD
+                // retained a visible native icon. Reapply the six clean-room reference glyphs
+                // through the dedicated host-tree polisher and require successful read-back.
+                if (!BltQuantityIconPolisher.TryInitialize())
+                    return false;
+
                 _initialized = true;
                 return true;
             }
@@ -128,7 +134,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
             }
         }
 
-        public static void Reset() => _initialized = false;
+        public static void Reset()
+        {
+            _initialized = false;
+            BltQuantityIconPolisher.Reset();
+        }
 
         private static void AddPanel(object panels, string sourceId, string title, ButtonSpec[] buttonSpecs)
         {
