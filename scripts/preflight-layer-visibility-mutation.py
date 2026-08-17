@@ -10,6 +10,7 @@ def validate(text: str) -> list[str]:
     errors: list[str] = []
 
     required = (
+        "using System.Collections;",
         "private const int MaxRequestedLayerNames = 10000;",
         "var wanted = BuildWantedNames(names);",
         "var mutationCount = 0;",
@@ -23,9 +24,15 @@ def validate(text: str) -> list[str]:
         "if (mutationCount > 0) document.Editor.Regen();",
         "private static HashSet<string> BuildWantedNames(IEnumerable<string> names)",
         "var countedNames = names as ICollection<string>;",
-        "countedNames.Count > MaxRequestedLayerNames",
+        "var readOnlyCountedNames = names as IReadOnlyCollection<string>;",
+        "var nonGenericCountedNames = names as ICollection;",
+        "countedNames != null && countedNames.Count > MaxRequestedLayerNames",
+        "readOnlyCountedNames != null && readOnlyCountedNames.Count > MaxRequestedLayerNames",
+        "nonGenericCountedNames != null && nonGenericCountedNames.Count > MaxRequestedLayerNames",
         "if (enumerated > MaxRequestedLayerNames)",
+        "throw LayerSelectionLimitError();",
         "wanted.Add(name);",
+        "private static ArgumentException LayerSelectionLimitError()",
     )
     for token in required:
         if token not in text:
@@ -66,22 +73,28 @@ def validate(text: str) -> list[str]:
 
     helper_required = (
         "var countedNames = names as ICollection<string>;",
-        "countedNames != null && countedNames.Count > MaxRequestedLayerNames",
+        "var readOnlyCountedNames = names as IReadOnlyCollection<string>;",
+        "var nonGenericCountedNames = names as ICollection;",
         "var enumerated = 0;",
         "foreach (var name in names)",
         "enumerated++;",
-        "throw new ArgumentException(",
-        "nameof(names)",
+        "throw LayerSelectionLimitError();",
     )
     for token in helper_required:
         if token not in helper:
             errors.append("bounded layer-name ingestion missing: " + token)
 
-    fast_bound = helper.find("countedNames.Count > MaxRequestedLayerNames")
+    fast_bounds = (
+        helper.find("countedNames != null && countedNames.Count > MaxRequestedLayerNames"),
+        helper.find("readOnlyCountedNames != null && readOnlyCountedNames.Count > MaxRequestedLayerNames"),
+        helper.find("nonGenericCountedNames != null && nonGenericCountedNames.Count > MaxRequestedLayerNames"),
+    )
     enumeration = helper.find("foreach (var name in names)")
     streaming_bound = helper.find("if (enumerated > MaxRequestedLayerNames)")
-    if min(fast_bound, enumeration, streaming_bound) < 0 or not fast_bound < enumeration < streaming_bound:
-        errors.append("known-count bound must reject before enumeration and streaming bound must remain inside enumeration")
+    if min(*fast_bounds, enumeration, streaming_bound) < 0:
+        errors.append("known-count and streaming layer-name bounds must all be present")
+    elif not all(bound < enumeration for bound in fast_bounds) or not enumeration < streaming_bound:
+        errors.append("all known-count bounds must reject before enumeration and streaming bound must remain inside enumeration")
 
     return errors
 
@@ -101,8 +114,16 @@ def run_mutation_self_checks(pristine: str) -> list[str]:
             "if (mutationCount > 0) document.Editor.Regen();",
             "document.Editor.Regen();",
         ),
-        "lost known-count fast bound": (
+        "lost generic collection fast bound": (
             "countedNames != null && countedNames.Count > MaxRequestedLayerNames",
+            "false",
+        ),
+        "lost read-only collection fast bound": (
+            "readOnlyCountedNames != null && readOnlyCountedNames.Count > MaxRequestedLayerNames",
+            "false",
+        ),
+        "lost non-generic collection fast bound": (
+            "nonGenericCountedNames != null && nonGenericCountedNames.Count > MaxRequestedLayerNames",
             "false",
         ),
         "lost streaming request bound": (
@@ -138,7 +159,7 @@ def main() -> int:
 
     print(
         "PASS: layer visibility/lock operations preserve matched counts, avoid no-op writes, "
-        "thaw on show, gate Regen on real mutations, and bound requested-name ingestion."
+        "thaw on show, gate Regen on real mutations, and bound all standard counted/streaming name inputs."
     )
     return 0
 
