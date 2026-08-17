@@ -32,8 +32,8 @@ def validate(source: str) -> None:
     require(source, "ObserveKnownCount(collection.Count", "generic Count must be observed")
     require(source, "ObserveKnownCount(readOnlyCollection.Count", "read-only Count must be observed")
     require(source, "ObserveKnownCount(nonGenericCollection.Count", "non-generic Count must be observed")
-    require(source, "conflictingKnownCounts", "conflicting Count evidence must fail closed")
-    require(source, "invalidKnownCount", "negative Count evidence must fail closed")
+    require(source, "if (conflictingKnownCounts)", "conflicting Count evidence must fail closed")
+    require(source, "if (invalidKnownCount)", "negative Count evidence must fail closed")
     require(source, "rawCount++;", "streaming raw-item counter is missing")
     require(source, "if (rawCount > MaxHandleInputCount)", "streaming limit+1 rejection is missing")
     require_before(
@@ -107,9 +107,15 @@ def main() -> None:
     )
     assert_mutation_fails(
         source,
-        "conflictingKnownCounts",
-        "ignoredCountConflict",
+        "if (conflictingKnownCounts)",
+        "if (false && conflictingKnownCounts)",
         "Count-conflict fail-closed contract",
+    )
+    assert_mutation_fails(
+        source,
+        "if (invalidKnownCount)",
+        "if (false && invalidKnownCount)",
+        "negative Count fail-closed contract",
     )
 
     print("CadHandleService bounded/canonical ingestion guard passed.")
