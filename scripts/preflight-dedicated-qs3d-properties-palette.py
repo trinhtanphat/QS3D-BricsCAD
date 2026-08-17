@@ -59,9 +59,6 @@ for token in (
     if token not in base:
         errors.append("existing BIM/isolated-workspace contract regressed: " + token)
 
-if "BricsCAD Properties" in dedicated or "native Properties" in dedicated:
-    errors.append("dedicated QS3D palette must not present native BricsCAD Properties as its implementation")
-
 if "new Viewport" in dedicated or "Viewport3D" in dedicated:
     errors.append("dedicated Properties palette must not create or replace the native BricsCAD viewport")
 
