@@ -60,6 +60,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             BltModelingRibbonVisualRefiner.Reset();
             BltModelingRibbonFunctionRefiner.Reset();
             BltModelingRibbonAugmenter.Reset();
+            QuantityReferenceRibbonAugmenter.Reset();
             BltTopbarTabContract.Reset();
             RibbonBootstrapIconAugmenter.Reset();
             Qs3dRibbonTabGroupCoordinator.Reset();
