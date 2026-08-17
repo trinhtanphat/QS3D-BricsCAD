@@ -61,7 +61,8 @@ if AUGMENTER.is_file():
         'SetEnumProperty(button, "Size", "Large");',
         'SetProperty(button, "Image", RibbonIconFactory.Create(spec.Icon, 16));',
         'SetProperty(button, "LargeImage", RibbonIconFactory.Create(spec.Icon, 32));',
-        'public static void Reset() => _initialized = false;',
+        '_initialized = false;',
+        'BltQuantityIconPolisher.Reset();',
     )
     for needle in required:
         if needle not in text:
