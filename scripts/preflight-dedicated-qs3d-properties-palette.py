@@ -2,6 +2,7 @@
 from pathlib import Path
 import sys
 
+# Keep this guard on the clean #2399 carrier so exact-head CI validates the scoped palette contract.
 ROOT = Path(__file__).resolve().parents[1]
 PALETTE = ROOT / "src" / "QS3D.BricsCAD.V25" / "PaletteCoordinator.cs"
 PROPERTIES = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.DedicatedPropertiesPalette.cs"
