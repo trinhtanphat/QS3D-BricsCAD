@@ -64,7 +64,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
                         _bimSettleTicksRemaining > 0)
                     {
                         if (ReassertBimWorkspace())
+                        {
                             _bimSettleTicksRemaining--;
+                        }
                     }
                     return;
                 }
