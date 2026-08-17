@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using Bricscad.ApplicationServices;
 using Teigha.DatabaseServices;
@@ -75,11 +76,13 @@ namespace QS3D.BricsCAD.V25.Cad
         private static HashSet<string> BuildWantedNames(IEnumerable<string> names)
         {
             var countedNames = names as ICollection<string>;
-            if (countedNames != null && countedNames.Count > MaxRequestedLayerNames)
+            var readOnlyCountedNames = names as IReadOnlyCollection<string>;
+            var nonGenericCountedNames = names as ICollection;
+            if ((countedNames != null && countedNames.Count > MaxRequestedLayerNames) ||
+                (readOnlyCountedNames != null && readOnlyCountedNames.Count > MaxRequestedLayerNames) ||
+                (nonGenericCountedNames != null && nonGenericCountedNames.Count > MaxRequestedLayerNames))
             {
-                throw new ArgumentException(
-                    "Layer selection exceeds the supported limit of " + MaxRequestedLayerNames + " entries.",
-                    nameof(names));
+                throw LayerSelectionLimitError();
             }
 
             var wanted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -88,14 +91,17 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 enumerated++;
                 if (enumerated > MaxRequestedLayerNames)
-                {
-                    throw new ArgumentException(
-                        "Layer selection exceeds the supported limit of " + MaxRequestedLayerNames + " entries.",
-                        nameof(names));
-                }
+                    throw LayerSelectionLimitError();
                 wanted.Add(name);
             }
             return wanted;
+        }
+
+        private static ArgumentException LayerSelectionLimitError()
+        {
+            return new ArgumentException(
+                "Layer selection exceeds the supported limit of " + MaxRequestedLayerNames + " entries.",
+                "names");
         }
     }
 }
