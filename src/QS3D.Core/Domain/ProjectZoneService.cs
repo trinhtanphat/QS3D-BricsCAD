@@ -130,10 +130,7 @@ namespace QS3D.Core.Domain
         private static bool ReferencesZone(ProjectElement element, string zoneId)
         {
             RequireCanonicalOptionalReference(element.ZoneId, "Element ZoneId");
-            return string.Equals(
-                (element.ZoneId ?? string.Empty).Trim(),
-                zoneId,
-                StringComparison.OrdinalIgnoreCase);
+            return string.Equals((element.ZoneId ?? string.Empty).Trim(), zoneId, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void RequireAssignmentTargetCountWithinLimit(IEnumerable<ProjectElement> elements)
