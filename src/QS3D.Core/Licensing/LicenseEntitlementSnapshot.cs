@@ -158,17 +158,39 @@ namespace QS3D.Core.Licensing
         private static string RequireBounded(string value, string parameterName, int maxBytes)
         {
             if (value == null) throw new ArgumentNullException(parameterName);
-            var normalized = value.Trim();
-            if (normalized.Length == 0) throw new ArgumentException("Value must not be blank.", parameterName);
-            if (StrictUtf8.GetByteCount(normalized) > maxBytes) throw new ArgumentException("Value exceeds the persistence bound.", parameterName);
-            return normalized;
+            if (value.Trim().Length == 0) throw new ArgumentException("Value must not be blank.", parameterName);
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Value must not contain leading or trailing whitespace.", parameterName);
+            foreach (var ch in value)
+            {
+                if (char.IsControl(ch))
+                    throw new ArgumentException("Value must not contain control characters.", parameterName);
+            }
+            try
+            {
+                if (StrictUtf8.GetByteCount(value) > maxBytes)
+                    throw new ArgumentException("Value exceeds the persistence bound.", parameterName);
+            }
+            catch (EncoderFallbackException ex)
+            {
+                throw new ArgumentException("Value must contain well-formed Unicode text.", parameterName, ex);
+            }
+            return value;
         }
 
         private static string RequirePayload(string payload)
         {
             if (payload == null) throw new ArgumentNullException(nameof(payload));
             if (payload.Length == 0) throw new ArgumentException("Entitlement payload must not be empty.", nameof(payload));
-            if (StrictUtf8.GetByteCount(payload) > MaxPayloadBytes) throw new ArgumentException("Entitlement payload exceeds the persistence bound.", nameof(payload));
+            try
+            {
+                if (StrictUtf8.GetByteCount(payload) > MaxPayloadBytes)
+                    throw new ArgumentException("Entitlement payload exceeds the persistence bound.", nameof(payload));
+            }
+            catch (EncoderFallbackException ex)
+            {
+                throw new ArgumentException("Entitlement payload must contain well-formed Unicode text.", nameof(payload), ex);
+            }
             return payload;
         }
 
