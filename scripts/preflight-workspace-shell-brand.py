@@ -52,15 +52,19 @@ def main():
     # The visible Workspace header owns the brand mark declaratively. This avoids depending on a
     # host-specific Loaded/visual-tree timing race for the primary X/V identity. The code-behind
     # injector remains a compatibility fallback and must short-circuit when the XAML name exists.
+    # Keep the tile geometry and contrast explicit: a zero-size/transparent placeholder must not
+    # satisfy this guard while still leaving the owner-visible X đỏ / V xanh effectively absent.
     for token in (
         'x:Name="Qs3dWorkspaceBrandMark"',
+        'Width="32" Height="20" Margin="0,0,7,0"',
         'ToolTip="QS3D • X đỏ / V xanh"',
+        'Background="#FF121822" BorderBrush="#FF435062"',
         'x:Name="Qs3dBrandRedX"',
         'Data="M 5,4 L 13,13 M 13,4 L 5,13"',
-        'Stroke="#FFE84A4A"',
+        'Stroke="#FFE84A4A" StrokeThickness="2.6"',
         'x:Name="Qs3dBrandGreenV"',
         'Data="M 17,8 L 21,13 L 27,4"',
-        'Stroke="#FF52BE6C"',
+        'Stroke="#FF52BE6C" StrokeThickness="2.8"',
         '<TextBlock Text="QS3D" FontWeight="Bold" FontSize="14"/>',
     ):
         require(workspace_xaml, token, WORKSPACE_XAML_REL)
@@ -131,8 +135,9 @@ def main():
         require(logo, token, LOGO_REL)
 
     print(
-        "PASS: Workspace breaks the zero-viewport width loop, declares the QS3D red-X green-V mark "
-        "directly in XAML with a fallback-safe runtime injector, and keeps matching shell/repository branding."
+        "PASS: Workspace breaks the zero-viewport width loop, declares a visible high-contrast "
+        "QS3D red-X green-V tile directly in XAML with a fallback-safe runtime injector, and keeps "
+        "matching shell/repository branding."
     )
     return 0
 
