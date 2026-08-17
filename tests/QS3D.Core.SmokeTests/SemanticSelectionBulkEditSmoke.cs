@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using QS3D.Core.Domain;
 using QS3D.Core.Selection;
+using QS3D.Core.Services;
 
 namespace QS3D.Core.SmokeTests
 {
@@ -16,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             NumericMultiplyUnderflowIsAtomic();
             NumericMultiplyPreservesLegitimateZeroAndSubnormal();
             FamilyAssignmentIsAllOrNothingAcrossCategories();
+            FamilyIdentityMustBeCanonicalAndAtomic();
             DuplicateSelectionFailsBeforeMutation();
         }
 
@@ -173,6 +175,48 @@ namespace QS3D.Core.SmokeTests
             Equal(2, changed.ChangedCount);
             Equal("F-B2", project.FindElement("B-1")!.FamilyId);
             Equal("F-B2", project.FindElement("B-2")!.FamilyId);
+        }
+
+        private static void FamilyIdentityMustBeCanonicalAndAtomic()
+        {
+            var semantic = new SemanticSelectionBulkEditService();
+
+            var paddedTarget = BuildProject();
+            var paddedTargetVersion = paddedTarget.ChangeVersion;
+            MustFail(() => semantic.AssignFamily(paddedTarget, new[] { "B-1" }, " F-B2 "));
+            Equal("F-B", paddedTarget.FindElement("B-1")!.FamilyId);
+            Equal(paddedTargetVersion, paddedTarget.ChangeVersion);
+
+            var paddedCurrent = BuildProject();
+            var paddedCurrentElement = paddedCurrent.FindElement("B-1")!;
+            paddedCurrentElement.FamilyId = " F-B ";
+            var paddedCurrentVersion = paddedCurrent.ChangeVersion;
+            MustFail(() => semantic.AssignFamily(paddedCurrent, new[] { "B-1" }, "F-B2"));
+            Equal(" F-B ", paddedCurrentElement.FamilyId);
+            Equal(paddedCurrentVersion, paddedCurrent.ChangeVersion);
+
+            var inherited = BuildProject();
+            var inheritedElement = inherited.FindElement("B-1")!;
+            inheritedElement.FamilyId = " F-B ";
+            var inheritedVersion = inherited.ChangeVersion;
+            MustFail(() => semantic.MultiplyNumericProperty(inherited, new[] { "B-1" }, "WidthM", 2d));
+            Equal(false, inheritedElement.Properties.ContainsKey("WidthM"));
+            Equal(" F-B ", inheritedElement.FamilyId);
+            Equal(inheritedVersion, inherited.ChangeVersion);
+
+            var directTarget = BuildProject();
+            var directTargetVersion = directTarget.ChangeVersion;
+            MustFail(() => new BulkEditService().AssignFamily(directTarget, new[] { "B-1" }, " F-B2 "));
+            Equal("F-B", directTarget.FindElement("B-1")!.FamilyId);
+            Equal(directTargetVersion, directTarget.ChangeVersion);
+
+            var directCurrent = BuildProject();
+            var directCurrentElement = directCurrent.FindElement("B-1")!;
+            directCurrentElement.FamilyId = " F-B ";
+            var directCurrentVersion = directCurrent.ChangeVersion;
+            MustFail(() => new BulkEditService().AssignFamily(directCurrent, new[] { "B-1" }, "F-B2"));
+            Equal(" F-B ", directCurrentElement.FamilyId);
+            Equal(directCurrentVersion, directCurrent.ChangeVersion);
         }
 
         private static void DuplicateSelectionFailsBeforeMutation()
