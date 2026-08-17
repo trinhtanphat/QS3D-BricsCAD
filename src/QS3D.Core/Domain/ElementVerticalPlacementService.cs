@@ -226,8 +226,12 @@ namespace QS3D.Core.Domain
         private static double OptionalFiniteProperty(ProjectElement element, string key, double fallback)
         {
             if (!element.Properties.TryGetValue(key, out var raw)) return fallback;
-            if (string.IsNullOrWhiteSpace(raw) ||
-                !double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
+            if (string.IsNullOrWhiteSpace(raw))
+                throw new InvalidOperationException(element.Id + "/" + key + " must be a finite invariant number.");
+            var canonical = raw.Trim();
+            if (!string.Equals(raw, canonical, StringComparison.Ordinal))
+                throw new InvalidOperationException(element.Id + "/" + key + " must use a canonical finite invariant number without surrounding whitespace.");
+            if (!double.TryParse(canonical, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
                 double.IsNaN(value) || double.IsInfinity(value))
                 throw new InvalidOperationException(element.Id + "/" + key + " must be a finite invariant number.");
             return CanonicalZero(value);

@@ -216,6 +216,9 @@ namespace QS3D.Core.Cost
             ref int maximumKnownCount,
             ref bool conflictingKnownCounts)
         {
+            if (candidate < 0)
+                throw new InvalidOperationException("Rate book item source reports an invalid negative known count.");
+
             if (!hasKnownCount)
             {
                 hasKnownCount = true;
