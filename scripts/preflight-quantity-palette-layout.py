@@ -56,13 +56,17 @@ if COORDINATOR.is_file():
         "MinimumSize = new DrawingSize(UserUiLayoutStore.QuantityPaletteMinWidth, UserUiLayoutStore.QuantityPaletteMinHeight)",
         "_quantityInsight.DeviceIndependentSize = new WpfSize(layout.QuantityPaletteWidth, layout.QuantityPaletteHeight);",
         "var quantitySize = _quantityInsight?.DeviceIndependentSize;",
-        "if (quantitySize.HasValue)",
-        "layout.QuantityPaletteWidth = checked((int)Math.Round(quantitySize.Value.Width, MidpointRounding.AwayFromZero));",
-        "layout.QuantityPaletteHeight = checked((int)Math.Round(quantitySize.Value.Height, MidpointRounding.AwayFromZero));",
-        "if (_workspace == null && _right == null && _quantityInsight == null) return;",
+        "var hasQuantitySize = TryGetPersistableSize(quantitySize, out var quantityWidth, out var quantityHeight);",
+        "if (hasQuantitySize)",
+        "layout.QuantityPaletteWidth = quantityWidth;",
+        "layout.QuantityPaletteHeight = quantityHeight;",
+        "private static bool TryGetPersistableSize(WpfSize? size, out int width, out int height)",
+        "double.IsNaN(value.Width) || double.IsInfinity(value.Width)",
+        "value.Width <= 0d || value.Height <= 0d",
+        "if (_workspace == null && _properties == null && _right == null && _quantityInsight == null) return;",
         "var quantityVisible = IsQuantityInsightVisible;",
-        "SetVisibility(workspaceVisible, rightVisible, quantityVisible);",
-        "private static void SetVisibility(bool workspace, bool right, bool quantityInsight)",
+        "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);",
+        "private static void SetVisibility(bool workspace, bool properties, bool right, bool quantityInsight)",
         "if (_quantityInsight != null) _quantityInsight.Visible = quantityInsight;",
     )
     for needle in required:
@@ -88,4 +92,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Quantity Insight has independent per-user dimensions and centralized visibility restore/persist wiring without QSDB mutation.")
+print("PASS: Quantity Insight has independent per-user dimensions and four-palette visibility restore plus finite positive persisted-size filtering without QSDB mutation.")
