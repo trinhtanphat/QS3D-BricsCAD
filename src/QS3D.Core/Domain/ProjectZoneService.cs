@@ -9,6 +9,7 @@ namespace QS3D.Core.Domain
     {
         private const int MaxZones = 2000;
         private const int MaxNameLength = 120;
+        private const int MaxAssignmentTargetEntries = 10000;
 
         public static ZoneDefinition Create(ProjectState project, string id, string name)
         {
@@ -67,9 +68,17 @@ namespace QS3D.Core.Domain
                 .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
 
             var targetEnumerationVersion = project.ChangeVersion;
+            RequireAssignmentTargetCountWithinLimit(elements);
+            if (project.ChangeVersion != targetEnumerationVersion)
+                throw new InvalidOperationException("Project changed while Zone assignment targets were being counted. Retry assignment against the current project state.");
+
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            var observedEntries = 0;
             foreach (var element in elements)
             {
+                observedEntries++;
+                if (observedEntries > MaxAssignmentTargetEntries)
+                    throw AssignmentTargetLimitExceeded();
                 if (element == null)
                     throw new InvalidOperationException("Zone assignment target collection contains a null element.");
                 if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
@@ -117,6 +126,26 @@ namespace QS3D.Core.Domain
         private static bool ReferencesZone(ProjectElement element, string zoneId)
         {
             return string.Equals((element.ZoneId ?? string.Empty).Trim(), zoneId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void RequireAssignmentTargetCountWithinLimit(IEnumerable<ProjectElement> elements)
+        {
+            int? count = null;
+            if (elements is ICollection<ProjectElement> collection)
+                count = collection.Count;
+            else if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection)
+                count = readOnlyCollection.Count;
+            else if (elements is System.Collections.ICollection nonGenericCollection)
+                count = nonGenericCollection.Count;
+
+            if (count.HasValue && count.Value > MaxAssignmentTargetEntries)
+                throw AssignmentTargetLimitExceeded();
+        }
+
+        private static InvalidOperationException AssignmentTargetLimitExceeded()
+        {
+            return new InvalidOperationException(
+                "Zone assignment supports at most " + MaxAssignmentTargetEntries + " target entries per operation.");
         }
 
         private static void RequireCurrentAssignmentOwnership(ProjectState project, ZoneDefinition zone, IEnumerable<ProjectElement> elements)
