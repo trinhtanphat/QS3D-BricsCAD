@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             CanonicalResultParityAndProvenance();
             SignedZeroResultParity();
+            TakeoffResultHandleCanonicality();
             MissingMetricStillFailsThroughCanonicalPath();
             InvalidDrawingUnitStillFailsThroughCanonicalPath();
         }
@@ -45,6 +46,28 @@ namespace QS3D.Core.SmokeTests
             PositiveZero(traced.Trace.GrossValue, "Trace gross zero must remain canonical.");
             PositiveZero(traced.Trace.NetValue, "Trace net zero must remain canonical.");
             Equal(traced.Trace.NetValue, traced.Result.Value, "Takeoff result and trace zero quantities must remain equal.");
+        }
+
+        private static void TakeoffResultHandleCanonicality()
+        {
+            var trimmed = new TakeoffResult("  H1  ", TakeoffKind.Count, 1d, "ea");
+            Equal("H1", trimmed.Handle, "TakeoffResult must preserve existing surrounding-space canonicalization.");
+
+            ExpectArgumentException(
+                () => new TakeoffResult("H\n1", TakeoffKind.Count, 1d, "ea"),
+                "Embedded newline in a TakeoffResult handle must fail closed.");
+            ExpectArgumentException(
+                () => new TakeoffResult("H\t1", TakeoffKind.Count, 1d, "ea"),
+                "Embedded tab in a TakeoffResult handle must fail closed.");
+            ExpectArgumentException(
+                () => new TakeoffResult("H\0" + "1", TakeoffKind.Count, 1d, "ea"),
+                "Embedded NUL in a TakeoffResult handle must fail closed.");
+
+            var entity = new EntitySnapshot("H2", "Point", "QTO");
+            var canonical = QuantityEngine.Calculate(entity, TakeoffKind.Count, DrawingUnit.Meter);
+            var traced = QuantityEngine.CalculateWithTrace(entity, TakeoffKind.Count, DrawingUnit.Meter);
+            Equal("H2", canonical.Handle, "Canonical QuantityEngine handle changed unexpectedly.");
+            Equal(canonical.Handle, traced.Result.Handle, "Trace projection must preserve canonical result handle after hardening.");
         }
 
         private static void AssertParity(
@@ -105,6 +128,19 @@ namespace QS3D.Core.SmokeTests
             var canonicalMessage = Capture<ArgumentOutOfRangeException>(() => QuantityEngine.Calculate(entity, TakeoffKind.Count, invalid));
             var tracedMessage = Capture<ArgumentOutOfRangeException>(() => QuantityEngine.CalculateWithTrace(entity, TakeoffKind.Count, invalid));
             Equal(canonicalMessage, tracedMessage, "Trace projection must preserve canonical drawing-unit validation before Count.");
+        }
+
+        private static void ExpectArgumentException(Action action, string message)
+        {
+            try
+            {
+                action();
+            }
+            catch (ArgumentException)
+            {
+                return;
+            }
+            throw new InvalidOperationException(message);
         }
 
         private static string Capture<TException>(Action action) where TException : Exception
