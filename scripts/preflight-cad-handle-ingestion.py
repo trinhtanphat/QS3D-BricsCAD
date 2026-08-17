@@ -58,8 +58,8 @@ def validate(source: str) -> None:
     require(source, "if (string.IsNullOrWhiteSpace(text)) return null;", "blank handle skip contract is missing")
     require(
         source,
-        "if (!string.Equals(text, text.Trim(), StringComparison.Ordinal)) return null;",
-        "padded nonblank handle rejection is missing",
+        "if (!string.Equals(text, text!.Trim(), StringComparison.Ordinal)) return null;",
+        "padded nonblank handle rejection must remain nullable-safe",
     )
     if "var normalized = (text ?? string.Empty).Trim();" in source:
         fail("padded handle tokens are being canonicalized by Trim")
@@ -101,7 +101,7 @@ def main() -> None:
     )
     assert_mutation_fails(
         source,
-        "if (!string.Equals(text, text.Trim(), StringComparison.Ordinal)) return null;",
+        "if (!string.Equals(text, text!.Trim(), StringComparison.Ordinal)) return null;",
         "// padded tokens accepted",
         "padded-handle canonicality weakening",
     )
