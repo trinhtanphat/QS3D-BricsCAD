@@ -30,7 +30,7 @@ namespace QS3D.Core.SmokeTests
             FabricationProvenanceFlowsToExports();
             CsvPreservesNonzeroSubSixDecimalValues();
             CsvRejectsInvalidRowsBeforeReplace();
-            XlsxPreservesNonzeroSubEightDecimalValues();
+            XlsxPreservesRoundTripNumericValues();
             XlsxRejectsWorksheetOverflowBeforeMutation();
         }
 
@@ -273,28 +273,32 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
-        private static void XlsxPreservesNonzeroSubEightDecimalValues()
+        private static void XlsxPreservesRoundTripNumericValues()
         {
-            const double tiny = 0.000000004d;
-            var directory = Path.Combine(Path.GetTempPath(), "qs3d-bbs-xlsx-tiny-" + Guid.NewGuid().ToString("N"));
+            const double exact = 0.123456789d;
+            var previousCulture = CultureInfo.CurrentCulture;
+            var previousUiCulture = CultureInfo.CurrentUICulture;
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-bbs-xlsx-roundtrip-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(directory);
             var path = Path.Combine(directory, "bbs.xlsx");
             try
             {
+                CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("vi-VN");
+                CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("vi-VN");
                 var row = new RebarScheduleRow
                 {
-                    ElementId = "E-XLSX-TINY",
-                    BarMark = "B-XLSX-TINY",
+                    ElementId = "E-XLSX-ROUNDTRIP",
+                    BarMark = "B-XLSX-ROUNDTRIP",
                     ShapeCode = "00",
                     Notation = "1D16",
-                    DiameterMm = 16d,
+                    DiameterMm = exact,
                     Quantity = 1,
-                    CuttingLengthM = tiny,
-                    TotalLengthM = tiny,
-                    UnitWeightKgM = tiny,
-                    NetWeightKg = tiny,
-                    WastePercent = tiny,
-                    TotalWeightKg = tiny
+                    CuttingLengthM = exact,
+                    TotalLengthM = exact,
+                    UnitWeightKgM = exact,
+                    NetWeightKg = exact,
+                    WastePercent = -0d,
+                    TotalWeightKg = 0d
                 };
                 XlsxRebarScheduleExporter.Export(path, new[] { row });
 
@@ -304,22 +308,29 @@ namespace QS3D.Core.SmokeTests
                 using (var reader = new StreamReader(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open()))
                     sheet = reader.ReadToEnd();
 
-                Equal(16d, XlsxNumber(sheet, "E2"));
+                EqualBits(exact, XlsxNumber(sheet, "E2"));
                 Equal(1d, XlsxNumber(sheet, "F2"));
-                foreach (var cell in new[] { "G2", "H2", "I2", "J2", "K2", "L2" })
-                {
-                    var parsed = XlsxNumber(sheet, cell);
-                    Equal(tiny, parsed);
-                    if (parsed == 0d) throw new Exception("BBS XLSX converted a validated non-zero numeric value to zero at cell " + cell + ".");
-                }
+                foreach (var cell in new[] { "G2", "H2", "I2", "J2" })
+                    EqualBits(exact, XlsxNumber(sheet, cell));
+                Equal("0", XlsxNumberText(sheet, "K2"));
+                Equal("0", XlsxNumberText(sheet, "L2"));
+                if (sheet.Contains("0,123456789"))
+                    throw new Exception("BBS XLSX numeric text must remain invariant under vi-VN culture.");
             }
             finally
             {
+                CultureInfo.CurrentCulture = previousCulture;
+                CultureInfo.CurrentUICulture = previousUiCulture;
                 try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
             }
         }
 
         private static double XlsxNumber(string sheet, string cellRef)
+        {
+            return double.Parse(XlsxNumberText(sheet, cellRef), NumberStyles.Float, CultureInfo.InvariantCulture);
+        }
+
+        private static string XlsxNumberText(string sheet, string cellRef)
         {
             var cellToken = "<c r=\"" + cellRef + "\"";
             var cellStart = sheet.IndexOf(cellToken, StringComparison.Ordinal);
@@ -327,7 +338,7 @@ namespace QS3D.Core.SmokeTests
             var valueStart = sheet.IndexOf("<v>", cellStart, StringComparison.Ordinal);
             var valueEnd = valueStart < 0 ? -1 : sheet.IndexOf("</v>", valueStart + 3, StringComparison.Ordinal);
             if (valueStart < 0 || valueEnd < 0) throw new Exception("Expected BBS XLSX numeric value in cell: " + cellRef);
-            return double.Parse(sheet.Substring(valueStart + 3, valueEnd - valueStart - 3), NumberStyles.Float, CultureInfo.InvariantCulture);
+            return sheet.Substring(valueStart + 3, valueEnd - valueStart - 3);
         }
 
         private static void XlsxRejectsWorksheetOverflowBeforeMutation()
@@ -374,6 +385,12 @@ namespace QS3D.Core.SmokeTests
         private static void Near(double expected, double actual)
         {
             if (Math.Abs(expected - actual) > 1e-9) throw new Exception("Expected " + expected + ", got " + actual);
+        }
+
+        private static void EqualBits(double expected, double actual)
+        {
+            if (BitConverter.DoubleToInt64Bits(expected) != BitConverter.DoubleToInt64Bits(actual))
+                throw new Exception("Expected bit-exact double " + expected.ToString("R", CultureInfo.InvariantCulture) + ", got " + actual.ToString("R", CultureInfo.InvariantCulture) + ".");
         }
 
         private static void Equal<T>(T expected, T actual)
