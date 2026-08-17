@@ -74,6 +74,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     if (source == null)
                         continue;
 
+                    // Keep independent native target sizes: reusing one source for both Ribbon
+                    // slots is precisely the host-scaling path this finalizer is designed to avoid.
                     var smallBitmap = Rasterize(source, 16);
                     var largeBitmap = Rasterize(source, 32);
                     SetProperty(item, "Image", smallBitmap);
