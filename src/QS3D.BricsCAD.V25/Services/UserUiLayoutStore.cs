@@ -10,6 +10,8 @@ namespace QS3D.BricsCAD.V25.Services
     {
         public int WorkspacePaletteWidth { get; set; } = 640;
         public int WorkspacePaletteHeight { get; set; } = 720;
+        public int PropertiesPaletteWidth { get; set; } = 330;
+        public int PropertiesPaletteHeight { get; set; } = 460;
         public int RightPaletteWidth { get; set; } = 300;
         public int RightPaletteHeight { get; set; } = 720;
         public int QuantityPaletteWidth { get; set; } = 330;
@@ -24,6 +26,8 @@ namespace QS3D.BricsCAD.V25.Services
     {
         internal const int WorkspacePaletteMinWidth = 460;
         internal const int WorkspacePaletteMinHeight = 420;
+        internal const int PropertiesPaletteMinWidth = 280;
+        internal const int PropertiesPaletteMinHeight = 300;
         internal const int RightPaletteMinWidth = 255;
         internal const int RightPaletteMinHeight = 480;
         internal const int QuantityPaletteMinWidth = 280;
@@ -80,6 +84,8 @@ namespace QS3D.BricsCAD.V25.Services
 
                 layout.WorkspacePaletteWidth = Int(values, "WorkspacePaletteWidth", layout.WorkspacePaletteWidth);
                 layout.WorkspacePaletteHeight = Int(values, "WorkspacePaletteHeight", layout.WorkspacePaletteHeight);
+                layout.PropertiesPaletteWidth = Int(values, "PropertiesPaletteWidth", layout.PropertiesPaletteWidth);
+                layout.PropertiesPaletteHeight = Int(values, "PropertiesPaletteHeight", layout.PropertiesPaletteHeight);
                 layout.RightPaletteWidth = Int(values, "RightPaletteWidth", layout.RightPaletteWidth);
                 layout.RightPaletteHeight = Int(values, "RightPaletteHeight", layout.RightPaletteHeight);
                 layout.QuantityPaletteWidth = Int(values, "QuantityPaletteWidth", layout.QuantityPaletteWidth);
@@ -149,6 +155,8 @@ namespace QS3D.BricsCAD.V25.Services
             builder.AppendLine("# QS3D per-user UI layout v1");
             builder.Append("WorkspacePaletteWidth=").AppendLine(layout.WorkspacePaletteWidth.ToString(invariant));
             builder.Append("WorkspacePaletteHeight=").AppendLine(layout.WorkspacePaletteHeight.ToString(invariant));
+            builder.Append("PropertiesPaletteWidth=").AppendLine(layout.PropertiesPaletteWidth.ToString(invariant));
+            builder.Append("PropertiesPaletteHeight=").AppendLine(layout.PropertiesPaletteHeight.ToString(invariant));
             builder.Append("RightPaletteWidth=").AppendLine(layout.RightPaletteWidth.ToString(invariant));
             builder.Append("RightPaletteHeight=").AppendLine(layout.RightPaletteHeight.ToString(invariant));
             builder.Append("QuantityPaletteWidth=").AppendLine(layout.QuantityPaletteWidth.ToString(invariant));
@@ -171,6 +179,8 @@ namespace QS3D.BricsCAD.V25.Services
         {
             layout.WorkspacePaletteWidth = Clamp(layout.WorkspacePaletteWidth, WorkspacePaletteMinWidth, 1600);
             layout.WorkspacePaletteHeight = Clamp(layout.WorkspacePaletteHeight, WorkspacePaletteMinHeight, 2000);
+            layout.PropertiesPaletteWidth = Clamp(layout.PropertiesPaletteWidth, PropertiesPaletteMinWidth, 1200);
+            layout.PropertiesPaletteHeight = Clamp(layout.PropertiesPaletteHeight, PropertiesPaletteMinHeight, 2000);
             layout.RightPaletteWidth = Clamp(layout.RightPaletteWidth, RightPaletteMinWidth, 1200);
             layout.RightPaletteHeight = Clamp(layout.RightPaletteHeight, RightPaletteMinHeight, 2000);
             layout.QuantityPaletteWidth = Clamp(layout.QuantityPaletteWidth, QuantityPaletteMinWidth, 1200);
@@ -185,6 +195,8 @@ namespace QS3D.BricsCAD.V25.Services
         {
             return left.WorkspacePaletteWidth == right.WorkspacePaletteWidth &&
                    left.WorkspacePaletteHeight == right.WorkspacePaletteHeight &&
+                   left.PropertiesPaletteWidth == right.PropertiesPaletteWidth &&
+                   left.PropertiesPaletteHeight == right.PropertiesPaletteHeight &&
                    left.RightPaletteWidth == right.RightPaletteWidth &&
                    left.RightPaletteHeight == right.RightPaletteHeight &&
                    left.QuantityPaletteWidth == right.QuantityPaletteWidth &&
@@ -213,6 +225,8 @@ namespace QS3D.BricsCAD.V25.Services
         {
             WorkspacePaletteWidth = source.WorkspacePaletteWidth,
             WorkspacePaletteHeight = source.WorkspacePaletteHeight,
+            PropertiesPaletteWidth = source.PropertiesPaletteWidth,
+            PropertiesPaletteHeight = source.PropertiesPaletteHeight,
             RightPaletteWidth = source.RightPaletteWidth,
             RightPaletteHeight = source.RightPaletteHeight,
             QuantityPaletteWidth = source.QuantityPaletteWidth,

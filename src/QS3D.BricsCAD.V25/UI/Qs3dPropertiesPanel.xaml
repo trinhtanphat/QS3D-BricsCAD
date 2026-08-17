@@ -1,0 +1,207 @@
+<UserControl x:Class="QS3D.BricsCAD.V25.UI.Qs3dPropertiesPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             MinWidth="0" MinHeight="0"
+             HorizontalContentAlignment="Stretch"
+             VerticalContentAlignment="Stretch"
+             DataContextChanged="OnPropertiesDataContextChanged"
+             PreviewKeyDown="OnPropertiesPreviewKeyDown">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <DataTemplate x:Key="PropertiesTextEditor">
+                <TextBox Text="{Binding Value, UpdateSourceTrigger=LostFocus}"
+                         IsReadOnly="{Binding IsReadOnly}"
+                         MinHeight="24" Padding="6,2"
+                         ToolTip="{Binding Value}"/>
+            </DataTemplate>
+            <DataTemplate x:Key="PropertiesBooleanEditor">
+                <Border MinHeight="24" Padding="4,0" VerticalAlignment="Center">
+                    <CheckBox IsChecked="{Binding BooleanValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              IsEnabled="{Binding IsEditable}"
+                              VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                </Border>
+            </DataTemplate>
+            <DataTemplate x:Key="PropertiesChoiceEditor">
+                <ComboBox ItemsSource="{Binding Choices}"
+                          Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                          IsEditable="True" IsEnabled="{Binding IsEditable}"
+                          MinHeight="24" Padding="4,0"/>
+            </DataTemplate>
+
+            <Style x:Key="PropertiesRow" TargetType="Border">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+                <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                <Setter Property="Padding" Value="5,4"/>
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="{StaticResource BgHoverBrush}"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            <Style x:Key="PropertiesPill" TargetType="Border">
+                <Setter Property="Background" Value="{StaticResource Bg2Brush}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="7"/>
+                <Setter Property="Padding" Value="5,0"/>
+                <Setter Property="Margin" Value="0,2,0,0"/>
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid Background="{StaticResource Bg1Brush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{StaticResource Bg2Brush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"
+                Padding="8,7">
+            <DockPanel>
+                <StackPanel>
+                    <TextBlock Text="QS3D PROPERTIES" Style="{StaticResource PanelTitle}" Margin="0"/>
+                    <TextBlock Text="{Binding SelectedFamilyName}"
+                               Style="{StaticResource Caption}"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding SelectedFamilyName}"/>
+                </StackPanel>
+                <Border DockPanel.Dock="Right" Background="{StaticResource AccentSoftBrush}"
+                        BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1"
+                        CornerRadius="8" Padding="7,2" Margin="6,0,0,0"
+                        VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Properties.Count, StringFormat={}{0} dòng}"
+                               Style="{StaticResource Caption}"/>
+                </Border>
+            </DockPanel>
+        </Border>
+
+        <StackPanel Grid.Row="1" Margin="8,7,8,3">
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="86"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Phạm vi sửa" Style="{StaticResource Caption}"
+                           VerticalAlignment="Center"/>
+                <ComboBox Grid.Column="1" MinHeight="24"
+                          ItemsSource="{Binding PropertyScopes}"
+                          SelectedItem="{Binding SelectedPropertyScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                          ToolTip="Family/Type hoặc Instance thật đang chọn"/>
+            </Grid>
+
+            <TextBlock Text="Tìm thuộc tính" Style="{StaticResource Caption}" Margin="1,0,1,2"/>
+            <Border Background="{StaticResource Bg0Brush}"
+                    BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1"
+                    CornerRadius="4" Padding="3">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="PropertySearch" BorderThickness="0"
+                             Background="Transparent" MinHeight="22" Padding="4,1"
+                             ToolTip="Lọc theo nhóm, tên, đơn vị, giá trị hoặc trạng thái"
+                             TextChanged="OnPropertySearchChanged"/>
+                    <Button Grid.Column="1" Content="×"
+                            Style="{StaticResource DenseButton}"
+                            Padding="5,0" MinHeight="20"
+                            ToolTip="Xóa bộ lọc"
+                            Click="OnClearPropertySearchClick"/>
+                </Grid>
+            </Border>
+        </StackPanel>
+
+        <Border Grid.Row="2" Background="{StaticResource Bg2Brush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                CornerRadius="4" Padding="6,3" Margin="8,2,8,5">
+            <TextBlock Text="Family • Kế thừa • Override • CAD/đo • Hệ thống • Selection"
+                       Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis"/>
+        </Border>
+
+        <ListView Grid.Row="3" x:Name="PropertyList"
+                  ItemsSource="{Binding Properties}" Margin="8,0,8,8">
+            <ListView.GroupStyle>
+                <GroupStyle>
+                    <GroupStyle.HeaderTemplate>
+                        <DataTemplate>
+                            <Border Background="{StaticResource Bg2Brush}"
+                                    BorderBrush="{StaticResource BorderBrush}"
+                                    BorderThickness="0,0,0,1" Padding="5,3" Margin="0,5,0,1">
+                                <DockPanel>
+                                    <TextBlock Text="{Binding Name}" Style="{StaticResource GroupHeader}" Margin="0"/>
+                                    <TextBlock DockPanel.Dock="Right"
+                                               Text="{Binding ItemCount, StringFormat={}{0}}"
+                                               Style="{StaticResource Caption}"/>
+                                </DockPanel>
+                            </Border>
+                        </DataTemplate>
+                    </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+            </ListView.GroupStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Border Style="{StaticResource PropertiesRow}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="38"/>
+                                <ColumnDefinition Width="42"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,6,0">
+                                <TextBlock Text="{Binding Name}" Foreground="{StaticResource MutedBrush}"
+                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
+                                <Border Style="{StaticResource PropertiesPill}" HorizontalAlignment="Left">
+                                    <TextBlock Text="{Binding StateLabel}" FontSize="8.5" Style="{StaticResource Caption}"/>
+                                </Border>
+                            </StackPanel>
+
+                            <ContentControl Grid.Column="1" Content="{Binding}" VerticalAlignment="Center">
+                                <ContentControl.Style>
+                                    <Style TargetType="ContentControl">
+                                        <Setter Property="ContentTemplate" Value="{StaticResource PropertiesTextEditor}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding EditorKind}" Value="Boolean">
+                                                <Setter Property="ContentTemplate" Value="{StaticResource PropertiesBooleanEditor}"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding EditorKind}" Value="Choice">
+                                                <Setter Property="ContentTemplate" Value="{StaticResource PropertiesChoiceEditor}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ContentControl.Style>
+                            </ContentControl>
+
+                            <TextBlock Grid.Column="2" Text="{Binding Unit}" Style="{StaticResource Caption}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+                            <Button Grid.Column="3" Content="↺" CommandParameter="{Binding}"
+                                    Click="OnResetPropertyClick" ToolTip="Reset override về giá trị Family">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource DenseButton}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Setter Property="Padding" Value="4,1"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding CanReset}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Grid>
+</UserControl>

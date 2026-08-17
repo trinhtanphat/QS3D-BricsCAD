@@ -7,6 +7,7 @@ PALETTE = ROOT / "src" / "QS3D.BricsCAD.V25" / "PaletteCoordinator.cs"
 ACTIVATION = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "BltBimWorkspaceActivationCoordinator.cs"
 REPAIR = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.Blt3dRuntimeLayoutRepair.cs"
 FIVE_ZONE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
+PROPERTIES = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "Qs3dPropertiesPanel.xaml"
 errors = []
 
 
@@ -21,10 +22,13 @@ palette = read(PALETTE)
 activation = read(ACTIVATION)
 repair = read(REPAIR)
 five_zone = read(FIVE_ZONE)
+properties = read(PROPERTIES)
 
 for token in (
     "SetVisibility(workspace: true, right: false, quantityInsight: false);",
     "SetVisibility(workspace: true, right: true, quantityInsight: true);",
+    "var properties = workspace && right && quantityInsight;",
+    "_properties.Dock = DockSides.Left;",
     "viewport BricsCAD native ở giữa",
 ):
     if token not in palette:
@@ -73,10 +77,20 @@ for token in (
     "workspace.RowDefinitions.Add",
     "GridResizeDirection.Rows",
     "ReferenceEquals(child, familyPropertiesPane)",
-    "PropertyList.MinHeight = 120",
+    "embeddedPropertyRegion.Visibility = Visibility.Collapsed;",
+    "PropertyList.Visibility = Visibility.Collapsed;",
+    "PropertyList.MinHeight = 0;",
 ):
     if token not in five_zone:
-        errors.append("owner five-zone runtime layout missing: " + token)
+        errors.append("owner Model/Family runtime layout missing: " + token)
+
+for token in (
+    'Text="QS3D PROPERTIES"',
+    'ItemsSource="{Binding Properties}"',
+    'SelectedItem="{Binding SelectedPropertyScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"',
+):
+    if token not in properties:
+        errors.append("dedicated live Properties palette missing: " + token)
 
 if "new Viewport" in repair or "Viewport3D" in repair or "new Viewport" in five_zone or "Viewport3D" in five_zone:
     errors.append("runtime layout must not create a fake second 3D viewport")
@@ -88,4 +102,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BIM activation reasserts all QS3D side palettes through a bounded BricsCAD docking settle window, preserves retries across transient reassert failures, restarts that bounded repair after palette unload/reload, and reapplies the owner-approved five-zone WorkspacePanel layout without replacing native modelspace.")
+print("PASS: BIM activation reasserts separate Model/Family, QS3D Properties, Management and Quantity native palettes through the bounded docking-settle window while preserving native BricsCAD modelspace.")

@@ -9,10 +9,10 @@ namespace QS3D.BricsCAD.V25.UI
     /// <summary>
     /// Final runtime layout pass for the owner-approved BLT3D-style workspace.
     ///
-    /// The left PaletteSet remains one native BricsCAD palette, but it exposes two distinct
-    /// QS3D regions vertically: Model/Zone/Floor above and Family/Properties below. This keeps
-    /// the real BricsCAD viewport wide enough on 1366-class screens while making Properties
-    /// visibly QS3D-owned instead of relying on the host Properties palette.
+    /// The Workspace PaletteSet owns Model/Zone/Floor plus Family browsing only. QS3D Properties
+    /// is intentionally hosted by its own native BricsCAD PaletteSet so it can be docked/resized
+    /// independently instead of being fused into the Family browser. Together with Management and
+    /// Quantity on the right, these palettes surround the real native BricsCAD modelspace.
     ///
     /// Run at SystemIdle so this pass wins after the older CompactShell / reference presentation
     /// compatibility passes that still rewrite the same five-column Grid during Loaded.
@@ -66,7 +66,9 @@ namespace QS3D.BricsCAD.V25.UI
 
             // Reassertion must be idempotent. The first pass deliberately moves this pane from
             // column 2 to column 0, so rediscover it by its owned controls rather than by the
-            // original compatibility-layout column.
+            // original compatibility-layout column. PropertyList remains in the visual tree only
+            // as a compatibility host; its region is collapsed because the live property editor is
+            // now rendered in the separately dockable Qs3dPropertiesPanel PaletteSet.
             var familyPropertiesPane = workspace.Children
                 .OfType<Grid>()
                 .FirstOrDefault(child =>
@@ -88,12 +90,21 @@ namespace QS3D.BricsCAD.V25.UI
             if (modelPane == null || familyPropertiesPane == null || verticalSplitter == null)
                 return;
 
+            var embeddedPropertyRegion = familyPropertiesPane.Children
+                .OfType<Border>()
+                .FirstOrDefault(child =>
+                    Grid.GetRow(child) == 2 &&
+                    IsVisualDescendant(child, PropertyList));
+            var embeddedPropertySplitter = familyPropertiesPane.Children
+                .OfType<GridSplitter>()
+                .FirstOrDefault(child => Grid.GetRow(child) == 1);
+
             root.MinWidth = 0;
             WorkspaceOverflow.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
             WorkspaceOverflow.ScrollToHorizontalOffset(0);
 
-            // Collapse the old horizontal dashboard columns. The host palette now needs only one
-            // compact left rail, with QS3D Properties visibly below the model browser.
+            // Collapse the old horizontal dashboard columns. The host palette now needs one compact
+            // left rail for Model + Family; dedicated QS3D Properties is a separate native palette.
             for (var index = 0; index < workspace.ColumnDefinitions.Count; index++)
             {
                 var column = workspace.ColumnDefinitions[index];
@@ -107,8 +118,8 @@ namespace QS3D.BricsCAD.V25.UI
             workspace.RowDefinitions.Clear();
             workspace.RowDefinitions.Add(new RowDefinition
             {
-                Height = new GridLength(45, GridUnitType.Star),
-                MinHeight = 130
+                Height = new GridLength(52, GridUnitType.Star),
+                MinHeight = 150
             });
             workspace.RowDefinitions.Add(new RowDefinition
             {
@@ -118,8 +129,8 @@ namespace QS3D.BricsCAD.V25.UI
             });
             workspace.RowDefinitions.Add(new RowDefinition
             {
-                Height = new GridLength(55, GridUnitType.Star),
-                MinHeight = 220
+                Height = new GridLength(48, GridUnitType.Star),
+                MinHeight = 150
             });
 
             foreach (UIElement child in workspace.Children)
@@ -149,23 +160,32 @@ namespace QS3D.BricsCAD.V25.UI
             Grid.SetRow(familyPropertiesPane, 2);
             Grid.SetColumnSpan(familyPropertiesPane, 1);
 
-            // Give Properties the larger share of the lower QS3D region. Family/Type remains
-            // available and functional rather than being retired only to gain visual parity.
+            // #2399: the embedded Workspace property editor must not masquerade as an independent
+            // region. Keep Family fully functional here and collapse the compatibility property row;
+            // the same live WorkspaceViewModel is rendered by Qs3dPropertiesPanel in another
+            // PaletteSet, so edits/selection remain real and synchronized rather than mocked.
             if (familyPropertiesPane.RowDefinitions.Count >= 3)
             {
-                familyPropertiesPane.RowDefinitions[0].MinHeight = 75;
+                familyPropertiesPane.RowDefinitions[0].MinHeight = 120;
                 familyPropertiesPane.RowDefinitions[0].MaxHeight = double.PositiveInfinity;
-                familyPropertiesPane.RowDefinitions[0].Height = new GridLength(42, GridUnitType.Star);
-                familyPropertiesPane.RowDefinitions[1].MinHeight = 4;
-                familyPropertiesPane.RowDefinitions[1].MaxHeight = 4;
-                familyPropertiesPane.RowDefinitions[1].Height = new GridLength(4);
-                familyPropertiesPane.RowDefinitions[2].MinHeight = 120;
-                familyPropertiesPane.RowDefinitions[2].MaxHeight = double.PositiveInfinity;
-                familyPropertiesPane.RowDefinitions[2].Height = new GridLength(58, GridUnitType.Star);
+                familyPropertiesPane.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
+                familyPropertiesPane.RowDefinitions[1].MinHeight = 0;
+                familyPropertiesPane.RowDefinitions[1].MaxHeight = 0;
+                familyPropertiesPane.RowDefinitions[1].Height = new GridLength(0);
+                familyPropertiesPane.RowDefinitions[2].MinHeight = 0;
+                familyPropertiesPane.RowDefinitions[2].MaxHeight = 0;
+                familyPropertiesPane.RowDefinitions[2].Height = new GridLength(0);
             }
 
-            FamilyList.MinHeight = 70;
-            PropertyList.MinHeight = 120;
+            if (embeddedPropertySplitter != null)
+                embeddedPropertySplitter.Visibility = Visibility.Collapsed;
+            if (embeddedPropertyRegion != null)
+                embeddedPropertyRegion.Visibility = Visibility.Collapsed;
+
+            FamilyList.Visibility = Visibility.Visible;
+            FamilyList.MinHeight = 120;
+            PropertyList.Visibility = Visibility.Collapsed;
+            PropertyList.MinHeight = 0;
         }
     }
 }
