@@ -6,13 +6,12 @@ from __future__ import annotations
 import json
 import os
 import re
-import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
 
-EXPLICIT_LANE_RE = re.compile(r"(?im)^\s*(?:[-*]\s*)?lane[- ]key\s*:\s*([^\r\n#]+|#\d+)\s*$")
+EXPLICIT_LANE_RE = re.compile(r"(?im)^\s*(?:[-*]\s*)?lane[- ]key\s*:\s*([^\r\n]*)$")
 ISSUE_FIELD_RE = re.compile(r"(?im)^\s*(?:[-*]\s*)?issue\s*:\s*#?(\d+)\s*(?:<!--.*)?$")
 CLOSING_RE = re.compile(r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)\b")
 VALID_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,80}$")
@@ -20,8 +19,12 @@ LOCKED_PREFIXES = ("agent/", "integration/")
 MAX_PAGES = 10
 
 
+def _strip_inline_comment(raw: str) -> str:
+    return str(raw or "").split("<!--", 1)[0].strip()
+
+
 def normalize_lane_key(raw: str) -> str:
-    value = str(raw or "").strip().lower()
+    value = _strip_inline_comment(raw).lower()
     if not value:
         raise ValueError("Lane-Key is empty")
 
@@ -51,7 +54,8 @@ def _unique_or_error(values: list[str], source: str) -> str | None:
 
 def extract_lane_key(body: str | None) -> str | None:
     text = body or ""
-    explicit = [match.group(1).strip() for match in EXPLICIT_LANE_RE.finditer(text)]
+    explicit_lines = [_strip_inline_comment(match.group(1)) for match in EXPLICIT_LANE_RE.finditer(text)]
+    explicit = [value for value in explicit_lines if value]
     if explicit:
         return _unique_or_error(explicit, "explicit")
 
@@ -93,27 +97,26 @@ def find_duplicate_carriers(current_number: int, current_key: str, open_prs: lis
     return sorted(conflicts)
 
 
-def _request_json(url: str, token: str | None) -> tuple[object, dict[str, str]]:
+def _request_json(url: str, token: str) -> object:
+    if not token:
+        raise RuntimeError("GITHUB_TOKEN is required for the PR Lane-Key runtime gate")
     headers = {
         "Accept": "application/vnd.github+json",
+        "Authorization": "Bearer " + token,
         "User-Agent": "qs3d-agent-lane-collision-preflight",
         "X-GitHub-Api-Version": "2022-11-28",
     }
-    if token:
-        headers["Authorization"] = "Bearer " + token
     request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=20) as response:
-        payload = json.loads(response.read().decode("utf-8"))
-        response_headers = {key.lower(): value for key, value in response.headers.items()}
-        return payload, response_headers
+        return json.loads(response.read().decode("utf-8"))
 
 
-def fetch_open_prs(api_url: str, repository: str, token: str | None) -> list[dict]:
+def fetch_open_prs(api_url: str, repository: str, token: str) -> list[dict]:
     owner_repo = urllib.parse.quote(repository, safe="/")
     collected: list[dict] = []
     for page in range(1, MAX_PAGES + 1):
         url = f"{api_url.rstrip('/')}/repos/{owner_repo}/pulls?state=open&per_page=100&page={page}"
-        payload, _ = _request_json(url, token)
+        payload = _request_json(url, token)
         if not isinstance(payload, list):
             raise RuntimeError("GitHub open-PR response was not a list")
         page_items = [item for item in payload if isinstance(item, dict)]
@@ -158,14 +161,19 @@ def validate_pull_request_event(event: dict, repository: str, open_prs: list[dic
 
 
 def main() -> int:
-    if os.environ.get("GITHUB_EVENT_NAME") != "pull_request":
-        print("PASS: agent Lane-Key collision runtime gate is inactive outside pull_request events.")
+    if os.environ.get("QS3D_AGENT_LANE_COLLISION_RUNTIME") != "1":
+        print("PASS: agent Lane-Key collision runtime is disabled; hermetic regression remains active via preflight-all.")
         return 0
+
+    if os.environ.get("GITHUB_EVENT_NAME") != "pull_request":
+        print("ERROR: agent Lane-Key collision runtime may run only for pull_request events")
+        return 1
 
     event_path = os.environ.get("GITHUB_EVENT_PATH")
     repository = os.environ.get("GITHUB_REPOSITORY", "").strip()
-    if not event_path or not repository:
-        print("ERROR: pull_request runtime requires GITHUB_EVENT_PATH and GITHUB_REPOSITORY")
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if not event_path or not repository or not token:
+        print("ERROR: PR Lane-Key runtime requires GITHUB_EVENT_PATH, GITHUB_REPOSITORY and GITHUB_TOKEN")
         return 1
 
     try:
@@ -182,10 +190,9 @@ def main() -> int:
             return 0
 
         api_url = os.environ.get("GITHUB_API_URL", "https://api.github.com")
-        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
         open_prs = fetch_open_prs(api_url, repository, token)
         lane_key, conflicts = validate_pull_request_event(event, repository, open_prs)
-    except (OSError, ValueError, RuntimeError, json.JSONDecodeError, urllib.error.URLError, urllib.error.HTTPError) as exc:
+    except (OSError, ValueError, RuntimeError, json.JSONDecodeError, urllib.error.URLError) as exc:
         print("ERROR: agent Lane-Key collision preflight failed closed:", exc)
         return 1
 
