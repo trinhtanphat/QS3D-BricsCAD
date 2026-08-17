@@ -62,6 +62,8 @@ namespace QS3D.Core.Domain
         public IEnumerator<KeyValuePair<string, string>> GetEnumerator() => _items.GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
+        internal void EnsureCanAddOwned(string key) => EnsureCanSet(key, true);
+        internal void EnsureCanSetOwned(string key) => EnsureCanSet(key, false);
         internal void AddOwned(string key, string value) => Set(key, value, true, false);
         internal void SetOwned(string key, string value) => Set(key, value, false, false);
         internal bool RemoveOwned(string key) => Remove(key, false);
@@ -110,14 +112,20 @@ namespace QS3D.Core.Domain
             Set(canonicalKey, xmlValue, addOnly, true);
         }
 
-        private void Set(string key, string value, bool addOnly, bool touchMutation)
+        private void EnsureCanSet(string key, bool addOnly)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
             var exists = _items.ContainsKey(key);
             if (addOnly && exists) throw new ArgumentException("An item with the same key has already been added.", nameof(key));
+            if (!exists && _items.Count >= MaximumEntries) throw MetadataCountError();
+        }
+
+        private void Set(string key, string value, bool addOnly, bool touchMutation)
+        {
+            EnsureCanSet(key, addOnly);
+            var exists = _items.ContainsKey(key);
             var normalizedValue = value ?? string.Empty;
             if (!addOnly && exists && _items.TryGetValue(key, out var existing) && string.Equals(existing, normalizedValue, StringComparison.Ordinal)) return;
-            if (!exists && _items.Count >= MaximumEntries) throw MetadataCountError();
 
             if (IsReservedKey(key))
             {
