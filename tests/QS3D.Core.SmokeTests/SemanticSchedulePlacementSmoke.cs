@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             MissingScheduleFailsClosed();
             DuplicateRequestedScheduleFailsClosed();
             DuplicateAvailableScheduleFailsClosed();
+            NonCanonicalScheduleIdsFailClosed();
             TooManyAvailableSchedulesFailClosed();
             TooManyPlacementItemsFailClosed();
             OversizedScheduleFailsClosed();
@@ -122,6 +123,34 @@ namespace QS3D.Core.SmokeTests
                 "Duplicate available schedule ids must fail closed.");
         }
 
+        private static void NonCanonicalScheduleIdsFailClosed()
+        {
+            var sheet = EmptySheet(297d, 210d);
+            var canonicalSchedules = BuildSchedules("SCH-1");
+            foreach (var padded in new[] { " SCH-1", "SCH-1 ", "\tSCH-1", "SCH-1\n" })
+            {
+                MustFail(
+                    () => SemanticSchedulePlacementPlanner.Build(
+                        sheet,
+                        canonicalSchedules,
+                        new[] { new SemanticSchedulePlacementItem(padded, 100d, 60d) }),
+                    "Padded requested schedule ids must fail closed: " + Escape(padded));
+
+                MustFail(
+                    () => SemanticSchedulePlacementPlanner.Build(
+                        sheet,
+                        new[] { Schedule(padded) },
+                        new[] { new SemanticSchedulePlacementItem("SCH-1", 100d, 60d) }),
+                    "Padded available schedule ids must fail closed: " + Escape(padded));
+            }
+
+            var caseInsensitive = SemanticSchedulePlacementPlanner.Build(
+                sheet,
+                canonicalSchedules,
+                new[] { new SemanticSchedulePlacementItem("sch-1", 100d, 60d) });
+            Equal("sch-1", caseInsensitive.Placements[0].ScheduleId);
+        }
+
         private static void TooManyAvailableSchedulesFailClosed()
         {
             var schedules = new List<SemanticScheduleDefinition>();
@@ -208,6 +237,11 @@ namespace QS3D.Core.SmokeTests
                 Array.Empty<string>(),
                 Array.Empty<string>(),
                 new[] { new SemanticDocumentationColumn("ID", "{Id}") });
+        }
+
+        private static string Escape(string value)
+        {
+            return value.Replace("\t", "\\t").Replace("\r", "\\r").Replace("\n", "\\n");
         }
 
         private static void MustFail(Action action, string message)
