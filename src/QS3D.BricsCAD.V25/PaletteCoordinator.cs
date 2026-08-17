@@ -8,6 +8,7 @@ using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Domain;
 using QS3D.Core.Model;
+using Application = Bricscad.ApplicationServices.Application;
 using DrawingSize = System.Drawing.Size;
 using WpfSize = System.Windows.Size;
 
