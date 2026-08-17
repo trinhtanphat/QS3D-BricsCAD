@@ -70,6 +70,8 @@ namespace QS3D.Core.Measurement
 
         private static void ValidateKnownCount(int count, ref int? knownCount, string paramName)
         {
+            if (count < 0)
+                throw new ArgumentException("Measurement snapshot count cannot be negative.", paramName);
             if (count > MaximumTraceCount)
                 throw TraceCountError(paramName);
             if (knownCount.HasValue && knownCount.Value != count)
