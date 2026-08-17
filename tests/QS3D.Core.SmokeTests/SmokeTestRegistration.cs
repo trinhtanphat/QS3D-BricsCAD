@@ -84,6 +84,7 @@ namespace QS3D.Core.SmokeTests
             DependencyHealthMissingTargetSmoke.Run();
             DependencyHealthBlankTargetSmoke.Run();
             LevelReferenceSmoke.Run();
+            ElementVerticalPlacementAdditivePrecisionSmoke.Run();
             FloorGeneratedIdentitySmoke.Run();
             ModelHealthIdentityAmbiguitySmoke.Run();
             ModelHealthSourceHandleSmoke.Run();
