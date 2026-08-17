@@ -15,6 +15,10 @@ if ([string]::IsNullOrWhiteSpace($PluginPath)) {
 }
 $PluginPath = [IO.Path]::GetFullPath($PluginPath)
 
+# The aggregate qualification still proves that the expected V25 runtime and
+# built plugin exist. The offline palette check below deliberately does not load
+# either one into standalone PowerShell; host-native palette construction belongs
+# to the later licensed BricsCAD runtime probe.
 foreach ($name in @("BrxMgd.dll", "TD_Mgd.dll")) {
     $path = Join-Path $BricsCadDir $name
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
@@ -29,11 +33,13 @@ Write-Host "=== WPF theme resource smoke ==="
 & (Join-Path $PSScriptRoot "test-wpf-theme-runtime.ps1")
 
 Write-Host ""
-Write-Host "=== WPF Workspace / RightPanel layout smoke ==="
+Write-Host "=== Workspace / RightPanel offline source-contract smoke ==="
 & (Join-Path $PSScriptRoot "test-wpf-palettes-runtime.ps1") `
     -PluginPath $PluginPath `
     -BricscadDirectory $BricsCadDir
 
 Write-Host ""
-Write-Host "PASS: offline WPF theme + Workspace/RightPanel smoke completed."
-Write-Host "This is an early local failure detector only; it does not replace licensed BricsCAD V25 NETLOAD, host-theme, HiDPI or private-DWG qualification."
+Write-Host "PASS: offline WPF theme + Workspace/RightPanel source-contract smoke completed."
+Write-Host "This is an early local failure detector only; it does not launch or host BricsCAD UI."
+Write-Host "This offline smoke does not replace licensed BricsCAD V25 NETLOAD and in-host runtime qualification."
+Write-Host "Palette construction/layout is intentionally deferred to the licensed in-host BricsCAD V25 runtime probe; offline PowerShell must not load BricsCAD native UI dependencies."
