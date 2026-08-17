@@ -1,15 +1,20 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.SmokeTests
 {
     internal static class ProjectZoneServiceSmoke
     {
+        private const int MaxAssignmentTargets = 10000;
+
         public static void Run()
         {
             CreateUpdateAssignAndDelete();
             AssignmentMarksGeneratedGeometryStale();
             AssignmentRejectsSpoofedSameIdElement();
+            AssignmentBoundsCallerEnumeration();
             DeleteGuardsActiveAndReferencedZones();
             CorruptElementCollectionFailsClosed();
             RejectsDuplicateNames();
@@ -62,6 +67,128 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => ProjectZoneService.Assign(project, z2.Id, new[] { spoofed }));
             if (owned.ZoneId != z1.Id) throw new Exception("Rejected spoofed assignment must not mutate the project-owned element.");
             if (spoofed.ZoneId != z1.Id) throw new Exception("Rejected spoofed assignment must not mutate the foreign element.");
+        }
+
+        private static void AssignmentBoundsCallerEnumeration()
+        {
+            var project = new ProjectState("p-bound", "Zone target bound");
+            var z1 = ProjectZoneService.Create(project, "z1", "Khu A");
+            var z2 = ProjectZoneService.Create(project, "z2", "Khu B");
+            var element = new ProjectElement("bounded", ElementCategory.Room, "fam", "floor", z1.Id);
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+
+            var originalVersion = project.ChangeVersion;
+            var originalDirty = element.Dirty;
+
+            var counted = new GuardedTargetCollection(element, MaxAssignmentTargets + 1);
+            Throws<InvalidOperationException>(() => ProjectZoneService.Assign(project, z2.Id, counted));
+            if (counted.GetEnumeratorCalls != 0)
+                throw new Exception("Known-count ICollection overflow must reject before target enumeration.");
+            AssertAssignmentUnchanged(project, element, z1.Id, originalVersion, originalDirty, "ICollection overflow");
+
+            var readOnlyCounted = new GuardedReadOnlyTargetCollection(element, MaxAssignmentTargets + 1);
+            Throws<InvalidOperationException>(() => ProjectZoneService.Assign(project, z2.Id, readOnlyCounted));
+            if (readOnlyCounted.GetEnumeratorCalls != 0)
+                throw new Exception("Known-count IReadOnlyCollection overflow must reject before target enumeration.");
+            AssertAssignmentUnchanged(project, element, z1.Id, originalVersion, originalDirty, "IReadOnlyCollection overflow");
+
+            var streamed = 0;
+            Throws<InvalidOperationException>(() => ProjectZoneService.Assign(
+                project,
+                z2.Id,
+                StreamTargets(element, MaxAssignmentTargets + 2, () => streamed++)));
+            if (streamed != MaxAssignmentTargets + 1)
+                throw new Exception("Streaming Zone assignment must stop immediately after observing target 10,001.");
+            AssertAssignmentUnchanged(project, element, z1.Id, originalVersion, originalDirty, "streaming overflow");
+
+            var exactObserved = 0;
+            var changed = ProjectZoneService.Assign(
+                project,
+                z2.Id,
+                StreamTargets(element, MaxAssignmentTargets, () => exactObserved++));
+            if (exactObserved != MaxAssignmentTargets || changed != 1 || element.ZoneId != z2.Id)
+                throw new Exception("Exactly 10,000 Zone assignment target entries must remain accepted with duplicate-target collapse.");
+            if (project.ChangeVersion != originalVersion + 1L)
+                throw new Exception("Exact-bound Zone assignment must touch the project exactly once when one unique target changes.");
+
+            var noOpVersion = project.ChangeVersion;
+            var noOpObserved = 0;
+            var noOpChanged = ProjectZoneService.Assign(
+                project,
+                z2.Id,
+                StreamTargets(element, MaxAssignmentTargets, () => noOpObserved++));
+            if (noOpObserved != MaxAssignmentTargets || noOpChanged != 0 || project.ChangeVersion != noOpVersion)
+                throw new Exception("Exact-bound duplicate no-op assignment must preserve no-Touch semantics.");
+        }
+
+        private static void AssertAssignmentUnchanged(
+            ProjectState project,
+            ProjectElement element,
+            string expectedZoneId,
+            long expectedVersion,
+            ElementDirtyFlags expectedDirty,
+            string scenario)
+        {
+            if (element.ZoneId != expectedZoneId || project.ChangeVersion != expectedVersion || element.Dirty != expectedDirty)
+                throw new Exception("Rejected Zone assignment must be atomic for " + scenario + ".");
+        }
+
+        private static IEnumerable<ProjectElement> StreamTargets(ProjectElement element, int count, Action onYield)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                onYield();
+                yield return element;
+            }
+        }
+
+        private sealed class GuardedTargetCollection : ICollection<ProjectElement>
+        {
+            public GuardedTargetCollection(ProjectElement element, int count)
+            {
+                Element = element;
+                Count = count;
+            }
+
+            private ProjectElement Element { get; }
+            public int Count { get; }
+            public bool IsReadOnly => true;
+            public int GetEnumeratorCalls { get; private set; }
+
+            public IEnumerator<ProjectElement> GetEnumerator()
+            {
+                GetEnumeratorCalls++;
+                throw new Exception("Oversized ICollection must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void Add(ProjectElement item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(ProjectElement item) => ReferenceEquals(item, Element);
+            public void CopyTo(ProjectElement[] array, int arrayIndex) => throw new NotSupportedException();
+            public bool Remove(ProjectElement item) => throw new NotSupportedException();
+        }
+
+        private sealed class GuardedReadOnlyTargetCollection : IReadOnlyCollection<ProjectElement>
+        {
+            public GuardedReadOnlyTargetCollection(ProjectElement element, int count)
+            {
+                Element = element;
+                Count = count;
+            }
+
+            private ProjectElement Element { get; }
+            public int Count { get; }
+            public int GetEnumeratorCalls { get; private set; }
+
+            public IEnumerator<ProjectElement> GetEnumerator()
+            {
+                GetEnumeratorCalls++;
+                throw new Exception("Oversized IReadOnlyCollection must not be enumerated: " + Element.Id);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private static void DeleteGuardsActiveAndReferencedZones()
