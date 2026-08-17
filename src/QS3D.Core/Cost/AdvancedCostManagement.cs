@@ -38,38 +38,41 @@ namespace QS3D.Core.Cost
 
         internal static bool TryGetKnownCount<T>(IEnumerable<T> items, out int count)
         {
-            var hasKnownCount = false;
-            count = 0;
-
+            var counts = new List<int>(3);
             if (items is ICollection<T> collection)
-                ObserveKnownCount(collection.Count, ref hasKnownCount, ref count);
+                counts.Add(collection.Count);
             if (items is IReadOnlyCollection<T> readOnlyCollection)
-                ObserveKnownCount(readOnlyCollection.Count, ref hasKnownCount, ref count);
+                counts.Add(readOnlyCollection.Count);
             if (items is ICollection nonGenericCollection)
-                ObserveKnownCount(nonGenericCollection.Count, ref hasKnownCount, ref count);
+                counts.Add(nonGenericCollection.Count);
 
-            return hasKnownCount;
-        }
-
-        private static void ObserveKnownCount(int candidate, ref bool hasKnownCount, ref int count)
-        {
-            if (!hasKnownCount)
+            if (counts.Count == 0)
             {
-                count = candidate;
-                hasKnownCount = true;
-                return;
+                count = 0;
+                return false;
             }
 
-            if (candidate == count)
-                return;
-
-            if (candidate > MaximumEntries || count > MaximumEntries)
+            count = counts[0];
+            var maximumCount = count;
+            var hasConflict = false;
+            for (var i = 1; i < counts.Count; i++)
             {
-                count = Math.Max(count, candidate);
-                return;
+                if (counts[i] != count)
+                    hasConflict = true;
+                if (counts[i] > maximumCount)
+                    maximumCount = counts[i];
             }
 
-            throw new InvalidOperationException("Collection reports conflicting known counts.");
+            if (maximumCount > MaximumEntries)
+            {
+                count = maximumCount;
+                return true;
+            }
+
+            if (hasConflict)
+                throw new InvalidOperationException("Collection reports conflicting known counts.");
+
+            return true;
         }
 
         internal static void ThrowTooManyEntries(string collectionLabel)
