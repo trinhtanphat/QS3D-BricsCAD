@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -161,8 +162,8 @@ namespace QS3D.Core.Measurement
 
             InputFacts = MeasurementTraceContract.SnapshotFacts(inputFacts, nameof(inputFacts));
             Adjustments = MeasurementTraceContract.SnapshotAdjustments(adjustments, nameof(adjustments));
-            Warnings = MeasurementTraceContract.SnapshotMessages(warnings);
-            Assumptions = MeasurementTraceContract.SnapshotMessages(assumptions);
+            Warnings = MeasurementTraceContract.SnapshotMessages(warnings, nameof(warnings));
+            Assumptions = MeasurementTraceContract.SnapshotMessages(assumptions, nameof(assumptions));
 
             for (var i = 0; i < Adjustments.Count; i++)
             {
@@ -379,6 +380,8 @@ namespace QS3D.Core.Measurement
 
     internal static class MeasurementTraceContract
     {
+        private const int MaximumChildCollectionCount = 10000;
+
         internal static string RequireText(string value, string parameterName)
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -443,9 +446,12 @@ namespace QS3D.Core.Measurement
         internal static IReadOnlyList<MeasurementTraceFact> SnapshotFacts(IEnumerable<MeasurementTraceFact> source, string parameterName)
         {
             if (source == null) throw new ArgumentNullException(parameterName);
+            RequireSupportedCount(source, parameterName, "facts");
             var items = new List<MeasurementTraceFact>();
             foreach (var item in source)
             {
+                if (items.Count >= MaximumChildCollectionCount)
+                    throw ChildCountError(parameterName, "facts");
                 if (item == null) throw new ArgumentException("Measurement trace facts cannot contain null entries.", parameterName);
                 items.Add(item);
             }
@@ -471,9 +477,12 @@ namespace QS3D.Core.Measurement
         internal static IReadOnlyList<MeasurementTraceAdjustment> SnapshotAdjustments(IEnumerable<MeasurementTraceAdjustment> source, string parameterName)
         {
             if (source == null) throw new ArgumentNullException(parameterName);
+            RequireSupportedCount(source, parameterName, "adjustments");
             var items = new List<MeasurementTraceAdjustment>();
             foreach (var item in source)
             {
+                if (items.Count >= MaximumChildCollectionCount)
+                    throw ChildCountError(parameterName, "adjustments");
                 if (item == null) throw new ArgumentException("Measurement trace adjustments cannot contain null entries.", parameterName);
                 items.Add(item);
             }
@@ -486,19 +495,41 @@ namespace QS3D.Core.Measurement
             return new ReadOnlyCollection<MeasurementTraceAdjustment>(items.ToArray());
         }
 
-        internal static IReadOnlyList<string> SnapshotMessages(IEnumerable<string>? source)
+        internal static IReadOnlyList<string> SnapshotMessages(IEnumerable<string>? source, string parameterName)
         {
             if (source == null) return new ReadOnlyCollection<string>(Array.Empty<string>());
+            RequireSupportedCount(source, parameterName, "messages");
             var items = new List<string>();
             foreach (var item in source)
-                items.Add(RequireText(item, nameof(source)));
+            {
+                if (items.Count >= MaximumChildCollectionCount)
+                    throw ChildCountError(parameterName, "messages");
+                items.Add(RequireText(item, parameterName));
+            }
             items.Sort(StringComparer.Ordinal);
             for (var i = 1; i < items.Count; i++)
             {
                 if (string.Equals(items[i - 1], items[i], StringComparison.Ordinal))
-                    throw new ArgumentException("Measurement trace messages must not contain duplicates.", nameof(source));
+                    throw new ArgumentException("Measurement trace messages must not contain duplicates.", parameterName);
             }
             return new ReadOnlyCollection<string>(items.ToArray());
+        }
+
+        private static void RequireSupportedCount<T>(IEnumerable<T> source, string parameterName, string collectionName)
+        {
+            if (source is ICollection<T> collection && collection.Count > MaximumChildCollectionCount)
+                throw ChildCountError(parameterName, collectionName);
+            if (source is IReadOnlyCollection<T> readOnlyCollection && readOnlyCollection.Count > MaximumChildCollectionCount)
+                throw ChildCountError(parameterName, collectionName);
+            if (source is ICollection nonGenericCollection && nonGenericCollection.Count > MaximumChildCollectionCount)
+                throw ChildCountError(parameterName, collectionName);
+        }
+
+        private static ArgumentException ChildCountError(string parameterName, string collectionName)
+        {
+            return new ArgumentException(
+                "Measurement trace " + collectionName + " accept at most " + MaximumChildCollectionCount + " entries.",
+                parameterName);
         }
 
         private static int CompareFacts(MeasurementTraceFact left, MeasurementTraceFact right)
