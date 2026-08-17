@@ -31,7 +31,7 @@ namespace QS3D.Core.SmokeTests
             ExpectArgument(() => CurtainWallPanelFingerprint.Compute(Create("Arc", 0)));
         }
 
-        private static CurtainWallPanelFingerprintInput Create(string sourceKind, int pathSegmentCount)
+        private static CurtainWallPanelFingerprintInput Create(string? sourceKind, int pathSegmentCount)
         {
             return new CurtainWallPanelFingerprintInput
             {
@@ -39,7 +39,7 @@ namespace QS3D.Core.SmokeTests
                 HeightM = 3d,
                 BottomOffsetM = 0d,
                 PanelDepthM = 0.12d,
-                SourceKind = sourceKind,
+                SourceKind = sourceKind!,
                 PathSegmentCount = pathSegmentCount,
                 Pieces = new[]
                 {
