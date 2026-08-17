@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import base64
+import hashlib
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -8,6 +10,7 @@ WORKSPACE_BRAND_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Qs3dBrandMark.cs"
 SHELL_REL = "src/QS3D.BricsCAD.V25/Ribbon/Blt3dShellChromeCoordinator.cs"
 ACTIVATION_REL = "src/QS3D.BricsCAD.V25/Ribbon/BltBimWorkspaceActivationCoordinator.cs"
 LOGO_REL = "assets/branding/qs3d-logo.svg"
+CANONICAL_ICON_SHA256 = "7f91b73395c653ccc7d2349dd59f147d081b381fc792d78dcb632f9cbe98c3c6"
 
 
 def read(rel):
@@ -63,14 +66,21 @@ def main():
         "Grid.GetColumn(child) == 0",
         "RegisterName(Qs3dWorkspaceBrandName, mark);",
         "X đỏ / V xanh",
-        "Color.FromRgb(232, 74, 74)",
-        "Color.FromRgb(82, 190, 108)",
+        "Color.FromRgb(211, 58, 49)",
+        "Color.FromRgb(46, 174, 98)",
         'Geometry.Parse("M 5,4 L 13,13 M 13,4 L 5,13")',
         'Geometry.Parse("M 17,8 L 21,13 L 27,4")',
         "left.Children.Insert(0, mark);",
     ):
         require(workspace_brand, token, WORKSPACE_BRAND_REL)
-    for stale in ("BLT3D.exe", "BLT3D.dll", "private-user-images", "screenshot crop"):
+    for stale in (
+        "Color.FromRgb(232, 74, 74)",
+        "Color.FromRgb(82, 190, 108)",
+        "BLT3D.exe",
+        "BLT3D.dll",
+        "private-user-images",
+        "screenshot crop",
+    ):
         forbid(workspace_brand, stale, WORKSPACE_BRAND_REL)
 
     # Shell branding must be QS3D-owned clean-room artwork, not screenshot-cropped BLT pixels.
@@ -97,6 +107,14 @@ def main():
     )
     if base64_match is None or len(base64_match.group(1)) < 1000:
         raise SystemExit(f"FAIL: {SHELL_REL} must embed deterministic 16/32px QS3D brand ICO data")
+    try:
+        icon_bytes = base64.b64decode(base64_match.group(1), validate=True)
+    except ValueError as exc:
+        raise SystemExit(f"FAIL: {SHELL_REL} contains invalid embedded ICO base64: {exc}") from exc
+    if hashlib.sha256(icon_bytes).hexdigest() != CANONICAL_ICON_SHA256:
+        raise SystemExit(
+            f"FAIL: {SHELL_REL} must use the canonical QS3D #D33A31/#2EAE62 X/V ICO payload"
+        )
 
     # Reassert only on host tab/workspace transitions; do not continuously overwrite manual state.
     require(activation, "Blt3dShellChromeCoordinator.Reassert();", ACTIVATION_REL)
@@ -105,17 +123,19 @@ def main():
 
     # Repository branding uses the same independently-authored red/green visual identity.
     for token in (
-        '#E84A4A',
-        '#52BE6C',
+        '#D33A31',
+        '#2EAE62',
         'QS3D original red X and green V BIM/CAD product mark',
         'd="M108 122 222 282M222 122 108 282"',
         'd="M270 207 329 286 422 124"',
     ):
         require(logo, token, LOGO_REL)
+    for stale in ('#E84A4A', '#52BE6C'):
+        forbid(logo, stale, LOGO_REL)
 
     print(
         "PASS: Workspace breaks the zero-viewport width loop, restores visible two-column BIM content, "
-        "and QS3D Workspace/shell/repository branding uses original red-X green-V artwork with live UI wiring."
+        "and QS3D Workspace/shell/repository branding uses canonical #D33A31/#2EAE62 red-X green-V artwork with live UI wiring."
     )
     return 0
 

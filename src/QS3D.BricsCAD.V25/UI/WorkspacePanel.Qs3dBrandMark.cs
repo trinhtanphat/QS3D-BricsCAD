@@ -78,7 +78,7 @@ namespace QS3D.BricsCAD.V25.UI
             canvas.Children.Add(new Path
             {
                 Data = Geometry.Parse("M 5,4 L 13,13 M 13,4 L 5,13"),
-                Stroke = new SolidColorBrush(Color.FromRgb(232, 74, 74)),
+                Stroke = new SolidColorBrush(Color.FromRgb(211, 58, 49)),
                 StrokeThickness = 2.6,
                 StrokeStartLineCap = PenLineCap.Round,
                 StrokeEndLineCap = PenLineCap.Round
@@ -86,7 +86,7 @@ namespace QS3D.BricsCAD.V25.UI
             canvas.Children.Add(new Path
             {
                 Data = Geometry.Parse("M 17,8 L 21,13 L 27,4"),
-                Stroke = new SolidColorBrush(Color.FromRgb(82, 190, 108)),
+                Stroke = new SolidColorBrush(Color.FromRgb(46, 174, 98)),
                 StrokeThickness = 2.8,
                 StrokeStartLineCap = PenLineCap.Round,
                 StrokeEndLineCap = PenLineCap.Round,
