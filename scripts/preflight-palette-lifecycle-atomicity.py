@@ -99,6 +99,8 @@ else:
         "var propertiesVisible = IsPropertiesVisible;",
         "var rightVisible = IsRightPanelVisible;",
         "var quantityVisible = IsQuantityInsightVisible;",
+        "var bimSurfaceActive = workspaceVisible && rightVisible && quantityVisible;",
+        "_workspacePanel?.SetDedicatedPropertiesPaletteActive(bimSurfaceActive);",
         "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);",
         "private static void SetVisibility(bool workspace, bool properties, bool right, bool quantityInsight)",
         "if (_workspace != null) _workspace.Visible = workspace;",
@@ -117,4 +119,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: four-palette creation rolls back partial ownership without persisting incomplete dimensions; teardown isolates native Dispose and reset visibility flows through one centralized helper.")
+print("PASS: four-palette creation rolls back partial ownership without persisting incomplete dimensions; teardown isolates native Dispose, dynamic Properties hosting is created fail-atomically, and reset preserves the actual four-palette visibility state including a manually closed Properties palette.")
