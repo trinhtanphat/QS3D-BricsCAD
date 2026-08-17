@@ -80,7 +80,7 @@ namespace QS3D.Core.Documentation
             var normalizedTitle = Required(title, nameof(title), MaxTitleLength);
             var rawIds = MaterializeBounded(orderedElementIds, MaxRows, "rows");
             var ids = rawIds
-                .Select((value, index) => Required(value, "orderedElementIds[" + index + "]", MaxElementIdLength))
+                .Select((value, index) => RequiredCanonicalId(value, "orderedElementIds[" + index + "]", MaxElementIdLength))
                 .ToList();
             if (ids.Count == 0 && !allowEmpty)
                 throw new InvalidOperationException("Documentation table requires at least one semantic element.");
@@ -140,6 +140,17 @@ namespace QS3D.Core.Documentation
         {
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Value is required.", name);
             var normalized = value!.Trim();
+            if (normalized.Length > maxLength) throw new ArgumentException("Value exceeds " + maxLength + " characters.", name);
+            return normalized;
+        }
+
+        private static string RequiredCanonicalId(string? value, string name, int maxLength)
+        {
+            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Value is required.", name);
+            var raw = value!;
+            var normalized = raw.Trim();
+            if (!string.Equals(raw, normalized, StringComparison.Ordinal))
+                throw new ArgumentException("Semantic element id must not contain leading or trailing whitespace.", name);
             if (normalized.Length > maxLength) throw new ArgumentException("Value exceeds " + maxLength + " characters.", name);
             return normalized;
         }

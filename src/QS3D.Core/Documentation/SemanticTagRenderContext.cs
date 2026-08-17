@@ -32,8 +32,11 @@ namespace QS3D.Core.Documentation
 
         public ProjectElement ResolveElement(string id)
         {
-            var normalized = (id ?? string.Empty).Trim();
+            var raw = id ?? string.Empty;
+            var normalized = raw.Trim();
             if (normalized.Length == 0) throw new InvalidOperationException("Semantic documentation element id is required.");
+            if (!string.Equals(raw, normalized, StringComparison.Ordinal))
+                throw new InvalidOperationException("Semantic documentation element id is non-canonical: \"" + id + "\".");
             if (_ambiguousElementIds.Contains(normalized))
                 throw new InvalidOperationException("Semantic documentation element id is ambiguous: " + normalized + ".");
             if (!_elements.TryGetValue(normalized, out var element))
