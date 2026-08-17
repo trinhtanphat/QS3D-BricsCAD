@@ -35,18 +35,19 @@ if BULK.is_file():
     text = BULK.read_text(encoding="utf-8")
     for token in (
         "var pending = new List<PendingFamilyAssignment>();",
-        "var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();",
+        "var previousFamilyId = RequireCanonicalExistingFamilyId(element);",
+        "!string.Equals(value, value.Trim(), StringComparison.Ordinal)",
         "project.FindFamily(previousFamilyId)",
         "pending.Add(new PendingFamilyAssignment",
         "foreach (var item in pending)",
     ):
         if token not in text:
-            errors.append("BulkEditService.cs missing Family assignment preflight token: " + token)
-    normalize = text.find("var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();")
-    lookup = text.find("project.FindFamily(previousFamilyId)", normalize if normalize >= 0 else 0)
+            errors.append("BulkEditService.cs missing canonical Family assignment preflight token: " + token)
+    canonical = text.find("var previousFamilyId = RequireCanonicalExistingFamilyId(element);")
+    lookup = text.find("project.FindFamily(previousFamilyId)", canonical if canonical >= 0 else 0)
     mutation = text.find("element.FamilyId = family.Id;")
-    if min(normalize, lookup, mutation) < 0 or not normalize < lookup < mutation:
-        errors.append("BulkEditService.AssignFamily must normalize and resolve previous Family identities before the first FamilyId mutation.")
+    if min(canonical, lookup, mutation) < 0 or not canonical < lookup < mutation:
+        errors.append("BulkEditService.AssignFamily must reject non-canonical and resolve previous Family identities before the first FamilyId mutation.")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
@@ -68,4 +69,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: ProjectFamilyService and BulkEditService normalize and resolve all failure-prone previous-family identities before mutating any assignment target.")
+print("PASS: ProjectFamilyService resolves whole-batch previous-family identity before mutation, while BulkEditService additionally rejects non-canonical previous-family identities before lookup or mutation.")
