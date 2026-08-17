@@ -71,6 +71,26 @@ def main() -> int:
     ):
         forbid(polisher, stale, "Recognition semantic icon source")
 
+    # Guard the initial/fallback Ribbon image as well as the semantic polisher. The fallback must
+    # remain an ordinary inspection/check glyph so initialization order or a future host failure
+    # cannot re-expose the rejected status-derived X/V pair before the polisher/finalizer runs.
+    ribbon_validate = section(ribbon, "case IconKind.Validate:", "break;", "Ribbon Validate fallback block")
+    for token in (
+        "Stroke(accentDark, 2.2, new RectangleGeometry(new System.Windows.Rect(5, 6, 21, 20), 2, 2))",
+        'Stroke(accent, 2.4, Geometry.Parse("M9,16 L14,21 23,11"))',
+        "Fill(warning, new EllipseGeometry(new System.Windows.Point(26, 7), 3.0, 3.0))",
+    ):
+        require(ribbon_validate, token, "neutral Validate Ribbon fallback")
+    for stale in (
+        "statusRed",
+        "statusGreen",
+        "M8,11 L14,17 M14,11 L8,17",
+        "M17,18 L21,22 L27,12",
+        "red X",
+        "green V",
+    ):
+        forbid(ribbon_validate, stale, "neutral Validate Ribbon fallback")
+
     validate_spec = spec_block(ribbon, "QS3D_RECOGNIZE_BLT_VALIDATE")
     require(validate_spec, "string.Empty", "Validate remains without a command")
     require(validate_spec, "enabled: false", "Validate executable-command authority stays disabled")
@@ -95,9 +115,9 @@ def main() -> int:
         raise SystemExit("FAIL: Recognition bitmap finalizer must run after semantic icon polish")
 
     print(
-        "PASS: NHẬN DẠNG Validate uses the neutral disabled inspection/check semantic, remains without "
-        "a command, follows ordinary host disabled presentation, and still reaches BricsCAD through "
-        "the frozen 16px/32px bitmap finalization path."
+        "PASS: NHẬN DẠNG Validate uses neutral disabled inspection/check artwork in both fallback "
+        "and semantic paths, remains without a command, follows ordinary host disabled presentation, "
+        "and still reaches BricsCAD through the frozen 16px/32px bitmap finalization path."
     )
     return 0
 
