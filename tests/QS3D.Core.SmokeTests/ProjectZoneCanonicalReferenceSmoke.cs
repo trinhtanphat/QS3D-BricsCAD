@@ -9,6 +9,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             CanonicalCaseInsensitiveReferenceStillWorks();
+            PaddedZoneIdentityParametersFailBeforeMutation();
             PaddedStoredZoneReferenceFailsBeforeMutation();
             PaddedProjectElementIdFailsBeforeMutation();
             PaddedActiveZoneReferenceFailsDeleteBeforeMutation();
@@ -29,6 +30,37 @@ namespace QS3D.Core.SmokeTests
                 "Canonical Zone assignment did not touch the project exactly once.");
             Equal(fixture.TargetZone.Id, fixture.Element.ZoneId,
                 "Canonical Zone assignment did not store the canonical target id.");
+        }
+
+        private static void PaddedZoneIdentityParametersFailBeforeMutation()
+        {
+            var fixture = NewFixture("identity-parameter");
+            fixture.Element.MarkClean(ElementDirtyFlags.All);
+            var beforeVersion = fixture.Project.ChangeVersion;
+            var beforeUtc = fixture.Project.UpdatedUtc;
+            var beforeZoneCount = fixture.Project.Zones.Count;
+            var beforeActiveZoneId = fixture.Project.ActiveZoneId;
+            var beforeElementZoneId = fixture.Element.ZoneId;
+
+            Throws<ArgumentException>(() => ProjectZoneService.Create(fixture.Project, " zone-new ", "New zone"));
+            Throws<ArgumentException>(() => ProjectZoneService.Update(fixture.Project, " zone-source ", "Renamed"));
+            Throws<ArgumentException>(() => ProjectZoneService.SetActive(fixture.Project, " zone-source "));
+            Throws<ArgumentException>(() => ProjectZoneService.Assign(fixture.Project, " zone-target ", new[] { fixture.Element }));
+            Throws<ArgumentException>(() => ProjectZoneService.Delete(fixture.Project, " zone-source "));
+            Throws<ArgumentException>(() => ProjectZoneService.ReferenceCount(fixture.Project, " zone-source "));
+
+            Equal(beforeVersion, fixture.Project.ChangeVersion,
+                "Rejected padded Zone identity parameter changed project version.");
+            Equal(beforeUtc, fixture.Project.UpdatedUtc,
+                "Rejected padded Zone identity parameter changed project timestamp.");
+            Equal(beforeZoneCount, fixture.Project.Zones.Count,
+                "Rejected padded Zone identity parameter changed Zone collection.");
+            Equal(beforeActiveZoneId, fixture.Project.ActiveZoneId,
+                "Rejected padded Zone identity parameter changed active Zone.");
+            Equal(beforeElementZoneId, fixture.Element.ZoneId,
+                "Rejected padded Zone identity parameter changed element Zone reference.");
+            Equal(ElementDirtyFlags.None, fixture.Element.Dirty,
+                "Rejected padded Zone identity parameter dirtied the element.");
         }
 
         private static void PaddedStoredZoneReferenceFailsBeforeMutation()
