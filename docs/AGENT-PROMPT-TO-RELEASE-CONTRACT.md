@@ -226,12 +226,16 @@ Include a dedicated section with the exact heading below **only when a real next
 Do not include this section merely to restate the workflow, promise future behavior, or tell the owner to repeat an instruction already authorized.
 
 - State **1–3 concrete next actions in priority order**. The first action must agree with the `Next exact action` lifecycle field above; do not give two different next actions in the same report.
+- Make each recommendation **decision-ready rather than label-only**. For every proposed action, include the decision-critical detail that applies: the exact target/carrier/gate/surface; the concrete work to perform; why it is the priority now and what current evidence supports it; the expected outcome or definition of done; any important dependency, collision boundary, risk, or authorization constraint; and the validation/evidence that would prove success.
+- Prefer a compact structure such as `Action — Target — Why now — Done when — Constraints/Risks — Evidence` when several of those fields are material. Omit a field only when it genuinely does not apply; do not shorten a recommendation so aggressively that the owner must ask a follow-up merely to understand what would be changed or how success would be judged.
+- If multiple next items are alternatives rather than sequential lifecycle steps, say so explicitly, state the meaningful trade-off, and identify which option is recommended and why. Do not present mutually exclusive choices as if all must be performed.
 - If progress depends on a gate or blocker, name the exact condition first (for example: branch CI `SUCCESS` on the current head, PR protected checks green, exact-main validation, or required LOCAL_ONLY evidence), then state what action follows when that condition is satisfied.
+- Distinguish a **required next lifecycle action** from an optional improvement/follow-up. Do not elevate speculative cleanup, generic hardening, or invented backlog into a required recommendation merely to make the section look more detailed.
 - If this session can perform the next lifecycle action under current repository authorization and tooling, continue it on the same canonical carrier rather than asking the owner to repeat an already-authorized instruction.
-- Do not use vague wording such as `continue`, `check later`, `wait`, `monitor`, or `do more` without naming the concrete carrier/gate/action.
+- Do not use vague wording such as `continue`, `check later`, `wait`, `monitor`, or `do more` without naming the concrete carrier/gate/action and the success condition.
 - If the lifecycle is terminal and `Next exact action: none`, omit this section entirely. The terminal status report is sufficient.
 
-This section is conditional owner-facing guidance. `Next exact action` remains the compact lifecycle field used for traceability and must stay consistent with it whenever the section is present.
+This section is conditional owner-facing guidance. `Next exact action` remains the compact lifecycle field used for traceability and must stay consistent with it whenever the section is present. Detail is required to improve decision quality, not to add filler: recommendations must remain grounded in current repository evidence and scoped to real work.
 
 ## Completion wording rules
 
