@@ -8,6 +8,8 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class ComprehensiveModelHealthMulticoreSmoke
     {
+        private const int MaximumLiveHandleInputs = 10000;
+
         internal static void Run()
         {
             ThrowsArgumentOutOfRange(0);
@@ -69,7 +71,7 @@ namespace QS3D.Core.SmokeTests
                 negativeGenerated,
                 "negative Count contract");
 
-            var oversizedWins = new MultiCountSet(-1, ComprehensiveModelHealthService.MaximumLiveHandleInputs + 1, 0, throwOnEnumeration: true);
+            var oversizedWins = new MultiCountSet(-1, MaximumLiveHandleInputs + 1, 0, throwOnEnumeration: true);
             ThrowsInvalidCountContract(
                 () => service.Inspect(project, oversizedWins, null),
                 oversizedWins,
