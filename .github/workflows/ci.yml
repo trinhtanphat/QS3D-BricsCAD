@@ -23,6 +23,7 @@ on:
       - "README.md"
       - "docs/MAIN-WRITE-AUTHORIZATION.md"
       - "docs/AGENT-WORK-REGISTRATION.md"
+      - "docs/AGENT-LANE-LOCK.md"
   "pull_request":
     branches:
       - main
@@ -31,6 +32,7 @@ on:
 permissions:
   contents: read
   actions: read
+  pull-requests: read
 
 concurrency:
   group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -92,7 +94,7 @@ jobs:
                 continue
               }
 
-              if ($path -in @('CI_POLICY.md', 'AGENTS.md', 'README.md', 'docs/MAIN-WRITE-AUTHORIZATION.md', 'docs/AGENT-WORK-REGISTRATION.md')) {
+              if ($path -in @('CI_POLICY.md', 'AGENTS.md', 'README.md', 'docs/MAIN-WRITE-AUTHORIZATION.md', 'docs/AGENT-WORK-REGISTRATION.md', 'docs/AGENT-LANE-LOCK.md')) {
                 $sourceValidation = $true
               }
             }
@@ -113,6 +115,12 @@ jobs:
           QS3D_PR_BRANCH_CI_RUNTIME: "1"
           GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/preflight-pr-branch-ci-gate.py
+      - name: Agent Lane-Key collision gate
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          QS3D_AGENT_LANE_COLLISION_RUNTIME: "1"
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/preflight-agent-lane-collision.py
       - name: Generic source guard
         if: ${{ steps.scope.outputs.source_validation == 'true' }}
         run: python scripts/preflight.py
