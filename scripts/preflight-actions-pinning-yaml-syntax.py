@@ -83,18 +83,15 @@ def main():
     ):
         assert_rejected(checker, label, workflow, "pull_request_target is forbidden")
 
-    assert_rejected(
-        checker,
-        "root-flow-forbidden.yml",
-        "{on: [push, pull_request_target], jobs: {}}\n",
-        "root flow-style workflow mapping cannot be safety-checked",
-    )
-    assert_rejected(
-        checker,
-        "root-flow-safe.yml",
-        f"{{on: [push], jobs: {{test: {{steps: [{{uses: actions/checkout@{PIN}}}]}}}}}}\n",
-        "root flow-style workflow mapping cannot be safety-checked",
-    )
+    for label, workflow in (
+        ("root-flow-forbidden.yml", "{on: [push, pull_request_target], jobs: {}}\n"),
+        ("root-flow-safe.yml", f"{{on: [push], jobs: {{test: {{steps: [{{uses: actions/checkout@{PIN}}}]}}}}}}\n"),
+        ("root-flow-document-prefix.yml", "--- {on: [push, pull_request_target], jobs: {}}\n"),
+        ("root-flow-anchor-prefix.yml", "&workflow {on: [push, pull_request_target], jobs: {}}\n"),
+        ("root-flow-directive-bom.yml", "\ufeff%YAML 1.2\n---\n{on: [push], jobs: {}}\n"),
+    ):
+        assert_rejected(checker, label, workflow, "root flow-style workflow mapping cannot be safety-checked")
+
     assert_rejected(
         checker,
         "aliased-trigger.yml",
@@ -150,8 +147,9 @@ def main():
         assert_clean(checker, str(workflow.relative_to(ROOT)), text)
 
     print(
-        "PASS: Actions pinning guard rejects quoted/flow/anchored pull_request_target, root flow-style workflow mappings, "
-        "mutable or aliased uses, and unresolved trigger aliases while preserving pinned/local/comment/value and safe-anchor controls."
+        "PASS: Actions pinning guard rejects quoted/flow/anchored pull_request_target, root flow-style workflow mappings "
+        "including document/anchor/directive prefixes, mutable or aliased uses, and unresolved trigger aliases while "
+        "preserving pinned/local/comment/value and safe-anchor controls."
     )
     return 0
 
