@@ -20,7 +20,7 @@ else:
         "var layout = UserUiLayoutStore.Get();",
         "try",
         "_workspacePanel = new WorkspacePanel();",
-        "_propertiesVisual = _workspacePanel.DetachPropertiesPaletteVisual();",
+        "_propertiesVisual = _workspacePanel.CreatePropertiesPaletteVisual();",
         "_rightPanel = new RightPanel();",
         "_quantityInsightPanel = new QuantityInsightPanel();",
         '_workspace = new PaletteSet("QS3D — Mô hình", WorkspaceGuid)',
