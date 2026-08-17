@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
@@ -11,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             ThrowsArgumentOutOfRange(0);
             ThrowsArgumentOutOfRange(5);
+            RejectsInvalidKnownLiveHandleCountsBeforeEnumeration();
 
             var project = NewProject();
             project.Elements.Add(null!);
@@ -48,6 +50,53 @@ namespace QS3D.Core.SmokeTests
                 var actual = multiWorker.Inspect(project, liveSourceHandles, null);
                 AssertEquivalent(expected, actual, iteration);
             }
+        }
+
+        private static void RejectsInvalidKnownLiveHandleCountsBeforeEnumeration()
+        {
+            var project = NewProject();
+            var service = new ComprehensiveModelHealthService(1);
+
+            var conflictingSource = new MultiCountSet(1, 2, 1, throwOnEnumeration: true);
+            ThrowsInvalidCountContract(
+                () => service.Inspect(project, conflictingSource, null),
+                conflictingSource,
+                "conflicting Count contracts");
+
+            var negativeGenerated = new MultiCountSet(0, -1, 0, throwOnEnumeration: true);
+            ThrowsInvalidCountContract(
+                () => service.Inspect(project, null, negativeGenerated),
+                negativeGenerated,
+                "negative Count contract");
+
+            var oversizedWins = new MultiCountSet(-1, ComprehensiveModelHealthService.MaximumLiveHandleInputs + 1, 0, throwOnEnumeration: true);
+            ThrowsInvalidCountContract(
+                () => service.Inspect(project, oversizedWins, null),
+                oversizedWins,
+                "exceeds the supported bound");
+
+            var consistent = new MultiCountSet(0, 0, 0, throwOnEnumeration: false);
+            _ = service.Inspect(project, consistent, null);
+            if (!consistent.EnumeratorRequested)
+                throw new InvalidOperationException("Consistent live-handle Count contracts should proceed to bounded enumeration.");
+        }
+
+        private static void ThrowsInvalidCountContract(Action action, MultiCountSet source, string expectedMessageFragment)
+        {
+            try
+            {
+                action();
+            }
+            catch (InvalidOperationException ex) when (
+                ex.Message.IndexOf(expectedMessageFragment, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                if (source.EnumeratorRequested)
+                    throw new InvalidOperationException("Invalid live-handle Count contracts must fail before enumeration.");
+                return;
+            }
+
+            throw new InvalidOperationException(
+                "Expected comprehensive health live-handle Count-contract rejection containing: " + expectedMessageFragment + ".");
         }
 
         private static ProjectState NewProject()
@@ -108,5 +157,63 @@ namespace QS3D.Core.SmokeTests
 
         private static string Describe(ModelHealthIssue issue) =>
             "[" + issue.Code + "," + issue.Severity + "," + issue.ElementId + "] " + issue.Message;
+
+        private sealed class MultiCountSet : ISet<string>, IReadOnlyCollection<string>, ICollection
+        {
+            private readonly HashSet<string> _inner = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            private readonly int _genericCount;
+            private readonly int _readOnlyCount;
+            private readonly int _nonGenericCount;
+            private readonly bool _throwOnEnumeration;
+
+            internal MultiCountSet(int genericCount, int readOnlyCount, int nonGenericCount, bool throwOnEnumeration)
+            {
+                _genericCount = genericCount;
+                _readOnlyCount = readOnlyCount;
+                _nonGenericCount = nonGenericCount;
+                _throwOnEnumeration = throwOnEnumeration;
+            }
+
+            internal bool EnumeratorRequested { get; private set; }
+
+            int ICollection<string>.Count => _genericCount;
+            int IReadOnlyCollection<string>.Count => _readOnlyCount;
+            int ICollection.Count => _nonGenericCount;
+            bool ICollection<string>.IsReadOnly => false;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+
+            public bool Add(string item) => _inner.Add(item);
+            void ICollection<string>.Add(string item) => _inner.Add(item);
+            public void ExceptWith(IEnumerable<string> other) => _inner.ExceptWith(other);
+            public void IntersectWith(IEnumerable<string> other) => _inner.IntersectWith(other);
+            public bool IsProperSubsetOf(IEnumerable<string> other) => _inner.IsProperSubsetOf(other);
+            public bool IsProperSupersetOf(IEnumerable<string> other) => _inner.IsProperSupersetOf(other);
+            public bool IsSubsetOf(IEnumerable<string> other) => _inner.IsSubsetOf(other);
+            public bool IsSupersetOf(IEnumerable<string> other) => _inner.IsSupersetOf(other);
+            public bool Overlaps(IEnumerable<string> other) => _inner.Overlaps(other);
+            public bool SetEquals(IEnumerable<string> other) => _inner.SetEquals(other);
+            public void SymmetricExceptWith(IEnumerable<string> other) => _inner.SymmetricExceptWith(other);
+            public void UnionWith(IEnumerable<string> other) => _inner.UnionWith(other);
+            public void Clear() => _inner.Clear();
+            public bool Contains(string item) => _inner.Contains(item);
+            public void CopyTo(string[] array, int arrayIndex) => _inner.CopyTo(array, arrayIndex);
+            void ICollection.CopyTo(Array array, int index)
+            {
+                foreach (var value in _inner)
+                    array.SetValue(value, index++);
+            }
+            public bool Remove(string item) => _inner.Remove(item);
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                EnumeratorRequested = true;
+                if (_throwOnEnumeration)
+                    throw new InvalidOperationException("Enumeration should not occur for malformed known Count contracts.");
+                return _inner.GetEnumerator();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
     }
 }
