@@ -67,6 +67,8 @@ namespace QS3D.Core.Services
         {
             value = 0d;
             if (!element.Properties.TryGetValue(key, out var raw)) return false;
+            if (raw != null && !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException(element.Id + "/" + key + " must not contain surrounding whitespace.");
             if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value) || double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
                 throw new InvalidOperationException(element.Id + "/" + key + " must be a finite non-negative metric.");
             if (value == 0d && HasNonZeroSignificand(raw))
