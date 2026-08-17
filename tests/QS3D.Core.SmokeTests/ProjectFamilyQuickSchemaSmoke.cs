@@ -55,6 +55,10 @@ namespace QS3D.Core.SmokeTests
                 double.Epsilon.ToString("R", CultureInfo.InvariantCulture),
                 vi,
                 true));
+            Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.FormatInternalMetersAsMillimeters(
+                "WidthM",
+                double.MaxValue.ToString("R", CultureInfo.InvariantCulture),
+                vi));
         }
 
         private static void SuggestedNamesMatchQsConventions()
@@ -64,6 +68,9 @@ namespace QS3D.Core.SmokeTests
             Equal("T200", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.ArchitecturalWall, Values(("ThicknessM", "0.2"))), "Wall suggested name mismatch.");
             Equal("S120", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.Slab, Values(("ThicknessM", "0.12"))), "Slab suggested name mismatch.");
             Equal("Móng BTCT H500", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.Foundation, Values(("ThicknessM", "0.5"))), "Foundation suggested name mismatch.");
+            Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.SuggestName(
+                ElementCategory.Beam,
+                Values(("WidthM", double.MaxValue.ToString("R", CultureInfo.InvariantCulture)), ("HeightM", "0.5"))));
         }
 
         private static void AutoIdentityMatchingIsDeterministic()

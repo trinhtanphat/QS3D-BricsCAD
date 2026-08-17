@@ -179,7 +179,10 @@ namespace QS3D.Core.Domain
             var raw = (internalMeters ?? string.Empty).Trim();
             if (!TryParseInternalMeters(raw, culture, out var meters))
                 throw new InvalidOperationException((key ?? "Giá trị") + " đang có giá trị nội bộ không hợp lệ: “" + raw + "”.");
-            return (meters * MillimetersPerMeter).ToString("0.###", culture);
+            return FormatMetersAsMillimeters(
+                meters,
+                culture,
+                (key ?? "Giá trị") + " quá lớn để biểu diễn hữu hạn theo đơn vị mm: “" + raw + "”.");
         }
 
         public static string SuggestName(ElementCategory category, IReadOnlyDictionary<string, string> internalValues)
@@ -189,7 +192,10 @@ namespace QS3D.Core.Domain
             {
                 if (!internalValues.TryGetValue(key, out var raw) || !TryParseInternalMeters(raw, CultureInfo.InvariantCulture, out var meters))
                     throw new InvalidOperationException("Thiếu hoặc sai giá trị " + key + " để tự đặt tên Family.");
-                return (meters * MillimetersPerMeter).ToString("0.###", CultureInfo.InvariantCulture);
+                return FormatMetersAsMillimeters(
+                    meters,
+                    CultureInfo.InvariantCulture,
+                    "Giá trị " + key + " quá lớn để tự đặt tên Family theo đơn vị mm.");
             }
 
             switch (category)
@@ -277,6 +283,14 @@ namespace QS3D.Core.Domain
             IDictionary<string, double> defaultsM,
             string defaultMaterial) =>
             new ProjectFamilyQuickSchema(category, formKeys, identityKeys, defaultsM, defaultMaterial);
+
+        private static string FormatMetersAsMillimeters(double meters, CultureInfo culture, string overflowMessage)
+        {
+            var millimeters = meters * MillimetersPerMeter;
+            if (double.IsNaN(millimeters) || double.IsInfinity(millimeters))
+                throw new InvalidOperationException(overflowMessage);
+            return millimeters.ToString("0.###", culture);
+        }
 
         private static bool TryParseInternalMeters(string raw, CultureInfo fallbackCulture, out double meters)
         {
