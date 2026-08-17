@@ -12,8 +12,10 @@ using System.Windows.Media.Imaging;
 namespace QS3D.BricsCAD.V25.Ribbon
 {
     /// <summary>
-    /// Applies the shell-level details visible in the BLT3D reference topbar:
-    /// the BLT3D app mark plus a clean tab row without BricsCAD application/QAT/search chrome.
+    /// Applies the compact QS3D shell-level chrome used by the BLT3D-familiar workflow: the
+    /// QS3D-owned red-X / green-V app mark plus a clean tab row without BricsCAD application/QAT/
+    /// search chrome. The reference product is layout inspiration only; the mark below is original
+    /// QS3D artwork generated in-repository and does not contain copied BLT3D pixels or assets.
     /// All host-owned visibility/icon values are restored when QS3D unloads.
     /// </summary>
     internal static class Blt3dShellChromeCoordinator
@@ -28,11 +30,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
         private const int IconBig = 1;
         private const uint GaRoot = 2;
 
-        // Exact 16x16 BLT3D title-bar mark cropped from the user-provided reference screenshot.
-        // The ICO embeds those exact PNG pixels and can be consumed by both net48 and net8 without
-        // System.Drawing or a host-version-specific resource-pack URI.
-        private const string Blt3dIconIcoBase64 =
-            "AAABAAEAEBAAAAAAIAC3AgAAFgAAAIlQTkcNChoKAAAADUlIRFIAAAAQAAAAEAgGAAAAH/P/YQAAAn5JREFUeJxlk81vE1cUxX/3+XkcezxxSk0DobBA7EBCrNuw6A4WoSAikBB7EKwoCPEv8LUCskRVU4Ig4qNSgRXddYGEhAQLJIKC+BQIBU8843jsee+ysGUScpZX75x777nnyWJ7XukjTTPiZgooIKxEr1aLQsKwNKha7z1e4dzFv7l96yFxmqKqqOoKuoggItTCkL37fuPUiUMYAWuM4ez5aS5PzeJddzkDMabX23voCzbjhMtTswCcOXUYkyRtZmbuIXgKhQJiDMZayHPyOCaPY8hzjLWIMb03eK5fv0+StLGLzZRW1sE5hxiDyzLyNKWy4Wc2Hz0OwOtrf7H09h2FaghBgHpPK+sQLyZYRAYja55TXr+OjZMHWLd7D+WxMcAwNrGXD3dv8Gb2Jp2FBvRXExHMsqVR57BbxhkZn6A8uhafLeHSBkM/1hidPMHI7tNot8OgKWC/XUkxgSV+9Yn/T1+ivm0Tm3/fSfDDGB+eNEg+N8njImKld9FVAgBesUNFiIb5/GyeL3Mfqf96GJUitiI441aQVwtI/2TeEURlxA4hxmOK/Vx47Y2/LGOG7yFFEIs6j6rvhSp3iC0h5Qi8h64f+GBZkTiBLy/QQgmCCMEghYBCuIZ84RXtx7NQLEKtCq0MVcUORyGVUkC7lfUGiucheY9Gm5D1O/DJJ9qPrrL09B+0m1C6eAypR4RXHlCLKphqdYiDB3ehGJxzqCmi3sHCc5j7l/jmMdJHf6KdNlL/CR+W0NE6+08eohpVkEbrpXqFsxemuXP7PxpJ0t9KQF3fKQsoknUZ+WUrE0f28cf2rZSCAFn+nZOkzWIzXeVrPygghuFKQHW4Oqh+BR0ZFiqoacnNAAAAAElFTkSuQmCC";
+        // Original QS3D clean-room mark. It contains a dark rounded tile with a red X and green V,
+        // authored specifically for QS3D. The ICO carries 16px and 32px PNG frames so the same
+        // deterministic mark works for WPF Window.Icon and native WM_SETICON on net48/net8.
+        private const string Qs3dBrandIconIcoBase64 =
+            "AAABAAIAEBAAAAAAIAAdAwAAJgAAACAgAAAAACAAcwEAAEMDAACJUE5HDQoaCgAAAA1JSERSAAAAEAAAABAIBgAAAB/z/2EAAALkSURBVHicpZM/TJx1GMc/z/O+995xtPR4j/aEtLTDlaKR1GiMMV10lCjRoTgYk6YORpYOhKRTDzZJ49CFqANxbhutJFITBzUOVuOfEGUgnI22chxQjzsK9O7e9/09DpTYQSef6Vm++T7J8/kIQKlU0qmpKXd2bOxAd9zv7aQfGP8yna0O2fTvJNdmZrb3M7K/jJ6bGI7j9mwURZ6JqRriHk0LJibOS6WSwA/OX/3o8nypVFLBTM6+fXG4vlqZ+2lxQdMiALTMOOgpsT1yjIGoUBwccj29fSNXP3h3Xs5PTB/cuPvHn1/c+qbrxUCS5ShRM2MwE/B5Y5eelAICZogKUTNymY6s9/RzZ7YO9584qpXmrqhZMl7othun+vXVsEteC7vkk4FjMt6bF189ERFR3xMXmeQGQk0XMuZ8l3Q2M+K/FIZcX63QF/giZjZ2OAcYAvQFPvUkIed5OAFLjBOvF8k/U5DW9YjlT8touVYjqz5X1jYptyIOeUqXKuVWmyuVGunIcM7R3mrTfbqHnucLbC02iG9HnHyjiNaADhEq7Zi5+jaBCmlPmdvcporj+AtHeXz8KdRXjo0cB+DOx78RxwlhGKIh8MCMvsBnJHeAtjPaBi9nswycCul/5wmOnOnl9KVnyQ3luffdGpu/1Ag6A8rlMloMQ3ZdwoUjOYrpFI3E0YhjBnIdvLma8OPln6GVkHsyRFMed2/8Ds5A9z6rN2s1Qs+nEiWYwMx6nZn1Os4ZGxkh+n6d6q01Ul0p/vphndrCBn7Wx5I9Pvw80DDjvWrNFrbus9SKAFhqtrm5tUM+8Fh+f5GNb6vsruygnmL8Q5efzmRNFO+xwJcv6/eTrJ9Sw/i6HVFQJRaImhHVr1bwAsXUHIYngpfOZE3MTEbfujh8b31l7vbSr+rMAEEAx36RIMper8HJwSHX07eHsj85OSnXZqc/Gz038cqhXH42eSjTQ5b+W6YPp+cnezMq/1fnvwGhv2gJjH87wgAAAABJRU5ErkJggolQTkcNChoKAAAADUlIRFIAAAAgAAAAIAgGAAAAc3p69AAAATpJREFUeJztl7ENwjAQRT+IQdKnSYcUUYUBGICKAZiGGqViAAaACiHRpUmfRRBUBse+O18UGwnBL23r/rvL2bGBX9eEm1itt4+YRsfDjvSafsJciulRmYW3yykqwHyxBOBXoleBVOZ2TLcSL4CU5hIE2QNGTZ6pxsaIBTBGtiE1Fh2gyTOVgXYdAJR1xc7N3IGi7bzAnFHRdiqAPsQD9/17I4g9EENu9rY5C6DJbEj2kpJWwM3+ujnrAaQMqTmp0SRFqYAxtyE02YsA0hYzc2VdeUZDKzGqAlxW2uxZAO1BFAquUZQekCBCgORR7KpoO7LzY/wTPADOLLSOylTzeYLngG1CjVGGQ/pC7AHKKFSdoRDJf0bfA2Buq+b2mkLUzbhXgZQQ3LWcfK2keJhQ5gDTA9wzKrb5XwDwBGcEk1KL9Yk7AAAAAElFTkSuQmCC";
 
         private sealed class HiddenChrome
         {
@@ -53,13 +55,13 @@ namespace QS3D.BricsCAD.V25.Ribbon
         private static IntPtr _hostHandle;
         private static IntPtr _originalSmallIcon;
         private static IntPtr _originalBigIcon;
-        private static IntPtr _bltSmallIcon;
-        private static IntPtr _bltBigIcon;
+        private static IntPtr _qs3dSmallIcon;
+        private static IntPtr _qs3dBigIcon;
 
         public static bool TryInitialize()
         {
             if (_initialized)
-                return true;
+                return Reassert();
 
             try
             {
@@ -67,23 +69,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 if (!(control is DependencyObject ribbonRoot))
                     return false;
 
-                var window = Window.GetWindow(ribbonRoot);
-                var handle = ResolveHostWindowHandle(ribbonRoot, window);
-                if (window == null && handle == IntPtr.Zero)
+                if (!ApplyChrome(control, ribbonRoot))
                     return false;
-
-                if (window != null)
-                    ApplyWpfWindowIcon(window);
-                if (handle != IntPtr.Zero)
-                    ApplyNativeWindowIcon(handle);
-
-                CollapseKnownChromeProperty(control, "QuickAccessToolBar");
-                CollapseKnownChromeProperty(control, "QuickAccessToolbar");
-                CollapseKnownChromeProperty(control, "ApplicationButton");
-                CollapseKnownChromeProperty(control, "ApplicationMenuButton");
-                CollapseKnownChromeProperty(control, "SearchBox");
-                CollapseKnownChromeProperty(control, "SearchControl");
-                CollapseNonReferenceChrome(ribbonRoot);
 
                 _initialized = true;
                 return true;
@@ -92,6 +79,54 @@ namespace QS3D.BricsCAD.V25.Ribbon
             {
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Idempotently reapplies QS3D-owned shell chrome after a host Ribbon/workspace transition.
+        /// BricsCAD can recreate top-level visual/native shell state after initial Ribbon startup;
+        /// keeping this operation explicit lets the tab lifecycle restore the X/V mark without
+        /// rerunning feature augmenters or taking ownership of native Ribbon content.
+        /// </summary>
+        public static bool Reassert()
+        {
+            try
+            {
+                var control = FindRibbonControl();
+                if (!(control is DependencyObject ribbonRoot))
+                    return false;
+
+                if (!ApplyChrome(control, ribbonRoot))
+                    return false;
+
+                _initialized = true;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool ApplyChrome(object control, DependencyObject ribbonRoot)
+        {
+            var window = Window.GetWindow(ribbonRoot);
+            var handle = ResolveHostWindowHandle(ribbonRoot, window);
+            if (window == null && handle == IntPtr.Zero)
+                return false;
+
+            if (window != null)
+                ApplyWpfWindowIcon(window);
+            if (handle != IntPtr.Zero)
+                ApplyNativeWindowIcon(handle);
+
+            CollapseKnownChromeProperty(control, "QuickAccessToolBar");
+            CollapseKnownChromeProperty(control, "QuickAccessToolbar");
+            CollapseKnownChromeProperty(control, "ApplicationButton");
+            CollapseKnownChromeProperty(control, "ApplicationMenuButton");
+            CollapseKnownChromeProperty(control, "SearchBox");
+            CollapseKnownChromeProperty(control, "SearchControl");
+            CollapseNonReferenceChrome(ribbonRoot);
+            return true;
         }
 
         public static void Reset()
@@ -128,8 +163,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 // Native shell may already be gone during process teardown.
             }
 
-            DestroyOwnedIcon(ref _bltSmallIcon);
-            DestroyOwnedIcon(ref _bltBigIcon);
+            DestroyOwnedIcon(ref _qs3dSmallIcon);
+            DestroyOwnedIcon(ref _qs3dBigIcon);
             _hostWindow = null;
             _originalWpfIcon = null;
             _hostHandle = IntPtr.Zero;
@@ -139,13 +174,13 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private static void ApplyWpfWindowIcon(Window window)
         {
-            if (_hostWindow == null)
+            if (!ReferenceEquals(_hostWindow, window))
             {
                 _hostWindow = window;
                 _originalWpfIcon = window.Icon;
             }
 
-            var iconBytes = ExtractEmbeddedPngFromIco();
+            var iconBytes = ExtractLargestEmbeddedPngFromIco();
             using (var stream = new MemoryStream(iconBytes, writable: false))
             {
                 var frame = BitmapFrame.Create(
@@ -160,22 +195,22 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private static void ApplyNativeWindowIcon(IntPtr handle)
         {
-            if (_hostHandle == IntPtr.Zero)
+            if (_hostHandle != handle)
             {
                 _hostHandle = handle;
                 _originalSmallIcon = SendMessage(handle, WmGetIcon, new IntPtr(IconSmall), IntPtr.Zero);
                 _originalBigIcon = SendMessage(handle, WmGetIcon, new IntPtr(IconBig), IntPtr.Zero);
             }
 
-            if (_bltSmallIcon == IntPtr.Zero)
-                _bltSmallIcon = LoadEmbeddedIcon(16, 16);
-            if (_bltBigIcon == IntPtr.Zero)
-                _bltBigIcon = LoadEmbeddedIcon(32, 32);
+            if (_qs3dSmallIcon == IntPtr.Zero)
+                _qs3dSmallIcon = LoadEmbeddedIcon(16, 16);
+            if (_qs3dBigIcon == IntPtr.Zero)
+                _qs3dBigIcon = LoadEmbeddedIcon(32, 32);
 
-            if (_bltSmallIcon != IntPtr.Zero)
-                SendMessage(handle, WmSetIcon, new IntPtr(IconSmall), _bltSmallIcon);
-            if (_bltBigIcon != IntPtr.Zero)
-                SendMessage(handle, WmSetIcon, new IntPtr(IconBig), _bltBigIcon);
+            if (_qs3dSmallIcon != IntPtr.Zero)
+                SendMessage(handle, WmSetIcon, new IntPtr(IconSmall), _qs3dSmallIcon);
+            if (_qs3dBigIcon != IntPtr.Zero)
+                SendMessage(handle, WmSetIcon, new IntPtr(IconBig), _qs3dBigIcon);
         }
 
         private static IntPtr ResolveHostWindowHandle(DependencyObject ribbonRoot, Window? window)
@@ -219,10 +254,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
         {
             var path = Path.Combine(
                 Path.GetTempPath(),
-                "qs3d-blt3d-icon-" + Guid.NewGuid().ToString("N") + ".ico");
+                "qs3d-brand-icon-" + Guid.NewGuid().ToString("N") + ".ico");
             try
             {
-                File.WriteAllBytes(path, Convert.FromBase64String(Blt3dIconIcoBase64));
+                File.WriteAllBytes(path, Convert.FromBase64String(Qs3dBrandIconIcoBase64));
                 return LoadImage(IntPtr.Zero, path, ImageIcon, width, height, LoadFromFile | LoadDefaultColor);
             }
             finally
@@ -231,19 +266,43 @@ namespace QS3D.BricsCAD.V25.Ribbon
             }
         }
 
-        private static byte[] ExtractEmbeddedPngFromIco()
+        private static byte[] ExtractLargestEmbeddedPngFromIco()
         {
-            var ico = Convert.FromBase64String(Blt3dIconIcoBase64);
+            var ico = Convert.FromBase64String(Qs3dBrandIconIcoBase64);
             if (ico.Length < 22)
-                throw new InvalidDataException("BLT3D icon payload is incomplete.");
+                throw new InvalidDataException("QS3D brand icon payload is incomplete.");
 
-            var length = BitConverter.ToInt32(ico, 14);
-            var offset = BitConverter.ToInt32(ico, 18);
-            if (length <= 0 || offset < 0 || offset + length > ico.Length)
-                throw new InvalidDataException("BLT3D icon directory entry is invalid.");
+            var count = BitConverter.ToUInt16(ico, 4);
+            if (count == 0 || ico.Length < 6 + count * 16)
+                throw new InvalidDataException("QS3D brand icon directory is incomplete.");
 
-            var png = new byte[length];
-            Buffer.BlockCopy(ico, offset, png, 0, length);
+            var bestArea = -1;
+            var bestLength = 0;
+            var bestOffset = 0;
+            for (var index = 0; index < count; index++)
+            {
+                var entry = 6 + index * 16;
+                var width = ico[entry] == 0 ? 256 : ico[entry];
+                var height = ico[entry + 1] == 0 ? 256 : ico[entry + 1];
+                var length = BitConverter.ToInt32(ico, entry + 8);
+                var offset = BitConverter.ToInt32(ico, entry + 12);
+                if (length <= 0 || offset < 0 || offset + length > ico.Length)
+                    continue;
+
+                var area = width * height;
+                if (area <= bestArea)
+                    continue;
+
+                bestArea = area;
+                bestLength = length;
+                bestOffset = offset;
+            }
+
+            if (bestLength <= 0)
+                throw new InvalidDataException("QS3D brand icon directory has no valid image entry.");
+
+            var png = new byte[bestLength];
+            Buffer.BlockCopy(ico, bestOffset, png, 0, bestLength);
             return png;
         }
 
