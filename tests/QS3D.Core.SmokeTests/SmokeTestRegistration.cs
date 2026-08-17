@@ -148,6 +148,7 @@ namespace QS3D.Core.SmokeTests
             ProjectFamilyActivationRevisionSmoke.Run();
             RegenerationAtomicitySmoke.Run();
             HostLinkCanonicalizationSmoke.Run();
+            MeasurementWorkItemMappingCatalogBoundSmoke.Run();
             ProjectFamilyAssignmentAtomicitySmoke.Run();
             ProjectSessionAuditSmoke.Run();
             ProjectInterchangeValidationSmoke.Run();
