@@ -44,14 +44,16 @@ def main():
     modeling = read("src/QS3D.BricsCAD.V25/Ribbon/BltModelingRibbonAugmenter.cs")
     topbar = read("src/QS3D.BricsCAD.V25/Ribbon/BltTopbarTabContract.cs")
 
-    # Full three-zone BIM workspace: real QS3D workspace left, native BricsCAD viewport centre,
-    # production drawing/layer manager right. Quantity insight is intentionally not forced open.
+    # Full BIM workspace: real QS3D workspace left, native BricsCAD viewport centre,
+    # production drawing/layer manager and quantity explanation palettes right.
     for token in (
         "public static void ShowBimWorkspace()",
         "EnsureBimDockContract();",
-        "SetVisibility(workspace: true, right: true, quantityInsight: false);",
+        "SetVisibility(workspace: true, right: true, quantityInsight: true);",
         "_workspace.Dock = DockSides.Left",
         "_right.Dock = DockSides.Right",
+        "_quantityInsight.Dock = DockSides.Right",
+        "_quantityInsightPanel?.RefreshQuantityInsights();",
         "viewport BricsCAD native ở giữa",
     ):
         require(palette, token, "PaletteCoordinator BIM shell")

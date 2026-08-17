@@ -38,26 +38,47 @@ namespace QS3D.Core.Cost
 
         internal static bool TryGetKnownCount<T>(IEnumerable<T> items, out int count)
         {
+            var counts = new List<int>(3);
             if (items is ICollection<T> collection)
-            {
-                count = collection.Count;
-                return true;
-            }
-
+                counts.Add(collection.Count);
             if (items is IReadOnlyCollection<T> readOnlyCollection)
-            {
-                count = readOnlyCollection.Count;
-                return true;
-            }
-
+                counts.Add(readOnlyCollection.Count);
             if (items is ICollection nonGenericCollection)
+                counts.Add(nonGenericCollection.Count);
+
+            if (counts.Count == 0)
             {
-                count = nonGenericCollection.Count;
+                count = 0;
+                return false;
+            }
+
+            count = counts[0];
+            var maximumCount = count;
+            var hasConflict = false;
+            var hasNegative = count < 0;
+            for (var i = 1; i < counts.Count; i++)
+            {
+                if (counts[i] < 0)
+                    hasNegative = true;
+                if (counts[i] != count)
+                    hasConflict = true;
+                if (counts[i] > maximumCount)
+                    maximumCount = counts[i];
+            }
+
+            if (maximumCount > MaximumEntries)
+            {
+                count = maximumCount;
                 return true;
             }
 
-            count = 0;
-            return false;
+            if (hasNegative)
+                throw new InvalidOperationException("Collection reports an invalid negative known count.");
+
+            if (hasConflict)
+                throw new InvalidOperationException("Collection reports conflicting known counts.");
+
+            return true;
         }
 
         internal static void ThrowTooManyEntries(string collectionLabel)
@@ -137,7 +158,6 @@ namespace QS3D.Core.Cost
             Components = new ReadOnlyCollection<CostResourceComponent>(snapshot.ToArray());
             OverheadPercent = overheadPercent;
             ProfitPercent = profitPercent;
-
             decimal direct = 0m;
             checked
             {
@@ -328,12 +348,35 @@ namespace QS3D.Core.Cost
 
             var average = values[0];
             for (var i = 1; i < values.Count; i++)
-                average += (values[i] - average) / (decimal)(i + 1);
+            {
+                var contribution = CostDecimalMath.DividePreservingNonZero(
+                    checked(values[i] - average),
+                    (decimal)(i + 1),
+                    "benchmark average contribution");
+                average = CostDecimalMath.AddPreservingNonZeroContribution(
+                    average,
+                    contribution,
+                    "benchmark average");
+            }
 
-            var median = values.Count % 2 == 1
-                ? values[values.Count / 2]
-                : values[(values.Count / 2) - 1] +
-                  ((values[values.Count / 2] - values[(values.Count / 2) - 1]) / 2m);
+            decimal median;
+            if (values.Count % 2 == 1)
+            {
+                median = values[values.Count / 2];
+            }
+            else
+            {
+                var lowerMiddle = values[(values.Count / 2) - 1];
+                var upperMiddle = values[values.Count / 2];
+                var medianContribution = CostDecimalMath.DividePreservingNonZero(
+                    checked(upperMiddle - lowerMiddle),
+                    2m,
+                    "benchmark median contribution");
+                median = CostDecimalMath.AddPreservingNonZeroContribution(
+                    lowerMiddle,
+                    medianContribution,
+                    "benchmark median");
+            }
             decimal? deviation = average == 0m
                 ? (currentUnitCost == 0m ? 0m : (decimal?)null)
                 : CalculateDeviationPercent(currentUnitCost, average);

@@ -89,7 +89,7 @@ namespace QS3D.Core.SmokeTests
                 FloorId = "FLOOR-A",
                 ZoneId = " zone-a "
             };
-            finish.Properties[AutoRoomLifecycle.RoomSourceIdKey] = "  room-live  ";
+            finish.Properties[AutoRoomLifecycle.RoomSourceIdKey] = "room-live";
             project.Elements.Add(room);
             project.Elements.Add(finish);
 

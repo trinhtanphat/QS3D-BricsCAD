@@ -23,6 +23,7 @@ namespace QS3D.Core.Domain
         private const int MaxNameLength = 160;
         private const int MaxPropertyKeyLength = 120;
         private const int MaxPropertyValueLength = 1000;
+        private const int MaxAssignmentTargetEntries = 10000;
 
         public static ProjectFamily Create(ProjectState project, string id, string name, ElementCategory category)
         {
@@ -278,9 +279,17 @@ namespace QS3D.Core.Domain
             }
 
             var targetEnumerationVersion = project.ChangeVersion;
+            RequireAssignmentTargetCountWithinLimit(elements);
+            if (project.ChangeVersion != targetEnumerationVersion)
+                throw new InvalidOperationException("Project changed while Family assignment targets were being counted. Retry the operation against the current project state.");
+
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            var observedEntries = 0;
             foreach (var element in elements)
             {
+                observedEntries++;
+                if (observedEntries > MaxAssignmentTargetEntries)
+                    throw AssignmentTargetLimitExceeded();
                 if (element == null) throw new ArgumentException("Family assignment elements cannot contain null entries.", nameof(elements));
                 if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
                     throw new InvalidOperationException("Element does not belong to the project instance: " + element.Id);
@@ -291,6 +300,22 @@ namespace QS3D.Core.Domain
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Family assignment targets were being enumerated. Retry the operation against the current project state.");
             return unique.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+        }
+
+        private static void RequireAssignmentTargetCountWithinLimit(IEnumerable<ProjectElement> elements)
+        {
+            if (elements is ICollection<ProjectElement> collection && collection.Count > MaxAssignmentTargetEntries)
+                throw AssignmentTargetLimitExceeded();
+            if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection && readOnlyCollection.Count > MaxAssignmentTargetEntries)
+                throw AssignmentTargetLimitExceeded();
+            if (elements is System.Collections.ICollection nonGenericCollection && nonGenericCollection.Count > MaxAssignmentTargetEntries)
+                throw AssignmentTargetLimitExceeded();
+        }
+
+        private static InvalidOperationException AssignmentTargetLimitExceeded()
+        {
+            return new InvalidOperationException(
+                "Family assignment supports at most " + MaxAssignmentTargetEntries + " target entries per operation.");
         }
 
         private static void RequireTargetEnumerationFreshness(ProjectState project, long beforeEnumeration)

@@ -48,13 +48,33 @@ namespace QS3D.Core.SmokeTests
             Near(0.3d, ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters("Bề rộng", "300", vi, true), 1e-12, "300 mm must persist as 0.3 m.");
             Near(3.6d, ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters("Chiều cao", "3600", vi, true), 1e-12, "3600 mm must persist as 3.6 m.");
             Near(-0.05d, ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters("Offset đáy", "-50", vi, false), 1e-12, "Negative bottom offset conversion mismatch.");
+            Near(0d, ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters("Offset đáy", "0", vi, false), 0d, "Explicit zero offset must remain valid.");
             Equal("300", ProjectFamilyQuickSchemaService.FormatInternalMetersAsMillimeters("WidthM", "0.300", vi), "0.300 m must display as 300 mm.");
+            Equal("0", ProjectFamilyQuickSchemaService.FormatInternalMetersAsMillimeters("BottomOffsetM", "0", vi), "Explicit zero must continue to format as 0 mm.");
+
+            var overflowMeters = double.MaxValue.ToString("R", CultureInfo.InvariantCulture);
+            Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.FormatInternalMetersAsMillimeters("WidthM", overflowMeters, vi));
+            Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.FormatInternalMetersAsMillimeters("OffsetM", "-" + overflowMeters, vi));
+            Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.FormatInternalMetersAsMillimeters("WidthM", "0.0000004", vi));
+            Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.FormatInternalMetersAsMillimeters("BottomOffsetM", "-0.0000004", vi));
+
             Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters("Bề dày", "0", vi, true));
+            var epsilonMm = double.Epsilon.ToString("R", CultureInfo.InvariantCulture);
             Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters(
                 "Bề dày",
-                double.Epsilon.ToString("R", CultureInfo.InvariantCulture),
+                epsilonMm,
                 vi,
                 true));
+            Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters(
+                "Offset đáy",
+                epsilonMm,
+                vi,
+                false));
+            Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters(
+                "Offset đáy",
+                "-" + epsilonMm,
+                vi,
+                false));
         }
 
         private static void SuggestedNamesMatchQsConventions()
@@ -64,6 +84,14 @@ namespace QS3D.Core.SmokeTests
             Equal("T200", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.ArchitecturalWall, Values(("ThicknessM", "0.2"))), "Wall suggested name mismatch.");
             Equal("S120", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.Slab, Values(("ThicknessM", "0.12"))), "Slab suggested name mismatch.");
             Equal("Móng BTCT H500", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.Foundation, Values(("ThicknessM", "0.5"))), "Foundation suggested name mismatch.");
+
+            var overflowMeters = double.MaxValue.ToString("R", CultureInfo.InvariantCulture);
+            Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.SuggestName(
+                ElementCategory.Beam,
+                Values(("WidthM", overflowMeters), ("HeightM", "0.5"))));
+            Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.SuggestName(
+                ElementCategory.Beam,
+                Values(("WidthM", "0.0000004"), ("HeightM", "0.5"))));
         }
 
         private static void AutoIdentityMatchingIsDeterministic()

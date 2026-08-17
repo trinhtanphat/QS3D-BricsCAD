@@ -170,6 +170,8 @@ namespace QS3D.Core.Domain
             var valueMeters = valueMm / MillimetersPerMeter;
             if (positive && valueMeters <= 0d)
                 throw new InvalidOperationException((key ?? "Giá trị") + " quá nhỏ để biểu diễn giá trị dương theo đơn vị nội bộ (m).");
+            if (valueMm != 0d && valueMeters == 0d)
+                throw new InvalidOperationException((key ?? "Giá trị") + " quá nhỏ để biểu diễn giá trị khác 0 theo đơn vị nội bộ (m).");
             return valueMm / MillimetersPerMeter;
         }
 
@@ -179,7 +181,10 @@ namespace QS3D.Core.Domain
             var raw = (internalMeters ?? string.Empty).Trim();
             if (!TryParseInternalMeters(raw, culture, out var meters))
                 throw new InvalidOperationException((key ?? "Giá trị") + " đang có giá trị nội bộ không hợp lệ: “" + raw + "”.");
-            return (meters * MillimetersPerMeter).ToString("0.###", culture);
+            return FormatMetersAsMillimeters(
+                meters,
+                culture,
+                (key ?? "Giá trị") + " không thể biểu diễn an toàn theo mm với định dạng hiện tại. Giá trị nội bộ: “" + raw + "”.");
         }
 
         public static string SuggestName(ElementCategory category, IReadOnlyDictionary<string, string> internalValues)
@@ -189,7 +194,10 @@ namespace QS3D.Core.Domain
             {
                 if (!internalValues.TryGetValue(key, out var raw) || !TryParseInternalMeters(raw, CultureInfo.InvariantCulture, out var meters))
                     throw new InvalidOperationException("Thiếu hoặc sai giá trị " + key + " để tự đặt tên Family.");
-                return (meters * MillimetersPerMeter).ToString("0.###", CultureInfo.InvariantCulture);
+                return FormatMetersAsMillimeters(
+                    meters,
+                    CultureInfo.InvariantCulture,
+                    "Giá trị " + key + " không thể biểu diễn an toàn theo mm khi tự đặt tên Family.");
             }
 
             switch (category)
@@ -277,6 +285,20 @@ namespace QS3D.Core.Domain
             IDictionary<string, double> defaultsM,
             string defaultMaterial) =>
             new ProjectFamilyQuickSchema(category, formKeys, identityKeys, defaultsM, defaultMaterial);
+
+        private static string FormatMetersAsMillimeters(double meters, CultureInfo culture, string invalidMessage)
+        {
+            var millimeters = meters * MillimetersPerMeter;
+            if (double.IsNaN(millimeters) || double.IsInfinity(millimeters))
+                throw new InvalidOperationException(invalidMessage);
+
+            var formatted = millimeters.ToString("0.###", culture);
+            if (millimeters != 0d &&
+                double.TryParse(formatted, NumberStyles.Float, culture, out var formattedMillimeters) &&
+                formattedMillimeters == 0d)
+                throw new InvalidOperationException(invalidMessage);
+            return formatted;
+        }
 
         private static bool TryParseInternalMeters(string raw, CultureInfo fallbackCulture, out double meters)
         {

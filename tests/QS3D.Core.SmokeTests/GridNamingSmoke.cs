@@ -1,11 +1,14 @@
 using System;
-using System.Linq;
+using System.Collections;
+using System.Collections.Generic;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.SmokeTests
 {
     internal static class GridNamingSmoke
     {
+        private const int MaxGridBatch = 2000;
+
         public static void Run()
         {
             NumericSequenceIsOrderedAndPadded();
@@ -13,6 +16,11 @@ namespace QS3D.Core.SmokeTests
             ExistingExternalLabelBlocksWholeBatch();
             NonGridInputBlocksWholeBatch();
             UnrelatedDuplicateIdentityBlocksWholeBatch();
+            OversizedCountedSourcesRejectBeforeEnumeration();
+            ConflictingKnownCountContractsRejectBeforeEnumeration();
+            CountSideEffectRejectsBeforeEnumeration();
+            ExactCapacityCountedSourceRemainsAccepted();
+            GridNamingBoundedEnumerationSmoke.Run();
         }
 
         private static void NumericSequenceIsOrderedAndPadded()
@@ -99,6 +107,240 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => GridNamingService.Renumber(project, new[] { grid.Id }, new GridNamingOptions()));
             Equal("OLD", grid.Properties[GridNamingService.GridLabelKey]);
             True(!grid.Properties.ContainsKey(GridNamingService.GridSequenceIndexKey));
+        }
+
+        private static void OversizedCountedSourcesRejectBeforeEnumeration()
+        {
+            var generic = new OversizedGenericCollection();
+            CapacityRejectedBeforeEnumeration(generic, () => generic.EnumeratorRequested);
+
+            var readOnly = new OversizedReadOnlyCollection();
+            CapacityRejectedBeforeEnumeration(readOnly, () => readOnly.EnumeratorRequested);
+
+            var nonGeneric = new OversizedNonGenericCollection();
+            CapacityRejectedBeforeEnumeration(nonGeneric, () => nonGeneric.EnumeratorRequested);
+        }
+
+        private static void ConflictingKnownCountContractsRejectBeforeEnumeration()
+        {
+            var project = Project();
+            var source = new ConflictingKnownCountCollection();
+            var beforeVersion = project.ChangeVersion;
+            try
+            {
+                GridNamingService.Renumber(project, source);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Equal("A Grid renumber batch supports at most 2000 elements.", ex.Message);
+                True(source.GenericCountRead);
+                True(source.ReadOnlyCountRead);
+                True(source.NonGenericCountRead);
+                True(!source.EnumeratorRequested);
+                Equal(beforeVersion, project.ChangeVersion);
+                return;
+            }
+
+            throw new Exception("Expected conflicting known-count Grid source to fail before enumeration.");
+        }
+
+        private static void CapacityRejectedBeforeEnumeration(IEnumerable<string> source, Func<bool> enumeratorRequested)
+        {
+            var project = Project();
+            var beforeVersion = project.ChangeVersion;
+            try
+            {
+                GridNamingService.Renumber(project, source);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Equal("A Grid renumber batch supports at most 2000 elements.", ex.Message);
+                True(!enumeratorRequested());
+                Equal(beforeVersion, project.ChangeVersion);
+                return;
+            }
+
+            throw new Exception("Expected counted Grid renumber capacity rejection.");
+        }
+
+        private static void CountSideEffectRejectsBeforeEnumeration()
+        {
+            var project = Project();
+            var source = new VersionMutatingCountCollection(project);
+            var beforeVersion = project.ChangeVersion;
+            try
+            {
+                GridNamingService.Renumber(project, source);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Equal("Project changed while Grid renumber targets were being enumerated. Retry renumbering against the current project state.", ex.Message);
+                True(source.CountRead);
+                True(!source.EnumeratorRequested);
+                Equal(beforeVersion + 1, project.ChangeVersion);
+                return;
+            }
+
+            throw new Exception("Expected Grid renumber version-drift rejection after Count access.");
+        }
+
+        private static void ExactCapacityCountedSourceRemainsAccepted()
+        {
+            var project = Project();
+            var ids = new List<string>(MaxGridBatch);
+            for (var index = 1; index <= MaxGridBatch; index++)
+            {
+                var id = "G-LIMIT-" + index;
+                Grid(project, id);
+                ids.Add(id);
+            }
+
+            var beforeVersion = project.ChangeVersion;
+            var plan = GridNamingService.Renumber(project, ids);
+            Equal(MaxGridBatch, plan.Count);
+            Equal(beforeVersion + 1, project.ChangeVersion);
+            Equal("1", plan[0].Label);
+            Equal(MaxGridBatch.ToString(), plan[MaxGridBatch - 1].Label);
+        }
+
+        private sealed class OversizedGenericCollection : ICollection<string>
+        {
+            public int Count => MaxGridBatch + 1;
+            public bool IsReadOnly => true;
+            public bool EnumeratorRequested { get; private set; }
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                EnumeratorRequested = true;
+                throw new Exception("Oversized generic Grid source should not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void Add(string item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(string item) => false;
+            public void CopyTo(string[] array, int arrayIndex) => throw new NotSupportedException();
+            public bool Remove(string item) => throw new NotSupportedException();
+        }
+
+        private sealed class OversizedReadOnlyCollection : IReadOnlyCollection<string>
+        {
+            public int Count => MaxGridBatch + 1;
+            public bool EnumeratorRequested { get; private set; }
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                EnumeratorRequested = true;
+                throw new Exception("Oversized read-only Grid source should not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class OversizedNonGenericCollection : IEnumerable<string>, ICollection
+        {
+            public int Count => MaxGridBatch + 1;
+            public bool IsSynchronized => false;
+            public object SyncRoot => this;
+            public bool EnumeratorRequested { get; private set; }
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                EnumeratorRequested = true;
+                throw new Exception("Oversized non-generic Grid source should not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void CopyTo(Array array, int index) => throw new NotSupportedException();
+        }
+
+        private sealed class ConflictingKnownCountCollection : ICollection<string>, IReadOnlyCollection<string>, ICollection
+        {
+            public int Count
+            {
+                get
+                {
+                    GenericCountRead = true;
+                    return 1;
+                }
+            }
+
+            int IReadOnlyCollection<string>.Count
+            {
+                get
+                {
+                    ReadOnlyCountRead = true;
+                    return 2;
+                }
+            }
+
+            int ICollection.Count
+            {
+                get
+                {
+                    NonGenericCountRead = true;
+                    return MaxGridBatch + 1;
+                }
+            }
+
+            public bool GenericCountRead { get; private set; }
+            public bool ReadOnlyCountRead { get; private set; }
+            public bool NonGenericCountRead { get; private set; }
+            public bool EnumeratorRequested { get; private set; }
+            public bool IsReadOnly => true;
+            public bool IsSynchronized => false;
+            public object SyncRoot => this;
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                EnumeratorRequested = true;
+                throw new Exception("Conflicting known-count Grid source should not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void Add(string item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(string item) => false;
+            public void CopyTo(string[] array, int arrayIndex) => throw new NotSupportedException();
+            public bool Remove(string item) => throw new NotSupportedException();
+            public void CopyTo(Array array, int index) => throw new NotSupportedException();
+        }
+
+        private sealed class VersionMutatingCountCollection : ICollection<string>
+        {
+            private readonly ProjectState _project;
+
+            public VersionMutatingCountCollection(ProjectState project)
+            {
+                _project = project;
+            }
+
+            public int Count
+            {
+                get
+                {
+                    CountRead = true;
+                    _project.Touch();
+                    return 1;
+                }
+            }
+
+            public bool CountRead { get; private set; }
+            public bool EnumeratorRequested { get; private set; }
+            public bool IsReadOnly => true;
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                EnumeratorRequested = true;
+                throw new Exception("Version-mutating Count source should not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void Add(string item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(string item) => false;
+            public void CopyTo(string[] array, int arrayIndex) => throw new NotSupportedException();
+            public bool Remove(string item) => throw new NotSupportedException();
         }
 
         private static ProjectState Project() => new ProjectState("grid-naming", "Grid Naming");

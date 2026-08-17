@@ -62,20 +62,21 @@ namespace QS3D.Core.Export
         public static IfcRoundTripQuantityEvidenceSet Create(IEnumerable<IfcRoundTripQuantityEvidence> evidence)
         {
             if (evidence == null) throw new ArgumentNullException(nameof(evidence));
-            if (TryGetKnownCount(evidence, out var knownCount) && knownCount > MaxCandidates)
+            var knownCount = TryGetKnownCount(evidence, out var conflictingKnownCounts);
+            if (knownCount.HasValue && knownCount.Value > MaxCandidates)
                 ThrowTooManyCandidates();
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("IFC round-trip quantity evidence source exposes conflicting known Count values.");
 
             var candidates = new List<IfcRoundTripQuantityEvidence>();
             foreach (var candidate in evidence)
             {
                 if (candidates.Count == MaxCandidates)
                     ThrowTooManyCandidates();
+                if (candidate == null)
+                    throw new ArgumentException("Quantity evidence collection cannot contain null entries.", nameof(evidence));
                 candidates.Add(candidate);
             }
-
-            for (var index = 0; index < candidates.Count; index++)
-                if (candidates[index] == null)
-                    throw new ArgumentException("Quantity evidence collection cannot contain null entries.", nameof(evidence));
 
             candidates.Sort(IfcRoundTripQuantityEvidenceComparer.Instance);
             var groups = new List<IfcRoundTripQuantityEvidenceGroup>();
@@ -104,28 +105,28 @@ namespace QS3D.Core.Export
             return new IfcRoundTripQuantityEvidenceSet(Array.AsReadOnly(groups.ToArray()));
         }
 
-        private static bool TryGetKnownCount(IEnumerable<IfcRoundTripQuantityEvidence> evidence, out int count)
+        private static int? TryGetKnownCount(
+            IEnumerable<IfcRoundTripQuantityEvidence> evidence,
+            out bool conflictingKnownCounts)
         {
+            conflictingKnownCounts = false;
+            int? knownCount = null;
+
             if (evidence is ICollection<IfcRoundTripQuantityEvidence> collection)
-            {
-                count = collection.Count;
-                return true;
-            }
-
+                knownCount = ObserveKnownCount(knownCount, collection.Count, ref conflictingKnownCounts);
             if (evidence is IReadOnlyCollection<IfcRoundTripQuantityEvidence> readOnlyCollection)
-            {
-                count = readOnlyCollection.Count;
-                return true;
-            }
-
+                knownCount = ObserveKnownCount(knownCount, readOnlyCollection.Count, ref conflictingKnownCounts);
             if (evidence is ICollection nonGenericCollection)
-            {
-                count = nonGenericCollection.Count;
-                return true;
-            }
+                knownCount = ObserveKnownCount(knownCount, nonGenericCollection.Count, ref conflictingKnownCounts);
 
-            count = 0;
-            return false;
+            return knownCount;
+        }
+
+        private static int ObserveKnownCount(int? current, int observed, ref bool conflictingKnownCounts)
+        {
+            if (current.HasValue && current.Value != observed)
+                conflictingKnownCounts = true;
+            return !current.HasValue || observed > current.Value ? observed : current.Value;
         }
 
         private static void ThrowTooManyCandidates()

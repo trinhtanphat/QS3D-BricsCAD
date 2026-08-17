@@ -31,6 +31,7 @@ namespace QS3D.Core.SmokeTests
             PersistenceHardeningSmoke.Run();
             LicenseVerifierSmoke.Run();
             AdvancedDomainSmoke.Run();
+            CostBenchmarkMedianPrecisionSmoke.Run();
             HardeningRegressionSmoke.Run();
             ReviewHardeningSmoke.Run();
             Ed2NumericParitySmoke.Run();
@@ -127,6 +128,7 @@ namespace QS3D.Core.SmokeTests
             ProjectInterchangeSnapshotDiffSmoke.Run();
             ProjectInterchangeImportResolutionPlannerSmoke.Run();
             ProjectInterchangeAppendOnlyImporterSmoke.Run();
+            IfcRoundTripQuantityEvidenceNullFailFastSmoke.Run();
             BcfIssueExchangeSmoke.Run();
             BcfZipPackageSmoke.Run();
             RegenerationSubsetSmoke.Run();
@@ -137,6 +139,9 @@ namespace QS3D.Core.SmokeTests
             ProjectStateSnapshotElementIdentitySmoke.Run();
             ProjectStateSnapshotFamilyIdentitySmoke.Run();
             ProjectPersistenceCheckpointSmoke.Run();
+            ProjectMetadataBoundSmoke.Run();
+            ProjectZoneAssignmentBoundSmoke.Run();
+            ProjectFamilyAssignmentBoundSmoke.Run();
             ProjectElementCategoryIntegritySmoke.Run();
             SelectionStateSmoke.Run();
             BulkEditCanonicalizationSmoke.Run();
