@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Xml;
@@ -235,11 +236,7 @@ namespace QS3D.Core.Export
             string overflowMessage)
         {
             if (values == null) throw new ArgumentNullException(parameterName);
-
-            if (values is ICollection<T> collection && collection.Count > maximumCount)
-                throw new ArgumentException(overflowMessage, parameterName);
-            if (values is IReadOnlyCollection<T> readOnlyCollection && readOnlyCollection.Count > maximumCount)
-                throw new ArgumentException(overflowMessage, parameterName);
+            ValidateKnownCounts(values, maximumCount, parameterName, overflowMessage);
 
             var items = new List<T>();
             var observedCount = 0;
@@ -252,6 +249,46 @@ namespace QS3D.Core.Export
             }
 
             return items;
+        }
+
+        private static void ValidateKnownCounts<T>(
+            IEnumerable<T> values,
+            int maximumCount,
+            string parameterName,
+            string overflowMessage)
+        {
+            int? knownCount = null;
+            var invalidKnownCount = false;
+            var conflictingKnownCounts = false;
+
+            void ObserveKnownCount(int count)
+            {
+                if (count > maximumCount)
+                    throw new ArgumentException(overflowMessage, parameterName);
+                if (count < 0)
+                {
+                    invalidKnownCount = true;
+                    return;
+                }
+                if (knownCount.HasValue && knownCount.Value != count)
+                {
+                    conflictingKnownCounts = true;
+                    return;
+                }
+                knownCount = count;
+            }
+
+            if (values is ICollection<T> collection)
+                ObserveKnownCount(collection.Count);
+            if (values is IReadOnlyCollection<T> readOnlyCollection)
+                ObserveKnownCount(readOnlyCollection.Count);
+            if (values is ICollection nonGenericCollection)
+                ObserveKnownCount(nonGenericCollection.Count);
+
+            if (invalidKnownCount)
+                throw new ArgumentException("BCF collection reports a negative known Count.", parameterName);
+            if (conflictingKnownCounts)
+                throw new ArgumentException("BCF collection reports conflicting known Count values.", parameterName);
         }
 
         internal static string RequireBcfGuid(string value, string parameterName)
