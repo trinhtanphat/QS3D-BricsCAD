@@ -20,7 +20,12 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class WorkspacePanel
     {
         private static readonly bool Blt3dFiveZoneRuntimeLayoutRegistered = RegisterBlt3dFiveZoneRuntimeLayout();
+        private GridSplitter? _blt3dRuntimeVerticalSplitter;
 
+        // WorkspacePanel.CompactShell.cs already owns the type's single explicit static constructor.
+        // That constructor removes beforefieldinit for the complete partial type, so this field
+        // initializer and the runtime-repair registration execute deterministically before the
+        // first WorkspacePanel instance without declaring a duplicate static constructor here.
         private static bool RegisterBlt3dFiveZoneRuntimeLayout()
         {
             EventManager.RegisterClassHandler(
@@ -58,15 +63,27 @@ namespace QS3D.BricsCAD.V25.UI
             var modelPane = workspace.Children
                 .OfType<Border>()
                 .FirstOrDefault(child => Grid.GetColumn(child) == 0);
+
+            // Reassertion must be idempotent. The first pass deliberately moves this pane from
+            // column 2 to column 0, so rediscover it by its owned controls rather than by the
+            // original compatibility-layout column.
             var familyPropertiesPane = workspace.Children
                 .OfType<Grid>()
                 .FirstOrDefault(child =>
-                    Grid.GetColumn(child) == 2 &&
                     IsVisualDescendant(child, FamilyList) &&
                     IsVisualDescendant(child, PropertyList));
-            var verticalSplitter = workspace.Children
-                .OfType<GridSplitter>()
-                .FirstOrDefault(child => Grid.GetColumn(child) == 1);
+
+            // Likewise, the first pass moves the original column-1 splitter into row 1/column 0.
+            // Keep the exact splitter instance for later settle passes; rediscover only when the
+            // host has recreated/reparented the workspace tree.
+            var verticalSplitter = _blt3dRuntimeVerticalSplitter;
+            if (verticalSplitter == null || !ReferenceEquals(verticalSplitter.Parent, workspace))
+            {
+                verticalSplitter = workspace.Children
+                    .OfType<GridSplitter>()
+                    .FirstOrDefault(child => Grid.GetColumn(child) == 1);
+                _blt3dRuntimeVerticalSplitter = verticalSplitter;
+            }
 
             if (modelPane == null || familyPropertiesPane == null || verticalSplitter == null)
                 return;
