@@ -63,8 +63,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     if (string.Equals(currentId, BimTabId, StringComparison.OrdinalIgnoreCase) &&
                         _bimSettleTicksRemaining > 0)
                     {
-                        _bimSettleTicksRemaining--;
                         ReassertBimWorkspace();
+                        _bimSettleTicksRemaining--;
                     }
                     return;
                 }
