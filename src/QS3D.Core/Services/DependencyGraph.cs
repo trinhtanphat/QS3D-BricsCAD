@@ -7,6 +7,8 @@ namespace QS3D.Core.Services
 {
     public sealed class DependencyGraph
     {
+        private const int MaxElementInputCount = 10000;
+
         private sealed class VisitFrame
         {
             public VisitFrame(ProjectElement element) { Element = element; }
@@ -21,13 +23,18 @@ namespace QS3D.Core.Services
         public void Rebuild(IEnumerable<ProjectElement> elements)
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
+            RejectKnownOversizedInput(elements, "Dependency graph rebuild");
 
             var next = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
             var nextElements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             var processedDependencies = new List<KeyValuePair<ProjectElement, HashSet<string>>>();
             var enumerationVersion = _rebuildVersion;
+            var elementCount = 0;
             foreach (var element in elements)
             {
+                elementCount++;
+                if (elementCount > MaxElementInputCount)
+                    throw new InvalidOperationException("Dependency graph rebuild exceeds the supported " + MaxElementInputCount + " element limit.");
                 if (element == null) throw new InvalidOperationException("Dependency graph cannot contain a null semantic element.");
                 if (nextElements.ContainsKey(element.Id))
                     throw new InvalidOperationException("Dependency graph contains duplicate semantic element id: " + element.Id);
@@ -124,9 +131,12 @@ namespace QS3D.Core.Services
         public IReadOnlyList<ProjectElement> TopologicalDirtyOrder(IEnumerable<ProjectElement> elements)
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
+            RejectKnownOversizedInput(elements, "Dependency ordering");
             var materialized = new List<ProjectElement>();
             foreach (var element in elements)
             {
+                if (materialized.Count >= MaxElementInputCount)
+                    throw new InvalidOperationException("Dependency ordering exceeds the supported " + MaxElementInputCount + " element limit.");
                 if (element == null) throw new InvalidOperationException("Dependency ordering cannot contain a null semantic element.");
                 materialized.Add(element);
             }
@@ -178,6 +188,14 @@ namespace QS3D.Core.Services
                 }
             }
             return result.AsReadOnly();
+        }
+
+        private static void RejectKnownOversizedInput(IEnumerable<ProjectElement> elements, string operation)
+        {
+            if (elements is ICollection<ProjectElement> collection && collection.Count > MaxElementInputCount)
+                throw new InvalidOperationException(operation + " exceeds the supported " + MaxElementInputCount + " element limit.");
+            if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection && readOnlyCollection.Count > MaxElementInputCount)
+                throw new InvalidOperationException(operation + " exceeds the supported " + MaxElementInputCount + " element limit.");
         }
 
         private static void ValidateDependencies(ProjectElement element)
