@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using QS3D.Core.Formulas;
 
@@ -42,6 +43,24 @@ namespace QS3D.Core.SmokeTests
                 ["Rate"] = 4.0
             };
             Near(10.0, evaluator.Evaluate("_x + A1 + a.b + rate", validIdentifiers), 1e-12, "valid identifier grammar and case-insensitive lookup");
+
+            var exactBound = BuildVariables(4096);
+            Near(1.0, evaluator.Evaluate("v0", exactBound), 1e-12, "exact variable-count bound");
+
+            var overBound = BuildVariables(4097);
+            Throws<InvalidOperationException>(() => evaluator.Evaluate("v0", overBound), "variable-count one over bound");
+
+            var reportedOversize = new ReportedOversizeDictionary();
+            Throws<InvalidOperationException>(() => evaluator.Evaluate("v0", reportedOversize), "reported oversized variable count rejected before enumeration");
+            if (reportedOversize.EnumerationAttempted)
+                throw new InvalidOperationException("reported oversized variable count: evaluator enumerated after the count guard should have rejected input.");
+        }
+
+        private static Dictionary<string, double> BuildVariables(int count)
+        {
+            var result = new Dictionary<string, double>(count, StringComparer.Ordinal);
+            for (var i = 0; i < count; i++) result.Add("v" + i, i + 1d);
+            return result;
         }
 
         private static void Near(double expected, double actual, double tolerance, string label)
@@ -62,6 +81,30 @@ namespace QS3D.Core.SmokeTests
             }
 
             throw new InvalidOperationException($"{label}: expected {typeof(TException).Name}.");
+        }
+
+        private sealed class ReportedOversizeDictionary : IReadOnlyDictionary<string, double>
+        {
+            public bool EnumerationAttempted { get; private set; }
+            public int Count => 4097;
+            public IEnumerable<string> Keys => Array.Empty<string>();
+            public IEnumerable<double> Values => Array.Empty<double>();
+            public double this[string key] => throw new KeyNotFoundException();
+
+            public bool ContainsKey(string key) => false;
+            public bool TryGetValue(string key, out double value)
+            {
+                value = default;
+                return false;
+            }
+
+            public IEnumerator<KeyValuePair<string, double>> GetEnumerator()
+            {
+                EnumerationAttempted = true;
+                throw new InvalidOperationException("Enumeration should not occur for an oversized reported count.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
     }
 }
