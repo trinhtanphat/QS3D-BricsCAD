@@ -104,26 +104,47 @@ namespace QS3D.Core.Export
 
         private static bool TryGetKnownCount(IEnumerable<IfcRoundTripQuantityEvidence> evidence, out int count)
         {
+            var hasKnownCount = false;
+            var firstKnownCount = 0;
+            var maximumKnownCount = 0;
+            var conflictingKnownCounts = false;
+
             if (evidence is ICollection<IfcRoundTripQuantityEvidence> collection)
-            {
-                count = collection.Count;
-                return true;
-            }
+                ObserveKnownCount(collection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
 
             if (evidence is IReadOnlyCollection<IfcRoundTripQuantityEvidence> readOnlyCollection)
-            {
-                count = readOnlyCollection.Count;
-                return true;
-            }
+                ObserveKnownCount(readOnlyCollection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
 
             if (evidence is ICollection nonGenericCollection)
-            {
-                count = nonGenericCollection.Count;
+                ObserveKnownCount(nonGenericCollection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+
+            count = maximumKnownCount;
+            if (maximumKnownCount > MaxCandidates)
                 return true;
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("IFC round-trip quantity evidence source reports conflicting known counts.");
+            return hasKnownCount;
+        }
+
+        private static void ObserveKnownCount(
+            int candidate,
+            ref bool hasKnownCount,
+            ref int firstKnownCount,
+            ref int maximumKnownCount,
+            ref bool conflictingKnownCounts)
+        {
+            if (!hasKnownCount)
+            {
+                hasKnownCount = true;
+                firstKnownCount = candidate;
+                maximumKnownCount = candidate;
+                return;
             }
 
-            count = 0;
-            return false;
+            if (candidate != firstKnownCount)
+                conflictingKnownCounts = true;
+            if (candidate > maximumKnownCount)
+                maximumKnownCount = candidate;
         }
 
         private static void ThrowTooManyCandidates()
