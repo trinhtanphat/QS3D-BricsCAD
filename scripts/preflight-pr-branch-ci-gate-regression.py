@@ -62,6 +62,15 @@ def payload_regressions(gate):
     check(base_repo == "trinhtanphat/QS3D-BricsCAD", "base repo drifted")
     check(created_at == datetime(2026, 8, 16, 10, tzinfo=timezone.utc), "creation timestamp drifted")
 
+    offset_event = valid_event()
+    offset_event["pull_request"]["created_at"] = "2026-08-16T12:00:00+02:00"
+    offset_qualified = gate.qualify_pr_payload(offset_event, "trinhtanphat/QS3D-BricsCAD")
+    check(offset_qualified is not None, "offset-aware GitHub timestamp must remain valid")
+    check(
+        offset_qualified[3] == datetime(2026, 8, 16, 10, tzinfo=timezone.utc),
+        "offset-aware GitHub timestamp must normalize to UTC",
+    )
+
     mutations = (
         ("pull_request payload", {"pull_request": []}),
         ("pull_request.user", {"pull_request.user": "owner"}),
@@ -79,6 +88,24 @@ def payload_regressions(gate):
             target = target[part]
         target[parts[-1]] = value
         expect_runtime(lambda event=event, label=label: gate.qualify_pr_payload(event, "trinhtanphat/QS3D-BricsCAD"), label)
+
+    canonicality_mutations = (
+        ("pull_request.user.login", " trinhtanphat ", "canonical"),
+        ("pull_request.head.ref", " agent/worker/fix", "canonical"),
+        ("pull_request.head.sha", "a" * 40 + " ", "canonical"),
+        ("pull_request.head.repo.full_name", "trinhtanphat/QS3D-BricsCAD ", "canonical"),
+        ("pull_request.base.repo.full_name", " trinhtanphat/QS3D-BricsCAD", "canonical"),
+        ("pull_request.created_at", " 2026-08-16T10:00:00Z", "canonical"),
+        ("pull_request.created_at", "2026-08-16T10:00:00", "explicit timezone"),
+    )
+    for path, value, message in canonicality_mutations:
+        event = valid_event()
+        target = event
+        parts = path.split(".")
+        for part in parts[:-1]:
+            target = target[part]
+        target[parts[-1]] = value
+        expect_runtime(lambda event=event, message=message: gate.qualify_pr_payload(event, "trinhtanphat/QS3D-BricsCAD"), message)
 
     event = valid_event()
     event["pull_request"]["head"]["sha"] = "not-a-sha"
@@ -116,6 +143,11 @@ def run_regressions(gate):
     }
     check(gate.run_qualifies(base, "agent/worker/fix", "a" * 40, opened), "valid attempt-1 evidence must qualify")
 
+    offset = dict(base)
+    offset["created_at"] = "2026-08-16T11:50:00+02:00"
+    offset["updated_at"] = "2026-08-16T11:59:00+02:00"
+    check(gate.run_qualifies(offset, "agent/worker/fix", "a" * 40, opened), "aware offset timestamps must qualify")
+
     for malformed in (True, False, 0, -1, "", "1.0", "abc", [], {}):
         candidate = dict(base)
         candidate["run_attempt"] = malformed
@@ -126,11 +158,19 @@ def run_regressions(gate):
     string_attempt["run_attempt"] = "1"
     check(gate.run_qualifies(string_attempt, "agent/worker/fix", "a" * 40, opened), "canonical string attempt 1 should qualify")
 
-    for field, malformed in (("created_at", []), ("updated_at", {}), ("updated_at", "not-a-time")):
+    timestamp_failures = (
+        ("created_at", []),
+        ("updated_at", {}),
+        ("updated_at", "not-a-time"),
+        ("created_at", "2026-08-16T09:50:00"),
+        ("updated_at", "2026-08-16T09:59:00"),
+        ("created_at", "2026-08-16T09:50:00Z "),
+    )
+    for field, malformed in timestamp_failures:
         candidate = dict(base)
         candidate[field] = malformed
         check(not gate.run_qualifies(candidate, "agent/worker/fix", "a" * 40, opened),
-              f"malformed {field} must fail closed")
+              f"malformed/noncanonical {field} must fail closed")
 
 
 def event_file_regressions(gate):
@@ -188,7 +228,7 @@ def main():
     check("live admission check not requested" in output.getvalue(), "hermetic aggregate mode message drifted")
     check(not errors.getvalue(), "hermetic aggregate mode emitted unexpected stderr")
 
-    print("PASS: PR branch-CI admission gate fails closed on malformed event/run/API payloads while preserving valid evidence and hermetic aggregate execution.")
+    print("PASS: PR branch-CI admission gate rejects noncanonical evidence identities and naive timestamps while preserving aware-time exact-head evidence, malformed-payload containment, and hermetic aggregate execution.")
     return 0
 
 
