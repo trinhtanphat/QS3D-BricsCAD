@@ -170,6 +170,8 @@ namespace QS3D.Core.Domain
             var valueMeters = valueMm / MillimetersPerMeter;
             if (positive && valueMeters <= 0d)
                 throw new InvalidOperationException((key ?? "Giá trị") + " quá nhỏ để biểu diễn giá trị dương theo đơn vị nội bộ (m).");
+            if (valueMm != 0d && valueMeters == 0d)
+                throw new InvalidOperationException((key ?? "Giá trị") + " quá nhỏ để biểu diễn giá trị khác 0 theo đơn vị nội bộ (m).");
             return valueMm / MillimetersPerMeter;
         }
 
@@ -182,7 +184,7 @@ namespace QS3D.Core.Domain
             return FormatMetersAsMillimeters(
                 meters,
                 culture,
-                (key ?? "Giá trị") + " quá lớn để biểu diễn hữu hạn theo mm. Giá trị nội bộ: “" + raw + "”.");
+                (key ?? "Giá trị") + " không thể biểu diễn an toàn theo mm với định dạng hiện tại. Giá trị nội bộ: “" + raw + "”.");
         }
 
         public static string SuggestName(ElementCategory category, IReadOnlyDictionary<string, string> internalValues)
@@ -195,7 +197,7 @@ namespace QS3D.Core.Domain
                 return FormatMetersAsMillimeters(
                     meters,
                     CultureInfo.InvariantCulture,
-                    "Giá trị " + key + " quá lớn để biểu diễn hữu hạn theo mm khi tự đặt tên Family.");
+                    "Giá trị " + key + " không thể biểu diễn an toàn theo mm khi tự đặt tên Family.");
             }
 
             switch (category)
@@ -289,7 +291,13 @@ namespace QS3D.Core.Domain
             var millimeters = meters * MillimetersPerMeter;
             if (double.IsNaN(millimeters) || double.IsInfinity(millimeters))
                 throw new InvalidOperationException(invalidMessage);
-            return millimeters.ToString("0.###", culture);
+
+            var formatted = millimeters.ToString("0.###", culture);
+            if (millimeters != 0d &&
+                double.TryParse(formatted, NumberStyles.Float, culture, out var formattedMillimeters) &&
+                formattedMillimeters == 0d)
+                throw new InvalidOperationException(invalidMessage);
+            return formatted;
         }
 
         private static bool TryParseInternalMeters(string raw, CultureInfo fallbackCulture, out double meters)
