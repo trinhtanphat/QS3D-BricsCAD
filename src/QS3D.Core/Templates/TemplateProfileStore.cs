@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 using QS3D.Core.Audit;
@@ -27,6 +28,36 @@ namespace QS3D.Core.Templates
         public const string LayerMappingPrefix = "QS3D.LayerMapping:";
         public const string VisibleBqColumnsKey = "QS3D.BqVisibleColumns";
         private const long MaxTemplateFileBytes = 8L * 1024L * 1024L;
+
+        private sealed class BoundedMemoryStream : MemoryStream
+        {
+            private readonly long _maxBytes;
+
+            public BoundedMemoryStream(long maxBytes)
+            {
+                if (maxBytes < 0) throw new ArgumentOutOfRangeException(nameof(maxBytes));
+                _maxBytes = maxBytes;
+            }
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                EnsureWritable(count);
+                base.Write(buffer, offset, count);
+            }
+
+            public override void WriteByte(byte value)
+            {
+                EnsureWritable(1);
+                base.WriteByte(value);
+            }
+
+            private void EnsureWritable(int count)
+            {
+                if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+                if (Position > _maxBytes - count)
+                    throw new InvalidDataException("QS3D template exceeds 8 MiB.");
+            }
+        }
 
         private sealed class FamilyApplyPlan
         {
@@ -176,6 +207,7 @@ namespace QS3D.Core.Templates
             if (profile == null) throw new ArgumentNullException(nameof(profile));
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Template path is required.", nameof(path));
             Validate(profile);
+            EnsureSerializedLowerBoundWithinLimit(profile);
             var full = Path.GetFullPath(path);
             var payload = SerializeBounded(profile);
             var directory = Path.GetDirectoryName(full);
@@ -317,11 +349,22 @@ namespace QS3D.Core.Templates
 
         private static byte[] SerializeBounded(TemplateProfile profile)
         {
-            using (var stream = new MemoryStream())
+            try
             {
-                Serialize(profile).Save(stream, SaveOptions.DisableFormatting);
-                if (stream.Length > MaxTemplateFileBytes) throw new InvalidDataException("QS3D template exceeds 8 MiB.");
-                return stream.ToArray();
+                using (var stream = new BoundedMemoryStream(MaxTemplateFileBytes))
+                {
+                    Serialize(profile).Save(stream, SaveOptions.DisableFormatting);
+                    return stream.ToArray();
+                }
+            }
+            catch (InvalidDataException) { throw; }
+            catch (XmlException ex)
+            {
+                throw new InvalidDataException("Template contains characters that are invalid in XML.", ex);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new InvalidDataException("Template contains data that cannot be represented as XML.", ex);
             }
         }
 
@@ -337,6 +380,50 @@ namespace QS3D.Core.Templates
                     new XAttribute("id", x.Id), new XAttribute("category", x.Category), new XAttribute("output", x.OutputName), new XAttribute("expression", x.Expression), new XAttribute("version", x.Version)))),
                 new XElement("layerMappings", profile.LayerMappings.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).Select(x => new XElement("map", new XAttribute("pattern", x.Key), new XAttribute("category", x.Value)))),
                 new XElement("bqColumns", profile.VisibleBqColumns.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).Select(x => new XElement("column", new XAttribute("name", x))))));
+
+        private static void EnsureSerializedLowerBoundWithinLimit(TemplateProfile profile)
+        {
+            long estimate = 128;
+            AddEstimatedBytes(ref estimate, profile.Id, 8);
+            AddEstimatedBytes(ref estimate, profile.Name, 8);
+            foreach (var family in profile.Families)
+            {
+                AddEstimatedBytes(ref estimate, family.Id, 32);
+                AddEstimatedBytes(ref estimate, family.Name, 16);
+                AddEstimatedBytes(ref estimate, family.Category.ToString(), 16);
+                foreach (var property in family.Properties)
+                {
+                    AddEstimatedBytes(ref estimate, property.Key, 16);
+                    AddEstimatedBytes(ref estimate, property.Value ?? string.Empty, 16);
+                }
+            }
+            foreach (var rule in profile.QuantityRules)
+            {
+                AddEstimatedBytes(ref estimate, rule.Id, 32);
+                AddEstimatedBytes(ref estimate, rule.Category.ToString(), 16);
+                AddEstimatedBytes(ref estimate, rule.OutputName, 16);
+                AddEstimatedBytes(ref estimate, rule.Expression, 16);
+                AddEstimatedBytes(ref estimate, rule.Version, 16);
+            }
+            foreach (var mapping in profile.LayerMappings)
+            {
+                AddEstimatedBytes(ref estimate, mapping.Key, 24);
+                AddEstimatedBytes(ref estimate, mapping.Value, 16);
+            }
+            foreach (var column in profile.VisibleBqColumns.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase))
+                AddEstimatedBytes(ref estimate, column, 16);
+        }
+
+        private static void AddEstimatedBytes(ref long estimate, string value, int markupBytes)
+        {
+            if (estimate > MaxTemplateFileBytes - markupBytes)
+                throw new InvalidDataException("QS3D template exceeds 8 MiB.");
+            estimate += markupBytes;
+            var textBytes = Encoding.UTF8.GetByteCount(value ?? string.Empty);
+            if (textBytes > MaxTemplateFileBytes - estimate)
+                throw new InvalidDataException("QS3D template exceeds 8 MiB.");
+            estimate += textBytes;
+        }
 
         private static XDocument LoadDocument(string path)
         {
@@ -387,9 +474,31 @@ namespace QS3D.Core.Templates
         {
             try
             {
-                var root = Serialize(profile).Root ?? throw new InvalidDataException("Template serialization produced no root element.");
-                foreach (var attribute in root.DescendantsAndSelf().Attributes())
-                    XmlConvert.VerifyXmlChars(attribute.Value);
+                VerifyXmlText(profile.Id);
+                VerifyXmlText(profile.Name);
+                foreach (var family in profile.Families)
+                {
+                    VerifyXmlText(family.Id);
+                    VerifyXmlText(family.Name);
+                    foreach (var property in family.Properties)
+                    {
+                        VerifyXmlText(property.Key);
+                        VerifyXmlText(property.Value ?? string.Empty);
+                    }
+                }
+                foreach (var rule in profile.QuantityRules)
+                {
+                    VerifyXmlText(rule.Id);
+                    VerifyXmlText(rule.OutputName);
+                    VerifyXmlText(rule.Expression);
+                    VerifyXmlText(rule.Version);
+                }
+                foreach (var mapping in profile.LayerMappings)
+                {
+                    VerifyXmlText(mapping.Key);
+                    VerifyXmlText(mapping.Value);
+                }
+                foreach (var column in profile.VisibleBqColumns) VerifyXmlText(column ?? string.Empty);
             }
             catch (XmlException ex)
             {
@@ -400,6 +509,8 @@ namespace QS3D.Core.Templates
                 throw new InvalidDataException("Template contains data that cannot be represented as XML.", ex);
             }
         }
+
+        private static void VerifyXmlText(string value) => XmlConvert.VerifyXmlChars(value ?? string.Empty);
 
         private static ElementCategory RequiredCanonicalCategory(XElement element, string label)
         {
