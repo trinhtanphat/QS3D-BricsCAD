@@ -98,8 +98,9 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        // The owner-reference BIM tab coordinates the full BLT3D-familiar side workspace around
-        // the real BricsCAD viewport. Keep this explicit so the ordinary Workspace command stays isolated.
+        // The owner-reference BIM tab intentionally coordinates all three QS3D palettes around
+        // the real BricsCAD viewport. It is explicit so the ordinary Workspace command stays
+        // isolated while the BLT3D-familiar BIM surface restores the complete five-region view.
         public static void ShowBimWorkspace()
         {
             try
@@ -110,7 +111,7 @@ namespace QS3D.BricsCAD.V25
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
                 _rightPanel?.Refresh();
                 _quantityInsightPanel?.RefreshQuantityInsights();
-                _workspacePanel?.SetStatus("MÔ HÌNH BIM • BLT3D workspace • viewport BricsCAD native ở giữa • quản lý + diễn giải khối lượng bên phải.");
+                _workspacePanel?.SetStatus("MÔ HÌNH BIM • BLT3D workspace • viewport BricsCAD native ở giữa • Quản lý + Diễn giải bên phải.");
             }
             catch (Exception)
             {
