@@ -49,11 +49,12 @@ Before substantive work, read:
 4. `CI_POLICY.md`;
 5. fetch/read the latest `origin/main` and record its exact SHA;
 6. `docs/AGENT-WORK-REGISTRATION.md`;
-7. relevant open Issues/PRs plus `ACTIVE`/`BLOCKED` historical claims under `docs/agent-work-claims/`;
-8. `docs/REMOTE-AGENT-SCOPE.md`;
-9. the newest current handoff/status docs relevant to the task;
-10. `docs/LOCAL-AGENT-INBOX.md` for LOCAL_ONLY work;
-11. the exact feature/runbook documents required by the assigned lane.
+7. `docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md`;
+8. relevant open Issues/PRs plus `ACTIVE`/`BLOCKED` historical claims under `docs/agent-work-claims/`;
+9. `docs/REMOTE-AGENT-SCOPE.md`;
+10. the newest current handoff/status docs relevant to the task;
+11. `docs/LOCAL-AGENT-INBOX.md` for LOCAL_ONLY work;
+12. the exact feature/runbook documents required by the assigned lane.
 
 Current source wins over stale historical handoffs for implementation truth. `docs/LOCAL-AGENT-INBOX.md` is the live LOCAL_ONLY priority index when older local documents disagree on status/priority.
 
@@ -63,19 +64,32 @@ Before implementation, every normal agent must:
 
 1. fetch/read current `origin/main`;
 2. inspect relevant Issues, PRs, branches and active/blocking claims;
-3. choose a non-overlapping lane;
-4. create/update a GitHub Issue for the lane when practical, unless an existing owner-created issue already uniquely identifies the task;
-5. create a dedicated branch from the latest valid baseline, normally `agent/<agent-id>/<scope>`;
-6. put **all** task changes on that branch, including source, tests, scripts, workflows, docs, Markdown, claim/handoff/status files and chores;
-7. validate, commit and push only that branch;
-8. when watched/integration-relevant paths changed, wait for the automatic shared **branch-push CI on the exact current branch SHA to finish `SUCCESS` before opening a new PR**; a PR or draft PR must not be the first CI attempt;
-9. refresh `origin/main`; if the baseline moved, reconcile safely, push the reconciled branch and obtain fresh green branch CI before PR creation;
-10. open/update the PR; protected-main required checks and PR/integration CI then validate merge-candidate freshness as applicable;
-11. stop before merge unless this session has explicit owner merge/integration authorization.
+3. choose a non-overlapping lane and determine its stable **Lane-Key**, normally `issue-<number>`;
+4. identify the one current canonical owner/carrier for that Lane-Key, if any; an existing equivalent active carrier means `DUPLICATE_CARRIER / NO MUTATION`;
+5. create/update a GitHub Issue for the lane when practical, unless an existing owner-created issue already uniquely identifies the task;
+6. create a dedicated branch from the latest valid baseline, normally `agent/<agent-id>/<scope>`, only when no active canonical carrier already owns the Lane-Key;
+7. put **all** task changes on that one canonical branch, including source, tests, scripts, workflows, docs, Markdown, claim/handoff/status files and chores;
+8. validate, commit and push only that branch;
+9. when watched/integration-relevant paths changed, wait for the automatic shared **branch-push CI on the exact current branch SHA to finish `SUCCESS` before opening a new PR**; a PR or draft PR must not be the first CI attempt;
+10. refresh `origin/main`; if the baseline moved, reconcile the same canonical carrier safely, push the reconciled branch and obtain fresh green branch CI before PR creation;
+11. open/update the single canonical PR and include `Lane-Key`, canonical owner/session, canonical carrier and explicit supersession metadata; protected-main required checks and PR/integration CI then validate merge-candidate freshness as applicable;
+12. stop before merge unless this session has explicit owner merge/integration authorization.
 
 Historical Markdown work claims may still be used, but new/updated claim files belong on the task branch/PR. A claim does not need to be pushed to `main` before implementation starts.
 
 An Issue plus pushed task branch is the preferred visible coordination surface before PR creation. The PR becomes the review/handoff surface only after the applicable branch-CI gate is green.
+
+### Single-owner / single-carrier invariant
+
+`docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md` is mandatory for all concurrent agents and chat sessions.
+
+- One Lane-Key has at most one ACTIVE owner, one canonical task branch and one open canonical PR.
+- Stale, red, queued, behind or inconvenient work remains owned until explicitly released/superseded; another session must not create a cleaner competing carrier.
+- If a replacement carrier is genuinely required, explicitly record supersession first and close the old open PR before the replacement is represented as canonical.
+- Do **not** create branch-to-branch/internal PRs whose only purpose is to sync/replay `main` or another branch into the task branch. Reconcile the canonical task branch non-force, or rebuild one explicitly superseding carrier from current `main`.
+- Umbrella audit Issues do not authorize multiple sessions to create equivalent concrete fixes. Every concrete implementation needs its own unique Lane-Key, and an equivalent active lane is an automatic stop.
+
+A clean Git merge does not prove semantic non-overlap. Same production-file ownership or equivalent behavior remains a collision signal even when Lane-Keys differ.
 
 ## Mandatory sync discipline
 
