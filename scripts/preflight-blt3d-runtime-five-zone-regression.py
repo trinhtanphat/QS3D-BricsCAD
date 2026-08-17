@@ -6,7 +6,9 @@ ROOT = Path(__file__).resolve().parents[1]
 PALETTE = ROOT / "src" / "QS3D.BricsCAD.V25" / "PaletteCoordinator.cs"
 ACTIVATION = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "BltBimWorkspaceActivationCoordinator.cs"
 LAYOUT = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
+PROPERTIES = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.DedicatedPropertiesPalette.cs"
 COMPACT = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.CompactShell.cs"
+STORE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Services" / "UserUiLayoutStore.cs"
 errors = []
 
 
@@ -20,24 +22,34 @@ def read(path: Path) -> str:
 palette = read(PALETTE)
 activation = read(ACTIVATION)
 layout = read(LAYOUT)
+properties = read(PROPERTIES)
 compact = read(COMPACT)
+store = read(STORE)
 
-# #2396 is specifically the BIM-tab host-settle repair. Keep the ordinary QS3D/Workspace entry
-# point isolated; the separate #2399 follow-up owns any owner-facing activation change and a
-# distinct QS3D Properties plugin region/palette.
+# Owner-facing QS3D / BIM activation restores four plugin palettes. The ordinary Workspace-only
+# helper stays isolated and preserves its historical embedded editor; BIM dynamically moves that
+# exact editor into the distinct QS3D Properties PaletteSet.
 for token in (
-    "public static void Show() => ShowWorkspace();",
+    "public static void Show() => ShowBimWorkspace();",
     "public static void ShowWorkspace()",
     "SetVisibility(workspace: true, right: false, quantityInsight: false);",
-    "EnsureBimDockContract();",
     "SetVisibility(workspace: true, right: true, quantityInsight: true);",
+    "private static readonly Guid PropertiesGuid",
+    "private static PaletteSet? _properties;",
+    "public static bool IsPropertiesVisible",
+    'new PaletteSet("QS3D — Thuộc tính", PropertiesGuid)',
+    "CreatePropertiesPaletteVisual()",
+    "SetDedicatedPropertiesPaletteActive(false)",
+    "SetDedicatedPropertiesPaletteActive(true)",
     "_workspace.Dock = DockSides.Left;",
+    "_properties.Dock = DockSides.Left;",
     "_right.Dock = DockSides.Right;",
     "_quantityInsight.Dock = DockSides.Right;",
+    "Thuộc tính QS3D palette riêng bên trái",
     "viewport BricsCAD native ở giữa",
 ):
     if token not in palette:
-        errors.append("PaletteCoordinator runtime contract missing: " + token)
+        errors.append("PaletteCoordinator dedicated-properties contract missing: " + token)
 
 for token in (
     'private const string BimTabId = "QS3D_BIM";',
@@ -46,48 +58,66 @@ for token in (
     if token not in activation:
         errors.append("BIM activation contract missing: " + token)
 
+for token in (
+    "CreatePropertiesPaletteVisual",
+    "SetDedicatedPropertiesPaletteActive(bool active)",
+    "ownerGrid.Children.Remove(region);",
+    "host.Children.Add(region);",
+    "host.Children.Remove(region);",
+    "ownerGrid.Children.Add(region);",
+    "BindingOperations.SetBinding",
+    "new Binding(nameof(DataContext))",
+    "CollapseEmbeddedPropertiesSlot",
+    "RestoreEmbeddedPropertiesSlot",
+):
+    if token not in properties:
+        errors.append("dynamic QS3D Properties visual contract missing: " + token)
+
+for token in (
+    "PropertiesPaletteWidth",
+    "PropertiesPaletteHeight",
+    "PropertiesPaletteMinWidth",
+    "PropertiesPaletteMinHeight",
+):
+    if token not in store:
+        errors.append("QS3D Properties layout persistence missing: " + token)
+
 # WorkspacePanel is a partial type and C# permits only one static constructor for the whole type.
-# CompactShell owns that constructor; its presence removes beforefieldinit for every partial file,
-# making the BLT3D layout/repair static registrations run before the first panel instance.
 if "static WorkspacePanel()" not in compact:
     errors.append("WorkspacePanel deterministic type initializer missing from CompactShell")
-if "static WorkspacePanel()" in layout:
-    errors.append("BLT3D runtime layout must not declare a duplicate WorkspacePanel static constructor")
+if "static WorkspacePanel()" in layout or "static WorkspacePanel()" in properties:
+    errors.append("BLT3D dedicated-properties partials must not declare duplicate WorkspacePanel static constructors")
 
 for token in (
     "DispatcherPriority.SystemIdle",
     "ApplyBlt3dFiveZoneRuntimeLayout",
     "Grid.GetColumn(child) == 0",
     "IsVisualDescendant(child, FamilyList)",
-    "IsVisualDescendant(child, PropertyList)",
     "_blt3dRuntimeVerticalSplitter",
     "ReferenceEquals(verticalSplitter.Parent, workspace)",
     "Grid.SetRow(modelPane, 0);",
     "Grid.SetRow(verticalSplitter, 1);",
-    "Grid.SetRow(familyPropertiesPane, 2);",
+    "Grid.SetRow(familyPane, 2);",
     "verticalSplitter.ResizeDirection = GridResizeDirection.Rows;",
-    "familyPropertiesPane.RowDefinitions[2].Height = new GridLength(58, GridUnitType.Star);",
+    "if (_dedicatedPropertiesPaletteActive)",
+    "familyPane.RowDefinitions[2].Height = new GridLength(0);",
+    "PropertyList.MinHeight = 0;",
+    "familyPane.RowDefinitions[2].Height = new GridLength(58, GridUnitType.Star);",
+    "PropertyList.MinHeight = 120;",
 ):
     if token not in layout:
-        errors.append("left Model/Properties region contract missing: " + token)
+        errors.append("dynamic Model/Family/Properties runtime layout missing: " + token)
 
-# ApplyBlt3dFiveZoneRuntimeLayout is intentionally called repeatedly during the bounded host-docking
-# settle window. After pass 1, Family/Properties has already moved from column 2 to column 0; tying
-# rediscovery to the original column would make every later reassert a silent no-op.
-if "Grid.GetColumn(child) == 2" in layout:
-    errors.append("runtime reassert must rediscover Family/Properties independently of its original column")
-
-if "public static void Show() => ShowBimWorkspace();" in palette:
-    errors.append("#2396 must not absorb #2399 owner-facing QS3D activation semantics")
-
+if "public static void Show() => ShowWorkspace();" in palette:
+    errors.append("regression: owner-facing QS3D activation must restore the coordinated BIM surface")
 if "new Viewport" in layout or "Viewport3D" in layout:
     errors.append("runtime layout must not create a fake second 3D viewport")
 
-print("QS3D BLT3D runtime five-zone regression preflight")
+print("QS3D BLT3D dynamic dedicated Properties five-zone regression preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BIM-tab activation restores the coordinated BLT3D settle layout while ordinary QS3D/Workspace activation remains isolated for #2396; first-load class handlers are registered deterministically through the existing WorkspacePanel type initializer, repeated settle passes remain idempotent after the Family/Properties pane moves, and native BricsCAD modelspace remains the center viewport. Dedicated owner-facing QS3D activation / Properties-palette work remains #2399.")
+print("PASS: QS3D/BIM activation restores Model + dedicated QS3D Properties on the left and Management + Quantity on the right of native BricsCAD modelspace; ordinary ShowWorkspace keeps its embedded real Properties editor, BIM reparents that same editor without cloning state, and repeated host settle passes remain deterministic.")
