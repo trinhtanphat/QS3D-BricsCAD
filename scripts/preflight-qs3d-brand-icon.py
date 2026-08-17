@@ -33,15 +33,21 @@ def main() -> int:
     home = HOME.read_text(encoding="utf-8")
     bootstrap = BOOTSTRAP.read_text(encoding="utf-8")
 
+    # Canonical repository/product branding is the independently-authored QS3D red-X / green-V
+    # identity. Keep this guard strict: the two marks, their colors, and the product description
+    # are all required so a future branding edit cannot silently regress to a generic placeholder.
     for token in (
         "QS3D CAD",
-        "QS3D product family isometric precision cube mark",
-        "#061323",
-        "#168BFF",
-        "#33C5FF",
+        "QS3D original red X and green V BIM/CAD product mark",
+        "#E84A4A",
+        "#52BE6C",
+        'd="M108 122 222 282M222 122 108 282"',
+        'd="M270 207 329 286 422 124"',
     ):
-        require(asset, token, "repository branding asset")
+        require(asset, token, "repository red-X / green-V branding asset")
 
+    # The compact ribbon fallback remains a separate repository-owned QS3D glyph. This contract is
+    # intentionally preserved while the shell/repository product identity moves to red-X / green-V.
     for token in (
         "assets/branding/qs3d-logo.svg",
         "internal static class Qs3dBrandIconFactory",
@@ -52,7 +58,7 @@ def main() -> int:
         'Geometry.Parse("M16,5.75 L24.25,10.5 16,15.25 7.75,10.5 Z")',
         "image.Freeze();",
     ):
-        require(factory, token, "QS3D compact cube mark")
+        require(factory, token, "QS3D compact ribbon fallback mark")
 
     for token in (
         'new HomeButtonSpec("QS3D_HOME_SYSTEM_OBJECTS", "Đối tượng\\nhệ thống"',
@@ -65,7 +71,7 @@ def main() -> int:
 
     # The late bootstrap decorator must never regress an unclassified QS3D action back to the
     # old generic four-dot Objects placeholder. Rich buttons keep their own semantic images and
-    # truly unknown command-bearing buttons use the same repository-owned QS3D brand mark.
+    # truly unknown command-bearing buttons use the repository-owned compact QS3D fallback mark.
     for token in (
         "if (icon == RibbonIconKind.Qs3dLogo)",
         "return Qs3dBrandIconFactory.Create(pixelSize);",
@@ -84,9 +90,10 @@ def main() -> int:
             fail(f"QS3D ribbon branding must not replace BricsCAD host icon: {forbidden}")
 
     print(
-        "PASS: QS3D-owned system Ribbon action uses the repository-approved cube mark, unknown "
-        "QS3D command buttons cannot fall back to the generic Objects placeholder, and BricsCAD "
-        "host/application icon ownership remains untouched."
+        "PASS: canonical repository branding keeps the original QS3D red-X / green-V product mark, "
+        "the system Ribbon action keeps its repository-owned compact fallback glyph, unknown QS3D "
+        "command buttons cannot regress to the generic Objects placeholder, and BricsCAD host/icon "
+        "ownership remains untouched."
     )
     return 0
 

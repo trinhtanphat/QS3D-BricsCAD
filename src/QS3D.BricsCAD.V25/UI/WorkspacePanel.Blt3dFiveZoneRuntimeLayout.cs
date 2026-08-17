@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Threading;
 
 namespace QS3D.BricsCAD.V25.UI
@@ -81,9 +82,25 @@ namespace QS3D.BricsCAD.V25.UI
             if (modelPane == null || familyPane == null || columnSplitter == null)
                 return;
 
+            // Do not bind the content Width to ScrollViewer.ViewportWidth. BricsCAD PaletteSet can
+            // report a zero viewport during its first WPF measure; older runtime passes also clear
+            // the XAML MinWidth, which can turn that transient zero into a self-sustaining blank
+            // palette. Let the host-owned ScrollViewer stretch the content naturally instead.
+            BindingOperations.ClearBinding(root, FrameworkElement.WidthProperty);
+            root.Width = double.NaN;
             root.MinWidth = 0;
+            root.HorizontalAlignment = HorizontalAlignment.Stretch;
+            root.Visibility = Visibility.Visible;
+            root.Opacity = 1d;
+
+            WorkspaceOverflow.HorizontalContentAlignment = HorizontalAlignment.Stretch;
             WorkspaceOverflow.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
             WorkspaceOverflow.ScrollToHorizontalOffset(0);
+
+            workspace.MinWidth = 0;
+            workspace.HorizontalAlignment = HorizontalAlignment.Stretch;
+            workspace.Visibility = Visibility.Visible;
+            workspace.Opacity = 1d;
 
             // Match the owner screenshot inside the QS3D palette: narrow model/navigation column,
             // slim splitter, then a wider Family/Properties column. Retired legacy columns stay off.
@@ -123,6 +140,8 @@ namespace QS3D.BricsCAD.V25.UI
             Grid.SetColumn(modelPane, 0);
             Grid.SetRow(modelPane, 0);
             Grid.SetColumnSpan(modelPane, 1);
+            modelPane.Visibility = Visibility.Visible;
+            modelPane.Opacity = 1d;
 
             Grid.SetColumn(columnSplitter, 1);
             Grid.SetRow(columnSplitter, 0);
@@ -137,6 +156,8 @@ namespace QS3D.BricsCAD.V25.UI
             Grid.SetColumn(familyPane, 2);
             Grid.SetRow(familyPane, 0);
             Grid.SetColumnSpan(familyPane, 1);
+            familyPane.Visibility = Visibility.Visible;
+            familyPane.Opacity = 1d;
 
             if (familyPane.RowDefinitions.Count >= 3)
             {
