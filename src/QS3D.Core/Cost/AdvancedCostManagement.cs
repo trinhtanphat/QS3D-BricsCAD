@@ -680,11 +680,11 @@ namespace QS3D.Core.Cost
                 throw new ArgumentOutOfRangeException(nameof(retentionPercent));
             if (retentionPercent > 0m && retentionPercent / 100m == 0m)
                 throw new ArgumentOutOfRangeException(nameof(retentionPercent), retentionPercent, "Positive retention percentage is too small to preserve at decimal precision.");
-            if (AdvancedCostCollectionContract.TryGetKnownCount(contractItems, out var knownContractItemCount) &&
-                knownContractItemCount > AdvancedCostCollectionContract.MaximumEntries)
+            if (AdvancedCostCollectionContract.TryGetKnownCount(contractItems, out var knownContractCount) &&
+                knownContractCount > AdvancedCostCollectionContract.MaximumEntries)
                 AdvancedCostCollectionContract.ThrowTooManyEntries("Progress contract item collection");
-            if (AdvancedCostCollectionContract.TryGetKnownCount(claimLines, out var knownClaimLineCount) &&
-                knownClaimLineCount > AdvancedCostCollectionContract.MaximumEntries)
+            if (AdvancedCostCollectionContract.TryGetKnownCount(claimLines, out var knownClaimCount) &&
+                knownClaimCount > AdvancedCostCollectionContract.MaximumEntries)
                 AdvancedCostCollectionContract.ThrowTooManyEntries("Progress claim line collection");
 
             var contracts = new Dictionary<string, ProgressContractItem>(StringComparer.OrdinalIgnoreCase);
