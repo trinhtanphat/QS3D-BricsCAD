@@ -283,11 +283,14 @@ namespace QS3D.Core.Domain
 
         private static IReadOnlyList<ProjectElement> ResolveOwnedElements(ProjectState project, IEnumerable<ProjectElement> elements)
         {
+            var targetEnumerationVersion = project.ChangeVersion;
             RejectKnownOversizeTargetCollection(elements);
+            if (project.ChangeVersion != targetEnumerationVersion)
+                throw new InvalidOperationException("Project changed while Floor mutation targets were being counted. Retry the operation against the current project state.");
+
             var projectElements = ResolveProjectElements(project)
                 .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
 
-            var targetEnumerationVersion = project.ChangeVersion;
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             var observed = 0;
             foreach (var element in elements)
