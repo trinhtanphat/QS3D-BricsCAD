@@ -67,6 +67,7 @@ namespace QS3D.Core.Rebar
                 throw new ArgumentOutOfRangeException(label, "Shape rebar values must be finite.");
             var result = left - right;
             if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException("Shape rebar subtraction overflow: " + label);
+            if (right != 0d && result == left) throw new OverflowException("Shape rebar subtraction lost a nonzero value: " + label);
             return result;
         }
     }
