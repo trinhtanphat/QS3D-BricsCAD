@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             CommonAndMixedValuesAreStable();
             QuantitySignedZeroProjectionIsCanonical();
+            NegativeInjectedQuantityFailsClosed();
             QuantityKeysMustBeCanonical();
             PropertyKeysMustBeCanonical();
             ReferencePresenceCountsActualAssignments();
@@ -82,6 +83,21 @@ namespace QS3D.Core.SmokeTests
             Equal(0L, BitConverter.DoubleToInt64Bits(combined.Value.Value));
             Equal(long.MinValue, BitConverter.DoubleToInt64Bits(negativeElement.Quantities["LengthM"]));
             Equal(0L, BitConverter.DoubleToInt64Bits(positiveElement.Quantities["LengthM"]));
+            Equal(version, project.ChangeVersion);
+        }
+
+        private static void NegativeInjectedQuantityFailsClosed()
+        {
+            var project = BuildProject();
+            var element = project.FindElement("B-001")!;
+            element.Quantities["LengthM"] = -1d;
+            var version = project.ChangeVersion;
+
+            MustFail(
+                () => SemanticSelectionInspector.Inspect(project, new[] { element.Id }),
+                "Negative quantity state injected through the mutable quantity dictionary must fail closed at the semantic selection boundary.");
+
+            Equal(-1d, element.Quantities["LengthM"]);
             Equal(version, project.ChangeVersion);
         }
 
