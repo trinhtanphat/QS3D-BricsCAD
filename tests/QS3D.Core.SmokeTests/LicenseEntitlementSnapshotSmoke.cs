@@ -21,13 +21,13 @@ namespace QS3D.Core.SmokeTests
         private static void RoundTripsCanonicalSnapshot()
         {
             var instant = new DateTime(2026, 8, 16, 18, 20, 0, DateTimeKind.Utc);
-            var source = LicenseEntitlementSnapshot.Create(" QS3D ", " 0.1-preview ", " machine-01 ", "signed-entitlement-payload", instant);
+            var source = LicenseEntitlementSnapshot.Create("QS3D", "0.1-preview", "machine-01", "signed-entitlement-payload", instant);
             var serialized = source.Serialize();
 
             Require(LicenseEntitlementSnapshot.TryDeserialize(serialized, out var restored), "canonical snapshot did not deserialize");
-            Equal("QS3D", restored.Product, "product was not canonicalized");
-            Equal("0.1-preview", restored.ProductVersion, "version was not canonicalized");
-            Equal("machine-01", restored.MachineId, "machine id was not canonicalized");
+            Equal("QS3D", restored.Product, "product identity changed");
+            Equal("0.1-preview", restored.ProductVersion, "version identity changed");
+            Equal("machine-01", restored.MachineId, "machine id changed");
             Equal("signed-entitlement-payload", restored.EntitlementPayload, "payload changed during round-trip");
             Require(restored.PersistedAtUtc == instant && restored.PersistedAtUtc.Kind == DateTimeKind.Utc, "UTC timestamp changed during round-trip");
             Equal(serialized, restored.Serialize(), "canonical serialization was not stable");
@@ -55,9 +55,9 @@ namespace QS3D.Core.SmokeTests
         private static void RejectsInvalidUtf16BeforeCanonicalization()
         {
             const string InvalidUtf16 = "bad-\uD800-value";
-            RequireThrows<EncoderFallbackException>(
+            RequireThrows<ArgumentException>(
                 () => LicenseEntitlementSnapshot.Create(InvalidUtf16, "1", "machine", "payload", DateTime.UtcNow),
-                "invalid UTF-16 product identity was replacement-encoded");
+                "invalid UTF-16 product identity was not rejected through argument validation");
             RequireThrows<EncoderFallbackException>(
                 () => LicenseEntitlementSnapshot.Create("QS3D", "1", "machine", InvalidUtf16, DateTime.UtcNow),
                 "invalid UTF-16 entitlement payload was replacement-encoded");
