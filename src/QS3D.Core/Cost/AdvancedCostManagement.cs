@@ -720,7 +720,10 @@ namespace QS3D.Core.Cost
                     var rejected = requested - certified;
                     var remaining = available - certified;
                     var value = CostDecimalMath.MultiplyPreservingNonZero(certified, item.UnitRate, "progress certified line value");
-                    gross += value;
+                    gross = CostDecimalMath.AddPreservingNonZeroContribution(
+                        gross,
+                        value,
+                        "progress gross certified this period");
                     results.Add(new ProgressClaimLineResult(
                         item.ItemCode,
                         previous,
