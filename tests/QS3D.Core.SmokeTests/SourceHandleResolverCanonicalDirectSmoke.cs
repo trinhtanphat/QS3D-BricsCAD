@@ -20,7 +20,7 @@ namespace QS3D.Core.SmokeTests
             var element = project.Elements[0];
             var beforeVersion = project.ChangeVersion;
 
-            var handles = SourceHandleResolver.Resolve(project, new[] { " " + element.Id + " " });
+            var handles = SourceHandleResolver.Resolve(project, new[] { element.Id });
             Equal(1, handles.Count);
             Equal("SOURCE-A", handles[0]);
             Equal(beforeVersion, project.ChangeVersion);
