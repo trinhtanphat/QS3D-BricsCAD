@@ -64,13 +64,13 @@ namespace QS3D.Core.Domain
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var zone = FindRequired(project, zoneId);
 
-            var projectElements = ResolveProjectElements(project)
-                .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
-
             var targetEnumerationVersion = project.ChangeVersion;
             RequireAssignmentTargetCountWithinLimit(elements);
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Zone assignment targets were being counted. Retry assignment against the current project state.");
+
+            var projectElements = ResolveProjectElements(project)
+                .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
 
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             var observedEntries = 0;
