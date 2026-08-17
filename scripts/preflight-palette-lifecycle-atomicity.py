@@ -15,15 +15,18 @@ else:
     show_start = text.find("public static void Show()", ensure_start + 1)
     ensure = text[ensure_start:show_start] if ensure_start >= 0 and show_start > ensure_start else ""
     required_ensure = (
-        "if (_workspace != null && _right != null && _quantityInsight != null) return;",
-        "if (_workspace != null || _right != null || _quantityInsight != null) DisposeCore(false);",
+        "if (_workspace != null && _properties != null && _right != null && _quantityInsight != null) return;",
+        "if (_workspace != null || _properties != null || _right != null || _quantityInsight != null) DisposeCore(false);",
         "var layout = UserUiLayoutStore.Get();",
         "try",
         "_workspacePanel = new WorkspacePanel();",
+        "_propertiesVisual = _workspacePanel.DetachPropertiesPaletteVisual();",
         "_rightPanel = new RightPanel();",
         "_quantityInsightPanel = new QuantityInsightPanel();",
         '_workspace = new PaletteSet("QS3D — Mô hình", WorkspaceGuid)',
         '_workspace.AddVisual("Mô hình", _workspacePanel, true);',
+        '_properties = new PaletteSet("QS3D — Thuộc tính", PropertiesGuid)',
+        '_properties.AddVisual("Thuộc tính", _propertiesVisual, true);',
         '_right = new PaletteSet("QS3D — Bản vẽ & Lớp", RightGuid)',
         '_right.AddVisual("Quản lý", _rightPanel, true);',
         '_quantityInsight = new PaletteSet("QS3D — Diễn giải khối lượng", QuantityInsightGuid)',
@@ -36,11 +39,11 @@ else:
     for token in required_ensure:
         pos = ensure.find(token, cursor)
         if pos < 0:
-            errors.append("EnsureCreated missing ordered fail-atomic palette creation contract: " + token)
+            errors.append("EnsureCreated missing ordered fail-atomic four-palette creation contract: " + token)
             break
         cursor = pos + len(token)
 
-    if "if (_workspace != null || _right != null || _quantityInsight != null) Dispose();" in ensure:
+    if "if (_workspace != null || _properties != null || _right != null || _quantityInsight != null) Dispose();" in ensure:
         errors.append("partial palette recovery must not persist incomplete palette dimensions")
 
     dispose_start = text.find("public static void Dispose()")
@@ -50,10 +53,12 @@ else:
         "DisposeCore(true);",
         "private static void DisposeCore(bool persistLayout)",
         "if (persistLayout) PersistPaletteLayout();",
+        "DisposePalette(ref _properties);",
         "DisposePalette(ref _workspace);",
         "DisposePalette(ref _right);",
         "DisposePalette(ref _quantityInsight);",
         "_workspacePanel = null;",
+        "_propertiesVisual = null;",
         "_rightPanel = null;",
         "_quantityInsightPanel = null;",
         "private static void DisposePalette(ref PaletteSet? palette)",
@@ -67,7 +72,7 @@ else:
     for token in required_dispose:
         pos = dispose.find(token, cursor)
         if pos < 0:
-            errors.append("palette teardown missing ordered best-effort ownership contract: " + token)
+            errors.append("palette teardown missing ordered best-effort four-palette ownership contract: " + token)
             break
         cursor = pos + len(token)
 
@@ -80,6 +85,7 @@ else:
 
     for forbidden in (
         "_workspace.Dispose();",
+        "_properties.Dispose();",
         "_right.Dispose();",
         "_quantityInsight.Dispose();",
     ):
@@ -90,11 +96,13 @@ else:
         "PersistPaletteLayout();",
         "ResetPreservingVisibility();",
         "var workspaceVisible = IsWorkspaceVisible;",
+        "var propertiesVisible = IsPropertiesVisible;",
         "var rightVisible = IsRightPanelVisible;",
         "var quantityVisible = IsQuantityInsightVisible;",
-        "SetVisibility(workspaceVisible, rightVisible, quantityVisible);",
-        "private static void SetVisibility(bool workspace, bool right, bool quantityInsight)",
+        "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);",
+        "private static void SetVisibility(bool workspace, bool properties, bool right, bool quantityInsight)",
         "if (_workspace != null) _workspace.Visible = workspace;",
+        "if (_properties != null) _properties.Visible = properties;",
         "if (_right != null) _right.Visible = right;",
         "if (_quantityInsight != null) _quantityInsight.Visible = quantityInsight;",
         "UserUiLayoutStore.Update(layout =>",
@@ -109,4 +117,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: palette creation rolls back partial ownership without persisting incomplete dimensions; teardown isolates native Dispose and reset visibility flows through one centralized helper.")
+print("PASS: four-palette creation rolls back partial ownership without persisting incomplete dimensions; teardown isolates native Dispose and reset visibility flows through one centralized helper.")

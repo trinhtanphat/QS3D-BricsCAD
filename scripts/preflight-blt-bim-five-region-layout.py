@@ -28,7 +28,7 @@ else:
     if "EnsureBimDockContract();" not in bim:
         errors.append("BIM workspace must repair the dock contract before visibility")
     if "SetVisibility(workspace: true, right: true, quantityInsight: true);" not in bim:
-        errors.append("BIM workspace must show Workspace + Management + Quantity Insight together")
+        errors.append("BIM workspace must show Workspace + dedicated QS3D Properties + Management + Quantity Insight together")
     if "_quantityInsightPanel?.RefreshQuantityInsights();" not in bim:
         errors.append("BIM workspace must refresh Quantity Insight when it becomes visible")
     if "SetVisibility(workspace: false, right: true, quantityInsight: false);" not in management:
@@ -39,6 +39,8 @@ else:
     required_dock = (
         "_workspace.Dock != DockSides.Left",
         "_workspace.Dock = DockSides.Left;",
+        "_properties.Dock != DockSides.Left",
+        "_properties.Dock = DockSides.Left;",
         "_right.Dock != DockSides.Right",
         "_right.Dock = DockSides.Right;",
         "_quantityInsight.Dock != DockSides.Right",
@@ -48,10 +50,15 @@ else:
         if token not in dock:
             errors.append("BIM dock contract missing: " + token)
 
-    if "if (workspaceVisible && rightVisible)" not in reset or "EnsureBimDockContract();" not in reset:
-        errors.append("palette recreation must reapply the BIM dock contract while the coordinated side palettes remain visible")
-    if "SetVisibility(workspaceVisible, rightVisible, quantityVisible);" not in reset:
-        errors.append("palette recreation must preserve the user's actual visibility state")
+    if "if (workspaceVisible && propertiesVisible && rightVisible)" not in reset or "EnsureBimDockContract();" not in reset:
+        errors.append("palette recreation must reapply the BIM dock contract while the coordinated four-palette surface remains visible")
+    if "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);" not in reset:
+        errors.append("palette recreation must preserve the user's actual four-palette visibility state")
+
+    if "var properties = workspace && right && quantityInsight;" not in text:
+        errors.append("legacy three-argument BIM visibility path must enable dedicated QS3D Properties only for the coordinated BIM state")
+    if "if (_properties != null) _properties.Visible = properties;" not in text:
+        errors.append("dedicated QS3D Properties visibility must be controlled by the central visibility helper")
 
     legacy_hidden_bim = "SetVisibility(workspace: true, right: true, quantityInsight: false);"
     if legacy_hidden_bim in bim:
@@ -64,4 +71,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: explicit BIM mode shows the complete palette set around the native BricsCAD viewport, preserves isolated commands, and reapplies left/right docking after palette recreation.")
+print("PASS: explicit BIM mode shows Workspace + dedicated QS3D Properties + Management + Quantity around the native BricsCAD viewport, preserves isolated commands, and reapplies docking after palette recreation.")
