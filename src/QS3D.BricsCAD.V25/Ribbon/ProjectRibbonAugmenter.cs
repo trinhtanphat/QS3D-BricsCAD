@@ -1,7 +1,9 @@
 using System;
 using System.Collections;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using System.Windows.Input;
 using Bricscad.ApplicationServices;
 
@@ -23,10 +25,22 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private sealed class ButtonSpec
         {
-            public ButtonSpec(string id, string text, string command) { Id = id; Text = text; Command = command; }
+            public ButtonSpec(
+                string id,
+                string text,
+                string command,
+                RibbonIconKind icon = RibbonIconKind.Qs3dLogo)
+            {
+                Id = id;
+                Text = text;
+                Command = command;
+                Icon = icon;
+            }
+
             public string Id { get; }
             public string Text { get; }
             public string Command { get; }
+            public RibbonIconKind Icon { get; }
         }
 
         // Keep the canonical project command inventory in source so established workflows and
@@ -48,9 +62,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private static readonly ButtonSpec[] BltButtons =
         {
-            new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\ndự án", "QS3DPROJECTINFO"),
-            new ButtonSpec("QS3D_PROJECT_FLOORS", "Cài đặt\ntầng", "QS3DLEVELS"),
-            new ButtonSpec("QS3D_PROJECT_PROPERTIES", "Thuộc tính\ndự án", "QS3DPROJECTPROPERTIES")
+            new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\ndự án", "QS3DPROJECTINFO", RibbonIconKind.Qs3dLogo),
+            new ButtonSpec("QS3D_PROJECT_FLOORS", "Cài đặt\ntầng", "QS3DLEVELS", RibbonIconKind.Structure),
+            new ButtonSpec("QS3D_PROJECT_PROPERTIES", "Thuộc tính\ndự án", "QS3DPROJECTPROPERTIES", RibbonIconKind.Settings)
         };
 
         public static bool TryInitialize()
@@ -91,7 +105,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     SetProperty(button, "Name", spec.Text.Replace("\n", " "));
                     SetProperty(button, "Text", spec.Text);
                     SetProperty(button, "ShowText", true);
-                    SetProperty(button, "ShowImage", false);
+                    SetProperty(button, "ShowImage", true);
+                    SetProperty(button, "Image", CreateIcon(spec.Icon, 16));
+                    SetProperty(button, "LargeImage", CreateIcon(spec.Icon, 32));
                     SetProperty(button, "CommandParameter", spec.Command);
                     SetProperty(button, "CommandHandler", new CommandHandler());
                     Add(items, button);
@@ -180,6 +196,24 @@ namespace QS3D.BricsCAD.V25.Ribbon
             SetProperty(panel, "Source", source);
             Add(panels, panel);
             return source;
+        }
+
+        private static object CreateIcon(RibbonIconKind icon, int pixelSize)
+        {
+            if (icon == RibbonIconKind.Qs3dLogo)
+                return Qs3dBrandIconFactory.Create(pixelSize);
+
+            var thread = Thread.CurrentThread;
+            var previousCulture = thread.CurrentCulture;
+            try
+            {
+                thread.CurrentCulture = CultureInfo.InvariantCulture;
+                return RibbonIconFactory.Create(icon, pixelSize);
+            }
+            finally
+            {
+                thread.CurrentCulture = previousCulture;
+            }
         }
 
         private static object? FindRibbonControl()
