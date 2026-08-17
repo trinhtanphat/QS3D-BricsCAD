@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
@@ -70,11 +71,7 @@ namespace QS3D.Core.Mapping
             IEnumerable<MeasurementWorkItemCoverageFinding> findings)
         {
             if (findings == null) throw new ArgumentNullException(nameof(findings));
-
-            if (findings is ICollection<MeasurementWorkItemCoverageFinding> collection && collection.Count > MaximumFindingCount)
-                throw CreateFindingCountException();
-            if (findings is IReadOnlyCollection<MeasurementWorkItemCoverageFinding> readOnlyCollection && readOnlyCollection.Count > MaximumFindingCount)
-                throw CreateFindingCountException();
+            ValidateKnownCount(findings);
 
             var rows = new List<MeasurementWorkItemCoverageReportRow>();
             var index = 0;
@@ -124,6 +121,38 @@ namespace QS3D.Core.Mapping
                 missingQuantityCount,
                 staleQuantityCount,
                 unmappedWorkItemCount);
+        }
+
+        private static void ValidateKnownCount(IEnumerable<MeasurementWorkItemCoverageFinding> findings)
+        {
+            var counts = new List<int>(3);
+            if (findings is ICollection<MeasurementWorkItemCoverageFinding> collection)
+                counts.Add(collection.Count);
+            if (findings is IReadOnlyCollection<MeasurementWorkItemCoverageFinding> readOnlyCollection)
+                counts.Add(readOnlyCollection.Count);
+            if (findings is ICollection nonGenericCollection)
+                counts.Add(nonGenericCollection.Count);
+
+            if (counts.Count == 0) return;
+
+            var expected = counts[0];
+            var maximumReported = expected;
+            var hasNegative = expected < 0;
+            var hasConflict = false;
+            for (var i = 1; i < counts.Count; i++)
+            {
+                var current = counts[i];
+                if (current < 0) hasNegative = true;
+                if (current != expected) hasConflict = true;
+                if (current > maximumReported) maximumReported = current;
+            }
+
+            if (maximumReported > MaximumFindingCount)
+                throw CreateFindingCountException();
+            if (hasNegative)
+                throw new ArgumentException("Coverage report input reports an invalid negative known count.", nameof(findings));
+            if (hasConflict)
+                throw new ArgumentException("Coverage report input reports conflicting known counts.", nameof(findings));
         }
 
         private static ArgumentException CreateFindingCountException()
