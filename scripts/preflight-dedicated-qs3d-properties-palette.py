@@ -11,6 +11,8 @@ WORKSPACE_XAML = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.xam
 SELECTION = ROOT / "src" / "QS3D.BricsCAD.V25" / "SelectionSyncCoordinator.cs"
 errors = []
 
+# r4 keeps this guard on the latest main integration contract, including bool-returning BIM settle evidence.
+
 
 def read(path: Path) -> str:
     if not path.is_file():
