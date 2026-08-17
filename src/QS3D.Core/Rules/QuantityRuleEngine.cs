@@ -266,6 +266,8 @@ namespace QS3D.Core.Rules
                 if (double.TryParse(item.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && !double.IsNaN(value) && !double.IsInfinity(value))
                 {
                     var normalizedName = item.Key.Trim();
+                    if (!string.Equals(item.Key, normalizedName, StringComparison.Ordinal))
+                        throw new InvalidOperationException("Rule variable numeric property name is non-canonical: " + item.Key + ".");
                     if (!normalizedNames.Add(normalizedName))
                         throw new InvalidOperationException("Rule variable property name conflicts after normalization: " + item.Key + ".");
                     AddVariable(target, normalizedName, value);
