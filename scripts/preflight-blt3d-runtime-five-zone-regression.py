@@ -4,6 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PALETTE = ROOT / "src" / "QS3D.BricsCAD.V25" / "PaletteCoordinator.cs"
+ACTIVATION = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "BltBimWorkspaceActivationCoordinator.cs"
 LAYOUT = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
 errors = []
 
@@ -16,19 +17,31 @@ def read(path: Path) -> str:
 
 
 palette = read(PALETTE)
+activation = read(ACTIVATION)
 layout = read(LAYOUT)
 
+# Keep the ordinary Workspace command isolated. The coordinated BLT3D BIM surface is activated
+# explicitly by the BIM ribbon coordinator, so normal authoring does not unexpectedly consume the
+# CAD viewport with every QS3D side palette.
 for token in (
-    "public static void Show() => ShowBimWorkspace();",
+    "public static void Show() => ShowWorkspace();",
+    "SetVisibility(workspace: true, right: false, quantityInsight: false);",
     "EnsureBimDockContract();",
     "SetVisibility(workspace: true, right: true, quantityInsight: true);",
     "_workspace.Dock = DockSides.Left;",
     "_right.Dock = DockSides.Right;",
     "_quantityInsight.Dock = DockSides.Right;",
-    "Mô hình + Thuộc tính QS3D bên trái",
+    "viewport BricsCAD native ở giữa",
 ):
     if token not in palette:
         errors.append("PaletteCoordinator runtime contract missing: " + token)
+
+for token in (
+    'private const string BimTabId = "QS3D_BIM";',
+    "PaletteCoordinator.ShowBimWorkspace();",
+):
+    if token not in activation:
+        errors.append("BIM activation contract missing: " + token)
 
 for token in (
     "DispatcherPriority.SystemIdle",
@@ -46,11 +59,11 @@ for token in (
     if token not in layout:
         errors.append("left Model/Properties region contract missing: " + token)
 
-# Regression signature from the owner-provided runtime screenshot: explicit QS3D activation must
-# never route back to the isolated legacy Workspace path, otherwise Management + Quantity disappear
-# and native BricsCAD Properties can visually masquerade as the plugin's right-side workspace.
-if "public static void Show() => ShowWorkspace();" in palette:
-    errors.append("regression: QS3D activation still opens only the isolated Workspace palette")
+if "public static void Show() => ShowBimWorkspace();" in palette:
+    errors.append("regression: ordinary Workspace command must remain isolated from coordinated BIM activation")
+
+if "new Viewport" in layout or "Viewport3D" in layout:
+    errors.append("runtime layout must not create a fake second 3D viewport")
 
 print("QS3D BLT3D runtime five-zone regression preflight")
 if errors:
@@ -59,4 +72,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3D activation restores the coordinated BLT3D workspace, with Model + QS3D Properties visible as distinct left regions and Management + Quantity palettes restored on the right of the native BricsCAD viewport.")
+print("PASS: the normal Workspace command remains isolated while BIM ribbon activation restores the coordinated BLT3D surface, with Model + QS3D Properties visible as distinct left regions and Management + Quantity palettes on the right of native BricsCAD modelspace.")
