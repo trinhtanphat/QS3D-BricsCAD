@@ -58,144 +58,135 @@ namespace QS3D.BricsCAD.V25.Cad
             var rollback = ProjectStateSnapshot.Capture(project);
             var rollbackStamp = SourceReconcileUndoCoordinator.ProjectRevisionStamp.Capture(project);
             var cadCommitted = false;
+            SourceReconcileUndoCoordinator.PendingTransition? undoTransition = null;
 
             try
             {
                 using (document.LockDocument())
                 using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    SourceReconcileUndoCoordinator.PendingTransition? undoTransition = null;
-                    try
+                    var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                    var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                    foreach (var id in ids)
                     {
-                        var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
-                        var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
-                        foreach (var id in ids)
+                        var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
+                        if (entity == null || entity.IsErased) continue;
+                        var handle = entity.Handle.ToString();
+                        var matches = project.Elements
+                            .Where(x => x.Category == category && x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)))
+                            .Take(2)
+                            .ToList();
+                        if (matches.Count == 0) continue;
+                        if (matches.Count > 1) throw new InvalidOperationException("CAD source handle " + handle + " đang thuộc nhiều QS3D " + category + " element.");
+                        var element = matches[0];
+                        if (!processedElements.Add(element.Id)) throw new InvalidOperationException(category + " element " + element.Id + " có nhiều source đang được chọn. Tách/capture từng source thành element riêng trước khi Vẽ 3D.");
+
+                        if (undoTransition == null)
                         {
-                            var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
-                            if (entity == null || entity.IsErased) continue;
-                            var handle = entity.Handle.ToString();
-                            var matches = project.Elements
-                                .Where(x => x.Category == category && x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)))
-                                .Take(2)
-                                .ToList();
-                            if (matches.Count == 0) continue;
-                            if (matches.Count > 1) throw new InvalidOperationException("CAD source handle " + handle + " đang thuộc nhiều QS3D " + category + " element.");
-                            var element = matches[0];
-                            if (!processedElements.Add(element.Id)) throw new InvalidOperationException(category + " element " + element.Id + " có nhiều source đang được chọn. Tách/capture từng source thành element riêng trước khi Vẽ 3D.");
-
-                            if (undoTransition == null)
-                            {
-                                undoTransition = SourceReconcileUndoCoordinator.BeginTransition(
-                                    document,
-                                    transaction,
-                                    project,
-                                    rollback,
-                                    rollbackStamp);
-                                // The native marker must enter this transaction before
-                                // PrepareReplacement erases the retiring generated solid.
-                                // Native Undo can then select the exact semantic snapshot
-                                // whose generated/applied handles match restored topology.
-                                undoTransition.StageNativeMarker();
-                            }
-
-                            var family = project.FindFamily(element.FamilyId);
-                            Solid3d solid;
-                            CadElementVerticalPlacement? vertical;
-                            if (category == ElementCategory.Beam)
-                            {
-                                solid = BuildBeamPrism(document, project, entity, element, family, out vertical);
-                            }
-                            else if (UsesLine(category))
-                            {
-                                if (!(entity is Line line)) throw new InvalidOperationException(category + " element " + element.Id + " cần source LINE để dựng 3D.");
-                                solid = BuildLinePrism(document, project, line, element, family, category, out vertical);
-                            }
-                            else if (entity is Polyline polyline && polyline.Closed)
-                            {
-                                solid = BuildClosedProfilePrism(document, project, polyline, polyline.Elevation, element, family, category, out vertical);
-                            }
-                            else if ((category == ElementCategory.Slab || category == ElementCategory.Column) && entity is Circle circle)
-                            {
-                                EnsureWcsXy(circle.Normal, element.Id + "/circle");
-                                solid = BuildClosedProfilePrism(document, project, circle, circle.Center.Z, element, family, category, out vertical);
-                            }
-                            else
-                            {
-                                throw new InvalidOperationException(category + " element " + element.Id + " cần closed POLYLINE" +
-                                    (category == ElementCategory.Slab || category == ElementCategory.Column ? " hoặc CIRCLE" : string.Empty) + " để dựng 3D.");
-                            }
-
-                            try
-                            {
-                                solid.Layer = entity.Layer;
-                                var previousHandle = GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
-                                var appliedSlabOpeningIds = SlabOpeningPeerReplayService.CaptureAppliedOpeningIds(project, element, previousHandle);
-                                modelSpace.AppendEntity(solid);
-                                transaction.AddNewlyCreatedDBObject(solid, true);
-                                GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category);
-                                pending.Add(new PendingUpdate
-                                {
-                                    Element = element,
-                                    PreviousHandle = previousHandle,
-                                    GeneratedHandle = solid.Handle.ToString(),
-                                    Category = category,
-                                    VerticalPlacement = vertical,
-                                    SourceId = id,
-                                    GeneratedSolidId = solid.ObjectId,
-                                    AppliedSlabOpeningIds = appliedSlabOpeningIds
-                                });
-                            }
-                            catch
-                            {
-                                solid.Dispose();
-                                throw;
-                            }
-                        }
-
-                        foreach (var update in pending)
-                        {
-                            GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, update.Category);
-                            update.Element.Properties["GeneratedSolidMode"] = GeometryMode(update.Category);
-                            if (update.VerticalPlacement != null)
-                                CadElementVerticalPlacement.CommitSnapshot(update.Element, "GeneratedSolid", update.VerticalPlacement);
-                        }
-
-                        foreach (var update in pending.Where(x => x.Category == ElementCategory.Slab && x.AppliedSlabOpeningIds.Count > 0))
-                        {
-                            var source = transaction.GetObject(update.SourceId, OpenMode.ForRead, false) as Polyline;
-                            if (source == null || source.IsErased || !source.Closed)
-                                throw new InvalidOperationException("Rebuilt Slab with applied slabOpen peers must retain one live closed POLYLINE source: " + update.Element.Id);
-                            var generated = transaction.GetObject(update.GeneratedSolidId, OpenMode.ForWrite, false) as Solid3d;
-                            if (generated == null || generated.IsErased)
-                                throw new InvalidOperationException("Rebuilt Slab Solid3d disappeared before slabOpen peer replay: " + update.Element.Id);
-
-                            SlabOpeningPeerReplayService.ReplayAppliedOpenings(
+                            undoTransition = SourceReconcileUndoCoordinator.BeginTransition(
                                 document,
                                 transaction,
                                 project,
-                                update.Element,
-                                source,
-                                generated,
-                                update.PreviousHandle,
-                                update.AppliedSlabOpeningIds);
+                                rollback,
+                                rollbackStamp);
+                            // Stage the native revision before PrepareReplacement erases
+                            // the retiring solid, so Undo restores the matching semantic snapshot.
+                            undoTransition.StageNativeMarker();
                         }
 
-                        if (pending.Count > 0)
+                        var family = project.FindFamily(element.FamilyId);
+                        Solid3d solid;
+                        CadElementVerticalPlacement? vertical;
+                        if (category == ElementCategory.Beam)
                         {
-                            project.Touch();
-                            var afterSnapshot = ProjectStateSnapshot.Capture(project);
-                            if (undoTransition == null)
-                                throw new InvalidOperationException("Structural semantic Undo transition was not initialized for pending generated geometry.");
-                            undoTransition.StageAfter(project, afterSnapshot);
+                            solid = BuildBeamPrism(document, project, entity, element, family, out vertical);
                         }
-                        transaction.Commit();
-                        undoTransition?.ConfirmCommitted();
-                        cadCommitted = true;
+                        else if (UsesLine(category))
+                        {
+                            if (!(entity is Line line)) throw new InvalidOperationException(category + " element " + element.Id + " cần source LINE để dựng 3D.");
+                            solid = BuildLinePrism(document, project, line, element, family, category, out vertical);
+                        }
+                        else if (entity is Polyline polyline && polyline.Closed)
+                        {
+                            solid = BuildClosedProfilePrism(document, project, polyline, polyline.Elevation, element, family, category, out vertical);
+                        }
+                        else if ((category == ElementCategory.Slab || category == ElementCategory.Column) && entity is Circle circle)
+                        {
+                            EnsureWcsXy(circle.Normal, element.Id + "/circle");
+                            solid = BuildClosedProfilePrism(document, project, circle, circle.Center.Z, element, family, category, out vertical);
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException(category + " element " + element.Id + " cần closed POLYLINE" +
+                                (category == ElementCategory.Slab || category == ElementCategory.Column ? " hoặc CIRCLE" : string.Empty) + " để dựng 3D.");
+                        }
+
+                        try
+                        {
+                            solid.Layer = entity.Layer;
+                            var previousHandle = GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);
+                            var appliedSlabOpeningIds = SlabOpeningPeerReplayService.CaptureAppliedOpeningIds(project, element, previousHandle);
+                            modelSpace.AppendEntity(solid);
+                            transaction.AddNewlyCreatedDBObject(solid, true);
+                            GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category);
+                            pending.Add(new PendingUpdate
+                            {
+                                Element = element,
+                                PreviousHandle = previousHandle,
+                                GeneratedHandle = solid.Handle.ToString(),
+                                Category = category,
+                                VerticalPlacement = vertical,
+                                SourceId = id,
+                                GeneratedSolidId = solid.ObjectId,
+                                AppliedSlabOpeningIds = appliedSlabOpeningIds
+                            });
+                        }
+                        catch
+                        {
+                            solid.Dispose();
+                            throw;
+                        }
                     }
-                    finally
+
+                    foreach (var update in pending)
                     {
-                        undoTransition?.Dispose();
+                        GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, update.Category);
+                        update.Element.Properties["GeneratedSolidMode"] = GeometryMode(update.Category);
+                        if (update.VerticalPlacement != null)
+                            CadElementVerticalPlacement.CommitSnapshot(update.Element, "GeneratedSolid", update.VerticalPlacement);
                     }
+
+                    foreach (var update in pending.Where(x => x.Category == ElementCategory.Slab && x.AppliedSlabOpeningIds.Count > 0))
+                    {
+                        var source = transaction.GetObject(update.SourceId, OpenMode.ForRead, false) as Polyline;
+                        if (source == null || source.IsErased || !source.Closed)
+                            throw new InvalidOperationException("Rebuilt Slab with applied slabOpen peers must retain one live closed POLYLINE source: " + update.Element.Id);
+                        var generated = transaction.GetObject(update.GeneratedSolidId, OpenMode.ForWrite, false) as Solid3d;
+                        if (generated == null || generated.IsErased)
+                            throw new InvalidOperationException("Rebuilt Slab Solid3d disappeared before slabOpen peer replay: " + update.Element.Id);
+
+                        SlabOpeningPeerReplayService.ReplayAppliedOpenings(
+                            document,
+                            transaction,
+                            project,
+                            update.Element,
+                            source,
+                            generated,
+                            update.PreviousHandle,
+                            update.AppliedSlabOpeningIds);
+                    }
+
+                    if (pending.Count > 0)
+                    {
+                        project.Touch();
+                        var afterSnapshot = ProjectStateSnapshot.Capture(project);
+                        if (undoTransition == null)
+                            throw new InvalidOperationException("Structural semantic Undo transition was not initialized for pending generated geometry.");
+                        undoTransition.StageAfter(project, afterSnapshot);
+                    }
+                    transaction.Commit();
+                    undoTransition?.ConfirmCommitted();
+                    cadCommitted = true;
                 }
             }
             catch (Exception operationError)
@@ -211,6 +202,10 @@ namespace QS3D.BricsCAD.V25.Cad
                     }
                 }
                 throw;
+            }
+            finally
+            {
+                undoTransition?.Dispose();
             }
 
             if (pending.Count > 0)
