@@ -18,7 +18,9 @@ namespace QS3D.Core.SmokeTests
             DuplicatePreviousFamilyBlocksBulkEditBatch();
             DanglingPreviousFamilyBlocksWholeAssignmentBatch();
             DanglingPreviousFamilyBlocksBulkEditBatch();
-            SemanticallyIdenticalTargetAssignmentIsNoOp();
+            CanonicalCaseInsensitiveTargetAssignmentIsNoOp();
+            PaddedTargetFamilyIdFailsClosedBeforeEnumeration();
+            PaddedPersistedFamilyIdFailsClosedBeforeMutation();
             MalformedPreviousFamilyBlocksWholeAssignmentBeforeMutation();
             LazyAssignmentTargetsRejectStaleProjectInput();
             CorruptProjectElementListBlocksPropertyPropagationBeforeMutation();
@@ -129,7 +131,7 @@ namespace QS3D.Core.SmokeTests
             AssertDanglingUnchanged(setup, beforeUpdated, "BulkEditService.AssignFamily");
         }
 
-        private static void SemanticallyIdenticalTargetAssignmentIsNoOp()
+        private static void CanonicalCaseInsensitiveTargetAssignmentIsNoOp()
         {
             var project = new ProjectState("family-canonical-noop", "Canonical family assignment no-op");
             var target = new ProjectFamily("TARGET", "Target", ElementCategory.ArchitecturalWall);
@@ -137,9 +139,7 @@ namespace QS3D.Core.SmokeTests
             project.Families.Add(target);
 
             var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall, target.Id, string.Empty, string.Empty);
-            element.FamilyId = "  target  ";
-            Equal("target", element.FamilyId, "FamilyId setter must canonicalize padded assignment input.");
-            SetRawFamilyId(element, "  target  ");
+            element.FamilyId = "target";
             element.Properties["InstanceOverride"] = "keep";
             element.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(element);
@@ -149,16 +149,72 @@ namespace QS3D.Core.SmokeTests
             var beforeElementUpdated = element.UpdatedUtc;
             var beforeDirty = element.Dirty;
 
-            var changed = ProjectFamilyService.Assign(project, " target ", new[] { element });
+            var changed = ProjectFamilyService.Assign(project, "target", new[] { element });
 
-            if (changed != 0) throw new Exception("Semantically identical target Family assignment must report zero changes.");
-            Equal("  target  ", element.FamilyId, "Canonical no-op assignment rewrote the stored FamilyId.");
-            Equal("keep", element.Properties["InstanceOverride"], "Canonical no-op assignment changed instance properties.");
-            if (element.Properties.Count != 1) throw new Exception("Canonical no-op assignment changed the element property set.");
+            if (changed != 0) throw new Exception("Canonical case-insensitive target Family assignment must report zero changes.");
+            Equal("target", element.FamilyId, "Canonical case-insensitive no-op assignment rewrote the stored FamilyId.");
+            Equal("keep", element.Properties["InstanceOverride"], "Canonical case-insensitive no-op assignment changed instance properties.");
+            if (element.Properties.Count != 1) throw new Exception("Canonical case-insensitive no-op assignment changed the element property set.");
             if (element.Dirty != beforeDirty || element.UpdatedUtc != beforeElementUpdated)
-                throw new Exception("Canonical no-op assignment dirtied or timestamped the element.");
+                throw new Exception("Canonical case-insensitive no-op assignment dirtied or timestamped the element.");
             if (project.ChangeVersion != beforeProjectVersion || project.UpdatedUtc != beforeProjectUpdated)
-                throw new Exception("Canonical no-op assignment touched project persistence state.");
+                throw new Exception("Canonical case-insensitive no-op assignment touched project persistence state.");
+        }
+
+        private static void PaddedTargetFamilyIdFailsClosedBeforeEnumeration()
+        {
+            var project = new ProjectState("family-padded-target", "Padded target Family identity");
+            var target = new ProjectFamily("TARGET", "Target", ElementCategory.ArchitecturalWall);
+            project.Families.Add(target);
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdated = project.UpdatedUtc;
+
+            Throws<ArgumentException>(() => ProjectFamilyService.Assign(project, " TARGET ", ThrowIfEnumerated()));
+
+            if (project.ChangeVersion != beforeVersion || project.UpdatedUtc != beforeUpdated)
+                throw new Exception("Rejected padded target Family identity touched project persistence state.");
+        }
+
+        private static IEnumerable<ProjectElement> ThrowIfEnumerated()
+        {
+            throw new InvalidOperationException("Assignment targets were enumerated before target Family identity validation.");
+#pragma warning disable CS0162
+            yield break;
+#pragma warning restore CS0162
+        }
+
+        private static void PaddedPersistedFamilyIdFailsClosedBeforeMutation()
+        {
+            var project = new ProjectState("family-padded-existing", "Padded persisted Family identity");
+            var target = new ProjectFamily("TARGET", "Target", ElementCategory.ArchitecturalWall);
+            target.Properties["ThicknessM"] = "0.3";
+            var previous = new ProjectFamily("PREV", "Previous", ElementCategory.ArchitecturalWall);
+            previous.Properties["ThicknessM"] = "0.2";
+            project.Families.Add(target);
+            project.Families.Add(previous);
+
+            var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall, previous.Id, string.Empty, string.Empty);
+            SetRawFamilyId(element, " PREV ");
+            element.Properties["ThicknessM"] = "0.2";
+            element.Properties["InstanceOverride"] = "keep";
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+
+            var beforeProjectVersion = project.ChangeVersion;
+            var beforeProjectUpdated = project.UpdatedUtc;
+            var beforeElementUpdated = element.UpdatedUtc;
+            var beforeDirty = element.Dirty;
+
+            Throws<InvalidOperationException>(() => ProjectFamilyService.Assign(project, target.Id, new[] { element }));
+
+            Equal(" PREV ", element.FamilyId, "Rejected padded persisted Family identity rewrote FamilyId.");
+            Equal("0.2", element.Properties["ThicknessM"], "Rejected padded persisted Family identity changed inherited properties.");
+            Equal("keep", element.Properties["InstanceOverride"], "Rejected padded persisted Family identity changed instance overrides.");
+            if (element.Properties.Count != 2) throw new Exception("Rejected padded persisted Family identity changed the element property set.");
+            if (element.Dirty != beforeDirty || element.UpdatedUtc != beforeElementUpdated)
+                throw new Exception("Rejected padded persisted Family identity dirtied or timestamped the element.");
+            if (project.ChangeVersion != beforeProjectVersion || project.UpdatedUtc != beforeProjectUpdated)
+                throw new Exception("Rejected padded persisted Family identity touched project persistence state.");
         }
 
         private static void MalformedPreviousFamilyBlocksWholeAssignmentBeforeMutation()
@@ -340,7 +396,7 @@ namespace QS3D.Core.SmokeTests
         private static void SetRawFamilyId(ProjectElement element, string value)
         {
             var field = typeof(ProjectElement).GetField("_familyId", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-                ?? throw new Exception("ProjectElement FamilyId backing field was not found for the raw no-op fixture.");
+                ?? throw new Exception("ProjectElement FamilyId backing field was not found for the raw identity fixture.");
             if (field.FieldType != typeof(string))
                 throw new Exception("ProjectElement FamilyId backing field must remain a string.");
             field.SetValue(element, value);
