@@ -34,6 +34,7 @@ namespace QS3D.Core.Domain
                 string.Equals(existing, value, StringComparison.Ordinal))
                 return;
 
+            _metadata.EnsureCanSetOwned(ProjectTbqWorkspaceCodec.WorkspaceKey);
             _project.Touch();
             _metadata.SetOwned(ProjectTbqWorkspaceCodec.WorkspaceKey, value);
         }
