@@ -31,6 +31,7 @@ namespace QS3D.Core.Revisions
         {
             if (before == null) throw new ArgumentNullException(nameof(before));
             if (after == null) throw new ArgumentNullException(nameof(after));
+            ValidateProjectIdentityCompatibility(before, after);
             var left = Index(before, "before");
             var right = Index(after, "after");
             var rows = new List<QuantityRevisionRow>();
@@ -89,6 +90,24 @@ namespace QS3D.Core.Revisions
                 });
             }
             return result.AsReadOnly();
+        }
+
+        private static void ValidateProjectIdentityCompatibility(RevisionSnapshot before, RevisionSnapshot after)
+        {
+            var beforeProjectId = before.ProjectId ?? string.Empty;
+            var afterProjectId = after.ProjectId ?? string.Empty;
+
+            if (beforeProjectId.Length == 0 && afterProjectId.Length == 0) return;
+
+            if (beforeProjectId.Length == 0)
+                throw new InvalidOperationException("Revision baseline has no project identity; capture a new baseline before comparing.");
+            if (afterProjectId.Length == 0)
+                throw new InvalidOperationException("Current revision has no project identity; capture a new revision before comparing.");
+            ValidateCanonicalRequired(beforeProjectId, "before project id");
+            ValidateCanonicalRequired(afterProjectId, "after project id");
+
+            if (!string.Equals(beforeProjectId, afterProjectId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Revision baseline belongs to a different project; capture a new baseline before comparing.");
         }
 
         private static Dictionary<string, RevisionElementSnapshot> Index(RevisionSnapshot snapshot, string label)
