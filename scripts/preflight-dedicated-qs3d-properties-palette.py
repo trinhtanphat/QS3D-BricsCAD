@@ -8,6 +8,7 @@ PROPERTIES = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.Dedicat
 LAYOUT = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
 STORE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Services" / "UserUiLayoutStore.cs"
 WORKSPACE_XAML = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.xaml"
+SELECTION = ROOT / "src" / "QS3D.BricsCAD.V25" / "SelectionSyncCoordinator.cs"
 errors = []
 
 
@@ -23,6 +24,7 @@ properties = read(PROPERTIES)
 layout = read(LAYOUT)
 store = read(STORE)
 workspace_xaml = read(WORKSPACE_XAML)
+selection = read(SELECTION)
 
 for token in (
     "private static readonly Guid PropertiesGuid",
@@ -30,28 +32,38 @@ for token in (
     "public static bool IsPropertiesVisible",
     'new PaletteSet("QS3D — Thuộc tính", PropertiesGuid)',
     'AddVisual("Thuộc tính", _propertiesVisual, true)',
-    "_workspacePanel.DetachPropertiesPaletteVisual()",
+    "_workspacePanel.CreatePropertiesPaletteVisual()",
+    "_workspacePanel?.SetDedicatedPropertiesPaletteActive(false);",
+    "_workspacePanel?.SetDedicatedPropertiesPaletteActive(true);",
     "_properties.Dock = DockSides.Left;",
     "PropertiesPaletteMinWidth",
     "PropertiesPaletteMinHeight",
     "layout.PropertiesPaletteWidth",
     "layout.PropertiesPaletteHeight",
     "propertiesVisible = IsPropertiesVisible",
+    "bimSurfaceActive = workspaceVisible && rightVisible && quantityVisible",
     "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);",
 ):
     if token not in palette:
         errors.append("PaletteCoordinator dedicated Properties contract missing: " + token)
 
+# The exact existing editor visual moves between Workspace and the dedicated palette. This preserves
+# ordinary ShowWorkspace behavior while BIM gets a distinct native plugin palette without cloning
+# ViewModel state or edit handlers.
 for token in (
-    "DetachPropertiesPaletteVisual",
-    "PropertyList",
-    "ownerGrid.Children.Remove(propertiesRegion);",
+    "CreatePropertiesPaletteVisual",
+    "SetDedicatedPropertiesPaletteActive(bool active)",
+    "ownerGrid.Children.Remove(region);",
+    "host.Children.Add(region);",
+    "host.Children.Remove(region);",
+    "ownerGrid.Children.Add(region);",
     "BindingOperations.SetBinding",
     "new Binding(nameof(DataContext))",
     "CollapseEmbeddedPropertiesSlot",
+    "RestoreEmbeddedPropertiesSlot",
 ):
     if token not in properties:
-        errors.append("real QS3D Properties reparenting missing: " + token)
+        errors.append("dynamic real QS3D Properties reparenting missing: " + token)
 
 # Lock the real editor semantics. A generic reflection-only inspector must not substitute for the
 # existing project-aware QS3D property editor with scope, search, typed editors and override reset.
@@ -76,10 +88,20 @@ for token in (
     if token not in store:
         errors.append("dedicated Properties layout persistence missing: " + token)
 
-if "IsVisualDescendant(child, PropertyList)" in layout:
-    errors.append("regression: five-zone Workspace layout still treats Properties as embedded")
-if "PropertyList.MinHeight" in layout:
-    errors.append("regression: Workspace layout still sizes the detached Properties editor")
+for token in (
+    "if (_dedicatedPropertiesPaletteActive)",
+    "familyPane.RowDefinitions[2].Height = new GridLength(0);",
+    "PropertyList.MinHeight = 0;",
+    "familyPane.RowDefinitions[2].Height = new GridLength(58, GridUnitType.Star);",
+    "PropertyList.MinHeight = 120;",
+):
+    if token not in layout:
+        errors.append("dynamic embedded/dedicated layout contract missing: " + token)
+
+if "DedicatedPropertiesPaletteCoordinator.SyncVisibility();" in selection:
+    errors.append("selection changes must not reopen a manually closed Properties palette")
+if "DedicatedPropertiesPaletteCoordinator.SetInspection(snapshots);" in selection:
+    errors.append("selection must not maintain a duplicate reflection inspector state")
 if "DedicatedPropertiesPanel" in palette or "QS3D plugin inspector" in palette:
     errors.append("regression: dedicated palette must host the real QS3D editor, not a reflection inspector")
 if "new Viewport" in properties or "Viewport3D" in properties:
@@ -92,4 +114,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BIM mode owns a distinct QS3D Properties PaletteSet that reparents the existing project-aware PropertyList editor with its original WorkspaceViewModel, scope/search/typed-edit/reset behavior and deterministic persisted fallback sizing; native BricsCAD Properties is not used as a substitute.")
+print("PASS: BIM mode owns a distinct QS3D Properties PaletteSet by dynamically reparenting the existing project-aware PropertyList editor with its original WorkspaceViewModel/scope/search/typed-edit/reset behavior; ordinary ShowWorkspace restores the same editor in-place, selection changes respect manual close, and native BricsCAD Properties is not used as a substitute.")

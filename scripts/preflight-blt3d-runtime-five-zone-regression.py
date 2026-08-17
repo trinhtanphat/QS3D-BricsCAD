@@ -26,19 +26,21 @@ properties = read(PROPERTIES)
 compact = read(COMPACT)
 store = read(STORE)
 
-# Owner-facing QS3D / BIM activation restores four plugin palettes. The legacy Workspace-only helper
-# stays isolated, while the real QS3D Properties editor is hosted by a distinct PaletteSet.
+# Owner-facing QS3D / BIM activation restores four plugin palettes. The ordinary Workspace-only
+# helper stays isolated and preserves its historical embedded editor; BIM dynamically moves that
+# exact editor into the distinct QS3D Properties PaletteSet.
 for token in (
     "public static void Show() => ShowBimWorkspace();",
     "public static void ShowWorkspace()",
     "SetVisibility(workspace: true, right: false, quantityInsight: false);",
-    "EnsureBimDockContract();",
     "SetVisibility(workspace: true, right: true, quantityInsight: true);",
     "private static readonly Guid PropertiesGuid",
     "private static PaletteSet? _properties;",
     "public static bool IsPropertiesVisible",
     'new PaletteSet("QS3D — Thuộc tính", PropertiesGuid)',
-    "DetachPropertiesPaletteVisual()",
+    "CreatePropertiesPaletteVisual()",
+    "SetDedicatedPropertiesPaletteActive(false)",
+    "SetDedicatedPropertiesPaletteActive(true)",
     "_workspace.Dock = DockSides.Left;",
     "_properties.Dock = DockSides.Left;",
     "_right.Dock = DockSides.Right;",
@@ -57,15 +59,19 @@ for token in (
         errors.append("BIM activation contract missing: " + token)
 
 for token in (
-    "DetachPropertiesPaletteVisual",
-    "PropertyList",
-    "ownerGrid.Children.Remove(propertiesRegion);",
+    "CreatePropertiesPaletteVisual",
+    "SetDedicatedPropertiesPaletteActive(bool active)",
+    "ownerGrid.Children.Remove(region);",
+    "host.Children.Add(region);",
+    "host.Children.Remove(region);",
+    "ownerGrid.Children.Add(region);",
     "BindingOperations.SetBinding",
     "new Binding(nameof(DataContext))",
     "CollapseEmbeddedPropertiesSlot",
+    "RestoreEmbeddedPropertiesSlot",
 ):
     if token not in properties:
-        errors.append("dedicated QS3D Properties visual contract missing: " + token)
+        errors.append("dynamic QS3D Properties visual contract missing: " + token)
 
 for token in (
     "PropertiesPaletteWidth",
@@ -93,25 +99,25 @@ for token in (
     "Grid.SetRow(verticalSplitter, 1);",
     "Grid.SetRow(familyPane, 2);",
     "verticalSplitter.ResizeDirection = GridResizeDirection.Rows;",
+    "if (_dedicatedPropertiesPaletteActive)",
     "familyPane.RowDefinitions[2].Height = new GridLength(0);",
+    "PropertyList.MinHeight = 0;",
+    "familyPane.RowDefinitions[2].Height = new GridLength(58, GridUnitType.Star);",
+    "PropertyList.MinHeight = 120;",
 ):
     if token not in layout:
-        errors.append("left Model/Family runtime layout missing: " + token)
+        errors.append("dynamic Model/Family/Properties runtime layout missing: " + token)
 
-if "IsVisualDescendant(child, PropertyList)" in layout:
-    errors.append("regression: Workspace layout still treats Properties as embedded instead of a dedicated plugin palette")
-if "PropertyList.MinHeight" in layout:
-    errors.append("regression: Workspace runtime layout still sizes the detached Properties editor")
 if "public static void Show() => ShowWorkspace();" in palette:
     errors.append("regression: owner-facing QS3D activation must restore the coordinated BIM surface")
 if "new Viewport" in layout or "Viewport3D" in layout:
     errors.append("runtime layout must not create a fake second 3D viewport")
 
-print("QS3D BLT3D dedicated Properties five-zone regression preflight")
+print("QS3D BLT3D dynamic dedicated Properties five-zone regression preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3D/BIM activation restores Model + dedicated QS3D Properties on the left and Management + Quantity on the right of native BricsCAD modelspace; the isolated Workspace helper remains isolated, the Properties editor keeps the real Workspace ViewModel/edit handlers, and repeated host settle passes remain deterministic.")
+print("PASS: QS3D/BIM activation restores Model + dedicated QS3D Properties on the left and Management + Quantity on the right of native BricsCAD modelspace; ordinary ShowWorkspace keeps its embedded real Properties editor, BIM reparents that same editor without cloning state, and repeated host settle passes remain deterministic.")

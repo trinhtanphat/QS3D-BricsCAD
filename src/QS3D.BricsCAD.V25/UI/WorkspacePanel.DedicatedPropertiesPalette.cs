@@ -4,40 +4,35 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace QS3D.BricsCAD.V25.UI
 {
     public partial class WorkspacePanel
     {
-        private FrameworkElement? _dedicatedPropertiesPaletteVisual;
+        private Grid? _dedicatedPropertiesPaletteHost;
+        private Border? _dedicatedPropertiesRegion;
+        private Grid? _dedicatedPropertiesOwnerGrid;
+        private bool _dedicatedPropertiesPaletteActive;
+
+        internal bool IsDedicatedPropertiesPaletteActive => _dedicatedPropertiesPaletteActive;
 
         /// <summary>
-        /// Moves the existing QS3D Properties editor into a dedicated palette host without cloning
-        /// its ViewModel or edit handlers. The binding follows WorkspacePanel.DataContext so project
-        /// reloads and selection changes continue to update the detached editor deterministically.
+        /// Creates a stable host for the native QS3D Properties PaletteSet without permanently
+        /// removing the real editor from Workspace. ShowWorkspace keeps the historical embedded
+        /// editor; BIM activation moves that same visual into this host.
         /// </summary>
-        internal FrameworkElement DetachPropertiesPaletteVisual()
+        internal FrameworkElement CreatePropertiesPaletteVisual()
         {
-            if (_dedicatedPropertiesPaletteVisual != null)
-                return _dedicatedPropertiesPaletteVisual;
+            if (_dedicatedPropertiesPaletteHost != null)
+                return _dedicatedPropertiesPaletteHost;
 
-            var propertiesRegion = FindPropertiesRegion();
-            var ownerGrid = PropertiesParentOf(propertiesRegion) as Grid;
-            if (ownerGrid == null)
-                throw new InvalidOperationException("QS3D Properties region is not hosted by the expected Workspace grid.");
-
-            ownerGrid.Children.Remove(propertiesRegion);
-            CollapseEmbeddedPropertiesSlot(ownerGrid);
-
-            Grid.SetRow(propertiesRegion, 0);
-            Grid.SetColumn(propertiesRegion, 0);
-            Grid.SetRowSpan(propertiesRegion, 1);
-            Grid.SetColumnSpan(propertiesRegion, 1);
-            propertiesRegion.HorizontalAlignment = HorizontalAlignment.Stretch;
-            propertiesRegion.VerticalAlignment = VerticalAlignment.Stretch;
+            _dedicatedPropertiesRegion = FindPropertiesRegion();
+            _dedicatedPropertiesOwnerGrid = PropertiesParentOf(_dedicatedPropertiesRegion) as Grid
+                ?? throw new InvalidOperationException("QS3D Properties region is not hosted by the expected Workspace grid.");
 
             BindingOperations.SetBinding(
-                propertiesRegion,
+                _dedicatedPropertiesRegion,
                 FrameworkElement.DataContextProperty,
                 new Binding(nameof(DataContext))
                 {
@@ -45,16 +40,61 @@ namespace QS3D.BricsCAD.V25.UI
                     Mode = BindingMode.OneWay
                 });
 
-            var host = new Grid
+            _dedicatedPropertiesPaletteHost = new Grid
             {
                 MinWidth = 0,
                 MinHeight = 0,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 VerticalAlignment = VerticalAlignment.Stretch
             };
-            host.Children.Add(propertiesRegion);
-            _dedicatedPropertiesPaletteVisual = host;
-            return host;
+            return _dedicatedPropertiesPaletteHost;
+        }
+
+        internal void SetDedicatedPropertiesPaletteActive(bool active)
+        {
+            var host = (Grid)CreatePropertiesPaletteVisual();
+            var region = _dedicatedPropertiesRegion
+                ?? throw new InvalidOperationException("QS3D Properties region is unavailable.");
+            var ownerGrid = _dedicatedPropertiesOwnerGrid
+                ?? throw new InvalidOperationException("QS3D Properties owner grid is unavailable.");
+
+            if (active)
+            {
+                if (ReferenceEquals(PropertiesParentOf(region), ownerGrid))
+                    ownerGrid.Children.Remove(region);
+                if (!host.Children.Contains(region))
+                    host.Children.Add(region);
+
+                Grid.SetRow(region, 0);
+                Grid.SetColumn(region, 0);
+                Grid.SetRowSpan(region, 1);
+                Grid.SetColumnSpan(region, 1);
+                region.HorizontalAlignment = HorizontalAlignment.Stretch;
+                region.VerticalAlignment = VerticalAlignment.Stretch;
+                region.Visibility = Visibility.Visible;
+                CollapseEmbeddedPropertiesSlot(ownerGrid);
+            }
+            else
+            {
+                if (ReferenceEquals(PropertiesParentOf(region), host))
+                    host.Children.Remove(region);
+                if (!ownerGrid.Children.Contains(region))
+                    ownerGrid.Children.Add(region);
+
+                Grid.SetRow(region, 2);
+                Grid.SetColumn(region, 0);
+                Grid.SetRowSpan(region, 1);
+                Grid.SetColumnSpan(region, 1);
+                region.HorizontalAlignment = HorizontalAlignment.Stretch;
+                region.VerticalAlignment = VerticalAlignment.Stretch;
+                region.Visibility = Visibility.Visible;
+                RestoreEmbeddedPropertiesSlot(ownerGrid);
+            }
+
+            _dedicatedPropertiesPaletteActive = active;
+            Dispatcher.BeginInvoke(
+                DispatcherPriority.SystemIdle,
+                new Action(ApplyBlt3dFiveZoneRuntimeLayout));
         }
 
         private Border FindPropertiesRegion()
@@ -81,14 +121,12 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (familyGrid.RowDefinitions.Count >= 3)
             {
-                familyGrid.RowDefinitions[0].MinHeight = 120;
+                familyGrid.RowDefinitions[0].MinHeight = 100;
                 familyGrid.RowDefinitions[0].MaxHeight = double.PositiveInfinity;
                 familyGrid.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
-
                 familyGrid.RowDefinitions[1].MinHeight = 0;
                 familyGrid.RowDefinitions[1].MaxHeight = 0;
                 familyGrid.RowDefinitions[1].Height = new GridLength(0);
-
                 familyGrid.RowDefinitions[2].MinHeight = 0;
                 familyGrid.RowDefinitions[2].MaxHeight = 0;
                 familyGrid.RowDefinitions[2].Height = new GridLength(0);
@@ -96,9 +134,27 @@ namespace QS3D.BricsCAD.V25.UI
 
             foreach (var splitter in familyGrid.Children.OfType<GridSplitter>()
                          .Where(child => Grid.GetRow(child) == 1))
-            {
                 splitter.Visibility = Visibility.Collapsed;
+        }
+
+        private static void RestoreEmbeddedPropertiesSlot(Grid familyGrid)
+        {
+            if (familyGrid.RowDefinitions.Count >= 3)
+            {
+                familyGrid.RowDefinitions[0].MinHeight = 75;
+                familyGrid.RowDefinitions[0].MaxHeight = double.PositiveInfinity;
+                familyGrid.RowDefinitions[0].Height = new GridLength(42, GridUnitType.Star);
+                familyGrid.RowDefinitions[1].MinHeight = 4;
+                familyGrid.RowDefinitions[1].MaxHeight = 4;
+                familyGrid.RowDefinitions[1].Height = new GridLength(4);
+                familyGrid.RowDefinitions[2].MinHeight = 120;
+                familyGrid.RowDefinitions[2].MaxHeight = double.PositiveInfinity;
+                familyGrid.RowDefinitions[2].Height = new GridLength(58, GridUnitType.Star);
             }
+
+            foreach (var splitter in familyGrid.Children.OfType<GridSplitter>()
+                         .Where(child => Grid.GetRow(child) == 1))
+                splitter.Visibility = Visibility.Visible;
         }
     }
 }

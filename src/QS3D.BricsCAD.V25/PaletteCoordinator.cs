@@ -40,7 +40,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 _workspacePanel = new WorkspacePanel();
-                _propertiesVisual = _workspacePanel.DetachPropertiesPaletteVisual();
+                _propertiesVisual = _workspacePanel.CreatePropertiesPaletteVisual();
                 _rightPanel = new RightPanel();
                 _quantityInsightPanel = new QuantityInsightPanel();
 
@@ -107,6 +107,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 EnsureCreated();
+                _workspacePanel?.SetDedicatedPropertiesPaletteActive(false);
                 SetVisibility(workspace: true, right: false, quantityInsight: false);
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
             }
@@ -117,13 +118,14 @@ namespace QS3D.BricsCAD.V25
         }
 
         // The owner-reference BIM tab coordinates four QS3D plugin palettes around the real
-        // BricsCAD viewport. Model/Family remains in Workspace, QS3D Properties is a distinct
-        // left-side PaletteSet, and Management + Quantity remain on the right.
+        // BricsCAD viewport. The exact Workspace property editor is reparented into a distinct
+        // left-side PaletteSet, while Management + Quantity remain on the right.
         public static void ShowBimWorkspace()
         {
             try
             {
                 EnsureCreated();
+                _workspacePanel?.SetDedicatedPropertiesPaletteActive(true);
                 EnsureBimDockContract();
                 SetVisibility(workspace: true, right: true, quantityInsight: true);
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
@@ -142,6 +144,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 EnsureCreated();
+                _workspacePanel?.SetDedicatedPropertiesPaletteActive(false);
                 SetVisibility(workspace: false, right: true, quantityInsight: false);
             }
             catch (Exception)
@@ -155,6 +158,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 EnsureCreated();
+                _workspacePanel?.SetDedicatedPropertiesPaletteActive(false);
                 SetVisibility(workspace: false, right: false, quantityInsight: true);
             }
             catch (Exception)
@@ -166,6 +170,7 @@ namespace QS3D.BricsCAD.V25
         public static void Hide()
         {
             PersistPaletteLayout();
+            _workspacePanel?.SetDedicatedPropertiesPaletteActive(false);
             SetVisibility(workspace: false, right: false, quantityInsight: false);
         }
 
@@ -174,6 +179,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 EnsureCreated();
+                _workspacePanel?.SetDedicatedPropertiesPaletteActive(false);
                 SetVisibility(workspace: true, right: false, quantityInsight: false);
                 _workspacePanel?.SetStatus("Safe Mode: panel thuộc tính, bản vẽ/layer và diễn giải khối lượng đang tắt.");
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
@@ -236,9 +242,11 @@ namespace QS3D.BricsCAD.V25
             var propertiesVisible = IsPropertiesVisible;
             var rightVisible = IsRightPanelVisible;
             var quantityVisible = IsQuantityInsightVisible;
+            var bimSurfaceActive = workspaceVisible && rightVisible && quantityVisible;
             Dispose();
             EnsureCreated();
-            if (workspaceVisible && propertiesVisible && rightVisible)
+            _workspacePanel?.SetDedicatedPropertiesPaletteActive(bimSurfaceActive);
+            if (bimSurfaceActive)
                 EnsureBimDockContract();
             SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);
         }

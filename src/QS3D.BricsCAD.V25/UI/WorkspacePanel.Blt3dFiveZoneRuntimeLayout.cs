@@ -9,9 +9,10 @@ namespace QS3D.BricsCAD.V25.UI
     /// <summary>
     /// Final runtime layout pass for the owner-approved BLT3D-style workspace.
     ///
-    /// The Workspace PaletteSet now contains Model/Zone/Floor plus Family/Type only. The real
-    /// QS3D Properties editor is detached into its own PaletteSet by PaletteCoordinator so native
-    /// BricsCAD Properties can never be mistaken for the plugin-owned properties region.
+    /// Workspace keeps Model/Zone/Floor + Family/Type on the left. Ordinary ShowWorkspace also
+    /// keeps its historical embedded Properties editor. Coordinated BIM mode reparents that exact
+    /// editor into a distinct native QS3D Properties PaletteSet, so native BricsCAD Properties can
+    /// never be mistaken for the plugin-owned property surface.
     ///
     /// Run at SystemIdle so this pass wins after the older CompactShell / reference presentation
     /// compatibility passes that still rewrite the same five-column Grid during Loaded.
@@ -63,16 +64,14 @@ namespace QS3D.BricsCAD.V25.UI
                 .OfType<Border>()
                 .FirstOrDefault(child => Grid.GetColumn(child) == 0);
 
-            // Properties is now hosted by a dedicated PaletteSet. Rediscover the remaining
-            // Family/Type pane by the control it still owns so repeated settle passes remain
-            // idempotent after this pane has already moved from its compatibility-layout column.
+            // Properties can move between this grid and the dedicated native palette. FamilyList
+            // remains in the owner grid in both modes, so it is the stable idempotent rediscovery key.
             var familyPane = workspace.Children
                 .OfType<Grid>()
                 .FirstOrDefault(child => IsVisualDescendant(child, FamilyList));
 
-            // Likewise, the first pass moves the original column-1 splitter into row 1/column 0.
-            // Keep the exact splitter instance for later settle passes; rediscover only when the
-            // host has recreated/reparented the workspace tree.
+            // The first pass moves the original column-1 splitter into row 1/column 0. Keep the
+            // exact splitter instance for later settle passes; rediscover only after recreation.
             var verticalSplitter = _blt3dRuntimeVerticalSplitter;
             if (verticalSplitter == null || !ReferenceEquals(verticalSplitter.Parent, workspace))
             {
@@ -89,8 +88,6 @@ namespace QS3D.BricsCAD.V25.UI
             WorkspaceOverflow.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
             WorkspaceOverflow.ScrollToHorizontalOffset(0);
 
-            // Collapse the old horizontal dashboard columns. Workspace becomes the compact model /
-            // family rail; the detached QS3D Properties palette occupies its own native host region.
             for (var index = 0; index < workspace.ColumnDefinitions.Count; index++)
             {
                 var column = workspace.ColumnDefinitions[index];
@@ -104,8 +101,8 @@ namespace QS3D.BricsCAD.V25.UI
             workspace.RowDefinitions.Clear();
             workspace.RowDefinitions.Add(new RowDefinition
             {
-                Height = new GridLength(62, GridUnitType.Star),
-                MinHeight = 160
+                Height = new GridLength(_dedicatedPropertiesPaletteActive ? 62 : 45, GridUnitType.Star),
+                MinHeight = 130
             });
             workspace.RowDefinitions.Add(new RowDefinition
             {
@@ -115,7 +112,7 @@ namespace QS3D.BricsCAD.V25.UI
             });
             workspace.RowDefinitions.Add(new RowDefinition
             {
-                Height = new GridLength(38, GridUnitType.Star),
+                Height = new GridLength(_dedicatedPropertiesPaletteActive ? 38 : 55, GridUnitType.Star),
                 MinHeight = 120
             });
 
@@ -146,29 +143,49 @@ namespace QS3D.BricsCAD.V25.UI
             Grid.SetRow(familyPane, 2);
             Grid.SetColumnSpan(familyPane, 1);
 
-            // The Properties row was detached before the palette is shown. Keep only Family/Type
-            // visible inside this grid; stale persisted row heights must not create an empty slot.
             if (familyPane.RowDefinitions.Count >= 3)
             {
-                familyPane.RowDefinitions[0].MinHeight = 100;
-                familyPane.RowDefinitions[0].MaxHeight = double.PositiveInfinity;
-                familyPane.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
-                familyPane.RowDefinitions[1].MinHeight = 0;
-                familyPane.RowDefinitions[1].MaxHeight = 0;
-                familyPane.RowDefinitions[1].Height = new GridLength(0);
-                familyPane.RowDefinitions[2].MinHeight = 0;
-                familyPane.RowDefinitions[2].MaxHeight = 0;
-                familyPane.RowDefinitions[2].Height = new GridLength(0);
-            }
+                if (_dedicatedPropertiesPaletteActive)
+                {
+                    familyPane.RowDefinitions[0].MinHeight = 100;
+                    familyPane.RowDefinitions[0].MaxHeight = double.PositiveInfinity;
+                    familyPane.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
+                    familyPane.RowDefinitions[1].MinHeight = 0;
+                    familyPane.RowDefinitions[1].MaxHeight = 0;
+                    familyPane.RowDefinitions[1].Height = new GridLength(0);
+                    familyPane.RowDefinitions[2].MinHeight = 0;
+                    familyPane.RowDefinitions[2].MaxHeight = 0;
+                    familyPane.RowDefinitions[2].Height = new GridLength(0);
 
-            foreach (var splitter in familyPane.Children
-                         .OfType<GridSplitter>()
-                         .Where(child => Grid.GetRow(child) == 1))
-            {
-                splitter.Visibility = Visibility.Collapsed;
-            }
+                    foreach (var splitter in familyPane.Children.OfType<GridSplitter>()
+                                 .Where(child => Grid.GetRow(child) == 1))
+                        splitter.Visibility = Visibility.Collapsed;
 
-            FamilyList.MinHeight = 100;
+                    FamilyList.MinHeight = 100;
+                    PropertyList.MinHeight = 0;
+                }
+                else
+                {
+                    // Preserve the ordinary isolated Workspace behavior from #2396: the same real
+                    // property editor returns to row 2 when the dedicated BIM palette is inactive.
+                    familyPane.RowDefinitions[0].MinHeight = 75;
+                    familyPane.RowDefinitions[0].MaxHeight = double.PositiveInfinity;
+                    familyPane.RowDefinitions[0].Height = new GridLength(42, GridUnitType.Star);
+                    familyPane.RowDefinitions[1].MinHeight = 4;
+                    familyPane.RowDefinitions[1].MaxHeight = 4;
+                    familyPane.RowDefinitions[1].Height = new GridLength(4);
+                    familyPane.RowDefinitions[2].MinHeight = 120;
+                    familyPane.RowDefinitions[2].MaxHeight = double.PositiveInfinity;
+                    familyPane.RowDefinitions[2].Height = new GridLength(58, GridUnitType.Star);
+
+                    foreach (var splitter in familyPane.Children.OfType<GridSplitter>()
+                                 .Where(child => Grid.GetRow(child) == 1))
+                        splitter.Visibility = Visibility.Visible;
+
+                    FamilyList.MinHeight = 70;
+                    PropertyList.MinHeight = 120;
+                }
+            }
         }
     }
 }

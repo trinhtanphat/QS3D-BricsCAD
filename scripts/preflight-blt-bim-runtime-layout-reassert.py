@@ -31,6 +31,8 @@ for token in (
     'new PaletteSet("QS3D — Thuộc tính", PropertiesGuid)',
     "public static bool IsPropertiesVisible",
     "_properties.Dock = DockSides.Left;",
+    "_workspacePanel?.SetDedicatedPropertiesPaletteActive(false);",
+    "_workspacePanel?.SetDedicatedPropertiesPaletteActive(true);",
     "Thuộc tính QS3D palette riêng bên trái",
     "viewport BricsCAD native ở giữa",
 ):
@@ -80,29 +82,35 @@ for token in (
     "workspace.RowDefinitions.Add",
     "GridResizeDirection.Rows",
     "ReferenceEquals(child, familyPane)",
+    "if (_dedicatedPropertiesPaletteActive)",
     "familyPane.RowDefinitions[2].Height = new GridLength(0);",
+    "familyPane.RowDefinitions[2].Height = new GridLength(58, GridUnitType.Star);",
 ):
     if token not in five_zone:
-        errors.append("owner Model/Family runtime layout missing: " + token)
+        errors.append("owner dynamic Model/Family/Properties runtime layout missing: " + token)
 
 for token in (
-    "DetachPropertiesPaletteVisual",
-    "ownerGrid.Children.Remove(propertiesRegion);",
+    "CreatePropertiesPaletteVisual",
+    "SetDedicatedPropertiesPaletteActive(bool active)",
+    "ownerGrid.Children.Remove(region);",
+    "host.Children.Add(region);",
+    "host.Children.Remove(region);",
+    "ownerGrid.Children.Add(region);",
     "BindingOperations.SetBinding",
+    "CollapseEmbeddedPropertiesSlot",
+    "RestoreEmbeddedPropertiesSlot",
 ):
     if token not in properties:
-        errors.append("dedicated QS3D Properties reparenting missing: " + token)
+        errors.append("dynamic dedicated QS3D Properties reparenting missing: " + token)
 
-if "IsVisualDescendant(child, PropertyList)" in five_zone:
-    errors.append("runtime layout still treats QS3D Properties as embedded inside Workspace")
 if "new Viewport" in repair or "Viewport3D" in repair or "new Viewport" in five_zone or "Viewport3D" in five_zone:
     errors.append("runtime layout must not create a fake second 3D viewport")
 
-print("QS3D BLT3D BIM dedicated Properties runtime layout preflight")
+print("QS3D BLT3D BIM dynamic dedicated Properties runtime layout preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BIM activation reasserts Workspace + dedicated QS3D Properties + Management + Quantity through a bounded BricsCAD docking settle window, preserves the native modelspace viewport, and keeps the real Properties editor synchronized with Workspace state without relying on native BricsCAD Properties.")
+print("PASS: BIM activation reasserts Workspace + dedicated QS3D Properties + Management + Quantity through a bounded BricsCAD docking settle window, ordinary ShowWorkspace restores the same real editor in-place, manual palette close is not selection-driven, and the native modelspace viewport remains host-owned.")
