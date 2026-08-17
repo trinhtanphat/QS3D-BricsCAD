@@ -97,12 +97,24 @@ namespace QS3D.Core.Licensing
     {
         private readonly LicenseDocument _license;
 
-        internal LicenseVerificationResult(LicenseStatus status, LicenseDocument license)
+        public LicenseVerificationResult(LicenseStatus status, LicenseDocument license)
+            : this(status, license, allowValid: false)
+        {
+        }
+
+        private LicenseVerificationResult(LicenseStatus status, LicenseDocument license, bool allowValid)
         {
             if (!Enum.IsDefined(typeof(LicenseStatus), status))
                 throw new ArgumentOutOfRangeException(nameof(status), status, "License verification status is not defined.");
+            if (status == LicenseStatus.Valid && !allowValid)
+                throw new ArgumentException("A valid license verification result can only be created by LicenseVerifier.Verify().", nameof(status));
             Status = status;
             _license = CloneLicense(license ?? throw new ArgumentNullException(nameof(license)));
+        }
+
+        internal static LicenseVerificationResult FromVerifier(LicenseStatus status, LicenseDocument license)
+        {
+            return new LicenseVerificationResult(status, license, allowValid: true);
         }
 
         public LicenseStatus Status { get; }
@@ -150,7 +162,7 @@ namespace QS3D.Core.Licensing
             if (nowUtc.Kind != DateTimeKind.Utc) throw new ArgumentException("Verification time must be UTC.", nameof(nowUtc));
             license.Validate();
             if (license.Signature == null || license.Signature.Length == 0)
-                return new LicenseVerificationResult(LicenseStatus.InvalidSignature, license);
+                return LicenseVerificationResult.FromVerifier(LicenseStatus.InvalidSignature, license);
 
             bool signatureValid;
             using (var rsa = RSA.Create())
@@ -158,12 +170,12 @@ namespace QS3D.Core.Licensing
                 rsa.ImportParameters(publicKey);
                 signatureValid = rsa.VerifyData(license.CanonicalPayload(), license.Signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             }
-            if (!signatureValid) return new LicenseVerificationResult(LicenseStatus.InvalidSignature, license);
+            if (!signatureValid) return LicenseVerificationResult.FromVerifier(LicenseStatus.InvalidSignature, license);
             if (!string.Equals(license.ProductId, expectedProductId, StringComparison.Ordinal))
-                return new LicenseVerificationResult(LicenseStatus.ProductMismatch, license);
-            if (nowUtc < license.NotBeforeUtc) return new LicenseVerificationResult(LicenseStatus.NotYetValid, license);
-            if (nowUtc >= license.ExpiresUtc) return new LicenseVerificationResult(LicenseStatus.Expired, license);
-            return new LicenseVerificationResult(LicenseStatus.Valid, license);
+                return LicenseVerificationResult.FromVerifier(LicenseStatus.ProductMismatch, license);
+            if (nowUtc < license.NotBeforeUtc) return LicenseVerificationResult.FromVerifier(LicenseStatus.NotYetValid, license);
+            if (nowUtc >= license.ExpiresUtc) return LicenseVerificationResult.FromVerifier(LicenseStatus.Expired, license);
+            return LicenseVerificationResult.FromVerifier(LicenseStatus.Valid, license);
         }
 
         public LicenseDocument Load(string path)
