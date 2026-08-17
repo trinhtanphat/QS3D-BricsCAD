@@ -21,71 +21,71 @@ else:
     management = method("public static void ShowDrawingManagement()", "public static void ShowQuantityInsight()")
     quantity = method("public static void ShowQuantityInsight()", "public static void Hide()")
     reset = method("private static void ResetPreservingVisibility()", "public static void Dispose()")
-    dock = method("private static void EnsureBimDockContract()", "private static void SetVisibility(")
+    dock = method("private static void EnsureBimDockContract()", "private static void EnsurePaletteSize(")
 
     if "_workspacePanel?.SetDedicatedPropertiesPaletteActive(false);" not in workspace:
-        errors.append("ordinary Workspace must restore the real Properties editor in-place")
+        errors.append("ordinary Workspace must keep the real Properties editor embedded")
     if "SetVisibility(workspace: true, right: false, quantityInsight: false);" not in workspace:
-        errors.append("ordinary Workspace must remain Ribbon-first and isolated")
-    if "_workspacePanel?.SetDedicatedPropertiesPaletteActive(true);" not in bim:
-        errors.append("BIM workspace must move the real Properties editor into the dedicated palette")
-    if "EnsureBimDockContract();" not in bim:
-        errors.append("BIM workspace must repair the dock contract before visibility")
-    if "SetVisibility(workspace: true, right: true, quantityInsight: true);" not in bim:
-        errors.append("BIM workspace must show Workspace + dedicated QS3D Properties + Management + Quantity Insight together")
-    if "_quantityInsightPanel?.RefreshQuantityInsights();" not in bim:
-        errors.append("BIM workspace must refresh Quantity Insight when it becomes visible")
-    if "return true;" not in bim or "return false;" not in bim:
-        errors.append("BIM workspace must report success/failure to bounded settle callers")
-    if "_workspacePanel?.SetDedicatedPropertiesPaletteActive(false);" not in management:
-        errors.append("standalone Management must restore the embedded Properties editor before isolating Workspace")
-    if "SetVisibility(workspace: false, right: true, quantityInsight: false);" not in management:
-        errors.append("standalone Management command isolation changed")
-    if "_workspacePanel?.SetDedicatedPropertiesPaletteActive(false);" not in quantity:
-        errors.append("standalone Quantity Insight must restore the embedded Properties editor before isolating Workspace")
-    if "SetVisibility(workspace: false, right: false, quantityInsight: true);" not in quantity:
-        errors.append("standalone Quantity Insight command isolation changed")
-
-    required_dock = (
-        "_workspace.Dock != DockSides.Left",
-        "_workspace.Dock = DockSides.Left;",
-        "_properties.Dock != DockSides.Left",
-        "_properties.Dock = DockSides.Left;",
-        "_right.Dock != DockSides.Right",
-        "_right.Dock = DockSides.Right;",
-        "_quantityInsight.Dock != DockSides.Right",
-        "_quantityInsight.Dock = DockSides.Right;",
-    )
-    for token in required_dock:
-        if token not in dock:
-            errors.append("BIM dock contract missing: " + token)
+        errors.append("ordinary Workspace must remain isolated")
 
     for token in (
-        "var bimSurfaceActive = workspaceVisible && rightVisible && quantityVisible;",
-        "if (propertiesVisible && !bimSurfaceActive)",
-        "_workspacePanel?.SetDedicatedPropertiesPaletteActive(true);",
-        "_workspacePanel?.SetDedicatedPropertiesPaletteActive(bimSurfaceActive);",
-        "if (bimSurfaceActive)",
+        "_workspacePanel?.SetDedicatedPropertiesPaletteActive(false);",
+        "EnsureBimDockContract();",
+        "SetVisibility(workspace: true, right: true, quantityInsight: false);",
+        "return true;",
+        "return false;",
+        "viewport BricsCAD native ở giữa",
+    ):
+        if token not in bim:
+            errors.append("owner-reference BIM default missing: " + token)
+
+    if "SetDedicatedPropertiesPaletteActive(true)" in bim:
+        errors.append("default BIM must not pull Properties out of the embedded Family/Properties column")
+    if "SetVisibility(workspace: true, right: true, quantityInsight: true);" in bim:
+        errors.append("default BIM must not auto-open Quantity Insight")
+    if "_quantityInsightPanel?.RefreshQuantityInsights();" in bim:
+        errors.append("default BIM must not refresh an auto-hidden Quantity Insight surface")
+
+    if "_workspacePanel?.SetDedicatedPropertiesPaletteActive(false);" not in management:
+        errors.append("standalone Management must keep Properties embedded")
+    if "SetVisibility(workspace: false, right: true, quantityInsight: false);" not in management:
+        errors.append("standalone Management isolation changed")
+    if "_workspacePanel?.SetDedicatedPropertiesPaletteActive(false);" not in quantity:
+        errors.append("standalone Quantity Insight must not steal the Workspace Properties editor")
+    if "SetVisibility(workspace: false, right: false, quantityInsight: true);" not in quantity:
+        errors.append("standalone Quantity Insight isolation changed")
+
+    for token in (
+        "_workspace.Dock != DockSides.Left",
+        "_workspace.Dock = DockSides.Left;",
+        "_right.Dock != DockSides.Right",
+        "_right.Dock = DockSides.Right;",
+        "_properties.Dock != DockSides.Left",
+        "_quantityInsight.Dock != DockSides.Right",
+    ):
+        if token not in dock:
+            errors.append("palette dock capability missing: " + token)
+
+    for token in (
+        "var ownerReferenceBimActive = workspaceVisible && rightVisible && !propertiesVisible && !quantityVisible;",
+        "_workspacePanel?.SetDedicatedPropertiesPaletteActive(propertiesVisible);",
+        "if (ownerReferenceBimActive)",
         "EnsureBimDockContract();",
         "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);",
     ):
         if token not in reset:
-            errors.append("palette recreation lost dynamic four-palette BIM restore contract: " + token)
+            errors.append("palette recreation lost owner-reference visibility restore: " + token)
 
-    if "var properties = workspace && right && quantityInsight;" not in text:
-        errors.append("legacy three-argument BIM visibility path must enable dedicated QS3D Properties only for the coordinated BIM state")
+    if "SetVisibility(workspace, properties: false, right, quantityInsight);" not in text:
+        errors.append("legacy three-argument visibility must keep dedicated Properties opt-in only")
     if "if (_properties != null) _properties.Visible = properties;" not in text:
-        errors.append("dedicated QS3D Properties visibility must be controlled by the central visibility helper")
+        errors.append("dedicated Properties visibility must remain centrally controllable")
 
-    legacy_hidden_bim = "SetVisibility(workspace: true, right: true, quantityInsight: false);"
-    if legacy_hidden_bim in bim:
-        errors.append("regression: BIM workspace still hides Quantity Insight")
-
-print("QS3D BLT3D BIM five-region layout preflight")
+print("QS3D BLT3D BIM owner-reference layout preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: explicit BIM mode dynamically reparents the real QS3D Properties editor into a distinct palette, reports settle success/failure, preserves isolated commands, and restores four-palette docking/visibility after recreation around native BricsCAD modelspace.")
+print("PASS: default BIM shows the integrated two-column QS3D Workspace plus Drawing/Layer Management around native BricsCAD modelspace; dedicated Properties and Quantity remain optional isolated palettes, and visibility/docking restores deterministically.")

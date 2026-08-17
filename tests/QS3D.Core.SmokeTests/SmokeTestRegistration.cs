@@ -87,6 +87,7 @@ namespace QS3D.Core.SmokeTests
             DependencyHealthBlankTargetSmoke.Run();
             LevelReferenceSmoke.Run();
             ElementVerticalPlacementAdditivePrecisionSmoke.Run();
+            ProjectFloorMutationTargetBoundSmoke.Run();
             FloorGeneratedIdentitySmoke.Run();
             ModelHealthIdentityAmbiguitySmoke.Run();
             ModelHealthSourceHandleSmoke.Run();
@@ -135,6 +136,7 @@ namespace QS3D.Core.SmokeTests
             GeneratedHandleOwnershipIndexSmoke.Run();
             GeneratedHandleOwnershipPolicyIdentitySmoke.Run();
             DependencyGraphDirectDependentsSmoke.Run();
+            DependencyGraphKnownCountContractSmoke.Run();
             ProjectStateLookupSmoke.Run();
             ProjectStateSnapshotElementIdentitySmoke.Run();
             ProjectStateSnapshotFamilyIdentitySmoke.Run();

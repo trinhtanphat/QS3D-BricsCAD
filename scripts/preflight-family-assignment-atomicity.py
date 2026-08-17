@@ -16,43 +16,57 @@ for path in (FAMILY, BULK, SMOKE, REG):
 if FAMILY.is_file():
     text = FAMILY.read_text(encoding="utf-8")
     for token in (
+        "var canonicalFamilyId = RequireCanonicalFamilyId(familyId);",
+        "var target = FindRequired(project, canonicalFamilyId);",
         "var owned = ResolveOwnedElements(project, elements, target);",
         "var pending = new List<PendingFamilyAssignment>();",
-        "var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();",
+        "var previousFamilyId = RequireCanonicalExistingFamilyId(element);",
+        "!string.Equals(value, value.Trim(), StringComparison.Ordinal)",
         "project.FindFamily(previousFamilyId)",
         "foreach (var item in pending)",
         "ResolveFamilyMembers(project, family.Id)",
     ):
         if token not in text:
-            errors.append("ProjectFamilyService.cs missing whole-batch preflight token: " + token)
-    normalize = text.find("var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();")
-    lookup = text.find("project.FindFamily(previousFamilyId)", normalize if normalize >= 0 else 0)
+            errors.append("ProjectFamilyService.cs missing whole-batch/canonical preflight token: " + token)
+    if "var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();" in text:
+        errors.append("ProjectFamilyService.Assign must not normalize a persisted previous Family identity by trimming it.")
+    target_canonical = text.find("var canonicalFamilyId = RequireCanonicalFamilyId(familyId);")
+    target_lookup = text.find("var target = FindRequired(project, canonicalFamilyId);", target_canonical if target_canonical >= 0 else 0)
+    enumeration = text.find("var owned = ResolveOwnedElements(project, elements, target);", target_lookup if target_lookup >= 0 else 0)
+    if min(target_canonical, target_lookup, enumeration) < 0 or not target_canonical < target_lookup < enumeration:
+        errors.append("ProjectFamilyService.Assign must validate canonical target Family identity before lookup and target enumeration.")
+    canonical = text.find("var previousFamilyId = RequireCanonicalExistingFamilyId(element);")
+    lookup = text.find("project.FindFamily(previousFamilyId)", canonical if canonical >= 0 else 0)
     mutation = text.find("element.FamilyId = target.Id;")
-    if min(normalize, lookup, mutation) < 0 or not normalize < lookup < mutation:
-        errors.append("ProjectFamilyService.Assign must normalize and resolve previous Family identities before the first FamilyId mutation.")
+    if min(canonical, lookup, mutation) < 0 or not canonical < lookup < mutation:
+        errors.append("ProjectFamilyService.Assign must reject non-canonical and resolve previous Family identities before the first FamilyId mutation.")
 
 if BULK.is_file():
     text = BULK.read_text(encoding="utf-8")
     for token in (
         "var pending = new List<PendingFamilyAssignment>();",
-        "var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();",
+        "var previousFamilyId = RequireCanonicalExistingFamilyId(element);",
+        "!string.Equals(value, value.Trim(), StringComparison.Ordinal)",
         "project.FindFamily(previousFamilyId)",
         "pending.Add(new PendingFamilyAssignment",
         "foreach (var item in pending)",
     ):
         if token not in text:
-            errors.append("BulkEditService.cs missing Family assignment preflight token: " + token)
-    normalize = text.find("var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();")
-    lookup = text.find("project.FindFamily(previousFamilyId)", normalize if normalize >= 0 else 0)
+            errors.append("BulkEditService.cs missing canonical Family assignment preflight token: " + token)
+    canonical = text.find("var previousFamilyId = RequireCanonicalExistingFamilyId(element);")
+    lookup = text.find("project.FindFamily(previousFamilyId)", canonical if canonical >= 0 else 0)
     mutation = text.find("element.FamilyId = family.Id;")
-    if min(normalize, lookup, mutation) < 0 or not normalize < lookup < mutation:
-        errors.append("BulkEditService.AssignFamily must normalize and resolve previous Family identities before the first FamilyId mutation.")
+    if min(canonical, lookup, mutation) < 0 or not canonical < lookup < mutation:
+        errors.append("BulkEditService.AssignFamily must reject non-canonical and resolve previous Family identities before the first FamilyId mutation.")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
     for token in (
         "DuplicatePreviousFamilyBlocksWholeAssignmentBatch",
         "DuplicatePreviousFamilyBlocksBulkEditBatch",
+        "CanonicalCaseInsensitiveTargetAssignmentIsNoOp",
+        "PaddedTargetFamilyIdFailsClosedBeforeEnumeration",
+        "PaddedPersistedFamilyIdFailsClosedBeforeMutation",
         "CorruptProjectElementListBlocksPropertyPropagationBeforeMutation",
         "setup.Project.UpdatedUtc != beforeUpdated",
     ):
@@ -68,4 +82,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: ProjectFamilyService and BulkEditService normalize and resolve all failure-prone previous-family identities before mutating any assignment target.")
+print("PASS: ProjectFamilyService validates canonical target/source Family identities and resolves the whole batch before mutation; BulkEditService preserves the same fail-closed source-identity boundary.")

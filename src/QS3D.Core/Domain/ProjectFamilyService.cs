@@ -128,7 +128,8 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elements == null) throw new ArgumentNullException(nameof(elements));
-            var target = FindRequired(project, familyId);
+            var canonicalFamilyId = RequireCanonicalFamilyId(familyId);
+            var target = FindRequired(project, canonicalFamilyId);
             var targetProperties = SnapshotProperties(target, "Target", "assignment");
 
             var beforeTargetEnumeration = project.ChangeVersion;
@@ -141,7 +142,7 @@ namespace QS3D.Core.Domain
 
             foreach (var element in owned)
             {
-                var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();
+                var previousFamilyId = RequireCanonicalExistingFamilyId(element);
                 if (string.Equals(previousFamilyId, target.Id, StringComparison.OrdinalIgnoreCase)) continue;
                 IReadOnlyList<KeyValuePair<string, string>> previousProperties = Array.Empty<KeyValuePair<string, string>>();
                 if (previousFamilyId.Length > 0)
@@ -304,11 +305,19 @@ namespace QS3D.Core.Domain
 
         private static void RequireAssignmentTargetCountWithinLimit(IEnumerable<ProjectElement> elements)
         {
-            if (elements is ICollection<ProjectElement> collection && collection.Count > MaxAssignmentTargetEntries)
-                throw AssignmentTargetLimitExceeded();
-            if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection && readOnlyCollection.Count > MaxAssignmentTargetEntries)
-                throw AssignmentTargetLimitExceeded();
-            if (elements is System.Collections.ICollection nonGenericCollection && nonGenericCollection.Count > MaxAssignmentTargetEntries)
+            if (elements is ICollection<ProjectElement> collection)
+                RequireValidAssignmentTargetKnownCount(collection.Count);
+            if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection)
+                RequireValidAssignmentTargetKnownCount(readOnlyCollection.Count);
+            if (elements is System.Collections.ICollection nonGenericCollection)
+                RequireValidAssignmentTargetKnownCount(nonGenericCollection.Count);
+        }
+
+        private static void RequireValidAssignmentTargetKnownCount(int count)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Family assignment target collection reported an invalid negative known count.");
+            if (count > MaxAssignmentTargetEntries)
                 throw AssignmentTargetLimitExceeded();
         }
 
@@ -347,6 +356,23 @@ namespace QS3D.Core.Domain
                 if (element.Category != target.Category)
                     throw new InvalidOperationException("Family '" + target.Name + "' category " + target.Category + " cannot be assigned to element " + element.Id + " category " + element.Category + ".");
             }
+        }
+
+        private static string RequireCanonicalFamilyId(string familyId)
+        {
+            var canonical = Required(familyId, nameof(familyId), 80);
+            if (!string.Equals(familyId, canonical, StringComparison.Ordinal))
+                throw new ArgumentException("Family id must be canonical and contain no leading or trailing whitespace.", nameof(familyId));
+            return canonical;
+        }
+
+        private static string RequireCanonicalExistingFamilyId(ProjectElement element)
+        {
+            var value = element.FamilyId ?? string.Empty;
+            if (value.Length == 0) return string.Empty;
+            if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Element " + element.Id + " references a non-canonical family id: '" + value + "'. Repair the relation before reassignment.");
+            return value;
         }
 
         private static ProjectFamily FindRequired(ProjectState project, string id)

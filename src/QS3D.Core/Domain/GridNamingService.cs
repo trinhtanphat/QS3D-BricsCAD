@@ -58,7 +58,7 @@ namespace QS3D.Core.Domain
 
             var targetEnumerationVersion = project.ChangeVersion;
             var projectElementsAtStart = project.Elements.ToList();
-            var knownCount = TryGetKnownCount(orderedGridElementIds, out var conflictingKnownCounts);
+            var knownCount = TryGetKnownCount(orderedGridElementIds, out var conflictingKnownCounts, out var invalidNegativeKnownCount);
             var versionAfterKnownCount = project.ChangeVersion;
             if (versionAfterKnownCount != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Grid renumber targets were being enumerated. Retry renumbering against the current project state.");
@@ -66,6 +66,8 @@ namespace QS3D.Core.Domain
                 throw new InvalidOperationException("A Grid renumber batch supports at most " + MaxGridBatch + " elements.");
             if (conflictingKnownCounts)
                 throw new InvalidOperationException("Grid renumber target source exposes conflicting known Count values.");
+            if (invalidNegativeKnownCount)
+                throw new InvalidOperationException("Grid renumber target source exposes an invalid negative known count.");
 
             var ids = new List<string>();
             foreach (var value in orderedGridElementIds)
@@ -172,21 +174,31 @@ namespace QS3D.Core.Domain
             return result;
         }
 
-        private static int? TryGetKnownCount(IEnumerable<string> source, out bool conflictingKnownCounts)
+        private static int? TryGetKnownCount(
+            IEnumerable<string> source,
+            out bool conflictingKnownCounts,
+            out bool invalidNegativeKnownCount)
         {
             conflictingKnownCounts = false;
+            invalidNegativeKnownCount = false;
             int? knownCount = null;
             if (source is ICollection<string> collection)
-                knownCount = ObserveKnownCount(knownCount, collection.Count, ref conflictingKnownCounts);
+                knownCount = ObserveKnownCount(knownCount, collection.Count, ref conflictingKnownCounts, ref invalidNegativeKnownCount);
             if (source is IReadOnlyCollection<string> readOnlyCollection)
-                knownCount = ObserveKnownCount(knownCount, readOnlyCollection.Count, ref conflictingKnownCounts);
+                knownCount = ObserveKnownCount(knownCount, readOnlyCollection.Count, ref conflictingKnownCounts, ref invalidNegativeKnownCount);
             if (source is ICollection nonGenericCollection)
-                knownCount = ObserveKnownCount(knownCount, nonGenericCollection.Count, ref conflictingKnownCounts);
+                knownCount = ObserveKnownCount(knownCount, nonGenericCollection.Count, ref conflictingKnownCounts, ref invalidNegativeKnownCount);
             return knownCount;
         }
 
-        private static int ObserveKnownCount(int? current, int observed, ref bool conflictingKnownCounts)
+        private static int ObserveKnownCount(
+            int? current,
+            int observed,
+            ref bool conflictingKnownCounts,
+            ref bool invalidNegativeKnownCount)
         {
+            if (observed < 0)
+                invalidNegativeKnownCount = true;
             if (current.HasValue && current.Value != observed)
                 conflictingKnownCounts = true;
             return !current.HasValue || observed > current.Value ? observed : current.Value;
