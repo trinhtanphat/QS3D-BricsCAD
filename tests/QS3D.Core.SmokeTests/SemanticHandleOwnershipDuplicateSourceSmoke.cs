@@ -130,7 +130,7 @@ namespace QS3D.Core.SmokeTests
             if (!ReferenceEquals(owner, element))
                 throw new Exception("Canonical unique SourceHandle owner resolution changed unexpectedly.");
 
-            var captureTarget = SemanticHandleOwnershipResolver.ResolveCaptureTarget(project, " 1a ", ElementCategory.Beam, " E-1 ");
+            var captureTarget = SemanticHandleOwnershipResolver.ResolveCaptureTarget(project, " 1a ", ElementCategory.Beam, "E-1");
             if (!ReferenceEquals(captureTarget, element))
                 throw new Exception("Canonical unique SourceHandle capture-target resolution changed unexpectedly.");
 
