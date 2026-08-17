@@ -34,13 +34,13 @@ namespace QS3D.Core.Templates
             if (string.IsNullOrWhiteSpace(value))
                 throw new ArgumentException(requiredMessage, parameterName);
 
-            var normalized = value.Trim();
-            for (var i = 0; i < normalized.Length; i++)
+            for (var i = 0; i < value.Length; i++)
             {
-                if (char.IsControl(normalized[i]))
+                if (char.IsControl(value[i]))
                     throw new ArgumentException("Template identity text cannot contain control characters.", parameterName);
             }
 
+            var normalized = value.Trim();
             try
             {
                 XmlConvert.VerifyXmlChars(normalized);
