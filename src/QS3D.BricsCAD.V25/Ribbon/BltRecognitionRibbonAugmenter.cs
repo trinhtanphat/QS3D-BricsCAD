@@ -11,8 +11,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
     /// <summary>
     /// Reconciles only the QS3D-owned NHẬN DẠNG tab into the compact BLT3D-familiar
     /// topbar layout. The workspace/palette below the Ribbon is intentionally untouched.
-    /// Enabled buttons are routed through dedicated recognition adapters so their labels,
-    /// artwork and runtime actions stay semantically aligned.
+    /// Recognition actions without a matching production workflow remain visibly present
+    /// but disabled so a familiar label can never dispatch an unrelated QS3D command.
     /// </summary>
     internal static class BltRecognitionRibbonAugmenter
     {
@@ -28,7 +28,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private sealed class RecognitionButtonSpec
         {
-            public RecognitionButtonSpec(string id, string text, string command, IconKind icon, bool enabled = true, double width = 136d)
+            public RecognitionButtonSpec(string id, string text, string command, IconKind icon, bool enabled = false, double width = 136d)
             { Id = id; Text = text; Command = command; Icon = icon; Enabled = enabled; Width = width; }
             public string Id { get; }
             public string Text { get; }

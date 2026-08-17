@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RIBBON = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "BltRecognitionRibbonAugmenter.cs"
+COMMANDS = ROOT / "src" / "QS3D.BricsCAD.V25" / "RecognitionTopbarCommands.cs"
 INIT = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "RibbonInitializationCoordinator.cs"
 ICONS = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "RibbonBootstrapIconAugmenter.cs"
 
@@ -14,6 +15,7 @@ def require(text: str, needle: str, label: str) -> None:
 
 def main() -> int:
     ribbon = RIBBON.read_text(encoding="utf-8")
+    commands = COMMANDS.read_text(encoding="utf-8")
     init = INIT.read_text(encoding="utf-8")
     icons = ICONS.read_text(encoding="utf-8")
 
@@ -39,16 +41,39 @@ def main() -> int:
     require(ribbon, 'SetProperty(button, "ShowImage", true)', "reference icon visibility")
     require(ribbon, 'SetProperty(button, "IsEnabled", spec.Enabled)', "reference disabled states")
 
-    # The screenshot intentionally shows these commands greyed out.
+    # No recognition action may be clickable until a production workflow with the same semantics exists.
+    require(ribbon, "bool enabled = false", "fail-closed recognition button default")
     for disabled_id in (
+        "QS3D_RECOGNIZE_BLT_RESTORE",
         "QS3D_RECOGNIZE_BLT_TEXT",
+        "QS3D_RECOGNIZE_BLT_OPTIONS",
         "QS3D_RECOGNIZE_BLT_TABLE",
+        "QS3D_RECOGNIZE_BLT_BOUNDARY",
+        "QS3D_RECOGNIZE_BLT_LABEL",
+        "QS3D_RECOGNIZE_BLT_AUTO",
         "QS3D_RECOGNIZE_BLT_VALIDATE",
     ):
         marker = f'"{disabled_id}"'
         pos = ribbon.find(marker)
-        if pos < 0 or "enabled: false" not in ribbon[pos : pos + 340]:
-            raise SystemExit(f"FAIL: {disabled_id} must remain visually disabled")
+        if pos < 0:
+            raise SystemExit(f"FAIL: {disabled_id} missing from recognition parity surface")
+        if "enabled: true" in ribbon[pos : pos + 340]:
+            raise SystemExit(f"FAIL: {disabled_id} must remain fail-closed until a matching recognition workflow exists")
+
+    # Dedicated-looking recognition adapters must not redirect to unrelated QS3D workflows.
+    for adapter in (
+        "QS3DRECOGNITIONRESTORE",
+        "QS3DRECOGNITIONOPTIONS",
+        "QS3DRECOGNITIONBOUNDARY",
+        "QS3DRECOGNITIONLABEL",
+        "QS3DRECOGNITIONAUTO",
+    ):
+        require(commands, f'CommandMethod("{adapter}"', f"recognition adapter {adapter}")
+
+    for unrelated in ("QS3DINSPECT", "QS3DMEPREVIEW", "QS3DTAKEOFF", "SendStringToExecute"):
+        if unrelated in commands:
+            raise SystemExit(f"FAIL: recognition adapters must fail closed, not dispatch unrelated workflow token: {unrelated}")
+    require(commands, "chưa có workflow nhận dạng tương ứng", "fail-closed recognition adapter message")
 
     require(init, "BltRecognitionRibbonAugmenter.TryInitialize()", "recognition parity initialization")
     require(init, "BltRecognitionRibbonAugmenter.Reset()", "recognition parity reset")
@@ -61,8 +86,8 @@ def main() -> int:
     require(icons, "HasCompleteVisibleIcon(item)", "preserve richer recognition artwork")
 
     print(
-        "PASS: NHẬN DẠNG topbar keeps the BLT3D reference labels, two compact groups, "
-        "stacked small-icon rows, disabled-state parity, and recursive nested ribbon readiness."
+        "PASS: NHẬN DẠNG topbar keeps BLT3D reference labels/layout/artwork while every unsupported "
+        "recognition action stays disabled and its command adapter fails closed without unrelated dispatch."
     )
     return 0
 
