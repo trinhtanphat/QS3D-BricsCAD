@@ -149,8 +149,14 @@ def main():
         'button.MouseLeave += (_, __) => frame.Background = PanelBrush;',
         'private static Button CreateClickSurface(UIElement content, Cursor cursor)',
         'button.Click += (_, __) => RunUiAction(action);', 'button.Click += (_, __) => OpenRecentProject(recent);',
-        'Application.DocumentManager.Open(normalized, false)', 'StatusItem("○ Nền sáng")',
-        'StatusItem("◐ Tương phản")', 'StatusItem("⌞ Vuông góc")', 'StatusItem("⌖ Bắt điểm", highlighted: true)',
+        'Application.DocumentManager.Open(normalized, false)',
+        'private const int ObjectSnapSuppressedBit = 16384;',
+        'StatusToggleButton(', '"○ Nền sáng"', '"◐ Tương phản"', '"⌞ Vuông góc"', '"⌖ Bắt điểm"',
+        'ToggleLightTheme', 'ToggleLinearContrast', 'ToggleOrtho', 'ToggleEntitySnap',
+        'RefreshStatusControls();', 'Application.GetSystemVariable(name)',
+        'Application.SetSystemVariable("COLORTHEME",', 'Application.SetSystemVariable("LINEARCONTRAST",',
+        'Application.SetSystemVariable("ORTHOMODE",', 'Application.SetSystemVariable("OSMODE",',
+        'current | ObjectSnapSuppressedBit', 'current & ~ObjectSnapSuppressedBit',
         'StartCenterUserStateStore.GetSnapshot().RecentProjects',
         'RibbonIconFactory.Create(RibbonIconKind.OpenProject, 20)',
     ):
@@ -162,6 +168,8 @@ def main():
                   'CreateActionCard("↻", "Cập nhật"', 'CreateActionCard("＋"', 'CreateActionCard("▱"',
                   'CreateActionCard("▣"', 'CreateActionCard("▤"', 'var brandGlyph = new TextBlock', 'Text = "✦"',
                   '"Chọn tệp BLT3D/QS3D hiện có từ máy tính"', '"Lưu project QS3D"', '"Tạo bản sao BLT3D"',
+                  'StatusItem("○ Nền sáng")', 'StatusItem("◐ Tương phản")', 'StatusItem("⌞ Vuông góc")',
+                  'StatusItem("⌖ Bắt điểm", highlighted: true)', 'private TextBlock StatusItem(',
                   'khối lượng trong BricsCAD.'):
         forbid(shell, stale, shell_rel)
 
@@ -176,7 +184,7 @@ def main():
     require(host, '_palette.AddVisual("Khởi đầu", _panel, true);', host_rel)
     require(host, 'Dock = DockSides.Left', host_rel)
 
-    print("PASS: QS3D KHỞI ĐẦU matches the BLT3D reference surface with Dự án + Cấu hình ribbon groups, semantic vector icons, and exactly four embedded quick actions, while preserving branded/rasterized Ribbon icons, native WPF Button.Click and keyboard/focus semantics, responsive embedded PaletteSet layout, project/sidecar safety, truthful dynamic versioning, recent projects, and bottom status routing.")
+    print("PASS: QS3D KHỞI ĐẦU matches the BLT3D reference surface with Dự án + Cấu hình ribbon groups, semantic vector icons, and exactly four embedded quick actions, while preserving branded/rasterized Ribbon icons, native WPF Button.Click and keyboard/focus semantics, responsive embedded PaletteSet layout, project/sidecar safety, truthful dynamic versioning, recent projects, and actionable host-synchronized bottom status routing.")
     return 0
 
 
