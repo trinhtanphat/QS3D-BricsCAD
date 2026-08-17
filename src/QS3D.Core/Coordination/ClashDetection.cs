@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
@@ -119,6 +120,8 @@ namespace QS3D.Core.Coordination
 
     public sealed class ClashDetectionService
     {
+        private const int MaximumElements = 500;
+
         public IReadOnlyList<ClashResult> Detect(
             IEnumerable<CoordinationElement> elements,
             double clearanceM = 0d,
@@ -128,11 +131,15 @@ namespace QS3D.Core.Coordination
             if (double.IsNaN(clearanceM) || double.IsInfinity(clearanceM) || clearanceM < 0d)
                 throw new ArgumentOutOfRangeException(nameof(clearanceM));
 
+            RequireKnownCountWithinLimit(elements);
+
             var snapshot = new List<CoordinationElement>();
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var element in elements)
             {
+                if (index == MaximumElements)
+                    throw TooManyElements();
                 if (element == null)
                     throw new ArgumentException("Coordination input contains a null element at index " + index + ".", nameof(elements));
                 if (!ids.Add(element.ElementId))
@@ -189,6 +196,22 @@ namespace QS3D.Core.Coordination
             }
 
             return new ReadOnlyCollection<ClashResult>(results.ToArray());
+        }
+
+        private static void RequireKnownCountWithinLimit(IEnumerable<CoordinationElement> elements)
+        {
+            if (elements is ICollection<CoordinationElement> collection && collection.Count > MaximumElements)
+                throw TooManyElements();
+            if (elements is IReadOnlyCollection<CoordinationElement> readOnlyCollection && readOnlyCollection.Count > MaximumElements)
+                throw TooManyElements();
+            if (elements is ICollection nonGenericCollection && nonGenericCollection.Count > MaximumElements)
+                throw TooManyElements();
+        }
+
+        private static InvalidOperationException TooManyElements()
+        {
+            return new InvalidOperationException(
+                "Coordination clash detection supports at most " + MaximumElements + " elements per operation.");
         }
 
         private static int CompareElements(CoordinationElement left, CoordinationElement right)
