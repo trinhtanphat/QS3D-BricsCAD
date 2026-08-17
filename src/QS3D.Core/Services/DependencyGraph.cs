@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Domain;
@@ -192,10 +193,33 @@ namespace QS3D.Core.Services
 
         private static void RejectKnownOversizedInput(IEnumerable<ProjectElement> elements, string operation)
         {
-            if (elements is ICollection<ProjectElement> collection && collection.Count > MaxElementInputCount)
-                throw new InvalidOperationException(operation + " exceeds the supported " + MaxElementInputCount + " element limit.");
-            if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection && readOnlyCollection.Count > MaxElementInputCount)
-                throw new InvalidOperationException(operation + " exceeds the supported " + MaxElementInputCount + " element limit.");
+            var knownCounts = new List<int>(3);
+            if (elements is ICollection<ProjectElement> collection)
+                knownCounts.Add(collection.Count);
+            if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection)
+                knownCounts.Add(readOnlyCollection.Count);
+            if (elements is ICollection nonGenericCollection)
+                knownCounts.Add(nonGenericCollection.Count);
+
+            foreach (var count in knownCounts)
+            {
+                if (count > MaxElementInputCount)
+                    throw new InvalidOperationException(operation + " exceeds the supported " + MaxElementInputCount + " element limit.");
+            }
+
+            foreach (var count in knownCounts)
+            {
+                if (count < 0)
+                    throw new InvalidOperationException(operation + " exposes a negative known element count. Repair the caller collection contract before graph evaluation.");
+            }
+
+            if (knownCounts.Count < 2) return;
+            var expected = knownCounts[0];
+            for (var index = 1; index < knownCounts.Count; index++)
+            {
+                if (knownCounts[index] == expected) continue;
+                throw new InvalidOperationException(operation + " exposes conflicting known element counts. Repair the caller collection contract before graph evaluation.");
+            }
         }
 
         private static void ValidateDependencies(ProjectElement element)
