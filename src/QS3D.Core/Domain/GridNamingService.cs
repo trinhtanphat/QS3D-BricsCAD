@@ -172,13 +172,19 @@ namespace QS3D.Core.Domain
 
         private static int? TryGetKnownCount(IEnumerable<string> source)
         {
+            int? knownCount = null;
             if (source is ICollection<string> collection)
-                return collection.Count;
+                knownCount = MaximumKnownCount(knownCount, collection.Count);
             if (source is IReadOnlyCollection<string> readOnlyCollection)
-                return readOnlyCollection.Count;
+                knownCount = MaximumKnownCount(knownCount, readOnlyCollection.Count);
             if (source is ICollection nonGenericCollection)
-                return nonGenericCollection.Count;
-            return null;
+                knownCount = MaximumKnownCount(knownCount, nonGenericCollection.Count);
+            return knownCount;
+        }
+
+        private static int MaximumKnownCount(int? current, int observed)
+        {
+            return !current.HasValue || observed > current.Value ? observed : current.Value;
         }
 
         private static Dictionary<string, ProjectElement?> ResolveOriginalTargets(
