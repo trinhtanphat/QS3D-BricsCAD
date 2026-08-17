@@ -113,8 +113,9 @@ namespace QS3D.Core.Services
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
+            var canonicalFamilyId = RequireCanonicalFamilyId(familyId);
             ValidateUniqueFamilyIds(project);
-            var family = project.FindFamily(familyId) ?? throw new KeyNotFoundException("Unknown family: " + familyId);
+            var family = project.FindFamily(canonicalFamilyId) ?? throw new KeyNotFoundException("Unknown family: " + canonicalFamilyId);
 
             var familyOwnership = SnapshotFamilyOwnership(project);
             var beforeTargetEnumeration = project.ChangeVersion;
@@ -135,7 +136,7 @@ namespace QS3D.Core.Services
             var previousSnapshots = new Dictionary<string, IReadOnlyList<KeyValuePair<string, string>>>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in targets)
             {
-                var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();
+                var previousFamilyId = RequireCanonicalExistingFamilyId(element);
                 if (string.Equals(previousFamilyId, family.Id, StringComparison.OrdinalIgnoreCase)) continue;
 
                 IReadOnlyList<KeyValuePair<string, string>> previousProperties = Array.Empty<KeyValuePair<string, string>>();
@@ -312,6 +313,24 @@ namespace QS3D.Core.Services
                 if (!ReferenceEquals(current, element))
                     throw new InvalidOperationException("Element no longer belongs to the project after bulk Family assignment target enumeration: " + element.Id + ".");
             }
+        }
+
+        private static string RequireCanonicalFamilyId(string familyId)
+        {
+            if (string.IsNullOrWhiteSpace(familyId))
+                throw new ArgumentException("Family id is required.", nameof(familyId));
+            if (!string.Equals(familyId, familyId.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Family id must be canonical and contain no leading or trailing whitespace.", nameof(familyId));
+            return familyId;
+        }
+
+        private static string RequireCanonicalExistingFamilyId(ProjectElement element)
+        {
+            var value = element.FamilyId ?? string.Empty;
+            if (value.Length == 0) return string.Empty;
+            if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Element " + element.Id + " references a non-canonical family id: '" + value + "'. Repair the relation before bulk reassignment.");
+            return value;
         }
 
         private static void ValidateUniqueFamilyIds(ProjectState project)
