@@ -1,10 +1,14 @@
 using System;
+using System.Runtime.CompilerServices;
 using QS3D.Core.Cost;
 
 namespace QS3D.Core.SmokeTests
 {
     internal static class CostBenchmarkMedianPrecisionSmoke
     {
+        [ModuleInitializer]
+        internal static void Initialize() => Run();
+
         internal static void Run()
         {
             PrecisionLossFailsClosed();
