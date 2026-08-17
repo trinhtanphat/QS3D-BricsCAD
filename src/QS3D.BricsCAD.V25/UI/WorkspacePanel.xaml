@@ -110,24 +110,6 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Grid x:Name="Qs3dWorkspaceBrandMark"
-                          Width="32" Height="20" Margin="0,0,7,0"
-                          VerticalAlignment="Center"
-                          ToolTip="QS3D • X đỏ / V xanh">
-                        <Border Background="#FF121822" BorderBrush="#FF435062"
-                                BorderThickness="1" CornerRadius="4"/>
-                        <Canvas Width="30" Height="18">
-                            <Path x:Name="Qs3dBrandRedX"
-                                  Data="M 5,4 L 13,13 M 13,4 L 5,13"
-                                  Stroke="#FFE84A4A" StrokeThickness="2.6"
-                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                            <Path x:Name="Qs3dBrandGreenV"
-                                  Data="M 17,8 L 21,13 L 27,4"
-                                  Stroke="#FF52BE6C" StrokeThickness="2.8"
-                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                  StrokeLineJoin="Round"/>
-                        </Canvas>
-                    </Grid>
                     <TextBlock Text="QS3D" FontWeight="Bold" FontSize="14"/>
                     <Border Background="{StaticResource AccentBrush}" CornerRadius="3"
                             Padding="7,1" Margin="7,0,0,0">

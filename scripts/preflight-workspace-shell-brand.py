@@ -3,7 +3,6 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKSPACE_XAML_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml"
 LAYOUT_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
 WORKSPACE_BRAND_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Qs3dBrandMark.cs"
 SHELL_REL = "src/QS3D.BricsCAD.V25/Ribbon/Blt3dShellChromeCoordinator.cs"
@@ -26,7 +25,6 @@ def forbid(text, needle, scope):
 
 
 def main():
-    workspace_xaml = read(WORKSPACE_XAML_REL)
     layout = read(LAYOUT_REL)
     workspace_brand = read(WORKSPACE_BRAND_REL)
     shell = read(SHELL_REL)
@@ -49,39 +47,20 @@ def main():
         require(layout, token, LAYOUT_REL)
     require(layout, "using System.Windows.Data;", LAYOUT_REL)
 
-    # The visible Workspace header owns the brand mark declaratively. This avoids depending on a
-    # host-specific Loaded/visual-tree timing race for the primary X/V identity. The code-behind
-    # injector remains a compatibility fallback and must short-circuit when the XAML name exists.
-    # Keep the tile geometry and contrast explicit: a zero-size/transparent placeholder must not
-    # satisfy this guard while still leaving the owner-visible X đỏ / V xanh effectively absent.
+    # The Workspace itself must visibly carry the original QS3D red-X / green-V identity. Guard
+    # not only the vector art but also the Loaded lifecycle and deterministic insertion point so a
+    # future carrier/rebase cannot silently keep the file while disconnecting it from the live UI.
+    # LOCAL-012 remains the real licensed BricsCAD/HiDPI visual qualification gate.
     for token in (
-        'x:Name="Qs3dWorkspaceBrandMark"',
-        'Width="32" Height="20" Margin="0,0,7,0"',
-        'ToolTip="QS3D • X đỏ / V xanh"',
-        'Background="#FF121822" BorderBrush="#FF435062"',
-        'x:Name="Qs3dBrandRedX"',
-        'Data="M 5,4 L 13,13 M 13,4 L 5,13"',
-        'Stroke="#FFE84A4A" StrokeThickness="2.6"',
-        'x:Name="Qs3dBrandGreenV"',
-        'Data="M 17,8 L 21,13 L 27,4"',
-        'Stroke="#FF52BE6C" StrokeThickness="2.8"',
-        '<TextBlock Text="QS3D" FontWeight="Bold" FontSize="14"/>',
-    ):
-        require(workspace_xaml, token, WORKSPACE_XAML_REL)
-
-    mark_pos = workspace_xaml.find('x:Name="Qs3dWorkspaceBrandMark"')
-    qs3d_text_pos = workspace_xaml.find('<TextBlock Text="QS3D" FontWeight="Bold" FontSize="14"/>')
-    if mark_pos < 0 or qs3d_text_pos < 0 or mark_pos > qs3d_text_pos:
-        raise SystemExit(f"FAIL: {WORKSPACE_XAML_REL} must place the X/V mark before the QS3D header text")
-
-    for token in (
-        'private const string Qs3dWorkspaceBrandName = "Qs3dWorkspaceBrandMark";',
-        "if (FindName(Qs3dWorkspaceBrandName) != null || WorkspaceContentRoot == null)",
+        "Qs3dWorkspaceBrandMark",
         "EventManager.RegisterClassHandler(",
         "FrameworkElement.LoadedEvent",
         "OnQs3dWorkspaceBrandLoaded",
         "DispatcherPriority.Loaded",
         "EnsureQs3dWorkspaceBrandMark",
+        "WorkspaceContentRoot.Children",
+        "Grid.GetRow(child) == 0",
+        "Grid.GetColumn(child) == 0",
         "RegisterName(Qs3dWorkspaceBrandName, mark);",
         "X đỏ / V xanh",
         "Color.FromRgb(232, 74, 74)",
@@ -135,9 +114,8 @@ def main():
         require(logo, token, LOGO_REL)
 
     print(
-        "PASS: Workspace breaks the zero-viewport width loop, declares a visible high-contrast "
-        "QS3D red-X green-V tile directly in XAML with a fallback-safe runtime injector, and keeps "
-        "matching shell/repository branding."
+        "PASS: Workspace breaks the zero-viewport width loop, restores visible two-column BIM content, "
+        "and QS3D Workspace/shell/repository branding uses original red-X green-V artwork with live UI wiring."
     )
     return 0
 
