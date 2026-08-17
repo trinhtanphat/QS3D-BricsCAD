@@ -6,11 +6,6 @@ using System.Text;
 
 namespace QS3D.Core.Measurement
 {
-    /// <summary>
-    /// Immutable, deterministic snapshot of already-computed canonical measurement traces.
-    /// This type does not calculate or reconcile quantities; MeasurementTrace remains the
-    /// authoritative explanation of each measured value.
-    /// </summary>
     public sealed class MeasurementSnapshot
     {
         private const int MaximumTraceCount = 10000;
@@ -31,10 +26,7 @@ namespace QS3D.Core.Measurement
 
                 var identity = IdentityKey(trace);
                 if (!identities.Add(identity))
-                    throw new ArgumentException(
-                        "Measurement snapshot contains duplicate measurement identity: " +
-                        trace.SemanticIdentity + "/" + trace.SourceIdentity + "/" + trace.QuantityKey + ".",
-                        nameof(traces));
+                    throw new ArgumentException("Measurement snapshot contains duplicate measurement identity: " + trace.SemanticIdentity + "/" + trace.SourceIdentity + "/" + trace.QuantityKey + ".", nameof(traces));
 
                 items.Add(trace);
             }
@@ -55,8 +47,6 @@ namespace QS3D.Core.Measurement
             return builder.ToString();
         }
 
-        // Inspect every exposed known-count contract before acquiring an enumerator so
-        // contradictory in-bound counts fail closed without consuming any trace data.
         private static void RequireSupportedCount(IEnumerable<MeasurementTrace> traces, string paramName)
         {
             int? knownCount = null;
@@ -70,6 +60,8 @@ namespace QS3D.Core.Measurement
 
         private static void ValidateKnownCount(int count, ref int? knownCount, string paramName)
         {
+            if (count < 0)
+                throw new InvalidOperationException("Measurement snapshot collection reports a negative known count.");
             if (count > MaximumTraceCount)
                 throw TraceCountError(paramName);
             if (knownCount.HasValue && knownCount.Value != count)
@@ -79,17 +71,10 @@ namespace QS3D.Core.Measurement
 
         private static ArgumentException TraceCountError(string paramName)
         {
-            return new ArgumentException(
-                "Measurement snapshot accepts at most " + MaximumTraceCount + " traces.",
-                paramName);
+            return new ArgumentException("Measurement snapshot accepts at most " + MaximumTraceCount + " traces.", paramName);
         }
 
-        private static string IdentityKey(MeasurementTrace trace)
-        {
-            // MeasurementTrace rejects control characters, so U+001F cannot occur in any
-            // of these canonical identity tokens and is safe as an internal separator.
-            return trace.SemanticIdentity + "\u001f" + trace.SourceIdentity + "\u001f" + trace.QuantityKey;
-        }
+        private static string IdentityKey(MeasurementTrace trace) => trace.SemanticIdentity + "\u001f" + trace.SourceIdentity + "\u001f" + trace.QuantityKey;
 
         private static int CompareTraces(MeasurementTrace left, MeasurementTrace right)
         {
