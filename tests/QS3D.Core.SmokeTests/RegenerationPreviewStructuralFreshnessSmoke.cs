@@ -39,7 +39,7 @@ namespace QS3D.Core.SmokeTests
             Equal(beforeVersion, project.ChangeVersion, "direct replacement must leave ChangeVersion unchanged");
             if (ReferenceEquals(project.Elements[index], original))
                 throw new InvalidOperationException("RegenerationPreviewStructuralFreshnessSmoke replacement fixture did not change element ownership.");
-            True(!project.FindElement("B1")!.Quantities.ContainsKey("NetVolumeM3"), "failed replacement preview must not mutate live target quantities");
+            True(!project.FindElement("B1")!.Quantities.ContainsKey("NetVolumeM3"), "failed preview must not mutate live target quantities");
         }
 
         private static void PropertyMutationDuringSubsetEnumerationFailsFreshness()
