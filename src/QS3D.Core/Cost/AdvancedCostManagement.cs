@@ -328,7 +328,16 @@ namespace QS3D.Core.Cost
 
             var average = values[0];
             for (var i = 1; i < values.Count; i++)
-                average += (values[i] - average) / (decimal)(i + 1);
+            {
+                var contribution = CostDecimalMath.DividePreservingNonZero(
+                    checked(values[i] - average),
+                    (decimal)(i + 1),
+                    "benchmark average contribution");
+                average = CostDecimalMath.AddPreservingNonZeroContribution(
+                    average,
+                    contribution,
+                    "benchmark average");
+            }
 
             var median = values.Count % 2 == 1
                 ? values[values.Count / 2]
