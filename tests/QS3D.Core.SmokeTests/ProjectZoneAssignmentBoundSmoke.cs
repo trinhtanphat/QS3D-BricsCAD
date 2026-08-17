@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         {
             CountedOversizeFailsBeforeEnumeration();
             NonGenericCountedOversizeFailsBeforeEnumeration();
+            ConflictingCountInterfacesFailBeforeEnumeration();
             CountVersionMutationFailsBeforeEnumeration();
             LazyOversizeStopsAtFirstImpossibleEntry();
             ExactBoundDuplicatesRemainSupported();
@@ -50,6 +51,23 @@ namespace QS3D.Core.SmokeTests
             Equal(beforeUtc, fixture.Project.UpdatedUtc, "Non-generic counted oversize Zone assignment changed project timestamp.");
             Equal(fixture.SourceZone.Id, fixture.Element.ZoneId, "Non-generic counted oversize Zone assignment changed ZoneId.");
             Equal(ElementDirtyFlags.None, fixture.Element.Dirty, "Non-generic counted oversize Zone assignment dirtied the element.");
+        }
+
+        private static void ConflictingCountInterfacesFailBeforeEnumeration()
+        {
+            var fixture = NewFixture("conflicting-counts");
+            var beforeVersion = fixture.Project.ChangeVersion;
+            var beforeUtc = fixture.Project.UpdatedUtc;
+            var source = new ConflictingCountInterfacesCollection(fixture.Element, AssignmentTargetLimit + 1);
+
+            Throws<InvalidOperationException>(() =>
+                ProjectZoneService.Assign(fixture.Project, fixture.TargetZone.Id, source));
+
+            Equal(0, source.EnumerationAttempts, "Conflicting count contracts bypassed known-count Zone assignment rejection.");
+            Equal(beforeVersion, fixture.Project.ChangeVersion, "Conflicting count contracts changed project version.");
+            Equal(beforeUtc, fixture.Project.UpdatedUtc, "Conflicting count contracts changed project timestamp.");
+            Equal(fixture.SourceZone.Id, fixture.Element.ZoneId, "Conflicting count contracts changed ZoneId.");
+            Equal(ElementDirtyFlags.None, fixture.Element.Dirty, "Conflicting count contracts dirtied the element.");
         }
 
         private static void CountVersionMutationFailsBeforeEnumeration()
@@ -234,6 +252,40 @@ namespace QS3D.Core.SmokeTests
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void CopyTo(Array array, int index) => throw new NotSupportedException();
+        }
+
+        private sealed class ConflictingCountInterfacesCollection : ICollection<ProjectElement>, IReadOnlyCollection<ProjectElement>, ICollection
+        {
+            private readonly ProjectElement _element;
+            private readonly int _oversizeCount;
+
+            public ConflictingCountInterfacesCollection(ProjectElement element, int oversizeCount)
+            {
+                _element = element;
+                _oversizeCount = oversizeCount;
+            }
+
+            public int EnumerationAttempts { get; private set; }
+            public int Count => 1;
+            int IReadOnlyCollection<ProjectElement>.Count => _oversizeCount;
+            int ICollection.Count => _oversizeCount;
+            public bool IsReadOnly => true;
+            public bool IsSynchronized => false;
+            public object SyncRoot => this;
+
+            public IEnumerator<ProjectElement> GetEnumerator()
+            {
+                EnumerationAttempts++;
+                throw new Exception("Conflicting count contracts must be rejected before enumeration.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public bool Contains(ProjectElement item) => ReferenceEquals(item, _element);
+            public void CopyTo(ProjectElement[] array, int arrayIndex) => throw new NotSupportedException();
+            public void Add(ProjectElement item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Remove(ProjectElement item) => throw new NotSupportedException();
             public void CopyTo(Array array, int index) => throw new NotSupportedException();
         }
 
