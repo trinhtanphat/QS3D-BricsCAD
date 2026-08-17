@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using QS3D.Core.Domain;
+using QS3D.Core.Mapping;
 using QS3D.Core.Persistence;
 
 namespace QS3D.Core.SmokeTests
@@ -14,6 +15,7 @@ namespace QS3D.Core.SmokeTests
         {
             PublicMutationStopsAtBoundAndPreservesUpdates();
             PersistenceReplacementStopsAtBoundAndIsAtomic();
+            OwnedMappingCapacityFailureDoesNotTouchProject();
             SnapshotSupportsExactBoundary();
         }
 
@@ -64,6 +66,28 @@ namespace QS3D.Core.SmokeTests
             Equal(MaximumEntries + 1, yielded, "lazy metadata enumeration stop point");
             Equal(1, project.Metadata.Count, "atomic metadata replacement count");
             Equal("original", project.Metadata["seed"], "atomic metadata replacement value");
+        }
+
+        private static void OwnedMappingCapacityFailureDoesNotTouchProject()
+        {
+            var project = NewProject("owned");
+            for (var i = 0; i < MaximumEntries; i++)
+                project.Metadata.Add(Key(i), "v");
+
+            var changeVersion = project.ChangeVersion;
+            var mapping = new MeasurementWorkItemMapping(
+                "metadata-bound-mapping",
+                ElementCategory.Room,
+                "area",
+                "classification",
+                "work-item");
+
+            Throws<InvalidOperationException>(
+                () => project.MeasurementWorkItemMappings.Add(mapping),
+                "owned mapping metadata entry 10001");
+            Equal(changeVersion, project.ChangeVersion, "failed owned metadata mutation change version");
+            Equal(MaximumEntries, project.Metadata.Count, "failed owned metadata mutation count");
+            Equal(0, project.MeasurementWorkItemMappings.Count, "failed owned mapping collection count");
         }
 
         private static void SnapshotSupportsExactBoundary()
