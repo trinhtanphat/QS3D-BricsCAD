@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 
@@ -15,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             ZoneNamesStillNormalize();
             StoredZoneReferencesFailClosedWithoutMutation();
             CorruptStoredReferenceFailsBeforeTargetEnumeration();
+            CorruptProjectElementIdFailsClosed();
             CanonicalCaseInsensitiveAssignmentStillWorks();
         }
 
@@ -24,6 +26,7 @@ namespace QS3D.Core.SmokeTests
             var zone = ProjectZoneService.Create(project, "zone-a", "Zone A");
             var before = project.ChangeVersion;
 
+            Throws<ArgumentException>(() => ProjectZoneService.Create(project, " zone-new ", "New Zone"));
             Throws<ArgumentException>(() => ProjectZoneService.Update(project, " zone-a", "Changed"));
             Throws<ArgumentException>(() => ProjectZoneService.SetActive(project, "zone-a "));
             Throws<ArgumentException>(() => ProjectZoneService.ReferenceCount(project, "\tzone-a"));
@@ -55,16 +58,17 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(element);
             Equal(1, ProjectZoneService.Assign(project, zoneA.Id, new[] { element }), "initial assignment count");
 
-            element.ZoneId = " ZONE-A ";
+            SetRawZoneId(element, " ZONE-A ");
             var beforeReference = project.ChangeVersion;
             Throws<ArgumentException>(() => ProjectZoneService.ReferenceCount(project, zoneA.Id));
-            Equal(" ZONE-A ", element.ZoneId, "padded element ZoneId preserved");
+            Equal(" ZONE-A ", RawZoneId(element), "padded element ZoneId preserved");
             Equal(beforeReference, project.ChangeVersion, "padded element reference version");
 
-            project.ActiveZoneId = " ZONE-B ";
+            SetRawZoneId(element, string.Empty);
+            SetRawActiveZoneId(project, " ZONE-B ");
             var beforeDelete = project.ChangeVersion;
             Throws<ArgumentException>(() => ProjectZoneService.Delete(project, zoneA.Id));
-            Equal(" ZONE-B ", project.ActiveZoneId, "padded ActiveZoneId preserved");
+            Equal(" ZONE-B ", RawActiveZoneId(project), "padded ActiveZoneId preserved");
             Equal(beforeDelete, project.ChangeVersion, "padded ActiveZoneId delete version");
         }
 
@@ -73,7 +77,7 @@ namespace QS3D.Core.SmokeTests
             var project = NewProject("enumeration");
             var zone = ProjectZoneService.Create(project, "zone-a", "Zone A");
             var element = NewElement("E1");
-            element.ZoneId = " zone-a ";
+            SetRawZoneId(element, " zone-a ");
             project.Elements.Add(element);
             var before = project.ChangeVersion;
             var targets = new ThrowIfEnumerated();
@@ -81,8 +85,21 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentException>(() => ProjectZoneService.Assign(project, zone.Id, targets));
 
             Equal(false, targets.Enumerated, "target enumerable untouched");
-            Equal(" zone-a ", element.ZoneId, "corrupt stored reference preserved");
+            Equal(" zone-a ", RawZoneId(element), "corrupt stored reference preserved");
             Equal(before, project.ChangeVersion, "fail-before-enumeration version");
+        }
+
+        private static void CorruptProjectElementIdFailsClosed()
+        {
+            var project = NewProject("element-id");
+            var zone = ProjectZoneService.Create(project, "zone-a", "Zone A");
+            var element = NewElement("E1");
+            SetRawElementId(element, " E1 ");
+            project.Elements.Add(element);
+            var before = project.ChangeVersion;
+
+            Throws<ArgumentException>(() => ProjectZoneService.ReferenceCount(project, zone.Id));
+            Equal(before, project.ChangeVersion, "corrupt element id version");
         }
 
         private static void CanonicalCaseInsensitiveAssignmentStillWorks()
@@ -108,6 +125,39 @@ namespace QS3D.Core.SmokeTests
         private static ProjectElement NewElement(string id)
         {
             return new ProjectElement(id, ElementCategory.Beam, string.Empty, string.Empty, string.Empty);
+        }
+
+        private static void SetRawZoneId(ProjectElement element, string value)
+        {
+            Field(typeof(ProjectElement), "_zoneId").SetValue(element, value);
+        }
+
+        private static string RawZoneId(ProjectElement element)
+        {
+            return Field(typeof(ProjectElement), "_zoneId").GetValue(element) as string
+                ?? throw new InvalidOperationException("ProjectElement._zoneId was not a string.");
+        }
+
+        private static void SetRawActiveZoneId(ProjectState project, string value)
+        {
+            Field(typeof(ProjectState), "_activeZoneId").SetValue(project, value);
+        }
+
+        private static string RawActiveZoneId(ProjectState project)
+        {
+            return Field(typeof(ProjectState), "_activeZoneId").GetValue(project) as string
+                ?? throw new InvalidOperationException("ProjectState._activeZoneId was not a string.");
+        }
+
+        private static void SetRawElementId(ProjectElement element, string value)
+        {
+            Field(typeof(ProjectElement), "<Id>k__BackingField").SetValue(element, value);
+        }
+
+        private static FieldInfo Field(Type type, string name)
+        {
+            return type.GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException(type.Name + "." + name + " field was not found.");
         }
 
         private static void Equal<T>(T expected, T actual, string label)
