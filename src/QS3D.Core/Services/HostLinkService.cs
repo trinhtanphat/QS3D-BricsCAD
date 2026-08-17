@@ -16,9 +16,11 @@ namespace QS3D.Core.Services
             var wall = project.FindElement(wallId) ?? throw new InvalidOperationException("Wall element not found: " + wallId);
             EnsureOpening(opening, openingId);
             if (!IsWall(wall.Category)) throw new InvalidOperationException("Host is not a wall: " + wallId);
+            ValidateCanonicalDependencies(opening);
 
             var hasPreviousHost = opening.Properties.TryGetValue("HostWallId", out var previous);
             var previousHostRaw = hasPreviousHost ? previous ?? string.Empty : string.Empty;
+            ValidateCanonicalHostId(opening, previousHostRaw);
             var previousHost = previousHostRaw.Trim();
             var relationshipChanged = !string.Equals(previousHost, wall.Id, StringComparison.OrdinalIgnoreCase);
             var matchingDependencies = opening.DependsOn.Where(x => DependencyMatches(x, wall.Id)).ToList();
@@ -67,6 +69,7 @@ namespace QS3D.Core.Services
             ValidateUniqueElementIds(project);
             var opening = project.FindElement(openingId) ?? throw new InvalidOperationException("Opening element not found: " + openingId);
             EnsureOpening(opening, openingId);
+            ValidateCanonicalDependencies(opening);
             var hasHostProperty = opening.Properties.TryGetValue("HostWallId", out var value);
             if (!hasHostProperty)
             {
@@ -80,7 +83,9 @@ namespace QS3D.Core.Services
                 return;
             }
 
-            var hostId = (value ?? string.Empty).Trim();
+            var hostIdRaw = value ?? string.Empty;
+            ValidateCanonicalHostId(opening, hostIdRaw);
+            var hostId = hostIdRaw.Trim();
             if (hostId.Length == 0)
                 throw new InvalidOperationException("Opening " + opening.Id + " has blank HostWallId metadata. Repair the host relationship before unlinking it.");
 
@@ -114,6 +119,24 @@ namespace QS3D.Core.Services
                     throw new InvalidOperationException("Project contains a null semantic element entry.");
                 if (!seenIds.Add(element.Id))
                     throw new InvalidOperationException("Project contains duplicate semantic element id: " + element.Id + ".");
+            }
+        }
+
+        private static void ValidateCanonicalHostId(ProjectElement opening, string hostId)
+        {
+            if (string.IsNullOrWhiteSpace(hostId)) return;
+            if (!string.Equals(hostId, hostId.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Opening " + opening.Id + " has non-canonical HostWallId metadata. Repair the host relationship before changing it.");
+        }
+
+        private static void ValidateCanonicalDependencies(ProjectElement opening)
+        {
+            for (var index = 0; index < opening.DependsOn.Count; index++)
+            {
+                var dependencyId = opening.DependsOn[index] ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(dependencyId)) continue;
+                if (!string.Equals(dependencyId, dependencyId.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Opening " + opening.Id + " has a non-canonical dependency at index " + index + ". Repair the relationship before changing its host.");
             }
         }
 
@@ -169,9 +192,6 @@ namespace QS3D.Core.Services
                 throw new InvalidOperationException(
                     "Host " + hostId + " has orphan physical opening target-state. Rebuild its 3D geometry before " + operation + " of opening " + opening.Id + ".");
 
-            // Legacy physical cuts may have been created before the exact opening-id target state was
-            // persisted. We cannot prove that this opening is not baked into the host solid, so changing
-            // HostWallId must fail closed rather than leaving an irreversible hole behind.
             if (!hasTargets)
                 throw new InvalidOperationException(
                     "Host " + hostId + " has a physical opening cut without exact target-state. Rebuild its 3D geometry before " + operation + " of opening " + opening.Id + ".");
@@ -180,8 +200,6 @@ namespace QS3D.Core.Services
                 throw new InvalidOperationException(
                     "Host " + hostId + " physical opening target-state is unavailable. Rebuild its 3D geometry before " + operation + ".");
 
-            // Validate the whole target set before trusting absence of this particular opening. A stale
-            // or partially corrupt target-set must not be used as evidence that leaving the host is safe.
             PhysicalOpeningCutTargetStateCodec.Resolve(project, host, targetIds);
             if (!targetIds.Any(x => string.Equals(x, opening.Id, StringComparison.OrdinalIgnoreCase))) return;
 
@@ -204,7 +222,7 @@ namespace QS3D.Core.Services
 
         private static bool DependencyMatches(string candidate, string expected)
         {
-            return string.Equals((candidate ?? string.Empty).Trim(), (expected ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
+            return string.Equals(candidate ?? string.Empty, expected ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void MarkHostOpeningRelationChanged(ProjectElement? host, string openingId, string action)
