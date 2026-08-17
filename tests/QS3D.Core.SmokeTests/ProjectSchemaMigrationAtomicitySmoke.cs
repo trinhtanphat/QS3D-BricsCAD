@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Xml.Linq;
 using QS3D.Core.Domain;
@@ -90,14 +91,17 @@ namespace QS3D.Core.SmokeTests
 
         private static string MeasurementWorkItemMappingPrefix()
         {
-            var assembly = typeof(QsdbProjectStore).Assembly;
-            var type = assembly.GetType("QS3D.Core.Persistence.ProjectMeasurementWorkItemMappingCodec", throwOnError: true)
-                ?? throw new Exception("ProjectMeasurementWorkItemMappingCodec type was not found.");
-            var field = type.GetField("Prefix", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
-                ?? throw new Exception("ProjectMeasurementWorkItemMappingCodec.Prefix was not found.");
-            var value = field.GetValue(null) as string;
-            if (string.IsNullOrEmpty(value)) throw new Exception("ProjectMeasurementWorkItemMappingCodec.Prefix is empty.");
-            return value;
+            var candidates = typeof(QsdbProjectStore).Assembly.GetTypes()
+                .Where(type => string.Equals(type.Name, "ProjectMeasurementWorkItemMappingCodec", StringComparison.Ordinal))
+                .Select(type => type.GetField("Prefix", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
+                .Where(field => field != null && field.FieldType == typeof(string))
+                .Select(field => field!.GetValue(null) as string)
+                .Where(value => !string.IsNullOrEmpty(value))
+                .ToArray();
+
+            if (candidates.Length != 1)
+                throw new Exception("Expected exactly one production ProjectMeasurementWorkItemMappingCodec.Prefix contract.");
+            return candidates[0]!;
         }
 
         private static void RequireInvalidData(XDocument document, string message)
