@@ -14,28 +14,34 @@ namespace QS3D.BricsCAD.V25
     internal static class PaletteCoordinator
     {
         private static readonly Guid WorkspaceGuid = new Guid("B6D934DE-67ED-4F90-A7CF-A4DC0C4CDDF1");
+        private static readonly Guid PropertiesGuid = new Guid("D236169E-6A0A-4D5E-8DE4-4D6CA50B4A6A");
         private static readonly Guid RightGuid = new Guid("AC615D29-590A-457C-8579-6BF4ACEC5C29");
         private static readonly Guid QuantityInsightGuid = new Guid("7EA0345F-1F62-4BD4-9ED0-3B25EB76A91B");
         private static PaletteSet? _workspace;
+        private static PaletteSet? _properties;
         private static PaletteSet? _right;
         private static PaletteSet? _quantityInsight;
         private static WorkspacePanel? _workspacePanel;
+        private static PropertiesPanel? _propertiesPanel;
         private static RightPanel? _rightPanel;
         private static QuantityInsightPanel? _quantityInsightPanel;
 
         public static bool IsWorkspaceVisible => _workspace != null && _workspace.Visible;
+        public static bool IsPropertiesVisible => _properties != null && _properties.Visible;
         public static bool IsRightPanelVisible => _right != null && _right.Visible;
         public static bool IsQuantityInsightVisible => _quantityInsight != null && _quantityInsight.Visible;
 
         public static void EnsureCreated()
         {
-            if (_workspace != null && _right != null && _quantityInsight != null) return;
-            if (_workspace != null || _right != null || _quantityInsight != null) DisposeCore(false);
+            if (_workspace != null && _properties != null && _right != null && _quantityInsight != null) return;
+            if (_workspace != null || _properties != null || _right != null || _quantityInsight != null) DisposeCore(false);
 
             var layout = UserUiLayoutStore.Get();
             try
             {
                 _workspacePanel = new WorkspacePanel();
+                _propertiesPanel = new PropertiesPanel();
+                _propertiesPanel.Attach(_workspacePanel);
                 _rightPanel = new RightPanel();
                 _quantityInsightPanel = new QuantityInsightPanel();
 
@@ -49,6 +55,17 @@ namespace QS3D.BricsCAD.V25
                 };
                 _workspace.DeviceIndependentSize = new WpfSize(layout.WorkspacePaletteWidth, layout.WorkspacePaletteHeight);
                 _workspace.AddVisual("Mô hình", _workspacePanel, true);
+
+                _properties = new PaletteSet("QS3D — Thuộc tính", PropertiesGuid)
+                {
+                    DockEnabled = DockSides.Left | DockSides.Right,
+                    Dock = DockSides.Left,
+                    Visible = false,
+                    KeepFocus = false,
+                    MinimumSize = new DrawingSize(UserUiLayoutStore.PropertiesPaletteMinWidth, UserUiLayoutStore.PropertiesPaletteMinHeight)
+                };
+                _properties.DeviceIndependentSize = new WpfSize(layout.PropertiesPaletteWidth, layout.PropertiesPaletteHeight);
+                _properties.AddVisual("Thuộc tính", _propertiesPanel, true);
 
                 _right = new PaletteSet("QS3D — Bản vẽ & Lớp", RightGuid)
                 {
@@ -79,11 +96,8 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        // The explicit QS3D command is the owner-facing workspace activation entry point. Fresh
-        // runtime evidence showed that routing it through the isolated legacy Workspace path left
-        // only one QS3D palette visible and made native BricsCAD Properties look like part of QS3D.
-        // Always restore the coordinated BLT3D-style surface here; standalone palette commands
-        // below remain available when an intentionally isolated tool window is needed.
+        // Explicit QS3D activation restores the coordinated BIM surface. Native BricsCAD
+        // Properties is host-owned and is never treated as the QS3D Properties region.
         public static void Show() => ShowBimWorkspace();
 
         public static void ShowWorkspace()
@@ -91,7 +105,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 EnsureCreated();
-                SetVisibility(workspace: true, right: false, quantityInsight: false);
+                SetVisibility(workspace: true, properties: false, right: false, quantityInsight: false);
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
             }
             catch (Exception)
@@ -100,20 +114,17 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        // The owner-reference BIM tab intentionally coordinates all three QS3D palettes around
-        // the real BricsCAD viewport. The left workspace now exposes its own Model + Properties
-        // regions vertically, while Management and Quantity remain native QS3D palettes right.
         public static void ShowBimWorkspace()
         {
             try
             {
                 EnsureCreated();
                 EnsureBimDockContract();
-                SetVisibility(workspace: true, right: true, quantityInsight: true);
+                SetVisibility(workspace: true, properties: true, right: true, quantityInsight: true);
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
                 _rightPanel?.Refresh();
                 _quantityInsightPanel?.RefreshQuantityInsights();
-                _workspacePanel?.SetStatus("MÔ HÌNH BIM • BLT3D workspace • Mô hình + Thuộc tính QS3D bên trái • viewport BricsCAD native ở giữa • Quản lý + Diễn giải bên phải.");
+                _workspacePanel?.SetStatus("MÔ HÌNH BIM • BLT3D workspace • Mô hình + QS3D Properties tách riêng bên trái • viewport BricsCAD native ở giữa • Quản lý + Diễn giải bên phải.");
             }
             catch (Exception)
             {
@@ -126,7 +137,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 EnsureCreated();
-                SetVisibility(workspace: false, right: true, quantityInsight: false);
+                SetVisibility(workspace: false, properties: false, right: true, quantityInsight: false);
             }
             catch (Exception)
             {
@@ -139,7 +150,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 EnsureCreated();
-                SetVisibility(workspace: false, right: false, quantityInsight: true);
+                SetVisibility(workspace: false, properties: false, right: false, quantityInsight: true);
             }
             catch (Exception)
             {
@@ -150,7 +161,7 @@ namespace QS3D.BricsCAD.V25
         public static void Hide()
         {
             PersistPaletteLayout();
-            SetVisibility(workspace: false, right: false, quantityInsight: false);
+            SetVisibility(workspace: false, properties: false, right: false, quantityInsight: false);
         }
 
         public static void ShowSafeMode()
@@ -158,8 +169,9 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 EnsureCreated();
-                SetVisibility(workspace: true, right: false, quantityInsight: false);
-                _workspacePanel?.SetStatus("Safe Mode: panel bản vẽ/layer và diễn giải khối lượng đang tắt.");
+                EnsureLeftDockContract();
+                SetVisibility(workspace: true, properties: true, right: false, quantityInsight: false);
+                _workspacePanel?.SetStatus("Safe Mode: QS3D Mô hình + Thuộc tính vẫn hoạt động; panel bản vẽ/layer và diễn giải khối lượng đang tắt.");
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
             }
             catch (Exception)
@@ -215,15 +227,19 @@ namespace QS3D.BricsCAD.V25
 
         private static void ResetPreservingVisibility()
         {
-            if (_workspace == null && _right == null && _quantityInsight == null) return;
+            if (_workspace == null && _properties == null && _right == null && _quantityInsight == null) return;
             var workspaceVisible = IsWorkspaceVisible;
+            var propertiesVisible = IsPropertiesVisible;
             var rightVisible = IsRightPanelVisible;
             var quantityVisible = IsQuantityInsightVisible;
             Dispose();
             EnsureCreated();
-            if (workspaceVisible && rightVisible)
-                EnsureBimDockContract();
-            SetVisibility(workspaceVisible, rightVisible, quantityVisible);
+            if (workspaceVisible && propertiesVisible)
+            {
+                if (rightVisible && quantityVisible) EnsureBimDockContract();
+                else EnsureLeftDockContract();
+            }
+            SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);
         }
 
         public static void Dispose()
@@ -234,10 +250,13 @@ namespace QS3D.BricsCAD.V25
         private static void DisposeCore(bool persistLayout)
         {
             if (persistLayout) PersistPaletteLayout();
+            _propertiesPanel?.Detach();
             DisposePalette(ref _workspace);
+            DisposePalette(ref _properties);
             DisposePalette(ref _right);
             DisposePalette(ref _quantityInsight);
             _workspacePanel = null;
+            _propertiesPanel = null;
             _rightPanel = null;
             _quantityInsightPanel = null;
         }
@@ -256,17 +275,40 @@ namespace QS3D.BricsCAD.V25
 
         private static void EnsureBimDockContract()
         {
-            if (_workspace != null && _workspace.Dock != DockSides.Left)
-                _workspace.Dock = DockSides.Left;
+            EnsureLeftDockContract();
             if (_right != null && _right.Dock != DockSides.Right)
                 _right.Dock = DockSides.Right;
             if (_quantityInsight != null && _quantityInsight.Dock != DockSides.Right)
                 _quantityInsight.Dock = DockSides.Right;
+            ReassertPersistedPaletteSizes();
         }
 
-        private static void SetVisibility(bool workspace, bool right, bool quantityInsight)
+        private static void EnsureLeftDockContract()
+        {
+            if (_workspace != null && _workspace.Dock != DockSides.Left)
+                _workspace.Dock = DockSides.Left;
+            if (_properties != null && _properties.Dock != DockSides.Left)
+                _properties.Dock = DockSides.Left;
+            ReassertPersistedPaletteSizes();
+        }
+
+        private static void ReassertPersistedPaletteSizes()
+        {
+            var layout = UserUiLayoutStore.Get();
+            if (_workspace != null)
+                _workspace.DeviceIndependentSize = new WpfSize(layout.WorkspacePaletteWidth, layout.WorkspacePaletteHeight);
+            if (_properties != null)
+                _properties.DeviceIndependentSize = new WpfSize(layout.PropertiesPaletteWidth, layout.PropertiesPaletteHeight);
+            if (_right != null)
+                _right.DeviceIndependentSize = new WpfSize(layout.RightPaletteWidth, layout.RightPaletteHeight);
+            if (_quantityInsight != null)
+                _quantityInsight.DeviceIndependentSize = new WpfSize(layout.QuantityPaletteWidth, layout.QuantityPaletteHeight);
+        }
+
+        private static void SetVisibility(bool workspace, bool properties, bool right, bool quantityInsight)
         {
             if (_workspace != null) _workspace.Visible = workspace;
+            if (_properties != null) _properties.Visible = properties;
             if (_right != null) _right.Visible = right;
             if (_quantityInsight != null) _quantityInsight.Visible = quantityInsight;
         }
@@ -286,10 +328,11 @@ namespace QS3D.BricsCAD.V25
 
         private static void PersistPaletteLayout()
         {
-            if (_workspace == null && _right == null && _quantityInsight == null) return;
+            if (_workspace == null && _properties == null && _right == null && _quantityInsight == null) return;
             try
             {
                 var workspaceSize = _workspace?.DeviceIndependentSize;
+                var propertiesSize = _properties?.DeviceIndependentSize;
                 var rightSize = _right?.DeviceIndependentSize;
                 var quantitySize = _quantityInsight?.DeviceIndependentSize;
                 UserUiLayoutStore.Update(layout =>
@@ -298,6 +341,11 @@ namespace QS3D.BricsCAD.V25
                     {
                         layout.WorkspacePaletteWidth = checked((int)Math.Round(workspaceSize.Value.Width, MidpointRounding.AwayFromZero));
                         layout.WorkspacePaletteHeight = checked((int)Math.Round(workspaceSize.Value.Height, MidpointRounding.AwayFromZero));
+                    }
+                    if (propertiesSize.HasValue)
+                    {
+                        layout.PropertiesPaletteWidth = checked((int)Math.Round(propertiesSize.Value.Width, MidpointRounding.AwayFromZero));
+                        layout.PropertiesPaletteHeight = checked((int)Math.Round(propertiesSize.Value.Height, MidpointRounding.AwayFromZero));
                     }
                     if (rightSize.HasValue)
                     {
