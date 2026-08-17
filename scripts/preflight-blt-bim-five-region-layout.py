@@ -62,6 +62,8 @@ else:
 
     for token in (
         "var bimSurfaceActive = workspaceVisible && rightVisible && quantityVisible;",
+        "if (propertiesVisible && !bimSurfaceActive)",
+        "_workspacePanel?.SetDedicatedPropertiesPaletteActive(true);",
         "_workspacePanel?.SetDedicatedPropertiesPaletteActive(bimSurfaceActive);",
         "if (bimSurfaceActive)",
         "EnsureBimDockContract();",

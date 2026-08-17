@@ -247,7 +247,10 @@ namespace QS3D.BricsCAD.V25
             var bimSurfaceActive = workspaceVisible && rightVisible && quantityVisible;
             Dispose();
             EnsureCreated();
-            _workspacePanel?.SetDedicatedPropertiesPaletteActive(bimSurfaceActive);
+            if (propertiesVisible && !bimSurfaceActive)
+                _workspacePanel?.SetDedicatedPropertiesPaletteActive(true);
+            else
+                _workspacePanel?.SetDedicatedPropertiesPaletteActive(bimSurfaceActive);
             if (bimSurfaceActive)
                 EnsureBimDockContract();
             SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);
