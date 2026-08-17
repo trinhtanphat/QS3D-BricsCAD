@@ -40,21 +40,24 @@ def optional_object(value: Any, label: str) -> dict[str, Any]:
 def require_string(value: Any, label: str, *, allow_empty: bool = False) -> str:
     if not isinstance(value, str):
         raise RuntimeError(f"{label} must be a string")
-    result = value.strip()
-    if not allow_empty and not result:
+    if value != value.strip():
+        raise RuntimeError(f"{label} must be canonical without leading/trailing whitespace")
+    if not allow_empty and not value:
         raise RuntimeError(f"{label} must not be empty")
-    return result
+    return value
 
 
 def parse_github_time(value: Any) -> datetime:
-    if not isinstance(value, str) or not value.strip():
+    if not isinstance(value, str) or not value:
         raise ValueError("GitHub timestamp is missing or not a string")
+    if value != value.strip():
+        raise ValueError("GitHub timestamp must be canonical without leading/trailing whitespace")
     try:
-        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as exc:
         raise ValueError(f"GitHub timestamp is invalid: {value!r}") from exc
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"GitHub timestamp must include an explicit timezone offset: {value!r}")
     return parsed.astimezone(timezone.utc)
 
 
@@ -172,6 +175,9 @@ def validate_self_tests() -> list[str]:
         ("in-progress run", {"status": "in_progress", "conclusion": None}),
         ("malformed created timestamp", {"created_at": []}),
         ("malformed updated timestamp", {"updated_at": {}}),
+        ("naive created timestamp", {"created_at": "2026-08-16T09:50:00"}),
+        ("naive updated timestamp", {"updated_at": "2026-08-16T09:59:00"}),
+        ("padded created timestamp", {"created_at": " 2026-08-16T09:50:00Z"}),
     )
     for name, patch in mutations:
         candidate = dict(base)
