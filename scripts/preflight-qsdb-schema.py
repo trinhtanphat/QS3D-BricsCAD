@@ -8,9 +8,10 @@ VALIDATOR = ROOT / "src/QS3D.Core/Persistence/QsdbProjectXmlSchemaValidator.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/QsdbProjectSchemaRegressionSmoke.cs"
 SAVE_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/QsdbSaveAtomicitySmoke.cs"
 TIMESTAMP_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/QsdbTimestampValidationSmoke.cs"
+ATOMICITY_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/ProjectSchemaMigrationAtomicitySmoke.cs"
 errors = []
 
-for path in (MIGRATOR, VALIDATOR, SMOKE, SAVE_SMOKE, TIMESTAMP_SMOKE):
+for path in (MIGRATOR, VALIDATOR, SMOKE, SAVE_SMOKE, TIMESTAMP_SMOKE, ATOMICITY_SMOKE):
     if not path.is_file():
         errors.append("missing " + str(path.relative_to(ROOT)))
 
@@ -20,13 +21,16 @@ if not errors:
     smoke = SMOKE.read_text(encoding="utf-8")
     save_smoke = SAVE_SMOKE.read_text(encoding="utf-8")
     timestamp_smoke = TIMESTAMP_SMOKE.read_text(encoding="utf-8")
+    atomicity_smoke = ATOMICITY_SMOKE.read_text(encoding="utf-8")
 
-    migration = migrator.find("while (schema < ProjectState.CurrentSchemaVersion)")
-    persistence = migrator.find("ValidateCurrentPersistenceState(root);", migration)
-    shape = migrator.find("QsdbProjectXmlSchemaValidator.ValidateCurrent(root);", persistence)
-    returned = migrator.find("return document;", shape)
-    if min(migration, persistence, shape, returned) < 0 or not migration < persistence < shape < returned:
-        errors.append("ProjectSchemaMigrator must migrate legacy schemas, validate required current persistence state, then validate strict XML shape")
+    working_copy = migrator.find("var workingDocument = new XDocument(document);")
+    migration = migrator.find("while (schema < ProjectState.CurrentSchemaVersion)", working_copy)
+    persistence = migrator.find("ValidateCurrentPersistenceState(workingRoot);", migration)
+    shape = migrator.find("QsdbProjectXmlSchemaValidator.ValidateCurrent(workingRoot);", persistence)
+    publish = migrator.find("root.ReplaceWith(new XElement(workingRoot));", shape)
+    returned = migrator.find("return document;", publish)
+    if min(working_copy, migration, persistence, shape, publish, returned) < 0 or not working_copy < migration < persistence < shape < publish < returned:
+        errors.append("ProjectSchemaMigrator must migrate legacy schemas on a detached document, validate required current persistence state and strict XML shape, then publish the validated root in place")
 
     migrate_v2 = migrator.find("private static void MigrateV2ToV3")
     legacy_backfill = migrator.find('if (root.Attribute("changeVersion") == null) root.SetAttributeValue("changeVersion", "0");', migrate_v2)
@@ -75,6 +79,17 @@ if not errors:
         if token not in smoke:
             errors.append("QSDB schema regression smoke missing contract token: " + token)
 
+    atomicity_tokens = [
+        "FailedLegacyMigrationDoesNotMutateInput();",
+        "SuccessfulLegacyMigrationStillPublishesInPlace();",
+        "ReferenceEquals(document, returned)",
+        'document.Root?.Attribute("schema")?.Value == "1"',
+        'document.Root?.Attribute("updatedUtc") == null',
+    ]
+    for token in atomicity_tokens:
+        if token not in atomicity_smoke:
+            errors.append("QSDB schema migration atomicity smoke missing contract token: " + token)
+
     strict_persistence_tokens = [
         (save_smoke, "MissingCurrentChangeVersionIsRejected();", "save smoke must reject schema-3 files whose required changeVersion was removed"),
         (save_smoke, 'Attribute("changeVersion")?.Remove();', "save smoke must remove changeVersion from a real current QSDB before asserting rejection"),
@@ -94,4 +109,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: current schema-3 QSDB requires the canonical qs3d root, explicit persistence state, and fails closed on missing changeVersion, while legacy schema migration synthesizes the required field before strict XML-shape validation.")
+print("PASS: current schema-3 QSDB requires the canonical qs3d root and explicit persistence state; legacy migration is failure-atomic on a detached copy, publishes only after strict validation, and synthesizes required changeVersion only on the legacy migration path.")
