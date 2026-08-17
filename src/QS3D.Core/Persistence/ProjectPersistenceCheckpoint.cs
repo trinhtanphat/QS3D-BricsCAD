@@ -42,7 +42,7 @@ namespace QS3D.Core.Persistence
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
-            RejectKnownOversize(elementIds);
+            RejectInvalidKnownCounts(elementIds);
 
             var elements = new Dictionary<string, ElementPersistenceState>(StringComparer.OrdinalIgnoreCase);
             var observed = 0;
@@ -50,7 +50,7 @@ namespace QS3D.Core.Persistence
             {
                 observed++;
                 if (observed > MaximumElementCount)
-                    throw new InvalidOperationException("Persistence checkpoint exceeds the supported " + MaximumElementCount + " element limit.");
+                    throw ElementCountError();
 
                 var id = rawId ?? string.Empty;
                 if (id.Length == 0 || string.IsNullOrWhiteSpace(id))
@@ -109,14 +109,36 @@ namespace QS3D.Core.Persistence
             project.RestorePersistenceState(_projectUpdatedUtc, _projectChangeVersion);
         }
 
-        private static void RejectKnownOversize(IEnumerable<string> elementIds)
+        private static void RejectInvalidKnownCounts(IEnumerable<string> elementIds)
         {
-            if (elementIds is ICollection<string> collection && collection.Count > MaximumElementCount)
-                throw new InvalidOperationException("Persistence checkpoint exceeds the supported " + MaximumElementCount + " element limit.");
-            if (elementIds is IReadOnlyCollection<string> readOnlyCollection && readOnlyCollection.Count > MaximumElementCount)
-                throw new InvalidOperationException("Persistence checkpoint exceeds the supported " + MaximumElementCount + " element limit.");
-            if (elementIds is ICollection nonGenericCollection && nonGenericCollection.Count > MaximumElementCount)
-                throw new InvalidOperationException("Persistence checkpoint exceeds the supported " + MaximumElementCount + " element limit.");
+            var knownCounts = new List<int>(3);
+            if (elementIds is ICollection<string> collection)
+                knownCounts.Add(collection.Count);
+            if (elementIds is IReadOnlyCollection<string> readOnlyCollection)
+                knownCounts.Add(readOnlyCollection.Count);
+            if (elementIds is ICollection nonGenericCollection)
+                knownCounts.Add(nonGenericCollection.Count);
+
+            if (knownCounts.Count == 0) return;
+
+            var expectedCount = knownCounts[0];
+            var maximumCount = expectedCount;
+            var hasConflict = false;
+            for (var index = 1; index < knownCounts.Count; index++)
+            {
+                if (knownCounts[index] != expectedCount) hasConflict = true;
+                if (knownCounts[index] > maximumCount) maximumCount = knownCounts[index];
+            }
+
+            if (maximumCount > MaximumElementCount)
+                throw ElementCountError();
+            if (hasConflict)
+                throw new InvalidOperationException("Persistence checkpoint target collection reports conflicting known counts.");
+        }
+
+        private static InvalidOperationException ElementCountError()
+        {
+            return new InvalidOperationException("Persistence checkpoint exceeds the supported " + MaximumElementCount + " element limit.");
         }
 
         private sealed class ElementPersistenceState
