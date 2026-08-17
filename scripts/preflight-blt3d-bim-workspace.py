@@ -72,21 +72,29 @@ def main():
     if "Grid.SetRow(familyPane, 2);" in runtime_layout:
         fail("default BIM must not stack Family/Properties below Model")
 
-    # BLT3D parity is implemented inside BricsCAD. This runtime layout may rearrange QS3D-owned
-    # palette content, but it must never create a replacement top-level window or fake CAD viewport.
-    for forbidden in (
-        "new Viewport",
-        "Viewport3D",
-        "new Window",
-        "WindowStyle",
-        "ShowDialog(",
-        "Topmost =",
-    ):
-        if forbidden in runtime_layout:
-            fail(
-                "BricsCAD host UI/modelspace must remain host-owned; "
-                f"runtime BIM layout contains forbidden standalone-host token: {forbidden}"
-            )
+    # BLT3D parity is implemented inside BricsCAD. The activation/coordinator/layout path may
+    # coordinate QS3D-owned palettes, but it must never construct a replacement top-level host or
+    # fake CAD viewport. Guard all three runtime authorities so the boundary cannot move sideways.
+    hosted_runtime_sources = (
+        ("PaletteCoordinator", palette),
+        ("BIM activation", activation),
+        ("BIM runtime layout", runtime_layout),
+    )
+    for source_name, source in hosted_runtime_sources:
+        for forbidden in (
+            "new Viewport",
+            "Viewport3D",
+            "new Window",
+            "WindowStyle",
+            "ShowDialog(",
+            "Application.Run(",
+            "Topmost =",
+        ):
+            if forbidden in source:
+                fail(
+                    "BricsCAD host UI/modelspace must remain host-owned; "
+                    f"{source_name} contains forbidden standalone-host token: {forbidden}"
+                )
 
     for token in (
         "⚡ Nhập từ chọn",
