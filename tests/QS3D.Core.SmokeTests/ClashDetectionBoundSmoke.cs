@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using QS3D.Core.Coordination;
 
 namespace QS3D.Core.SmokeTests
@@ -8,6 +9,9 @@ namespace QS3D.Core.SmokeTests
     internal static class ClashDetectionBoundSmoke
     {
         private const int MaximumElements = 500;
+
+        [ModuleInitializer]
+        internal static void Initialize() => Run();
 
         public static void Run()
         {
