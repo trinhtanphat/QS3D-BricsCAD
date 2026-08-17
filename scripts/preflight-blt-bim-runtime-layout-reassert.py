@@ -52,6 +52,10 @@ for token in (
     "ApplyBlt3dFiveZoneRuntimeLayout();",
     "if (!IsLoaded)",
     "StopBlt3dRuntimeLayoutRepairTimer();",
+    "FrameworkElement.UnloadedEvent",
+    "OnBlt3dRuntimeLayoutUnloaded",
+    "_blt3dRuntimeSettlePassesRemaining = 0;",
+    "_blt3dRuntimeLayoutRepairStarted = false;",
 ):
     if token not in repair:
         errors.append("WorkspacePanel runtime repair missing: " + token)
@@ -79,4 +83,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BIM activation reasserts all QS3D side palettes through a bounded BricsCAD docking settle window and reapplies the owner-approved five-zone WorkspacePanel layout without replacing native modelspace.")
+print("PASS: BIM activation reasserts all QS3D side palettes through a bounded BricsCAD docking settle window, restarts that bounded repair after palette unload/reload, and reapplies the owner-approved five-zone WorkspacePanel layout without replacing native modelspace.")
