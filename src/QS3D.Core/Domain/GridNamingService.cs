@@ -58,12 +58,14 @@ namespace QS3D.Core.Domain
 
             var targetEnumerationVersion = project.ChangeVersion;
             var projectElementsAtStart = project.Elements.ToList();
-            var knownCount = TryGetKnownCount(orderedGridElementIds);
+            var knownCount = TryGetKnownCount(orderedGridElementIds, out var conflictingKnownCounts);
             var versionAfterKnownCount = project.ChangeVersion;
             if (versionAfterKnownCount != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Grid renumber targets were being enumerated. Retry renumbering against the current project state.");
             if (knownCount.HasValue && knownCount.Value > MaxGridBatch)
                 throw new InvalidOperationException("A Grid renumber batch supports at most " + MaxGridBatch + " elements.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Grid renumber target source exposes conflicting known Count values.");
 
             var ids = new List<string>();
             foreach (var value in orderedGridElementIds)
@@ -170,15 +172,24 @@ namespace QS3D.Core.Domain
             return result;
         }
 
-        private static int? TryGetKnownCount(IEnumerable<string> source)
+        private static int? TryGetKnownCount(IEnumerable<string> source, out bool conflictingKnownCounts)
         {
+            conflictingKnownCounts = false;
+            int? knownCount = null;
             if (source is ICollection<string> collection)
-                return collection.Count;
+                knownCount = ObserveKnownCount(knownCount, collection.Count, ref conflictingKnownCounts);
             if (source is IReadOnlyCollection<string> readOnlyCollection)
-                return readOnlyCollection.Count;
+                knownCount = ObserveKnownCount(knownCount, readOnlyCollection.Count, ref conflictingKnownCounts);
             if (source is ICollection nonGenericCollection)
-                return nonGenericCollection.Count;
-            return null;
+                knownCount = ObserveKnownCount(knownCount, nonGenericCollection.Count, ref conflictingKnownCounts);
+            return knownCount;
+        }
+
+        private static int ObserveKnownCount(int? current, int observed, ref bool conflictingKnownCounts)
+        {
+            if (current.HasValue && current.Value != observed)
+                conflictingKnownCounts = true;
+            return !current.HasValue || observed > current.Value ? observed : current.Value;
         }
 
         private static Dictionary<string, ProjectElement?> ResolveOriginalTargets(
