@@ -28,6 +28,7 @@ namespace QS3D.Core.SmokeTests
             XlsxExporterRowBoundSmoke.Run();
             QuantityReportRevisionReviewSmoke.Run();
             PersistenceHardeningSmoke.Run();
+            ProjectSchemaMigrationAtomicitySmoke.Run();
             LicenseVerifierSmoke.Run();
             AdvancedDomainSmoke.Run();
             HardeningRegressionSmoke.Run();
