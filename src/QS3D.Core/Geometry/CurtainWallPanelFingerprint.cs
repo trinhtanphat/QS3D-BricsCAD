@@ -29,7 +29,9 @@ namespace QS3D.Core.Geometry
             Positive(input.HeightM, nameof(input.HeightM));
             Finite(input.BottomOffsetM, nameof(input.BottomOffsetM));
             Positive(input.PanelDepthM, nameof(input.PanelDepthM));
-            var sourceKind = (input.SourceKind ?? string.Empty).Trim();
+            var sourceKind = input.SourceKind ?? string.Empty;
+            if (!string.Equals(sourceKind, sourceKind.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Curtain panel source kind must not contain leading or trailing whitespace.", nameof(input.SourceKind));
             if (!string.Equals(sourceKind, "Line", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(sourceKind, "OpenPolyline", StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException("Curtain panel source kind must be Line or OpenPolyline.", nameof(input.SourceKind));

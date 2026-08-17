@@ -11,17 +11,16 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
-            TenThousandRawRootsRemainSupportedAndNormalized();
+            TenThousandCanonicalRootsRemainSupported();
             KnownOversizeRootsFailReadOnly();
             LazyOversizeRootsStopAtMaxPlusOneReadOnly();
         }
 
-        private static void TenThousandRawRootsRemainSupportedAndNormalized()
+        private static void TenThousandCanonicalRootsRemainSupported()
         {
             var project = BuildProject();
             var beforeVersion = project.ChangeVersion;
-            var roots = Enumerable.Repeat("   ", 9997)
-                .Concat(new[] { " root ", "ROOT", "\tROOT\t" });
+            var roots = Enumerable.Repeat("ROOT", 9999).Concat(new[] { "root" });
 
             var handles = SourceHandleResolver.Resolve(project, roots);
 
