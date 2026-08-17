@@ -46,6 +46,7 @@ for token in (
         errors.append("BIM activation contract missing: " + token)
 
 for token in (
+    "static WorkspacePanel()",
     "DispatcherPriority.SystemIdle",
     "ApplyBlt3dFiveZoneRuntimeLayout",
     "Grid.GetColumn(child) == 0",
@@ -74,4 +75,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: owner-facing QS3D/BIM activation restores the coordinated BLT3D surface while the dedicated ShowWorkspace helper remains isolated; Model + QS3D Properties stay distinct on the left and Management + Quantity stay on the right of native BricsCAD modelspace.")
+print("PASS: owner-facing QS3D/BIM activation restores the coordinated BLT3D surface while the dedicated ShowWorkspace helper remains isolated; first-load class handlers are registered deterministically, Model + QS3D Properties stay distinct on the left, and Management + Quantity stay on the right of native BricsCAD modelspace.")
