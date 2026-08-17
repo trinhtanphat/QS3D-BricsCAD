@@ -3,6 +3,7 @@ using System.Collections;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace QS3D.BricsCAD.V25.Ribbon
 {
@@ -90,15 +91,15 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 var id = GetProperty(item, "Id") as string;
                 if (!string.IsNullOrWhiteSpace(id) && TryGetIconKind(id!, out var kind))
                 {
-                    var image = CreateIcon(kind);
-                    SetProperty(item, "Image", image);
-                    SetProperty(item, "LargeImage", image);
+                    // BricsCAD V25 Ribbon is most reliable with frozen bitmap image sources.
+                    // Preserve the clean-room vector glyphs, but rasterize each slot separately.
+                    SetProperty(item, "Image", CreateIcon(kind, 16));
+                    SetProperty(item, "LargeImage", CreateIcon(kind, 32));
                     SetProperty(item, "ShowImage", true);
                     SetEnumProperty(item, "Size", "Large");
 
-                    // Read back the host properties. The old source guard only proved that
-                    // assignment statements existed; it could not detect a reflection/type
-                    // mismatch that silently left the native Ribbon button text-only.
+                    // Read back the host properties. Source-level assignments alone do not prove
+                    // that BricsCAD retained a visible image on the native Ribbon item.
                     if (HasCompleteVisibleIcon(item))
                         polished++;
                 }
@@ -143,8 +144,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
             }
         }
 
-        private static ImageSource CreateIcon(IconKind kind)
+        private static ImageSource CreateIcon(IconKind kind, int pixelSize)
         {
+            if (pixelSize <= 0)
+                throw new ArgumentOutOfRangeException(nameof(pixelSize));
+
             // Clean-room vector recreation of the visual language visible in the supplied
             // reference screenshot: bright CAD blue + white bodywork, green export direction,
             // and amber accents. No BLT3D bitmap/resource is embedded or copied.
@@ -232,10 +236,21 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     break;
             }
 
-            group.Freeze();
-            var image = new DrawingImage(group);
-            image.Freeze();
-            return image;
+            if (group.CanFreeze)
+                group.Freeze();
+
+            var visual = new DrawingVisual();
+            using (var drawing = visual.RenderOpen())
+            {
+                drawing.PushTransform(new ScaleTransform(pixelSize / 32.0, pixelSize / 32.0));
+                drawing.DrawDrawing(group);
+                drawing.Pop();
+            }
+
+            var bitmap = new RenderTargetBitmap(pixelSize, pixelSize, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(visual);
+            bitmap.Freeze();
+            return bitmap;
         }
 
         private static void AddReferenceCube(
