@@ -91,7 +91,7 @@ namespace QS3D.Core.SmokeTests
         private static void OpeningCountBoundaryRemainsDeterministic()
         {
             var exact = Enumerable.Range(0, 4096).Select(index => "opening-" + index.ToString("D4")).ToArray();
-            var normalized = PhysicalOpeningCutTargetStateCodec.Normalize(exact.Reverse());
+            var normalized = PhysicalOpeningCutTargetStateCodec.Normalize(exact.AsEnumerable().Reverse());
             if (normalized.Count != 4096 || normalized[0] != "opening-0000" || normalized[4095] != "opening-4095") throw new Exception("Exact physical opening target limit must remain accepted with deterministic ordering.");
             ExpectInvalidOperation(() => PhysicalOpeningCutTargetStateCodec.Normalize(exact.Concat(new[] { "opening-4096" })), "4096 opening id limit");
         }
