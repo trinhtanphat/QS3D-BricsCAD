@@ -15,8 +15,11 @@ $null = $PluginPath
 $null = $BricscadDirectory
 
 $root = Split-Path -Parent $PSScriptRoot
-$workspacePath = Join-Path $root 'src\QS3D.BricsCAD.V25\UI\WorkspacePanel.xaml'
-$rightPanelPath = Join-Path $root 'src\QS3D.BricsCAD.V25\UI\RightPanel.xaml'
+$uiRoot = Join-Path $root 'src\QS3D.BricsCAD.V25\UI'
+$workspacePath = Join-Path $uiRoot 'WorkspacePanel.xaml'
+$rightPanelPath = Join-Path $uiRoot 'RightPanel.xaml'
+$maxXamlBytes = 1MB
+$utf8Strict = [System.Text.UTF8Encoding]::new($false, $true)
 
 function Read-XamlDocument {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -25,8 +28,51 @@ function Read-XamlDocument {
         throw "Required palette XAML source is missing: $Path"
     }
 
+    $resolvedUiRoot = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $uiRoot).Path)
+    $resolvedPath = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $Path).Path)
+    $uiPrefix = $resolvedUiRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $resolvedPath.StartsWith($uiPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Palette XAML source escapes the canonical UI root: $Path"
+    }
+
+    $item = Get-Item -LiteralPath $resolvedPath -Force
+    if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Palette XAML source must not be a reparse point: $Path"
+    }
+    if ($item.Length -gt $maxXamlBytes) {
+        throw "Palette XAML source exceeds the 1 MiB safety limit: $Path"
+    }
+
+    $stream = [System.IO.File]::Open($resolvedPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
     try {
-        return [xml](Get-Content -LiteralPath $Path -Raw -Encoding UTF8)
+        $buffer = [byte[]]::new(65536)
+        $memory = [System.IO.MemoryStream]::new()
+        try {
+            while (($read = $stream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+                if (($memory.Length + $read) -gt $maxXamlBytes) {
+                    throw "Palette XAML source exceeds the 1 MiB safety limit while reading: $Path"
+                }
+                $memory.Write($buffer, 0, $read)
+            }
+            $bytes = $memory.ToArray()
+        }
+        finally {
+            $memory.Dispose()
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+
+    try {
+        $text = $utf8Strict.GetString($bytes)
+    }
+    catch {
+        throw "Palette XAML source is not valid strict UTF-8: $Path :: $($_.Exception.Message)"
+    }
+
+    try {
+        return [xml]$text
     }
     catch {
         throw "Palette XAML is not well-formed XML: $Path :: $($_.Exception.Message)"
@@ -102,5 +148,5 @@ $rightTheme = Require-Node $rightPanel $rightNs "//p:ResourceDictionary[@Source=
 $null = $rightTheme
 Write-Host 'PASS: RightPanel source contract is structurally valid without loading BricsCAD/plugin assemblies.'
 
-Write-Host 'PASS: offline palette qualification completed using source/XAML checks only.'
+Write-Host 'PASS: offline palette qualification completed using bounded source/XAML checks only.'
 Write-Host 'Licensed in-host BricsCAD V25 runtime remains the authority for palette construction, layout, host theme, HiDPI, and native integration.'
