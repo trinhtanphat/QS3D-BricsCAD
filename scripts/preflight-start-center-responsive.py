@@ -28,11 +28,7 @@ def main():
     shell = section(source, "private UIElement BuildShell()", "private Grid BuildLeftPane()")
     for needle in (
         "var leftContent = BuildLeftPane();",
-        "var left = new ScrollViewer",
-        "VerticalScrollBarVisibility = ScrollBarVisibility.Auto",
-        "HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled",
-        "CanContentScroll = false",
-        "Content = leftContent",
+        "var left = CreateVerticalScrollViewer(leftContent);",
         "left.SizeChanged += (_, e) => leftContent.MinHeight = Math.Max(0d, e.NewSize.Height);",
     ):
         require(shell, needle, SOURCE_REL + "::BuildShell")
@@ -51,10 +47,20 @@ def main():
     if left.count("TextWrapping = TextWrapping.Wrap") < 3:
         raise SystemExit("FAIL: left pane must wrap brand, description and version text")
 
-    recent = section(source, "private Grid BuildRecentPane()", "private Border BuildStatusBar()")
+    recent = section(source, "private Grid BuildRecentPane()", "private static ScrollViewer CreateVerticalScrollViewer(UIElement content)")
     require(recent, "Text = \"Nhấp vào dự án để mở trực tiếp và bắt đầu làm việc\"", SOURCE_REL + "::BuildRecentPane")
     require(recent, "TextWrapping = TextWrapping.Wrap", SOURCE_REL + "::BuildRecentPane")
-    require(recent, "HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled", SOURCE_REL + "::BuildRecentPane")
+    require(recent, "var scroll = CreateVerticalScrollViewer(_recentPanel);", SOURCE_REL + "::BuildRecentPane")
+
+    scroll = section(source, "private static ScrollViewer CreateVerticalScrollViewer(UIElement content)", "private static Style CreateCompactScrollBarStyle()")
+    for needle in (
+        "VerticalScrollBarVisibility = ScrollBarVisibility.Auto",
+        "HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled",
+        "CanContentScroll = false",
+        "PanningMode = PanningMode.VerticalOnly",
+        "Content = content",
+    ):
+        require(scroll, needle, SOURCE_REL + "::CreateVerticalScrollViewer")
 
     cards = section(source, "private Button CreateActionCard(", "private UIElement StatusButton(")
     if cards.count("TextWrapping = TextWrapping.Wrap") < 2:
@@ -64,7 +70,7 @@ def main():
     recent_row = section(source, "private UIElement CreateRecentRow(", "private void OpenRecentProject(")
     require(recent_row, "TextTrimming = TextTrimming.CharacterEllipsis", SOURCE_REL + "::CreateRecentRow")
 
-    print("PASS: embedded Start Center keeps the status strip fixed, makes the left pane vertically scrollable, disables horizontal scrolling, and wraps narrow-width descriptive/action text.")
+    print("PASS: embedded Start Center keeps the status strip fixed, routes both panes through the shared vertical-only pixel scroller, disables horizontal scrolling, and wraps narrow-width descriptive/action text.")
     return 0
 
 
