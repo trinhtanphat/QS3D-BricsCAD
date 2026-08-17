@@ -18,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             UnrelatedDuplicateIdentityBlocksWholeBatch();
             OversizedCountedSourcesRejectBeforeEnumeration();
             ConflictingKnownCountContractsRejectBeforeEnumeration();
+            NegativeKnownCountContractsRejectBeforeEnumeration();
             CountSideEffectRejectsBeforeEnumeration();
             ExactCapacityCountedSourceRemainsAccepted();
             GridNamingBoundedEnumerationSmoke.Run();
@@ -144,6 +145,45 @@ namespace QS3D.Core.SmokeTests
             throw new Exception("Expected conflicting known-count Grid source to fail before enumeration.");
         }
 
+        private static void NegativeKnownCountContractsRejectBeforeEnumeration()
+        {
+            var generic = new NegativeGenericCollection();
+            NegativeKnownCountRejectedBeforeEnumeration(generic, () => generic.EnumeratorRequested);
+
+            var readOnly = new NegativeReadOnlyCollection();
+            NegativeKnownCountRejectedBeforeEnumeration(readOnly, () => readOnly.EnumeratorRequested);
+
+            var nonGeneric = new NegativeNonGenericCollection();
+            NegativeKnownCountRejectedBeforeEnumeration(nonGeneric, () => nonGeneric.EnumeratorRequested);
+        }
+
+        private static void NegativeKnownCountRejectedBeforeEnumeration(IEnumerable<string> source, Func<bool> enumeratorRequested)
+        {
+            var project = Project();
+            var grid = Grid(project, "G-NEG");
+            grid.SetProperty(GridNamingService.GridLabelKey, "KEEP");
+            grid.SetProperty(GridNamingService.GridSequenceIndexKey, "9");
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdatedUtc = project.UpdatedUtc;
+
+            try
+            {
+                GridNamingService.Renumber(project, source);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Equal("Grid renumber target source exposes an invalid negative known count.", ex.Message);
+                True(!enumeratorRequested());
+                Equal(beforeVersion, project.ChangeVersion);
+                Equal(beforeUpdatedUtc, project.UpdatedUtc);
+                Equal("KEEP", grid.Properties[GridNamingService.GridLabelKey]);
+                Equal("9", grid.Properties[GridNamingService.GridSequenceIndexKey]);
+                return;
+            }
+
+            throw new Exception("Expected negative known-count Grid source to fail before enumeration.");
+        }
+
         private static void CapacityRejectedBeforeEnumeration(IEnumerable<string> source, Func<bool> enumeratorRequested)
         {
             var project = Project();
@@ -248,6 +288,57 @@ namespace QS3D.Core.SmokeTests
             {
                 EnumeratorRequested = true;
                 throw new Exception("Oversized non-generic Grid source should not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void CopyTo(Array array, int index) => throw new NotSupportedException();
+        }
+
+        private sealed class NegativeGenericCollection : ICollection<string>
+        {
+            public int Count => -1;
+            public bool IsReadOnly => true;
+            public bool EnumeratorRequested { get; private set; }
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                EnumeratorRequested = true;
+                throw new Exception("Negative-count generic Grid source should not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void Add(string item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(string item) => false;
+            public void CopyTo(string[] array, int arrayIndex) => throw new NotSupportedException();
+            public bool Remove(string item) => throw new NotSupportedException();
+        }
+
+        private sealed class NegativeReadOnlyCollection : IReadOnlyCollection<string>
+        {
+            public int Count => -1;
+            public bool EnumeratorRequested { get; private set; }
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                EnumeratorRequested = true;
+                throw new Exception("Negative-count read-only Grid source should not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class NegativeNonGenericCollection : IEnumerable<string>, ICollection
+        {
+            public int Count => -1;
+            public bool IsSynchronized => false;
+            public object SyncRoot => this;
+            public bool EnumeratorRequested { get; private set; }
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                EnumeratorRequested = true;
+                throw new Exception("Negative-count non-generic Grid source should not be enumerated.");
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
