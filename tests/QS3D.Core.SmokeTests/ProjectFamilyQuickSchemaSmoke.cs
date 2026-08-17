@@ -49,6 +49,11 @@ namespace QS3D.Core.SmokeTests
             Near(3.6d, ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters("Chiều cao", "3600", vi, true), 1e-12, "3600 mm must persist as 3.6 m.");
             Near(-0.05d, ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters("Offset đáy", "-50", vi, false), 1e-12, "Negative bottom offset conversion mismatch.");
             Equal("300", ProjectFamilyQuickSchemaService.FormatInternalMetersAsMillimeters("WidthM", "0.300", vi), "0.300 m must display as 300 mm.");
+
+            var overflowMeters = double.MaxValue.ToString("R", CultureInfo.InvariantCulture);
+            Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.FormatInternalMetersAsMillimeters("WidthM", overflowMeters, vi));
+            Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.FormatInternalMetersAsMillimeters("OffsetM", "-" + overflowMeters, vi));
+
             Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters("Bề dày", "0", vi, true));
             Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters(
                 "Bề dày",
@@ -64,6 +69,11 @@ namespace QS3D.Core.SmokeTests
             Equal("T200", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.ArchitecturalWall, Values(("ThicknessM", "0.2"))), "Wall suggested name mismatch.");
             Equal("S120", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.Slab, Values(("ThicknessM", "0.12"))), "Slab suggested name mismatch.");
             Equal("Móng BTCT H500", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.Foundation, Values(("ThicknessM", "0.5"))), "Foundation suggested name mismatch.");
+
+            var overflowMeters = double.MaxValue.ToString("R", CultureInfo.InvariantCulture);
+            Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.SuggestName(
+                ElementCategory.Beam,
+                Values(("WidthM", overflowMeters), ("HeightM", "0.5"))));
         }
 
         private static void AutoIdentityMatchingIsDeterministic()
