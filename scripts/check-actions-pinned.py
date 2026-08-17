@@ -9,6 +9,7 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 PLAIN_KEY_RE = re.compile(r"[A-Za-z0-9_.-]+")
 TOP_LEVEL_ON_RE = re.compile(r"^(?:on|\"on\"|'on')\s*:\s*(.*)$")
+ANCHOR_PREFIX_RE = re.compile(r"^&[^\s,\[\]{}]+(?:\s+|$)")
 
 
 def _decode_quoted_scalar(raw: str):
@@ -58,6 +59,14 @@ def _strip_yaml_comment(line: str) -> str:
             return line[:index]
         index += 1
     return line
+
+
+def _strip_yaml_anchor_prefix(raw: str) -> str:
+    value = raw.strip()
+    match = ANCHOR_PREFIX_RE.match(value)
+    if match is None:
+        return value
+    return value[match.end():].strip()
 
 
 def _outside_quote_delimiters(line: str):
@@ -255,6 +264,23 @@ def _split_flow_scalars(raw: str):
     return decoded
 
 
+def _find_on_alias(text: str):
+    for line_number, original in enumerate(text.splitlines(), start=1):
+        code = _strip_yaml_comment(original).rstrip()
+        if not code.strip():
+            continue
+        indent = len(code) - len(code.lstrip(" "))
+        if indent != 0:
+            continue
+        match = TOP_LEVEL_ON_RE.match(code)
+        if not match:
+            continue
+        raw = _strip_yaml_anchor_prefix(match.group(1))
+        if raw.startswith("*"):
+            return line_number
+    return None
+
+
 def _has_forbidden_pull_request_target(text: str):
     on_block_indent = None
     on_child_indent = None
@@ -288,7 +314,9 @@ def _has_forbidden_pull_request_target(text: str):
         match = TOP_LEVEL_ON_RE.match(code)
         if not match:
             continue
-        raw = match.group(1).strip()
+        raw = _strip_yaml_anchor_prefix(match.group(1))
+        if raw.startswith("*"):
+            continue
         if not raw:
             on_block_indent = 0
             on_child_indent = None
@@ -311,9 +339,11 @@ def _has_forbidden_pull_request_target(text: str):
 
 
 def parse_uses_target(raw: str):
-    raw = raw.strip()
+    raw = _strip_yaml_anchor_prefix(raw)
     if not raw:
         return None, "uses value is empty"
+    if raw.startswith("*"):
+        return None, "uses alias cannot be safety-checked; expand the action reference explicitly"
 
     if raw.startswith("'"):
         quoted = re.fullmatch(r"'((?:[^']|'')*)'", raw)
@@ -339,6 +369,11 @@ def parse_uses_target(raw: str):
 
 def scan_workflow_text(label: str, text: str):
     errors: list[str] = []
+    on_alias_line = _find_on_alias(text)
+    if on_alias_line is not None:
+        errors.append(
+            f"{label}:{on_alias_line}: on alias cannot be safety-checked; expand workflow triggers explicitly"
+        )
     forbidden_line = _has_forbidden_pull_request_target(text)
     if forbidden_line is not None:
         errors.append(
