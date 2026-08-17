@@ -55,6 +55,12 @@ def main():
         "conflicting closing reference lane keys",
     )
 
+    assert gate.extract_lane_evidence("Lane-Key: issue-2305\nLane-Key: issue-2306") == [
+        "issue-2305",
+        "issue-2306",
+    ]
+    assert gate.extract_lane_evidence("Lane-Key: bad/key\nIssue: #2305") == ["issue-2305"]
+
     assert gate.requires_lane_lock(
         "agent/chatgpt/task-2305", "trinhtanphat/QS3D-BricsCAD", "trinhtanphat/QS3D-BricsCAD", "trinhtanphat"
     )
@@ -75,13 +81,21 @@ def main():
         {"number": 10, "body": "Lane-Key: issue-2305", "head": {"ref": "agent/a/task"}},
         {"number": 11, "body": "Issue: #2306", "head": {"ref": "agent/b/task"}},
         {"number": 12, "body": "Fixes #2305", "head": {"ref": "agent/c/task"}},
-        {"number": 13, "body": "Lane-Key: issue-9999\nLane-Key: issue-8888", "head": {"ref": "agent/bad"}},
+        {"number": 13, "body": "Lane-Key: issue-9999\nLane-Key: issue-8888", "head": {"ref": "agent/bad-unrelated"}},
+        {"number": 14, "body": "Lane-Key: issue-2305\nLane-Key: issue-9999", "head": {"ref": "agent/bad-conflict"}},
+        {"number": 15, "body": "Lane-Key: bad/key\nIssue: #2305", "head": {"ref": "agent/bad-explicit"}},
     ]
     assert gate.find_duplicate_carriers(99, "issue-2305", peers) == [
         (10, "agent/a/task"),
         (12, "agent/c/task"),
+        (14, "agent/bad-conflict"),
+        (15, "agent/bad-explicit"),
     ]
-    assert gate.find_duplicate_carriers(10, "issue-2305", peers) == [(12, "agent/c/task")]
+    assert gate.find_duplicate_carriers(10, "issue-2305", peers) == [
+        (12, "agent/c/task"),
+        (14, "agent/bad-conflict"),
+        (15, "agent/bad-explicit"),
+    ]
     assert gate.find_duplicate_carriers(99, "issue-7777", peers) == []
 
     event = {
@@ -98,7 +112,12 @@ def main():
     }
     key, conflicts = gate.validate_pull_request_event(event, "trinhtanphat/QS3D-BricsCAD", peers)
     assert key == "issue-2305"
-    assert conflicts == [(10, "agent/a/task"), (12, "agent/c/task")]
+    assert conflicts == [
+        (10, "agent/a/task"),
+        (12, "agent/c/task"),
+        (14, "agent/bad-conflict"),
+        (15, "agent/bad-explicit"),
+    ]
 
     missing = {
         **event,
