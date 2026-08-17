@@ -680,25 +680,39 @@ namespace QS3D.Core.Cost
                 throw new ArgumentOutOfRangeException(nameof(retentionPercent));
             if (retentionPercent > 0m && retentionPercent / 100m == 0m)
                 throw new ArgumentOutOfRangeException(nameof(retentionPercent), retentionPercent, "Positive retention percentage is too small to preserve at decimal precision.");
+            if (AdvancedCostCollectionContract.TryGetKnownCount(contractItems, out var knownContractItemCount) &&
+                knownContractItemCount > AdvancedCostCollectionContract.MaximumEntries)
+                AdvancedCostCollectionContract.ThrowTooManyEntries("Progress contract item collection");
+            if (AdvancedCostCollectionContract.TryGetKnownCount(claimLines, out var knownClaimLineCount) &&
+                knownClaimLineCount > AdvancedCostCollectionContract.MaximumEntries)
+                AdvancedCostCollectionContract.ThrowTooManyEntries("Progress claim line collection");
 
             var contracts = new Dictionary<string, ProgressContractItem>(StringComparer.OrdinalIgnoreCase);
+            var contractIndex = 0;
             foreach (var item in contractItems)
             {
+                if (contractIndex == AdvancedCostCollectionContract.MaximumEntries)
+                    AdvancedCostCollectionContract.ThrowTooManyEntries("Progress contract item collection");
                 if (item == null) throw new ArgumentException("Progress contract contains a null item.", nameof(contractItems));
                 if (contracts.ContainsKey(item.ItemCode))
                     throw new ArgumentException("Duplicate progress contract item code: " + item.ItemCode + ".", nameof(contractItems));
                 contracts.Add(item.ItemCode, item);
+                contractIndex++;
             }
 
             var claims = new Dictionary<string, ProgressClaimLine>(StringComparer.OrdinalIgnoreCase);
+            var claimIndex = 0;
             foreach (var line in claimLines)
             {
+                if (claimIndex == AdvancedCostCollectionContract.MaximumEntries)
+                    AdvancedCostCollectionContract.ThrowTooManyEntries("Progress claim line collection");
                 if (line == null) throw new ArgumentException("Progress claim contains a null line.", nameof(claimLines));
                 if (claims.ContainsKey(line.ItemCode))
                     throw new ArgumentException("Duplicate progress claim item code: " + line.ItemCode + ".", nameof(claimLines));
                 if (!contracts.ContainsKey(line.ItemCode))
                     throw new InvalidOperationException("Progress claim references an unknown contract item: " + line.ItemCode + ".");
                 claims.Add(line.ItemCode, line);
+                claimIndex++;
             }
 
             var itemCodes = new List<string>(contracts.Keys);
