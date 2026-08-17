@@ -13,6 +13,9 @@ namespace QS3D.Core.SmokeTests
             KnownOversizedCollectionFailsBeforeEnumeration();
             LazyOversizedEnumerableStopsAtFirstExcessItem();
             NullOpeningRejectionRemainsIntact();
+            LostAreaDeductionFailsClosed();
+            LostVolumeDeductionFailsClosed();
+            OrdinaryAndFullDeductionsRemainStable();
         }
 
         private static void ExactBoundRemainsAccepted()
@@ -55,6 +58,53 @@ namespace QS3D.Core.SmokeTests
                 3d,
                 0.2d,
                 new OpeningCut[] { null! }));
+        }
+
+        private static void LostAreaDeductionFailsClosed()
+        {
+            Throws<InvalidOperationException>(() => WallQuantityCalculator.Calculate(
+                1e16d,
+                1d,
+                0d,
+                new[] { new OpeningCut { WidthM = 1d, HeightM = 1d } }));
+        }
+
+        private static void LostVolumeDeductionFailsClosed()
+        {
+            Throws<InvalidOperationException>(() => WallQuantityCalculator.Calculate(
+                2d,
+                1d,
+                1e16d,
+                new[] { new OpeningCut { WidthM = 2e-16d, HeightM = 1d } }));
+        }
+
+        private static void OrdinaryAndFullDeductionsRemainStable()
+        {
+            var ordinary = WallQuantityCalculator.Calculate(
+                10d,
+                3d,
+                0.2d,
+                new[] { new OpeningCut { WidthM = 1d, HeightM = 2d } });
+
+            Near(30d, ordinary.GrossAreaM2, "Ordinary gross wall area changed.");
+            Near(2d, ordinary.OpeningAreaM2, "Ordinary opening area changed.");
+            Near(28d, ordinary.NetAreaM2, "Ordinary net wall area changed.");
+            Near(6d, ordinary.GrossVolumeM3, "Ordinary gross wall volume changed.");
+            Near(0.4d, ordinary.DeductionVolumeM3, "Ordinary deduction volume changed.");
+            Near(5.6d, ordinary.NetVolumeM3, "Ordinary net wall volume changed.");
+            Near(56d, ordinary.TwoSideFinishAreaM2, "Ordinary finish area changed.");
+
+            var full = WallQuantityCalculator.Calculate(
+                10d,
+                3d,
+                0.2d,
+                new[] { new OpeningCut { WidthM = 100d, HeightM = 100d } });
+
+            Near(30d, full.OpeningAreaM2, "Full opening deduction no longer clamps to gross wall area.");
+            Near(0d, full.NetAreaM2, "Full opening deduction no longer floors net wall area to zero.");
+            Near(6d, full.DeductionVolumeM3, "Full opening deduction volume changed.");
+            Near(0d, full.NetVolumeM3, "Full opening deduction no longer floors net wall volume to zero.");
+            Near(0d, full.TwoSideFinishAreaM2, "Full opening deduction no longer floors finish area to zero.");
         }
 
         private static IEnumerable<OpeningCut> LazyOpenings(int count, Action onYield)
