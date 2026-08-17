@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +16,11 @@ def fail(message):
 def require(text, token, label):
     if token not in text:
         fail(label + ": expected source contract not found: " + token)
+
+
+def require_pattern(text, pattern, label):
+    if re.search(pattern, text, flags=re.DOTALL) is None:
+        fail(label + ": expected behavioral source contract not found")
 
 
 def forbid(text, token, label):
@@ -55,13 +61,23 @@ def main():
         "_right.Dock = DockSides.Right;",
         "if (_quantityInsight != null && _quantityInsight.Dock != DockSides.Right)",
         "_quantityInsight.Dock = DockSides.Right;",
-        "if (workspaceVisible && rightVisible && quantityVisible)",
     ):
         require(source, token, "BIM docking/reset contract")
-    forbid(
+
+    # Validate reset behavior from the semantic visibility properties instead of depending on
+    # local variable names. The reset must capture all three states, recreate the palettes,
+    # reapply BIM docking when all three were visible, then restore the captured visibility.
+    require_pattern(
         source,
-        "if (workspaceVisible && rightVisible && !quantityVisible)",
-        "stale BIM reset visibility contract",
+        r"private\s+static\s+void\s+ResetPreservingVisibility\s*\(\s*\)\s*\{"
+        r".*?IsWorkspaceVisible\s*;"
+        r".*?IsRightPanelVisible\s*;"
+        r".*?IsQuantityInsightVisible\s*;"
+        r".*?Dispose\s*\(\s*\)\s*;"
+        r".*?EnsureCreated\s*\(\s*\)\s*;"
+        r".*?if\s*\([^)]*&&[^)]*&&[^)]*\)\s*EnsureBimDockContract\s*\(\s*\)\s*;"
+        r".*?SetVisibility\s*\(",
+        "BIM reset visibility contract",
     )
 
     # Keep the ribbon-first isolated commands unchanged: only MÔ HÌNH BIM shows the full set.
