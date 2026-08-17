@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
         {
             AcceptsExactBoundAndPreservesOrdinaryGraphBehavior();
             RejectsKnownOversizedSourcesBeforeEnumeration();
+            RejectsKnownReadOnlyOversizedSourcesBeforeEnumeration();
             RebuildStopsLazySourceAtLimitPlusOneAndPreservesCommittedGraph();
             DirtyOrderStopsLazySourceAtLimitPlusOne();
         }
@@ -33,7 +34,11 @@ namespace QS3D.Core.SmokeTests
             var direct = graph.GetDirectDependents("E0");
             Equal(1, direct.Count, "exact-bound direct dependent count");
             Equal("E1", direct[0], "exact-bound direct dependent id");
-            Equal(0, graph.TopologicalDirtyOrder(exact).Count, "exact-bound clean dirty order");
+
+            var dirtyOrder = graph.TopologicalDirtyOrder(exact);
+            Equal(Limit, dirtyOrder.Count, "exact-bound dirty order count");
+            Equal("E0", dirtyOrder[0].Id, "dependency must precede dependent in dirty order");
+            Equal("E1", dirtyOrder[1].Id, "dependent must follow dependency in dirty order");
         }
 
         private static void RejectsKnownOversizedSourcesBeforeEnumeration()
@@ -48,6 +53,20 @@ namespace QS3D.Core.SmokeTests
             ThrowsLimit(() => graph.TopologicalDirtyOrder(known), "known oversized dirty order");
             if (known.Enumerated)
                 throw new InvalidOperationException("DependencyGraphBoundedInputSmoke known oversized dirty order enumerated the source.");
+        }
+
+        private static void RejectsKnownReadOnlyOversizedSourcesBeforeEnumeration()
+        {
+            var known = new OversizedKnownReadOnlyCollection();
+            var graph = new DependencyGraph();
+
+            ThrowsLimit(() => graph.Rebuild(known), "known read-only oversized rebuild");
+            if (known.Enumerated)
+                throw new InvalidOperationException("DependencyGraphBoundedInputSmoke known read-only oversized rebuild enumerated the source.");
+
+            ThrowsLimit(() => graph.TopologicalDirtyOrder(known), "known read-only oversized dirty order");
+            if (known.Enumerated)
+                throw new InvalidOperationException("DependencyGraphBoundedInputSmoke known read-only oversized dirty order enumerated the source.");
         }
 
         private static void RebuildStopsLazySourceAtLimitPlusOneAndPreservesCommittedGraph()
@@ -141,6 +160,20 @@ namespace QS3D.Core.SmokeTests
             public void Add(ProjectElement item) => throw new NotSupportedException();
             public void Clear() => throw new NotSupportedException();
             public bool Remove(ProjectElement item) => throw new NotSupportedException();
+        }
+
+        private sealed class OversizedKnownReadOnlyCollection : IReadOnlyCollection<ProjectElement>
+        {
+            public int Count => Limit + 1;
+            public bool Enumerated { get; private set; }
+
+            public IEnumerator<ProjectElement> GetEnumerator()
+            {
+                Enumerated = true;
+                return ((IEnumerable<ProjectElement>)Array.Empty<ProjectElement>()).GetEnumerator();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
     }
 }
