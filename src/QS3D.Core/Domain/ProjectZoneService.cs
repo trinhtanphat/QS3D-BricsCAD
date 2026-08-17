@@ -90,7 +90,7 @@ namespace QS3D.Core.Domain
             RequireCurrentAssignmentOwnership(project, zone, unique.Values);
 
             var changed = unique.Values
-                .Where(x => !string.Equals((x.ZoneId ?? string.Empty).Trim(), zone.Id, StringComparison.OrdinalIgnoreCase))
+                .Where(x => !string.Equals(RequireCanonicalOptionalReference(x.ZoneId, "Element ZoneId"), zone.Id, StringComparison.OrdinalIgnoreCase))
                 .ToList();
             if (changed.Count == 0) return 0;
 
@@ -107,7 +107,7 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var zone = FindRequired(project, zoneId);
-            if (string.Equals((project.ActiveZoneId ?? string.Empty).Trim(), zone.Id, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(RequireCanonicalOptionalReference(project.ActiveZoneId, "ActiveZoneId"), zone.Id, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Cannot delete the active zone. Activate another zone first.");
             var references = ResolveProjectElements(project).Count(x => ReferencesZone(x, zone.Id));
             if (references > 0)
@@ -125,7 +125,10 @@ namespace QS3D.Core.Domain
 
         private static bool ReferencesZone(ProjectElement element, string zoneId)
         {
-            return string.Equals((element.ZoneId ?? string.Empty).Trim(), zoneId, StringComparison.OrdinalIgnoreCase);
+            return string.Equals(
+                RequireCanonicalOptionalReference(element.ZoneId, "Element ZoneId"),
+                zoneId,
+                StringComparison.OrdinalIgnoreCase);
         }
 
         private static void RequireAssignmentTargetCountWithinLimit(IEnumerable<ProjectElement> elements)
@@ -188,14 +191,27 @@ namespace QS3D.Core.Domain
             {
                 if (element == null)
                     throw new InvalidOperationException("Project element collection contains a null entry.");
-                var elementId = (element.Id ?? string.Empty).Trim();
-                if (elementId.Length == 0)
+                var elementId = element.Id ?? string.Empty;
+                var canonicalElementId = elementId.Trim();
+                if (canonicalElementId.Length == 0)
                     throw new InvalidOperationException("Project element collection contains an element with a blank semantic id.");
+                if (!string.Equals(elementId, canonicalElementId, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Project element semantic id must not contain leading or trailing whitespace: " + elementId);
                 if (!seenIds.Add(elementId))
                     throw new InvalidOperationException("Project contains duplicate semantic element id: " + elementId);
                 resolved.Add(element);
             }
             return resolved;
+        }
+
+        private static string RequireCanonicalOptionalReference(string value, string fieldName)
+        {
+            var raw = value ?? string.Empty;
+            var canonical = raw.Trim();
+            if (canonical.Length == 0) return string.Empty;
+            if (!string.Equals(raw, canonical, StringComparison.Ordinal))
+                throw new InvalidOperationException(fieldName + " must not contain leading or trailing whitespace: " + raw);
+            return raw;
         }
 
         private static void EnsureUniqueName(ProjectState project, string name, string exceptId)
