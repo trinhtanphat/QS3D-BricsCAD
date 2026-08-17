@@ -123,7 +123,7 @@ namespace QS3D.Core.SmokeTests
             Equal(room.Id, finish.DependsOn[finish.DependsOn.Count - 1]);
 
             finish.Properties["DoorWidthM"] = "0.9";
-            finish.DependsOn.Insert(0, " " + room.Id.ToLowerInvariant() + " ");
+            finish.DependsOn.Insert(0, room.Id.ToLowerInvariant());
             var beforeRepairVersion = project.ChangeVersion;
             RoomFinishSynchronizationService.Synchronize(project, room, finish);
 
