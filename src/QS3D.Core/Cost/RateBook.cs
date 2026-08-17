@@ -190,20 +190,23 @@ namespace QS3D.Core.Cost
             var hasKnownCount = false;
             var firstKnownCount = 0;
             var maximumKnownCount = 0;
+            var hasNegativeKnownCount = false;
             var conflictingKnownCounts = false;
 
             if (items is ICollection<RateItem> collection)
-                ObserveKnownCount(collection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+                ObserveKnownCount(collection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref hasNegativeKnownCount, ref conflictingKnownCounts);
 
             if (items is IReadOnlyCollection<RateItem> readOnlyCollection)
-                ObserveKnownCount(readOnlyCollection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+                ObserveKnownCount(readOnlyCollection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref hasNegativeKnownCount, ref conflictingKnownCounts);
 
             if (items is ICollection nonGenericCollection)
-                ObserveKnownCount(nonGenericCollection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+                ObserveKnownCount(nonGenericCollection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref hasNegativeKnownCount, ref conflictingKnownCounts);
 
             count = maximumKnownCount;
             if (maximumKnownCount > MaxItems)
                 return true;
+            if (hasNegativeKnownCount)
+                throw new InvalidOperationException("Rate book item source reports an invalid negative known count.");
             if (conflictingKnownCounts)
                 throw new InvalidOperationException("Rate book item source reports conflicting known counts.");
             return hasKnownCount;
@@ -214,19 +217,20 @@ namespace QS3D.Core.Cost
             ref bool hasKnownCount,
             ref int firstKnownCount,
             ref int maximumKnownCount,
+            ref bool hasNegativeKnownCount,
             ref bool conflictingKnownCounts)
         {
-            if (candidate < 0)
-                throw new InvalidOperationException("Rate book item source reports an invalid negative known count.");
-
             if (!hasKnownCount)
             {
                 hasKnownCount = true;
                 firstKnownCount = candidate;
                 maximumKnownCount = candidate;
+                hasNegativeKnownCount = candidate < 0;
                 return;
             }
 
+            if (candidate < 0)
+                hasNegativeKnownCount = true;
             if (candidate != firstKnownCount)
                 conflictingKnownCounts = true;
             if (candidate > maximumKnownCount)
