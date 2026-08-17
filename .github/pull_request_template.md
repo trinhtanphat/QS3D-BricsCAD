@@ -2,6 +2,10 @@
 
 ## Scope
 
+Lane-Key: <!-- REQUIRED for agent/integration PRs: issue-123 or an explicit stable batch key -->
+Canonical owner/session: <!-- stable agent/session/lane id -->
+Canonical carrier: <!-- exactly one active task branch for this Lane-Key -->
+Supersedes: none <!-- if not none, name the explicitly superseded closed PR/branch -->
 Issue: <!-- #123; reuse the existing task issue instead of creating a duplicate -->
 Task branch: <!-- agent/<agent-id>/<scope> or integration/<batch-id> when explicitly authorized -->
 Baseline `main` SHA: <!-- exact 40-hex SHA used to start/reconcile this work -->
@@ -9,9 +13,14 @@ Head SHA: <!-- exact candidate SHA validated by branch CI -->
 
 Summarize the behavior changed and the user-visible reason for the change. Keep unrelated work out of this PR.
 
+For concurrent-agent work, `docs/AGENT-LANE-LOCK.md` is mandatory. One Lane-Key has one active owner and one canonical carrier. A stale/red/behind carrier is not free for takeover; explicit supersession must be recorded and the old PR closed before a replacement is represented as canonical.
+
 ## Validation
 
 - [ ] I checked relevant Issues/PRs/active lanes and did not overwrite concurrent work.
+- [ ] This PR is the **only open canonical carrier** for its Lane-Key; if it supersedes an older carrier, that supersession was explicitly recorded and the old PR is closed.
+- [ ] I did not create this PR merely to reconcile/transport `main` or another task branch into an agent branch.
+- [ ] If a scheduled assignment was stale/already landed/blocked, a CONTROL-authored replacement assignment exists; the worker did not self-select replacement work.
 - [ ] Watched-path work has a successful Shared Branch CI run on the exact current head SHA before this PR was opened/updated.
 - [ ] I refreshed `main` after branch CI and reconciled the candidate if `main` moved.
 - [ ] Required PR checks (`preflight` and `core`) are green on the current merge candidate, or are still running and this PR is not being represented as merge-ready.
