@@ -38,26 +38,47 @@ namespace QS3D.Core.Cost
 
         internal static bool TryGetKnownCount<T>(IEnumerable<T> items, out int count)
         {
+            var counts = new List<int>(3);
             if (items is ICollection<T> collection)
-            {
-                count = collection.Count;
-                return true;
-            }
-
+                counts.Add(collection.Count);
             if (items is IReadOnlyCollection<T> readOnlyCollection)
-            {
-                count = readOnlyCollection.Count;
-                return true;
-            }
-
+                counts.Add(readOnlyCollection.Count);
             if (items is ICollection nonGenericCollection)
+                counts.Add(nonGenericCollection.Count);
+
+            if (counts.Count == 0)
             {
-                count = nonGenericCollection.Count;
+                count = 0;
+                return false;
+            }
+
+            count = counts[0];
+            var maximumCount = count;
+            var hasConflict = false;
+            var hasNegative = count < 0;
+            for (var i = 1; i < counts.Count; i++)
+            {
+                if (counts[i] < 0)
+                    hasNegative = true;
+                if (counts[i] != count)
+                    hasConflict = true;
+                if (counts[i] > maximumCount)
+                    maximumCount = counts[i];
+            }
+
+            if (maximumCount > MaximumEntries)
+            {
+                count = maximumCount;
                 return true;
             }
 
-            count = 0;
-            return false;
+            if (hasNegative)
+                throw new InvalidOperationException("Collection reports an invalid negative known count.");
+
+            if (hasConflict)
+                throw new InvalidOperationException("Collection reports conflicting known counts.");
+
+            return true;
         }
 
         internal static void ThrowTooManyEntries(string collectionLabel)

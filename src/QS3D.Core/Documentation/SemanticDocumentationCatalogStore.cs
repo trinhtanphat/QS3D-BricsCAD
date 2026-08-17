@@ -435,6 +435,9 @@ namespace QS3D.Core.Documentation
                 var placements = new List<SemanticSheetPlacementDefinition>();
                 foreach (var placement in item.Element("placements")?.Elements("placement") ?? Enumerable.Empty<XElement>())
                 {
+                    if (placements.Count >= SemanticSheetPlanner.MaxPlacements)
+                        throw new InvalidDataException(
+                            "Semantic documentation sheet contains more than " + SemanticSheetPlanner.MaxPlacements + " view placements.");
                     placements.Add(new SemanticSheetPlacementDefinition(
                         Required(placement, "viewId"),
                         RequiredDouble(placement, "xMm", "placement xMm"),
