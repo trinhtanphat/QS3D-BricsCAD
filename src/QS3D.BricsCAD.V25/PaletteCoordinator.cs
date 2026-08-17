@@ -79,6 +79,9 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        // Compatibility entry point used by the QS3D command. Keep the normal authoring flow
+        // Ribbon-first: opening Workspace must not also consume the CAD viewport with the
+        // drawing/layer and quantity palettes.
         public static void Show() => ShowWorkspace();
 
         public static void ShowWorkspace()
@@ -95,6 +98,8 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        // The owner-reference BIM tab coordinates the full BLT3D-familiar side workspace around
+        // the real BricsCAD viewport. Keep this explicit so the ordinary Workspace command stays isolated.
         public static void ShowBimWorkspace()
         {
             try
@@ -240,7 +245,10 @@ namespace QS3D.BricsCAD.V25
             palette = null;
             if (current == null) return;
             try { current.Dispose(); }
-            catch { }
+            catch
+            {
+                // Native palette teardown is best-effort; one failed palette must not block the others.
+            }
         }
 
         private static void EnsureBimDockContract()
@@ -267,7 +275,10 @@ namespace QS3D.BricsCAD.V25
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
                     "\nQS3D " + operation + " UI error: không thể hoàn tất thao tác giao diện.");
             }
-            catch { }
+            catch
+            {
+                // Error reporting must never recurse into palette creation or mask the original failure.
+            }
         }
 
         private static void PersistPaletteLayout()
@@ -297,7 +308,10 @@ namespace QS3D.BricsCAD.V25
                     }
                 });
             }
-            catch { }
+            catch
+            {
+                // UI preference persistence is best-effort and must never block palette teardown.
+            }
         }
     }
 }
