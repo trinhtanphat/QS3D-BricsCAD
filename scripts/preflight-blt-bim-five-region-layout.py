@@ -16,8 +16,8 @@ else:
         end = text.find(next_name, start + 1) if start >= 0 else -1
         return text[start:end] if start >= 0 and end > start else ""
 
-    workspace = method("public static void ShowWorkspace()", "public static void ShowBimWorkspace()")
-    bim = method("public static void ShowBimWorkspace()", "public static void ShowDrawingManagement()")
+    workspace = method("public static void ShowWorkspace()", "public static bool ShowBimWorkspace()")
+    bim = method("public static bool ShowBimWorkspace()", "public static void ShowDrawingManagement()")
     management = method("public static void ShowDrawingManagement()", "public static void ShowQuantityInsight()")
     quantity = method("public static void ShowQuantityInsight()", "public static void Hide()")
     reset = method("private static void ResetPreservingVisibility()", "public static void Dispose()")
@@ -31,6 +31,8 @@ else:
         errors.append("BIM workspace must show Workspace + Management + Quantity Insight together")
     if "_quantityInsightPanel?.RefreshQuantityInsights();" not in bim:
         errors.append("BIM workspace must refresh Quantity Insight when it becomes visible")
+    if "return true;" not in bim or "return false;" not in bim:
+        errors.append("BIM workspace must report success/failure to bounded settle callers")
     if "SetVisibility(workspace: false, right: true, quantityInsight: false);" not in management:
         errors.append("standalone Management command isolation changed")
     if "SetVisibility(workspace: false, right: false, quantityInsight: true);" not in quantity:
@@ -64,4 +66,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: explicit BIM mode shows the complete palette set around the native BricsCAD viewport, preserves isolated commands, and reapplies left/right docking after palette recreation.")
+print("PASS: explicit BIM mode shows the complete palette set around the native BricsCAD viewport, reports settle success/failure, preserves isolated commands, and reapplies left/right docking after palette recreation.")
