@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             BulgedBoundaryFeedsPolygonalMeshPlanner();
             SelfIntersectionFailsClosed();
             ExcessiveTessellationFailsClosed();
+            OversizedSourceCountFailsBeforeIndexAccess();
             MutableSourceCountFailsBeforeTraversalExpansion();
         }
 
@@ -85,6 +86,13 @@ namespace QS3D.Core.SmokeTests
             }, 1e-15d));
         }
 
+        private static void OversizedSourceCountFailsBeforeIndexAccess()
+        {
+            var source = new OversizedCountVertices();
+            Throws<ArgumentException>(() => BulgedPolygonFootprintTessellator.TessellateClosed(source));
+            Require(source.IndexAccessCount == 0, "Known oversized source Count must fail before any vertex index is accessed.");
+        }
+
         private static void MutableSourceCountFailsBeforeTraversalExpansion()
         {
             var source = new ExpandingCountVertices(new[]
@@ -96,6 +104,28 @@ namespace QS3D.Core.SmokeTests
 
             Throws<ArgumentException>(() => BulgedPolygonFootprintTessellator.TessellateClosed(source));
             Require(source.HighestRequestedIndex == 2, "Mutable source Count must not expand traversal beyond the validated vertex snapshot.");
+        }
+
+        private sealed class OversizedCountVertices : IReadOnlyList<BulgedPolygonVertex2>
+        {
+            public int Count => 4097;
+            public int IndexAccessCount { get; private set; }
+
+            public BulgedPolygonVertex2 this[int index]
+            {
+                get
+                {
+                    IndexAccessCount++;
+                    throw new InvalidOperationException("Oversized source must not be indexed.");
+                }
+            }
+
+            public IEnumerator<BulgedPolygonVertex2> GetEnumerator()
+            {
+                throw new InvalidOperationException("Oversized source must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private sealed class ExpandingCountVertices : IReadOnlyList<BulgedPolygonVertex2>
