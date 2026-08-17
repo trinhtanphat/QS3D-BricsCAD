@@ -14,17 +14,18 @@ namespace QS3D.Core.Domain
         public static ZoneDefinition Create(ProjectState project, string id, string name)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var normalizedId = Required(id, nameof(id), 64);
+            var normalizedId = RequiredCanonicalId(id, nameof(id), 64);
             var normalizedName = Required(name, nameof(name), MaxNameLength);
             if (project.Zones.Any(x => x == null))
                 throw new InvalidOperationException("Project zone collection contains a null zone.");
             ValidateUniqueZoneIds(project);
+            var activeZoneId = OptionalStoredCanonicalId(project.ActiveZoneId, "Project active Zone id");
             if (project.Zones.Count >= MaxZones) throw new InvalidOperationException("Project supports at most " + MaxZones + " zones.");
             if (project.Zones.Any(x => string.Equals(x.Id, normalizedId, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Zone id already exists: " + normalizedId);
             EnsureUniqueName(project, normalizedName, string.Empty);
             var zone = new ZoneDefinition(normalizedId, normalizedName);
-            var activate = string.IsNullOrWhiteSpace(project.ActiveZoneId);
+            var activate = activeZoneId.Length == 0;
             if (activate) project.ActiveZoneId = zone.Id;
             else project.Touch();
             project.Zones.Add(zone);
@@ -54,7 +55,8 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var zone = FindRequired(project, zoneId);
-            if (string.Equals(project.ActiveZoneId, zone.Id, StringComparison.Ordinal)) return;
+            var activeZoneId = OptionalStoredCanonicalId(project.ActiveZoneId, "Project active Zone id");
+            if (string.Equals(activeZoneId, zone.Id, StringComparison.Ordinal)) return;
             project.ActiveZoneId = zone.Id;
         }
 
@@ -90,7 +92,7 @@ namespace QS3D.Core.Domain
             RequireCurrentAssignmentOwnership(project, zone, unique.Values);
 
             var changed = unique.Values
-                .Where(x => !string.Equals((x.ZoneId ?? string.Empty).Trim(), zone.Id, StringComparison.OrdinalIgnoreCase))
+                .Where(x => !string.Equals(OptionalStoredCanonicalId(x.ZoneId, "Project element Zone id"), zone.Id, StringComparison.OrdinalIgnoreCase))
                 .ToList();
             if (changed.Count == 0) return 0;
 
@@ -107,7 +109,8 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var zone = FindRequired(project, zoneId);
-            if (string.Equals((project.ActiveZoneId ?? string.Empty).Trim(), zone.Id, StringComparison.OrdinalIgnoreCase))
+            var activeZoneId = OptionalStoredCanonicalId(project.ActiveZoneId, "Project active Zone id");
+            if (string.Equals(activeZoneId, zone.Id, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Cannot delete the active zone. Activate another zone first.");
             var references = ResolveProjectElements(project).Count(x => ReferencesZone(x, zone.Id));
             if (references > 0)
@@ -125,7 +128,10 @@ namespace QS3D.Core.Domain
 
         private static bool ReferencesZone(ProjectElement element, string zoneId)
         {
-            return string.Equals((element.ZoneId ?? string.Empty).Trim(), zoneId, StringComparison.OrdinalIgnoreCase);
+            return string.Equals(
+                OptionalStoredCanonicalId(element.ZoneId, "Project element Zone id"),
+                zoneId,
+                StringComparison.OrdinalIgnoreCase);
         }
 
         private static void RequireAssignmentTargetCountWithinLimit(IEnumerable<ProjectElement> elements)
@@ -163,9 +169,9 @@ namespace QS3D.Core.Domain
 
         private static ZoneDefinition FindRequired(ProjectState project, string id)
         {
-            var normalized = Required(id, nameof(id), 64);
+            var canonical = RequiredCanonicalId(id, nameof(id), 64);
             ValidateUniqueZoneIds(project);
-            return project.FindZone(normalized) ?? throw new InvalidOperationException("Zone not found: " + normalized);
+            return project.FindZone(canonical) ?? throw new InvalidOperationException("Zone not found: " + canonical);
         }
 
         private static void ValidateUniqueZoneIds(ProjectState project)
@@ -175,8 +181,9 @@ namespace QS3D.Core.Domain
             {
                 if (zone == null)
                     throw new InvalidOperationException("Project zone collection contains a null zone.");
-                if (!seenIds.Add(zone.Id))
-                    throw new InvalidOperationException("Project contains duplicate zone id: " + zone.Id + ".");
+                var zoneId = StoredCanonicalId(zone.Id, "Project Zone id", 64);
+                if (!seenIds.Add(zoneId))
+                    throw new InvalidOperationException("Project contains duplicate zone id: " + zoneId + ".");
             }
         }
 
@@ -188,9 +195,7 @@ namespace QS3D.Core.Domain
             {
                 if (element == null)
                     throw new InvalidOperationException("Project element collection contains a null entry.");
-                var elementId = (element.Id ?? string.Empty).Trim();
-                if (elementId.Length == 0)
-                    throw new InvalidOperationException("Project element collection contains an element with a blank semantic id.");
+                var elementId = StoredCanonicalId(element.Id, "Project element semantic id");
                 if (!seenIds.Add(elementId))
                     throw new InvalidOperationException("Project contains duplicate semantic element id: " + elementId);
                 resolved.Add(element);
@@ -202,6 +207,64 @@ namespace QS3D.Core.Domain
         {
             if (project.Zones.Any(x => !string.Equals(x.Id, exceptId, StringComparison.OrdinalIgnoreCase) && string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Another zone already uses the name '" + name + "'.");
+        }
+
+        private static string RequiredCanonicalId(string value, string parameterName, int maxLength)
+        {
+            var text = value ?? string.Empty;
+            if (text.Length == 0 || text.Length > maxLength || string.IsNullOrWhiteSpace(text))
+                throw new ArgumentException(parameterName + " must contain 1.." + maxLength + " characters.", parameterName);
+            if (!string.Equals(text, text.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException(parameterName + " must be a canonical semantic id without leading or trailing whitespace.", parameterName);
+            ValidateArgumentSemanticId(text, parameterName);
+            return text;
+        }
+
+        private static string StoredCanonicalId(string value, string context, int? maxLength = null)
+        {
+            var text = value ?? string.Empty;
+            if (text.Length == 0 || string.IsNullOrWhiteSpace(text))
+                throw new InvalidOperationException(context + " is blank.");
+            if (maxLength.HasValue && text.Length > maxLength.Value)
+                throw new InvalidOperationException(context + " exceeds " + maxLength.Value + " characters.");
+            if (!string.Equals(text, text.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException(context + " is not canonical because it has leading or trailing whitespace.");
+            ValidateStoredSemanticId(text, context);
+            return text;
+        }
+
+        private static string OptionalStoredCanonicalId(string value, string context)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+            return StoredCanonicalId(value, context);
+        }
+
+        private static void ValidateArgumentSemanticId(string text, string parameterName)
+        {
+            if (text.Any(char.IsControl))
+                throw new ArgumentException(parameterName + " cannot contain control characters.", parameterName);
+            try
+            {
+                XmlConvert.VerifyXmlChars(text);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException(parameterName + " contains characters that are invalid in XML.", parameterName, ex);
+            }
+        }
+
+        private static void ValidateStoredSemanticId(string text, string context)
+        {
+            if (text.Any(char.IsControl))
+                throw new InvalidOperationException(context + " contains control characters.");
+            try
+            {
+                XmlConvert.VerifyXmlChars(text);
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidOperationException(context + " contains characters that are invalid in XML.", ex);
+            }
         }
 
         private static string Required(string value, string parameterName, int maxLength)
