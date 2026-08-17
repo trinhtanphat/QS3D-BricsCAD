@@ -98,6 +98,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 }
 
                 _initialized = true;
+                ProjectTabActivationCoordinator.Start();
                 return true;
             }
             catch
@@ -106,7 +107,12 @@ namespace QS3D.BricsCAD.V25.Ribbon
             }
         }
 
-        public static void Reset() => _initialized = false;
+        public static void Reset()
+        {
+            ProjectTabActivationCoordinator.Stop();
+            ProjectSetupPaletteCoordinator.Dispose();
+            _initialized = false;
+        }
 
         // Retain the established Project Tools reconciliation implementation as a compile-time
         // compatibility contract. It is deliberately not invoked by TryInitialize because the
