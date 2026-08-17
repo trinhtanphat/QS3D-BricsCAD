@@ -48,7 +48,12 @@ namespace QS3D.Core.SmokeTests
             Near(0.3d, ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters("Bề rộng", "300", vi, true), 1e-12, "300 mm must persist as 0.3 m.");
             Near(3.6d, ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters("Chiều cao", "3600", vi, true), 1e-12, "3600 mm must persist as 3.6 m.");
             Near(-0.05d, ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters("Offset đáy", "-50", vi, false), 1e-12, "Negative bottom offset conversion mismatch.");
+            Near(0d, ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters("Offset đáy", "0", vi, false), 0d, "Explicit zero offset must remain valid.");
             Equal("300", ProjectFamilyQuickSchemaService.FormatInternalMetersAsMillimeters("WidthM", "0.300", vi), "0.300 m must display as 300 mm.");
+
+            var tinyMillimeters = double.Epsilon.ToString("R", CultureInfo.InvariantCulture);
+            Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters("Offset đáy", tinyMillimeters, vi, false));
+            Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters("Offset đáy", "-" + tinyMillimeters, vi, false));
 
             var overflowMeters = double.MaxValue.ToString("R", CultureInfo.InvariantCulture);
             Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.FormatInternalMetersAsMillimeters("WidthM", overflowMeters, vi));
