@@ -10,7 +10,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             RepairsFloorAliasAndPreservesCanonicalNoOp();
-            RepairsZoneAliasAndPreservesCanonicalNoOp();
+            RejectsZoneAliasAndPreservesCanonicalNoOp();
         }
 
         private static void RepairsFloorAliasAndPreservesCanonicalNoOp()
@@ -34,18 +34,22 @@ namespace QS3D.Core.SmokeTests
             Equal(canonicalVersion, project.ChangeVersion, "floor missing-id version");
         }
 
-        private static void RepairsZoneAliasAndPreservesCanonicalNoOp()
+        private static void RejectsZoneAliasAndPreservesCanonicalNoOp()
         {
             var project = new ProjectState("P-ACTIVE-ZONE-CANONICAL", "Active zone canonical regression");
             var zone = ProjectZoneService.Create(project, "zone-a", "Zone A");
             project.ActiveZoneId = " ZONE-A ";
-            var beforeRepair = project.ChangeVersion;
+            var malformedVersion = project.ChangeVersion;
 
-            ProjectZoneService.SetActive(project, " Zone-A ");
+            Throws<ArgumentException>(() => ProjectZoneService.SetActive(project, " Zone-A "));
+            Equal(" ZONE-A ", project.ActiveZoneId, "zone padded caller rejection state");
+            Equal(malformedVersion, project.ChangeVersion, "zone padded caller rejection version");
 
-            Equal(zone.Id, project.ActiveZoneId, "zone canonical repair");
-            Equal(beforeRepair + 1L, project.ChangeVersion, "zone repair version");
+            Throws<InvalidOperationException>(() => ProjectZoneService.SetActive(project, zone.Id));
+            Equal(" ZONE-A ", project.ActiveZoneId, "zone malformed active reference state");
+            Equal(malformedVersion, project.ChangeVersion, "zone malformed active reference version");
 
+            project.ActiveZoneId = zone.Id;
             var canonicalVersion = project.ChangeVersion;
             ProjectZoneService.SetActive(project, zone.Id);
             Equal(canonicalVersion, project.ChangeVersion, "zone canonical no-op version");

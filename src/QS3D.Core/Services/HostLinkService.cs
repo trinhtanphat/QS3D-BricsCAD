@@ -11,6 +11,8 @@ namespace QS3D.Core.Services
         public void LinkOpening(ProjectState project, string openingId, string wallId)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            ValidateCanonicalCallerId(openingId, "Opening");
+            ValidateCanonicalCallerId(wallId, "Host wall");
             ValidateUniqueElementIds(project);
             var opening = project.FindElement(openingId) ?? throw new InvalidOperationException("Opening element not found: " + openingId);
             var wall = project.FindElement(wallId) ?? throw new InvalidOperationException("Wall element not found: " + wallId);
@@ -65,6 +67,7 @@ namespace QS3D.Core.Services
         public void UnlinkOpening(ProjectState project, string openingId)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            ValidateCanonicalCallerId(openingId, "Opening");
             ValidateUniqueElementIds(project);
             var opening = project.FindElement(openingId) ?? throw new InvalidOperationException("Opening element not found: " + openingId);
             EnsureOpening(opening, openingId);
@@ -106,6 +109,13 @@ namespace QS3D.Core.Services
                 AuditTrail.ForProject(project).Record("host.unlink", opening.Id, hostId);
                 return true;
             });
+        }
+
+        private static void ValidateCanonicalCallerId(string value, string label)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return;
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException(label + " id is non-canonical. Use the exact semantic identifier without surrounding whitespace.");
         }
 
         private static void ValidateCanonicalPersistedHostId(string rawHostId, string openingId)
