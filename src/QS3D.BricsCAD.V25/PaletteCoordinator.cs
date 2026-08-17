@@ -247,7 +247,10 @@ namespace QS3D.BricsCAD.V25
             var bimSurfaceActive = workspaceVisible && rightVisible && quantityVisible;
             Dispose();
             EnsureCreated();
-            _workspacePanel?.SetDedicatedPropertiesPaletteActive(bimSurfaceActive);
+            if (propertiesVisible && !bimSurfaceActive)
+                _workspacePanel?.SetDedicatedPropertiesPaletteActive(true);
+            else
+                _workspacePanel?.SetDedicatedPropertiesPaletteActive(bimSurfaceActive);
             if (bimSurfaceActive)
                 EnsureBimDockContract();
             SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);
@@ -293,6 +296,56 @@ namespace QS3D.BricsCAD.V25
                 _right.Dock = DockSides.Right;
             if (_quantityInsight != null && _quantityInsight.Dock != DockSides.Right)
                 _quantityInsight.Dock = DockSides.Right;
+
+            // BricsCAD can restore stale host-owned palette dimensions after construction. Reapply
+            // the normalized per-user fallback only when the host reports a non-finite or undersized
+            // value; valid user-resized palettes remain untouched during explicit BIM activation.
+            var layout = UserUiLayoutStore.Get();
+            EnsurePaletteSize(
+                _workspace,
+                new WpfSize(layout.WorkspacePaletteWidth, layout.WorkspacePaletteHeight),
+                UserUiLayoutStore.WorkspacePaletteMinWidth,
+                UserUiLayoutStore.WorkspacePaletteMinHeight);
+            EnsurePaletteSize(
+                _properties,
+                new WpfSize(layout.PropertiesPaletteWidth, layout.PropertiesPaletteHeight),
+                UserUiLayoutStore.PropertiesPaletteMinWidth,
+                UserUiLayoutStore.PropertiesPaletteMinHeight);
+            EnsurePaletteSize(
+                _right,
+                new WpfSize(layout.RightPaletteWidth, layout.RightPaletteHeight),
+                UserUiLayoutStore.RightPaletteMinWidth,
+                UserUiLayoutStore.RightPaletteMinHeight);
+            EnsurePaletteSize(
+                _quantityInsight,
+                new WpfSize(layout.QuantityPaletteWidth, layout.QuantityPaletteHeight),
+                UserUiLayoutStore.QuantityPaletteMinWidth,
+                UserUiLayoutStore.QuantityPaletteMinHeight);
+        }
+
+        private static void EnsurePaletteSize(PaletteSet? palette, WpfSize fallback, int minWidth, int minHeight)
+        {
+            if (palette == null) return;
+            var useFallback = false;
+            try
+            {
+                var size = palette.DeviceIndependentSize;
+                useFallback =
+                    double.IsNaN(size.Width) || double.IsInfinity(size.Width) ||
+                    double.IsNaN(size.Height) || double.IsInfinity(size.Height) ||
+                    size.Width < minWidth || size.Height < minHeight;
+            }
+            catch
+            {
+                useFallback = true;
+            }
+
+            if (!useFallback) return;
+            try { palette.DeviceIndependentSize = fallback; }
+            catch
+            {
+                // Native host state is best-effort; a failed size repair must not abort palette activation.
+            }
         }
 
         // Keep the established three-argument call sites source-compatible. The only state that
@@ -334,27 +387,32 @@ namespace QS3D.BricsCAD.V25
                 var propertiesSize = _properties?.DeviceIndependentSize;
                 var rightSize = _right?.DeviceIndependentSize;
                 var quantitySize = _quantityInsight?.DeviceIndependentSize;
+                var hasWorkspaceSize = TryGetPersistableSize(workspaceSize, out var workspaceWidth, out var workspaceHeight);
+                var hasPropertiesSize = TryGetPersistableSize(propertiesSize, out var propertiesWidth, out var propertiesHeight);
+                var hasRightSize = TryGetPersistableSize(rightSize, out var rightWidth, out var rightHeight);
+                var hasQuantitySize = TryGetPersistableSize(quantitySize, out var quantityWidth, out var quantityHeight);
+
                 UserUiLayoutStore.Update(layout =>
                 {
-                    if (workspaceSize.HasValue)
+                    if (hasWorkspaceSize)
                     {
-                        layout.WorkspacePaletteWidth = checked((int)Math.Round(workspaceSize.Value.Width, MidpointRounding.AwayFromZero));
-                        layout.WorkspacePaletteHeight = checked((int)Math.Round(workspaceSize.Value.Height, MidpointRounding.AwayFromZero));
+                        layout.WorkspacePaletteWidth = workspaceWidth;
+                        layout.WorkspacePaletteHeight = workspaceHeight;
                     }
-                    if (propertiesSize.HasValue)
+                    if (hasPropertiesSize)
                     {
-                        layout.PropertiesPaletteWidth = checked((int)Math.Round(propertiesSize.Value.Width, MidpointRounding.AwayFromZero));
-                        layout.PropertiesPaletteHeight = checked((int)Math.Round(propertiesSize.Value.Height, MidpointRounding.AwayFromZero));
+                        layout.PropertiesPaletteWidth = propertiesWidth;
+                        layout.PropertiesPaletteHeight = propertiesHeight;
                     }
-                    if (rightSize.HasValue)
+                    if (hasRightSize)
                     {
-                        layout.RightPaletteWidth = checked((int)Math.Round(rightSize.Value.Width, MidpointRounding.AwayFromZero));
-                        layout.RightPaletteHeight = checked((int)Math.Round(rightSize.Value.Height, MidpointRounding.AwayFromZero));
+                        layout.RightPaletteWidth = rightWidth;
+                        layout.RightPaletteHeight = rightHeight;
                     }
-                    if (quantitySize.HasValue)
+                    if (hasQuantitySize)
                     {
-                        layout.QuantityPaletteWidth = checked((int)Math.Round(quantitySize.Value.Width, MidpointRounding.AwayFromZero));
-                        layout.QuantityPaletteHeight = checked((int)Math.Round(quantitySize.Value.Height, MidpointRounding.AwayFromZero));
+                        layout.QuantityPaletteWidth = quantityWidth;
+                        layout.QuantityPaletteHeight = quantityHeight;
                     }
                 });
             }
@@ -362,6 +420,24 @@ namespace QS3D.BricsCAD.V25
             {
                 // UI preference persistence is best-effort and must never block palette teardown.
             }
+        }
+
+        private static bool TryGetPersistableSize(WpfSize? size, out int width, out int height)
+        {
+            width = 0;
+            height = 0;
+            if (!size.HasValue) return false;
+
+            var value = size.Value;
+            if (double.IsNaN(value.Width) || double.IsInfinity(value.Width) ||
+                double.IsNaN(value.Height) || double.IsInfinity(value.Height) ||
+                value.Width <= 0d || value.Height <= 0d ||
+                value.Width > int.MaxValue || value.Height > int.MaxValue)
+                return false;
+
+            width = checked((int)Math.Round(value.Width, MidpointRounding.AwayFromZero));
+            height = checked((int)Math.Round(value.Height, MidpointRounding.AwayFromZero));
+            return width > 0 && height > 0;
         }
     }
 }

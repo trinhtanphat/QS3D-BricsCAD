@@ -2,16 +2,16 @@
 from pathlib import Path
 import sys
 
+# Keep this guard on the clean #2399 carrier so exact-head CI validates the scoped palette contract.
 ROOT = Path(__file__).resolve().parents[1]
 PALETTE = ROOT / "src" / "QS3D.BricsCAD.V25" / "PaletteCoordinator.cs"
 PROPERTIES = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.DedicatedPropertiesPalette.cs"
 LAYOUT = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
 STORE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Services" / "UserUiLayoutStore.cs"
 WORKSPACE_XAML = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.xaml"
+WORKSPACE_CODE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.xaml.cs"
 SELECTION = ROOT / "src" / "QS3D.BricsCAD.V25" / "SelectionSyncCoordinator.cs"
 errors = []
-
-# r4 keeps this guard on the latest main integration contract, including bool-returning BIM settle evidence.
 
 
 def read(path: Path) -> str:
@@ -26,6 +26,7 @@ properties = read(PROPERTIES)
 layout = read(LAYOUT)
 store = read(STORE)
 workspace_xaml = read(WORKSPACE_XAML)
+workspace_code = read(WORKSPACE_CODE)
 selection = read(SELECTION)
 
 for token in (
@@ -48,6 +49,23 @@ for token in (
 ):
     if token not in palette:
         errors.append("PaletteCoordinator dedicated Properties contract missing: " + token)
+
+# Explicit BIM activation must repair invalid host-restored dimensions without overwriting valid
+# user-resized palettes, and one corrupt host size must not prevent other valid sizes persisting.
+for token in (
+    "EnsurePaletteSize(",
+    "new WpfSize(layout.PropertiesPaletteWidth, layout.PropertiesPaletteHeight)",
+    "UserUiLayoutStore.PropertiesPaletteMinWidth",
+    "UserUiLayoutStore.PropertiesPaletteMinHeight",
+    "double.IsNaN(size.Width)",
+    "double.IsInfinity(size.Height)",
+    "size.Width < minWidth || size.Height < minHeight",
+    "TryGetPersistableSize",
+    "hasPropertiesSize",
+    "value.Width > int.MaxValue || value.Height > int.MaxValue",
+):
+    if token not in palette:
+        errors.append("deterministic palette size fallback/persistence guard missing: " + token)
 
 # The exact existing editor visual moves between Workspace and the dedicated palette. This preserves
 # ordinary ShowWorkspace behavior while BIM gets a distinct native plugin palette without cloning
@@ -73,13 +91,30 @@ for token in (
     'x:Name="PropertyList"',
     'ItemsSource="{Binding Properties}"',
     'ItemsSource="{Binding PropertyScopes}"',
+    'SelectedItem="{Binding SelectedPropertyScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"',
     'x:Name="PropertySearch"',
+    'Text="{Binding Value, UpdateSourceTrigger=LostFocus}"',
+    'IsChecked="{Binding BooleanValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"',
+    'Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"',
+    'IsReadOnly="{Binding IsReadOnly}"',
+    'IsEnabled="{Binding IsEditable}"',
     'Click="OnResetPropertyClick"',
     'Value="Boolean"',
     'Value="Choice"',
 ):
     if token not in workspace_xaml:
-        errors.append("real QS3D Properties editor contract missing from WorkspacePanel.xaml: " + token)
+        errors.append("real editable QS3D Properties editor contract missing from WorkspacePanel.xaml: " + token)
+
+for token in (
+    "OnResetPropertyClick",
+    "button.CommandParameter is PropertyRowViewModel row",
+    "row.ResetValue();",
+):
+    if token not in workspace_code:
+        errors.append("real QS3D Properties reset/write-back handler missing: " + token)
+
+if "new WorkspaceViewModel" in properties:
+    errors.append("dedicated QS3D Properties host must not construct a second WorkspaceViewModel")
 
 for token in (
     "PropertiesPaletteWidth",
@@ -116,4 +151,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BIM mode owns a distinct QS3D Properties PaletteSet by dynamically reparenting the existing project-aware PropertyList editor with its original WorkspaceViewModel/scope/search/typed-edit/reset behavior; ordinary ShowWorkspace restores the same editor in-place, selection changes respect manual close, and native BricsCAD Properties is not used as a substitute.")
+print("PASS: BIM mode owns a distinct QS3D Properties PaletteSet by dynamically reparenting the existing project-aware PropertyList editor with its original WorkspaceViewModel/scope/search/typed-edit/reset behavior; editability/write-back semantics are pinned for text/boolean/choice/scope/reset paths; explicit BIM activation repairs invalid host-restored palette sizes from normalized per-user fallbacks, corrupt dimensions cannot poison persistence of other palettes, ordinary ShowWorkspace restores the same editor in-place, selection changes respect manual close, and native BricsCAD Properties is not used as a substitute.")
