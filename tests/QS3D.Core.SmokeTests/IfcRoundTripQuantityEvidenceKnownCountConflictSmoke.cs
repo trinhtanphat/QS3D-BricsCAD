@@ -22,7 +22,7 @@ namespace QS3D.Core.SmokeTests
             var failure = CaptureFailure(() => IfcRoundTripQuantityEvidenceSet.Create(source));
 
             Contains(failure.Message, "supports at most 10000 candidates", "oversized secondary Count diagnostic");
-            AssertAllCountsReadWithoutEnumeration(source, "oversized secondary Count");
+            AssertAllCountsReadExactlyOnceWithoutEnumeration(source, "oversized secondary Count");
         }
 
         private static void RejectsConflictingInBoundKnownCountsBeforeEnumeration()
@@ -34,7 +34,7 @@ namespace QS3D.Core.SmokeTests
                 "IFC round-trip quantity evidence source exposes conflicting known Count values.",
                 failure.Message,
                 "in-bound conflicting Count diagnostic");
-            AssertAllCountsReadWithoutEnumeration(source, "in-bound conflicting Count");
+            AssertAllCountsReadExactlyOnceWithoutEnumeration(source, "in-bound conflicting Count");
         }
 
         private static void EqualKnownCountContractsRemainAccepted()
@@ -45,9 +45,9 @@ namespace QS3D.Core.SmokeTests
 
             Equal(1, result.CandidateCount, "equal Count candidate count");
             Equal(1, result.Groups.Count, "equal Count group count");
-            True(source.GenericCountRead, "equal Count generic contract was not inspected");
-            True(source.ReadOnlyCountRead, "equal Count read-only contract was not inspected");
-            True(source.NonGenericCountRead, "equal Count non-generic contract was not inspected");
+            Equal(1, source.GenericCountReads, "equal Count generic contract read count");
+            Equal(1, source.ReadOnlyCountReads, "equal Count read-only contract read count");
+            Equal(1, source.NonGenericCountReads, "equal Count non-generic contract read count");
             True(source.EnumeratorRequested, "equal Count source should be enumerated");
         }
 
@@ -65,11 +65,11 @@ namespace QS3D.Core.SmokeTests
             throw new Exception("Expected IFC quantity evidence known-count validation to fail.");
         }
 
-        private static void AssertAllCountsReadWithoutEnumeration(MultiCountCollection source, string label)
+        private static void AssertAllCountsReadExactlyOnceWithoutEnumeration(MultiCountCollection source, string label)
         {
-            True(source.GenericCountRead, label + " generic Count was not inspected");
-            True(source.ReadOnlyCountRead, label + " read-only Count was not inspected");
-            True(source.NonGenericCountRead, label + " non-generic Count was not inspected");
+            Equal(1, source.GenericCountReads, label + " generic Count read count");
+            Equal(1, source.ReadOnlyCountReads, label + " read-only Count read count");
+            Equal(1, source.NonGenericCountReads, label + " non-generic Count read count");
             True(!source.EnumeratorRequested, label + " requested an enumerator");
         }
 
@@ -102,7 +102,7 @@ namespace QS3D.Core.SmokeTests
             {
                 get
                 {
-                    GenericCountRead = true;
+                    GenericCountReads++;
                     return _genericCount;
                 }
             }
@@ -111,7 +111,7 @@ namespace QS3D.Core.SmokeTests
             {
                 get
                 {
-                    ReadOnlyCountRead = true;
+                    ReadOnlyCountReads++;
                     return _readOnlyCount;
                 }
             }
@@ -120,14 +120,14 @@ namespace QS3D.Core.SmokeTests
             {
                 get
                 {
-                    NonGenericCountRead = true;
+                    NonGenericCountReads++;
                     return _nonGenericCount;
                 }
             }
 
-            internal bool GenericCountRead { get; private set; }
-            internal bool ReadOnlyCountRead { get; private set; }
-            internal bool NonGenericCountRead { get; private set; }
+            internal int GenericCountReads { get; private set; }
+            internal int ReadOnlyCountReads { get; private set; }
+            internal int NonGenericCountReads { get; private set; }
             internal bool EnumeratorRequested { get; private set; }
 
             public bool IsReadOnly => true;
