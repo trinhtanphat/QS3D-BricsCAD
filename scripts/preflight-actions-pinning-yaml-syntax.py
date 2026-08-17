@@ -54,6 +54,11 @@ def main():
     )
     assert_clean(
         checker,
+        "anchored-safe.yml",
+        f"on: &events [push]\njobs:\n  test:\n    steps:\n      - uses: &checkout actions/checkout@{PIN}\n",
+    )
+    assert_clean(
+        checker,
         "comments-and-values.yml",
         "# pull_request_target:\n"
         "on: push\n"
@@ -73,9 +78,29 @@ def main():
         ("flow-event-sequence.yml", 'on: [push, "pull_request_target"]\n'),
         ("block-event-sequence.yml", "on:\n  - push\n  - 'pull_request_target'\n"),
         ("single-event-scalar.yml", "on: pull_request_target\n"),
+        ("anchored-flow-event.yml", "on: &events [push, pull_request_target]\n"),
+        ("anchored-block-event.yml", "on: &events\n  pull_request_target: {}\n"),
     ):
         assert_rejected(checker, label, workflow, "pull_request_target is forbidden")
 
+    assert_rejected(
+        checker,
+        "aliased-trigger.yml",
+        "events: &events [push]\non: *events\n",
+        "on alias cannot be safety-checked",
+    )
+    assert_rejected(
+        checker,
+        "aliased-uses.yml",
+        f"action: &action actions/checkout@{PIN}\non: push\njobs:\n  test:\n    steps:\n      - uses: *action\n",
+        "uses alias cannot be safety-checked",
+    )
+    assert_rejected(
+        checker,
+        "anchored-mutable-ref.yml",
+        "on: push\njobs:\n  test:\n    steps:\n      - uses: &checkout actions/checkout@main\n",
+        "full 40-hex commit SHA",
+    )
     assert_rejected(
         checker,
         "flow-mutable-ref.yml",
@@ -113,8 +138,8 @@ def main():
         assert_clean(checker, str(workflow.relative_to(ROOT)), text)
 
     print(
-        "PASS: Actions pinning guard rejects quoted/flow pull_request_target and flow-style mutable uses "
-        "while preserving pinned/local/comment/value controls."
+        "PASS: Actions pinning guard rejects quoted/flow/anchored pull_request_target, mutable or aliased uses, "
+        "and unresolved trigger aliases while preserving pinned/local/comment/value and safe-anchor controls."
     )
     return 0
 
