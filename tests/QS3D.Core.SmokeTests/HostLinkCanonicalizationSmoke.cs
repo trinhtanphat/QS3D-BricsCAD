@@ -28,6 +28,8 @@ namespace QS3D.Core.SmokeTests
             opening.DependsOn.Add("wall-a");
             var version = project.ChangeVersion;
             var audits = project.AuditEvents.Count;
+            var openingDirty = opening.Dirty;
+            var wallADirty = wallA.Dirty;
 
             Throws<InvalidOperationException>(() => new HostLinkService().LinkOpening(project, " opening ", " wall-a "));
 
@@ -37,7 +39,8 @@ namespace QS3D.Core.SmokeTests
             Equal("wall-a", opening.DependsOn[1]);
             Equal(version, project.ChangeVersion);
             Equal(audits, project.AuditEvents.Count);
-            Equal(ElementDirtyFlags.None, wallA.Dirty);
+            Equal(openingDirty, opening.Dirty);
+            Equal(wallADirty, wallA.Dirty);
         }
 
         private static void RehostRejectsLegacyPreviousHostVariants()
@@ -48,6 +51,9 @@ namespace QS3D.Core.SmokeTests
             opening.DependsOn.Add("wall-a");
             var version = project.ChangeVersion;
             var audits = project.AuditEvents.Count;
+            var openingDirty = opening.Dirty;
+            var wallADirty = wallA.Dirty;
+            var wallBDirty = wallB.Dirty;
 
             Throws<InvalidOperationException>(() => new HostLinkService().LinkOpening(project, opening.Id, " wall-b "));
 
@@ -57,8 +63,9 @@ namespace QS3D.Core.SmokeTests
             Equal("wall-a", opening.DependsOn[1]);
             Equal(version, project.ChangeVersion);
             Equal(audits, project.AuditEvents.Count);
-            Equal(ElementDirtyFlags.None, wallA.Dirty);
-            Equal(ElementDirtyFlags.None, wallB.Dirty);
+            Equal(openingDirty, opening.Dirty);
+            Equal(wallADirty, wallA.Dirty);
+            Equal(wallBDirty, wallB.Dirty);
         }
 
         private static void UnlinkRejectsLegacyHostVariants()
@@ -69,6 +76,8 @@ namespace QS3D.Core.SmokeTests
             opening.DependsOn.Add("wall-a");
             var version = project.ChangeVersion;
             var audits = project.AuditEvents.Count;
+            var openingDirty = opening.Dirty;
+            var wallADirty = wallA.Dirty;
 
             Throws<InvalidOperationException>(() => new HostLinkService().UnlinkOpening(project, " OPENING "));
 
@@ -78,7 +87,8 @@ namespace QS3D.Core.SmokeTests
             Equal("wall-a", opening.DependsOn[1]);
             Equal(version, project.ChangeVersion);
             Equal(audits, project.AuditEvents.Count);
-            Equal(ElementDirtyFlags.None, wallA.Dirty);
+            Equal(openingDirty, opening.Dirty);
+            Equal(wallADirty, wallA.Dirty);
         }
 
         private static void AmbiguousPreviousHostFailsBeforeMutation()
