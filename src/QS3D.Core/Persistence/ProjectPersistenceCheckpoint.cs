@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Domain;
@@ -13,6 +14,7 @@ namespace QS3D.Core.Persistence
     /// </summary>
     public sealed class ProjectPersistenceCheckpoint
     {
+        private const int MaximumElementCount = 10000;
         private readonly string _projectId;
         private readonly DateTime _projectUpdatedUtc;
         private readonly long _projectChangeVersion;
@@ -40,13 +42,21 @@ namespace QS3D.Core.Persistence
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
+            RejectKnownOversize(elementIds);
 
             var elements = new Dictionary<string, ElementPersistenceState>(StringComparer.OrdinalIgnoreCase);
+            var observed = 0;
             foreach (var rawId in elementIds)
             {
-                var id = (rawId ?? string.Empty).Trim();
-                if (id.Length == 0)
+                observed++;
+                if (observed > MaximumElementCount)
+                    throw new InvalidOperationException("Persistence checkpoint exceeds the supported " + MaximumElementCount + " element limit.");
+
+                var id = rawId ?? string.Empty;
+                if (id.Length == 0 || string.IsNullOrWhiteSpace(id))
                     throw new InvalidOperationException("Persistence checkpoint element id is required.");
+                if (!string.Equals(id, id.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Persistence checkpoint element id must be canonical without leading or trailing whitespace: " + id + ".");
                 if (elements.ContainsKey(id))
                     throw new InvalidOperationException("Persistence checkpoint contains duplicate element id: " + id + ".");
                 var element = project.FindElement(id)
@@ -97,6 +107,16 @@ namespace QS3D.Core.Persistence
             foreach (var pair in _elements)
                 pair.Value.Restore(targets[pair.Key]);
             project.RestorePersistenceState(_projectUpdatedUtc, _projectChangeVersion);
+        }
+
+        private static void RejectKnownOversize(IEnumerable<string> elementIds)
+        {
+            if (elementIds is ICollection<string> collection && collection.Count > MaximumElementCount)
+                throw new InvalidOperationException("Persistence checkpoint exceeds the supported " + MaximumElementCount + " element limit.");
+            if (elementIds is IReadOnlyCollection<string> readOnlyCollection && readOnlyCollection.Count > MaximumElementCount)
+                throw new InvalidOperationException("Persistence checkpoint exceeds the supported " + MaximumElementCount + " element limit.");
+            if (elementIds is ICollection nonGenericCollection && nonGenericCollection.Count > MaximumElementCount)
+                throw new InvalidOperationException("Persistence checkpoint exceeds the supported " + MaximumElementCount + " element limit.");
         }
 
         private sealed class ElementPersistenceState
