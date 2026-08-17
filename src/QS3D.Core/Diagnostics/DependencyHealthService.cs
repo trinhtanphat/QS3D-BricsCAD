@@ -29,6 +29,7 @@ namespace QS3D.Core.Diagnostics
             var graph = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
             var selfReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var blankTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var controlCharacterTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var nonCanonicalTargets = new List<KeyValuePair<string, string>>();
             var duplicateTargets = new List<KeyValuePair<string, string>>();
             var ambiguousTargets = new List<KeyValuePair<string, string>>();
@@ -47,6 +48,11 @@ namespace QS3D.Core.Diagnostics
                     if (dependencyId.Length == 0)
                     {
                         blankTargets.Add(element.Id);
+                        continue;
+                    }
+                    if (rawDependencyId.Any(char.IsControl))
+                    {
+                        controlCharacterTargets.Add(element.Id);
                         continue;
                     }
                     if (!string.Equals(rawDependencyId, dependencyId, StringComparison.Ordinal))
@@ -89,6 +95,15 @@ namespace QS3D.Core.Diagnostics
                     "DEPENDENCY_ELEMENT_ID_DUPLICATE",
                     HealthSeverity.Error,
                     "Project chứa nhiều semantic element cùng ID: " + elementId + ". Không thể dựng dependency graph an toàn.",
+                    elementId));
+            }
+
+            foreach (var elementId in controlCharacterTargets.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+            {
+                issues.Add(new ModelHealthIssue(
+                    "DEPENDENCY_TARGET_CONTROL_CHARACTER",
+                    HealthSeverity.Error,
+                    "Dependency ID chứa control character và không thể dùng để dựng dependency graph an toàn. Cần sửa relation trước khi regenerate/release.",
                     elementId));
             }
 
