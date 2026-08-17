@@ -13,6 +13,8 @@ namespace QS3D.Core.SmokeTests
             BasicBomGuard();
             NonCanonicalPropertyKeyBlocksRelease();
             NonCanonicalQuantityKeyBlocksRelease();
+            MalformedDiagnosticKeysBlockReleaseAndAreRedacted();
+            CanonicalUnicodeDiagnosticKeysRemainValid();
             RoomFinishProvenanceReachesReleaseGuard();
             ProvenanceConflictDoesNotCrashReleaseGuard();
             NullSemanticEntryBlocksReleaseWithoutCrashing();
@@ -66,14 +68,9 @@ namespace QS3D.Core.SmokeTests
 
         private static void NonCanonicalPropertyKeyBlocksRelease()
         {
-            var project = new ProjectState("bom-property-key", "BOM property key guard");
-            project.Families.Add(new ProjectFamily("beam", "Beam", ElementCategory.Beam));
-            var element = new ProjectElement("beam-property-key", ElementCategory.Beam, "beam", string.Empty, string.Empty);
-            element.SourceHandles.Add("1C");
+            var project = ProjectWithBeam("bom-property-key", "beam-property-key");
+            var element = project.Elements[0];
             element.Properties[" MaterialName "] = "C30";
-            element.SetQuantity("NetConcreteM3", 1.25d);
-            element.MarkClean(ElementDirtyFlags.All);
-            project.Elements.Add(element);
 
             var issues = BomReleaseGuardService.Inspect(project);
             Has(issues, "BOM_PROPERTY_KEY_INVALID");
@@ -83,18 +80,83 @@ namespace QS3D.Core.SmokeTests
 
         private static void NonCanonicalQuantityKeyBlocksRelease()
         {
-            var project = new ProjectState("bom-key", "BOM quantity key guard");
-            project.Families.Add(new ProjectFamily("beam", "Beam", ElementCategory.Beam));
-            var element = new ProjectElement("beam-key", ElementCategory.Beam, "beam", string.Empty, string.Empty);
-            element.SourceHandles.Add("1B");
+            var project = ProjectWithBeam("bom-key", "beam-key", addCanonicalQuantity: false);
+            var element = project.Elements[0];
             element.Quantities[" NetConcreteM3 "] = 1.25d;
-            element.MarkClean(ElementDirtyFlags.All);
-            project.Elements.Add(element);
 
             var issues = BomReleaseGuardService.Inspect(project);
             Has(issues, "BOM_QUANTITY_KEY_INVALID");
             if (!issues.Any(x => x.Code == "BOM_QUANTITY_KEY_INVALID" && x.Severity == HealthSeverity.Error && x.ElementId == element.Id))
                 throw new Exception("Non-canonical quantity key must be an Error-level BOM release blocker for its owning element.");
+        }
+
+        private static void MalformedDiagnosticKeysBlockReleaseAndAreRedacted()
+        {
+            var invalidKeys = new[]
+            {
+                "Bad\0Key",
+                "Bad\u0001Key",
+                "Bad\tKey",
+                "Bad\nKey",
+                "Bad\u001fKey",
+                "Bad\u007fKey",
+                "Bad\u0085Key",
+                "Bad\u009fKey",
+                "Bad" + ((char)0xfffe) + "Key",
+                "Bad" + ((char)0xffff) + "Key",
+                "Bad" + new string((char)0xd800, 1) + "Key",
+                "Bad" + new string((char)0xdc00, 1) + "Key"
+            };
+
+            foreach (var invalidKey in invalidKeys)
+            {
+                var propertyProject = ProjectWithBeam("bom-bad-property", "beam-bad-property");
+                var propertyElement = propertyProject.Elements[0];
+                propertyElement.Properties[invalidKey] = "value";
+                var propertyIssues = BomReleaseGuardService.Inspect(propertyProject);
+                Equal(1, Count(propertyIssues, "BOM_PROPERTY_KEY_INVALID"));
+                AssertKeyNotReflected(propertyIssues, invalidKey);
+
+                var quantityProject = ProjectWithBeam("bom-bad-quantity", "beam-bad-quantity", addCanonicalQuantity: false);
+                var quantityElement = quantityProject.Elements[0];
+                quantityElement.Quantities[invalidKey] = double.NaN;
+                var quantityIssues = BomReleaseGuardService.Inspect(quantityProject);
+                Equal(1, Count(quantityIssues, "BOM_QUANTITY_KEY_INVALID"));
+                Equal(0, Count(quantityIssues, "BOM_QUANTITY_NONFINITE"));
+                AssertKeyNotReflected(quantityIssues, invalidKey);
+            }
+        }
+
+        private static void CanonicalUnicodeDiagnosticKeysRemainValid()
+        {
+            var project = ProjectWithBeam("bom-unicode-key", "beam-unicode-key", addCanonicalQuantity: false);
+            var element = project.Elements[0];
+            element.Properties["VậtLiệu_😀"] = "C30";
+            element.Quantities["KhốiLượng_😀"] = 1.25d;
+
+            var issues = BomReleaseGuardService.Inspect(project);
+            Equal(0, Count(issues, "BOM_PROPERTY_KEY_INVALID"));
+            Equal(0, Count(issues, "BOM_QUANTITY_KEY_INVALID"));
+            Equal(0, Count(issues, "BOM_QUANTITY_NONFINITE"));
+        }
+
+        private static ProjectState ProjectWithBeam(string projectId, string elementId, bool addCanonicalQuantity = true)
+        {
+            var project = new ProjectState(projectId, "BOM key guard");
+            project.Families.Add(new ProjectFamily("beam", "Beam", ElementCategory.Beam));
+            var element = new ProjectElement(elementId, ElementCategory.Beam, "beam", string.Empty, string.Empty);
+            element.SourceHandles.Add("1A");
+            if (addCanonicalQuantity) element.SetQuantity("NetConcreteM3", 1.25d);
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+            return project;
+        }
+
+        private static void AssertKeyNotReflected(IReadOnlyList<ModelHealthIssue> issues, string invalidKey)
+        {
+            foreach (var issue in issues)
+                if (issue.Message.IndexOf(invalidKey, StringComparison.Ordinal) >= 0)
+                    throw new Exception("Malformed BOM diagnostic key must never be reflected in an issue message.");
         }
 
         private static void RoomFinishProvenanceReachesReleaseGuard()
