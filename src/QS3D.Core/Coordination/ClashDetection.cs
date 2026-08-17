@@ -200,12 +200,49 @@ namespace QS3D.Core.Coordination
 
         private static void RequireKnownCountWithinLimit(IEnumerable<CoordinationElement> elements)
         {
-            if (elements is ICollection<CoordinationElement> collection && collection.Count > MaximumElements)
+            int? genericCount = null;
+            int? readOnlyCount = null;
+            int? nonGenericCount = null;
+
+            if (elements is ICollection<CoordinationElement> collection)
+                genericCount = collection.Count;
+            if (elements is IReadOnlyCollection<CoordinationElement> readOnlyCollection)
+                readOnlyCount = readOnlyCollection.Count;
+            if (elements is ICollection nonGenericCollection)
+                nonGenericCount = nonGenericCollection.Count;
+
+            if ((genericCount.HasValue && genericCount.Value > MaximumElements) ||
+                (readOnlyCount.HasValue && readOnlyCount.Value > MaximumElements) ||
+                (nonGenericCount.HasValue && nonGenericCount.Value > MaximumElements))
                 throw TooManyElements();
-            if (elements is IReadOnlyCollection<CoordinationElement> readOnlyCollection && readOnlyCollection.Count > MaximumElements)
-                throw TooManyElements();
-            if (elements is ICollection nonGenericCollection && nonGenericCollection.Count > MaximumElements)
-                throw TooManyElements();
+
+            if ((genericCount.HasValue && genericCount.Value < 0) ||
+                (readOnlyCount.HasValue && readOnlyCount.Value < 0) ||
+                (nonGenericCount.HasValue && nonGenericCount.Value < 0))
+            {
+                throw new InvalidOperationException(
+                    "Coordination input reported an invalid negative element count.");
+            }
+
+            int? expectedCount = null;
+            RequireConsistentKnownCount(genericCount, ref expectedCount);
+            RequireConsistentKnownCount(readOnlyCount, ref expectedCount);
+            RequireConsistentKnownCount(nonGenericCount, ref expectedCount);
+        }
+
+        private static void RequireConsistentKnownCount(int? count, ref int? expectedCount)
+        {
+            if (!count.HasValue) return;
+            if (!expectedCount.HasValue)
+            {
+                expectedCount = count.Value;
+                return;
+            }
+            if (count.Value != expectedCount.Value)
+            {
+                throw new InvalidOperationException(
+                    "Coordination input reported conflicting known element counts.");
+            }
         }
 
         private static InvalidOperationException TooManyElements()
