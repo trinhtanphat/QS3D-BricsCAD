@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Domain;
@@ -113,6 +114,8 @@ namespace QS3D.Core.Persistence
             if (elementIds is ICollection<string> collection && collection.Count > MaximumElementCount)
                 throw new InvalidOperationException("Persistence checkpoint exceeds the supported " + MaximumElementCount + " element limit.");
             if (elementIds is IReadOnlyCollection<string> readOnlyCollection && readOnlyCollection.Count > MaximumElementCount)
+                throw new InvalidOperationException("Persistence checkpoint exceeds the supported " + MaximumElementCount + " element limit.");
+            if (elementIds is ICollection nonGenericCollection && nonGenericCollection.Count > MaximumElementCount)
                 throw new InvalidOperationException("Persistence checkpoint exceeds the supported " + MaximumElementCount + " element limit.");
         }
 
