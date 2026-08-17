@@ -13,14 +13,19 @@ namespace QS3D.Core.Measurement
     /// </summary>
     public sealed class MeasurementSnapshot
     {
+        private const int MaximumTraceCount = 10000;
+
         public MeasurementSnapshot(IEnumerable<MeasurementTrace> traces)
         {
             if (traces == null) throw new ArgumentNullException(nameof(traces));
+            RequireSupportedCount(traces, nameof(traces));
 
             var items = new List<MeasurementTrace>();
             var identities = new HashSet<string>(StringComparer.Ordinal);
             foreach (var trace in traces)
             {
+                if (items.Count >= MaximumTraceCount)
+                    throw TraceCountError(nameof(traces));
                 if (trace == null)
                     throw new ArgumentException("Measurement snapshot traces cannot contain null entries.", nameof(traces));
 
@@ -48,6 +53,21 @@ namespace QS3D.Core.Measurement
             for (var i = 0; i < Traces.Count; i++)
                 AppendToken(builder, Traces[i].ToCanonicalString());
             return builder.ToString();
+        }
+
+        private static void RequireSupportedCount(IEnumerable<MeasurementTrace> traces, string paramName)
+        {
+            if (traces is ICollection<MeasurementTrace> collection && collection.Count > MaximumTraceCount)
+                throw TraceCountError(paramName);
+            if (traces is IReadOnlyCollection<MeasurementTrace> readOnlyCollection && readOnlyCollection.Count > MaximumTraceCount)
+                throw TraceCountError(paramName);
+        }
+
+        private static ArgumentException TraceCountError(string paramName)
+        {
+            return new ArgumentException(
+                "Measurement snapshot accepts at most " + MaximumTraceCount + " traces.",
+                paramName);
         }
 
         private static string IdentityKey(MeasurementTrace trace)
