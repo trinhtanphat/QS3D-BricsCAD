@@ -50,9 +50,17 @@ for token in (
     "PaletteCoordinator.IsWorkspaceVisible || PaletteCoordinator.IsPropertiesVisible;",
     "if (!IsSelectionSurfaceVisible) return;",
     "if (!IsSelectionSurfaceVisible)",
+    "if (PaletteCoordinator.IsPropertiesVisible && !PaletteCoordinator.IsWorkspaceVisible)",
+    "PaletteCoordinator.RefreshProject();",
+    "PaletteCoordinator.SetInspection(EntitySnapshotReader.ReadImpliedSelection(document));",
 ):
     if token not in selection_sync:
-        errors.append("standalone Properties live-selection contract missing: " + token)
+        errors.append("standalone Properties live-selection/project contract missing: " + token)
+
+prime_project = selection_sync.find("PaletteCoordinator.RefreshProject();")
+resolve_selection = selection_sync.find("PaletteCoordinator.SetInspection(EntitySnapshotReader.ReadImpliedSelection(document));")
+if prime_project < 0 or resolve_selection < 0 or prime_project > resolve_selection:
+    errors.append("standalone Properties must prime the shared project before resolving the active CAD selection")
 
 for token in (
     "PropertiesPaletteWidth",
@@ -109,4 +117,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3D Properties is a separately dockable/resizable native PaletteSet bound to the live WorkspaceViewModel with standalone live selection; the embedded Workspace property region is retired and native BricsCAD modelspace remains untouched.")
+print("PASS: QS3D Properties is a separately dockable/resizable native PaletteSet bound to the live WorkspaceViewModel; standalone mode primes the active project before live selection, the embedded Workspace property region is retired, and native BricsCAD modelspace remains untouched.")

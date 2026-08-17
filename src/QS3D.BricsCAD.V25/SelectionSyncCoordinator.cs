@@ -68,7 +68,17 @@ namespace QS3D.BricsCAD.V25
             if (!IsSelectionSurfaceVisible) return;
             StopPending(document);
             if (!Refreshing.Add(document)) return;
-            try { PaletteCoordinator.SetInspection(EntitySnapshotReader.ReadImpliedSelection(document)); }
+            try
+            {
+                // A standalone Properties palette can become visible without ever loading the hidden
+                // Workspace control. Prime that shared WorkspaceViewModel from the active document
+                // before resolving selection, otherwise the property list remains empty/stale even
+                // though both surfaces intentionally share the same DataContext instance.
+                if (PaletteCoordinator.IsPropertiesVisible && !PaletteCoordinator.IsWorkspaceVisible)
+                    PaletteCoordinator.RefreshProject();
+
+                PaletteCoordinator.SetInspection(EntitySnapshotReader.ReadImpliedSelection(document));
+            }
             catch (Exception ex) { PaletteCoordinator.SetStatus("Selection sync lỗi: " + ex.Message); }
             finally { Refreshing.Remove(document); }
         }
