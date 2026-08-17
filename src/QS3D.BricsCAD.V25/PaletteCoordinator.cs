@@ -120,7 +120,7 @@ namespace QS3D.BricsCAD.V25
         // The owner-reference BIM tab coordinates four QS3D plugin palettes around the real
         // BricsCAD viewport. The exact Workspace property editor is reparented into a distinct
         // left-side PaletteSet, while Management + Quantity remain on the right.
-        public static void ShowBimWorkspace()
+        public static bool ShowBimWorkspace()
         {
             try
             {
@@ -132,10 +132,12 @@ namespace QS3D.BricsCAD.V25
                 _rightPanel?.Refresh();
                 _quantityInsightPanel?.RefreshQuantityInsights();
                 _workspacePanel?.SetStatus("MÔ HÌNH BIM • BLT3D workspace • Mô hình bên trái • Thuộc tính QS3D palette riêng bên trái • viewport BricsCAD native ở giữa • Quản lý + Diễn giải bên phải.");
+                return true;
             }
             catch (Exception)
             {
                 ReportPaletteFailure("MÔ HÌNH BIM");
+                return false;
             }
         }
 
