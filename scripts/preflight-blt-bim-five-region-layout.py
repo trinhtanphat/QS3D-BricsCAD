@@ -2,6 +2,7 @@
 from pathlib import Path
 import sys
 
+# #2450 intentionally left owner-facing QS3D activation to #2399; this guard owns that follow-up contract.
 ROOT = Path(__file__).resolve().parents[1]
 PALETTE = ROOT / "src" / "QS3D.BricsCAD.V25" / "PaletteCoordinator.cs"
 errors = []
