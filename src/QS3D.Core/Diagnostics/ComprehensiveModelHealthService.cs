@@ -197,7 +197,7 @@ namespace QS3D.Core.Diagnostics
         private static ISet<string>? NormalizeHandleSet(ISet<string>? handles, string label)
         {
             if (handles == null) return null;
-            RejectKnownOversize(handles, label);
+            ValidateKnownCounts(handles, label);
 
             var normalized = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var observedCount = 0;
@@ -216,7 +216,7 @@ namespace QS3D.Core.Diagnostics
         private static ISet<string>? NormalizeGeneratedHandleSet(ISet<string>? handles)
         {
             if (handles == null) return null;
-            RejectKnownOversize(handles, "generated-solid");
+            ValidateKnownCounts(handles, "generated-solid");
 
             var normalized = new HashSet<string>(GeneratedHandleIdentityComparer.Instance);
             var observedCount = 0;
@@ -232,10 +232,34 @@ namespace QS3D.Core.Diagnostics
             return normalized;
         }
 
-        private static void RejectKnownOversize(ISet<string> handles, string label)
+        private static void ValidateKnownCounts(ISet<string> handles, string label)
         {
-            if (handles.Count > MaximumLiveHandleInputs)
-                throw LiveHandleInputTooLarge(label);
+            var counts = new List<int> { handles.Count };
+            if (handles is IReadOnlyCollection<string> readOnly)
+                counts.Add(readOnly.Count);
+            if (handles is System.Collections.ICollection nonGeneric)
+                counts.Add(nonGeneric.Count);
+
+            for (var index = 0; index < counts.Count; index++)
+            {
+                if (counts[index] > MaximumLiveHandleInputs)
+                    throw LiveHandleInputTooLarge(label);
+            }
+
+            for (var index = 0; index < counts.Count; index++)
+            {
+                if (counts[index] < 0)
+                    throw new InvalidOperationException(
+                        "Comprehensive model-health live " + label + " Handle input exposes a negative Count contract.");
+            }
+
+            var expected = counts[0];
+            for (var index = 1; index < counts.Count; index++)
+            {
+                if (counts[index] == expected) continue;
+                throw new InvalidOperationException(
+                    "Comprehensive model-health live " + label + " Handle input exposes conflicting Count contracts.");
+            }
         }
 
         private static InvalidOperationException LiveHandleInputTooLarge(string label)
