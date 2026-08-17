@@ -379,6 +379,8 @@ namespace QS3D.Core.Measurement
 
     internal static class MeasurementTraceContract
     {
+        private const int MaximumCollectionEntries = 10000;
+
         internal static string RequireText(string value, string parameterName)
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -443,9 +445,12 @@ namespace QS3D.Core.Measurement
         internal static IReadOnlyList<MeasurementTraceFact> SnapshotFacts(IEnumerable<MeasurementTraceFact> source, string parameterName)
         {
             if (source == null) throw new ArgumentNullException(parameterName);
+            RequireSupportedCount(source, parameterName, "facts");
             var items = new List<MeasurementTraceFact>();
             foreach (var item in source)
             {
+                if (items.Count >= MaximumCollectionEntries)
+                    throw CollectionCountError(parameterName, "facts");
                 if (item == null) throw new ArgumentException("Measurement trace facts cannot contain null entries.", parameterName);
                 items.Add(item);
             }
@@ -471,9 +476,12 @@ namespace QS3D.Core.Measurement
         internal static IReadOnlyList<MeasurementTraceAdjustment> SnapshotAdjustments(IEnumerable<MeasurementTraceAdjustment> source, string parameterName)
         {
             if (source == null) throw new ArgumentNullException(parameterName);
+            RequireSupportedCount(source, parameterName, "adjustments");
             var items = new List<MeasurementTraceAdjustment>();
             foreach (var item in source)
             {
+                if (items.Count >= MaximumCollectionEntries)
+                    throw CollectionCountError(parameterName, "adjustments");
                 if (item == null) throw new ArgumentException("Measurement trace adjustments cannot contain null entries.", parameterName);
                 items.Add(item);
             }
@@ -489,9 +497,14 @@ namespace QS3D.Core.Measurement
         internal static IReadOnlyList<string> SnapshotMessages(IEnumerable<string>? source)
         {
             if (source == null) return new ReadOnlyCollection<string>(Array.Empty<string>());
+            RequireSupportedCount(source, nameof(source), "messages");
             var items = new List<string>();
             foreach (var item in source)
+            {
+                if (items.Count >= MaximumCollectionEntries)
+                    throw CollectionCountError(nameof(source), "messages");
                 items.Add(RequireText(item, nameof(source)));
+            }
             items.Sort(StringComparer.Ordinal);
             for (var i = 1; i < items.Count; i++)
             {
@@ -499,6 +512,23 @@ namespace QS3D.Core.Measurement
                     throw new ArgumentException("Measurement trace messages must not contain duplicates.", nameof(source));
             }
             return new ReadOnlyCollection<string>(items.ToArray());
+        }
+
+        private static void RequireSupportedCount<T>(IEnumerable<T> source, string parameterName, string collectionName)
+        {
+            if (source is ICollection<T> collection && collection.Count > MaximumCollectionEntries)
+                throw CollectionCountError(parameterName, collectionName);
+            if (source is IReadOnlyCollection<T> readOnlyCollection && readOnlyCollection.Count > MaximumCollectionEntries)
+                throw CollectionCountError(parameterName, collectionName);
+            if (source is System.Collections.ICollection nonGenericCollection && nonGenericCollection.Count > MaximumCollectionEntries)
+                throw CollectionCountError(parameterName, collectionName);
+        }
+
+        private static ArgumentException CollectionCountError(string parameterName, string collectionName)
+        {
+            return new ArgumentException(
+                "Measurement trace " + collectionName + " accepts at most " + MaximumCollectionEntries + " entries.",
+                parameterName);
         }
 
         private static int CompareFacts(MeasurementTraceFact left, MeasurementTraceFact right)
