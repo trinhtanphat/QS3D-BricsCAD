@@ -61,6 +61,8 @@ namespace QS3D.Core.Measurement
                 throw TraceCountError(paramName);
             if (traces is IReadOnlyCollection<MeasurementTrace> readOnlyCollection && readOnlyCollection.Count > MaximumTraceCount)
                 throw TraceCountError(paramName);
+            if (traces is System.Collections.ICollection nonGenericCollection && nonGenericCollection.Count > MaximumTraceCount)
+                throw TraceCountError(paramName);
         }
 
         private static ArgumentException TraceCountError(string paramName)
