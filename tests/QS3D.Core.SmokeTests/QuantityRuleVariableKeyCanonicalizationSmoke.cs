@@ -16,13 +16,13 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("canonical-projection", "Canonical rule projection");
             var family = new ProjectFamily("beam", "Beam", ElementCategory.Beam);
-            family.Properties[" Factor "] = "2";
+            family.Properties["Factor"] = "2";
             family.Properties["   "] = "111";
             project.Families.Add(family);
 
             var element = new ProjectElement("B1", ElementCategory.Beam, family.Id, "floor", "zone");
             element.Properties["factor"] = "3";
-            element.Properties[" LengthM "] = "4";
+            element.Properties["LengthM"] = "4";
             element.Properties["\t"] = "222";
             element.Quantities["LengthM"] = 5d;
             project.Elements.Add(element);
@@ -51,19 +51,19 @@ namespace QS3D.Core.SmokeTests
             try
             {
                 new QuantityRuleEngine().ApplyMatching(project, element);
-                throw new InvalidOperationException("Expected normalized same-map variable-key collision to fail closed.");
+                throw new InvalidOperationException("Expected non-canonical same-map variable key to fail closed.");
             }
             catch (InvalidOperationException ex)
             {
-                if (ex.Message == "Expected normalized same-map variable-key collision to fail closed.") throw;
+                if (ex.Message == "Expected non-canonical same-map variable key to fail closed.") throw;
             }
 
             if (element.Quantities.ContainsKey("ProjectedQuantity"))
-                throw new InvalidOperationException("Rejected normalized variable-key collision wrote a quantity output.");
+                throw new InvalidOperationException("Rejected non-canonical variable key wrote a quantity output.");
             if (element.Properties.ContainsKey("Rule:ProjectedQuantity"))
-                throw new InvalidOperationException("Rejected normalized variable-key collision wrote provenance.");
+                throw new InvalidOperationException("Rejected non-canonical variable key wrote provenance.");
             if (element.UpdatedUtc != beforeUpdatedUtc || element.Dirty != beforeDirty)
-                throw new InvalidOperationException("Rejected normalized variable-key collision changed element freshness state.");
+                throw new InvalidOperationException("Rejected non-canonical variable key changed element freshness state.");
         }
     }
 }
