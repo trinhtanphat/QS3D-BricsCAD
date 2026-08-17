@@ -137,7 +137,6 @@ namespace QS3D.Core.Cost
             Components = new ReadOnlyCollection<CostResourceComponent>(snapshot.ToArray());
             OverheadPercent = overheadPercent;
             ProfitPercent = profitPercent;
-
             decimal direct = 0m;
             checked
             {
@@ -339,10 +338,24 @@ namespace QS3D.Core.Cost
                     "benchmark average");
             }
 
-            var median = values.Count % 2 == 1
-                ? values[values.Count / 2]
-                : values[(values.Count / 2) - 1] +
-                  ((values[values.Count / 2] - values[(values.Count / 2) - 1]) / 2m);
+            decimal median;
+            if (values.Count % 2 == 1)
+            {
+                median = values[values.Count / 2];
+            }
+            else
+            {
+                var lowerMiddle = values[(values.Count / 2) - 1];
+                var upperMiddle = values[values.Count / 2];
+                var medianContribution = CostDecimalMath.DividePreservingNonZero(
+                    checked(upperMiddle - lowerMiddle),
+                    2m,
+                    "benchmark median contribution");
+                median = CostDecimalMath.AddPreservingNonZeroContribution(
+                    lowerMiddle,
+                    medianContribution,
+                    "benchmark median");
+            }
             decimal? deviation = average == 0m
                 ? (currentUnitCost == 0m ? 0m : (decimal?)null)
                 : CalculateDeviationPercent(currentUnitCost, average);
