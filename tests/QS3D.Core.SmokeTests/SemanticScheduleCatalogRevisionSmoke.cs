@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
         {
             CatalogMutationTouchesProjectExactlyOnce();
             CatalogUsesLastAvailableRevision();
+            ScheduleBuildRejectsMoreThanFiveThousandMatchesBeforeTableMaterialization();
+            ScheduleBuildCountsOnlyMatchingRowsAgainstTheLimit();
         }
 
         private static void CatalogMutationTouchesProjectExactlyOnce()
@@ -102,6 +104,31 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void ScheduleBuildRejectsMoreThanFiveThousandMatchesBeforeTableMaterialization()
+        {
+            var project = new ProjectState("SCHEDULE-MATCH-LIMIT", "Schedule match limit");
+            for (var i = 0; i < 5001; i++)
+                project.Elements.Add(new ProjectElement("B" + i.ToString("D4", CultureInfo.InvariantCulture), ElementCategory.Beam, string.Empty, string.Empty, string.Empty));
+
+            var message = ThrowsMessage<InvalidOperationException>(() =>
+                SemanticScheduleCatalog.Build(project, Definition("S1", "Beam schedule", "BEAMS")));
+
+            Equal("Semantic schedule supports at most 5000 matching elements.", message);
+        }
+
+        private static void ScheduleBuildCountsOnlyMatchingRowsAgainstTheLimit()
+        {
+            var project = new ProjectState("SCHEDULE-NONMATCH-LIMIT", "Schedule nonmatch limit");
+            for (var i = 0; i < 5001; i++)
+                project.Elements.Add(new ProjectElement("C" + i.ToString("D4", CultureInfo.InvariantCulture), ElementCategory.Column, string.Empty, string.Empty, string.Empty));
+            project.Elements.Add(new ProjectElement("B0001", ElementCategory.Beam, string.Empty, string.Empty, string.Empty));
+
+            var table = SemanticScheduleCatalog.Build(project, Definition("S1", "Beam schedule", "BEAMS"));
+
+            Equal(1, table.Rows.Count);
+            Equal("B0001", table.Rows[0].ElementId);
+        }
+
         private static SemanticScheduleDefinition Definition(string id, string name, string title)
         {
             return new SemanticScheduleDefinition(
@@ -137,6 +164,20 @@ namespace QS3D.Core.SmokeTests
         private static void True(bool condition)
         {
             if (!condition) throw new Exception("Expected condition to be true.");
+        }
+
+        private static string ThrowsMessage<T>(Action action) where T : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (T ex)
+            {
+                return ex.Message;
+            }
+
+            throw new Exception("Expected exception " + typeof(T).Name + ".");
         }
 
         private static void TryDelete(string path)
