@@ -12,7 +12,10 @@ namespace QS3D.Core.SmokeTests
         {
             RejectsNonCanonicalExistingActionWithoutMutation();
             RejectsNonUtcExistingTimestampWithoutMutation();
+            RejectsMalformedHistoryOnClearWithoutMutation();
             AcceptsCanonicalHistoryAndNormalizesNewAction();
+            ClearsCanonicalHistoryAndTouchesOnce();
+            EmptyClearIsNoOp();
         }
 
         private static void RejectsNonCanonicalExistingActionWithoutMutation()
@@ -47,6 +50,41 @@ namespace QS3D.Core.SmokeTests
             Equal(beforeCount, project.AuditEvents.Count, "non-UTC existing timestamp count");
         }
 
+        private static void RejectsMalformedHistoryOnClearWithoutMutation()
+        {
+            AssertClearRejected(null, "null event");
+            AssertClearRejected(new AuditEvent
+            {
+                Utc = new DateTime(2026, 8, 12, 0, 0, 0, DateTimeKind.Unspecified),
+                Action = "existing.action"
+            }, "non-UTC event");
+            AssertClearRejected(new AuditEvent
+            {
+                Utc = new DateTime(2026, 8, 12, 0, 0, 0, DateTimeKind.Utc),
+                Action = " existing.action "
+            }, "noncanonical action");
+            AssertClearRejected(new AuditEvent
+            {
+                Utc = new DateTime(2026, 8, 12, 0, 0, 0, DateTimeKind.Utc),
+                Action = "existing.action",
+                Detail = "bad\u0001detail"
+            }, "XML-invalid detail");
+        }
+
+        private static void AssertClearRejected(AuditEvent? item, string label)
+        {
+            var project = new ProjectState("AUDIT-CLEAR-" + label, "Audit clear integrity");
+            project.AuditEvents.Add(item!);
+            var beforeVersion = project.ChangeVersion;
+            var beforeCount = project.AuditEvents.Count;
+
+            Throws<InvalidOperationException>(() => AuditTrail.ForProject(project).Clear());
+            Equal(beforeVersion, project.ChangeVersion, label + " clear version");
+            Equal(beforeCount, project.AuditEvents.Count, label + " clear count");
+            if (!ReferenceEquals(item, project.AuditEvents[0]))
+                throw new Exception("AuditExistingHistoryIntegritySmoke " + label + " clear replaced persisted evidence.");
+        }
+
         private static void AcceptsCanonicalHistoryAndNormalizesNewAction()
         {
             var project = new ProjectState("AUDIT-VALID", "Audit valid history");
@@ -63,6 +101,34 @@ namespace QS3D.Core.SmokeTests
             Equal(2, project.AuditEvents.Count, "canonical history count");
             Equal("new.action", project.AuditEvents[1].Action, "new action normalization");
             Equal(DateTimeKind.Utc, project.AuditEvents[1].Utc.Kind, "new audit UTC kind");
+        }
+
+        private static void ClearsCanonicalHistoryAndTouchesOnce()
+        {
+            var project = new ProjectState("AUDIT-CLEAR-VALID", "Audit canonical clear");
+            project.AuditEvents.Add(new AuditEvent
+            {
+                Utc = new DateTime(2026, 8, 12, 0, 0, 0, DateTimeKind.Utc),
+                Action = "existing.action",
+                Detail = "canonical detail"
+            });
+            var beforeVersion = project.ChangeVersion;
+
+            AuditTrail.ForProject(project).Clear();
+
+            Equal(beforeVersion + 1L, project.ChangeVersion, "canonical clear version increment");
+            Equal(0, project.AuditEvents.Count, "canonical clear count");
+        }
+
+        private static void EmptyClearIsNoOp()
+        {
+            var project = new ProjectState("AUDIT-CLEAR-EMPTY", "Audit empty clear");
+            var beforeVersion = project.ChangeVersion;
+
+            AuditTrail.ForProject(project).Clear();
+
+            Equal(beforeVersion, project.ChangeVersion, "empty clear version");
+            Equal(0, project.AuditEvents.Count, "empty clear count");
         }
 
         private static void Equal<T>(T expected, T actual, string label)
