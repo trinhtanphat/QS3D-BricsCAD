@@ -43,22 +43,23 @@ namespace QS3D.Core.Cost
 
     public sealed class RateReferenceGraph
     {
+        private const int MaximumEdges = TbqProjectWorkspaceState.MaxRateReferences;
         private readonly IReadOnlyList<RateReferenceEdge> _edges;
 
         public RateReferenceGraph(IEnumerable<RateReferenceEdge> edges)
         {
             if (edges == null) throw new ArgumentNullException(nameof(edges));
             if (AdvancedCostCollectionContract.TryGetKnownCount(edges, out var knownEdgeCount) &&
-                knownEdgeCount > AdvancedCostCollectionContract.MaximumEntries)
-                AdvancedCostCollectionContract.ThrowTooManyEntries("Rate reference edge collection");
+                knownEdgeCount > MaximumEdges)
+                ThrowTooManyEdges();
 
             var snapshot = new List<RateReferenceEdge>();
             var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var edge in edges)
             {
-                if (index == AdvancedCostCollectionContract.MaximumEntries)
-                    AdvancedCostCollectionContract.ThrowTooManyEntries("Rate reference edge collection");
+                if (index == MaximumEdges)
+                    ThrowTooManyEdges();
                 if (edge == null)
                     throw new ArgumentException("Rate reference graph contains a null edge at index " + index + ".", nameof(edges));
                 var key = edge.SourceRateCode + "\u001f" + ((int)edge.TargetKind) + "\u001f" + edge.TargetId;
@@ -111,6 +112,12 @@ namespace QS3D.Core.Cost
             compare = left.TargetKind.CompareTo(right.TargetKind);
             if (compare != 0) return compare;
             return StringComparer.OrdinalIgnoreCase.Compare(left.TargetId, right.TargetId);
+        }
+
+        private static void ThrowTooManyEdges()
+        {
+            throw new InvalidOperationException(
+                "Rate reference edge collection supports at most " + MaximumEdges + " entries.");
         }
     }
 
