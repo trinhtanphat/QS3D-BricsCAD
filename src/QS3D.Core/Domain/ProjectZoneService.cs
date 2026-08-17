@@ -195,6 +195,7 @@ namespace QS3D.Core.Domain
                 if (element == null)
                     throw new InvalidOperationException("Project element collection contains a null entry.");
                 var elementId = RequiredIdentity(element.Id, "Project semantic element id", 128);
+                OptionalIdentity(element.ZoneId, "Element ZoneId", 64);
                 if (!seenIds.Add(elementId))
                     throw new InvalidOperationException("Project contains duplicate semantic element id: " + elementId);
                 resolved.Add(element);
