@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Xml;
 
 namespace QS3D.Core.Domain
 {
@@ -41,10 +42,40 @@ namespace QS3D.Core.Domain
         public string Transparency { get; set; } = "ByLayer";
         public IDictionary<string, string> Metadata { get; }
 
-        private static string RequireName(string value) =>
-            string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Family name is required.", nameof(value)) : value.Trim();
+        private static string RequireName(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException("Family name is required.", nameof(value));
 
-        private static string NormalizeMaterial(string value) =>
-            string.IsNullOrWhiteSpace(value) ? "Khác" : value.Trim();
+            return ValidatePersistedText(value.Trim(), nameof(value), "Family name");
+        }
+
+        private static string NormalizeMaterial(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return "Khác";
+
+            return ValidatePersistedText(value.Trim(), nameof(value), "Family material");
+        }
+
+        private static string ValidatePersistedText(string value, string parameterName, string label)
+        {
+            foreach (var ch in value)
+            {
+                if (char.IsControl(ch))
+                    throw new ArgumentException(label + " must not contain control characters.", parameterName);
+            }
+
+            try
+            {
+                XmlConvert.VerifyXmlChars(value);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException(label + " must contain XML-persistable text.", parameterName, ex);
+            }
+
+            return value;
+        }
     }
 }
