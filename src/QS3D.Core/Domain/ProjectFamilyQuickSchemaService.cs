@@ -170,6 +170,8 @@ namespace QS3D.Core.Domain
             var valueMeters = valueMm / MillimetersPerMeter;
             if (positive && valueMeters <= 0d)
                 throw new InvalidOperationException((key ?? "Giá trị") + " quá nhỏ để biểu diễn giá trị dương theo đơn vị nội bộ (m).");
+            if (valueMm != 0d && valueMeters == 0d)
+                throw new InvalidOperationException((key ?? "Giá trị") + " quá nhỏ để biểu diễn giá trị khác 0 theo đơn vị nội bộ (m).");
             return valueMm / MillimetersPerMeter;
         }
 
