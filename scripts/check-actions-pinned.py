@@ -7,67 +7,365 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
-USES_KEY_RE = re.compile(r"^\s*-?\s*(?:uses|\"uses\"|'uses')\s*:\s*(.*)$")
+PLAIN_KEY_RE = re.compile(r"[A-Za-z0-9_.-]+")
+TOP_LEVEL_ON_RE = re.compile(r"^(?:on|\"on\"|'on')\s*:\s*(.*)$")
 
 
-def parse_uses_target(line: str):
-    match = USES_KEY_RE.match(line)
-    if not match:
-        return None, None
+def _decode_quoted_scalar(raw: str):
+    if raw.startswith("'"):
+        match = re.fullmatch(r"'((?:[^']|'')*)'", raw)
+        if not match:
+            return None
+        return match.group(1).replace("''", "'")
+    if raw.startswith('"'):
+        try:
+            value = json.loads(raw)
+        except (TypeError, ValueError):
+            return None
+        return value if isinstance(value, str) else None
+    return raw
 
-    raw = match.group(1).strip()
+
+def _strip_yaml_comment(line: str) -> str:
+    single = False
+    double = False
+    escaped = False
+    index = 0
+    while index < len(line):
+        char = line[index]
+        if double:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                double = False
+            index += 1
+            continue
+        if single:
+            if char == "'" and index + 1 < len(line) and line[index + 1] == "'":
+                index += 2
+                continue
+            if char == "'":
+                single = False
+            index += 1
+            continue
+        if char == '"':
+            double = True
+        elif char == "'":
+            single = True
+        elif char == "#":
+            return line[:index]
+        index += 1
+    return line
+
+
+def _outside_quote_delimiters(line: str):
+    positions = [0]
+    single = False
+    double = False
+    escaped = False
+    index = 0
+    while index < len(line):
+        char = line[index]
+        if double:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                double = False
+            index += 1
+            continue
+        if single:
+            if char == "'" and index + 1 < len(line) and line[index + 1] == "'":
+                index += 2
+                continue
+            if char == "'":
+                single = False
+            index += 1
+            continue
+        if char == '"':
+            double = True
+        elif char == "'":
+            single = True
+        elif char in "{,":
+            positions.append(index + 1)
+        index += 1
+    return positions
+
+
+def _parse_mapping_entry(line: str, start: int):
+    index = start
+    while index < len(line) and line[index].isspace():
+        index += 1
+    if index < len(line) and line[index] == "-":
+        index += 1
+        while index < len(line) and line[index].isspace():
+            index += 1
+    if index >= len(line):
+        return None
+
+    key_start = index
+    if line[index] in "'\"":
+        quote = line[index]
+        index += 1
+        escaped = False
+        while index < len(line):
+            char = line[index]
+            if quote == '"' and escaped:
+                escaped = False
+                index += 1
+                continue
+            if quote == '"' and char == "\\":
+                escaped = True
+                index += 1
+                continue
+            if quote == "'" and char == "'" and index + 1 < len(line) and line[index + 1] == "'":
+                index += 2
+                continue
+            if char == quote:
+                index += 1
+                break
+            index += 1
+        else:
+            return None
+    else:
+        match = PLAIN_KEY_RE.match(line, index)
+        if not match:
+            return None
+        index = match.end()
+
+    key_raw = line[key_start:index]
+    while index < len(line) and line[index].isspace():
+        index += 1
+    if index >= len(line) or line[index] != ":":
+        return None
+    key = _decode_quoted_scalar(key_raw)
+    if key is None:
+        return None
+
+    value_start = index + 1
+    index = value_start
+    single = False
+    double = False
+    escaped = False
+    square_depth = 0
+    curly_depth = 0
+    while index < len(line):
+        char = line[index]
+        if double:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                double = False
+            index += 1
+            continue
+        if single:
+            if char == "'" and index + 1 < len(line) and line[index + 1] == "'":
+                index += 2
+                continue
+            if char == "'":
+                single = False
+            index += 1
+            continue
+        if char == '"':
+            double = True
+        elif char == "'":
+            single = True
+        elif char == "[":
+            square_depth += 1
+        elif char == "]" and square_depth:
+            square_depth -= 1
+        elif char == "{":
+            curly_depth += 1
+        elif char == "}" and curly_depth:
+            curly_depth -= 1
+        elif char in ",}" and not square_depth and not curly_depth:
+            break
+        index += 1
+
+    return key, line[value_start:index].strip()
+
+
+def iter_mapping_entries(line: str):
+    code = _strip_yaml_comment(line)
+    seen = set()
+    for start in _outside_quote_delimiters(code):
+        if start in seen:
+            continue
+        seen.add(start)
+        entry = _parse_mapping_entry(code, start)
+        if entry is not None:
+            yield entry
+
+
+def _split_flow_scalars(raw: str):
+    raw = raw.strip()
+    if not (raw.startswith("[") and raw.endswith("]")):
+        return None
+    body = raw[1:-1]
+    values = []
+    start = 0
+    single = False
+    double = False
+    escaped = False
+    index = 0
+    while index < len(body):
+        char = body[index]
+        if double:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                double = False
+            index += 1
+            continue
+        if single:
+            if char == "'" and index + 1 < len(body) and body[index + 1] == "'":
+                index += 2
+                continue
+            if char == "'":
+                single = False
+            index += 1
+            continue
+        if char == '"':
+            double = True
+        elif char == "'":
+            single = True
+        elif char == ",":
+            values.append(body[start:index].strip())
+            start = index + 1
+        index += 1
+    if single or double:
+        return None
+    values.append(body[start:].strip())
+
+    decoded = []
+    for value in values:
+        if not value:
+            return None
+        scalar = _decode_quoted_scalar(value)
+        if scalar is None:
+            return None
+        decoded.append(scalar)
+    return decoded
+
+
+def _has_forbidden_pull_request_target(text: str):
+    on_block_indent = None
+    on_child_indent = None
+
+    for line_number, original in enumerate(text.splitlines(), start=1):
+        code = _strip_yaml_comment(original).rstrip()
+        if not code.strip():
+            continue
+        indent = len(code) - len(code.lstrip(" "))
+
+        if on_block_indent is not None:
+            if indent <= on_block_indent:
+                on_block_indent = None
+                on_child_indent = None
+            else:
+                stripped = code.strip()
+                if on_child_indent is None:
+                    on_child_indent = indent
+                if indent == on_child_indent:
+                    if stripped.startswith("-"):
+                        event_raw = stripped[1:].strip()
+                        event = _decode_quoted_scalar(event_raw)
+                        if event == "pull_request_target":
+                            return line_number
+                    entry = _parse_mapping_entry(code, indent)
+                    if entry is not None and entry[0] == "pull_request_target":
+                        return line_number
+
+        if indent != 0:
+            continue
+        match = TOP_LEVEL_ON_RE.match(code)
+        if not match:
+            continue
+        raw = match.group(1).strip()
+        if not raw:
+            on_block_indent = 0
+            on_child_indent = None
+            continue
+        if raw.startswith("["):
+            events = _split_flow_scalars(raw)
+            if events is not None and "pull_request_target" in events:
+                return line_number
+            continue
+        if raw.startswith("{"):
+            for key, _ in iter_mapping_entries(raw):
+                if key == "pull_request_target":
+                    return line_number
+            continue
+        event = _decode_quoted_scalar(raw)
+        if event == "pull_request_target":
+            return line_number
+
+    return None
+
+
+def parse_uses_target(raw: str):
+    raw = raw.strip()
     if not raw:
         return None, "uses value is empty"
 
     if raw.startswith("'"):
-        quoted = re.fullmatch(r"'((?:[^']|'')*)'\s*(?:#.*)?", raw)
+        quoted = re.fullmatch(r"'((?:[^']|'')*)'", raw)
         if not quoted:
             return None, "uses value has malformed single-quoted scalar"
         return quoted.group(1).replace("''", "'"), None
 
     if raw.startswith('"'):
-        quoted = re.fullmatch(r'("(?:[^"\\]|\\.)*")\s*(?:#.*)?', raw)
-        if not quoted:
+        if not re.fullmatch(r'"(?:[^"\\]|\\.)*"', raw):
             return None, "uses value has malformed double-quoted scalar"
         try:
-            return json.loads(quoted.group(1)), None
+            value = json.loads(raw)
         except (TypeError, ValueError):
             return None, "uses value has invalid double-quoted escapes"
+        if not isinstance(value, str):
+            return None, "uses value must be a string scalar"
+        return value, None
 
-    value = raw
-    comment_index = value.find(" #")
-    if comment_index >= 0:
-        value = value[:comment_index]
-    value = value.strip()
-    if not value or any(ch.isspace() for ch in value):
+    if any(ch.isspace() for ch in raw):
         return None, "uses value must be one plain or quoted scalar"
-    return value, None
+    return raw, None
 
 
 def scan_workflow_text(label: str, text: str):
     errors: list[str] = []
-    if "pull_request_target:" in text or '"pull_request_target":' in text:
-        errors.append(f"{label}: pull_request_target is forbidden for repository workflows")
+    forbidden_line = _has_forbidden_pull_request_target(text)
+    if forbidden_line is not None:
+        errors.append(
+            f"{label}:{forbidden_line}: pull_request_target is forbidden for repository workflows"
+        )
     if "http://" in text:
         errors.append(f"{label}: plaintext HTTP is forbidden in workflow source")
 
     for line_number, line in enumerate(text.splitlines(), start=1):
-        target, parse_error = parse_uses_target(line)
-        if target is None and parse_error is None:
-            continue
-        if parse_error is not None:
-            errors.append(f"{label}:{line_number}: {parse_error}")
-            continue
-        if target.startswith("./"):
-            continue
-        if "@" not in target:
-            errors.append(f"{label}:{line_number}: external action must include an immutable ref")
-            continue
-        action, ref = target.rsplit("@", 1)
-        if not action or not SHA_RE.fullmatch(ref):
-            errors.append(
-                f"{label}:{line_number}: external action ref must be one full 40-hex commit SHA: {target}"
-            )
+        for key, raw_value in iter_mapping_entries(line):
+            if key != "uses":
+                continue
+
+            target, parse_error = parse_uses_target(raw_value)
+            if parse_error is not None:
+                errors.append(f"{label}:{line_number}: {parse_error}")
+                continue
+            if target.startswith("./"):
+                continue
+            if "@" not in target:
+                errors.append(f"{label}:{line_number}: external action must include an immutable ref")
+                continue
+            action, ref = target.rsplit("@", 1)
+            if not action or not SHA_RE.fullmatch(ref):
+                errors.append(
+                    f"{label}:{line_number}: external action ref must be one full 40-hex commit SHA: {target}"
+                )
     return errors
 
 
