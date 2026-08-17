@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             CountedOversizeFailsBeforeEnumeration();
+            NonGenericCountedOversizeFailsBeforeEnumeration();
             StreamingOversizeStopsAtFirstDisallowedTrace();
             ExactBoundaryRemainsAccepted();
             CanonicalOrderingAndValidationRemainStable();
@@ -26,6 +27,15 @@ namespace QS3D.Core.SmokeTests
 
             Equal(0, source.GetEnumeratorCalls, "Oversized counted snapshot input must fail before enumeration.");
             Contains("at most 10000", error.Message, "Counted snapshot oversize failure must report the trace bound.");
+        }
+
+        private static void NonGenericCountedOversizeFailsBeforeEnumeration()
+        {
+            var source = new NonGenericCountedNeverEnumerated(MaximumTraces + 1);
+            var error = Capture<ArgumentException>(() => new MeasurementSnapshot(source));
+
+            Equal(0, source.GetEnumeratorCalls, "Oversized non-generic ICollection snapshot input must fail before enumeration.");
+            Contains("at most 10000", error.Message, "Non-generic counted snapshot oversize failure must report the trace bound.");
         }
 
         private static void StreamingOversizeStopsAtFirstDisallowedTrace()
@@ -115,6 +125,32 @@ namespace QS3D.Core.SmokeTests
 
             public int Count { get; }
             internal int GetEnumeratorCalls { get; private set; }
+
+            public IEnumerator<MeasurementTrace> GetEnumerator()
+            {
+                GetEnumeratorCalls++;
+                throw new InvalidOperationException("Oversized counted source must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class NonGenericCountedNeverEnumerated : ICollection, IEnumerable<MeasurementTrace>
+        {
+            internal NonGenericCountedNeverEnumerated(int count)
+            {
+                Count = count;
+            }
+
+            public int Count { get; }
+            public bool IsSynchronized => false;
+            public object SyncRoot { get; } = new object();
+            internal int GetEnumeratorCalls { get; private set; }
+
+            public void CopyTo(Array array, int index)
+            {
+                throw new InvalidOperationException("Oversized counted source must not be copied.");
+            }
 
             public IEnumerator<MeasurementTrace> GetEnumerator()
             {
