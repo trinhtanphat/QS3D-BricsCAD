@@ -46,6 +46,17 @@ namespace QS3D.Core.Reporting
             }
         }
 
+        internal struct CompensatedSum
+        {
+            private FiniteAccumulator _accumulator;
+
+            public double Add(double value, string label)
+            {
+                _accumulator.Add(value, label);
+                return _accumulator.Value(label);
+            }
+        }
+
         public static double Finite(double value, string label)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new InvalidOperationException("Quantity report value is not finite: " + label);
