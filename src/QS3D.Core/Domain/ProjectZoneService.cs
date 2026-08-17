@@ -130,15 +130,11 @@ namespace QS3D.Core.Domain
 
         private static void RequireAssignmentTargetCountWithinLimit(IEnumerable<ProjectElement> elements)
         {
-            int? count = null;
-            if (elements is ICollection<ProjectElement> collection)
-                count = collection.Count;
-            else if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection)
-                count = readOnlyCollection.Count;
-            else if (elements is System.Collections.ICollection nonGenericCollection)
-                count = nonGenericCollection.Count;
-
-            if (count.HasValue && count.Value > MaxAssignmentTargetEntries)
+            if (elements is ICollection<ProjectElement> collection && collection.Count > MaxAssignmentTargetEntries)
+                throw AssignmentTargetLimitExceeded();
+            if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection && readOnlyCollection.Count > MaxAssignmentTargetEntries)
+                throw AssignmentTargetLimitExceeded();
+            if (elements is System.Collections.ICollection nonGenericCollection && nonGenericCollection.Count > MaxAssignmentTargetEntries)
                 throw AssignmentTargetLimitExceeded();
         }
 
