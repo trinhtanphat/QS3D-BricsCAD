@@ -151,7 +151,8 @@ def main():
         'button.Click += (_, __) => RunUiAction(action);', 'button.Click += (_, __) => OpenRecentProject(recent);',
         'Application.DocumentManager.Open(normalized, false)',
         'private const int ObjectSnapSuppressedBit = 16384;',
-        'StatusToggleButton(', '"○ Nền sáng"', '"◐ Tương phản"', '"⌞ Vuông góc"', '"⌖ Bắt điểm"',
+        'private Button StatusToggleButton(TextBlock label, string text, string toolTip, Action action)',
+        '"○ Nền sáng"', '"◐ Tương phản"', '"⌞ Vuông góc"', '"⌖ Bắt điểm"',
         'ToggleLightTheme', 'ToggleLinearContrast', 'ToggleOrtho', 'ToggleEntitySnap',
         'RefreshStatusControls();', 'Application.GetSystemVariable(name)',
         'Application.SetSystemVariable("COLORTHEME",', 'Application.SetSystemVariable("LINEARCONTRAST",',
@@ -161,6 +162,11 @@ def main():
         'RibbonIconFactory.Create(RibbonIconKind.OpenProject, 20)',
     ):
         require(shell, needle, shell_rel)
+    status_toggle_block = shell.split(
+        'private Button StatusToggleButton(TextBlock label, string text, string toolTip, Action action)', 1)[1].split(
+        'private void RefreshStatusControls()', 1)[0]
+    require(status_toggle_block, 'var button = CreateClickSurface(label, Cursors.Hand);', shell_rel + '::StatusToggleButton')
+    require(status_toggle_block, 'button.Click += (_, __) => RunUiAction(action);', shell_rel + '::StatusToggleButton')
     for stale in ('SendStringToExecute', '"_.OPEN', '"_.NEW', '"_.QSAVE', '"_.SAVEAS',
                   'border.MouseLeftButtonUp', 'border.MouseLeftButtonDown', 'FocusVisualStyle = null',
                   'Focusable = false', 'Text = "Nhấp đúp vào dự án để mở trực tiếp và bắt đầu làm việc"',
