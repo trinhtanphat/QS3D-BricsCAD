@@ -406,10 +406,16 @@ namespace QS3D.Core.Cost
             Bidder = bidder.Trim();
             Currency = RateBookContract.RequireCurrency(currency, nameof(currency));
             if (lines == null) throw new ArgumentNullException(nameof(lines));
+            if (AdvancedCostCollectionContract.TryGetKnownCount(lines, out var knownLineCount) &&
+                knownLineCount > AdvancedCostCollectionContract.MaximumEntries)
+                AdvancedCostCollectionContract.ThrowTooManyEntries("Tender quote line collection");
+
             var byItem = new Dictionary<string, TenderQuoteLine>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var line in lines)
             {
+                if (index == AdvancedCostCollectionContract.MaximumEntries)
+                    AdvancedCostCollectionContract.ThrowTooManyEntries("Tender quote line collection");
                 if (line == null)
                     throw new ArgumentException("Tender bid contains a null line at index " + index + ".", nameof(lines));
                 if (byItem.ContainsKey(line.ItemCode))
@@ -531,11 +537,17 @@ namespace QS3D.Core.Cost
 
         private static List<TenderRequirement> SnapshotRequirements(IEnumerable<TenderRequirement> requirements)
         {
+            if (AdvancedCostCollectionContract.TryGetKnownCount(requirements, out var knownRequirementCount) &&
+                knownRequirementCount > AdvancedCostCollectionContract.MaximumEntries)
+                AdvancedCostCollectionContract.ThrowTooManyEntries("Tender requirement collection");
+
             var result = new List<TenderRequirement>();
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var requirement in requirements)
             {
+                if (index == AdvancedCostCollectionContract.MaximumEntries)
+                    AdvancedCostCollectionContract.ThrowTooManyEntries("Tender requirement collection");
                 if (requirement == null)
                     throw new ArgumentException("Tender requirements contain a null item at index " + index + ".", nameof(requirements));
                 if (!ids.Add(requirement.ItemCode))
@@ -549,11 +561,17 @@ namespace QS3D.Core.Cost
 
         private static List<TenderBid> SnapshotBids(IEnumerable<TenderBid> bids)
         {
+            if (AdvancedCostCollectionContract.TryGetKnownCount(bids, out var knownBidCount) &&
+                knownBidCount > AdvancedCostCollectionContract.MaximumEntries)
+                AdvancedCostCollectionContract.ThrowTooManyEntries("Tender bid collection");
+
             var result = new List<TenderBid>();
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var bid in bids)
             {
+                if (index == AdvancedCostCollectionContract.MaximumEntries)
+                    AdvancedCostCollectionContract.ThrowTooManyEntries("Tender bid collection");
                 if (bid == null)
                     throw new ArgumentException("Tender comparison contains a null bid at index " + index + ".", nameof(bids));
                 if (!ids.Add(bid.BidId))
