@@ -44,26 +44,47 @@ namespace QS3D.Core.Cost
 
         private static bool TryGetKnownCount(IEnumerable<EstimateLine> lines, out int count)
         {
+            var counts = new List<int>(3);
             if (lines is ICollection<EstimateLine> collection)
-            {
-                count = collection.Count;
-                return true;
-            }
-
+                counts.Add(collection.Count);
             if (lines is IReadOnlyCollection<EstimateLine> readOnlyCollection)
-            {
-                count = readOnlyCollection.Count;
-                return true;
-            }
-
+                counts.Add(readOnlyCollection.Count);
             if (lines is ICollection nonGenericCollection)
+                counts.Add(nonGenericCollection.Count);
+
+            if (counts.Count == 0)
             {
-                count = nonGenericCollection.Count;
+                count = 0;
+                return false;
+            }
+
+            count = counts[0];
+            var maximumCount = count;
+            var hasNegative = count < 0;
+            var hasConflict = false;
+            for (var i = 1; i < counts.Count; i++)
+            {
+                if (counts[i] < 0)
+                    hasNegative = true;
+                if (counts[i] != count)
+                    hasConflict = true;
+                if (counts[i] > maximumCount)
+                    maximumCount = counts[i];
+            }
+
+            if (maximumCount > MaxLines)
+            {
+                count = maximumCount;
                 return true;
             }
 
-            count = 0;
-            return false;
+            if (hasNegative)
+                throw new InvalidOperationException("Frozen estimate projection source reports an invalid negative known count.");
+
+            if (hasConflict)
+                throw new InvalidOperationException("Frozen estimate projection source reports conflicting known counts.");
+
+            return true;
         }
 
         private static void ThrowTooManyLines()
