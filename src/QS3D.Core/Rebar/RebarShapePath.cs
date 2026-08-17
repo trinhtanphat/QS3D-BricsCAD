@@ -63,7 +63,7 @@ namespace QS3D.Core.Rebar
                 x = nextX;
                 y = nextY;
                 points.Add(new RebarShapePoint(x, y));
-                if (index < turns.Count) angle = AddFinite(angle, turns[index] * Math.PI / 180d, "rebar shape angle");
+                if (index < turns.Count) angle = AddFinite(angle, TurnRadians(turns[index]), "rebar shape angle");
             }
             return new RebarShapePath(code, points.AsReadOnly());
         }
@@ -109,6 +109,15 @@ namespace QS3D.Core.Rebar
             var total = 0d; foreach (var leg in legs) total = AddFinite(total, leg, "rebar shape total length");
             var tolerance = Math.Max(1e-6d, cuttingLengthM * 1e-6d);
             if (Math.Abs(total - cuttingLengthM) > tolerance) throw new InvalidOperationException("RebarShapeLegsM total " + total.ToString("R", CultureInfo.InvariantCulture) + " m does not match BBS cutting length " + cuttingLengthM.ToString("R", CultureInfo.InvariantCulture) + " m.");
+        }
+        private static double TurnRadians(double degrees)
+        {
+            if (double.IsNaN(degrees) || double.IsInfinity(degrees) || Math.Abs(degrees) > 180d)
+                throw new ArgumentOutOfRangeException(nameof(degrees));
+            var radians = degrees * Math.PI / 180d;
+            if (double.IsNaN(radians) || double.IsInfinity(radians)) throw new OverflowException("Rebar shape turn angle scaling overflowed.");
+            if (degrees != 0d && radians == 0d) throw new OverflowException("Rebar shape nonzero turn angle underflowed to zero radians.");
+            return radians;
         }
         private static string Normalize(string? code) => string.IsNullOrWhiteSpace(code) ? "00" : code!.Trim().ToUpperInvariant();
         private static bool IsStraight(string code) => code == "00" || code == "0" || code == "STRAIGHT";
