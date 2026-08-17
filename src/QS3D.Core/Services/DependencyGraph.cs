@@ -192,9 +192,28 @@ namespace QS3D.Core.Services
 
         private static void RejectKnownOversizedInput(IEnumerable<ProjectElement> elements, string operation)
         {
-            if (elements is ICollection<ProjectElement> collection && collection.Count > MaxElementInputCount)
-                throw new InvalidOperationException(operation + " exceeds the supported " + MaxElementInputCount + " element limit.");
-            if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection && readOnlyCollection.Count > MaxElementInputCount)
+            var genericCount = elements is ICollection<ProjectElement> collection ? (int?)collection.Count : null;
+            var readOnlyCount = elements is IReadOnlyCollection<ProjectElement> readOnlyCollection ? (int?)readOnlyCollection.Count : null;
+            var nonGenericCount = elements is System.Collections.ICollection nonGenericCollection ? (int?)nonGenericCollection.Count : null;
+
+            ValidateKnownCount(genericCount, operation);
+            ValidateKnownCount(readOnlyCount, operation);
+            ValidateKnownCount(nonGenericCount, operation);
+
+            var expected = genericCount ?? readOnlyCount ?? nonGenericCount;
+            if (!expected.HasValue) return;
+            if ((genericCount.HasValue && genericCount.Value != expected.Value) ||
+                (readOnlyCount.HasValue && readOnlyCount.Value != expected.Value) ||
+                (nonGenericCount.HasValue && nonGenericCount.Value != expected.Value))
+                throw new InvalidOperationException(operation + " reports conflicting known element counts.");
+        }
+
+        private static void ValidateKnownCount(int? count, string operation)
+        {
+            if (!count.HasValue) return;
+            if (count.Value < 0)
+                throw new InvalidOperationException(operation + " reports an invalid negative element count.");
+            if (count.Value > MaxElementInputCount)
                 throw new InvalidOperationException(operation + " exceeds the supported " + MaxElementInputCount + " element limit.");
         }
 
