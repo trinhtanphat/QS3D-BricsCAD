@@ -44,14 +44,15 @@ def main():
     modeling = read("src/QS3D.BricsCAD.V25/Ribbon/BltModelingRibbonAugmenter.cs")
     topbar = read("src/QS3D.BricsCAD.V25/Ribbon/BltTopbarTabContract.cs")
 
-    # Full three-zone BIM workspace: real QS3D workspace left, native BricsCAD viewport centre,
-    # production drawing/layer manager right. Quantity insight is intentionally not forced open.
+    # Full five-region BIM workspace: QS3D workspace left, native BricsCAD viewport centre,
+    # production management + quantity explanation right. All three QS3D palettes are visible.
     for token in (
         "public static void ShowBimWorkspace()",
         "EnsureBimDockContract();",
-        "SetVisibility(workspace: true, right: true, quantityInsight: false);",
+        "SetVisibility(workspace: true, right: true, quantityInsight: true);",
         "_workspace.Dock = DockSides.Left",
         "_right.Dock = DockSides.Right",
+        "_quantityInsight.Dock = DockSides.Right",
         "viewport BricsCAD native ở giữa",
     ):
         require(palette, token, "PaletteCoordinator BIM shell")
@@ -105,9 +106,6 @@ def main():
     require(init, "BltModelingRibbonAugmenter.TryInitialize()", "MODELING ribbon initialization")
     require(init, "BltModelingRibbonAugmenter.Reset();", "MODELING ribbon teardown")
 
-    # BIM ribbon mirrors the exact qualified Vẽ / Công cụ / IFC source panels in owner order.
-    # The Draw surface can now contain compact RibbonRowPanel/RibbonRowBreak columns, so the
-    # mirror must clone nested row items instead of assuming a flat list of RibbonButton objects.
     require_order(
         bim_ribbon,
         (
@@ -125,7 +123,6 @@ def main():
     ):
         require(bim_ribbon, token, "BIM compact Draw mirror")
 
-    # MODELING mirrors the owner screenshot: three lead groups followed by compact stacked groups.
     require_order(
         modeling,
         (
@@ -194,8 +191,6 @@ def main():
     ):
         require(modeling, token, "MODELING command routing")
 
-    # Topbar remains the exact ten-tab IDs emitted by RibbonBootstrapper and may not silently
-    # resurrect QS3D_AUTHOR. Guard the production IDs, not stale aliases from older prototypes.
     require_order(
         topbar,
         (
