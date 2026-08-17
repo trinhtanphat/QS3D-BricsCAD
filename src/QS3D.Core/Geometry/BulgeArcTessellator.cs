@@ -40,7 +40,19 @@ namespace QS3D.Core.Geometry
             var ny = dx / chord;
             var centerOffset = chord * 0.25d * (1d / bulge - bulge);
             if (double.IsNaN(centerOffset) || double.IsInfinity(centerOffset)) throw new OverflowException("Arc center offset is not finite.");
-            var center = new Point2(midpoint.X + nx * centerOffset, midpoint.Y + ny * centerOffset);
+
+            var centerDx = nx * centerOffset;
+            var centerDy = ny * centerOffset;
+            if (centerOffset != 0d &&
+                ((nx != 0d && centerDx == 0d) || (ny != 0d && centerDy == 0d)))
+                throw new InvalidOperationException("Arc center displacement is below numeric resolution.");
+
+            var centerX = midpoint.X + centerDx;
+            var centerY = midpoint.Y + centerDy;
+            if ((centerDx != 0d && centerX == midpoint.X) ||
+                (centerDy != 0d && centerY == midpoint.Y))
+                throw new InvalidOperationException("Arc center displacement is not representable at the supplied coordinates.");
+            var center = new Point2(centerX, centerY);
             ValidatePoint(center, "arcCenter");
 
             var sagittaAngle = MaximumSegmentAngle;
