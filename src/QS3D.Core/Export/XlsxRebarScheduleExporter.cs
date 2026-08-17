@@ -196,9 +196,7 @@ namespace QS3D.Core.Export
         private static void AppendNumber(StringBuilder sb, string cellRef, double value)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value), "XLSX numeric values must be finite.");
-            var formatted = value.ToString("0.########", CultureInfo.InvariantCulture);
-            if (value != 0d && string.Equals(formatted, "0", StringComparison.Ordinal))
-                formatted = value.ToString("R", CultureInfo.InvariantCulture);
+            var formatted = value == 0d ? "0" : value.ToString("R", CultureInfo.InvariantCulture);
             sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"2\"><v>").Append(formatted).Append("</v></c>");
         }
 
