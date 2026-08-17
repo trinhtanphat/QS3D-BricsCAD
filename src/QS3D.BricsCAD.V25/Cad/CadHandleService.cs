@@ -8,15 +8,26 @@ namespace QS3D.BricsCAD.V25.Cad
 {
     internal static class CadHandleService
     {
+        private const int MaxHandleInputCount = 10000;
+
         public static IReadOnlyList<ObjectId> Resolve(Document document, IEnumerable<string> handles)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (handles == null) throw new ArgumentNullException(nameof(handles));
 
+            ValidateKnownCount(handles);
+
             var candidates = new List<ObjectId>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var rawCount = 0;
             foreach (var text in handles)
             {
+                rawCount++;
+                if (rawCount > MaxHandleInputCount)
+                {
+                    throw new ArgumentException($"Handle input exceeds the maximum of {MaxHandleInputCount} entries.", nameof(handles));
+                }
+
                 var normalized = NormalizeHexHandle(text);
                 if (normalized == null || !seen.Add(normalized) || !long.TryParse(normalized, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value)) continue;
                 try
@@ -46,7 +57,10 @@ namespace QS3D.BricsCAD.V25.Cad
 
         public static string? NormalizeHexHandle(string? text)
         {
-            var normalized = (text ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            if (!string.Equals(text, text.Trim(), StringComparison.Ordinal)) return null;
+
+            var normalized = text;
             if (normalized.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) normalized = normalized.Substring(2);
             if (normalized.Length == 0 || !long.TryParse(normalized, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value) || value <= 0L) return null;
             return value.ToString("X", CultureInfo.InvariantCulture);
@@ -100,6 +114,19 @@ namespace QS3D.BricsCAD.V25.Cad
                 transaction.Commit();
             }
             return result;
+        }
+
+        private static void ValidateKnownCount(IEnumerable<string> handles)
+        {
+            if (handles is ICollection<string> collection && collection.Count > MaxHandleInputCount)
+            {
+                throw new ArgumentException($"Handle input exceeds the maximum of {MaxHandleInputCount} entries.", nameof(handles));
+            }
+
+            if (handles is IReadOnlyCollection<string> readOnlyCollection && readOnlyCollection.Count > MaxHandleInputCount)
+            {
+                throw new ArgumentException($"Handle input exceeds the maximum of {MaxHandleInputCount} entries.", nameof(handles));
+            }
         }
 
         private static bool IsRecoverableDiagnosticFailure(Exception exception)
