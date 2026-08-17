@@ -28,6 +28,11 @@ namespace QS3D.BricsCAD.V25.UI
                 FrameworkElement.LoadedEvent,
                 new RoutedEventHandler(OnBlt3dRuntimeLayoutLoaded),
                 true);
+            EventManager.RegisterClassHandler(
+                typeof(WorkspacePanel),
+                FrameworkElement.UnloadedEvent,
+                new RoutedEventHandler(OnBlt3dRuntimeLayoutUnloaded),
+                true);
             return true;
         }
 
@@ -37,6 +42,16 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
 
             panel.StartBlt3dRuntimeLayoutRepair();
+        }
+
+        private static void OnBlt3dRuntimeLayoutUnloaded(object sender, RoutedEventArgs e)
+        {
+            if (!(sender is WorkspacePanel panel))
+                return;
+
+            panel.StopBlt3dRuntimeLayoutRepairTimer();
+            panel._blt3dRuntimeSettlePassesRemaining = 0;
+            panel._blt3dRuntimeLayoutRepairStarted = false;
         }
 
         private void StartBlt3dRuntimeLayoutRepair()
@@ -53,8 +68,9 @@ namespace QS3D.BricsCAD.V25.UI
                 new Action(ReassertBlt3dRuntimeLayout));
 
             // BricsCAD can apply the native dock layout after WPF ApplicationIdle. Two bounded
-            // follow-up passes cover that host settle window and then stop permanently, so a user
-            // manually closing/resizing a palette afterwards remains respected.
+            // follow-up passes cover that host settle window and then stop permanently for this
+            // loaded lifetime, so manual resizing remains respected. A later unload/reload starts
+            // a fresh bounded settle window because BricsCAD may have reparented the palette.
             var timer = new DispatcherTimer(DispatcherPriority.ApplicationIdle)
             {
                 Interval = Blt3dRuntimeSettleInterval
