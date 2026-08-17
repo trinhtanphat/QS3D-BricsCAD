@@ -19,6 +19,7 @@ namespace QS3D.Core.Services
 
             var hasPreviousHost = opening.Properties.TryGetValue("HostWallId", out var previous);
             var previousHostRaw = hasPreviousHost ? previous ?? string.Empty : string.Empty;
+            ValidateCanonicalPersistedHostId(previousHostRaw, opening.Id);
             var previousHost = previousHostRaw.Trim();
             var relationshipChanged = !string.Equals(previousHost, wall.Id, StringComparison.OrdinalIgnoreCase);
             var matchingDependencies = opening.DependsOn.Where(x => DependencyMatches(x, wall.Id)).ToList();
@@ -80,7 +81,9 @@ namespace QS3D.Core.Services
                 return;
             }
 
-            var hostId = (value ?? string.Empty).Trim();
+            var hostIdRaw = value ?? string.Empty;
+            ValidateCanonicalPersistedHostId(hostIdRaw, opening.Id);
+            var hostId = hostIdRaw.Trim();
             if (hostId.Length == 0)
                 throw new InvalidOperationException("Opening " + opening.Id + " has blank HostWallId metadata. Repair the host relationship before unlinking it.");
 
@@ -103,6 +106,13 @@ namespace QS3D.Core.Services
                 AuditTrail.ForProject(project).Record("host.unlink", opening.Id, hostId);
                 return true;
             });
+        }
+
+        private static void ValidateCanonicalPersistedHostId(string rawHostId, string openingId)
+        {
+            if (string.IsNullOrWhiteSpace(rawHostId)) return;
+            if (!string.Equals(rawHostId, rawHostId.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Opening " + openingId + " has a non-canonical HostWallId. Repair the host relationship before changing it.");
         }
 
         private static void ValidateUniqueElementIds(ProjectState project)
@@ -168,10 +178,6 @@ namespace QS3D.Core.Services
             if (!hasSolid && hasTargets)
                 throw new InvalidOperationException(
                     "Host " + hostId + " has orphan physical opening target-state. Rebuild its 3D geometry before " + operation + " of opening " + opening.Id + ".");
-
-            // Legacy physical cuts may have been created before the exact opening-id target state was
-            // persisted. We cannot prove that this opening is not baked into the host solid, so changing
-            // HostWallId must fail closed rather than leaving an irreversible hole behind.
             if (!hasTargets)
                 throw new InvalidOperationException(
                     "Host " + hostId + " has a physical opening cut without exact target-state. Rebuild its 3D geometry before " + operation + " of opening " + opening.Id + ".");
@@ -180,8 +186,6 @@ namespace QS3D.Core.Services
                 throw new InvalidOperationException(
                     "Host " + hostId + " physical opening target-state is unavailable. Rebuild its 3D geometry before " + operation + ".");
 
-            // Validate the whole target set before trusting absence of this particular opening. A stale
-            // or partially corrupt target-set must not be used as evidence that leaving the host is safe.
             PhysicalOpeningCutTargetStateCodec.Resolve(project, host, targetIds);
             if (!targetIds.Any(x => string.Equals(x, opening.Id, StringComparison.OrdinalIgnoreCase))) return;
 
@@ -204,7 +208,14 @@ namespace QS3D.Core.Services
 
         private static bool DependencyMatches(string candidate, string expected)
         {
-            return string.Equals((candidate ?? string.Empty).Trim(), (expected ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
+            var candidateRaw = candidate ?? string.Empty;
+            var expectedRaw = expected ?? string.Empty;
+            var candidateTrimmed = candidateRaw.Trim();
+            var expectedTrimmed = expectedRaw.Trim();
+            if (!string.Equals(candidateTrimmed, expectedTrimmed, StringComparison.OrdinalIgnoreCase)) return false;
+            if (!string.Equals(candidateRaw, candidateTrimmed, StringComparison.Ordinal))
+                throw new InvalidOperationException("Opening host dependency contains a non-canonical identifier. Repair the relationship before changing it.");
+            return string.Equals(candidateRaw, expectedRaw, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void MarkHostOpeningRelationChanged(ProjectElement? host, string openingId, string action)
