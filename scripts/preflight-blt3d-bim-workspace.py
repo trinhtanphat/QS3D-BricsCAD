@@ -47,7 +47,7 @@ def main():
     # Full BIM workspace: real QS3D workspace left, native BricsCAD viewport centre,
     # production drawing/layer manager and quantity explanation palettes right.
     for token in (
-        "public static void ShowBimWorkspace()",
+        "public static bool ShowBimWorkspace()",
         "EnsureBimDockContract();",
         "SetVisibility(workspace: true, right: true, quantityInsight: true);",
         "_workspace.Dock = DockSides.Left",
