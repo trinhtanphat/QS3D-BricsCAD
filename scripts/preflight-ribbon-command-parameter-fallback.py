@@ -27,14 +27,21 @@ def main() -> int:
             "internal static class RibbonCommandParameterFallback",
             'GetProperty(item, "CommandParameter") as string',
             'GetProperty(item, "CommandHandler") as ICommand',
-            "handler is CommandParameterFallbackHandler",
+            "handler is CommandParameterFallbackHandler || handler is CapturedCommandHandler",
+            "new CapturedCommandHandler(command)",
             "new CommandParameterFallbackHandler(handler, command)",
             "public bool CanExecute(object? parameter) => _inner.CanExecute(ResolveParameter(parameter));",
             "public void Execute(object? parameter) => _inner.Execute(ResolveParameter(parameter));",
-            ": _fallbackCommand;",
+            "return _fallbackCommand;",
             'tabId.StartsWith(Qs3dTabPrefix, StringComparison.OrdinalIgnoreCase)',
         ):
             require(fallback, token, "ribbon command fallback")
+
+        # Both the direct captured dispatcher and the wrapper must ignore host-supplied event
+        # metadata and route the command captured from the owning RibbonButton.CommandParameter.
+        # This prevents a non-null button id/label from being mistaken for a CAD command.
+        if fallback.count("return _fallbackCommand;") != 2:
+            fail("both ribbon command resolvers must always dispatch the captured CommandParameter")
 
         update_index = coordinator.find("UpdateRibbonAugmenter.TryInitialize()")
         fallback_index = coordinator.find("RibbonCommandParameterFallback.TryInitialize()")
@@ -50,8 +57,9 @@ def main() -> int:
             "V26 linked-source project",
         )
 
-        print("PASS: QS3D ribbon commands preserve their captured command when BricsCAD omits ICommand parameters.")
-        print(" - fallback wraps only QS3D ribbon handlers with non-empty CommandParameter values")
+        print("PASS: QS3D ribbon commands preserve their captured command when BricsCAD omits or replaces ICommand parameters.")
+        print(" - fallback repairs only QS3D ribbon handlers with non-empty CommandParameter values")
+        print(" - direct and wrapped handlers always dispatch the owning button's captured command")
         print(" - fallback runs after ribbon augmentation and before final QS3D tab grouping")
         print(" - V26 consumes the same guarded V25 ribbon source")
         return 0

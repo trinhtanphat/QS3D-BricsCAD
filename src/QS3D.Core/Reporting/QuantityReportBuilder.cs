@@ -8,11 +8,61 @@ namespace QS3D.Core.Reporting
 {
     public static class QuantityReportBuilder
     {
+        private sealed class QuantityAccumulatorSet
+        {
+            private QuantityReportMath.FiniteAccumulator _grossConcreteM3;
+            private QuantityReportMath.FiniteAccumulator _deductionM3;
+            private QuantityReportMath.FiniteAccumulator _netConcreteM3;
+            private QuantityReportMath.FiniteAccumulator _formworkM2;
+            private QuantityReportMath.FiniteAccumulator _lengthM;
+            private QuantityReportMath.FiniteAccumulator _outerPerimeterM;
+            private QuantityReportMath.FiniteAccumulator _innerPerimeterM;
+            private QuantityReportMath.FiniteAccumulator _doorAreaM2;
+            private QuantityReportMath.FiniteAccumulator _sideAreaM2;
+            private QuantityReportMath.FiniteAccumulator _bottomAreaM2;
+            private QuantityReportMath.FiniteAccumulator _topAreaM2;
+            private QuantityReportMath.FiniteAccumulator _otherAreaM2;
+
+            public void Add(ElementInstance element)
+            {
+                var id = element.Id;
+                _grossConcreteM3.Add(NonNegative(element.GrossConcreteM3, id, "GrossConcreteM3"), id + "/GrossConcreteM3");
+                _deductionM3.Add(NonNegative(element.DeductionM3, id, "DeductionM3"), id + "/DeductionM3");
+                _netConcreteM3.Add(NonNegative(element.NetConcreteM3, id, "NetConcreteM3"), id + "/NetConcreteM3");
+                _formworkM2.Add(NonNegative(element.FormworkM2, id, "FormworkM2"), id + "/FormworkM2");
+                _lengthM.Add(NonNegative(element.LengthM, id, "LengthM"), id + "/LengthM");
+                _outerPerimeterM.Add(NonNegative(element.OuterPerimeterM, id, "OuterPerimeterM"), id + "/OuterPerimeterM");
+                _innerPerimeterM.Add(NonNegative(element.InnerPerimeterM, id, "InnerPerimeterM"), id + "/InnerPerimeterM");
+                _doorAreaM2.Add(NonNegative(element.DoorAreaM2, id, "DoorAreaM2"), id + "/DoorAreaM2");
+                _sideAreaM2.Add(NonNegative(element.SideAreaM2, id, "SideAreaM2"), id + "/SideAreaM2");
+                _bottomAreaM2.Add(NonNegative(element.BottomAreaM2, id, "BottomAreaM2"), id + "/BottomAreaM2");
+                _topAreaM2.Add(NonNegative(element.TopAreaM2, id, "TopAreaM2"), id + "/TopAreaM2");
+                _otherAreaM2.Add(NonNegative(element.OtherAreaM2, id, "OtherAreaM2"), id + "/OtherAreaM2");
+            }
+
+            public void Apply(QuantityReportRow row)
+            {
+                row.GrossConcreteM3 = _grossConcreteM3.Value("GrossConcreteM3");
+                row.DeductionM3 = _deductionM3.Value("DeductionM3");
+                row.NetConcreteM3 = _netConcreteM3.Value("NetConcreteM3");
+                row.FormworkM2 = _formworkM2.Value("FormworkM2");
+                row.LengthM = _lengthM.Value("LengthM");
+                row.OuterPerimeterM = _outerPerimeterM.Value("OuterPerimeterM");
+                row.InnerPerimeterM = _innerPerimeterM.Value("InnerPerimeterM");
+                row.DoorAreaM2 = _doorAreaM2.Value("DoorAreaM2");
+                row.SideAreaM2 = _sideAreaM2.Value("SideAreaM2");
+                row.BottomAreaM2 = _bottomAreaM2.Value("BottomAreaM2");
+                row.TopAreaM2 = _topAreaM2.Value("TopAreaM2");
+                row.OtherAreaM2 = _otherAreaM2.Value("OtherAreaM2");
+            }
+        }
+
         public static IReadOnlyList<QuantityReportRow> Group(IEnumerable<ElementInstance> elements)
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var order = new List<string>();
             var grouped = new Dictionary<string, QuantityReportRow>(StringComparer.OrdinalIgnoreCase);
+            var accumulators = new Dictionary<string, QuantityAccumulatorSet>(StringComparer.OrdinalIgnoreCase);
             var seenElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var elementIndex = 0;
             foreach (var element in elements)
@@ -32,27 +82,23 @@ namespace QS3D.Core.Reporting
                         FamilyName = element.Family.Name,
                         Material = material
                     };
-                    grouped.Add(key, row); order.Add(key);
+                    grouped.Add(key, row);
+                    accumulators.Add(key, new QuantityAccumulatorSet());
+                    order.Add(key);
                 }
                 row.Count = QuantityReportMath.AddCount(row.Count, 1);
                 row.ElementIds.Add(element.Id);
                 ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
-                row.GrossConcreteM3 = QuantityReportMath.Add(row.GrossConcreteM3, NonNegative(element.GrossConcreteM3, element.Id, "GrossConcreteM3"), element.Id + "/GrossConcreteM3");
-                row.DeductionM3 = QuantityReportMath.Add(row.DeductionM3, NonNegative(element.DeductionM3, element.Id, "DeductionM3"), element.Id + "/DeductionM3");
-                row.NetConcreteM3 = QuantityReportMath.Add(row.NetConcreteM3, NonNegative(element.NetConcreteM3, element.Id, "NetConcreteM3"), element.Id + "/NetConcreteM3");
-                row.FormworkM2 = QuantityReportMath.Add(row.FormworkM2, NonNegative(element.FormworkM2, element.Id, "FormworkM2"), element.Id + "/FormworkM2");
-                row.LengthM = QuantityReportMath.Add(row.LengthM, NonNegative(element.LengthM, element.Id, "LengthM"), element.Id + "/LengthM");
-                row.OuterPerimeterM = QuantityReportMath.Add(row.OuterPerimeterM, NonNegative(element.OuterPerimeterM, element.Id, "OuterPerimeterM"), element.Id + "/OuterPerimeterM");
-                row.InnerPerimeterM = QuantityReportMath.Add(row.InnerPerimeterM, NonNegative(element.InnerPerimeterM, element.Id, "InnerPerimeterM"), element.Id + "/InnerPerimeterM");
-                row.DoorAreaM2 = QuantityReportMath.Add(row.DoorAreaM2, NonNegative(element.DoorAreaM2, element.Id, "DoorAreaM2"), element.Id + "/DoorAreaM2");
-                row.SideAreaM2 = QuantityReportMath.Add(row.SideAreaM2, NonNegative(element.SideAreaM2, element.Id, "SideAreaM2"), element.Id + "/SideAreaM2");
-                row.BottomAreaM2 = QuantityReportMath.Add(row.BottomAreaM2, NonNegative(element.BottomAreaM2, element.Id, "BottomAreaM2"), element.Id + "/BottomAreaM2");
-                row.TopAreaM2 = QuantityReportMath.Add(row.TopAreaM2, NonNegative(element.TopAreaM2, element.Id, "TopAreaM2"), element.Id + "/TopAreaM2");
-                row.OtherAreaM2 = QuantityReportMath.Add(row.OtherAreaM2, NonNegative(element.OtherAreaM2, element.Id, "OtherAreaM2"), element.Id + "/OtherAreaM2");
+                accumulators[key].Add(element);
                 elementIndex++;
             }
             var result = new List<QuantityReportRow>(order.Count);
-            foreach (var key in order) result.Add(grouped[key]);
+            foreach (var key in order)
+            {
+                var row = grouped[key];
+                accumulators[key].Apply(row);
+                result.Add(row);
+            }
             return result.AsReadOnly();
         }
 
