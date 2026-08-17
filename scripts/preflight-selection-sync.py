@@ -25,7 +25,9 @@ checks = {
     "sync": [
         "Dictionary<Document, DispatcherTimer> Pending",
         "TimeSpan.FromMilliseconds(80d)",
-        "if (!PaletteCoordinator.IsWorkspaceVisible) return;",
+        "private static bool IsSelectionSurfaceVisible =>",
+        "PaletteCoordinator.IsWorkspaceVisible || PaletteCoordinator.IsPropertiesVisible;",
+        "if (!IsSelectionSurfaceVisible) return;",
         "ScheduleRefresh(document)",
         "timer.Stop();",
         "timer.Start();",
@@ -84,4 +86,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: implied-selection reads are side-effect free, inspector refreshes are visible-only and debounced, and document selection attachment is deferred to the ApplicationIdle lifecycle reconcile boundary.")
+print("PASS: implied-selection reads are side-effect free, inspector refreshes are visible-surface-only and debounced for Workspace or dedicated Properties, and document selection attachment is deferred to the ApplicationIdle lifecycle reconcile boundary.")
