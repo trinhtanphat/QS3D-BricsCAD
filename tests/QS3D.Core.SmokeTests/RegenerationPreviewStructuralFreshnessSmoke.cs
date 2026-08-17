@@ -16,7 +16,9 @@ namespace QS3D.Core.SmokeTests
         {
             ReplacementDuringSubsetEnumerationFailsFreshness();
             PropertyMutationDuringSubsetEnumerationFailsFreshness();
+            QuantityMutationDuringSubsetEnumerationFailsFreshness();
             DependencyMutationDuringSubsetEnumerationFailsFreshness();
+            SourceHandleMutationDuringSubsetEnumerationFailsFreshness();
             DirtyStateMutationDuringSubsetEnumerationFailsFreshness();
             StableSubsetStillPreviews();
         }
@@ -60,6 +62,24 @@ namespace QS3D.Core.SmokeTests
             True(!target.Quantities.ContainsKey("NetVolumeM3"), "failed property-race preview must not mutate live target quantities");
         }
 
+        private static void QuantityMutationDuringSubsetEnumerationFailsFreshness()
+        {
+            var project = Fixture();
+            var beforeVersion = project.ChangeVersion;
+            var target = project.FindElement("B1")!;
+
+            IEnumerable<string> Targets()
+            {
+                target.Quantities["InjectedQuantity"] = 999d;
+                yield return "B1";
+            }
+
+            ThrowsStateFreshness(() => new RegenerationPreviewService().PreviewSubset(project, Targets()), "B1");
+            Equal(beforeVersion, project.ChangeVersion, "direct quantity mutation must leave ChangeVersion unchanged");
+            Equal(999d, target.Quantities["InjectedQuantity"], "quantity mutation fixture must remain observable");
+            True(!target.Quantities.ContainsKey("NetVolumeM3"), "failed quantity-race preview must not mutate regenerated live target quantities");
+        }
+
         private static void DependencyMutationDuringSubsetEnumerationFailsFreshness()
         {
             var project = Fixture();
@@ -77,6 +97,25 @@ namespace QS3D.Core.SmokeTests
             Equal(1, target.DependsOn.Count, "dependency mutation fixture count");
             Equal("B2", target.DependsOn[0], "dependency mutation fixture value");
             True(!target.Quantities.ContainsKey("NetVolumeM3"), "failed dependency-race preview must not mutate live target quantities");
+        }
+
+        private static void SourceHandleMutationDuringSubsetEnumerationFailsFreshness()
+        {
+            var project = Fixture();
+            var beforeVersion = project.ChangeVersion;
+            var target = project.FindElement("B1")!;
+
+            IEnumerable<string> Targets()
+            {
+                target.SourceHandles.Add("A1");
+                yield return "B1";
+            }
+
+            ThrowsStateFreshness(() => new RegenerationPreviewService().PreviewSubset(project, Targets()), "B1");
+            Equal(beforeVersion, project.ChangeVersion, "direct source-handle mutation must leave ChangeVersion unchanged");
+            Equal(1, target.SourceHandles.Count, "source-handle mutation fixture count");
+            Equal("A1", target.SourceHandles[0], "source-handle mutation fixture value");
+            True(!target.Quantities.ContainsKey("NetVolumeM3"), "failed source-handle-race preview must not mutate live target quantities");
         }
 
         private static void DirtyStateMutationDuringSubsetEnumerationFailsFreshness()
