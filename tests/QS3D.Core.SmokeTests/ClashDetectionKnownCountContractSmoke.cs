@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             NonGenericCountConflictFailsBeforeEnumeration();
             NegativeKnownCountFailsBeforeEnumeration();
             CapacityViolationPrecedesCountConflict();
+            ExactBoundRemainsAccepted();
             ConsistentKnownCountsPreserveDeterministicClassification();
             DishonestKnownCountStillStopsAtStreamingBoundary();
         }
@@ -85,6 +86,17 @@ namespace QS3D.Core.SmokeTests
                 "Known clash capacity violation must retain precedence over count conflicts.");
             if (source.EnumerationRequested)
                 throw new Exception("Known clash capacity violation must fail before caller enumeration.");
+        }
+
+        private static void ExactBoundRemainsAccepted()
+        {
+            var items = new CoordinationElement[MaximumElements];
+            for (var index = 0; index < items.Length; index++)
+                items[index] = Element("BOUND-" + index, "Architecture");
+
+            var results = new ClashDetectionService().Detect(items);
+            if (results.Count != 0)
+                throw new Exception("Exactly 500 same-discipline elements must remain accepted without producing cross-discipline clashes.");
         }
 
         private static void ConsistentKnownCountsPreserveDeterministicClassification()
