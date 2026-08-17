@@ -54,6 +54,11 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => evaluator.Evaluate("v0", reportedOversize), "reported oversized variable count rejected before enumeration");
             if (reportedOversize.EnumerationAttempted)
                 throw new InvalidOperationException("reported oversized variable count: evaluator enumerated after the count guard should have rejected input.");
+
+            var reportedNegative = new ReportedNegativeCountDictionary();
+            Throws<InvalidOperationException>(() => evaluator.Evaluate("1", reportedNegative), "reported negative variable count rejected before enumeration");
+            if (reportedNegative.EnumerationAttempted)
+                throw new InvalidOperationException("reported negative variable count: evaluator enumerated after the count guard should have rejected input.");
         }
 
         private static Dictionary<string, double> BuildVariables(int count)
@@ -102,6 +107,30 @@ namespace QS3D.Core.SmokeTests
             {
                 EnumerationAttempted = true;
                 throw new InvalidOperationException("Enumeration should not occur for an oversized reported count.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class ReportedNegativeCountDictionary : IReadOnlyDictionary<string, double>
+        {
+            public bool EnumerationAttempted { get; private set; }
+            public int Count => -1;
+            public IEnumerable<string> Keys => Array.Empty<string>();
+            public IEnumerable<double> Values => Array.Empty<double>();
+            public double this[string key] => throw new KeyNotFoundException();
+
+            public bool ContainsKey(string key) => false;
+            public bool TryGetValue(string key, out double value)
+            {
+                value = default;
+                return false;
+            }
+
+            public IEnumerator<KeyValuePair<string, double>> GetEnumerator()
+            {
+                EnumerationAttempted = true;
+                throw new InvalidOperationException("Enumeration should not occur for a negative reported count.");
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
