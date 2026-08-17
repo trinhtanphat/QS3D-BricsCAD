@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             NonGridInputBlocksWholeBatch();
             UnrelatedDuplicateIdentityBlocksWholeBatch();
             OversizedCountedSourcesRejectBeforeEnumeration();
+            ConflictingKnownCountContractsRejectBeforeEnumeration();
             CountSideEffectRejectsBeforeEnumeration();
             ExactCapacityCountedSourceRemainsAccepted();
             GridNamingBoundedEnumerationSmoke.Run();
@@ -118,6 +119,29 @@ namespace QS3D.Core.SmokeTests
 
             var nonGeneric = new OversizedNonGenericCollection();
             CapacityRejectedBeforeEnumeration(nonGeneric, () => nonGeneric.EnumeratorRequested);
+        }
+
+        private static void ConflictingKnownCountContractsRejectBeforeEnumeration()
+        {
+            var project = Project();
+            var source = new ConflictingKnownCountCollection();
+            var beforeVersion = project.ChangeVersion;
+            try
+            {
+                GridNamingService.Renumber(project, source);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Equal("A Grid renumber batch supports at most 2000 elements.", ex.Message);
+                True(source.GenericCountRead);
+                True(source.ReadOnlyCountRead);
+                True(source.NonGenericCountRead);
+                True(!source.EnumeratorRequested);
+                Equal(beforeVersion, project.ChangeVersion);
+                return;
+            }
+
+            throw new Exception("Expected conflicting known-count Grid source to fail before enumeration.");
         }
 
         private static void CapacityRejectedBeforeEnumeration(IEnumerable<string> source, Func<bool> enumeratorRequested)
@@ -227,6 +251,58 @@ namespace QS3D.Core.SmokeTests
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void CopyTo(Array array, int index) => throw new NotSupportedException();
+        }
+
+        private sealed class ConflictingKnownCountCollection : ICollection<string>, IReadOnlyCollection<string>, ICollection
+        {
+            public int Count
+            {
+                get
+                {
+                    GenericCountRead = true;
+                    return 1;
+                }
+            }
+
+            int IReadOnlyCollection<string>.Count
+            {
+                get
+                {
+                    ReadOnlyCountRead = true;
+                    return 2;
+                }
+            }
+
+            int ICollection.Count
+            {
+                get
+                {
+                    NonGenericCountRead = true;
+                    return MaxGridBatch + 1;
+                }
+            }
+
+            public bool GenericCountRead { get; private set; }
+            public bool ReadOnlyCountRead { get; private set; }
+            public bool NonGenericCountRead { get; private set; }
+            public bool EnumeratorRequested { get; private set; }
+            public bool IsReadOnly => true;
+            public bool IsSynchronized => false;
+            public object SyncRoot => this;
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                EnumeratorRequested = true;
+                throw new Exception("Conflicting known-count Grid source should not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void Add(string item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(string item) => false;
+            public void CopyTo(string[] array, int arrayIndex) => throw new NotSupportedException();
+            public bool Remove(string item) => throw new NotSupportedException();
             public void CopyTo(Array array, int index) => throw new NotSupportedException();
         }
 
