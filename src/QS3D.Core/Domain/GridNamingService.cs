@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -57,6 +58,13 @@ namespace QS3D.Core.Domain
 
             var targetEnumerationVersion = project.ChangeVersion;
             var projectElementsAtStart = project.Elements.ToList();
+            var knownCount = TryGetKnownCount(orderedGridElementIds);
+            var versionAfterKnownCount = project.ChangeVersion;
+            if (versionAfterKnownCount != targetEnumerationVersion)
+                throw new InvalidOperationException("Project changed while Grid renumber targets were being enumerated. Retry renumbering against the current project state.");
+            if (knownCount.HasValue && knownCount.Value > MaxGridBatch)
+                throw new InvalidOperationException("A Grid renumber batch supports at most " + MaxGridBatch + " elements.");
+
             var ids = new List<string>();
             foreach (var value in orderedGridElementIds)
             {
@@ -160,6 +168,17 @@ namespace QS3D.Core.Domain
             var result = prefix + core + suffix;
             if (result.Length > MaxLabelLength) throw new InvalidOperationException("Grid label exceeds " + MaxLabelLength + " characters.");
             return result;
+        }
+
+        private static int? TryGetKnownCount(IEnumerable<string> source)
+        {
+            if (source is ICollection<string> collection)
+                return collection.Count;
+            if (source is IReadOnlyCollection<string> readOnlyCollection)
+                return readOnlyCollection.Count;
+            if (source is ICollection nonGenericCollection)
+                return nonGenericCollection.Count;
+            return null;
         }
 
         private static Dictionary<string, ProjectElement?> ResolveOriginalTargets(
