@@ -8,6 +8,7 @@ namespace QS3D.Core.Domain
 {
     internal sealed class ProjectMetadataDictionary : IDictionary<string, string>
     {
+        private const int MaximumEntries = 10000;
         private const string ProjectBrowserWorkspaceMetadataKey = "QS3D.ProjectBrowser.WorkspaceState";
         private readonly Dictionary<string, string> _items = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private ProjectState? _project;
@@ -83,6 +84,7 @@ namespace QS3D.Core.Domain
             {
                 if (item.Key == null) throw new ArgumentNullException(nameof(values), "Project metadata contains a null key.");
                 if (next.ContainsKey(item.Key)) throw new ArgumentException("Project metadata contains a duplicate key: " + item.Key + ".", nameof(values));
+                if (next.Count >= MaximumEntries) throw MetadataCountError();
                 next.Add(item.Key, item.Value ?? string.Empty);
             }
             ValidateReserved(next);
@@ -111,9 +113,11 @@ namespace QS3D.Core.Domain
         private void Set(string key, string value, bool addOnly, bool touchMutation)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
-            if (addOnly && _items.ContainsKey(key)) throw new ArgumentException("An item with the same key has already been added.", nameof(key));
+            var exists = _items.ContainsKey(key);
+            if (addOnly && exists) throw new ArgumentException("An item with the same key has already been added.", nameof(key));
             var normalizedValue = value ?? string.Empty;
-            if (!addOnly && _items.TryGetValue(key, out var existing) && string.Equals(existing, normalizedValue, StringComparison.Ordinal)) return;
+            if (!addOnly && exists && _items.TryGetValue(key, out var existing) && string.Equals(existing, normalizedValue, StringComparison.Ordinal)) return;
+            if (!exists && _items.Count >= MaximumEntries) throw MetadataCountError();
 
             if (IsReservedKey(key))
             {
@@ -127,6 +131,11 @@ namespace QS3D.Core.Domain
                 if (touchMutation) TouchProject();
             }
             if (addOnly) _items.Add(key, normalizedValue); else _items[key] = normalizedValue;
+        }
+
+        private static InvalidOperationException MetadataCountError()
+        {
+            return new InvalidOperationException("Project metadata supports at most " + MaximumEntries + " entries.");
         }
 
         private static bool IsReservedKey(string key)
