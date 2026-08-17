@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using QS3D.Core.Cost;
@@ -15,7 +16,9 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             PublicMutationStopsAtBoundAndPreservesUpdates();
+            PersistenceReplacementRejectsKnownOversizedInputBeforeEnumeration();
             PersistenceReplacementStopsAtBoundAndIsAtomic();
+            PersistenceReplacementAcceptsExactKnownBoundary();
             OwnedMappingCapacityFailureDoesNotTouchProject();
             OwnedTbqCapacityFailureDoesNotTouchProject();
             SnapshotSupportsExactBoundary();
@@ -43,21 +46,36 @@ namespace QS3D.Core.SmokeTests
             Equal(MaximumEntries, project.Metadata.Count, "metadata replacement after removal");
         }
 
+        private static void PersistenceReplacementRejectsKnownOversizedInputBeforeEnumeration()
+        {
+            var project = NewProject("known-count");
+            project.Metadata.Add("seed", "original");
+            var input = new KnownCountMetadataCollection(MaximumEntries + 1);
+
+            try
+            {
+                InvokePersistenceReplacement(project, input);
+                throw new InvalidOperationException("Expected known oversized project metadata input to be rejected.");
+            }
+            catch (TargetInvocationException ex) when (ex.InnerException is InvalidOperationException)
+            {
+                // Expected: reflection wraps the bounded replacement failure.
+            }
+
+            Equal(false, input.WasEnumerated, "known oversized metadata enumerated");
+            Equal(1, project.Metadata.Count, "known oversized atomic metadata replacement count");
+            Equal("original", project.Metadata["seed"], "known oversized atomic metadata replacement value");
+        }
+
         private static void PersistenceReplacementStopsAtBoundAndIsAtomic()
         {
             var project = NewProject("persistence");
             project.Metadata.Add("seed", "original");
 
-            var method = project.Metadata.GetType().GetMethod(
-                "ReplacePersistenceState",
-                BindingFlags.Instance | BindingFlags.NonPublic);
-            if (method == null)
-                throw new InvalidOperationException("Project metadata persistence replacement method was not found.");
-
             var yielded = 0;
             try
             {
-                method.Invoke(project.Metadata, new object[] { OverflowingMetadata(() => yielded++) });
+                InvokePersistenceReplacement(project, OverflowingMetadata(() => yielded++));
                 throw new InvalidOperationException("Expected project metadata persistence replacement to reject entry 10001.");
             }
             catch (TargetInvocationException ex) when (ex.InnerException is InvalidOperationException)
@@ -68,6 +86,18 @@ namespace QS3D.Core.SmokeTests
             Equal(MaximumEntries + 1, yielded, "lazy metadata enumeration stop point");
             Equal(1, project.Metadata.Count, "atomic metadata replacement count");
             Equal("original", project.Metadata["seed"], "atomic metadata replacement value");
+        }
+
+        private static void PersistenceReplacementAcceptsExactKnownBoundary()
+        {
+            var project = NewProject("known-exact");
+            var input = new List<KeyValuePair<string, string>>(MaximumEntries);
+            for (var i = 0; i < MaximumEntries; i++)
+                input.Add(new KeyValuePair<string, string>(Key(i), "v"));
+
+            InvokePersistenceReplacement(project, input);
+            Equal(MaximumEntries, project.Metadata.Count, "known metadata exact boundary");
+            Equal("v", project.Metadata[Key(MaximumEntries - 1)], "known metadata exact boundary value");
         }
 
         private static void OwnedMappingCapacityFailureDoesNotTouchProject()
@@ -128,6 +158,18 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Project snapshot unexpectedly returned null at the metadata boundary.");
         }
 
+        private static void InvokePersistenceReplacement(
+            ProjectState project,
+            IEnumerable<KeyValuePair<string, string>> input)
+        {
+            var method = project.Metadata.GetType().GetMethod(
+                "ReplacePersistenceState",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            if (method == null)
+                throw new InvalidOperationException("Project metadata persistence replacement method was not found.");
+            method.Invoke(project.Metadata, new object[] { input });
+        }
+
         private static IEnumerable<KeyValuePair<string, string>> OverflowingMetadata(Action onYield)
         {
             for (var i = 0; i <= MaximumEntries; i++)
@@ -161,6 +203,27 @@ namespace QS3D.Core.SmokeTests
         {
             if (!EqualityComparer<T>.Default.Equals(expected, actual))
                 throw new InvalidOperationException(label + ": expected " + expected + ", actual " + actual + ".");
+        }
+
+        private sealed class KnownCountMetadataCollection : ICollection<KeyValuePair<string, string>>
+        {
+            public KnownCountMetadataCollection(int count) { Count = count; }
+            public int Count { get; }
+            public bool IsReadOnly => true;
+            public bool WasEnumerated { get; private set; }
+
+            public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+            {
+                WasEnumerated = true;
+                throw new InvalidOperationException("Known oversized metadata must be rejected before enumeration.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void Add(KeyValuePair<string, string> item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(KeyValuePair<string, string> item) => false;
+            public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex) => throw new NotSupportedException();
+            public bool Remove(KeyValuePair<string, string> item) => throw new NotSupportedException();
         }
     }
 }
