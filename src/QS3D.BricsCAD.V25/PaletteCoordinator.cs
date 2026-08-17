@@ -98,18 +98,19 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        // The owner-reference BIM tab intentionally coordinates the two side palettes around the
-        // real BricsCAD viewport. It is explicit so the ordinary Workspace command stays isolated.
+        // The owner-reference BIM tab coordinates the full BLT3D-familiar side workspace around
+        // the real BricsCAD viewport. Keep this explicit so the ordinary Workspace command stays isolated.
         public static void ShowBimWorkspace()
         {
             try
             {
                 EnsureCreated();
                 EnsureBimDockContract();
-                SetVisibility(workspace: true, right: true, quantityInsight: false);
+                SetVisibility(workspace: true, right: true, quantityInsight: true);
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
                 _rightPanel?.Refresh();
-                _workspacePanel?.SetStatus("MÔ HÌNH BIM • BLT3D workspace • viewport BricsCAD native ở giữa.");
+                _quantityInsightPanel?.RefreshQuantityInsights();
+                _workspacePanel?.SetStatus("MÔ HÌNH BIM • BLT3D workspace • viewport BricsCAD native ở giữa • quản lý + diễn giải khối lượng bên phải.");
             }
             catch (Exception)
             {
@@ -217,7 +218,7 @@ namespace QS3D.BricsCAD.V25
             var quantityVisible = IsQuantityInsightVisible;
             Dispose();
             EnsureCreated();
-            if (workspaceVisible && rightVisible && !quantityVisible)
+            if (workspaceVisible && rightVisible && quantityVisible)
                 EnsureBimDockContract();
             SetVisibility(workspaceVisible, rightVisible, quantityVisible);
         }
@@ -256,6 +257,8 @@ namespace QS3D.BricsCAD.V25
                 _workspace.Dock = DockSides.Left;
             if (_right != null && _right.Dock != DockSides.Right)
                 _right.Dock = DockSides.Right;
+            if (_quantityInsight != null && _quantityInsight.Dock != DockSides.Right)
+                _quantityInsight.Dock = DockSides.Right;
         }
 
         private static void SetVisibility(bool workspace, bool right, bool quantityInsight)
