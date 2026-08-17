@@ -1,4 +1,3 @@
-using System;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using Teigha.Runtime;
@@ -7,35 +6,16 @@ namespace QS3D.BricsCAD.V25
 {
     /// <summary>
     /// Host-safe command adapters for the BLT3D-familiar NHẬN DẠNG ribbon.
-    /// These commands reuse only recognition-compatible QS3D workflows; an action with no
-    /// matching generic workflow fails closed instead of dispatching an unrelated command.
+    /// Only actions backed by a matching production recognition workflow may dispatch;
+    /// unsupported recognition labels fail closed instead of routing to unrelated commands.
     /// </summary>
     public sealed class RecognitionTopbarCommands
     {
         [CommandMethod("QS3DRECOGNITIONRESTORE", CommandFlags.UsePickSet)]
-        public void RestoreSelected()
-        {
-            var document = Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
-
-            var ids = ResolveSelection(document, "Chọn đối tượng cần khôi phục vào ngữ cảnh nhận dạng");
-            if (ids == null) return;
-
-            document.Editor.SetImpliedSelection(ids);
-            document.Editor.WriteMessage("\nQS3D Nhận dạng: đã khôi phục " + ids.Length + " đối tượng vào selection nhận dạng hiện hành.");
-            Queue(document, "QS3DINSPECT");
-        }
+        public void RestoreSelected() => WriteUnavailable("Khôi phục đã chọn");
 
         [CommandMethod("QS3DRECOGNITIONOPTIONS")]
-        public void RecognitionOptions()
-        {
-            var document = Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
-
-            document.Editor.WriteMessage(
-                "\nQS3D Nhận dạng: Tùy chọn nhận dạng chưa có workflow generic tương ứng; " +
-                "không mở MEP Review/Takeoff thay thế.");
-        }
+        public void RecognitionOptions() => WriteUnavailable("Tùy chọn nhận dạng");
 
         [CommandMethod("QS3DRECOGNITIONBOUNDARY", CommandFlags.UsePickSet)]
         public void SelectBoundary()
@@ -52,18 +32,7 @@ namespace QS3D.BricsCAD.V25
         }
 
         [CommandMethod("QS3DRECOGNITIONLABEL", CommandFlags.UsePickSet)]
-        public void SelectLabel()
-        {
-            var document = Application.DocumentManager.MdiActiveDocument;
-            if (document == null) return;
-
-            var ids = ResolveSelection(document, "Chọn nhãn/chữ cần kiểm tra nhận dạng");
-            if (ids == null) return;
-
-            document.Editor.SetImpliedSelection(ids);
-            document.Editor.WriteMessage("\nQS3D Nhận dạng: label selection=" + ids.Length + ".");
-            Queue(document, "QS3DINSPECT");
-        }
+        public void SelectLabel() => WriteUnavailable("Chọn nhãn");
 
         [CommandMethod("QS3DRECOGNITIONAUTO", CommandFlags.UsePickSet)]
         public void AutoRecognize()
@@ -77,6 +46,16 @@ namespace QS3D.BricsCAD.V25
             document.Editor.SetImpliedSelection(ids);
             document.Editor.WriteMessage("\nQS3D Nhận dạng: tự động xử lý selection=" + ids.Length + ".");
             Queue(document, "QS3DRECOGNIZEAUTO");
+        }
+
+        private static void WriteUnavailable(string action)
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null) return;
+
+            document.Editor.WriteMessage(
+                "\nQS3D Nhận dạng: " + action +
+                " chưa có workflow nhận dạng tương ứng; hành động bị vô hiệu hóa để tránh chạy sai chức năng.");
         }
 
         private static Teigha.DatabaseServices.ObjectId[]? ResolveSelection(Document document, string prompt)

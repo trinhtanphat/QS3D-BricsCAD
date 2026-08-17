@@ -11,8 +11,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
     /// <summary>
     /// Reconciles only the QS3D-owned NHẬN DẠNG tab into the compact BLT3D-familiar
     /// topbar layout. The workspace/palette below the Ribbon is intentionally untouched.
-    /// Enabled buttons are routed through dedicated recognition adapters so their labels,
-    /// artwork and runtime actions stay semantically aligned.
+    /// Only actions backed by matching production recognition workflows remain enabled;
+    /// unsupported labels stay visible but disabled instead of dispatching unrelated commands.
     /// </summary>
     internal static class BltRecognitionRibbonAugmenter
     {
@@ -59,9 +59,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 AddPanel(panels, RecognitionPanelSourceId, "Nhận dạng",
                     new[]
                     {
-                        new RecognitionButtonSpec("QS3D_RECOGNIZE_BLT_RESTORE", "Khôi phục đã chọn", "QS3DRECOGNITIONRESTORE", IconKind.Restore),
+                        new RecognitionButtonSpec("QS3D_RECOGNIZE_BLT_RESTORE", "Khôi phục đã chọn", "QS3DRECOGNITIONRESTORE", IconKind.Restore, enabled: false),
                         new RecognitionButtonSpec("QS3D_RECOGNIZE_BLT_TEXT", "Nhận dạng chữ", string.Empty, IconKind.Text, enabled: false),
-                        new RecognitionButtonSpec("QS3D_RECOGNIZE_BLT_OPTIONS", "Tùy chọn nhận dạng", "QS3DRECOGNITIONOPTIONS", IconKind.Options)
+                        new RecognitionButtonSpec("QS3D_RECOGNIZE_BLT_OPTIONS", "Tùy chọn nhận dạng", "QS3DRECOGNITIONOPTIONS", IconKind.Options, enabled: false)
                     },
                     new[]
                     {
@@ -71,9 +71,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 AddPanel(panels, BeamPanelSourceId, "Dầm",
                     new[]
                     {
-                        new RecognitionButtonSpec("QS3D_RECOGNIZE_BLT_BOUNDARY", "Chọn đường biên", "QS3DRECOGNITIONBOUNDARY", IconKind.Boundary),
-                        new RecognitionButtonSpec("QS3D_RECOGNIZE_BLT_LABEL", "Chọn nhãn", "QS3DRECOGNITIONLABEL", IconKind.Label),
-                        new RecognitionButtonSpec("QS3D_RECOGNIZE_BLT_AUTO", "Tự động nhận dạng", "QS3DRECOGNITIONAUTO", IconKind.Auto)
+                        new RecognitionButtonSpec("QS3D_RECOGNIZE_BLT_BOUNDARY", "Chọn đường biên", "QS3DRECOGNITIONBOUNDARY", IconKind.Boundary, enabled: true),
+                        new RecognitionButtonSpec("QS3D_RECOGNIZE_BLT_LABEL", "Chọn nhãn", "QS3DRECOGNITIONLABEL", IconKind.Label, enabled: false),
+                        new RecognitionButtonSpec("QS3D_RECOGNIZE_BLT_AUTO", "Tự động nhận dạng", "QS3DRECOGNITIONAUTO", IconKind.Auto, enabled: true)
                     },
                     new[]
                     {
