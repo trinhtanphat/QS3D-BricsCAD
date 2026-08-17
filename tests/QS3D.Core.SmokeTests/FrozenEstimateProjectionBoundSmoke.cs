@@ -24,6 +24,11 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             KnownCountOverLimitFailsBeforeEnumeration();
+            NegativeGenericCountFailsBeforeEnumeration();
+            NegativeReadOnlyCountFailsBeforeEnumeration();
+            NegativeNonGenericCountFailsBeforeEnumeration();
+            ConflictingKnownCountsFailBeforeEnumeration();
+            OversizeKnownCountPreservesBoundPrecedence();
             ExactLimitIsAccepted();
             FirstOverLimitLineFailsWithoutOverrun();
         }
@@ -35,6 +40,51 @@ namespace QS3D.Core.SmokeTests
 
             AssertBoundError(error);
             Assert(!source.Enumerated, "Known-count over-limit projection must fail before source enumeration starts.");
+        }
+
+        private static void NegativeGenericCountFailsBeforeEnumeration()
+        {
+            var source = new GenericKnownCountLineSource(-1);
+            var error = Capture<InvalidOperationException>(() => FrozenEstimateProjection.Create(source));
+
+            AssertContains("invalid negative known count", error.Message, "Negative generic Count must fail closed.");
+            Assert(!source.Enumerated, "Negative generic Count must fail before source enumeration starts.");
+        }
+
+        private static void NegativeReadOnlyCountFailsBeforeEnumeration()
+        {
+            var source = new ReadOnlyKnownCountLineSource(-1);
+            var error = Capture<InvalidOperationException>(() => FrozenEstimateProjection.Create(source));
+
+            AssertContains("invalid negative known count", error.Message, "Negative read-only Count must fail closed.");
+            Assert(!source.Enumerated, "Negative read-only Count must fail before source enumeration starts.");
+        }
+
+        private static void NegativeNonGenericCountFailsBeforeEnumeration()
+        {
+            var source = new NonGenericKnownCountLineSource(-1);
+            var error = Capture<InvalidOperationException>(() => FrozenEstimateProjection.Create(source));
+
+            AssertContains("invalid negative known count", error.Message, "Negative non-generic Count must fail closed.");
+            Assert(!source.Enumerated, "Negative non-generic Count must fail before source enumeration starts.");
+        }
+
+        private static void ConflictingKnownCountsFailBeforeEnumeration()
+        {
+            var source = new MultiKnownCountLineSource(1, 2, 2);
+            var error = Capture<InvalidOperationException>(() => FrozenEstimateProjection.Create(source));
+
+            AssertContains("conflicting known counts", error.Message, "Conflicting known Counts must fail closed.");
+            Assert(!source.Enumerated, "Conflicting known Counts must fail before source enumeration starts.");
+        }
+
+        private static void OversizeKnownCountPreservesBoundPrecedence()
+        {
+            var source = new MultiKnownCountLineSource(-1, MaxLines + 1, 2);
+            var error = Capture<InvalidOperationException>(() => FrozenEstimateProjection.Create(source));
+
+            AssertBoundError(error);
+            Assert(!source.Enumerated, "Any oversize known Count must preserve bounded-error precedence before enumeration.");
         }
 
         private static void ExactLimitIsAccepted()
@@ -67,6 +117,13 @@ namespace QS3D.Core.SmokeTests
                 "Frozen estimate projection must preserve the bounded-line failure contract.");
         }
 
+        private static void AssertContains(string expected, string actual, string message)
+        {
+            Assert(
+                actual != null && actual.IndexOf(expected, StringComparison.Ordinal) >= 0,
+                message + " Actual=" + (actual ?? "<null>") + ".");
+        }
+
         private sealed class KnownCountLineSource : IReadOnlyCollection<EstimateLine>
         {
             internal bool Enumerated { get; private set; }
@@ -80,6 +137,102 @@ namespace QS3D.Core.SmokeTests
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class GenericKnownCountLineSource : ICollection<EstimateLine>
+        {
+            private readonly int _count;
+
+            internal GenericKnownCountLineSource(int count) { _count = count; }
+            internal bool Enumerated { get; private set; }
+            public int Count => _count;
+            public bool IsReadOnly => true;
+
+            public IEnumerator<EstimateLine> GetEnumerator()
+            {
+                Enumerated = true;
+                throw new InvalidOperationException("Generic counted source must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void Add(EstimateLine item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(EstimateLine item) => false;
+            public void CopyTo(EstimateLine[] array, int arrayIndex) => throw new NotSupportedException();
+            public bool Remove(EstimateLine item) => throw new NotSupportedException();
+        }
+
+        private sealed class ReadOnlyKnownCountLineSource : IReadOnlyCollection<EstimateLine>
+        {
+            private readonly int _count;
+
+            internal ReadOnlyKnownCountLineSource(int count) { _count = count; }
+            internal bool Enumerated { get; private set; }
+            public int Count => _count;
+
+            public IEnumerator<EstimateLine> GetEnumerator()
+            {
+                Enumerated = true;
+                throw new InvalidOperationException("Read-only counted source must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class NonGenericKnownCountLineSource : IEnumerable<EstimateLine>, ICollection
+        {
+            private readonly int _count;
+
+            internal NonGenericKnownCountLineSource(int count) { _count = count; }
+            internal bool Enumerated { get; private set; }
+            public int Count => _count;
+            public bool IsSynchronized => false;
+            public object SyncRoot => this;
+
+            public IEnumerator<EstimateLine> GetEnumerator()
+            {
+                Enumerated = true;
+                throw new InvalidOperationException("Non-generic counted source must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void CopyTo(Array array, int index) => throw new NotSupportedException();
+        }
+
+        private sealed class MultiKnownCountLineSource : ICollection<EstimateLine>, IReadOnlyCollection<EstimateLine>, ICollection
+        {
+            private readonly int _genericCount;
+            private readonly int _readOnlyCount;
+            private readonly int _nonGenericCount;
+
+            internal MultiKnownCountLineSource(int genericCount, int readOnlyCount, int nonGenericCount)
+            {
+                _genericCount = genericCount;
+                _readOnlyCount = readOnlyCount;
+                _nonGenericCount = nonGenericCount;
+            }
+
+            internal bool Enumerated { get; private set; }
+            int ICollection<EstimateLine>.Count => _genericCount;
+            int IReadOnlyCollection<EstimateLine>.Count => _readOnlyCount;
+            int ICollection.Count => _nonGenericCount;
+            bool ICollection<EstimateLine>.IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+
+            IEnumerator<EstimateLine> IEnumerable<EstimateLine>.GetEnumerator()
+            {
+                Enumerated = true;
+                throw new InvalidOperationException("Multi-count source must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable<EstimateLine>)this).GetEnumerator();
+            void ICollection<EstimateLine>.Add(EstimateLine item) => throw new NotSupportedException();
+            void ICollection<EstimateLine>.Clear() => throw new NotSupportedException();
+            bool ICollection<EstimateLine>.Contains(EstimateLine item) => false;
+            void ICollection<EstimateLine>.CopyTo(EstimateLine[] array, int arrayIndex) => throw new NotSupportedException();
+            bool ICollection<EstimateLine>.Remove(EstimateLine item) => throw new NotSupportedException();
+            void ICollection.CopyTo(Array array, int index) => throw new NotSupportedException();
         }
 
         private sealed class LineSource : IEnumerable<EstimateLine>
