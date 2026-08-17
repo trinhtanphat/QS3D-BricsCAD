@@ -59,7 +59,8 @@ namespace QS3D.Core.Domain
             var targetEnumerationVersion = project.ChangeVersion;
             var projectElementsAtStart = project.Elements.ToList();
             var knownCount = TryGetKnownCount(orderedGridElementIds);
-            if (project.ChangeVersion != targetEnumerationVersion)
+            var versionAfterKnownCount = project.ChangeVersion;
+            if (versionAfterKnownCount != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Grid renumber targets were being enumerated. Retry renumbering against the current project state.");
             if (knownCount.HasValue && knownCount.Value > MaxGridBatch)
                 throw new InvalidOperationException("A Grid renumber batch supports at most " + MaxGridBatch + " elements.");
