@@ -10,7 +10,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             RepairsFloorAliasAndPreservesCanonicalNoOp();
-            RepairsZoneAliasAndPreservesCanonicalNoOp();
+            RejectsZoneAliasAndPreservesCanonicalNoOp();
         }
 
         private static void RepairsFloorAliasAndPreservesCanonicalNoOp()
@@ -34,25 +34,29 @@ namespace QS3D.Core.SmokeTests
             Equal(canonicalVersion, project.ChangeVersion, "floor missing-id version");
         }
 
-        private static void RepairsZoneAliasAndPreservesCanonicalNoOp()
+        private static void RejectsZoneAliasAndPreservesCanonicalNoOp()
         {
             var project = new ProjectState("P-ACTIVE-ZONE-CANONICAL", "Active zone canonical regression");
             var zone = ProjectZoneService.Create(project, "zone-a", "Zone A");
-            project.ActiveZoneId = " ZONE-A ";
-            var beforeRepair = project.ChangeVersion;
-
-            ProjectZoneService.SetActive(project, " Zone-A ");
-
-            Equal(zone.Id, project.ActiveZoneId, "zone canonical repair");
-            Equal(beforeRepair + 1L, project.ChangeVersion, "zone repair version");
-
             var canonicalVersion = project.ChangeVersion;
+
+            Throws<ArgumentException>(() => ProjectZoneService.SetActive(project, " Zone-A "));
+            Equal(zone.Id, project.ActiveZoneId, "zone padded caller state");
+            Equal(canonicalVersion, project.ChangeVersion, "zone padded caller version");
+
+            project.ActiveZoneId = " ZONE-A ";
+            var corruptVersion = project.ChangeVersion;
+            Throws<ArgumentException>(() => ProjectZoneService.SetActive(project, zone.Id));
+            Equal(" ZONE-A ", project.ActiveZoneId, "zone padded stored state");
+            Equal(corruptVersion, project.ChangeVersion, "zone padded stored version");
+
+            project.ActiveZoneId = zone.Id;
             ProjectZoneService.SetActive(project, zone.Id);
-            Equal(canonicalVersion, project.ChangeVersion, "zone canonical no-op version");
+            Equal(corruptVersion, project.ChangeVersion, "zone canonical no-op version");
 
             Throws<InvalidOperationException>(() => ProjectZoneService.SetActive(project, "missing-zone"));
             Equal(zone.Id, project.ActiveZoneId, "zone missing-id state");
-            Equal(canonicalVersion, project.ChangeVersion, "zone missing-id version");
+            Equal(corruptVersion, project.ChangeVersion, "zone missing-id version");
         }
 
         private static void Equal<T>(T expected, T actual, string label)
