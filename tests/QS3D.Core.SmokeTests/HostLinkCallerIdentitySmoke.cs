@@ -21,7 +21,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void RejectsPaddedOpeningCallerIdsWithoutMutation()
         {
-            foreach (var openingId in new[] { " O1", "O1 ", " O1 ", "\tO1\t" })
+            foreach (var openingId in new[] { " O1", "O1 ", " O1 ", "\tO1\t", "\r\nO1\r\n" })
             {
                 var project = NewProject(out var wallA, out _, out var opening);
                 AssertRejectedWithoutMutation(
@@ -35,7 +35,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void RejectsPaddedWallCallerIdsWithoutMutation()
         {
-            foreach (var wallId in new[] { " W1", "W1 ", " W1 ", "\tW1\t" })
+            foreach (var wallId in new[] { " W1", "W1 ", " W1 ", "\tW1\t", "\r\nW1\r\n" })
             {
                 var project = NewProject(out var wallA, out _, out var opening);
                 AssertRejectedWithoutMutation(
@@ -49,7 +49,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void RejectsPaddedUnlinkCallerIdsWithoutMutation()
         {
-            foreach (var openingId in new[] { " O1", "O1 ", " O1 ", "\tO1\t" })
+            foreach (var openingId in new[] { " O1", "O1 ", " O1 ", "\tO1\t", "\r\nO1\r\n" })
             {
                 var project = NewProject(out var wallA, out _, out var opening);
                 opening.Properties["HostWallId"] = wallA.Id;
@@ -181,7 +181,10 @@ namespace QS3D.Core.SmokeTests
             return project;
         }
 
-        private static string Escape(string value) => value.Replace("\t", "\\t");
+        private static string Escape(string value) => value
+            .Replace("\t", "\\t")
+            .Replace("\r", "\\r")
+            .Replace("\n", "\\n");
 
         private static void SequenceEqual<T>(System.Collections.Generic.IEnumerable<T> expected, System.Collections.Generic.IEnumerable<T> actual, string label)
         {
