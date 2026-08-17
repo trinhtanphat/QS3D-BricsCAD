@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
@@ -89,16 +90,25 @@ namespace QS3D.Core.Cost
             CfaM2 = cfaM2 == 0m ? 0m : cfaM2;
             LibraryId = RateBookContract.RequireToken(libraryId, nameof(libraryId));
 
+            if (billItems == null) throw new ArgumentNullException(nameof(billItems));
+            if (buildUpRates == null) throw new ArgumentNullException(nameof(buildUpRates));
+            if (rateReferences == null) throw new ArgumentNullException(nameof(rateReferences));
+            if (libraryEntries == null) throw new ArgumentNullException(nameof(libraryEntries));
+            ValidateKnownCount(billItems, MaxBillItems, "bill items");
+            ValidateKnownCount(buildUpRates, MaxBuildUpRates, "build-up rates");
+            ValidateKnownCount(rateReferences, MaxRateReferences, "rate references");
+            ValidateKnownCount(libraryEntries, MaxLibraryEntries, "BQ library entries");
+
             BillItems = SnapshotBillItems(billItems);
             BuildUpRates = SnapshotBuildUpRates(buildUpRates);
             RateReferences = new RateReferenceGraph(Bounded(
-                rateReferences ?? throw new ArgumentNullException(nameof(rateReferences)),
+                rateReferences,
                 MaxRateReferences,
                 "rate references"));
             Library = new BqLibraryCatalog(
                 LibraryId,
                 Bounded(
-                    libraryEntries ?? throw new ArgumentNullException(nameof(libraryEntries)),
+                    libraryEntries,
                     MaxLibraryEntries,
                     "BQ library entries"));
 
@@ -207,6 +217,38 @@ namespace QS3D.Core.Cost
             }
             snapshot.Sort(CompareBuildUps);
             return new ReadOnlyCollection<BuildUpRateSnapshot>(snapshot.ToArray());
+        }
+
+        private static void ValidateKnownCount<T>(IEnumerable<T> source, int maximum, string label)
+        {
+            var counts = new List<int>(3);
+            if (source is ICollection<T> collection)
+                counts.Add(collection.Count);
+            if (source is IReadOnlyCollection<T> readOnlyCollection)
+                counts.Add(readOnlyCollection.Count);
+            if (source is ICollection nonGenericCollection)
+                counts.Add(nonGenericCollection.Count);
+
+            if (counts.Count == 0) return;
+
+            var expected = counts[0];
+            var maximumReported = expected;
+            var hasNegative = expected < 0;
+            var hasConflict = false;
+            for (var i = 1; i < counts.Count; i++)
+            {
+                var current = counts[i];
+                if (current < 0) hasNegative = true;
+                if (current != expected) hasConflict = true;
+                if (current > maximumReported) maximumReported = current;
+            }
+
+            if (maximumReported > maximum)
+                throw new InvalidOperationException("TBQ workspace supports at most " + maximum + " " + label + ".");
+            if (hasNegative)
+                throw new InvalidOperationException("TBQ workspace " + label + " collection reports an invalid negative known count.");
+            if (hasConflict)
+                throw new InvalidOperationException("TBQ workspace " + label + " collection reports conflicting known counts.");
         }
 
         private static IEnumerable<T> Bounded<T>(IEnumerable<T> source, int maximum, string label)
