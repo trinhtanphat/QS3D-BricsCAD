@@ -87,12 +87,13 @@ namespace QS3D.Core.Domain
             foreach (var key in RoomReferencePropertyKeys)
             {
                 if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
-                candidates.Add(raw.Trim());
+                candidates.Add(CanonicalRoomReferenceId(raw, element, key));
             }
 
-            foreach (var dependencyRaw in element.DependsOn.Where(x => !string.IsNullOrWhiteSpace(x)))
+            foreach (var dependencyRaw in element.DependsOn)
             {
-                var dependencyId = dependencyRaw.Trim();
+                if (string.IsNullOrWhiteSpace(dependencyRaw)) continue;
+                var dependencyId = CanonicalRoomReferenceId(dependencyRaw, element, "DependsOn");
                 var dependency = project.FindElement(dependencyId);
                 if (dependency != null && dependency.Category == ElementCategory.Room)
                     candidates.Add(dependency.Id);
@@ -374,11 +375,23 @@ namespace QS3D.Core.Domain
             return resolved.AsReadOnly();
         }
 
+        private static string CanonicalRoomReferenceId(string raw, ProjectElement element, string source)
+        {
+            var canonical = raw.Trim();
+            if (!string.Equals(raw, canonical, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Room provenance id on " + element.Id + "/" + source +
+                    " must be canonical without surrounding whitespace.");
+            return canonical;
+        }
+
         private static bool HasStaleAutoRoomAncestor(ProjectState project, ProjectElement element, ISet<string> visited)
         {
             if (!visited.Add(element.Id)) return false;
-            foreach (var dependencyId in element.DependsOn.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()))
+            foreach (var dependencyRaw in element.DependsOn)
             {
+                if (string.IsNullOrWhiteSpace(dependencyRaw)) continue;
+                var dependencyId = CanonicalRoomReferenceId(dependencyRaw, element, "DependsOn");
                 var dependency = project.FindElement(dependencyId);
                 if (dependency == null) continue;
                 if (IsStaleAutoRoom(dependency)) return true;
