@@ -9,6 +9,7 @@ PROPERTIES = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.Dedicat
 LAYOUT = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
 STORE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Services" / "UserUiLayoutStore.cs"
 WORKSPACE_XAML = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.xaml"
+WORKSPACE_CODE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.xaml.cs"
 SELECTION = ROOT / "src" / "QS3D.BricsCAD.V25" / "SelectionSyncCoordinator.cs"
 errors = []
 
@@ -25,6 +26,7 @@ properties = read(PROPERTIES)
 layout = read(LAYOUT)
 store = read(STORE)
 workspace_xaml = read(WORKSPACE_XAML)
+workspace_code = read(WORKSPACE_CODE)
 selection = read(SELECTION)
 
 for token in (
@@ -89,13 +91,30 @@ for token in (
     'x:Name="PropertyList"',
     'ItemsSource="{Binding Properties}"',
     'ItemsSource="{Binding PropertyScopes}"',
+    'SelectedItem="{Binding SelectedPropertyScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"',
     'x:Name="PropertySearch"',
+    'Text="{Binding Value, UpdateSourceTrigger=LostFocus}"',
+    'IsChecked="{Binding BooleanValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"',
+    'Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"',
+    'IsReadOnly="{Binding IsReadOnly}"',
+    'IsEnabled="{Binding IsEditable}"',
     'Click="OnResetPropertyClick"',
     'Value="Boolean"',
     'Value="Choice"',
 ):
     if token not in workspace_xaml:
-        errors.append("real QS3D Properties editor contract missing from WorkspacePanel.xaml: " + token)
+        errors.append("real editable QS3D Properties editor contract missing from WorkspacePanel.xaml: " + token)
+
+for token in (
+    "OnResetPropertyClick",
+    "button.CommandParameter is PropertyRowViewModel row",
+    "row.ResetValue();",
+):
+    if token not in workspace_code:
+        errors.append("real QS3D Properties reset/write-back handler missing: " + token)
+
+if "new WorkspaceViewModel" in properties:
+    errors.append("dedicated QS3D Properties host must not construct a second WorkspaceViewModel")
 
 for token in (
     "PropertiesPaletteWidth",
@@ -132,4 +151,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BIM mode owns a distinct QS3D Properties PaletteSet by dynamically reparenting the existing project-aware PropertyList editor with its original WorkspaceViewModel/scope/search/typed-edit/reset behavior; explicit BIM activation repairs invalid host-restored palette sizes from normalized per-user fallbacks, corrupt dimensions cannot poison persistence of other palettes, ordinary ShowWorkspace restores the same editor in-place, selection changes respect manual close, and native BricsCAD Properties is not used as a substitute.")
+print("PASS: BIM mode owns a distinct QS3D Properties PaletteSet by dynamically reparenting the existing project-aware PropertyList editor with its original WorkspaceViewModel/scope/search/typed-edit/reset behavior; editability/write-back semantics are pinned for text/boolean/choice/scope/reset paths; explicit BIM activation repairs invalid host-restored palette sizes from normalized per-user fallbacks, corrupt dimensions cannot poison persistence of other palettes, ordinary ShowWorkspace restores the same editor in-place, selection changes respect manual close, and native BricsCAD Properties is not used as a substitute.")
