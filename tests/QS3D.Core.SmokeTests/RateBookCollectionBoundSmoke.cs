@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
         {
             CountedOversizeFailsBeforeEnumeration();
             ConflictingOversizedCountContractsFailBeforeEnumeration();
+            MixedNegativeAndOversizeCountsPreserveBoundPrecedence();
             ConflictingInBoundCountContractsFailBeforeEnumeration();
             StreamingOversizeStopsAtFirstDisallowedItem();
             ExactBoundaryRemainsAccepted();
@@ -37,6 +38,29 @@ namespace QS3D.Core.SmokeTests
 
             Equal(0, source.GetEnumeratorCalls, "An oversized RateBook count contract must fail before enumeration even when another contract reports a small count.");
             Contains("at most 10000", error.Message, "Conflicting oversize failure must preserve the RateBook item-bound failure.");
+        }
+
+        private static void MixedNegativeAndOversizeCountsPreserveBoundPrecedence()
+        {
+            AssertMixedCountBoundPrecedence(-1, MaximumItems + 1, 2, "negative generic / oversized readonly");
+            AssertMixedCountBoundPrecedence(MaximumItems + 1, -1, 2, "oversized generic / negative readonly");
+            AssertMixedCountBoundPrecedence(2, MaximumItems + 1, -1, "oversized readonly / negative non-generic");
+        }
+
+        private static void AssertMixedCountBoundPrecedence(
+            int genericCount,
+            int readOnlyCount,
+            int nonGenericCount,
+            string scenario)
+        {
+            var source = new MultiContractNeverEnumerated(genericCount, readOnlyCount, nonGenericCount);
+            var error = Capture<InvalidOperationException>(() => new RateBook("BOOK-MIXED-KNOWN-COUNTS", source));
+
+            Equal(0, source.GetEnumeratorCalls, scenario + " must fail before enumeration.");
+            Contains(
+                "at most 10000",
+                error.Message,
+                scenario + " must preserve capacity-error precedence whenever any known Count exceeds the RateBook bound.");
         }
 
         private static void ConflictingInBoundCountContractsFailBeforeEnumeration()
