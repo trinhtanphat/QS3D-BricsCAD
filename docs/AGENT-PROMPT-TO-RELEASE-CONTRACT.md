@@ -153,6 +153,17 @@ For yes/no lifecycle questions, make the meaning visually explicit. Examples:
 ➖ Local/runtime evidence: N/A — docs-only change
 ```
 
+## Durable owner corrections and owner-facing brevity
+
+When the owner corrects how agents should work, report, continue, merge, release, or communicate, treat a durable correction as repository policy work rather than as a chat-only preference.
+
+- Persist a durable correction in the relevant canonical `.md` policy on the same task carrier when repository policy is the intended source of truth.
+- Do not substitute a chat promise such as `từ giờ mình sẽ...`, `from now on I will...`, or a repeated explanation of the workflow for actually updating the policy Markdown.
+- After the policy change is recorded, report the concrete repository state/evidence only; do not lecture the owner by restating rules they just supplied.
+- Do not assign the owner unnecessary next steps. If the current session is authorized and technically able to perform the next repository lifecycle action, perform or continue that action on the canonical carrier instead of telling the owner to do it.
+- Ask the owner for an action or decision only when repository policy genuinely requires owner-only authorization/input that is not already present.
+- When no repository action remains, `Next exact action` is `none`; do not append procedural advice, a workflow promise, or instructions telling the owner what to do next.
+
 ## Mandatory per-prompt status report
 
 At the end of **every owner prompt that asks an agent/chat session to change, continue, fix, validate, integrate, merge, or release repository work**, report the exact current state in this form. Do not replace it with a generic `done`, `fixed`, or `completed` statement.
@@ -185,23 +196,23 @@ For a remote/source-only agent, a parked local gate uses `➖ Local/runtime: LOC
 
 The report must use real GitHub/CI/release evidence from the current carrier and current published state. Do not fill unknown fields with guessed identifiers, predicted versions, or stale conversation state.
 
-## Mandatory `Hướng làm gì tiếp theo` section
+## Conditional `Hướng làm gì tiếp theo` section
 
-Immediately after the mandatory lifecycle/status report above, every final per-prompt report must include a dedicated section with the exact heading:
+Include a dedicated section with the exact heading below **only when a real next repository action remains or an explicit owner decision/input is genuinely required**:
 
 ```text
 ## Hướng làm gì tiếp theo
 ```
 
-The section is mandatory even when the task is blocked or already complete.
+Do not include this section merely to restate the workflow, promise future behavior, or tell the owner to repeat an instruction already authorized.
 
 - State **1–3 concrete next actions in priority order**. The first action must agree with the `Next exact action` lifecycle field above; do not give two different next actions in the same report.
-- If progress depends on a gate or blocker, name the exact condition first (for example: branch CI `SUCCESS` on the current head, PR protected checks green, merge authorization, exact-main validation, or required LOCAL_ONLY evidence), then state what action follows when that condition is satisfied.
-- If this session can perform the next lifecycle action under current repository authorization and tooling, the report should say that action will be continued on the same canonical carrier rather than asking the owner to repeat an already-authorized instruction.
+- If progress depends on a gate or blocker, name the exact condition first (for example: branch CI `SUCCESS` on the current head, PR protected checks green, exact-main validation, or required LOCAL_ONLY evidence), then state what action follows when that condition is satisfied.
+- If this session can perform the next lifecycle action under current repository authorization and tooling, continue it on the same canonical carrier rather than asking the owner to repeat an already-authorized instruction.
 - Do not use vague wording such as `continue`, `check later`, `wait`, `monitor`, or `do more` without naming the concrete carrier/gate/action.
-- If no repository action remains, write exactly: `Không còn hành động repository bắt buộc; chờ prompt mới của owner.`
+- If the lifecycle is terminal and `Next exact action: none`, omit this section entirely. The terminal status report is sufficient.
 
-This section is owner-facing guidance, while `Next exact action` remains the compact lifecycle field used for traceability. Both must stay consistent.
+This section is conditional owner-facing guidance. `Next exact action` remains the compact lifecycle field used for traceability and must stay consistent with it whenever the section is present.
 
 ## Completion wording rules
 
