@@ -8,94 +8,172 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class SemanticSheetIndexKnownCountContractSmoke
     {
-        private const int Limit = 10000;
-
-        [ModuleInitializer]
-        internal static void Initialize()
+        internal static void Run()
         {
-            RejectsNonGenericCountBeforeEnumeration();
-            RejectsConflictingCountContractsBeforeEnumeration();
+            NegativeGenericCountFailsBeforeEnumeration();
+            NegativeReadOnlyCountFailsBeforeEnumeration();
+            NegativeNonGenericCountFailsBeforeEnumeration();
+            ConflictingKnownCountsFailBeforeEnumeration();
+            ConsistentKnownCountsRemainAccepted();
         }
 
-        private static void RejectsNonGenericCountBeforeEnumeration()
+        private static void NegativeGenericCountFailsBeforeEnumeration()
         {
-            var source = new NonGenericOversizedSource();
-            ThrowsLimit(() => SemanticSheetIndexBuilder.Build(source), "non-generic ICollection");
-            if (source.Enumerated)
-                throw new InvalidOperationException("SemanticSheetIndexKnownCountContractSmoke enumerated an oversized non-generic ICollection.");
+            var source = new NegativeGenericCountSource();
+            var error = Capture<InvalidOperationException>(() => SemanticSheetIndexBuilder.Build(source));
+            Equal(1, source.CountReads, "ICollection<T>.Count must be inspected exactly once.");
+            Equal(0, source.GetEnumeratorCalls, "Negative ICollection<T>.Count must fail before enumeration.");
+            Contains("negative known count", error.Message, "Negative generic known count must fail closed explicitly.");
         }
 
-        private static void RejectsConflictingCountContractsBeforeEnumeration()
+        private static void NegativeReadOnlyCountFailsBeforeEnumeration()
         {
-            var source = new ConflictingCountSource();
-            ThrowsLimit(() => SemanticSheetIndexBuilder.Build(source), "conflicting Count contracts");
-            if (source.Enumerated)
-                throw new InvalidOperationException("SemanticSheetIndexKnownCountContractSmoke enumerated a source whose IReadOnlyCollection Count exceeded the limit.");
+            var source = new NegativeReadOnlyCountSource();
+            var error = Capture<InvalidOperationException>(() => SemanticSheetIndexBuilder.Build(source));
+            Equal(1, source.CountReads, "IReadOnlyCollection<T>.Count must be inspected exactly once.");
+            Equal(0, source.GetEnumeratorCalls, "Negative IReadOnlyCollection<T>.Count must fail before enumeration.");
+            Contains("negative known count", error.Message, "Negative read-only known count must fail closed explicitly.");
         }
 
-        private static void ThrowsLimit(Action action, string label)
+        private static void NegativeNonGenericCountFailsBeforeEnumeration()
         {
-            try
-            {
-                action();
-            }
-            catch (InvalidOperationException ex)
-            {
-                if (ex.Message.IndexOf("10000", StringComparison.Ordinal) >= 0 &&
-                    ex.Message.IndexOf("at most", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return;
-                throw new InvalidOperationException(
-                    "SemanticSheetIndexKnownCountContractSmoke " + label + " returned the wrong diagnostic: " + ex.Message,
-                    ex);
-            }
-
-            throw new InvalidOperationException(
-                "SemanticSheetIndexKnownCountContractSmoke " + label + " did not fail closed.");
+            var source = new NegativeNonGenericCountSource();
+            var error = Capture<InvalidOperationException>(() => SemanticSheetIndexBuilder.Build(source));
+            Equal(1, source.CountReads, "ICollection.Count must be inspected exactly once.");
+            Equal(0, source.GetEnumeratorCalls, "Negative ICollection.Count must fail before enumeration.");
+            Contains("negative known count", error.Message, "Negative non-generic known count must fail closed explicitly.");
         }
 
-        private sealed class NonGenericOversizedSource : IEnumerable<SemanticSheetPlan>, ICollection
+        private static void ConflictingKnownCountsFailBeforeEnumeration()
         {
-            public bool Enumerated { get; private set; }
-            public int Count => Limit + 1;
+            var source = new MultiCountSource(1, 2, 1, Sheet("S-1", "A-001"));
+            var error = Capture<InvalidOperationException>(() => SemanticSheetIndexBuilder.Build(source));
+            Equal(1, source.GenericCountReads, "ICollection<T>.Count must be inspected exactly once.");
+            Equal(1, source.ReadOnlyCountReads, "IReadOnlyCollection<T>.Count must be inspected exactly once.");
+            Equal(1, source.NonGenericCountReads, "ICollection.Count must be inspected exactly once.");
+            Equal(0, source.GetEnumeratorCalls, "Conflicting known counts must fail before enumeration.");
+            Contains("conflicting known counts", error.Message, "Conflicting known counts must fail closed explicitly.");
+        }
+
+        private static void ConsistentKnownCountsRemainAccepted()
+        {
+            var sheet = Sheet("S-1", "A-001");
+            var source = new MultiCountSource(1, 1, 1, sheet);
+            var index = SemanticSheetIndexBuilder.Build(source);
+            Equal(1, source.GenericCountReads, "Consistent ICollection<T>.Count must be inspected exactly once.");
+            Equal(1, source.ReadOnlyCountReads, "Consistent IReadOnlyCollection<T>.Count must be inspected exactly once.");
+            Equal(1, source.NonGenericCountReads, "Consistent ICollection.Count must be inspected exactly once.");
+            Equal(1, source.GetEnumeratorCalls, "Consistent known counts must still enumerate once.");
+            Equal(1, index.Rows.Count, "Consistent counted source should produce one index row.");
+            Equal(sheet.Id, index.Rows[0].SheetId, "Accepted row must preserve sheet identity.");
+        }
+
+        private static SemanticSheetPlan Sheet(string id, string number)
+        {
+            var definition = new SemanticSheetDefinition(
+                id,
+                number,
+                "Sheet " + number,
+                841d,
+                594d,
+                Array.Empty<SemanticSheetPlacementDefinition>());
+            return SemanticSheetPlanner.Build(definition, Array.Empty<SemanticViewPlan>());
+        }
+
+        private static TException Capture<TException>(Action action) where TException : Exception
+        {
+            try { action(); }
+            catch (TException ex) { return ex; }
+            throw new InvalidOperationException("Expected exception " + typeof(TException).Name + ".");
+        }
+
+        private static void Contains(string expected, string actual, string message)
+        {
+            if (actual == null || actual.IndexOf(expected, StringComparison.Ordinal) < 0)
+                throw new InvalidOperationException(message + " Actual: " + actual);
+        }
+
+        private static void Equal<T>(T expected, T actual, string message)
+        {
+            if (!EqualityComparer<T>.Default.Equals(expected, actual))
+                throw new InvalidOperationException(message + " Expected=" + expected + ", actual=" + actual + ".");
+        }
+
+        private sealed class NegativeGenericCountSource : ICollection<SemanticSheetPlan>
+        {
+            public int Count { get { CountReads++; return -1; } }
+            public bool IsReadOnly => true;
+            internal int CountReads { get; private set; }
+            internal int GetEnumeratorCalls { get; private set; }
+            public IEnumerator<SemanticSheetPlan> GetEnumerator() { GetEnumeratorCalls++; throw new InvalidOperationException("Must not enumerate."); }
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void Add(SemanticSheetPlan item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(SemanticSheetPlan item) => false;
+            public void CopyTo(SemanticSheetPlan[] array, int arrayIndex) => throw new NotSupportedException();
+            public bool Remove(SemanticSheetPlan item) => throw new NotSupportedException();
+        }
+
+        private sealed class NegativeReadOnlyCountSource : IReadOnlyCollection<SemanticSheetPlan>
+        {
+            public int Count { get { CountReads++; return -1; } }
+            internal int CountReads { get; private set; }
+            internal int GetEnumeratorCalls { get; private set; }
+            public IEnumerator<SemanticSheetPlan> GetEnumerator() { GetEnumeratorCalls++; throw new InvalidOperationException("Must not enumerate."); }
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class NegativeNonGenericCountSource : IEnumerable<SemanticSheetPlan>, ICollection
+        {
+            public int Count { get { CountReads++; return -1; } }
             public bool IsSynchronized => false;
             public object SyncRoot => this;
-
-            public IEnumerator<SemanticSheetPlan> GetEnumerator()
-            {
-                Enumerated = true;
-                throw new InvalidOperationException("Oversized non-generic ICollection must fail before enumeration.");
-            }
-
+            internal int CountReads { get; private set; }
+            internal int GetEnumeratorCalls { get; private set; }
+            public IEnumerator<SemanticSheetPlan> GetEnumerator() { GetEnumeratorCalls++; throw new InvalidOperationException("Must not enumerate."); }
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
             public void CopyTo(Array array, int index) => throw new NotSupportedException();
         }
 
-        private sealed class ConflictingCountSource :
-            ICollection<SemanticSheetPlan>,
-            IReadOnlyCollection<SemanticSheetPlan>,
-            ICollection
+        private sealed class MultiCountSource : ICollection<SemanticSheetPlan>, IReadOnlyCollection<SemanticSheetPlan>, ICollection
         {
-            public bool Enumerated { get; private set; }
-            int ICollection<SemanticSheetPlan>.Count => 1;
-            int IReadOnlyCollection<SemanticSheetPlan>.Count => Limit + 1;
-            int ICollection.Count => 1;
-            public bool IsReadOnly => true;
-            bool ICollection.IsSynchronized => false;
-            object ICollection.SyncRoot => this;
+            private readonly int _genericCount;
+            private readonly int _readOnlyCount;
+            private readonly int _nonGenericCount;
+            private readonly SemanticSheetPlan[] _items;
 
-            public IEnumerator<SemanticSheetPlan> GetEnumerator()
+            internal MultiCountSource(int genericCount, int readOnlyCount, int nonGenericCount, params SemanticSheetPlan[] items)
             {
-                Enumerated = true;
-                throw new InvalidOperationException("Conflicting known Count contracts must fail before enumeration.");
+                _genericCount = genericCount;
+                _readOnlyCount = readOnlyCount;
+                _nonGenericCount = nonGenericCount;
+                _items = items;
             }
 
+            int ICollection<SemanticSheetPlan>.Count { get { GenericCountReads++; return _genericCount; } }
+            int IReadOnlyCollection<SemanticSheetPlan>.Count { get { ReadOnlyCountReads++; return _readOnlyCount; } }
+            int ICollection.Count { get { NonGenericCountReads++; return _nonGenericCount; } }
+            public bool IsReadOnly => true;
+            public bool IsSynchronized => false;
+            public object SyncRoot => this;
+            internal int GenericCountReads { get; private set; }
+            internal int ReadOnlyCountReads { get; private set; }
+            internal int NonGenericCountReads { get; private set; }
+            internal int GetEnumeratorCalls { get; private set; }
+            public IEnumerator<SemanticSheetPlan> GetEnumerator() { GetEnumeratorCalls++; return ((IEnumerable<SemanticSheetPlan>)_items).GetEnumerator(); }
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-            public bool Contains(SemanticSheetPlan item) => false;
-            public void CopyTo(SemanticSheetPlan[] array, int arrayIndex) => throw new NotSupportedException();
-            void ICollection.CopyTo(Array array, int index) => throw new NotSupportedException();
             public void Add(SemanticSheetPlan item) => throw new NotSupportedException();
             public void Clear() => throw new NotSupportedException();
+            public bool Contains(SemanticSheetPlan item) => ((ICollection<SemanticSheetPlan>)_items).Contains(item);
+            public void CopyTo(SemanticSheetPlan[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
             public bool Remove(SemanticSheetPlan item) => throw new NotSupportedException();
+            public void CopyTo(Array array, int index) => ((ICollection)_items).CopyTo(array, index);
         }
+    }
+
+    internal static class SemanticSheetIndexKnownCountContractRegistration
+    {
+        [ModuleInitializer]
+        internal static void Initialize() => SemanticSheetIndexKnownCountContractSmoke.Run();
     }
 }
