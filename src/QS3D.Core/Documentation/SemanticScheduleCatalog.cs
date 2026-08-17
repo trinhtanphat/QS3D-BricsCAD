@@ -75,6 +75,7 @@ namespace QS3D.Core.Documentation
         private const int MaxSchedules = 128;
         internal const int MaxIds = 5000;
         internal const int MaxColumns = 32;
+        private const int MaxRows = 5000;
         private const int MaxPayloadChars = 1024 * 1024;
 
         public static IReadOnlyList<SemanticScheduleDefinition> Load(ProjectState project)
@@ -166,17 +167,23 @@ namespace QS3D.Core.Documentation
             foreach (var id in exclude)
                 if (project.FindElement(id) == null) throw new InvalidOperationException("Semantic schedule exclude list references missing Element " + id + ".");
 
-            var candidates = project.Elements.ToArray();
-            if (candidates.Any(x => x == null))
-                throw new InvalidOperationException("Project contains a null semantic element.");
-
             var categorySet = new HashSet<ElementCategory>(normalized.Categories);
-            var ids = candidates
-                .Where(x => categorySet.Count == 0 || categorySet.Contains(x.Category))
-                .Where(x => normalized.FloorId.Length == 0 || string.Equals((x.FloorId ?? string.Empty).Trim(), normalized.FloorId, StringComparison.OrdinalIgnoreCase))
-                .Where(x => normalized.ZoneId.Length == 0 || string.Equals((x.ZoneId ?? string.Empty).Trim(), normalized.ZoneId, StringComparison.OrdinalIgnoreCase))
-                .Where(x => include.Count == 0 || include.Contains(x.Id))
-                .Where(x => !exclude.Contains(x.Id))
+            var matches = new List<ProjectElement>(Math.Min(project.Elements.Count, MaxRows));
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element.");
+                if (categorySet.Count > 0 && !categorySet.Contains(element.Category)) continue;
+                if (normalized.FloorId.Length > 0 && !string.Equals((element.FloorId ?? string.Empty).Trim(), normalized.FloorId, StringComparison.OrdinalIgnoreCase)) continue;
+                if (normalized.ZoneId.Length > 0 && !string.Equals((element.ZoneId ?? string.Empty).Trim(), normalized.ZoneId, StringComparison.OrdinalIgnoreCase)) continue;
+                if (include.Count > 0 && !include.Contains(element.Id)) continue;
+                if (exclude.Contains(element.Id)) continue;
+                if (matches.Count >= MaxRows)
+                    throw new InvalidOperationException("Semantic schedule supports at most 5000 matching elements.");
+                matches.Add(element);
+            }
+
+            var ids = matches
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Id, StringComparer.Ordinal)
                 .Select(x => x.Id)
