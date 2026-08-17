@@ -35,6 +35,7 @@ def require_order(text: str, needles, label: str) -> None:
 
 
 quantity = read("src/QS3D.BricsCAD.V25/Ribbon/QuantityReferenceRibbonAugmenter.cs")
+quantity_icons = read("src/QS3D.BricsCAD.V25/Ribbon/BltQuantityIconPolisher.cs")
 coordinator = read("src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator.cs")
 topbar = read("src/QS3D.BricsCAD.V25/Ribbon/BltTopbarTabContract.cs")
 
@@ -70,6 +71,14 @@ if panel_calls != [
     fail("quantity augmenter must add exactly the Cài đặt and Khối lượng panels in reference order")
 
 # Lock the exact owner-visible button order and production command routing.
+button_ids = (
+    "QS3D_QTY_BLT_SETTINGS",
+    "QS3D_QTY_BLT_CALCULATE",
+    "QS3D_QTY_BLT_EXPORT",
+    "QS3D_QTY_BLT_VIEW",
+    "QS3D_QTY_BLT_EXPLAIN",
+    "QS3D_QTY_BLT_COMPARE",
+)
 require_order(
     quantity,
     (
@@ -92,9 +101,47 @@ for token in (
 ):
     require(quantity, token, "large icon-first quantity button")
 
-# Stop/Start must be a real lifecycle boundary. Without Reset(), the static _initialized flag can
+# v160 had source-level Image/LargeImage assignments but no runtime read-back gate. The dedicated
+# final pass must own all six exact reference IDs, reapply image properties, request native Large
+# presentation, and refuse to mark the pass initialized unless BricsCAD exposes both images back.
+for button_id in button_ids:
+    require(quantity_icons, f'case "{button_id}":', "quantity icon ID ownership")
+
+for token in (
+    'if (polished != 6)',
+    'SetProperty(item, "Image", image);',
+    'SetProperty(item, "LargeImage", image);',
+    'SetProperty(item, "ShowImage", true);',
+    'SetEnumProperty(item, "Size", "Large");',
+    'private static bool HasCompleteVisibleIcon(object item)',
+    'GetProperty(item, "Image") != null',
+    'GetProperty(item, "LargeImage") != null',
+    'var image = new DrawingImage(group);',
+):
+    require(quantity_icons, token, "quantity final icon/read-back contract")
+
+# Distinct screenshot-familiar cues are clean-room vector geometry, not embedded owner assets.
+for cue in (
+    "AddGear(group, blueDeep, bluePale",
+    "Amber lightning bolt",
+    "Green upward export arrow",
+    "Four-column quantity chart",
+    "White report/table sheet",
+    "Blue balance with amber pivot/knob",
+):
+    require(quantity_icons, cue, "quantity clean-room visual cue")
+
+require(quantity, "if (!BltQuantityIconPolisher.TryInitialize())", "quantity host-tree icon finalization")
+require(quantity, "BltQuantityIconPolisher.Reset();", "quantity icon lifecycle reset")
+
+polish_call = quantity.find("if (!BltQuantityIconPolisher.TryInitialize())")
+initialized = quantity.find("_initialized = true;", polish_call)
+if polish_call < 0 or initialized < 0 or polish_call >= initialized:
+    fail("quantity icon host read-back must succeed before QuantityReferenceRibbonAugmenter becomes initialized")
+
+# Stop/Start must be a real lifecycle boundary. Without Reset(), the static _initialized flags can
 # skip reapplication after BricsCAD recreates the Ribbon tree during a coordinator restart.
-require(quantity, "public static void Reset() => _initialized = false;", "quantity reset primitive")
+require(quantity, "public static void Reset()", "quantity reset primitive")
 require(coordinator, "QuantityReferenceRibbonAugmenter.Reset();", "coordinator quantity teardown")
 require(coordinator, "ready = QuantityReferenceRibbonAugmenter.TryInitialize() && ready;", "coordinator quantity initialization")
 
@@ -105,5 +152,7 @@ if stop_start < 0 or reset < 0 or try_initialize_all < 0 or reset >= try_initial
     fail("quantity Reset must execute from RibbonInitializationCoordinator.Stop before the next initialization lifecycle")
 
 print(
-    "PASS: ĐỊNH LƯỢNG keeps the BLT3D topbar position, exactly two reference panels, exact owner button/command order, large icon-first presentation, legacy-panel cleanup, and restart-safe augmenter reset/reapply lifecycle."
+    "PASS: ĐỊNH LƯỢNG keeps the two-panel BLT3D-reference layout and exact command order, "
+    "reapplies six clean-room screenshot-familiar vector icons, verifies native Image/LargeImage "
+    "read-back before initialization, and remains restart-safe."
 )
