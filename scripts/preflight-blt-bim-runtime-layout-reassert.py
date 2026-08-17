@@ -25,6 +25,7 @@ five_zone = read(FIVE_ZONE)
 for token in (
     "SetVisibility(workspace: true, right: false, quantityInsight: false);",
     "SetVisibility(workspace: true, right: true, quantityInsight: true);",
+    "public static bool ShowBimWorkspace()",
     "viewport BricsCAD native ở giữa",
 ):
     if token not in palette:
@@ -36,7 +37,7 @@ for token in (
     "_bimSettleTicksRemaining--",
     "ReassertBimWorkspace();",
     "StartCenterPaletteCoordinator.Hide();",
-    "PaletteCoordinator.ShowBimWorkspace();",
+    "return PaletteCoordinator.ShowBimWorkspace();",
 ):
     if token not in activation:
         errors.append("BIM activation settle contract missing: " + token)
@@ -44,7 +45,7 @@ for token in (
 if "string.Equals(currentId, _lastTabId" in activation and "_bimSettleTicksRemaining > 0" not in activation:
     errors.append("same-tab polling still returns without a bounded BricsCAD dock-settle repair")
 
-successful_retry_order = "ReassertBimWorkspace();\n                        _bimSettleTicksRemaining--;"
+successful_retry_order = "if (ReassertBimWorkspace())\n                            _bimSettleTicksRemaining--;"
 consumed_before_retry = "_bimSettleTicksRemaining--;\n                        ReassertBimWorkspace();"
 if successful_retry_order not in activation or consumed_before_retry in activation:
     errors.append("same-tab settle retry must be consumed only after a successful BIM workspace reassert")
