@@ -111,7 +111,11 @@ def main() -> int:
             'host.Properties["SlabOpeningCutCount"] = CountAppliedOpenings(project, host.Id, currentSolidHandle)',
         ):
             require(replay, token, "slabOpen peer replay")
-        require(builder, "GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, update.Category)", "structural rebuild")
+        require(
+            builder,
+            "GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, update.Category)",
+            "structural rebuild",
+        )
 
         # Reuse the hardened document-scoped native Undo observer rather than
         # introducing an Ended-only hook. These tokens pin both exact matched
