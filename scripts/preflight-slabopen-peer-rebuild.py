@@ -27,6 +27,8 @@ def main():
             "SlabOpeningPeerReplayService.ReplayAppliedOpenings(",
             "update.PreviousHandle",
             "update.AppliedSlabOpeningIds",
+            "project.Touch();",
+            "undoTransition.StageAfter(project, afterSnapshot);",
             "transaction.Commit()",
         ))
         replay = require(REPLAY, (
@@ -51,11 +53,12 @@ def main():
 
     commit_pos = builder.find("GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, update.Category)")
     replay_pos = builder.find("SlabOpeningPeerReplayService.ReplayAppliedOpenings(", commit_pos)
-    touch_pos = builder.find("if (pending.Count > 0) project.Touch()", replay_pos)
-    tx_pos = builder.find("transaction.Commit()", touch_pos)
-    if min(commit_pos, replay_pos, touch_pos, tx_pos) < 0 or not (commit_pos < replay_pos < touch_pos < tx_pos):
+    touch_pos = builder.find("project.Touch();", replay_pos)
+    stage_after_pos = builder.find("undoTransition.StageAfter(project, afterSnapshot);", touch_pos)
+    tx_pos = builder.find("transaction.Commit()", stage_after_pos)
+    if min(commit_pos, replay_pos, touch_pos, stage_after_pos, tx_pos) < 0 or not (commit_pos < replay_pos < touch_pos < stage_after_pos < tx_pos):
         print("Slab peer-opening rebuild preflight FAILED")
-        print(" - peer replay must happen after new generated-handle commit and before the single project Touch/CAD transaction commit")
+        print(" - peer replay must happen after new generated-handle commit, before the single project Touch, and be captured in staged semantic Undo before CAD transaction commit")
         return 1
 
     capture_pos = builder.find("SlabOpeningPeerReplayService.CaptureAppliedOpeningIds(project, element, previousHandle)")
@@ -70,7 +73,7 @@ def main():
         print(" - internal peer replay must participate in StructuralSolidBuilder's one atomic project revision, not touch per opening")
         return 1
 
-    print("PASS: rebuilding a Slab captures exactly the slabOpen peers applied to the retiring Solid3d, replays them onto the new owned Solid3d inside the same CAD transaction, rewrites applied handle/fingerprint/count, and fails closed so outer CAD/project rollback remains atomic.")
+    print("PASS: rebuilding a Slab captures exactly the slabOpen peers applied to the retiring Solid3d, replays them onto the new owned Solid3d inside the same CAD transaction, rewrites applied handle/fingerprint/count, stages that semantic state for native Undo, and fails closed so outer CAD/project rollback remains atomic.")
     return 0
 
 
