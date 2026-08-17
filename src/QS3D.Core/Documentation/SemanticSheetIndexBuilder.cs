@@ -74,13 +74,18 @@ namespace QS3D.Core.Documentation
 
         private static List<SemanticSheetPlan> MaterializeBounded(IEnumerable<SemanticSheetPlan> sheets)
         {
+            if (sheets is ICollection<SemanticSheetPlan> collection && collection.Count > MaxSheets)
+                throw TooManySheets();
+            if (sheets is IReadOnlyCollection<SemanticSheetPlan> readOnlyCollection && readOnlyCollection.Count > MaxSheets)
+                throw TooManySheets();
+
             var result = new List<SemanticSheetPlan>(Math.Min(MaxSheets, 256));
             using (var enumerator = sheets.GetEnumerator())
             {
                 while (enumerator.MoveNext())
                 {
                     if (result.Count >= MaxSheets)
-                        throw new InvalidOperationException("Semantic sheet index supports at most " + MaxSheets + " sheets.");
+                        throw TooManySheets();
                     var sheet = enumerator.Current;
                     if (sheet == null)
                         throw new ArgumentException("Semantic sheet index source cannot contain a null sheet at index " + result.Count + ".", nameof(sheets));
@@ -88,6 +93,11 @@ namespace QS3D.Core.Documentation
                 }
             }
             return result;
+        }
+
+        private static InvalidOperationException TooManySheets()
+        {
+            return new InvalidOperationException("Semantic sheet index supports at most " + MaxSheets + " sheets.");
         }
     }
 }
