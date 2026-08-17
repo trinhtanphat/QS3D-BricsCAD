@@ -206,6 +206,7 @@ namespace QS3D.Core.Coordination
 
         private static double Overlap(double aMin, double aMax, double bMin, double bMax)
         {
+            if (aMax <= bMin || bMax <= aMin) return 0d;
             var upper = Math.Min(aMax, bMax);
             var lower = Math.Max(aMin, bMin);
             return SubtractFinite(upper, lower, "Coordination overlap extent");
