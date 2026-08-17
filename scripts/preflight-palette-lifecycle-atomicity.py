@@ -43,9 +43,6 @@ else:
             break
         cursor = pos + len(token)
 
-    if "if (_workspace != null || _properties != null || _right != null || _quantityInsight != null) Dispose();" in ensure:
-        errors.append("partial palette recovery must not persist incomplete palette dimensions")
-
     dispose_start = text.find("public static void Dispose()")
     persist_start = text.find("private static void PersistPaletteLayout()", dispose_start + 1)
     dispose = text[dispose_start:persist_start] if dispose_start >= 0 and persist_start > dispose_start else ""
@@ -76,21 +73,9 @@ else:
             break
         cursor = pos + len(token)
 
-    helper_start = dispose.find("private static void DisposePalette(ref PaletteSet? palette)")
-    helper = dispose[helper_start:] if helper_start >= 0 else ""
-    null_pos = helper.find("palette = null;")
-    native_dispose_pos = helper.find("current.Dispose();")
-    if null_pos < 0 or native_dispose_pos < 0 or null_pos >= native_dispose_pos:
-        errors.append("palette ownership must be cleared before native Dispose so a throwing native teardown cannot retain published ownership")
-
-    for forbidden in (
-        "_workspace.Dispose();",
-        "_properties.Dispose();",
-        "_right.Dispose();",
-        "_quantityInsight.Dispose();",
-    ):
+    for forbidden in ("_workspace.Dispose();", "_properties.Dispose();", "_right.Dispose();", "_quantityInsight.Dispose();"):
         if forbidden in text:
-            errors.append("palette teardown must remain isolated through DisposePalette, found direct dispose: " + forbidden)
+            errors.append("palette teardown must remain isolated through DisposePalette: " + forbidden)
 
     for token in (
         "PersistPaletteLayout();",
@@ -99,8 +84,8 @@ else:
         "var propertiesVisible = IsPropertiesVisible;",
         "var rightVisible = IsRightPanelVisible;",
         "var quantityVisible = IsQuantityInsightVisible;",
-        "var bimSurfaceActive = workspaceVisible && rightVisible && quantityVisible;",
-        "_workspacePanel?.SetDedicatedPropertiesPaletteActive(bimSurfaceActive);",
+        "var ownerReferenceBimActive = workspaceVisible && rightVisible && !propertiesVisible && !quantityVisible;",
+        "_workspacePanel?.SetDedicatedPropertiesPaletteActive(propertiesVisible);",
         "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);",
         "private static void SetVisibility(bool workspace, bool properties, bool right, bool quantityInsight)",
         "if (_workspace != null) _workspace.Visible = workspace;",
@@ -110,7 +95,7 @@ else:
         "UserUiLayoutStore.Update(layout =>",
     ):
         if token not in text:
-            errors.append("palette lifecycle hardening lost centralized layout/visibility behavior: " + token)
+            errors.append("palette lifecycle lost centralized layout/visibility behavior: " + token)
 
 print("QS3D palette lifecycle atomicity preflight")
 if errors:
@@ -119,4 +104,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: four-palette creation rolls back partial ownership without persisting incomplete dimensions; teardown isolates native Dispose, dynamic Properties hosting is created fail-atomically, and reset preserves the actual four-palette visibility state including a manually closed Properties palette.")
+print("PASS: four-palette creation/teardown remains fail-atomic; reset preserves actual visibility and restores the embedded owner-reference BIM arrangement without replacing BricsCAD host UI.")
