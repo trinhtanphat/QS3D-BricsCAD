@@ -9,6 +9,7 @@ namespace QS3D.Core.SmokeTests
     internal static class DeepCostCollectionBoundSmoke
     {
         private const int MaximumEntries = 10000;
+        private const int MaximumRateReferenceEdges = 50000;
 
         [ModuleInitializer]
         internal static void Initialize() => Run();
@@ -23,7 +24,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void KnownCountInputsRejectBeforeEnumeration()
         {
-            var edges = new KnownCountCollection<RateReferenceEdge>(MaximumEntries + 1);
+            var edges = new KnownCountCollection<RateReferenceEdge>(MaximumRateReferenceEdges + 1);
             Throws<InvalidOperationException>(() => new RateReferenceGraph(edges));
             Equal(false, edges.EnumerationStarted, "Known-count oversized rate-reference input must fail before enumeration.");
 
@@ -50,8 +51,8 @@ namespace QS3D.Core.SmokeTests
         {
             var edgeCounter = new ProductionCounter();
             Throws<InvalidOperationException>(() =>
-                new RateReferenceGraph(EdgeSequence(MaximumEntries + 2, edgeCounter)));
-            Equal(MaximumEntries + 1, edgeCounter.Produced, "Rate-reference streaming bound requested entry 10,002.");
+                new RateReferenceGraph(EdgeSequence(MaximumRateReferenceEdges + 2, edgeCounter)));
+            Equal(MaximumRateReferenceEdges + 1, edgeCounter.Produced, "Rate-reference streaming bound requested an entry after the first disallowed edge.");
 
             var rateCounter = new ProductionCounter();
             Throws<InvalidOperationException>(() =>
@@ -79,13 +80,13 @@ namespace QS3D.Core.SmokeTests
 
         private static void ExactBoundariesRemainAccepted()
         {
-            var edges = new List<RateReferenceEdge>(MaximumEntries);
-            for (var i = 0; i < MaximumEntries; i++)
+            var edges = new List<RateReferenceEdge>(MaximumRateReferenceEdges);
+            for (var i = 0; i < MaximumRateReferenceEdges; i++)
                 edges.Add(new RateReferenceEdge("R", RateReferenceTargetKind.BillItem, TargetId(i)));
             var graph = new RateReferenceGraph(edges);
-            Equal(MaximumEntries, graph.Edges.Count, "Rate-reference exact boundary changed.");
+            Equal(MaximumRateReferenceEdges, graph.Edges.Count, "Rate-reference exact boundary changed.");
             Equal("T00000", graph.Edges[0].TargetId, "Rate-reference boundary ordering changed.");
-            Equal("T09999", graph.Edges[MaximumEntries - 1].TargetId, "Rate-reference terminal ordering changed.");
+            Equal("T49999", graph.Edges[MaximumRateReferenceEdges - 1].TargetId, "Rate-reference terminal ordering changed.");
 
             var rates = new List<BuildUpRateSnapshot>(MaximumEntries);
             for (var i = 0; i < MaximumEntries; i++)
