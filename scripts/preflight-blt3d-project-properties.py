@@ -29,10 +29,10 @@ def main():
     v26_project = read("src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj")
 
     # The BLT3D reference exposes exactly three Project Setup entry points. Keep their
-    # production routes distinct: Info -> Project Tools, Floors -> Level UI, Properties ->
-    # the bounded Project Properties surface rather than the broad Project Tools dashboard.
+    # production routes distinct: Info -> dedicated Project Information host, Floors -> Level UI,
+    # Properties -> the bounded Project Properties surface already landed by #2104.
     for token in (
-        'new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\\ndự án", "QS3DPROJECTTOOLS")',
+        'new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\\ndự án", "QS3DPROJECTINFO")',
         'new ButtonSpec("QS3D_PROJECT_FLOORS", "Cài đặt\\ntầng", "QS3DLEVELS")',
         'new ButtonSpec("QS3D_PROJECT_PROPERTIES", "Thuộc tính\\ndự án", "QS3DPROJECTPROPERTIES")',
     ):
@@ -74,7 +74,7 @@ def main():
     # V26 must continue consuming the same V25 command/window source automatically.
     require(v26_project, '<Compile Include="..\\QS3D.BricsCAD.V25\\**\\*.cs"', "V26 shared adapter source")
 
-    print("PASS: BLT3D Project Properties route is dedicated and the reference placeholder stays read-only.")
+    print("PASS: BLT3D Project Properties stays dedicated while Project Information uses its own host.")
     return 0
 
 
