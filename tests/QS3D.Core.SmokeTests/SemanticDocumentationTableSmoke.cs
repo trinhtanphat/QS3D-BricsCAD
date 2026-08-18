@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using QS3D.Core.Documentation;
 using QS3D.Core.Domain;
@@ -18,6 +19,7 @@ namespace QS3D.Core.SmokeTests
             GeneratedOwnershipPropertiesRemainBlocked();
             OutputSnapshotsAreDefensivelyImmutable();
             UnusedReferenceIndexesStayLazy();
+            KnownCountsFailClosedBeforeEnumeration();
             OversizedEnumerablesStopAtDeclaredBounds();
         }
 
@@ -188,6 +190,53 @@ namespace QS3D.Core.SmokeTests
                 new[] { new SemanticDocumentationColumn("Family", "{Family}") }));
         }
 
+        private static void KnownCountsFailClosedBeforeEnumeration()
+        {
+            var project = new ProjectState("table-count", "Table count");
+            var element = Element(project, "E-1", ElementCategory.Beam, "B1", 1.0);
+            var oneColumn = new[] { new SemanticDocumentationColumn("Id", "{Id}") };
+
+            var oversizedRows = new NoEnumerationCollection<string>(5001);
+            ThrowsMessage<InvalidOperationException>(() => SemanticDocumentationTableBuilder.Build(
+                project,
+                "Schedule",
+                oversizedRows,
+                oneColumn), "at most 5000 rows");
+            Equal(0, oversizedRows.EnumerationAttempts);
+
+            var oversizedColumns = new NoEnumerationCollection<SemanticDocumentationColumn>(33);
+            ThrowsMessage<InvalidOperationException>(() => SemanticDocumentationTableBuilder.Build(
+                project,
+                "Schedule",
+                new[] { element.Id },
+                oversizedColumns), "at most 32 columns");
+            Equal(0, oversizedColumns.EnumerationAttempts);
+
+            var negativeRows = new ReadOnlyNoEnumerationCollection<string>(-1);
+            ThrowsMessage<InvalidOperationException>(() => SemanticDocumentationTableBuilder.Build(
+                project,
+                "Schedule",
+                negativeRows,
+                oneColumn), "invalid negative known count");
+            Equal(0, negativeRows.EnumerationAttempts);
+
+            var negativeColumns = new NonGenericNoEnumerationCollection<SemanticDocumentationColumn>(-1);
+            ThrowsMessage<InvalidOperationException>(() => SemanticDocumentationTableBuilder.Build(
+                project,
+                "Schedule",
+                new[] { element.Id },
+                negativeColumns), "invalid negative known count");
+            Equal(0, negativeColumns.EnumerationAttempts);
+
+            var conflictingRows = new ConflictingCountCollection<string>();
+            ThrowsMessage<InvalidOperationException>(() => SemanticDocumentationTableBuilder.Build(
+                project,
+                "Schedule",
+                conflictingRows,
+                oneColumn), "conflicting known counts");
+            Equal(0, conflictingRows.EnumerationAttempts);
+        }
+
         private static void OversizedEnumerablesStopAtDeclaredBounds()
         {
             var project = new ProjectState("table", "Table");
@@ -216,6 +265,77 @@ namespace QS3D.Core.SmokeTests
         {
             for (var i = 0; i < allowedItems; i++) yield return new SemanticDocumentationColumn("H-" + i, "{Id}");
             throw new Exception("Documentation table enumerated column input beyond its declared hard limit.");
+        }
+
+        private sealed class NoEnumerationCollection<T> : ICollection<T>
+        {
+            public NoEnumerationCollection(int count) { Count = count; }
+            public int EnumerationAttempts { get; private set; }
+            public int Count { get; }
+            public bool IsReadOnly => true;
+            public IEnumerator<T> GetEnumerator()
+            {
+                EnumerationAttempts++;
+                throw new Exception("Known invalid Count must be rejected before enumeration.");
+            }
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public bool Contains(T item) => false;
+            public void CopyTo(T[] array, int arrayIndex) => throw new NotSupportedException();
+            public void Add(T item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Remove(T item) => throw new NotSupportedException();
+        }
+
+        private sealed class ReadOnlyNoEnumerationCollection<T> : IReadOnlyCollection<T>
+        {
+            public ReadOnlyNoEnumerationCollection(int count) { Count = count; }
+            public int EnumerationAttempts { get; private set; }
+            public int Count { get; }
+            public IEnumerator<T> GetEnumerator()
+            {
+                EnumerationAttempts++;
+                throw new Exception("Known invalid read-only Count must be rejected before enumeration.");
+            }
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class NonGenericNoEnumerationCollection<T> : IEnumerable<T>, ICollection
+        {
+            public NonGenericNoEnumerationCollection(int count) { Count = count; }
+            public int EnumerationAttempts { get; private set; }
+            public int Count { get; }
+            public bool IsSynchronized => false;
+            public object SyncRoot => this;
+            public IEnumerator<T> GetEnumerator()
+            {
+                EnumerationAttempts++;
+                throw new Exception("Known invalid non-generic Count must be rejected before enumeration.");
+            }
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void CopyTo(Array array, int index) => throw new NotSupportedException();
+        }
+
+        private sealed class ConflictingCountCollection<T> : ICollection<T>, IReadOnlyCollection<T>, ICollection
+        {
+            public int EnumerationAttempts { get; private set; }
+            public int Count => 1;
+            int IReadOnlyCollection<T>.Count => 2;
+            int ICollection.Count => 2;
+            public bool IsReadOnly => true;
+            public bool IsSynchronized => false;
+            public object SyncRoot => this;
+            public IEnumerator<T> GetEnumerator()
+            {
+                EnumerationAttempts++;
+                throw new Exception("Conflicting known Counts must be rejected before enumeration.");
+            }
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public bool Contains(T item) => false;
+            public void CopyTo(T[] array, int arrayIndex) => throw new NotSupportedException();
+            public void Add(T item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Remove(T item) => throw new NotSupportedException();
+            public void CopyTo(Array array, int index) => throw new NotSupportedException();
         }
 
         private static ProjectElement Element(ProjectState project, string id, ElementCategory category, string mark, double length)
