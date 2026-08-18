@@ -41,6 +41,8 @@ namespace QS3D.Core.Geometry
                 throw new ArgumentOutOfRangeException(nameof(input.PathSegmentCount));
             if (input.Pieces == null) throw new ArgumentNullException(nameof(input.Pieces));
             var pieceCount = input.Pieces.Count;
+            if (pieceCount < 0)
+                throw new InvalidOperationException("Curtain panel fingerprint Pieces Count must not be negative.");
             if (pieceCount > MaxPieces)
                 throw new InvalidOperationException("Curtain panel fingerprint exceeds " + MaxPieces + " pieces.");
 
