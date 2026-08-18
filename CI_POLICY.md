@@ -33,7 +33,7 @@ QS3D separates validation from publishing. A branch must not need to land on `ma
 
 The approved stages are:
 
-1. **automatic branch/PR validation** — `.github/workflows/ci.yml`; every push to `agent/**` and `integration/**` produces an exact-head branch run, while internal scope classification keeps non-build candidates lightweight; watched/integration-relevant human/AI task branches must be green before a new PR is opened;
+1. **automatic branch/PR validation** — `.github/workflows/ci.yml`; for watched human/AI task branches, the branch-push run must be green before a new PR is opened;
 2. **combined integration validation** — the same `ci.yml` on PR merge candidates and `integration/**` combined trees when applicable;
 3. **exact-main release** — `.github/workflows/dispatch-v25-cloud-after-main-integration.yml` dispatches `.github/workflows/release-v25-cloud.yml` only after an authorized integration-relevant landing on `main`.
 
@@ -60,7 +60,7 @@ A PR must not be used as the first CI attempt for watched human/AI work. Do not 
 
 This rule avoids filling the PR queue with candidates that have never passed their own isolated validation. It does **not** mean that two independent full CI passes are always logically required for an unchanged tree. After PR creation, GitHub's protected-main ruleset controls the merge gate. If `main` moves, the branch is reconciled, or GitHub produces a different/fresher merge candidate, the applicable required checks must be fresh again before merge.
 
-Every push to `agent/**` and `integration/**` is intentionally eligible for shared CI even when the pushed commit is docs-only or ancestry-only. This is required because a safe reconciliation can create a new exact head SHA with no watched first-parent file delta; a push path filter would then suppress the only automatic run that can satisfy exact-head admission. The workflow's internal diff classifier, not the event trigger, decides whether source guards and the full Core/V25 build are needed. Ordinary documentation/claim/handoff-only candidates therefore receive lightweight validation rather than no branch run.
+For ordinary documentation/claim/handoff-only paths that are intentionally outside the shared CI watch set, the repository may omit heavy pre-PR branch CI. Those changes still require a branch and PR and must satisfy whatever protected-main required checks GitHub applies at merge time. Never bypass or weaken protection merely to land an unwatched docs-only change.
 
 ### Narrow maintenance-bot exception
 
@@ -82,8 +82,8 @@ Repository-wide blind auto-merge remains intentionally disabled. A green PR is m
 
 It may run automatically on:
 
-- **every** push to `agent/**`, including docs-only and ancestry-only reconciliation heads;
-- **every** push to `integration/**`, including ancestry-only combined-tree reconciliation heads;
+- watched pushes to `agent/**`;
+- watched pushes to `integration/**`;
 - **every** pull request targeting `main`, so the stable required `preflight` and `core` contexts can never disappear because of a path filter;
 - **every** pull request targeting `integration/**` for the same reason.
 
@@ -95,9 +95,9 @@ The workflow is intentionally tiered by changed-path impact while preserving the
 2. **policy/source-guard tier** — canonical governance files such as `AGENTS.md`, `CI_POLICY.md`, `README.md`, and the main-write/agent-registration policies also run generic/source/feature guards, but skip Core/V25 build when no build-relevant input changed;
 3. **full build tier** — `src/**`, `tests/**`, `scripts/**`, `samples/generated/**`, `.github/workflows/**`, build props and solution files run all source guards, package-verifier checks, deterministic Core build/smoke, trusted pinned BricsCAD V25 reference acquisition and V25 plugin compilation.
 
-Branch pushes deliberately have no `paths`/`paths-ignore` filter. The workflow compares the full candidate against `main` after checkout and uses that internal scope classification to avoid redundant heavy builds. This guarantees that a new exact branch SHA produced by docs-only or zero-tree/ancestry-only reconciliation still receives automatic CI evidence. Pull requests likewise have no path filter because protected `main` requires stable `preflight` and `core` contexts for every legitimate PR.
+Branch pushes remain path-bounded to avoid wasting CI on ordinary unreviewed docs. Pull requests deliberately have no `paths`/`paths-ignore` filter because protected `main` requires stable `preflight` and `core` contexts for every legitimate PR.
 
-The workflow uses `contents: read`; validation checkouts set `persist-credentials: false`. Adding release/publish credentials or write permissions to this workflow is forbidden unless the owner explicitly changes this policy.
+The workflow uses `contents: read`; validation checkouts set `persist-credentials: false`. Adding release/publish credentials or write permissions to this workflow is forbidden unless the owner explicitly changes that policy.
 
 The workflow must not tag, publish, release, sign, dispatch release workflows, mutate Issues, merge PRs, or write repository contents. Repository policy guards must reject autonomous PR-to-main merge primitives in committed workflows.
 
@@ -154,17 +154,20 @@ The automatic exact-main cloud run does not prove licensed local BricsCAD runtim
 
 All documentation and Markdown changes still use a branch/PR like every other human/AI task.
 
-The shared `ci.yml` now runs automatically for every push to `agent/**` and `integration/**`, including ordinary docs/claim/handoff-only commits. Its internal scope classifier keeps those candidates lightweight: ordinary docs receive repository/policy validation and a lightweight `core` success without redundant Core/V25 compilation, while canonical governance files can additionally enable source guards when appropriate.
+The shared `ci.yml` intentionally watches canonical CI/governance documents such as `CI_POLICY.md`, `AGENTS.md`, `README.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, and `docs/AGENT-WORK-REGISTRATION.md`, because regressions there can invalidate repository safety contracts. For those watched governance documents, human/AI branch CI must be green before the PR is opened.
 
-This all-push branch trigger is intentionally separate from the exact-main release dispatcher. After an authorized `main` merge, documentation-only landings outside the dispatcher's watched set must still not trigger the V25 release path.
+Other ordinary docs/claim/handoff-only changes may skip heavy pre-PR branch CI when they are outside the shared workflow's push watch set. Their PR still receives stable required `preflight` and `core` contexts through the lightweight tier, and they must satisfy effective protected-main merge rules.
 
-**Changed paths are authoritative for validation tier and release-dispatch eligibility, not commit-message prefixes.** A commit named `docs:` or `chore:` that modifies `scripts/**`, workflows, build props, solutions, source, tests or synthetic generated fixtures is integration-relevant.
+After an authorized `main` merge, documentation-only landings outside the main dispatcher's watched set must not trigger the V25 release path.
+
+**Changed paths are authoritative, not commit-message prefixes.** A commit named `docs:` or `chore:` that modifies `scripts/**`, workflows, build props, solutions, source, tests or synthetic generated fixtures is integration-relevant.
 
 ## Manual workflow authorization
 
 Workflows other than `ci.yml` and the single automatic main dispatcher remain owner-controlled manual lanes.
 
 Release workflows remain manually invokable tools except when `release-v25-cloud.yml` is launched by the approved main dispatcher:
+
 - `.github/workflows/release-v25.yml`
 - `.github/workflows/release-v25-cloud.yml`
 - `.github/workflows/release-v26.yml`
@@ -203,7 +206,7 @@ A branch existing/deleted, Issue state, PR `Merged` UI state, or green CI for an
 - The ruleset bypass list is expected to remain empty unless the owner explicitly approves a narrow exception.
 - `scripts/preflight.py` retains broad repository/source checks and its legacy broad automatic-trigger tripwire.
 - Automatic event keys for the two approved workflows are deliberately quoted in YAML; `scripts/preflight-ci-manual-only.py` is the strict allowlist that validates their exact trigger scopes, permissions, jobs and publishing boundaries.
-- `scripts/preflight-ci-manual-only.py` must reject any third automatic workflow, automatic release workflow, branch validation on direct `main` pushes, branch-push `paths`/`paths-ignore` filters that can suppress exact-head reconciliation evidence, broadened publishing permission, PR path filters that can suppress required contexts, or dispatcher target other than `release-v25-cloud.yml`.
+- `scripts/preflight-ci-manual-only.py` must reject any third automatic workflow, automatic release workflow, branch validation on direct `main` pushes, broadened publishing permission, PR path filters that can suppress required contexts, or dispatcher target other than `release-v25-cloud.yml`.
 - `scripts/preflight-repository-professionalism.py` must retain the professional repository surfaces, bounded maintenance configuration, stable required PR contexts and prohibition on autonomous PR-to-main merging.
 - Dependabot is the only standing branch-CI-before-PR exception and must never gain autonomous merge/release permission through committed configuration.
 - Release workflows must retain explicit `RELEASE` confirmation.
