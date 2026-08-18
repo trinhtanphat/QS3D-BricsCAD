@@ -69,6 +69,29 @@ namespace QS3D.Core.SmokeTests
             ThrowsArgument(() => new BcfViewpoint("VP-NOT-A-GUID", Camera(), Array.Empty<BcfComponentReference>()), "BCF topic/comment/viewpoint identifiers must use buildingSMART canonical GUID form.");
             ThrowsArgument(() => new BcfComponentReference("E-X", "IFC-NOT-COMPRESSED"), "BCF component IFC identities must use the 22-character buildingSMART IfcGuid shape.");
             ThrowsArgument(() => new BcfOrthogonalCamera(new BcfPoint3(0d, 0d, 0d), new BcfPoint3(0d, 0d, 0d), new BcfPoint3(0d, 1d, 0d), 1d, 1d), "BCF camera direction must be explicit and non-zero.");
+            ThrowsArgument(() => new BcfOrthogonalCamera(new BcfPoint3(0d, 0d, 0d), new BcfPoint3(1d, 2d, 3d), new BcfPoint3(2d, 4d, 6d), 1d, 1d), "Parallel BCF camera direction/up vectors must fail closed.");
+            ThrowsArgument(() => new BcfOrthogonalCamera(new BcfPoint3(0d, 0d, 0d), new BcfPoint3(1d, 2d, 3d), new BcfPoint3(-2d, -4d, -6d), 1d, 1d), "Anti-parallel BCF camera direction/up vectors must fail closed.");
+            ThrowsArgument(() => new BcfOrthogonalCamera(new BcfPoint3(0d, 0d, 0d), new BcfPoint3(double.MaxValue, double.MaxValue, 0d), new BcfPoint3(double.MaxValue, double.MaxValue, 0d), 1d, 1d), "Overflow-prone collinear BCF camera vectors must fail closed.");
+
+            // Keep a tiny non-collinear basis valid so the guard remains exact rather than epsilon-based.
+            var tinyNonCollinear = new BcfOrthogonalCamera(
+                new BcfPoint3(0d, 0d, 0d),
+                new BcfPoint3(double.Epsilon, 0d, 0d),
+                new BcfPoint3(0d, double.Epsilon, 0d),
+                1d,
+                1d);
+            if (tinyNonCollinear.Direction.X != double.Epsilon || tinyNonCollinear.UpVector.Y != double.Epsilon)
+                throw new Exception("Underflow-prone but non-collinear BCF camera vectors must remain valid.");
+
+            var skewNonCollinear = new BcfOrthogonalCamera(
+                new BcfPoint3(0d, 0d, 0d),
+                new BcfPoint3(1d, 0d, 0d),
+                new BcfPoint3(1d, 1d, 0d),
+                1d,
+                1d);
+            if (skewNonCollinear.Direction.X != 1d || skewNonCollinear.UpVector.X != 1d || skewNonCollinear.UpVector.Y != 1d)
+                throw new Exception("Non-collinear BCF camera vectors must remain valid even when they are not orthogonal.");
+
             ThrowsArgument(() => new BcfTopic(TopicA, "Bad UTC", "Open", "Error", string.Empty, "qa@qs3d", DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Local), Array.Empty<BcfComment>(), Array.Empty<BcfViewpoint>()), "BCF topic creation timestamps must be UTC.");
         }
 
