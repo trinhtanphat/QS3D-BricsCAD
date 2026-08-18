@@ -72,25 +72,35 @@ def validate_candidates(candidates):
     return sorted(candidates, key=lambda path: (path.name.casefold(), path.name))
 
 
+def _is_feature_gate_name(name):
+    return name.startswith("preflight-") and name.endswith(".py")
+
+
 def discover():
-    # Keep discovery itself bounded: Path.glob() is consumed only until the first
-    # boundary violation instead of materializing an arbitrarily large candidate
-    # set before validate_candidates() gets a chance to reject it.
-    # Exclude only the aggregate runner's exact directory entry. Do not resolve
-    # candidates first: a symlink that targets SELF is still an unsafe gate and
-    # must reach validate_candidates() so discovery fails closed.
+    # Bound filesystem discovery itself. Use os.scandir() directly so the aggregate
+    # runner controls iteration and can reject candidate 513 without first asking a
+    # higher-level glob implementation to enumerate/materialize the whole directory.
+    # Do not call DirEntry.is_file() here: symlink/non-regular/size checks remain in
+    # validate_candidates() and must happen only after the candidate-count gate.
     candidates = []
-    for path in SCRIPTS.glob("preflight-*.py"):
-        if str(path) == str(SELF):
-            continue
-        candidates.append(path)
-        if len(candidates) > MAX_FEATURE_GATES:
-            raise RuntimeError(
-                "feature preflight discovery count "
-                + str(len(candidates))
-                + " exceeds maximum "
-                + str(MAX_FEATURE_GATES)
-            )
+    try:
+        with os.scandir(SCRIPTS) as entries:
+            for entry in entries:
+                if not _is_feature_gate_name(entry.name):
+                    continue
+                path = Path(entry.path)
+                if str(path) == str(SELF):
+                    continue
+                candidates.append(path)
+                if len(candidates) > MAX_FEATURE_GATES:
+                    raise RuntimeError(
+                        "feature preflight discovery count "
+                        + str(len(candidates))
+                        + " exceeds maximum "
+                        + str(MAX_FEATURE_GATES)
+                    )
+    except OSError as exc:
+        raise RuntimeError("cannot scan feature preflight directory " + str(SCRIPTS) + ": " + str(exc)) from exc
     return validate_candidates(candidates)
 
 
