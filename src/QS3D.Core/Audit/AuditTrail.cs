@@ -47,6 +47,7 @@ namespace QS3D.Core.Audit
                     if (validationError != null) throw new InvalidOperationException(validationError);
                     snapshot.Add(Clone(item!));
                 }
+                RequireObservedHistoryCount(storedCount, observed);
                 return snapshot.AsReadOnly();
             }
         }
@@ -101,7 +102,7 @@ namespace QS3D.Core.Audit
 
         private int ValidateExistingHistory(bool requireAppendCapacity)
         {
-            RequireSupportedHistoryCount(requireAppendCapacity);
+            var storedCount = RequireSupportedHistoryCount(requireAppendCapacity);
 
             var observed = 0;
             foreach (var existing in _events)
@@ -115,6 +116,7 @@ namespace QS3D.Core.Audit
                     throw new InvalidOperationException(validationError + " Repair the existing audit history before modifying it.");
             }
 
+            RequireObservedHistoryCount(storedCount, observed);
             if (requireAppendCapacity && observed >= MaxStoredEvents)
                 throw AppendCapacityExceeded();
             return observed;
@@ -130,6 +132,12 @@ namespace QS3D.Core.Audit
             if (requireAppendCapacity && storedCount >= MaxStoredEvents)
                 throw AppendCapacityExceeded();
             return storedCount;
+        }
+
+        private static void RequireObservedHistoryCount(int storedCount, int observed)
+        {
+            if (observed != storedCount)
+                throw new InvalidOperationException("Audit trail event count does not match stored history traversal. Repair the existing audit history before reading or modifying it.");
         }
 
         private static InvalidOperationException TooManyEvents()
