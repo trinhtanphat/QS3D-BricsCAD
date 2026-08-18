@@ -291,17 +291,13 @@ else:
                 errors.append(f"{path.name}: shared validation must expose exactly {sorted(expected)}; got {sorted(trigger_names)}")
 
             push_block = "\n".join(trigger_blocks.get("push", []))
-            require_tokens(push_block, ('branches:', '"agent/**"', '"integration/**"', 'paths:'), f"{path.name} push")
+            require_tokens(push_block, ('branches:', '"agent/**"', '"integration/**"'), f"{path.name} push")
+            if "paths:" in push_block or "paths-ignore:" in push_block:
+                errors.append(
+                    f"{path.name}: branch-push validation must not use path filters because exact-head admission must survive docs-only and ancestry-only reconciliation commits"
+                )
             if re.search(r"(?m)^\s*-\s*[\"']?main[\"']?\s*$", push_block):
                 errors.append(f"{path.name}: direct main push must not trigger shared branch CI; main owns the release dispatcher")
-
-            for watched in (
-                '"src/**"', '"tests/**"', '"scripts/**"', '"samples/generated/**"', '".github/workflows/**"',
-                '"Directory.Build.props"', '"QS3D.sln"', '"CI_POLICY.md"', '"docs/AGENT-WORK-REGISTRATION.md"',
-                '"docs/AGENT-STATUS-MARKER-SEMANTICS.md"',
-            ):
-                if watched not in push_block:
-                    errors.append(f"{path.name}: shared branch-push validation scope missing {watched}")
 
             pr_block = "\n".join(trigger_blocks.get("pull_request", []))
             require_tokens(pr_block, ('branches:', '- main', '"integration/**"'), f"{path.name} pull_request")
@@ -321,7 +317,6 @@ else:
                 "tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release",
                 "dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64",
                 "cancel-in-progress: true",
-                "'docs/AGENT-STATUS-MARKER-SEMANTICS.md'",
             ), path.name)
             for forbidden in (
                 "contents: write", "actions: write", "issues: write", "packages: write", "id-token: write",
@@ -423,6 +418,6 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: branch CI is path-bounded, every PR emits stable required contexts, governance-only candidates keep source guards without redundant builds, "
+    "PASS: every agent/integration push produces exact-head branch CI, every PR emits stable required contexts, governance/docs-only candidates remain lightweight through internal scope classification, "
     "build-relevant candidates run Core plus V25 compile, main alone owns exact-source V25 dispatch, and releases retain explicit confirmation."
 )
