@@ -257,6 +257,12 @@ namespace QS3D.Core.Coordination
             var result = left - right;
             if (double.IsNaN(result) || double.IsInfinity(result))
                 throw new OverflowException(operation + " exceeded the finite double range.");
+            if ((right != 0d && result == left) ||
+                (left != 0d && result == -right))
+            {
+                throw new InvalidOperationException(
+                    operation + " lost a non-zero finite operand during subtraction.");
+            }
             return result == 0d ? 0d : result;
         }
     }
