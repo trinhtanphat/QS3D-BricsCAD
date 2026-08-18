@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
         {
             ReadsExactBoundWithoutMutation();
             RejectsOversizedReadWithoutMutation();
+            RejectsNegativeKnownCountBeforeEnumeration();
             SnapshotUsesValidatedCountOnce();
             RejectsRecordAtCapacityWithoutMutation();
             RecordsIntoLastAvailableSlot();
@@ -48,6 +49,22 @@ namespace QS3D.Core.SmokeTests
             Equal(MaxStoredEvents + 1, project.AuditEvents.Count, "oversized read count");
             if (!ReferenceEquals(first, project.AuditEvents[0]))
                 throw new Exception("AuditTrailHistoryBoundSmoke oversized read replaced stored evidence.");
+        }
+
+        private static void RejectsNegativeKnownCountBeforeEnumeration()
+        {
+            var history = new NegativeCountHistory();
+            var constructor = typeof(AuditTrail).GetConstructor(
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                binder: null,
+                types: new[] { typeof(IList<AuditEvent>), typeof(ProjectState) },
+                modifiers: null);
+            if (constructor == null)
+                throw new Exception("AuditTrailHistoryBoundSmoke could not resolve the bounded-history constructor.");
+
+            var trail = (AuditTrail)constructor.Invoke(new object?[] { history, null });
+            Throws<InvalidOperationException>(() => _ = trail.Events);
+            Equal(0, history.EnumeratorRequests, "negative-count enumeration requests");
         }
 
         private static void SnapshotUsesValidatedCountOnce()
@@ -129,6 +146,29 @@ namespace QS3D.Core.SmokeTests
                 });
             }
             return project;
+        }
+
+        private sealed class NegativeCountHistory : IList<AuditEvent>
+        {
+            internal int EnumeratorRequests { get; private set; }
+
+            public int Count => -1;
+            public bool IsReadOnly => true;
+            public AuditEvent this[int index] { get => throw new ArgumentOutOfRangeException(nameof(index)); set => throw new NotSupportedException(); }
+            public void Add(AuditEvent item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(AuditEvent item) => false;
+            public void CopyTo(AuditEvent[] array, int arrayIndex) { }
+            public int IndexOf(AuditEvent item) => -1;
+            public void Insert(int index, AuditEvent item) => throw new NotSupportedException();
+            public bool Remove(AuditEvent item) => throw new NotSupportedException();
+            public void RemoveAt(int index) => throw new NotSupportedException();
+            public IEnumerator<AuditEvent> GetEnumerator()
+            {
+                EnumeratorRequests++;
+                return ((IEnumerable<AuditEvent>)Array.Empty<AuditEvent>()).GetEnumerator();
+            }
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private sealed class SingleCountReadHistory : IList<AuditEvent>
