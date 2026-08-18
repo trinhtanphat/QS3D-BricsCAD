@@ -158,9 +158,11 @@ namespace QS3D.Core.Formulas
                     }
                     else
                     {
-                        return _evaluate
-                            ? EnsureFinite(sum + compensation, "Addition/subtraction produced a non-finite result.")
-                            : sum;
+                        if (!_evaluate) return sum;
+                        var result = EnsureFinite(sum + compensation, "Addition/subtraction produced a non-finite result.");
+                        if (compensation != 0d && result == sum)
+                            throw Error("Addition/subtraction lost the compensated contribution at double precision.");
+                        return result;
                     }
                 }
             }
