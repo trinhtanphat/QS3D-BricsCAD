@@ -213,6 +213,8 @@ namespace QS3D.Core.Formulas
                             var quotient = EnsureFinite(value / divisor, "Division produced a non-finite result.");
                             if (quotient == 0d && value != 0d)
                                 throw Error("Division underflowed to zero.");
+                            if (value != 0d && divisor != 1d && quotient == value)
+                                throw Error("Division lost the divisor contribution at double precision.");
                             value = quotient;
                         }
                         else value = 0d;
