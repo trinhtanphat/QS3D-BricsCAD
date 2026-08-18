@@ -58,6 +58,9 @@ namespace QS3D.BricsCAD.V25.Updates
         internal const string PackageChecksumAssetName = "QS3D-BricsCAD-V25.zip.sha256";
         private const int MaxResponseBytes = 2 * 1024 * 1024;
         private const int MaxReleasePages = 10;
+        private const int MaxRequestAttempts = 3;
+        private const int BaseRetryDelayMilliseconds = 500;
+        private const int MaxRetryDelayMilliseconds = 3000;
 
         internal async Task<IReadOnlyList<UpdateReleaseInfo>> GetPublishedReleasesAsync()
         {
@@ -86,6 +89,36 @@ namespace QS3D.BricsCAD.V25.Updates
             var address = pageNumber == 1
                 ? ReleasesEndpoint
                 : ReleasesEndpoint + "&page=" + pageNumber.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+            for (var attempt = 1; attempt <= MaxRequestAttempts; attempt++)
+            {
+                try
+                {
+                    return await GetReleasePageAttemptAsync(address).ConfigureAwait(false);
+                }
+                catch (WebException error) when (IsTransient(error))
+                {
+                    var failure = DescribeFailure(error);
+                    var retryDelayMilliseconds = GetRetryDelayMilliseconds(error, attempt);
+                    error.Response?.Close();
+
+                    if (attempt == MaxRequestAttempts)
+                    {
+                        throw new InvalidOperationException(
+                            "GitHub tạm thời không phản hồi (" + failure + ") sau " + MaxRequestAttempts +
+                            " lần thử. Hãy bấm \"Kiểm tra lại\" sau ít phút.",
+                            error);
+                    }
+
+                    await Task.Delay(retryDelayMilliseconds).ConfigureAwait(false);
+                }
+            }
+
+            throw new InvalidOperationException("GitHub Releases request retry loop ended unexpectedly.");
+        }
+
+        private static async Task<GitHubReleasePage> GetReleasePageAttemptAsync(string address)
+        {
             var request = WebRequest.CreateHttp(address);
             request.Method = "GET";
             request.Accept = "application/vnd.github+json";
@@ -114,6 +147,60 @@ namespace QS3D.BricsCAD.V25.Updates
                     return new GitHubReleasePage(payload, hasNext);
                 }
             }
+        }
+
+        private static bool IsTransient(WebException error)
+        {
+            var response = error.Response as HttpWebResponse;
+            if (response != null)
+            {
+                var statusCode = (int)response.StatusCode;
+                if (statusCode == 408 || statusCode == 429 || statusCode == 500 ||
+                    statusCode == 502 || statusCode == 503 || statusCode == 504)
+                    return true;
+
+                if (statusCode == 403 && !string.IsNullOrWhiteSpace(response.Headers["Retry-After"]))
+                    return true;
+            }
+
+            switch (error.Status)
+            {
+                case WebExceptionStatus.Timeout:
+                case WebExceptionStatus.ConnectFailure:
+                case WebExceptionStatus.ConnectionClosed:
+                case WebExceptionStatus.ReceiveFailure:
+                case WebExceptionStatus.SendFailure:
+                case WebExceptionStatus.KeepAliveFailure:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static int GetRetryDelayMilliseconds(WebException error, int attempt)
+        {
+            var response = error.Response as HttpWebResponse;
+            var retryAfter = response?.Headers["Retry-After"];
+            if (!string.IsNullOrWhiteSpace(retryAfter) &&
+                int.TryParse(retryAfter, System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out var retryAfterSeconds) &&
+                retryAfterSeconds >= 0)
+            {
+                var retryAfterMilliseconds = retryAfterSeconds >= MaxRetryDelayMilliseconds / 1000
+                    ? MaxRetryDelayMilliseconds
+                    : retryAfterSeconds * 1000;
+                return Math.Max(BaseRetryDelayMilliseconds, retryAfterMilliseconds);
+            }
+
+            return Math.Min(MaxRetryDelayMilliseconds, BaseRetryDelayMilliseconds * attempt);
+        }
+
+        private static string DescribeFailure(WebException error)
+        {
+            var response = error.Response as HttpWebResponse;
+            return response != null
+                ? "HTTP " + (int)response.StatusCode
+                : error.Status.ToString();
         }
 
         private static IReadOnlyList<UpdateReleaseInfo> Convert(IEnumerable<GitHubReleaseDto?>? releases)

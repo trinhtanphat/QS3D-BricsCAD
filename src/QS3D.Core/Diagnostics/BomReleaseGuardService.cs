@@ -19,7 +19,10 @@ namespace QS3D.Core.Diagnostics
             ISet<string>? liveHandleIndex = null;
             if (liveGeneratedHandles != null)
             {
-                if (liveGeneratedHandles.Count > MaxLiveGeneratedHandleInputs)
+                var reportedHandleCount = liveGeneratedHandles.Count;
+                if (reportedHandleCount < 0)
+                    throw LiveHandleInputNegativeCount();
+                if (reportedHandleCount > MaxLiveGeneratedHandleInputs)
                     throw LiveHandleInputTooLarge();
 
                 var index = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -163,6 +166,11 @@ namespace QS3D.Core.Diagnostics
             {
                 return true;
             }
+        }
+
+        private static InvalidOperationException LiveHandleInputNegativeCount()
+        {
+            return new InvalidOperationException("BOM live generated Handle input reported a negative known count.");
         }
 
         private static InvalidOperationException LiveHandleInputTooLarge()
