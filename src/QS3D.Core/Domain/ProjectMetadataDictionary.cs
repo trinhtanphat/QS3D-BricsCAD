@@ -148,25 +148,38 @@ namespace QS3D.Core.Domain
 
         private static int? RequireSupportedKnownPersistenceCount(IEnumerable<KeyValuePair<string, string>> values)
         {
-            int? knownCount = null;
+            var counts = new List<int>(3);
             if (values is ICollection<KeyValuePair<string, string>> collection)
-                MergeKnownPersistenceCount(ref knownCount, collection.Count);
+                counts.Add(collection.Count);
             if (values is IReadOnlyCollection<KeyValuePair<string, string>> readOnlyCollection)
-                MergeKnownPersistenceCount(ref knownCount, readOnlyCollection.Count);
+                counts.Add(readOnlyCollection.Count);
             if (values is ICollection nonGenericCollection)
-                MergeKnownPersistenceCount(ref knownCount, nonGenericCollection.Count);
-            return knownCount;
-        }
+                counts.Add(nonGenericCollection.Count);
 
-        private static void MergeKnownPersistenceCount(ref int? knownCount, int candidate)
-        {
-            if (candidate < 0)
-                throw new InvalidOperationException("Project metadata persistence input exposes an invalid negative Count.");
-            if (candidate > MaximumEntries)
+            if (counts.Count == 0)
+                return null;
+
+            var knownCount = counts[0];
+            var maximumCount = knownCount;
+            var hasNegative = knownCount < 0;
+            var hasConflict = false;
+            for (var i = 1; i < counts.Count; i++)
+            {
+                if (counts[i] > maximumCount)
+                    maximumCount = counts[i];
+                if (counts[i] < 0)
+                    hasNegative = true;
+                if (counts[i] != knownCount)
+                    hasConflict = true;
+            }
+
+            if (maximumCount > MaximumEntries)
                 throw MetadataCountError();
-            if (knownCount.HasValue && knownCount.Value != candidate)
+            if (hasNegative)
+                throw new InvalidOperationException("Project metadata persistence input exposes an invalid negative Count.");
+            if (hasConflict)
                 throw new InvalidOperationException("Project metadata persistence input exposes conflicting Count contracts.");
-            knownCount = candidate;
+            return knownCount;
         }
 
         private static InvalidOperationException MetadataTraversalCountMismatchError(int expected, int observed)
