@@ -51,32 +51,33 @@ namespace QS3D.Core.SmokeTests
         private static void QueryResultBoundIsEnforcedAfterFiltering()
         {
             const int maximum = 10000;
-            var exact = ProjectWithRuleCount("P-BOUND-EXACT", maximum);
+            var exact = ProjectWithElementCount("P-BOUND-EXACT", maximum);
             var exactSnapshot = CreateSnapshot("bound-exact", exact);
             var exactResult = new PreviewReviewQueryService().Query(exactSnapshot);
             Equal(maximum, exactResult.Count);
             Equal(maximum, exactResult.ChangeFacets.Single(x => x.Key == "Added").Count);
 
-            var overflow = ProjectWithRuleCount("P-BOUND-OVERFLOW", maximum + 1);
+            var overflow = ProjectWithElementCount("P-BOUND-OVERFLOW", maximum + 1);
             var overflowSnapshot = CreateSnapshot("bound-overflow", overflow);
             Throws<InvalidOperationException>(() => new PreviewReviewQueryService().Query(overflowSnapshot));
 
             var filtered = new PreviewReviewQueryService().Query(
                 overflowSnapshot,
-                new PreviewReviewQueryOptions(null, null, null, "Quantity:Q10000"));
+                new PreviewReviewQueryOptions("E10000"));
             Equal(1, filtered.Count);
-            Equal("Quantity:Q10000", filtered.Entries[0].Field);
+            Equal("E10000", filtered.Entries[0].ElementId);
+            Equal("Quantity:Q", filtered.Entries[0].Field);
             Equal(1, filtered.ChangeFacets.Single(x => x.Key == "Added").Count);
         }
 
-        private static ProjectState ProjectWithRuleCount(string projectId, int count)
+        private static ProjectState ProjectWithElementCount(string projectId, int count)
         {
             var project = new ProjectState(projectId, "Review Bound");
-            project.Elements.Add(new ProjectElement("E-BOUND", ElementCategory.Beam, string.Empty, string.Empty, string.Empty));
+            project.QuantityRules.Add(new QuantityRule("R-BOUND", ElementCategory.Beam, "Q", "1", "1"));
             for (var index = 0; index < count; index++)
             {
                 var suffix = index.ToString("D5");
-                project.QuantityRules.Add(new QuantityRule("R" + suffix, ElementCategory.Beam, "Q" + suffix, "1", "1"));
+                project.Elements.Add(new ProjectElement("E" + suffix, ElementCategory.Beam, string.Empty, string.Empty, string.Empty));
             }
             return project;
         }
