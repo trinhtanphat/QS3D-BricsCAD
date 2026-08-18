@@ -36,6 +36,13 @@ def with_root(root):
     module.SELF = module.SCRIPTS / "preflight-all.py"
 
 
+def test_feature_gate_name_filter_is_case_insensitive():
+    assert module._is_feature_gate_name("preflight-alpha.py")
+    assert module._is_feature_gate_name("Preflight-Alpha.PY")
+    assert not module._is_feature_gate_name("xpreflight-alpha.py")
+    assert not module._is_feature_gate_name("preflight-alpha.ps1")
+
+
 def test_exact_count_and_ordering():
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp)
@@ -156,6 +163,7 @@ def test_legacy_symlink_and_case_collision_guards():
 
 
 def main():
+    test_feature_gate_name_filter_is_case_insensitive()
     test_exact_count_and_ordering()
     test_count_boundary_plus_one_fails_before_inspection()
     test_discovery_stops_at_boundary_plus_one()
