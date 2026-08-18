@@ -51,17 +51,11 @@ def main():
     runtime_repair = read(RUNTIME_REPAIR_REL)
     local_inbox = read(LOCAL_INBOX_REL)
 
-    # XAML keeps a non-zero bootstrap floor while BricsCAD performs its first PaletteSet measure.
-    # The legacy ViewportWidth binding may still be present, but it must not be allowed to coerce
-    # the entire client to zero before the authoritative idle pass can break the feedback loop.
     require(xaml, 'x:Name="WorkspaceContentRoot"', XAML_REL)
     require(xaml, 'Width="{Binding ViewportWidth, ElementName=WorkspaceOverflow}"', XAML_REL)
     require(xaml, 'MinWidth="560"', XAML_REL)
     require(xaml, 'HorizontalContentAlignment="Stretch"', XAML_REL)
 
-    # Loaded-time compact presentation must preserve a measurable/visible client and leave final
-    # model/family column geometry to the Reference/FiveZone owners. It must never zero every live
-    # column while the Width binding is still active.
     for token in (
         "root.MinWidth = Math.Max(root.MinWidth, 560);",
         "root.HorizontalAlignment = HorizontalAlignment.Stretch;",
@@ -84,9 +78,6 @@ def main():
     ):
         forbid(compact, stale, COMPACT_REL)
 
-    # ApplicationIdle is the earliest authoritative presentation pass. It must break the zero-width
-    # binding before removing the bootstrap minimum, so even if SystemIdle is delayed the client is
-    # already stretch-sized and visible.
     for token in (
         "using System.Windows.Data;",
         "BindingOperations.ClearBinding(root, FrameworkElement.WidthProperty);",
@@ -105,7 +96,6 @@ def main():
         REFERENCE_REL,
     )
 
-    # The later SystemIdle pass remains the final idempotent repair and must retain the same ordering.
     for token in (
         "BindingOperations.ClearBinding(root, FrameworkElement.WidthProperty);",
         "root.Width = double.NaN;",
@@ -124,12 +114,11 @@ def main():
         RUNTIME_REL,
     )
 
-    # BricsCAD can show/reparent/resize/re-layout a PaletteSet after the old two-tick startup window.
-    # Keep the bounded startup repair, but also keep loaded-lifetime recovery observations that are
-    # gated by an actually blank/collapsed client. LayoutUpdated covers host reparent/layout cases
-    # where the final outer size and visibility do not change. Recovery is explicitly re-entry guarded
-    # so the invalidation it performs cannot schedule itself recursively.
+    # BricsCAD may show/reparent/re-layout after the startup settle. The loaded-lifetime observers
+    # must detect that blank client, avoid recovery re-entry loops, and keep retries bounded so a
+    # permanently invalid host state cannot create unbounded layout churn.
     for token in (
+        "private const int Blt3dRuntimeRecoveryRetryPasses = 3;",
         "WireBlt3dRuntimeViewportRecovery();",
         "UnwireBlt3dRuntimeViewportRecovery();",
         "WorkspaceOverflow.SizeChanged += OnBlt3dRuntimeViewportSizeChanged;",
@@ -140,6 +129,10 @@ def main():
         "WorkspaceOverflow.LayoutUpdated -= OnBlt3dRuntimeViewportLayoutUpdated;",
         "private void OnBlt3dRuntimeViewportLayoutUpdated(object? sender, EventArgs e)",
         "_blt3dRuntimeViewportRecoveryApplying",
+        "_blt3dRuntimeViewportRecoveryRetriesRemaining",
+        "_blt3dRuntimeViewportRecoveryRetriesRemaining = Blt3dRuntimeRecoveryRetryPasses;",
+        "_blt3dRuntimeViewportRecoveryRetriesRemaining <= 0",
+        "_blt3dRuntimeViewportRecoveryRetriesRemaining--;",
         "if (NeedsBlt3dRuntimeViewportRecovery())",
         "QueueBlt3dRuntimeViewportRecovery();",
         "if (!NeedsBlt3dRuntimeViewportRecovery())",
@@ -155,9 +148,16 @@ def main():
         "InvalidateBlt3dRuntimeLayout();",
     ):
         require(runtime_repair, token, RUNTIME_REPAIR_REL)
+
     require_order(
         runtime_repair,
         "if (!NeedsBlt3dRuntimeViewportRecovery())",
+        "_blt3dRuntimeViewportRecoveryRetriesRemaining--;",
+        RUNTIME_REPAIR_REL,
+    )
+    require_order(
+        runtime_repair,
+        "_blt3dRuntimeViewportRecoveryRetriesRemaining--;",
         "_blt3dRuntimeViewportRecoveryApplying = true;",
         RUNTIME_REPAIR_REL,
     )
@@ -173,6 +173,7 @@ def main():
         "panel._blt3dRuntimeLayoutRepairStarted = false;",
         RUNTIME_REPAIR_REL,
     )
+
     forbid(
         runtime_repair,
         "WorkspaceOverflow.SizeChanged += (_, __) => ReassertBlt3dRuntimeLayout();",
@@ -184,9 +185,6 @@ def main():
         RUNTIME_REPAIR_REL,
     )
 
-    # Real BricsCAD first-render/HiDPI proof is LOCAL_ONLY. Reuse the canonical Workspace local
-    # handoff instead of inventing another queue. Validate only the stable scenario identity here:
-    # LOCAL-012's workflow status/evidence is intentionally mutable as local qualification advances.
     local012 = require_section(
         local_inbox,
         "## LOCAL-012 — Project Browser native workspace and CAD selection bridge",
@@ -202,9 +200,8 @@ def main():
 
     print(
         "PASS: Workspace keeps the first-measure bootstrap, authoritative idle passes break the "
-        "ViewportWidth loop, and gated/re-entry-safe loaded-lifetime size/visibility/layout recovery "
-        "repairs late BricsCAD blanking without continuously resetting healthy splitter resizing; "
-        "LOCAL-012 remains the canonical licensed visual qualification scenario."
+        "ViewportWidth loop, and loaded-lifetime size/visibility/layout recovery is gated, "
+        "re-entry-safe and bounded while LOCAL-012 remains the licensed visual qualification lane."
     )
     return 0
 
