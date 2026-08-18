@@ -1,11 +1,15 @@
 using System;
+using System.Runtime.CompilerServices;
 using QS3D.Core.Model;
 
 namespace QS3D.Core.SmokeTests
 {
     internal static class EntitySnapshotHandleCanonicalitySmoke
     {
-        public static void Run()
+        [ModuleInitializer]
+        internal static void Initialize() => Run();
+
+        internal static void Run()
         {
             var canonical = new EntitySnapshot("AB12", "LINE", "Layer 1");
             Require(canonical.Handle == "AB12", "Canonical entity snapshot handle changed unexpectedly.");
