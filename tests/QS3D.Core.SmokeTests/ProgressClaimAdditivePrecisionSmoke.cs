@@ -13,6 +13,10 @@ namespace QS3D.Core.SmokeTests
         private static void Run()
         {
             SwallowedCertifiedLineContributionFailsClosed();
+            SwallowedPreviousCertifiedDeductionFailsClosed();
+            SwallowedRejectedQuantityDeductionFailsClosed();
+            SwallowedRemainingQuantityDeductionFailsClosed();
+            RepresentableQuantityDeductionsRemainAccepted();
             RepresentableLowOrderContributionRemainsAccepted();
             ExactZeroContributionRemainsAccepted();
             AccumulatedOverflowRemainsFailClosed();
@@ -34,6 +38,67 @@ namespace QS3D.Core.SmokeTests
 
             Throws<OverflowException>(() =>
                 new ProgressClaimService().Evaluate(contracts, claims));
+        }
+
+        private static void SwallowedPreviousCertifiedDeductionFailsClosed()
+        {
+            Throws<OverflowException>(() =>
+                new ProgressClaimService().Evaluate(
+                    new[]
+                    {
+                        new ProgressContractItem("A", "ea", decimal.MaxValue, 0m)
+                    },
+                    new[]
+                    {
+                        new ProgressClaimLine("A", 0.0000000000000000000000000001m, 0m)
+                    }));
+        }
+
+        private static void SwallowedRejectedQuantityDeductionFailsClosed()
+        {
+            Throws<OverflowException>(() =>
+                new ProgressClaimService().Evaluate(
+                    new[]
+                    {
+                        new ProgressContractItem("A", "ea", 0.0000000000000000000000000001m, 0m)
+                    },
+                    new[]
+                    {
+                        new ProgressClaimLine("A", 0m, decimal.MaxValue)
+                    }));
+        }
+
+        private static void SwallowedRemainingQuantityDeductionFailsClosed()
+        {
+            Throws<OverflowException>(() =>
+                new ProgressClaimService().Evaluate(
+                    new[]
+                    {
+                        new ProgressContractItem("A", "ea", decimal.MaxValue, 0m)
+                    },
+                    new[]
+                    {
+                        new ProgressClaimLine("A", 0m, 0.0000000000000000000000000001m)
+                    }));
+        }
+
+        private static void RepresentableQuantityDeductionsRemainAccepted()
+        {
+            var result = new ProgressClaimService().Evaluate(
+                new[]
+                {
+                    new ProgressContractItem("A", "ea", decimal.MaxValue, 0m)
+                },
+                new[]
+                {
+                    new ProgressClaimLine("A", 1m, 0m)
+                });
+
+            Equal(
+                decimal.MaxValue - 1m,
+                result.Lines[0].RemainingQuantity,
+                "Representable previous-certified deduction changed.");
+            Equal(0m, result.Lines[0].RejectedQuantity, "Zero rejected quantity changed.");
         }
 
         private static void RepresentableLowOrderContributionRemainsAccepted()
