@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             GroupsDoorsByDimensionsAndDistinctHosts();
             InstanceOverrideSplitsFamilyInheritedRow();
             RejectsInvalidSemanticDimensions();
+            RejectsDerivedAreaUnderflow();
         }
 
         private static void GroupsDoorsByDimensionsAndDistinctHosts()
@@ -96,6 +97,34 @@ namespace QS3D.Core.SmokeTests
             family.Properties["WidthM"] = "0.9";
             family.Properties["HeightM"] = "NaN";
             Throws<InvalidOperationException>(() => DoorOpeningScheduleBuilder.Build(project));
+        }
+
+        private static void RejectsDerivedAreaUnderflow()
+        {
+            var project = new ProjectState("p4", "Tiny opening");
+            var family = new ProjectFamily("tiny-door", "Tiny Door", ElementCategory.Door);
+            family.Properties["WidthM"] = "1e-200";
+            family.Properties["HeightM"] = "1e-200";
+            project.Families.Add(family);
+            project.Floors.Add(new FloorDefinition("f", "Floor", 0d));
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
+            project.Elements.Add(new ProjectElement("tiny", ElementCategory.Door, family.Id, "f", "z"));
+
+            Throws<InvalidOperationException>(() => DoorOpeningScheduleBuilder.Build(project));
+
+            var explicitArea = new ProjectState("p5", "Explicit tiny area");
+            explicitArea.Floors.Add(new FloorDefinition("f", "Floor", 0d));
+            explicitArea.Zones.Add(new ZoneDefinition("z", "Zone"));
+            var explicitFamily = new ProjectFamily("tiny-door", "Tiny Door", ElementCategory.Door);
+            explicitFamily.Properties["WidthM"] = "1e-200";
+            explicitFamily.Properties["HeightM"] = "1e-200";
+            explicitArea.Families.Add(explicitFamily);
+            var element = new ProjectElement("tiny", ElementCategory.Door, explicitFamily.Id, "f", "z");
+            element.Quantities["OpeningAreaM2"] = 0d;
+            explicitArea.Elements.Add(element);
+            var rows = DoorOpeningScheduleBuilder.Build(explicitArea);
+            if (rows.Count != 1 || rows[0].OpeningAreaM2 != 0d)
+                throw new Exception("Explicit stored zero OpeningAreaM2 must retain existing semantics.");
         }
 
         private static ProjectElement Door(string id, string familyId, string floorId, string hostId)
