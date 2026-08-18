@@ -337,7 +337,11 @@ namespace QS3D.Core.Export
         private static double ReadNumber(XElement parent, string name)
         {
             var value = RequiredSingleValue(parent, name);
-            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) || double.IsNaN(result) || double.IsInfinity(result)) throw new InvalidDataException("BCF numeric value is invalid: " + name);
+            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) ||
+                double.IsNaN(result) ||
+                double.IsInfinity(result) ||
+                !string.Equals(value, Number(result), StringComparison.Ordinal))
+                throw new InvalidDataException("BCF numeric value must use canonical invariant round-trip format: " + name);
             return result;
         }
 
