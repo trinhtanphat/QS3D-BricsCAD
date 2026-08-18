@@ -43,6 +43,8 @@ def main():
         '.RegenerateDirty(project)',
         'ProjectQuantityReportBuilder.Group(project)',
         'QuantityEngine2Summary.Build(rows, regenerated)',
+        'if (summary.ElementCount == 0)',
+        'Chưa có cấu kiện hợp lệ để tính khối lượng.',
         'QuantityCalculationResultWindow.ShowSuccess(summary)',
         'QuantityCalculationResultWindow.ShowError(ex.Message)',
         'QuantityReportMath.FiniteAccumulator',
