@@ -25,6 +25,7 @@ namespace QS3D.BricsCAD.V25.UI
         private bool _blt3dRuntimeLayoutRepairStarted;
         private bool _blt3dRuntimeViewportEventsWired;
         private bool _blt3dRuntimeViewportRecoveryQueued;
+        private bool _blt3dRuntimeViewportRecoveryApplying;
 
         private static bool RegisterBlt3dRuntimeLayoutRepair()
         {
@@ -58,6 +59,7 @@ namespace QS3D.BricsCAD.V25.UI
             panel.StopBlt3dRuntimeLayoutRepairTimer();
             panel._blt3dRuntimeSettlePassesRemaining = 0;
             panel._blt3dRuntimeViewportRecoveryQueued = false;
+            panel._blt3dRuntimeViewportRecoveryApplying = false;
             panel._blt3dRuntimeLayoutRepairStarted = false;
         }
 
@@ -145,7 +147,10 @@ namespace QS3D.BricsCAD.V25.UI
             // ScrollViewer's final size or visibility. LayoutUpdated is therefore the last-resort
             // observation surface, but it stays cheap and non-invasive: a normal healthy layout
             // returns before queuing any dispatcher work or touching splitter geometry.
-            if (!IsLoaded || !WorkspaceOverflow.IsVisible || !HasUsableBlt3dRuntimeViewport())
+            if (_blt3dRuntimeViewportRecoveryApplying ||
+                !IsLoaded ||
+                !WorkspaceOverflow.IsVisible ||
+                !HasUsableBlt3dRuntimeViewport())
                 return;
 
             if (NeedsBlt3dRuntimeViewportRecovery())
@@ -154,7 +159,9 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void QueueBlt3dRuntimeViewportRecovery()
         {
-            if (_blt3dRuntimeViewportRecoveryQueued || !IsLoaded)
+            if (_blt3dRuntimeViewportRecoveryQueued ||
+                _blt3dRuntimeViewportRecoveryApplying ||
+                !IsLoaded)
                 return;
 
             _blt3dRuntimeViewportRecoveryQueued = true;
@@ -172,8 +179,16 @@ namespace QS3D.BricsCAD.V25.UI
                     if (!NeedsBlt3dRuntimeViewportRecovery())
                         return;
 
-                    ReassertBlt3dRuntimeLayout();
-                    InvalidateBlt3dRuntimeLayout();
+                    _blt3dRuntimeViewportRecoveryApplying = true;
+                    try
+                    {
+                        ReassertBlt3dRuntimeLayout();
+                        InvalidateBlt3dRuntimeLayout();
+                    }
+                    finally
+                    {
+                        _blt3dRuntimeViewportRecoveryApplying = false;
+                    }
                 }));
         }
 
