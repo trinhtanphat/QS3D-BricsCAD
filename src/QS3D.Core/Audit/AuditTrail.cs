@@ -93,13 +93,13 @@ namespace QS3D.Core.Audit
 
         public void Clear()
         {
-            if (_events.Count == 0) return;
-            ValidateExistingHistory(requireAppendCapacity: false);
+            var observed = ValidateExistingHistory(requireAppendCapacity: false);
+            if (observed == 0) return;
             _project?.Touch();
             _events.Clear();
         }
 
-        private void ValidateExistingHistory(bool requireAppendCapacity)
+        private int ValidateExistingHistory(bool requireAppendCapacity)
         {
             RequireSupportedHistoryCount(requireAppendCapacity);
 
@@ -117,6 +117,7 @@ namespace QS3D.Core.Audit
 
             if (requireAppendCapacity && observed >= MaxStoredEvents)
                 throw AppendCapacityExceeded();
+            return observed;
         }
 
         private int RequireSupportedHistoryCount(bool requireAppendCapacity)
