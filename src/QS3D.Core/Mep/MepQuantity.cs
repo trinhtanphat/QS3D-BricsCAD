@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
@@ -92,15 +93,21 @@ namespace QS3D.Core.Mep
 
     public sealed class MepQuantityService
     {
+        internal const int MaxElements = 10000;
+
         public IReadOnlyList<MepQuantityGroup> Aggregate(IEnumerable<MepElement> elements)
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
+            if (TryGetKnownCount(elements, out var knownCount) && knownCount > MaxElements)
+                ThrowTooManyElements();
 
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var builders = new Dictionary<string, AggregateBuilder>(StringComparer.Ordinal);
             var index = 0;
             foreach (var element in elements)
             {
+                if (index == MaxElements)
+                    ThrowTooManyElements();
                 if (element == null)
                     throw new ArgumentException("MEP takeoff contains a null element at index " + index + ".", nameof(elements));
                 if (!ids.Add(element.ElementId))
@@ -121,6 +128,60 @@ namespace QS3D.Core.Mep
                 result.Add(builder.Build());
             result.Sort(CompareGroups);
             return new ReadOnlyCollection<MepQuantityGroup>(result.ToArray());
+        }
+
+        private static bool TryGetKnownCount(IEnumerable<MepElement> elements, out int count)
+        {
+            var hasKnownCount = false;
+            var firstKnownCount = 0;
+            var maximumKnownCount = 0;
+            var conflictingKnownCounts = false;
+
+            if (elements is ICollection<MepElement> collection)
+                ObserveKnownCount(collection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+
+            if (elements is IReadOnlyCollection<MepElement> readOnlyCollection)
+                ObserveKnownCount(readOnlyCollection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+
+            if (elements is ICollection nonGenericCollection)
+                ObserveKnownCount(nonGenericCollection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+
+            count = maximumKnownCount;
+            if (maximumKnownCount > MaxElements)
+                return true;
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("MEP takeoff source reports conflicting known counts.");
+            return hasKnownCount;
+        }
+
+        private static void ObserveKnownCount(
+            int candidate,
+            ref bool hasKnownCount,
+            ref int firstKnownCount,
+            ref int maximumKnownCount,
+            ref bool conflictingKnownCounts)
+        {
+            if (candidate < 0)
+                throw new InvalidOperationException("MEP takeoff source reports an invalid negative known count.");
+
+            if (!hasKnownCount)
+            {
+                hasKnownCount = true;
+                firstKnownCount = candidate;
+                maximumKnownCount = candidate;
+                return;
+            }
+
+            if (candidate != firstKnownCount)
+                conflictingKnownCounts = true;
+            if (candidate > maximumKnownCount)
+                maximumKnownCount = candidate;
+        }
+
+        private static void ThrowTooManyElements()
+        {
+            throw new InvalidOperationException(
+                "MEP quantity aggregation supports at most " + MaxElements + " elements.");
         }
 
         private static string BuildKey(MepElement element) =>

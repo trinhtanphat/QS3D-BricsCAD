@@ -65,7 +65,11 @@ namespace QS3D.Core.Reporting
             Finite(value, label);
             var result = current + value;
             if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException("Quantity report total overflow: " + label);
-            return result;
+            if (value != 0d && result == current)
+                throw new OverflowException("Quantity report total lost a non-zero addend at floating-point precision: " + label);
+            if (current != 0d && result == value)
+                throw new OverflowException("Quantity report total lost a non-zero accumulated value at floating-point precision: " + label);
+            return result == 0d ? 0d : result;
         }
 
         public static int AddCount(int current, int value)
