@@ -154,7 +154,7 @@ def main():
         'string.Equals(typeName, "RibbonButton", StringComparison.Ordinal)',
         'string.Equals(typeName, "RibbonRowBreak", StringComparison.Ordinal)',
         'string.Equals(typeName, "RibbonRowPanel", StringComparison.Ordinal)',
-        "CloneRibbonItem(sourceItem, ref buttonCount)",
+        "CloneRibbonItem(sourceItem, ref buttonCount, spec.RasterizeImages)",
     ):
         require(bim_ribbon, token, "BIM compact Draw mirror")
 
