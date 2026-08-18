@@ -45,7 +45,10 @@ namespace QS3D.Core.Export
             if (sourceToTargetElementIds == null) throw new ArgumentNullException(nameof(sourceToTargetElementIds));
             var sourceId = Required(sourceProjectId, nameof(sourceProjectId));
             var sourceFingerprint = (sourceDrawingFingerprint ?? string.Empty).Trim();
-            if (sourceToTargetElementIds.Count > MaxMappings)
+            var mappingCount = sourceToTargetElementIds.Count;
+            if (mappingCount < 0)
+                throw new InvalidOperationException("Interchange provenance target map reported a negative mapping Count.");
+            if (mappingCount > MaxMappings)
                 throw new InvalidOperationException("Interchange provenance target map exceeds the supported " + MaxMappings.ToString(CultureInfo.InvariantCulture) + " mapping limit.");
 
             var normalized = sourceToTargetElementIds

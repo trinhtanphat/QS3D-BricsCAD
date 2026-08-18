@@ -58,7 +58,15 @@ namespace QS3D.BricsCAD.V25.UI
             if (root == null || root.RowDefinitions.Count < 3)
                 return;
 
-            root.MinWidth = 0;
+            // WorkspaceContentRoot still has the legacy ViewportWidth binding when Loaded fires.
+            // BricsCAD PaletteSet can report ViewportWidth == 0 during that first host measure, so
+            // never clear the XAML bootstrap minimum here. Keeping a non-zero measure until the
+            // authoritative idle layout clears the binding prevents a self-sustaining blank client.
+            root.MinWidth = Math.Max(root.MinWidth, 560);
+            root.HorizontalAlignment = HorizontalAlignment.Stretch;
+            root.Visibility = Visibility.Visible;
+            root.Opacity = 1d;
+            WorkspaceOverflow.HorizontalContentAlignment = HorizontalAlignment.Stretch;
             WorkspaceOverflow.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
             WorkspaceOverflow.ScrollToHorizontalOffset(0);
 
@@ -73,28 +81,13 @@ namespace QS3D.BricsCAD.V25.UI
             if (workspace == null)
                 return;
 
-            // The Family/Type + Properties and Room/Selection dashboard panes are retired.
-            // Keep their named controls instantiated for code-behind compatibility, but remove
-            // every retired column and splitter from the visible layout after persisted widths
-            // have been restored. MaxWidth=0 prevents legacy saved widths from resurfacing them.
-            var primaryColumn = workspace.ColumnDefinitions[0];
-            primaryColumn.MinWidth = 0;
-            primaryColumn.MaxWidth = double.PositiveInfinity;
-            primaryColumn.Width = new GridLength(1, GridUnitType.Star);
-
-            for (var index = 1; index < workspace.ColumnDefinitions.Count; index++)
-            {
-                var retiredColumn = workspace.ColumnDefinitions[index];
-                retiredColumn.MinWidth = 0;
-                retiredColumn.MaxWidth = 0;
-                retiredColumn.Width = new GridLength(0);
-            }
-
-            foreach (UIElement child in workspace.Children)
-            {
-                if (Grid.GetColumn(child) > 0)
-                    child.Visibility = Visibility.Collapsed;
-            }
+            // Do not retire/collapse the live Workspace columns during Loaded. The BLT3D
+            // Reference/FiveZone idle passes own final column geometry. Mutating all columns to
+            // zero here creates a visible race window and can leave the palette black if host
+            // docking/measure settles before a later compatibility pass gets another render turn.
+            workspace.HorizontalAlignment = HorizontalAlignment.Stretch;
+            workspace.Visibility = Visibility.Visible;
+            workspace.Opacity = 1d;
         }
 
         private void TuneNamedWorkspaceControls()

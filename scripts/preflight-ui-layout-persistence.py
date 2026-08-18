@@ -171,28 +171,34 @@ if splitter.is_file():
 
 if compact.is_file():
     text = compact.read_text(encoding="utf-8")
+    # Loaded-time compact styling must keep the Workspace measurable and visible. Final column
+    # retirement/restoration belongs to the later Reference/FiveZone layout owners; doing it here
+    # while WorkspaceContentRoot still has its ViewportWidth binding can collapse first render.
     for needle in (
         "var root = WorkspaceContentRoot;",
-        "root.MinWidth = 0;",
+        "root.MinWidth = Math.Max(root.MinWidth, 560);",
+        "root.HorizontalAlignment = HorizontalAlignment.Stretch;",
+        "root.Visibility = Visibility.Visible;",
+        "root.Opacity = 1d;",
+        "WorkspaceOverflow.HorizontalContentAlignment = HorizontalAlignment.Stretch;",
         "WorkspaceOverflow.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;",
         "WorkspaceOverflow.ScrollToHorizontalOffset(0);",
         "root.RowDefinitions[0].Height = new GridLength(40);",
         "root.RowDefinitions[2].Height = new GridLength(30);",
-        "var primaryColumn = workspace.ColumnDefinitions[0];",
-        "primaryColumn.MinWidth = 0;",
-        "primaryColumn.MaxWidth = double.PositiveInfinity;",
-        "primaryColumn.Width = new GridLength(1, GridUnitType.Star);",
-        "for (var index = 1; index < workspace.ColumnDefinitions.Count; index++)",
+        "workspace.HorizontalAlignment = HorizontalAlignment.Stretch;",
+        "workspace.Visibility = Visibility.Visible;",
+        "workspace.Opacity = 1d;",
+    ):
+        if needle not in text:
+            errors.append("Workspace compact shell missing first-render-safe presentation contract: " + needle)
+
+    for forbidden in (
+        "root.MinWidth = 0;",
         "retiredColumn.MinWidth = 0;",
         "retiredColumn.MaxWidth = 0;",
         "retiredColumn.Width = new GridLength(0);",
         "if (Grid.GetColumn(child) > 0)",
         "child.Visibility = Visibility.Collapsed;",
-    ):
-        if needle not in text:
-            errors.append("Workspace compact shell missing retired-pane presentation contract: " + needle)
-
-    for forbidden in (
         "familyAndProperties.RowDefinitions[0].Height =",
         "familyAndProperties.RowDefinitions[0].MinHeight =",
         "roomAndSelection.RowDefinitions[0].Height =",
@@ -200,7 +206,7 @@ if compact.is_file():
     ):
         if forbidden in text:
             errors.append(
-                "Workspace compact shell must not mutate retired pane row dimensions; retirement is enforced at the workspace-column boundary: " + forbidden
+                "Workspace compact shell must not collapse the first-render client or mutate retired pane geometry during Loaded: " + forbidden
             )
 
 if runtime.is_file():
@@ -242,4 +248,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: centralized palette minimums remain persisted atomically/best-effort, while the compact presentation layer permanently retires the obsolete Workspace dashboard columns after legacy widths are restored and the offline palette smoke validates equivalent source/XAML contracts without loading hosted UI.")
+print("PASS: centralized palette minimums remain persisted atomically/best-effort, the compact Loaded pass preserves a measurable Workspace client, later authoritative layout passes own final pane geometry, and the offline palette smoke validates equivalent source/XAML contracts without loading hosted UI.")
