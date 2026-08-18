@@ -126,7 +126,10 @@ namespace QS3D.Core.Licensing
                 return false;
             try
             {
-                var bytes = Convert.FromBase64String(line.Substring(prefix.Length));
+                var encoded = line.Substring(prefix.Length);
+                var bytes = Convert.FromBase64String(encoded);
+                if (!string.Equals(encoded, Convert.ToBase64String(bytes), StringComparison.Ordinal))
+                    return false;
                 if (bytes.Length == 0 || bytes.Length > maxBytes)
                     return false;
                 value = StrictUtf8.GetString(bytes);

@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         {
             PublicMetadataTracksChangeVersion();
             ProjectBoundMutationAndAnalysis();
+            BaseTotalRejectsPrecisionLostContribution();
             SnapshotRollback();
             QsdbRoundTrip();
             ReservedMetadataFailsClosed();
@@ -99,6 +100,28 @@ namespace QS3D.Core.SmokeTests
             Equal("A", current.Library.Entries[0].ItemCode, "TBQ library item code");
             Equal("m3", current.Library.Entries[0].Unit, "TBQ library unit");
             Equal(100m, current.Library.Entries[0].ReferenceUnitRate ?? -1m, "TBQ library reference rate");
+        }
+
+        private static void BaseTotalRejectsPrecisionLostContribution()
+        {
+            var state = new TbqProjectWorkspaceState(
+                "VND",
+                0m,
+                new[]
+                {
+                    new TbqBillItem("A-LARGE", "Large cost", "ea", "Structure", 1m, 10000000000000000000000000000m),
+                    new TbqBillItem("B-TINY", "Tiny cost", "ea", "Structure", 1m, 0.0000000000000000000000000001m),
+                    new TbqBillItem("C-ZERO", "Zero cost", "ea", "Structure", 1m, 0m)
+                },
+                Array.Empty<BuildUpRateSnapshot>(),
+                Array.Empty<RateReferenceEdge>(),
+                "PROJECT",
+                Array.Empty<BqLibraryEntry>());
+
+            Equal(10000000000000000000000000000m, state.BillItems[0].TotalCost, "TBQ large line total must remain representable");
+            Equal(0.0000000000000000000000000001m, state.BillItems[1].TotalCost, "TBQ tiny line total must remain representable");
+            Equal(0m, state.BillItems[2].TotalCost, "TBQ explicit zero line total");
+            Throws<OverflowException>(() => { _ = state.BaseTotal; }, "TBQ base total must reject a swallowed non-zero contribution");
         }
 
         private static void SnapshotRollback()
