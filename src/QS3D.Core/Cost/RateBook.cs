@@ -113,7 +113,8 @@ namespace QS3D.Core.Cost
         {
             RateBookId = RateBookContract.RequireToken(rateBookId, nameof(rateBookId));
             if (items == null) throw new ArgumentNullException(nameof(items));
-            if (TryGetKnownCount(items, out var knownCount) && knownCount > MaxItems)
+            var hasKnownCount = TryGetKnownCount(items, out var knownCount);
+            if (hasKnownCount && knownCount > MaxItems)
                 ThrowTooManyItems();
 
             var snapshot = new List<RateItem>();
@@ -126,6 +127,8 @@ namespace QS3D.Core.Cost
             {
                 if (index == MaxItems)
                     ThrowTooManyItems();
+                if (hasKnownCount && index >= knownCount)
+                    ThrowKnownCountTraversalMismatch();
                 if (item == null)
                     throw new ArgumentException("Rate book contains a null item at index " + index + ".", nameof(items));
                 if (!itemIds.Add(item.RateItemId))
@@ -150,6 +153,9 @@ namespace QS3D.Core.Cost
                 snapshot.Add(item);
                 index++;
             }
+
+            if (hasKnownCount && index != knownCount)
+                ThrowKnownCountTraversalMismatch();
 
             foreach (var pair in _byScope)
                 pair.Value.Sort(CompareEffectiveItems);
@@ -241,6 +247,12 @@ namespace QS3D.Core.Cost
         {
             throw new InvalidOperationException(
                 "Rate book supports at most " + MaxItems + " rate items.");
+        }
+
+        private static void ThrowKnownCountTraversalMismatch()
+        {
+            throw new InvalidOperationException(
+                "Rate book item source traversal count does not match its reported known count.");
         }
 
         private static int CompareEffectiveItems(RateItem left, RateItem right)
