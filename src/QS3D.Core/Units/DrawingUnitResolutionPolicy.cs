@@ -123,14 +123,18 @@ namespace QS3D.Core.Units
                 snapshots[i] = new MetadataSnapshot(updates[i].Key, exists, value);
             }
 
+            var lastAttemptedIndex = -1;
             try
             {
                 for (var i = 0; i < updates.Length; i++)
+                {
+                    lastAttemptedIndex = i;
                     metadata[updates[i].Key] = updates[i].Value;
+                }
             }
             catch
             {
-                for (var i = snapshots.Length - 1; i >= 0; i--)
+                for (var i = lastAttemptedIndex; i >= 0; i--)
                 {
                     try
                     {
@@ -143,7 +147,7 @@ namespace QS3D.Core.Units
                     {
                         // Preserve the original mutation failure. Rollback is best-effort for a dictionary
                         // that remains permanently unwritable, while recoverable setter failures restore
-                        // every touched key to its pre-call state.
+                        // every attempted key to its pre-call state without touching later keys.
                     }
                 }
                 throw;

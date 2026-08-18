@@ -31,6 +31,8 @@ namespace QS3D.Core.SmokeTests
             AssertValue(metadata, DrawingUnitResolutionPolicy.OverrideMetadataKey, LengthUnit.Meter.ToString());
             AssertValue(metadata, DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey, "legacy-effective");
             AssertValue(metadata, DrawingUnitResolutionPolicy.BindingSourceMetadataKey, "legacy-source");
+            Equal(false, metadata.WasMutated(DrawingUnitResolutionPolicy.BindingSourceMetadataKey),
+                "rollback touched the unattempted binding-source key");
         }
 
         private static void BindQuantityUnitRollsBackAfterPartialWrite()
@@ -53,6 +55,8 @@ namespace QS3D.Core.SmokeTests
                 metadata.ContainsKey(DrawingUnitResolutionPolicy.BindingSourceMetadataKey))
                 throw new Exception("Rejected drawing-unit binding left partial metadata evidence.");
             AssertValue(metadata, "Unrelated", "preserve");
+            Equal(false, metadata.WasMutated(DrawingUnitResolutionPolicy.BindingSourceMetadataKey),
+                "rollback removed the unattempted binding-source key");
         }
 
         private static void AssertValue(IDictionary<string, string> metadata, string key, string expected)
@@ -75,9 +79,16 @@ namespace QS3D.Core.SmokeTests
             throw new Exception("Expected " + typeof(T).Name + ".");
         }
 
+        private static void Equal<T>(T expected, T actual, string label)
+        {
+            if (!EqualityComparer<T>.Default.Equals(expected, actual))
+                throw new Exception(label + ": expected " + expected + ", actual " + actual + ".");
+        }
+
         private sealed class FailOnceOnSetterDictionary : IDictionary<string, string>
         {
             private readonly Dictionary<string, string> _inner;
+            private readonly HashSet<string> _mutatedKeys;
             private readonly int _failOnSetterCall;
             private int _setterCalls;
             private bool _failed;
@@ -87,14 +98,18 @@ namespace QS3D.Core.SmokeTests
                 int failOnSetterCall)
             {
                 _inner = new Dictionary<string, string>(seed, StringComparer.OrdinalIgnoreCase);
+                _mutatedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 _failOnSetterCall = failOnSetterCall;
             }
+
+            public bool WasMutated(string key) => _mutatedKeys.Contains(key);
 
             public string this[string key]
             {
                 get => _inner[key];
                 set
                 {
+                    _mutatedKeys.Add(key);
                     _setterCalls++;
                     if (!_failed && _setterCalls == _failOnSetterCall)
                     {
@@ -110,9 +125,16 @@ namespace QS3D.Core.SmokeTests
             public int Count => _inner.Count;
             public bool IsReadOnly => false;
 
-            public void Add(string key, string value) => _inner.Add(key, value);
-            public void Add(KeyValuePair<string, string> item) =>
+            public void Add(string key, string value)
+            {
+                _mutatedKeys.Add(key);
+                _inner.Add(key, value);
+            }
+            public void Add(KeyValuePair<string, string> item)
+            {
+                _mutatedKeys.Add(item.Key);
                 ((ICollection<KeyValuePair<string, string>>)_inner).Add(item);
+            }
             public void Clear() => _inner.Clear();
             public bool Contains(KeyValuePair<string, string> item) =>
                 ((ICollection<KeyValuePair<string, string>>)_inner).Contains(item);
@@ -120,9 +142,16 @@ namespace QS3D.Core.SmokeTests
             public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex) =>
                 ((ICollection<KeyValuePair<string, string>>)_inner).CopyTo(array, arrayIndex);
             public IEnumerator<KeyValuePair<string, string>> GetEnumerator() => _inner.GetEnumerator();
-            public bool Remove(string key) => _inner.Remove(key);
-            public bool Remove(KeyValuePair<string, string> item) =>
-                ((ICollection<KeyValuePair<string, string>>)_inner).Remove(item);
+            public bool Remove(string key)
+            {
+                _mutatedKeys.Add(key);
+                return _inner.Remove(key);
+            }
+            public bool Remove(KeyValuePair<string, string> item)
+            {
+                _mutatedKeys.Add(item.Key);
+                return ((ICollection<KeyValuePair<string, string>>)_inner).Remove(item);
+            }
             public bool TryGetValue(string key, out string value) => _inner.TryGetValue(key, out value!);
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
