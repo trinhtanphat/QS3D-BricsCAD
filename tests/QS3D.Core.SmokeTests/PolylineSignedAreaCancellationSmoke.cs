@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             CounterexampleActuallyCollapsesRoundedProducts();
             NegativeOrientationPreservesHalfSquareUnitArea();
             ReversedOrientationPreservesPositiveHalfSquareUnitArea();
+            LargeCollinearTriangleRemainsZero();
         }
 
         private static void CounterexampleActuallyCollapsesRoundedProducts()
@@ -51,6 +52,19 @@ namespace QS3D.Core.SmokeTests
 
             Exact(0.5d, PolylineMetrics.SignedArea(points), "positive cancellation orientation");
             Exact(0.5d, PolylineMetrics.Area(points), "positive cancellation absolute area");
+        }
+
+        private static void LargeCollinearTriangleRemainsZero()
+        {
+            var points = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(134217728d, 134217728d),
+                new Point2(268435456d, 268435456d)
+            };
+
+            Exact(0d, PolylineMetrics.SignedArea(points), "large exact collinear triangle");
+            Exact(0d, PolylineMetrics.Area(points), "large exact collinear absolute area");
         }
 
         private static void Exact(double expected, double actual, string scenario)
