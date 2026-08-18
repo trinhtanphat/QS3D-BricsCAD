@@ -55,7 +55,7 @@ namespace QS3D.Core.SmokeTests
                     new QuantityRevisionRow
                     {
                         ElementId = "E1",
-                        Category = "StructuralColumn",
+                        Category = "Column",
                         QuantityName = quantityName,
                         Change = "Changed",
                         Before = 1d,
@@ -102,7 +102,7 @@ namespace QS3D.Core.SmokeTests
             var element = new RevisionElementSnapshot
             {
                 ElementId = elementId,
-                Category = "StructuralColumn"
+                Category = "Column"
             };
             element.Quantities[quantityKey] = value;
             snapshot.Elements.Add(element);
