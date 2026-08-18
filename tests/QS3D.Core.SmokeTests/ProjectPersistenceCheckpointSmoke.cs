@@ -16,6 +16,10 @@ namespace QS3D.Core.SmokeTests
             RefusesProjectAndElementAffinityBeforeMutation();
             RejectsNonCanonicalCallerIds();
             RejectsKnownOversizeBeforeEnumeration();
+            RejectsConflictingKnownCountsBeforeEnumeration();
+            RejectsNegativeKnownCountBeforeEnumeration();
+            CapacityTakesPrecedenceOverConflictingKnownCounts();
+            AcceptsConsistentMultiContractCounts();
             RejectsDishonestCountAtFirstDisallowedEntry();
             AcceptsExactBoundaryAndPreservesCaseInsensitiveIdentity();
             RestoresLongMaxValueWithoutOverflow();
@@ -128,6 +132,52 @@ namespace QS3D.Core.SmokeTests
             Equal(0, source.EnumerationCount, "Known oversized collection was enumerated before rejection.");
         }
 
+        private static void RejectsConflictingKnownCountsBeforeEnumeration()
+        {
+            var project = new ProjectState("P-COUNT-CONFLICT", "Count conflict");
+            var source = new MultiContractCollection(1, 2, 1, new[] { "E1" });
+            var error = ThrowsMessage<InvalidOperationException>(() => ProjectPersistenceCheckpoint.Capture(project, source));
+            Contains("conflicting element counts", error, "Conflicting Count contracts did not produce the deterministic conflict diagnostic.");
+            Equal(0, source.EnumerationCount, "Conflicting Count contracts reached enumeration.");
+            AssertEachKnownCountReadOnce(source, "conflicting Count contracts");
+        }
+
+        private static void RejectsNegativeKnownCountBeforeEnumeration()
+        {
+            var project = new ProjectState("P-COUNT-NEGATIVE", "Negative count");
+            var source = new MultiContractCollection(1, -1, 1, new[] { "E1" });
+            var error = ThrowsMessage<InvalidOperationException>(() => ProjectPersistenceCheckpoint.Capture(project, source));
+            Contains("invalid negative element count", error, "Negative Count evidence did not produce the deterministic malformed-count diagnostic.");
+            Equal(0, source.EnumerationCount, "Negative Count evidence reached enumeration.");
+            AssertEachKnownCountReadOnce(source, "negative Count evidence");
+        }
+
+        private static void CapacityTakesPrecedenceOverConflictingKnownCounts()
+        {
+            var project = new ProjectState("P-COUNT-CAPACITY", "Capacity precedence");
+            var source = new MultiContractCollection(1, 10001, 2, new[] { "E1" });
+            var error = ThrowsMessage<InvalidOperationException>(() => ProjectPersistenceCheckpoint.Capture(project, source));
+            Contains("10000 element limit", error, "Capacity rejection did not take precedence over Count conflict diagnostics.");
+            Equal(0, source.EnumerationCount, "Oversized conflicting Count contracts reached enumeration.");
+            AssertEachKnownCountReadOnce(source, "capacity-precedence Count evidence");
+        }
+
+        private static void AcceptsConsistentMultiContractCounts()
+        {
+            var project = new ProjectState("P-COUNT-CONSISTENT", "Consistent counts");
+            project.Elements.Add(new ProjectElement("E1", ElementCategory.GlassWall));
+            project.Touch();
+            var source = new MultiContractCollection(1, 1, 1, new[] { "e1" });
+
+            var checkpoint = ProjectPersistenceCheckpoint.Capture(project, source);
+
+            Equal(1, checkpoint.ElementIds.Count, "Consistent multi-contract Count evidence was rejected.");
+            Equal("e1", checkpoint.ElementIds[0], "Consistent Count capture changed canonical caller identity text.");
+            Equal(1, source.EnumerationCount, "Consistent Count source was not enumerated exactly once.");
+            AssertEachKnownCountReadOnce(source, "consistent Count evidence");
+            True(checkpoint.Matches(project), "Checkpoint from consistent Count evidence did not match its source project.");
+        }
+
         private static void RejectsDishonestCountAtFirstDisallowedEntry()
         {
             var project = BuildLargeProject("P-DISHONEST", 10000);
@@ -185,6 +235,13 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void AssertEachKnownCountReadOnce(MultiContractCollection source, string scenario)
+        {
+            Equal(1, source.GenericCountReads, scenario + " did not read ICollection<T>.Count exactly once.");
+            Equal(1, source.ReadOnlyCountReads, scenario + " did not read IReadOnlyCollection<T>.Count exactly once.");
+            Equal(1, source.NonGenericCountReads, scenario + " did not read ICollection.Count exactly once.");
+        }
+
         private sealed class ThrowingOversizeCollection : ICollection<string>
         {
             public ThrowingOversizeCollection(int count) { Count = count; }
@@ -202,6 +259,61 @@ namespace QS3D.Core.SmokeTests
             public bool Contains(string item) => false;
             public void CopyTo(string[] array, int arrayIndex) => throw new NotSupportedException();
             public bool Remove(string item) => throw new NotSupportedException();
+        }
+
+        private sealed class MultiContractCollection : ICollection<string>, IReadOnlyCollection<string>, ICollection
+        {
+            private readonly int _genericCount;
+            private readonly int _readOnlyCount;
+            private readonly int _nonGenericCount;
+            private readonly IReadOnlyList<string> _items;
+
+            public MultiContractCollection(int genericCount, int readOnlyCount, int nonGenericCount, IReadOnlyList<string> items)
+            {
+                _genericCount = genericCount;
+                _readOnlyCount = readOnlyCount;
+                _nonGenericCount = nonGenericCount;
+                _items = items;
+            }
+
+            public int GenericCountReads { get; private set; }
+            public int ReadOnlyCountReads { get; private set; }
+            public int NonGenericCountReads { get; private set; }
+            public int EnumerationCount { get; private set; }
+
+            int ICollection<string>.Count
+            {
+                get { GenericCountReads++; return _genericCount; }
+            }
+
+            int IReadOnlyCollection<string>.Count
+            {
+                get { ReadOnlyCountReads++; return _readOnlyCount; }
+            }
+
+            int ICollection.Count
+            {
+                get { NonGenericCountReads++; return _nonGenericCount; }
+            }
+
+            bool ICollection<string>.IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                EnumerationCount++;
+                for (var i = 0; i < _items.Count; i++)
+                    yield return _items[i];
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            void ICollection<string>.Add(string item) => throw new NotSupportedException();
+            void ICollection<string>.Clear() => throw new NotSupportedException();
+            bool ICollection<string>.Contains(string item) => false;
+            void ICollection<string>.CopyTo(string[] array, int arrayIndex) => throw new NotSupportedException();
+            bool ICollection<string>.Remove(string item) => throw new NotSupportedException();
+            void ICollection.CopyTo(Array array, int index) => throw new NotSupportedException();
         }
 
         private sealed class DishonestReadOnlyCollection : IReadOnlyCollection<string>
@@ -240,10 +352,23 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception(message + " Expected=" + expected + ", actual=" + actual + ".");
         }
 
+        private static void Contains(string expectedFragment, string actual, string message)
+        {
+            if (actual == null || actual.IndexOf(expectedFragment, StringComparison.Ordinal) < 0)
+                throw new Exception(message + " Actual=\"" + actual + "\".");
+        }
+
         private static void Throws<T>(Action action) where T : Exception
         {
             try { action(); }
             catch (T) { return; }
+            throw new Exception("Expected " + typeof(T).Name + ".");
+        }
+
+        private static string ThrowsMessage<T>(Action action) where T : Exception
+        {
+            try { action(); }
+            catch (T ex) { return ex.Message; }
             throw new Exception("Expected " + typeof(T).Name + ".");
         }
     }

@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.SmokeTests
@@ -9,8 +10,8 @@ namespace QS3D.Core.SmokeTests
         {
             FloorReferenceIdentityIsCanonical();
             PaddedActiveFloorBlocksDelete();
-            ZoneReferenceIdentityIsCanonical();
-            PaddedActiveZoneBlocksDelete();
+            ZoneReferenceIdentityFailsClosed();
+            PaddedActiveZoneFailsClosed();
         }
 
         private static void FloorReferenceIdentityIsCanonical()
@@ -56,44 +57,72 @@ namespace QS3D.Core.SmokeTests
             Equal("fLOOR-a", project.ActiveFloorId);
         }
 
-        private static void ZoneReferenceIdentityIsCanonical()
+        private static void ZoneReferenceIdentityFailsClosed()
         {
             var project = new ProjectState("P-ZONE-REF", "Zone reference test");
             var zone = ProjectZoneService.Create(project, "Z-01", "Zone 01");
             var fallback = ProjectZoneService.Create(project, "Z-02", "Zone 02");
             project.ActiveZoneId = fallback.Id;
-            var element = new ProjectElement("E-ZONE", ElementCategory.Beam)
-            {
-                ZoneId = "  z-01  "
-            };
+            var element = new ProjectElement("E-ZONE", ElementCategory.Beam);
+            SetRawZoneId(element, "  z-01  ");
             element.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(element);
 
-            Equal(1, ProjectZoneService.ReferenceCount(project, " Z-01 "));
-            ProjectZoneService.Update(project, zone.Id, "Zone 01 renamed");
-            True((element.Dirty & ElementDirtyFlags.Relations) != 0);
-            True((element.Dirty & ElementDirtyFlags.Quantity) != 0);
-
             var beforeVersion = project.ChangeVersion;
             var beforeCount = project.Zones.Count;
-            ThrowsReferencedZone(() => ProjectZoneService.Delete(project, zone.Id));
+            var beforeName = zone.Name;
+
+            ThrowsArgument(() => ProjectZoneService.ReferenceCount(project, zone.Id));
+            ThrowsArgument(() => ProjectZoneService.Update(project, zone.Id, "Zone 01 renamed"));
+            ThrowsArgument(() => ProjectZoneService.Delete(project, zone.Id));
+
             Equal(beforeVersion, project.ChangeVersion);
             Equal(beforeCount, project.Zones.Count);
+            Equal(beforeName, zone.Name);
+            Equal("  z-01  ", RawZoneId(element));
             Same(zone, project.FindZone(zone.Id));
         }
 
-        private static void PaddedActiveZoneBlocksDelete()
+        private static void PaddedActiveZoneFailsClosed()
         {
             var project = new ProjectState("P-ZONE-ACTIVE", "Zone active test");
             var zone = ProjectZoneService.Create(project, "Zone-A", "Zone A");
-            project.ActiveZoneId = "  zONE-a  ";
+            SetRawActiveZoneId(project, "  zONE-a  ");
             var beforeVersion = project.ChangeVersion;
 
-            ThrowsActiveZone(() => ProjectZoneService.Delete(project, " zone-A "));
+            ThrowsArgument(() => ProjectZoneService.Delete(project, zone.Id));
 
             Equal(beforeVersion, project.ChangeVersion);
             Same(zone, project.FindZone(zone.Id));
-            Equal("zONE-a", project.ActiveZoneId);
+            Equal("  zONE-a  ", RawActiveZoneId(project));
+        }
+
+        private static void SetRawZoneId(ProjectElement element, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_zoneId", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null) throw new Exception("ProjectElement._zoneId field was not found.");
+            field.SetValue(element, value);
+        }
+
+        private static string RawZoneId(ProjectElement element)
+        {
+            var field = typeof(ProjectElement).GetField("_zoneId", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null) throw new Exception("ProjectElement._zoneId field was not found.");
+            return field.GetValue(element) as string ?? throw new Exception("ProjectElement._zoneId was not a string.");
+        }
+
+        private static void SetRawActiveZoneId(ProjectState project, string value)
+        {
+            var field = typeof(ProjectState).GetField("_activeZoneId", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null) throw new Exception("ProjectState._activeZoneId field was not found.");
+            field.SetValue(project, value);
+        }
+
+        private static string RawActiveZoneId(ProjectState project)
+        {
+            var field = typeof(ProjectState).GetField("_activeZoneId", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null) throw new Exception("ProjectState._activeZoneId field was not found.");
+            return field.GetValue(project) as string ?? throw new Exception("ProjectState._activeZoneId was not a string.");
         }
 
         private static void ThrowsReferencedFloor(Action action)
@@ -106,14 +135,18 @@ namespace QS3D.Core.SmokeTests
             ThrowsInvalid(action, "Cannot delete the active floor. Activate another floor first.");
         }
 
-        private static void ThrowsReferencedZone(Action action)
+        private static void ThrowsArgument(Action action)
         {
-            ThrowsInvalid(action, "semantic element(s). Reassign them before deletion.");
-        }
+            try
+            {
+                action();
+            }
+            catch (ArgumentException)
+            {
+                return;
+            }
 
-        private static void ThrowsActiveZone(Action action)
-        {
-            ThrowsInvalid(action, "Cannot delete the active zone. Activate another zone first.");
+            throw new Exception("Expected ArgumentException for noncanonical Zone semantic identity/reference.");
         }
 
         private static void ThrowsInvalid(Action action, string expectedMessagePart)
