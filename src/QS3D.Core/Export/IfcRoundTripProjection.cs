@@ -112,8 +112,14 @@ namespace QS3D.Core.Export
         public static IfcRoundTripProjectionSet Create(IEnumerable<IfcRoundTripProjection> projections)
         {
             if (projections == null) throw new ArgumentNullException(nameof(projections));
-            if (TryGetKnownCount(projections, out var knownCount) && knownCount > MaxProjections)
+
+            var knownCount = TryGetKnownCount(projections, out var conflictingKnownCounts, out var negativeKnownCount);
+            if (knownCount.HasValue && knownCount.Value > MaxProjections)
                 ThrowTooManyProjections();
+            if (negativeKnownCount)
+                throw new InvalidOperationException("IFC round-trip projection source exposes an invalid negative known Count value.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("IFC round-trip projection source exposes conflicting known Count values.");
 
             var items = new List<IfcRoundTripProjection>();
             foreach (var projection in projections)
@@ -136,28 +142,36 @@ namespace QS3D.Core.Export
             return new IfcRoundTripProjectionSet(Array.AsReadOnly(items.ToArray()));
         }
 
-        private static bool TryGetKnownCount(IEnumerable<IfcRoundTripProjection> projections, out int count)
+        private static int? TryGetKnownCount(
+            IEnumerable<IfcRoundTripProjection> projections,
+            out bool conflictingKnownCounts,
+            out bool negativeKnownCount)
         {
+            conflictingKnownCounts = false;
+            negativeKnownCount = false;
+            int? knownCount = null;
+
             if (projections is ICollection<IfcRoundTripProjection> collection)
-            {
-                count = collection.Count;
-                return true;
-            }
-
+                knownCount = ObserveKnownCount(knownCount, collection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
             if (projections is IReadOnlyCollection<IfcRoundTripProjection> readOnlyCollection)
-            {
-                count = readOnlyCollection.Count;
-                return true;
-            }
-
+                knownCount = ObserveKnownCount(knownCount, readOnlyCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
             if (projections is ICollection nonGenericCollection)
-            {
-                count = nonGenericCollection.Count;
-                return true;
-            }
+                knownCount = ObserveKnownCount(knownCount, nonGenericCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
 
-            count = 0;
-            return false;
+            return knownCount;
+        }
+
+        private static int ObserveKnownCount(
+            int? current,
+            int observed,
+            ref bool conflictingKnownCounts,
+            ref bool negativeKnownCount)
+        {
+            if (observed < 0)
+                negativeKnownCount = true;
+            if (current.HasValue && current.Value != observed)
+                conflictingKnownCounts = true;
+            return !current.HasValue || observed > current.Value ? observed : current.Value;
         }
 
         private static void ThrowTooManyProjections()
