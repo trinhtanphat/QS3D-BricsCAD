@@ -51,7 +51,7 @@ namespace QS3D.Core.Units
                 throw new InvalidOperationException("Project drawing-unit override is invalid: value is blank.");
 
             if (!TryParseNamedUnitToken(raw, out var parsed))
-                throw new InvalidOperationException("Project drawing-unit override is invalid: " + raw + ".");
+                throw new InvalidOperationException("Project drawing-unit override is invalid: value is not a canonical unit token.");
             resolution = new DrawingUnitResolution(parsed, DrawingUnitResolutionSource.ProjectOverride);
             return true;
         }
@@ -121,7 +121,7 @@ namespace QS3D.Core.Units
             if (string.IsNullOrWhiteSpace(raw))
                 throw new InvalidOperationException("Project drawing-unit metadata is invalid: " + key + " is blank.");
             if (!TryParseNamedUnitToken(raw, out unit))
-                throw new InvalidOperationException("Project drawing-unit metadata is invalid: " + key + "=" + raw + ".");
+                throw new InvalidOperationException("Project drawing-unit metadata is invalid: " + key + " is not a canonical unit token.");
             return true;
         }
 
