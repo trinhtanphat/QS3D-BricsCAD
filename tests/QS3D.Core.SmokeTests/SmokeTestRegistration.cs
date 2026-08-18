@@ -88,6 +88,7 @@ namespace QS3D.Core.SmokeTests
             LevelReferenceSmoke.Run();
             ElementVerticalPlacementAdditivePrecisionSmoke.Run();
             ProjectFloorMutationTargetBoundSmoke.Run();
+            ProjectFloorPersistedLevelCanonicalitySmoke.Run();
             FloorGeneratedIdentitySmoke.Run();
             ModelHealthIdentityAmbiguitySmoke.Run();
             ModelHealthSourceHandleSmoke.Run();
