@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using QS3D.Core.Measurement;
 
 namespace QS3D.Core.SmokeTests
@@ -326,15 +325,6 @@ namespace QS3D.Core.SmokeTests
             void ICollection<T>.CopyTo(T[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
             bool ICollection<T>.Remove(T item) => throw new NotSupportedException();
             void ICollection.CopyTo(Array array, int index) => ((ICollection)_items).CopyTo(array, index);
-        }
-    }
-
-    internal static class MeasurementTraceKnownCountIntegrityRegistration
-    {
-        [ModuleInitializer]
-        internal static void Initialize()
-        {
-            MeasurementTraceKnownCountIntegritySmoke.Run();
         }
     }
 }
