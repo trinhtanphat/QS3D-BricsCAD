@@ -88,6 +88,7 @@ namespace QS3D.Core.SmokeTests
             HealthSummaryReadinessSmoke.Run();
             DependencyHealthMissingTargetSmoke.Run();
             DependencyHealthBlankTargetSmoke.Run();
+            DependencyHealthRelationBoundSmoke.Run();
             LevelReferenceSmoke.Run();
             ElementVerticalPlacementAdditivePrecisionSmoke.Run();
             ProjectFloorMutationTargetBoundSmoke.Run();
