@@ -12,7 +12,7 @@ The repository does not define the existence, count, cadence, enabled/disabled s
 
 ## Names such as C0 / W1-W4
 
-Labels such as `C0`, `W1`, `W2`, `W3`, `W4`, `QS3D-CONTROL`, `QS3D-WORKER-*`, `controller`, `worker`, or `Task 0-4` may appear inside an external ChatGPT schedule prompt as convenient account-side orchestration labels.
+Labels such as `C0`, `W1`, `W2`, `W3`, `W4`, `controller`, `worker`, or `Task 0-4` may appear inside an external ChatGPT schedule prompt as convenient account-side orchestration labels.
 
 Those labels **do not by themselves**:
 
