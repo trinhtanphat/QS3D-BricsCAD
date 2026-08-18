@@ -94,7 +94,9 @@ namespace QS3D.BricsCAD.V25.UI
             };
             titleBar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             titleBar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            titleBar.MouseLeftButtonDown += (_, args) =>
+
+            var dragSurface = new Grid { Background = Brushes.Transparent };
+            dragSurface.MouseLeftButtonDown += (_, args) =>
             {
                 if (args.ChangedButton == MouseButton.Left)
                     DragMove();
@@ -108,7 +110,9 @@ namespace QS3D.BricsCAD.V25.UI
                 FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center
             };
-            titleBar.Children.Add(heading);
+            dragSurface.Children.Add(heading);
+            Grid.SetColumn(dragSurface, 0);
+            titleBar.Children.Add(dragSurface);
 
             var close = new Button
             {
