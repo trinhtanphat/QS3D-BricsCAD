@@ -58,7 +58,7 @@ def main() -> int:
     ):
         forbid(asset, stale, "repository QS3D cube branding asset")
 
-    # Preserve the separate repository-owned compact Ribbon fallback glyph.
+    # Preserve the separate repository-owned compact Ribbon brand glyph for explicit identity.
     for token in (
         "assets/branding/qs3d-logo.svg",
         "internal static class Qs3dBrandIconFactory",
@@ -69,24 +69,43 @@ def main() -> int:
         'Geometry.Parse("M16,5.75 L24.25,10.5 16,15.25 7.75,10.5 Z")',
         "image.Freeze();",
     ):
-        require(factory, token, "QS3D compact ribbon fallback mark")
+        require(factory, token, "QS3D compact ribbon brand mark")
 
+    # Functional Home actions must use semantic glyphs; the product mark is not a substitute for
+    # a missing icon. Keep the brand-rendering path available only for future explicit identity specs.
+    require(
+        home,
+        'new HomeButtonSpec("QS3D_HOME_SYSTEM_OBJECTS", "Đối tượng\\nhệ thống", () => new FamilyManagerCommands().ShowFamilyManager(), RibbonIconKind.Objects)',
+        "QS3D system-object semantic icon",
+    )
     for token in (
-        'new HomeButtonSpec("QS3D_HOME_SYSTEM_OBJECTS", "Đối tượng\\nhệ thống"',
         "RibbonIconKind.Qs3dLogo",
         "? Qs3dBrandIconFactory.Create(16)",
         "? Qs3dBrandIconFactory.Create(32)",
-        "BricsCAD's host/application icon is",
+        "Functional actions such as System Objects must select a semantic icon instead.",
     ):
-        require(home, token, "QS3D-owned system ribbon branding")
+        require(home, token, "explicit-only Home brand rendering")
 
     for token in (
         "if (icon == RibbonIconKind.Qs3dLogo)",
         "return Qs3dBrandIconFactory.Create(pixelSize);",
+        '"QS3DSTART"',
         "return RibbonIconKind.Qs3dLogo;",
+        "return RibbonIconKind.Objects;",
+        "Do not turn a missing mapping into product branding.",
     ):
-        require(bootstrap, token, "canonical Ribbon brand fallback")
-    forbid(bootstrap, "return RibbonIconKind.Objects;", "canonical Ribbon brand fallback")
+        require(bootstrap, token, "canonical Ribbon brand/fallback separation")
+
+    # Exactly one resolver outcome may select the product mark: the explicit QS3D start/product
+    # identity surface. This prevents a second branded functional fallback from silently returning.
+    brand_outcome = "return RibbonIconKind.Qs3dLogo;"
+    if bootstrap.count(brand_outcome) != 1:
+        fail(
+            "canonical Ribbon bootstrap must contain exactly one Qs3dLogo resolver outcome "
+            "for explicit product identity"
+        )
+    if bootstrap.rfind("return RibbonIconKind.Objects;") < bootstrap.rfind("return RibbonIconKind.Draw;"):
+        fail("canonical Ribbon neutral Objects fallback must remain after semantic mappings")
 
     for forbidden in (
         "ApplicationIcon",
@@ -98,9 +117,9 @@ def main() -> int:
             fail(f"QS3D ribbon branding must not replace BricsCAD host icon: {forbidden}")
 
     print(
-        "PASS: repository branding uses the independent QS3D cube mark, the system Ribbon action "
-        "keeps its repository-owned compact fallback glyph, unknown QS3D command buttons cannot "
-        "regress to the generic Objects placeholder, and BricsCAD host/icon ownership remains untouched."
+        "PASS: repository branding keeps the independent QS3D cube mark for explicit identity, "
+        "System Objects uses a semantic Objects icon, unknown functional Ribbon commands use a "
+        "neutral fallback instead of product branding, and BricsCAD host/icon ownership is untouched."
     )
     return 0
 

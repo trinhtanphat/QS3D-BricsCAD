@@ -89,7 +89,7 @@ namespace QS3D.Core.Reporting
                     order.Add(key);
                 }
                 row.Count = checked(row.Count + 1);
-                row.OpeningAreaM2 = Add(row.OpeningAreaM2, areaM2, element.Id + "/opening schedule area");
+                row.OpeningAreaM2 = QuantityReportMath.Add(row.OpeningAreaM2, areaM2, element.Id + "/opening schedule area");
                 row.ElementIds.Add(element.Id);
                 ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
                 if (hostId.Length > 0 && !row.HostIds.Contains(hostId, StringComparer.OrdinalIgnoreCase)) row.HostIds.Add(hostId);
@@ -188,13 +188,6 @@ namespace QS3D.Core.Reporting
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new OverflowException(label + " overflowed.");
             if (value == 0d && left > 0d && right > 0d)
                 throw new InvalidOperationException(label + " underflowed: positive finite dimensions rounded to zero area.");
-            return value;
-        }
-
-        private static double Add(double left, double right, string label)
-        {
-            var value = left + right;
-            if (double.IsNaN(value) || double.IsInfinity(value)) throw new OverflowException(label + " overflowed.");
             return value;
         }
     }

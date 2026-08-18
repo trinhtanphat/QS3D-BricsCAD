@@ -30,7 +30,7 @@ namespace QS3D.Core.Navigation
         private static IReadOnlyList<T> CopyBounded<T>(IEnumerable<T>? values, string parameterName)
         {
             if (values == null) return new List<T>().AsReadOnly();
-            RejectOversizedKnownCount(values, parameterName);
+            ValidateKnownCounts(values, parameterName);
             var result = new List<T>();
             foreach (var value in values)
             {
@@ -41,14 +41,24 @@ namespace QS3D.Core.Navigation
             return result.AsReadOnly();
         }
 
-        private static void RejectOversizedKnownCount<T>(IEnumerable<T> values, string parameterName)
+        private static void ValidateKnownCounts<T>(IEnumerable<T> values, string parameterName)
         {
-            if (values is ICollection<T> collection && collection.Count > ProjectBrowserQueryPlanner.MaxFilterIds)
+            int? knownCount = null;
+            ValidateKnownCount(values is ICollection<T> collection ? collection.Count : (int?)null, parameterName, ref knownCount);
+            ValidateKnownCount(values is IReadOnlyCollection<T> readOnlyCollection ? readOnlyCollection.Count : (int?)null, parameterName, ref knownCount);
+            ValidateKnownCount(values is System.Collections.ICollection nonGenericCollection ? nonGenericCollection.Count : (int?)null, parameterName, ref knownCount);
+        }
+
+        private static void ValidateKnownCount(int? count, string parameterName, ref int? knownCount)
+        {
+            if (!count.HasValue) return;
+            if (count.Value < 0)
+                throw new InvalidOperationException("Project browser query option " + parameterName + " exposes an invalid negative Count.");
+            if (count.Value > ProjectBrowserQueryPlanner.MaxFilterIds)
                 throw TooManyFilterValues(parameterName);
-            if (values is IReadOnlyCollection<T> readOnlyCollection && readOnlyCollection.Count > ProjectBrowserQueryPlanner.MaxFilterIds)
-                throw TooManyFilterValues(parameterName);
-            if (values is System.Collections.ICollection nonGenericCollection && nonGenericCollection.Count > ProjectBrowserQueryPlanner.MaxFilterIds)
-                throw TooManyFilterValues(parameterName);
+            if (knownCount.HasValue && knownCount.Value != count.Value)
+                throw new InvalidOperationException("Project browser query option " + parameterName + " exposes conflicting Count contracts.");
+            knownCount = count.Value;
         }
 
         private static InvalidOperationException TooManyFilterValues(string parameterName)
