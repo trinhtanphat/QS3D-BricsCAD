@@ -114,6 +114,7 @@ namespace QS3D.Core.Templates
             if (profile == null) throw new ArgumentNullException(nameof(profile));
             Validate(profile);
             EnsureSerializedLowerBoundWithinLimit(profile);
+            EnsureSerializedPayloadWithinLimit(profile);
             var familyPlans = ValidateApply(project, profile);
             var rollback = ProjectStateSnapshot.Capture(project);
 
@@ -346,6 +347,11 @@ namespace QS3D.Core.Templates
                 element.MarkDirty(dirty);
                 affected.Add(element.Id);
             }
+        }
+
+        private static void EnsureSerializedPayloadWithinLimit(TemplateProfile profile)
+        {
+            SerializeBounded(profile);
         }
 
         private static byte[] SerializeBounded(TemplateProfile profile)
