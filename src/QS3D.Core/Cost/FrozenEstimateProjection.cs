@@ -19,7 +19,8 @@ namespace QS3D.Core.Cost
         public static FrozenEstimateProjection Create(IEnumerable<EstimateLine> lines)
         {
             if (lines == null) throw new ArgumentNullException(nameof(lines));
-            if (TryGetKnownCount(lines, out var knownCount) && knownCount > MaxLines)
+            var hasKnownCount = TryGetKnownCount(lines, out var knownCount);
+            if (hasKnownCount && knownCount > MaxLines)
                 ThrowTooManyLines();
 
             var rows = new List<FrozenEstimateProjectionRow>();
@@ -37,6 +38,9 @@ namespace QS3D.Core.Cost
                 rows.Add(FrozenEstimateProjectionRow.From(line));
                 index++;
             }
+
+            if (hasKnownCount && rows.Count != knownCount)
+                throw new InvalidOperationException("Frozen estimate projection source Count does not match source traversal.");
 
             rows.Sort(CompareRows);
             return new FrozenEstimateProjection(rows);
