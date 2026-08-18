@@ -356,12 +356,18 @@ namespace QS3D.Core.Review
 
             if (snapshot.Kind == PreviewReviewKind.Regeneration)
             {
+                HashSet<string>? subsetTargets = null;
+                if (snapshot.IsSubset)
+                    subsetTargets = new HashSet<string>(snapshot.TargetElementIds, StringComparer.OrdinalIgnoreCase);
+
                 foreach (var entry in snapshot.Entries)
                 {
                     if (entry.Category.Length != 0)
                         throw new InvalidOperationException("Regeneration review entries must not contain quantity-rule categories.");
                     if (entry.BeforeProvenance.Length != 0 || entry.AfterProvenance.Length != 0)
                         throw new InvalidOperationException("Regeneration review entries must not contain quantity-rule provenance.");
+                    if (subsetTargets != null && !subsetTargets.Contains(entry.ElementId))
+                        throw new InvalidOperationException("Regeneration subset review entry is outside the reviewed target set: " + entry.ElementId + ".");
                 }
             }
         }
