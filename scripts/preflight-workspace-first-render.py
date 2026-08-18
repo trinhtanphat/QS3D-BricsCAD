@@ -124,17 +124,22 @@ def main():
         RUNTIME_REL,
     )
 
-    # BricsCAD can show/reparent/resize a PaletteSet after the old two-tick startup window. Keep the
-    # bounded startup repair, but also keep a loaded-lifetime recovery trigger that is gated by an
-    # actually blank/collapsed client. This prevents a late host layout from stranding the body while
-    # also preventing ordinary nonblank resizes from continually resetting splitter geometry.
+    # BricsCAD can show/reparent/resize/re-layout a PaletteSet after the old two-tick startup window.
+    # Keep the bounded startup repair, but also keep loaded-lifetime recovery observations that are
+    # gated by an actually blank/collapsed client. LayoutUpdated covers host reparent/layout cases
+    # where the final outer size and visibility do not change, while the cheap healthy-layout return
+    # prevents normal splitter activity from being continuously reset.
     for token in (
         "WireBlt3dRuntimeViewportRecovery();",
         "UnwireBlt3dRuntimeViewportRecovery();",
         "WorkspaceOverflow.SizeChanged += OnBlt3dRuntimeViewportSizeChanged;",
         "WorkspaceOverflow.IsVisibleChanged += OnBlt3dRuntimeViewportVisibilityChanged;",
+        "WorkspaceOverflow.LayoutUpdated += OnBlt3dRuntimeViewportLayoutUpdated;",
         "WorkspaceOverflow.SizeChanged -= OnBlt3dRuntimeViewportSizeChanged;",
         "WorkspaceOverflow.IsVisibleChanged -= OnBlt3dRuntimeViewportVisibilityChanged;",
+        "WorkspaceOverflow.LayoutUpdated -= OnBlt3dRuntimeViewportLayoutUpdated;",
+        "private void OnBlt3dRuntimeViewportLayoutUpdated(object? sender, EventArgs e)",
+        "if (NeedsBlt3dRuntimeViewportRecovery())",
         "QueueBlt3dRuntimeViewportRecovery();",
         "if (!NeedsBlt3dRuntimeViewportRecovery())",
         "BindingOperations.IsDataBound(root, FrameworkElement.WidthProperty)",
@@ -164,6 +169,11 @@ def main():
         "WorkspaceOverflow.SizeChanged += (_, __) => ReassertBlt3dRuntimeLayout();",
         RUNTIME_REPAIR_REL,
     )
+    forbid(
+        runtime_repair,
+        "WorkspaceOverflow.LayoutUpdated += (_, __) => ReassertBlt3dRuntimeLayout();",
+        RUNTIME_REPAIR_REL,
+    )
 
     # Real BricsCAD first-render/HiDPI proof is LOCAL_ONLY. Reuse the canonical Workspace local
     # handoff instead of inventing another queue. Validate only the stable scenario identity here:
@@ -183,9 +193,9 @@ def main():
 
     print(
         "PASS: Workspace keeps the first-measure bootstrap, authoritative idle passes break the "
-        "ViewportWidth loop, and a gated loaded-lifetime viewport recovery repairs late BricsCAD "
-        "show/reparent/resize blanking without continuously resetting normal splitter resizing; "
-        "LOCAL-012 remains the canonical licensed visual qualification scenario."
+        "ViewportWidth loop, and gated loaded-lifetime size/visibility/layout recovery repairs late "
+        "BricsCAD blanking without continuously resetting healthy splitter resizing; LOCAL-012 "
+        "remains the canonical licensed visual qualification scenario."
     )
     return 0
 
