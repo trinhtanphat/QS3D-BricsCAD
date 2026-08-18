@@ -191,6 +191,13 @@ namespace QS3D.Core.Formulas
                             var product = EnsureFinite(value * right, "Multiplication produced a non-finite result.");
                             if (product == 0d && value != 0d && right != 0d)
                                 throw Error("Multiplication underflowed to zero.");
+                            if (value != 0d && right != 0d)
+                            {
+                                if (right != 1d && product == value)
+                                    throw Error("Multiplication lost the right operand contribution at double precision.");
+                                if (value != 1d && product == right)
+                                    throw Error("Multiplication lost the left operand contribution at double precision.");
+                            }
                             value = product;
                         }
                         else value = 0d;
