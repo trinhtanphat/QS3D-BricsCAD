@@ -17,8 +17,20 @@ namespace QS3D.Core.SmokeTests
             ExpectArgument("id", () => new QuantityRule(" rule-1", ElementCategory.ArchitecturalWall, "NetVolumeM3", "1", "v1"));
             ExpectArgument("id", () => new QuantityRule("rule-1 ", ElementCategory.ArchitecturalWall, "NetVolumeM3", "1", "v1"));
             ExpectArgument("id", () => new QuantityRule("\trule-1", ElementCategory.ArchitecturalWall, "NetVolumeM3", "1", "v1"));
-            ExpectArgument("outputName", () => new QuantityRule("rule-1", ElementCategory.ArchitecturalWall, "NetVolumeM3\n", "1", "v1"));
-            ExpectArgument("version", () => new QuantityRule("rule-1", ElementCategory.ArchitecturalWall, "NetVolumeM3", "1", " v1 "));
+            ExpectArgument("id", () => new QuantityRule("rule\n1", ElementCategory.ArchitecturalWall, "NetVolumeM3", "1", "v1"));
+            ExpectArgument("id", () => new QuantityRule("   ", ElementCategory.ArchitecturalWall, "NetVolumeM3", "1", "v1"));
+
+            ExpectArgument("outputName", () => new QuantityRule("rule-1", ElementCategory.ArchitecturalWall, " NetVolumeM3", "1", "v1"));
+            ExpectArgument("outputName", () => new QuantityRule("rule-1", ElementCategory.ArchitecturalWall, "NetVolumeM3 ", "1", "v1"));
+            ExpectArgument("outputName", () => new QuantityRule("rule-1", ElementCategory.ArchitecturalWall, "\tNetVolumeM3", "1", "v1"));
+            ExpectArgument("outputName", () => new QuantityRule("rule-1", ElementCategory.ArchitecturalWall, "Net\nVolumeM3", "1", "v1"));
+            ExpectArgument("outputName", () => new QuantityRule("rule-1", ElementCategory.ArchitecturalWall, "\t", "1", "v1"));
+
+            ExpectArgument("version", () => new QuantityRule("rule-1", ElementCategory.ArchitecturalWall, "NetVolumeM3", "1", " v1"));
+            ExpectArgument("version", () => new QuantityRule("rule-1", ElementCategory.ArchitecturalWall, "NetVolumeM3", "1", "v1 "));
+            ExpectArgument("version", () => new QuantityRule("rule-1", ElementCategory.ArchitecturalWall, "NetVolumeM3", "1", "v1\t"));
+            ExpectArgument("version", () => new QuantityRule("rule-1", ElementCategory.ArchitecturalWall, "NetVolumeM3", "1", "v\r1"));
+            ExpectArgument("version", () => new QuantityRule("rule-1", ElementCategory.ArchitecturalWall, "NetVolumeM3", "1", "\n"));
         }
 
         private static void ExpectArgument(string parameterName, Action action)
