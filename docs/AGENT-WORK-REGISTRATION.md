@@ -53,7 +53,7 @@ Do not create branch-to-branch/internal PRs solely to sync/replay `main` or anot
 
 ### External ChatGPT scheduler boundary
 
-External invokers, including ChatGPT account scheduled tasks/automations, may include convenience labels such as `C0`, `W1-W4`, `QS3D-CONTROL`, `QS3D-WORKER-*`, `controller`, `worker`, or `Task 0-4` in a prompt. Those labels are **account-side orchestration metadata only**. They do not define a repository lane, persistent repository owner, canonical carrier, GitHub reservation, CI authority, merge authority, or direct-`main` authority.
+External invokers, including ChatGPT account scheduled tasks/automations, may include convenience labels such as `C0`, `W1-W4`, `controller`, `worker`, or `Task 0-4` in a prompt. Those labels are **account-side orchestration metadata only**. They do not define a repository lane, persistent repository owner, canonical carrier, GitHub reservation, CI authority, merge authority, or direct-`main` authority.
 
 Schedule existence, count, cadence, enabled/disabled state, account task IDs, and live execution state exist outside this repository and must not be inferred from Markdown, Issues, comments, branches, PRs, or historical controller/worker records. Every scheduled execution must resolve the current GitHub Lane-Key / Issue / branch / PR state at execution time and follow the ordinary collision, ownership, CI, and authorization rules in this document. See `docs/CHATGPT-SCHEDULE-BOUNDARY.md`.
 
