@@ -37,9 +37,16 @@ namespace QS3D.Core.Geometry
         {
             if (panels == null) throw new ArgumentNullException(nameof(panels));
             if (openings == null) throw new ArgumentNullException(nameof(openings));
-            if (panels.Count > MaxInputPanels)
+
+            var panelCount = panels.Count;
+            var openingCount = openings.Count;
+            if (panelCount < 0)
+                throw new InvalidOperationException("Curtain panel input reports an invalid negative panel Count.");
+            if (openingCount < 0)
+                throw new InvalidOperationException("Curtain panel interruption input reports an invalid negative opening Count.");
+            if (panelCount > MaxInputPanels)
                 throw new InvalidOperationException("Curtain panel input exceeds " + MaxInputPanels + " panels.");
-            if (openings.Count > MaxOpenings)
+            if (openingCount > MaxOpenings)
                 throw new InvalidOperationException("Curtain panel interruption input exceeds " + MaxOpenings + " openings.");
 
             var clipped = CurtainWallOpeningFramePlanner.Plan(panels, openings, clearanceM);
@@ -63,7 +70,7 @@ namespace QS3D.Core.Geometry
                     .ThenBy(x => x.HeightM)
                     .ThenBy(x => x.WidthM)
                     .ToArray()),
-                SourcePanelCount = panels.Count,
+                SourcePanelCount = panelCount,
                 InterruptedPanelCount = clipped.InterruptedFrameCount,
                 OriginalPanelAreaM2 = clipped.OriginalFrameAreaM2,
                 RemainingPanelAreaM2 = clipped.RemainingFrameAreaM2
