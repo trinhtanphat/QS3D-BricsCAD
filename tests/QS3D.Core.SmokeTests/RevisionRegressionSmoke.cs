@@ -21,6 +21,7 @@ namespace QS3D.Core.SmokeTests
             PaddedElementIdsAreRejected();
             CompareRejectsPaddedReferenceIds();
             CompareRejectsMalformedElementPayload();
+            CompareRejectsXmlInvalidMutableSnapshotPayload();
             CaptureRecordsProjectIdentity();
             CompareAllowsSameProjectCapturedSnapshots();
             CompareRejectsLegacyBaselineAgainstCapturedRevision();
@@ -212,6 +213,42 @@ namespace QS3D.Core.SmokeTests
             duplicateDependency.Elements[0].Dependencies.Add("D1");
             duplicateDependency.Elements[0].Dependencies.Add("d1");
             Throws<InvalidOperationException>(() => new RevisionService().Compare(empty, duplicateDependency));
+        }
+
+        private static void CompareRejectsXmlInvalidMutableSnapshotPayload()
+        {
+            const string invalid = "\u0001";
+            var service = new RevisionService();
+            var empty = new RevisionSnapshot { Id = "empty", CreatedUtc = DateTime.UtcNow };
+
+            var badElementId = Snapshot("xml-element-id", "E" + invalid, 1d);
+            Throws<InvalidOperationException>(() => service.Compare(empty, badElementId));
+
+            var badPropertyValue = Snapshot("xml-property-value", "E1", 1d);
+            badPropertyValue.Elements[0].Properties["Mark"] = "B1" + invalid;
+            Throws<InvalidOperationException>(() => service.Compare(empty, badPropertyValue));
+
+            var badSourceHandle = Snapshot("xml-source-handle", "E1", 1d);
+            badSourceHandle.Elements[0].SourceHandles.Add("H1" + invalid);
+            Throws<InvalidOperationException>(() => service.Compare(empty, badSourceHandle));
+
+            var badDependency = Snapshot("xml-dependency", "E1", 1d);
+            badDependency.Elements[0].Dependencies.Add("D1" + invalid);
+            Throws<InvalidOperationException>(() => service.Compare(empty, badDependency));
+
+            var beforeProject = new RevisionSnapshot
+            {
+                Id = "xml-project-before",
+                CreatedUtc = DateTime.UtcNow,
+                ProjectId = "P1" + invalid
+            };
+            var afterProject = new RevisionSnapshot
+            {
+                Id = "xml-project-after",
+                CreatedUtc = DateTime.UtcNow,
+                ProjectId = "P1" + invalid
+            };
+            Throws<InvalidOperationException>(() => service.Compare(beforeProject, afterProject));
         }
 
         private static void CaptureRecordsProjectIdentity()
