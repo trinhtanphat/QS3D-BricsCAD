@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             ReadOnlyKnownCountOversizeRejectsBeforeEnumeration();
             NegativeNonGenericKnownCountRejectsBeforeEnumeration();
             ConflictingKnownCountsRejectBeforeEnumeration();
+            ConflictingNonGenericKnownCountsRejectBeforeEnumeration();
             ConsistentKnownCountsRemainAccepted();
             StreamingOversizeStopsAtFirstDisallowedEntry();
             ExactBoundaryPreservesCatalogBehavior();
@@ -47,6 +48,13 @@ namespace QS3D.Core.SmokeTests
             var mappings = new ConflictingKnownCountCollection();
             Throws<InvalidOperationException>(() => new MeasurementWorkItemMappingCatalog(mappings));
             Equal(false, mappings.EnumerationStarted, "Conflicting known Count contracts must fail before enumeration.");
+        }
+
+        private static void ConflictingNonGenericKnownCountsRejectBeforeEnumeration()
+        {
+            var mappings = new ConflictingNonGenericKnownCountCollection();
+            Throws<InvalidOperationException>(() => new MeasurementWorkItemMappingCatalog(mappings));
+            Equal(false, mappings.EnumerationStarted, "Conflicting generic/non-generic known Count contracts must fail before enumeration.");
         }
 
         private static void ConsistentKnownCountsRemainAccepted()
@@ -231,6 +239,30 @@ namespace QS3D.Core.SmokeTests
             bool ICollection<MeasurementWorkItemMapping>.Contains(MeasurementWorkItemMapping item) => false;
             void ICollection<MeasurementWorkItemMapping>.CopyTo(MeasurementWorkItemMapping[] array, int arrayIndex) => throw new NotSupportedException();
             bool ICollection<MeasurementWorkItemMapping>.Remove(MeasurementWorkItemMapping item) => throw new NotSupportedException();
+        }
+
+        private sealed class ConflictingNonGenericKnownCountCollection : ICollection<MeasurementWorkItemMapping>, System.Collections.ICollection
+        {
+            internal bool EnumerationStarted { get; private set; }
+            int ICollection<MeasurementWorkItemMapping>.Count => 1;
+            int System.Collections.ICollection.Count => 2;
+            bool ICollection<MeasurementWorkItemMapping>.IsReadOnly => true;
+            bool System.Collections.ICollection.IsSynchronized => false;
+            object System.Collections.ICollection.SyncRoot => this;
+
+            public IEnumerator<MeasurementWorkItemMapping> GetEnumerator()
+            {
+                EnumerationStarted = true;
+                throw new InvalidOperationException("Enumeration should not start for conflicting generic/non-generic known Count contracts.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            void ICollection<MeasurementWorkItemMapping>.Add(MeasurementWorkItemMapping item) => throw new NotSupportedException();
+            void ICollection<MeasurementWorkItemMapping>.Clear() => throw new NotSupportedException();
+            bool ICollection<MeasurementWorkItemMapping>.Contains(MeasurementWorkItemMapping item) => false;
+            void ICollection<MeasurementWorkItemMapping>.CopyTo(MeasurementWorkItemMapping[] array, int arrayIndex) => throw new NotSupportedException();
+            bool ICollection<MeasurementWorkItemMapping>.Remove(MeasurementWorkItemMapping item) => throw new NotSupportedException();
+            void System.Collections.ICollection.CopyTo(Array array, int index) => throw new NotSupportedException();
         }
 
         private sealed class ConsistentKnownCountCollection : ICollection<MeasurementWorkItemMapping>, IReadOnlyCollection<MeasurementWorkItemMapping>, System.Collections.ICollection
