@@ -68,7 +68,10 @@ def qualify_pr_payload(event: dict[str, Any], repository_hint: str) -> tuple[str
     base_repo_obj = optional_object(base.get("repo"), "pull_request.base.repo")
 
     head_repo = require_string(head_repo_obj.get("full_name", ""), "pull_request.head.repo.full_name")
-    base_repo_value = base_repo_obj.get("full_name") or repository_hint
+    if "full_name" in base_repo_obj:
+        base_repo_value = base_repo_obj["full_name"]
+    else:
+        base_repo_value = repository_hint
     base_repo = require_string(base_repo_value, "pull_request.base.repo.full_name")
     if head_repo.casefold() != base_repo.casefold():
         return None
