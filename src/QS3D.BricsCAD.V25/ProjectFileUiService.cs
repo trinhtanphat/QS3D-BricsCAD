@@ -262,6 +262,8 @@ namespace QS3D.BricsCAD.V25
 
         private static void OpenDrawing(string drawingPath)
         {
+            var total = Stopwatch.StartNew();
+            var bind = Stopwatch.StartNew();
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null || !SamePath(document.Name, drawingPath))
             {
@@ -271,9 +273,35 @@ namespace QS3D.BricsCAD.V25
 
             if (document == null || !SamePath(document.Name, drawingPath))
                 throw new InvalidOperationException("BricsCAD không kích hoạt được bản vẽ đã chọn.");
+            bind.Stop();
 
+            // A bare DWG is still a valid BricsCAD drawing, so do not manufacture a
+            // QS3D project just to display a success dialog. When an existing QS3D
+            // sidecar is present, load it read-only and report the same owner-facing
+            // project-open result used by .blt3d/.qsdb opens.
+            var read = Stopwatch.StartNew();
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+            {
+                read.Stop();
+                total.Stop();
+                try { PaletteCoordinator.RefreshProject(); }
+                catch { }
+                return;
+            }
+            read.Stop();
+
+            bind.Start();
             try { PaletteCoordinator.RefreshProject(); }
             catch { }
+            bind.Stop();
+            total.Stop();
+
+            ProjectOperationResultWindow.ShowOpenSuccess(
+                drawingPath,
+                project,
+                read.ElapsedMilliseconds,
+                bind.ElapsedMilliseconds,
+                total.ElapsedMilliseconds);
         }
 
         private static void PublishSelectedProject(QsdbProjectStore store, ProjectState project, string selectedPath, string canonicalPath)
