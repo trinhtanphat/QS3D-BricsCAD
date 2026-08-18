@@ -60,6 +60,23 @@ namespace QS3D.Core.SmokeTests
                 () => evaluator.Evaluate("1e-300 * 1e-300"));
             Contains("Multiplication underflowed to zero.", multiplicationUnderflow.Message);
 
+            var precisionVariables = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Tiny"] = double.Epsilon,
+                ["Factor"] = 1.0000000000000002d
+            };
+            var swallowedRight = Capture<InvalidOperationException>(
+                () => evaluator.Evaluate("Tiny * Factor", precisionVariables));
+            Contains("Multiplication lost the right operand contribution at double precision.", swallowedRight.Message);
+            var swallowedLeft = Capture<InvalidOperationException>(
+                () => evaluator.Evaluate("Factor * Tiny", precisionVariables));
+            Contains("Multiplication lost the left operand contribution at double precision.", swallowedLeft.Message);
+
+            Near(double.Epsilon, evaluator.Evaluate("Tiny * 1", precisionVariables), 0d);
+            Near(double.Epsilon, evaluator.Evaluate("1 * Tiny", precisionVariables), 0d);
+            Near(0d, evaluator.Evaluate("Tiny * 0", precisionVariables), 0d);
+            Near(0d, evaluator.Evaluate("0 * Tiny", precisionVariables), 0d);
+
             var divisionUnderflow = Capture<InvalidOperationException>(
                 () => evaluator.Evaluate("1e-300 / 1e300"));
             Contains("Division underflowed to zero.", divisionUnderflow.Message);
