@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 
 namespace QS3D.Core.Geometry
 {
@@ -228,7 +229,11 @@ namespace QS3D.Core.Geometry
             if (Finite(firstProduct) && Finite(secondProduct) && !firstProductUnderflowed && !secondProductUnderflowed)
             {
                 var direct = firstProduct - secondProduct;
-                if (Finite(direct)) return direct;
+                if (Finite(direct))
+                {
+                    if (direct != 0d || firstProduct == 0d || secondProduct == 0d) return direct;
+                    return ExactCrossFinite(ax, ay, bx, by);
+                }
             }
 
             var scaleA = Math.Max(Math.Abs(ax), Math.Abs(ay));
@@ -243,6 +248,77 @@ namespace QS3D.Core.Geometry
             var secondScale = Math.Max(scaleA, scaleB);
             var scaled = MultiplyFinitePreservingNonZero(normalized, firstScale, "Polyline area");
             return MultiplyFinitePreservingNonZero(scaled, secondScale, "Polyline area");
+        }
+
+        private static double ExactCrossFinite(double ax, double ay, double bx, double by)
+        {
+            BigInteger firstSignificand;
+            BigInteger secondSignificand;
+            int firstExponent;
+            int secondExponent;
+            ExactProduct(ax, by, out firstSignificand, out firstExponent);
+            ExactProduct(ay, bx, out secondSignificand, out secondExponent);
+
+            var commonExponent = Math.Min(firstExponent, secondExponent);
+            var exact = (firstSignificand << (firstExponent - commonExponent))
+                - (secondSignificand << (secondExponent - commonExponent));
+            if (exact.IsZero) return 0d;
+
+            return ScaleDyadicFinite(exact, commonExponent, "Polyline area");
+        }
+
+        private static void ExactProduct(double first, double second, out BigInteger significand, out int exponent)
+        {
+            BigInteger firstSignificand;
+            BigInteger secondSignificand;
+            int firstExponent;
+            int secondExponent;
+            DecomposeFinite(first, out firstSignificand, out firstExponent);
+            DecomposeFinite(second, out secondSignificand, out secondExponent);
+            significand = firstSignificand * secondSignificand;
+            exponent = firstExponent + secondExponent;
+        }
+
+        private static void DecomposeFinite(double value, out BigInteger significand, out int exponent)
+        {
+            var bits = unchecked((ulong)BitConverter.DoubleToInt64Bits(value));
+            var exponentBits = (int)((bits >> 52) & 0x7ffUL);
+            var fraction = bits & 0x000fffffffffffffUL;
+
+            if (exponentBits == 0)
+            {
+                significand = new BigInteger(fraction);
+                exponent = -1074;
+            }
+            else
+            {
+                significand = new BigInteger(fraction | 0x0010000000000000UL);
+                exponent = exponentBits - 1023 - 52;
+            }
+
+            if ((bits & 0x8000000000000000UL) != 0UL) significand = -significand;
+        }
+
+        private static double ScaleDyadicFinite(BigInteger significand, int exponent, string operation)
+        {
+            var value = (double)significand;
+            if (!Finite(value)) throw new OverflowException(operation + " exceeds the supported numeric range.");
+
+            while (exponent > 512)
+            {
+                value = MultiplyFinitePreservingNonZero(value, Math.Pow(2d, 512d), operation);
+                exponent -= 512;
+            }
+
+            while (exponent < -512)
+            {
+                value = MultiplyFinitePreservingNonZero(value, Math.Pow(2d, -512d), operation);
+                exponent += 512;
+            }
+
+            if (exponent != 0)
+                value = MultiplyFinitePreservingNonZero(value, Math.Pow(2d, exponent), operation);
+            return value;
         }
 
         private static double MultiplyFinitePreservingNonZero(double first, double second, string operation)
