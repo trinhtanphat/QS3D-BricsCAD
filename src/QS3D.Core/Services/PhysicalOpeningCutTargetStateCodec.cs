@@ -138,7 +138,9 @@ namespace QS3D.Core.Services
             {
                 if (string.IsNullOrWhiteSpace(raw))
                     throw new InvalidOperationException("Physical opening target-state contains an empty opening id.");
-                var id = raw.Trim();
+                if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Physical opening target-state contains a non-canonical opening id with leading or trailing whitespace.");
+                var id = raw;
                 if (id.Length > MaxElementIdLength)
                     throw new InvalidOperationException("Physical opening target id exceeds " + MaxElementIdLength + " characters.");
                 if (!result.Add(id))
@@ -156,9 +158,11 @@ namespace QS3D.Core.Services
             {
                 if (element == null)
                     throw new InvalidOperationException("Project contains a null semantic element entry.");
-                var id = (element.Id ?? string.Empty).Trim();
-                if (id.Length == 0)
+                var id = element.Id ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(id))
                     throw new InvalidOperationException("Project contains an element with a blank semantic id.");
+                if (!string.Equals(id, id.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Project contains an element with a non-canonical semantic id: " + id + ".");
                 if (!seen.Add(id))
                     throw new InvalidOperationException("Project contains duplicate semantic element id: " + id + ".");
             }

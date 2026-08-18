@@ -14,12 +14,22 @@ namespace QS3D.Core.Persistence
         public static XDocument MigrateToCurrent(XDocument document)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
-            var root = document.Root ?? throw new InvalidDataException("QSDB has no root element.");
-            if (!string.Equals(root.Name.LocalName, "qs3d", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("QSDB root element must be qs3d.");
+            var callerRoot = document.Root ?? throw new InvalidDataException("QSDB has no root element.");
+            if (!string.Equals(callerRoot.Name.LocalName, "qs3d", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("QSDB root element must be qs3d.");
 
-            var schema = ReadSchema(root);
+            var schema = ReadSchema(callerRoot);
             if (schema <= 0) throw new InvalidDataException("Unsupported QSDB schema version: " + schema.ToString(CultureInfo.InvariantCulture));
             if (schema > ProjectState.CurrentSchemaVersion) throw new InvalidDataException("QSDB schema is newer than this QS3D build: " + schema.ToString(CultureInfo.InvariantCulture));
+
+            if (schema == ProjectState.CurrentSchemaVersion)
+            {
+                ValidateCurrentPersistenceState(callerRoot);
+                QsdbProjectXmlSchemaValidator.ValidateCurrent(callerRoot);
+                return document;
+            }
+
+            var workingDocument = new XDocument(document);
+            var root = workingDocument.Root ?? throw new InvalidDataException("QSDB has no root element.");
 
             while (schema < ProjectState.CurrentSchemaVersion)
             {
@@ -45,6 +55,8 @@ namespace QS3D.Core.Persistence
 
             ValidateCurrentPersistenceState(root);
             QsdbProjectXmlSchemaValidator.ValidateCurrent(root);
+
+            callerRoot.ReplaceWith(new XElement(root));
             return document;
         }
 
