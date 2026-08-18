@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             ThrowsArgumentOutOfRange(0);
             ThrowsArgumentOutOfRange(5);
             RejectsInvalidKnownLiveHandleCountsBeforeEnumeration();
+            RejectsLiveHandleCountTraversalMismatch();
 
             var project = NewProject();
             project.Elements.Add(null!);
@@ -83,6 +84,23 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Consistent live-handle Count contracts should proceed to bounded enumeration.");
         }
 
+        private static void RejectsLiveHandleCountTraversalMismatch()
+        {
+            var project = NewProject();
+            var service = new ComprehensiveModelHealthService(1);
+
+            var missingSourceItem = new MultiCountSet(1, 1, 1, throwOnEnumeration: false);
+            ThrowsTraversalCountMismatch(
+                () => service.Inspect(project, missingSourceItem, null),
+                "source");
+
+            var unexpectedGeneratedItem = new MultiCountSet(0, 0, 0, throwOnEnumeration: false);
+            unexpectedGeneratedItem.Add("AB12");
+            ThrowsTraversalCountMismatch(
+                () => service.Inspect(project, null, unexpectedGeneratedItem),
+                "generated-solid");
+        }
+
         private static void ThrowsInvalidCountContract(Action action, MultiCountSet source, string expectedMessageFragment)
         {
             try
@@ -99,6 +117,24 @@ namespace QS3D.Core.SmokeTests
 
             throw new InvalidOperationException(
                 "Expected comprehensive health live-handle Count-contract rejection containing: " + expectedMessageFragment + ".");
+        }
+
+        private static void ThrowsTraversalCountMismatch(Action action, string expectedLabel)
+        {
+            try
+            {
+                action();
+            }
+            catch (InvalidOperationException ex) when (
+                ex.Message.IndexOf(expectedLabel, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                ex.Message.IndexOf("traversal count", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                ex.Message.IndexOf("Count contract", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException(
+                "Expected comprehensive health " + expectedLabel + " live-handle traversal Count-contract mismatch rejection.");
         }
 
         private static ProjectState NewProject()
