@@ -106,11 +106,15 @@ def main():
         'DWG hiện hành đã chuyển sang đường dẫn mới.', 'Content = "OK"',
         'WindowStyle = System.Windows.WindowStyle.None', 'AllowsTransparency = true',
         'Background = Brushes.Transparent', 'UseLayoutRounding = true', 'SnapsToDevicePixels = true',
-        'Content = "×"', 'DragMove();', 'Text = "✓"', '"⚙ Đọc tệp "',
-        '"   Mở bản vẽ + dựng project "', 'args.Key != Key.Escape',
+        'Content = "×"', 'var dragSurface = new Grid { Background = Brushes.Transparent };',
+        'dragSurface.MouseLeftButtonDown += (_, args) =>', 'DragMove();',
+        'Grid.SetColumn(dragSurface, 0);', 'titleBar.Children.Add(dragSurface);',
+        'Text = "✓"', '"⚙ Đọc tệp "', '"   Mở bản vẽ + dựng project "',
+        'args.Key != Key.Escape',
     ):
         require(result, needle, result_rel)
-    for stale in ('savedAsCopy', 'project hiện hành vẫn giữ liên kết với DWG đang mở'):
+    for stale in ('savedAsCopy', 'project hiện hành vẫn giữ liên kết với DWG đang mở',
+                  'titleBar.MouseLeftButtonDown'):
         forbid(result, stale, result_rel)
 
     icons = read(icon_rel)
