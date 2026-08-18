@@ -242,6 +242,8 @@ namespace QS3D.Core.Rebar
             foreach (var element in project.Elements)
             {
                 if (element == null) throw new InvalidOperationException("Project contains a null semantic element entry.");
+                if (string.IsNullOrWhiteSpace(element.Id))
+                    throw new InvalidOperationException("Project contains a semantic element with a blank id.");
                 string elementId;
                 try
                 {
