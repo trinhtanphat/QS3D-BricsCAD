@@ -16,6 +16,7 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class WorkspacePanel
     {
         private const int Blt3dRuntimeSettlePasses = 2;
+        private const int Blt3dRuntimeRecoveryRetryPasses = 3;
         private const double Blt3dUsableViewportFloor = 32d;
         private static readonly TimeSpan Blt3dRuntimeSettleInterval = TimeSpan.FromMilliseconds(250);
         private static readonly bool Blt3dRuntimeLayoutRepairRegistered = RegisterBlt3dRuntimeLayoutRepair();
@@ -26,6 +27,7 @@ namespace QS3D.BricsCAD.V25.UI
         private bool _blt3dRuntimeViewportEventsWired;
         private bool _blt3dRuntimeViewportRecoveryQueued;
         private bool _blt3dRuntimeViewportRecoveryApplying;
+        private int _blt3dRuntimeViewportRecoveryRetriesRemaining;
 
         private static bool RegisterBlt3dRuntimeLayoutRepair()
         {
@@ -60,6 +62,7 @@ namespace QS3D.BricsCAD.V25.UI
             panel._blt3dRuntimeSettlePassesRemaining = 0;
             panel._blt3dRuntimeViewportRecoveryQueued = false;
             panel._blt3dRuntimeViewportRecoveryApplying = false;
+            panel._blt3dRuntimeViewportRecoveryRetriesRemaining = 0;
             panel._blt3dRuntimeLayoutRepairStarted = false;
         }
 
@@ -70,6 +73,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             _blt3dRuntimeLayoutRepairStarted = true;
             _blt3dRuntimeSettlePassesRemaining = Blt3dRuntimeSettlePasses;
+            _blt3dRuntimeViewportRecoveryRetriesRemaining = Blt3dRuntimeRecoveryRetryPasses;
             WireBlt3dRuntimeViewportRecovery();
 
             // Run once behind all existing Loaded/ContextIdle compatibility passes.
@@ -132,13 +136,17 @@ namespace QS3D.BricsCAD.V25.UI
                 e.NewSize.Height <= Blt3dUsableViewportFloor)
                 return;
 
+            _blt3dRuntimeViewportRecoveryRetriesRemaining = Blt3dRuntimeRecoveryRetryPasses;
             QueueBlt3dRuntimeViewportRecovery();
         }
 
         private void OnBlt3dRuntimeViewportVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             if (IsLoaded && WorkspaceOverflow.IsVisible)
+            {
+                _blt3dRuntimeViewportRecoveryRetriesRemaining = Blt3dRuntimeRecoveryRetryPasses;
                 QueueBlt3dRuntimeViewportRecovery();
+            }
         }
 
         private void OnBlt3dRuntimeViewportLayoutUpdated(object? sender, EventArgs e)
@@ -161,7 +169,8 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (_blt3dRuntimeViewportRecoveryQueued ||
                 _blt3dRuntimeViewportRecoveryApplying ||
-                !IsLoaded)
+                !IsLoaded ||
+                _blt3dRuntimeViewportRecoveryRetriesRemaining <= 0)
                 return;
 
             _blt3dRuntimeViewportRecoveryQueued = true;
@@ -177,8 +186,12 @@ namespace QS3D.BricsCAD.V25.UI
                     // Only repair when a late host layout left the real client effectively blank or
                     // when a legacy pass reintroduced the unsafe ViewportWidth binding/visibility state.
                     if (!NeedsBlt3dRuntimeViewportRecovery())
+                    {
+                        _blt3dRuntimeViewportRecoveryRetriesRemaining = Blt3dRuntimeRecoveryRetryPasses;
                         return;
+                    }
 
+                    _blt3dRuntimeViewportRecoveryRetriesRemaining--;
                     _blt3dRuntimeViewportRecoveryApplying = true;
                     try
                     {
@@ -240,7 +253,10 @@ namespace QS3D.BricsCAD.V25.UI
                     child is FrameworkElement element &&
                     element.ActualWidth > 1d &&
                     element.ActualHeight > 1d)
+                {
+                    _blt3dRuntimeViewportRecoveryRetriesRemaining = Blt3dRuntimeRecoveryRetryPasses;
                     return false;
+                }
             }
 
             return true;
