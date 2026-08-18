@@ -18,6 +18,9 @@ namespace QS3D.BricsCAD.V25.UI
         private const int Blt3dRuntimeSettlePasses = 2;
         private const int Blt3dRuntimeRecoveryRetryPasses = 3;
         private const double Blt3dUsableViewportFloor = 32d;
+        private const double Blt3dFooterContentHeight = 28d;
+        private const double Blt3dFooterOuterTopGap = 8d;
+        private const double Blt3dViewportHeightTolerance = 1d;
         private static readonly TimeSpan Blt3dRuntimeSettleInterval = TimeSpan.FromMilliseconds(250);
         private static readonly bool Blt3dRuntimeLayoutRepairRegistered = RegisterBlt3dRuntimeLayoutRepair();
 
@@ -294,6 +297,11 @@ namespace QS3D.BricsCAD.V25.UI
                 root.ActualHeight <= 1d)
                 return true;
 
+            var viewportHeight = WorkspaceOverflow.ActualHeight;
+            if (viewportHeight > Blt3dUsableViewportFloor &&
+                root.ActualHeight + Blt3dViewportHeightTolerance < viewportHeight)
+                return true;
+
             Grid? workspace = null;
             foreach (UIElement child in root.Children)
             {
@@ -315,16 +323,31 @@ namespace QS3D.BricsCAD.V25.UI
                 workspace.ActualHeight <= 1d)
                 return true;
 
+            Border? modelPane = null;
+            Grid? familyPane = null;
             foreach (UIElement child in workspace.Children)
             {
-                if (child.Visibility == Visibility.Visible &&
-                    child is FrameworkElement element &&
-                    element.ActualWidth > 1d &&
-                    element.ActualHeight > 1d)
-                    return false;
+                if (child is Border border && Grid.GetColumn(border) == 0)
+                {
+                    modelPane = border;
+                    continue;
+                }
+
+                if (child is Grid grid && IsVisualDescendant(grid, FamilyList))
+                    familyPane = grid;
             }
 
-            return true;
+            return !IsUsableBlt3dRuntimePane(modelPane) ||
+                   !IsUsableBlt3dRuntimePane(familyPane);
+        }
+
+        private static bool IsUsableBlt3dRuntimePane(FrameworkElement? pane)
+        {
+            return pane != null &&
+                   pane.Visibility == Visibility.Visible &&
+                   pane.Opacity > 0d &&
+                   pane.ActualWidth > 1d &&
+                   pane.ActualHeight > 1d;
         }
 
         private void ReassertBlt3dRuntimeLayout()
@@ -334,7 +357,56 @@ namespace QS3D.BricsCAD.V25.UI
 
             WorkspaceOverflow.VerticalContentAlignment = VerticalAlignment.Stretch;
             WorkspaceContentRoot.VerticalAlignment = VerticalAlignment.Stretch;
+            ApplyBlt3dViewportFill();
             ApplyBlt3dFiveZoneRuntimeLayout();
+            ApplyBlt3dFooterDocking();
+        }
+
+        private void ApplyBlt3dViewportFill()
+        {
+            var viewportHeight = WorkspaceOverflow.ActualHeight;
+            if (viewportHeight <= Blt3dUsableViewportFloor ||
+                double.IsNaN(viewportHeight) ||
+                double.IsInfinity(viewportHeight))
+                return;
+
+            WorkspaceContentRoot.Height = double.NaN;
+            WorkspaceContentRoot.MinHeight = viewportHeight;
+        }
+
+        private void ApplyBlt3dFooterDocking()
+        {
+            var root = WorkspaceContentRoot;
+            if (root == null || root.RowDefinitions.Count < 3)
+                return;
+
+            var workspaceRow = root.RowDefinitions[1];
+            workspaceRow.MinHeight = 0;
+            workspaceRow.MaxHeight = double.PositiveInfinity;
+            workspaceRow.Height = new GridLength(1, GridUnitType.Star);
+
+            var footerRow = root.RowDefinitions[2];
+            var footerTotalHeight = Blt3dFooterContentHeight + Blt3dFooterOuterTopGap;
+            footerRow.MinHeight = 0;
+            footerRow.MaxHeight = footerTotalHeight;
+            footerRow.Height = new GridLength(footerTotalHeight);
+
+            Border? footer = null;
+            foreach (UIElement child in root.Children)
+            {
+                if (child is Border candidate && Grid.GetRow(candidate) == 2)
+                {
+                    footer = candidate;
+                    break;
+                }
+            }
+
+            if (footer == null)
+                return;
+
+            footer.Margin = new Thickness(0);
+            footer.Height = Blt3dFooterContentHeight;
+            footer.VerticalAlignment = VerticalAlignment.Bottom;
         }
 
         private void InvalidateBlt3dRuntimeLayout()
