@@ -74,9 +74,11 @@ def main():
 
     for stale in (
         "root.MinWidth = 0;",
+        "retiredColumn.MinWidth = 0;",
         "retiredColumn.MaxWidth = 0;",
         "retiredColumn.Width = new GridLength(0);",
         "if (Grid.GetColumn(child) > 0)",
+        "child.Visibility = Visibility.Collapsed;",
     ):
         forbid(compact, stale, COMPACT_REL)
 
