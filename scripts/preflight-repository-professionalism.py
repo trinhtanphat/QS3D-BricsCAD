@@ -30,6 +30,7 @@ FORBIDDEN_EXTERNAL_ORCHESTRATION_PATH_MARKERS = (
     "controller-worker-pool",
 )
 ORCHESTRATION_SCAN_SUFFIXES = {".md", ".txt", ".yml", ".yaml", ".json", ".toml", ".py", ".ps1", ".sh"}
+MAX_ORCHESTRATION_SCAN_BYTES = 1024 * 1024
 SELF_PATH = "scripts/preflight-repository-professionalism.py"
 
 
@@ -62,8 +63,22 @@ def reject_external_orchestration_artifacts(failures: list[str]) -> None:
             continue
 
         try:
+            size = path.stat().st_size
+        except OSError as exc:
+            failures.append(f"cannot inspect orchestration-scanned repository file metadata: {relative}: {exc}")
+            continue
+        if size > MAX_ORCHESTRATION_SCAN_BYTES:
+            failures.append(
+                f"orchestration-scanned repository file exceeds {MAX_ORCHESTRATION_SCAN_BYTES} byte safety bound: {relative} ({size} bytes)"
+            )
+            continue
+
+        try:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
+            continue
+        except OSError as exc:
+            failures.append(f"cannot read orchestration-scanned repository file: {relative}: {exc}")
             continue
 
         if "QS3D-CONTROL" in text and "QS3D-WORKER-" in text:
@@ -89,140 +104,40 @@ def main() -> int:
         return 1
 
     pr = read(".github/pull_request_template.md")
-    require(
-        pr,
-        (
-            "## Scope", "Issue:", "Baseline `main` SHA:", "Head SHA:", "## Validation",
-            "PENDING_LOCAL", "## Release impact", "## Merge authorization",
-            "does **not** authorize its own merge", "docs/MAIN-WRITE-AUTHORIZATION.md",
-        ),
-        "pull request template",
-        failures,
-    )
+    require(pr, ("## Scope", "Issue:", "Baseline `main` SHA:", "Head SHA:", "## Validation", "PENDING_LOCAL", "## Release impact", "## Merge authorization", "does **not** authorize its own merge", "docs/MAIN-WRITE-AUTHORIZATION.md"), "pull request template", failures)
 
     codeowners = read(".github/CODEOWNERS")
-    require(
-        codeowners,
-        (
-            "/.github/workflows/ @trinhtanphat", "/.github/CODEOWNERS @trinhtanphat",
-            "/AGENTS.md @trinhtanphat", "/CI_POLICY.md @trinhtanphat",
-            "/docs/MAIN-WRITE-AUTHORIZATION.md @trinhtanphat",
-            "/scripts/preflight-ci-manual-only.py @trinhtanphat",
-            "/scripts/*release* @trinhtanphat", "/scripts/*sign* @trinhtanphat",
-            "does not grant merge authority",
-        ),
-        "CODEOWNERS",
-        failures,
-    )
+    require(codeowners, ("/.github/workflows/ @trinhtanphat", "/.github/CODEOWNERS @trinhtanphat", "/AGENTS.md @trinhtanphat", "/CI_POLICY.md @trinhtanphat", "/docs/MAIN-WRITE-AUTHORIZATION.md @trinhtanphat", "/scripts/preflight-ci-manual-only.py @trinhtanphat", "/scripts/*release* @trinhtanphat", "/scripts/*sign* @trinhtanphat", "does not grant merge authority"), "CODEOWNERS", failures)
 
     dependabot = read(".github/dependabot.yml")
-    require(
-        dependabot,
-        (
-            "version: 2", 'package-ecosystem: "github-actions"', 'package-ecosystem: "nuget"',
-            'interval: "weekly"', 'interval: "monthly"', 'timezone: "Asia/Ho_Chi_Minh"',
-            'prefix: "chore(deps)"',
-        ),
-        "Dependabot configuration",
-        failures,
-    )
+    require(dependabot, ("version: 2", 'package-ecosystem: "github-actions"', 'package-ecosystem: "nuget"', 'interval: "weekly"', 'interval: "monthly"', 'timezone: "Asia/Ho_Chi_Minh"', 'prefix: "chore(deps)"'), "Dependabot configuration", failures)
     if "registries:" in dependabot or "target-branch:" in dependabot:
         failures.append("Dependabot must not introduce private registries or a non-default integration target without an explicit repository decision")
 
     contributing = read("CONTRIBUTING.md")
-    require(
-        contributing,
-        (
-            "docs/MAIN-WRITE-AUTHORIZATION.md", "AGENTS.md", "CI_POLICY.md",
-            "docs/AGENT-WORK-REGISTRATION.md", "`main` is read-only for normal agents and contributors",
-            "PENDING_LOCAL", "Do not weaken assertions", "does not self-authorize merge",
-        ),
-        "CONTRIBUTING.md",
-        failures,
-    )
+    require(contributing, ("docs/MAIN-WRITE-AUTHORIZATION.md", "AGENTS.md", "CI_POLICY.md", "docs/AGENT-WORK-REGISTRATION.md", "`main` is read-only for normal agents and contributors", "PENDING_LOCAL", "Do not weaken assertions", "does not self-authorize merge"), "CONTRIBUTING.md", failures)
 
     security = read("SECURITY.md")
-    require(
-        security,
-        (
-            "do **not** report", "GitHub private vulnerability reporting", "@trinhtanphat",
-            "Never include private keys", "fail closed",
-            "Licensed BricsCAD runtime binaries and signing credentials",
-        ),
-        "SECURITY.md",
-        failures,
-    )
+    require(security, ("do **not** report", "GitHub private vulnerability reporting", "@trinhtanphat", "Never include private keys", "fail closed", "Licensed BricsCAD runtime binaries and signing credentials"), "SECURITY.md", failures)
 
     bug = read(".github/ISSUE_TEMPLATE/bug_report.yml")
-    require(
-        bug,
-        (
-            "name: Bug report", "id: target", "id: release", "id: reproduction", "id: expected",
-            "id: actual", "id: evidence", "id: safety", "confidential customer data",
-        ),
-        "bug issue form",
-        failures,
-    )
+    require(bug, ("name: Bug report", "id: target", "id: release", "id: reproduction", "id: expected", "id: actual", "id: evidence", "id: safety", "confidential customer data"), "bug issue form", failures)
 
     feature = read(".github/ISSUE_TEMPLATE/feature_request.yml")
-    require(
-        feature,
-        ("name: Feature request", "id: target", "id: problem", "id: acceptance", "id: coordination", "existing issue/PR"),
-        "feature issue form",
-        failures,
-    )
+    require(feature, ("name: Feature request", "id: target", "id: problem", "id: acceptance", "id: coordination", "existing issue/PR"), "feature issue form", failures)
 
     issue_config = read(".github/ISSUE_TEMPLATE/config.yml")
     if not re.search(r"(?m)^blank_issues_enabled:\s*true\s*$", issue_config):
         failures.append("issue-template config must keep blank issues enabled for coordination/integration work")
 
     main_auth = read("docs/MAIN-WRITE-AUTHORIZATION.md")
-    require(
-        main_auth,
-        (
-            "Default rule: agents treat `main` as read-only", "Explicit authorization required",
-            "A normal agent must never use a direct ref update",
-        ),
-        "main write authorization",
-        failures,
-    )
+    require(main_auth, ("Default rule: agents treat `main` as read-only", "Explicit authorization required", "A normal agent must never use a direct ref update"), "main write authorization", failures)
 
     ci_policy = read("CI_POLICY.md")
-    require(
-        ci_policy,
-        (
-            "## Automatic branch CI and canonical PR lifecycle",
-            "its completion timestamp is not a permanent PR-admission identity",
-            "required `preflight` and `core` must be terminal `SUCCESS`",
-            "### Dependabot generated-PR boundary",
-            "GitHub Dependabot may create dependency-update PRs directly",
-            "does **not** authorize Dependabot to merge",
-            "Repository-wide blind auto-merge remains intentionally disabled",
-            "repository-metadata tier",
-            "policy/source-guard tier",
-            "full build tier",
-            "every** pull request targeting `main`",
-            "samples/generated/**",
-            "persist-credentials: false",
-        ),
-        "CI_POLICY.md professionalism contract",
-        failures,
-    )
+    require(ci_policy, ("## Automatic branch CI and canonical PR lifecycle", "its completion timestamp is not a permanent PR-admission identity", "required `preflight` and `core` must be terminal `SUCCESS`", "### Dependabot generated-PR boundary", "GitHub Dependabot may create dependency-update PRs directly", "does **not** authorize Dependabot to merge", "Repository-wide blind auto-merge remains intentionally disabled", "repository-metadata tier", "policy/source-guard tier", "full build tier", "every** pull request targeting `main`", "samples/generated/**", "persist-credentials: false"), "CI_POLICY.md professionalism contract", failures)
 
     ci = read(".github/workflows/ci.yml")
-    require(
-        ci,
-        (
-            "permissions:\n  contents: read", "persist-credentials: false", '"pull_request":',
-            "Classify validation scope", "source_validation:", "build_validation:",
-            "steps.scope.outputs.source_validation", "needs.preflight.outputs.build_validation",
-            "Lightweight non-build candidate", "samples/generated/",
-            "python scripts/preflight-repository-professionalism.py",
-            "dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64",
-        ),
-        "shared CI",
-        failures,
-    )
+    require(ci, ("permissions:\n  contents: read", "persist-credentials: false", '"pull_request":', "Classify validation scope", "source_validation:", "build_validation:", "steps.scope.outputs.source_validation", "needs.preflight.outputs.build_validation", "Lightweight non-build candidate", "samples/generated/", "python scripts/preflight-repository-professionalism.py", "dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64"), "shared CI", failures)
     if "contents: write" in ci:
         failures.append("shared branch/PR CI must not gain contents:write")
     push_trigger = ci.split('  "push":', 1)[1].split('  "pull_request":', 1)[0] if '  "push":' in ci and '  "pull_request":' in ci else ""
@@ -232,9 +147,7 @@ def main() -> int:
     if "paths:" in pr_trigger or "paths-ignore:" in pr_trigger:
         failures.append("shared CI pull_request trigger must always emit protected-main required contexts and must not use path filters")
 
-    forbidden_merge_tokens = (
-        "pull_request_target:", "gh pr merge", "enablepullrequestautomerge", "enable-pull-request-auto-merge",
-    )
+    forbidden_merge_tokens = ("pull_request_target:", "gh pr merge", "enablepullrequestautomerge", "enable-pull-request-auto-merge")
     for workflow in sorted((ROOT / ".github" / "workflows").glob("*.y*ml")):
         text = workflow.read_text(encoding="utf-8")
         lowered = text.lower()
