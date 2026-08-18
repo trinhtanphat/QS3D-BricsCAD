@@ -123,7 +123,7 @@ namespace QS3D.Core.Documentation
 
         private static List<T> MaterializeBounded<T>(IEnumerable<T> source, int maxCount, string label)
         {
-            ValidateKnownCounts(source, maxCount, label);
+            var knownCount = ValidateKnownCounts(source, maxCount, label);
 
             var result = new List<T>(Math.Min(maxCount, 256));
             using (var enumerator = source.GetEnumerator())
@@ -135,10 +135,14 @@ namespace QS3D.Core.Documentation
                     result.Add(enumerator.Current);
                 }
             }
+
+            if (knownCount.HasValue && knownCount.Value != result.Count)
+                throw new InvalidOperationException("Documentation table " + label + " source known count does not match completed traversal.");
+
             return result;
         }
 
-        private static void ValidateKnownCounts<T>(IEnumerable<T> source, int maxCount, string label)
+        private static int? ValidateKnownCounts<T>(IEnumerable<T> source, int maxCount, string label)
         {
             int? knownCount = null;
             if (source is ICollection<T> collection)
@@ -147,6 +151,7 @@ namespace QS3D.Core.Documentation
                 ValidateKnownCount(readOnlyCollection.Count, maxCount, label, ref knownCount);
             if (source is System.Collections.ICollection nonGenericCollection)
                 ValidateKnownCount(nonGenericCollection.Count, maxCount, label, ref knownCount);
+            return knownCount;
         }
 
         private static void ValidateKnownCount(int count, int maxCount, string label, ref int? knownCount)
