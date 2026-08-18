@@ -147,7 +147,25 @@ When the task's acceptance includes packaging, cloud build, publish, tag, releas
 - identify the exact release/version/tag that first contains the landed change whenever such a release exists;
 - record the release commit/source SHA and enough ancestry/manifest evidence to show that the release actually contains the change.
 
-Every release-relevant per-prompt report must distinguish:
+Release identity is **publication-based, not reservation- or ordinal-based**:
+
+- a preview ordinal/tag reservation may be consumed even when the release workflow later fails or is cancelled and no published GitHub Release is created;
+- never report the highest reserved ordinal, attempted tag, dispatcher success, child workflow start/run, or draft release as `Current/latest published release` by itself;
+- `Current/latest published release` means the newest **non-draft GitHub Release object whose publication completed successfully**;
+- if higher preview ordinals have no such published Release object, walk backward until the most recent actually published Release is found;
+- `First release containing this change` is a separate provenance claim and additionally requires evidence that the published release contains the target landed change/SHA.
+
+### Owner-facing release-status suppression
+
+Release provenance remains part of repository lifecycle truth, but it is **not automatically part of every owner-facing fix-completion answer**.
+
+- When the owner asks whether a code/source fix is finished, and the fix is already validated and merged as required, answer that fix-completion question directly. Do **not** append a routine line such as `⏳ release chứa fix vẫn pending`, `release pending`, or `first release containing this change: PENDING` merely because an automatic product release has not yet published.
+- A pending release must not make a verified merged code fix sound unfinished. Keep the distinction internally and in GitHub Issue/handoff evidence without turning it into an unsolicited owner-facing blocker.
+- Include release/publish/version status in the owner-facing response only when at least one of these conditions applies: the owner explicitly asks about release/version/update availability; release/publication/package/deployment is part of the current prompt's stated acceptance; the current task is specifically a release/publishing lane; or a release failure is the actual current blocker to what the owner asked to complete.
+- If none of those conditions applies, omit the release fields entirely from the concise owner-facing report. Do not print `Release required`, `Current/latest published release`, `First release containing this change`, `Release source/commit`, or `Release` merely as routine lifecycle bookkeeping.
+- Suppression is presentation-only. Agents must still preserve accurate release provenance in repository evidence and must never falsely claim `RELEASED` when publication has not been verified.
+
+When release status is owner-facing under the conditions above, distinguish:
 
 ```text
 Current/latest published release: <version/tag or none>
@@ -155,9 +173,9 @@ First release containing this change: <version/tag | PENDING | NONE/N/A>
 Release source/commit: <sha or N/A>
 ```
 
-If the change is merged to `main` but has not yet appeared in a published release, report `First release containing this change: ⏳ PENDING`; do not name a future version unless it is already formally defined by repository/release metadata.
+When release status is in scope and the change is merged to `main` but has not yet appeared in a published release, report `First release containing this change: ⏳ PENDING`; do not name a future version unless it is already formally defined by repository/release metadata.
 
-If the change does not require a product release under `CI_POLICY.md`, report `Release required: ➖ N/A` and `First release containing this change: ➖ N/A` with the reason instead of pretending a release occurred.
+When release status is in scope and the change does not require a product release under `CI_POLICY.md`, report `Release required: ➖ N/A` and `First release containing this change: ➖ N/A` with the reason instead of pretending a release occurred.
 
 Licensed BricsCAD runtime validation remains separate. Remote/source-only agents must follow `docs/LOCAL-ONLY-RUNTIME-REPORTING.md`: once a LOCAL_ONLY gate is parked, do not recheck it remotely **and do not routinely include a LOCAL/runtime status line in owner-facing reports**. Routine local/runtime evidence is reported by compatible local-machine agents when they actually execute or report local work. A remote agent may mention an exact local gate only when the owner explicitly asks about local validation/status or when that evidence is an explicit current acceptance/blocking gate for the request. Only compatible local evidence tied to the exact tested SHA may be reported as `LOCAL_PASS`.
 
@@ -181,7 +199,7 @@ For yes/no lifecycle questions, make the meaning visually explicit. Examples:
 ⏳ PR: not opened yet — required exact-head branch CI is still pending
 ❌ PR/protected checks: FAILURE — required check core failed; owning agent automatically diagnoses/fixes/revalidates the same carrier
 ❌ Merged to main: NO — PR not merged
-⏳ First release containing this change: PENDING — merged but release pipeline not complete
+When release status is explicitly in scope: ⏳ First release containing this change: PENDING — merged but release pipeline not complete
 ➖ Local/runtime evidence: N/A — docs-only change (local-agent report or explicitly requested local status only)
 ```
 
@@ -214,13 +232,18 @@ At the end of **every owner prompt that asks an agent/chat session to change, co
 <marker> PR/protected checks: <SUCCESS/FAILURE/PENDING/N/A + exact candidate when known>
 <marker> Merged to main: <NO | YES, main@sha>
 <marker> Exact-main validation: <run + landed SHA + SUCCESS/FAILURE/PENDING/N/A>
+<marker> Remaining blocker: <exact blocker or none>
+<marker> Next exact action: <one concrete next lifecycle action or none>
+```
+
+Only when release status is owner-facing under `Owner-facing release-status suppression`, append the applicable release block:
+
+```text
 <marker> Release required: <YES | NO/N/A + reason>
 <marker> Current/latest published release: <version/tag/none/N/A>
 <marker> First release containing this change: <version/tag/PENDING/NONE/N/A>
 <marker> Release source/commit: <sha or N/A>
 <marker> Release: <run/tag/artifact/deployment + SUCCESS/FAILURE/PENDING/N/A>
-<marker> Remaining blocker: <exact blocker or none>
-<marker> Next exact action: <one concrete next lifecycle action or none>
 ```
 
 For a compatible local-machine agent, append the local evidence line when local work is actually in scope or being reported:
@@ -289,8 +312,8 @@ A future agent receiving another prompt for the same function should be able to 
 2. which one branch/PR is canonical;
 3. what exact commit and CI evidence exist;
 4. whether it is merged into current `main`;
-5. what the current published release is;
-6. whether a release is required and, if so, the exact first published version/tag that contains the landed change, or that it is still pending;
+5. what the current published release is when release status is actually relevant to the owner's request;
+6. whether a release is required and, when release status is in scope, the exact first published version/tag that contains the landed change or that it is still pending;
 7. what single next action remains.
 
 That traceability is part of the deliverable, not optional reporting overhead.

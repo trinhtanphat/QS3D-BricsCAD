@@ -28,30 +28,14 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private sealed class RecognitionButtonSpec
         {
-            public RecognitionButtonSpec(
-                string id,
-                string text,
-                string command,
-                IconKind icon,
-                bool enabled = true,
-                double width = 136d,
-                bool preserveSourceColorWhenNonInteractive = false)
-            {
-                Id = id;
-                Text = text;
-                Command = command;
-                Icon = icon;
-                Enabled = enabled;
-                Width = width;
-                PreserveSourceColorWhenNonInteractive = preserveSourceColorWhenNonInteractive;
-            }
+            public RecognitionButtonSpec(string id, string text, string command, IconKind icon, bool enabled = true, double width = 136d)
+            { Id = id; Text = text; Command = command; Icon = icon; Enabled = enabled; Width = width; }
             public string Id { get; }
             public string Text { get; }
             public string Command { get; }
             public IconKind Icon { get; }
             public bool Enabled { get; }
             public double Width { get; }
-            public bool PreserveSourceColorWhenNonInteractive { get; }
         }
 
         public static bool TryInitialize()
@@ -93,14 +77,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     },
                     new[]
                     {
-                        new RecognitionButtonSpec(
-                            "QS3D_RECOGNIZE_BLT_VALIDATE",
-                            "Xác định Kiểm tra",
-                            string.Empty,
-                            IconKind.Validate,
-                            enabled: false,
-                            width: 136d,
-                            preserveSourceColorWhenNonInteractive: true)
+                        new RecognitionButtonSpec("QS3D_RECOGNIZE_BLT_VALIDATE", "Xác định Kiểm tra", string.Empty, IconKind.Validate, enabled: false, width: 136d)
                     });
 
                 _initialized = true;
@@ -133,9 +110,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
         {
             var button = Create("Bricscad.Windows.RibbonButton");
             SetProperty(button, "Id", spec.Id); SetProperty(button, "Name", spec.Text); SetProperty(button, "Text", spec.Text);
-            SetProperty(button, "ShowText", true); SetProperty(button, "ShowImage", true);
-            SetProperty(button, "IsEnabled", spec.Enabled || spec.PreserveSourceColorWhenNonInteractive);
-            SetProperty(button, "Width", spec.Width);
+            SetProperty(button, "ShowText", true); SetProperty(button, "ShowImage", true); SetProperty(button, "IsEnabled", spec.Enabled); SetProperty(button, "Width", spec.Width);
             SetEnumProperty(button, "Size", "Standard");
             var image = CreateIcon(spec.Icon); SetProperty(button, "Image", image); SetProperty(button, "LargeImage", image);
             if (spec.Enabled && !string.IsNullOrWhiteSpace(spec.Command)) { SetProperty(button, "CommandParameter", spec.Command); SetProperty(button, "CommandHandler", new RecognitionRibbonCommandHandler()); }
@@ -150,6 +125,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             var ink = FrozenBrush(Color.FromRgb(42, 51, 63));
             var amber = FrozenBrush(Color.FromRgb(239, 177, 45));
             var warning = FrozenBrush(Color.FromRgb(224, 72, 72));
+            var neutral = FrozenBrush(Color.FromRgb(154, 164, 174));
             var group = new DrawingGroup();
             switch (kind)
             {
@@ -184,9 +160,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     group.Children.Add(Fill(accentDark, Geometry.Parse("M5,22 L10,27 27,10 22,5 Z")));
                     group.Children.Add(Fill(amber, Geometry.Parse("M25,3 L27,8 31,10 27,12 25,17 23,12 19,10 23,8 Z"))); break;
                 case IconKind.Validate:
-                    group.Children.Add(Stroke(accentDark, 2.2, new RectangleGeometry(new System.Windows.Rect(5, 6, 21, 20), 2, 2)));
-                    group.Children.Add(Stroke(accent, 2.4, Geometry.Parse("M9,16 L14,21 23,11")));
-                    group.Children.Add(Fill(warning, new EllipseGeometry(new System.Windows.Point(26, 7), 3.0, 3.0))); break;
+                    group.Children.Add(Stroke(ink, 2.2, new RectangleGeometry(new System.Windows.Rect(5, 6, 21, 20), 2, 2)));
+                    group.Children.Add(Stroke(neutral, 2.4, Geometry.Parse("M9,16 L14,21 23,11")));
+                    group.Children.Add(Fill(neutral, new EllipseGeometry(new System.Windows.Point(26, 7), 3.0, 3.0))); break;
             }
             group.Freeze(); var image = new DrawingImage(group); image.Freeze(); return image;
         }
