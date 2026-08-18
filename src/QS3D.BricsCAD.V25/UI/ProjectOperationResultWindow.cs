@@ -24,11 +24,13 @@ namespace QS3D.BricsCAD.V25.UI
             Width = 420;
             Height = 244;
             ResizeMode = ResizeMode.NoResize;
-            WindowStyle = WindowStyle.None;
+            WindowStyle = System.Windows.WindowStyle.None;
             AllowsTransparency = true;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Background = Brushes.Transparent;
             ShowInTaskbar = false;
+            UseLayoutRounding = true;
+            SnapsToDevicePixels = true;
             Content = BuildContent(title, summary, detail);
             KeyDown += (_, args) =>
             {
