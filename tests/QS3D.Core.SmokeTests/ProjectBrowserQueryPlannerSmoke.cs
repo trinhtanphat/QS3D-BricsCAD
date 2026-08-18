@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using QS3D.Core.Domain;
 using QS3D.Core.Navigation;
 
@@ -18,6 +20,9 @@ namespace QS3D.Core.SmokeTests
             UnfilteredFamilyCategoryMismatchFailsClosed();
             FilteredPathStillValidatesUnmatchedReferences();
             InvalidFilterReferenceFailsClosed();
+            OversizedKnownCountFailsBeforeEnumeration();
+            ExactKnownCountLimitIsAccepted();
+            DishonestLowKnownCountStillHitsStreamingLimit();
         }
 
         private static void SearchMatchesSemanticCatalogNames()
@@ -155,6 +160,35 @@ namespace QS3D.Core.SmokeTests
                 "Unknown explicit browser filter IDs must fail closed.");
         }
 
+        private static void OversizedKnownCountFailsBeforeEnumeration()
+        {
+            var source = new CountedEnumerable<ElementCategory>(10001, 0, ElementCategory.Beam);
+            MustFail(
+                () => new ProjectBrowserQueryOptions(categories: source),
+                "A query filter whose known Count exceeds 10,000 must fail closed.");
+            Equal(0, source.GetEnumeratorCalls);
+            Equal(0, source.MoveNextCalls);
+        }
+
+        private static void ExactKnownCountLimitIsAccepted()
+        {
+            var source = new CountedEnumerable<ElementCategory>(10000, 10000, ElementCategory.Beam);
+            var options = new ProjectBrowserQueryOptions(categories: source);
+            Equal(10000, options.Categories.Count);
+            Equal(1, source.GetEnumeratorCalls);
+            Equal(10001, source.MoveNextCalls);
+        }
+
+        private static void DishonestLowKnownCountStillHitsStreamingLimit()
+        {
+            var source = new CountedEnumerable<ElementCategory>(1, 10001, ElementCategory.Beam);
+            MustFail(
+                () => new ProjectBrowserQueryOptions(categories: source),
+                "A dishonest low Count must not bypass the streaming 10,000-value ceiling.");
+            Equal(1, source.GetEnumeratorCalls);
+            Equal(10001, source.MoveNextCalls);
+        }
+
         private static ProjectState BuildProject()
         {
             var project = new ProjectState("P-BROWSER-QUERY", "Browser Query Smoke");
@@ -183,6 +217,57 @@ namespace QS3D.Core.SmokeTests
         private static void Equal<T>(T expected, T actual)
         {
             if (!Equals(expected, actual)) throw new Exception("Expected '" + expected + "' but got '" + actual + "'.");
+        }
+
+        private sealed class CountedEnumerable<T> : ICollection<T>
+        {
+            private readonly int _yieldCount;
+            private readonly T _value;
+
+            internal CountedEnumerable(int reportedCount, int yieldCount, T value)
+            {
+                Count = reportedCount;
+                _yieldCount = yieldCount;
+                _value = value;
+            }
+
+            public int Count { get; }
+            public bool IsReadOnly => true;
+            internal int GetEnumeratorCalls { get; private set; }
+            internal int MoveNextCalls { get; private set; }
+
+            public IEnumerator<T> GetEnumerator()
+            {
+                GetEnumeratorCalls++;
+                return new CountingEnumerator(this);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void Add(T item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Remove(T item) => throw new NotSupportedException();
+            public bool Contains(T item) => false;
+            public void CopyTo(T[] array, int arrayIndex) => throw new NotSupportedException();
+
+            private sealed class CountingEnumerator : IEnumerator<T>
+            {
+                private readonly CountedEnumerable<T> _owner;
+                private int _index = -1;
+
+                internal CountingEnumerator(CountedEnumerable<T> owner) => _owner = owner;
+                public T Current => _owner._value;
+                object IEnumerator.Current => Current!;
+
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    _index++;
+                    return _index < _owner._yieldCount;
+                }
+
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
         }
     }
 }

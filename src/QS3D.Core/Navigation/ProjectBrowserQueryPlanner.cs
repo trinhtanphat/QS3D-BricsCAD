@@ -30,16 +30,32 @@ namespace QS3D.Core.Navigation
         private static IReadOnlyList<T> CopyBounded<T>(IEnumerable<T>? values, string parameterName)
         {
             if (values == null) return new List<T>().AsReadOnly();
+            RejectOversizedKnownCount(values, parameterName);
             var result = new List<T>();
             foreach (var value in values)
             {
                 if (result.Count >= ProjectBrowserQueryPlanner.MaxFilterIds)
-                    throw new InvalidOperationException(
-                        "Project browser query option " + parameterName + " supports at most " +
-                        ProjectBrowserQueryPlanner.MaxFilterIds + " values.");
+                    throw TooManyFilterValues(parameterName);
                 result.Add(value);
             }
             return result.AsReadOnly();
+        }
+
+        private static void RejectOversizedKnownCount<T>(IEnumerable<T> values, string parameterName)
+        {
+            if (values is ICollection<T> collection && collection.Count > ProjectBrowserQueryPlanner.MaxFilterIds)
+                throw TooManyFilterValues(parameterName);
+            if (values is IReadOnlyCollection<T> readOnlyCollection && readOnlyCollection.Count > ProjectBrowserQueryPlanner.MaxFilterIds)
+                throw TooManyFilterValues(parameterName);
+            if (values is System.Collections.ICollection nonGenericCollection && nonGenericCollection.Count > ProjectBrowserQueryPlanner.MaxFilterIds)
+                throw TooManyFilterValues(parameterName);
+        }
+
+        private static InvalidOperationException TooManyFilterValues(string parameterName)
+        {
+            return new InvalidOperationException(
+                "Project browser query option " + parameterName + " supports at most " +
+                ProjectBrowserQueryPlanner.MaxFilterIds + " values.");
         }
     }
 
