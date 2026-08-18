@@ -81,15 +81,19 @@ namespace QS3D.Core.Domain
         internal void ReplacePersistenceState(IEnumerable<KeyValuePair<string, string>> values)
         {
             if (values == null) throw new ArgumentNullException(nameof(values));
-            RejectKnownOversizedPersistenceInput(values);
+            var knownCount = RequireSupportedKnownPersistenceCount(values);
             var next = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var observedCount = 0;
             foreach (var item in values)
             {
+                observedCount++;
                 if (item.Key == null) throw new ArgumentNullException(nameof(values), "Project metadata contains a null key.");
                 if (next.ContainsKey(item.Key)) throw new ArgumentException("Project metadata contains a duplicate key: " + item.Key + ".", nameof(values));
                 if (next.Count >= MaximumEntries) throw MetadataCountError();
                 next.Add(item.Key, item.Value ?? string.Empty);
             }
+            if (knownCount.HasValue && observedCount != knownCount.Value)
+                throw MetadataTraversalCountMismatchError(knownCount.Value, observedCount);
             ValidateReserved(next);
             _items.Clear();
             foreach (var item in next) _items.Add(item.Key, item.Value);
@@ -142,12 +146,33 @@ namespace QS3D.Core.Domain
             if (addOnly) _items.Add(key, normalizedValue); else _items[key] = normalizedValue;
         }
 
-        private static void RejectKnownOversizedPersistenceInput(IEnumerable<KeyValuePair<string, string>> values)
+        private static int? RequireSupportedKnownPersistenceCount(IEnumerable<KeyValuePair<string, string>> values)
         {
-            if (values is ICollection<KeyValuePair<string, string>> collection && collection.Count > MaximumEntries)
+            int? knownCount = null;
+            if (values is ICollection<KeyValuePair<string, string>> collection)
+                MergeKnownPersistenceCount(ref knownCount, collection.Count);
+            if (values is IReadOnlyCollection<KeyValuePair<string, string>> readOnlyCollection)
+                MergeKnownPersistenceCount(ref knownCount, readOnlyCollection.Count);
+            if (values is ICollection nonGenericCollection)
+                MergeKnownPersistenceCount(ref knownCount, nonGenericCollection.Count);
+            return knownCount;
+        }
+
+        private static void MergeKnownPersistenceCount(ref int? knownCount, int candidate)
+        {
+            if (candidate < 0)
+                throw new InvalidOperationException("Project metadata persistence input exposes an invalid negative Count.");
+            if (candidate > MaximumEntries)
                 throw MetadataCountError();
-            if (values is IReadOnlyCollection<KeyValuePair<string, string>> readOnlyCollection && readOnlyCollection.Count > MaximumEntries)
-                throw MetadataCountError();
+            if (knownCount.HasValue && knownCount.Value != candidate)
+                throw new InvalidOperationException("Project metadata persistence input exposes conflicting Count contracts.");
+            knownCount = candidate;
+        }
+
+        private static InvalidOperationException MetadataTraversalCountMismatchError(int expected, int observed)
+        {
+            return new InvalidOperationException(
+                "Project metadata persistence input Count does not match traversal (expected " + expected + ", observed " + observed + ").");
         }
 
         private static InvalidOperationException MetadataCountError()
