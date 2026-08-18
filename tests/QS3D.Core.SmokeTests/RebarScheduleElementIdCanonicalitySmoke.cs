@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Rebar;
@@ -54,8 +55,7 @@ namespace QS3D.Core.SmokeTests
         private static void ProjectBuilderRejectsNoncanonicalIdentityBeforeRowEmission()
         {
             const string invalidId = " P1";
-            var project = ProjectWithSingleRebar(invalidId, "rebar-schedule-id-project");
-
+            var project = ProjectWithMalformedRebarIdentity(invalidId, "rebar-schedule-id-project");
             var error = Capture<InvalidOperationException>(() => ProjectRebarScheduleBuilder.Build(project));
             Require(error.Message.IndexOf(invalidId, StringComparison.Ordinal) < 0,
                 "Project schedule diagnostic echoed the hostile raw ElementId.");
@@ -64,8 +64,7 @@ namespace QS3D.Core.SmokeTests
         private static void ProjectBuilderRejectsTrailingWhitespaceBeforeRowEmission()
         {
             const string invalidId = "P1 ";
-            var project = ProjectWithSingleRebar(invalidId, "rebar-schedule-trailing-id-project");
-
+            var project = ProjectWithMalformedRebarIdentity(invalidId, "rebar-schedule-trailing-id-project");
             var error = Capture<InvalidOperationException>(() => ProjectRebarScheduleBuilder.Build(project));
             Require(error.Message.IndexOf(invalidId, StringComparison.Ordinal) < 0,
                 "Project schedule trailing-whitespace diagnostic echoed the hostile raw ElementId.");
@@ -74,8 +73,7 @@ namespace QS3D.Core.SmokeTests
         private static void ProjectBuilderRejectsControlIdentityWithoutEchoingRawIdentity()
         {
             const string invalidId = "P\u0001X";
-            var project = ProjectWithSingleRebar(invalidId, "rebar-schedule-control-id-project");
-
+            var project = ProjectWithMalformedRebarIdentity(invalidId, "rebar-schedule-control-id-project");
             var error = Capture<InvalidOperationException>(() => ProjectRebarScheduleBuilder.Build(project));
             Require(error.Message.IndexOf(invalidId, StringComparison.Ordinal) < 0,
                 "Project schedule control-identity diagnostic echoed the hostile raw ElementId.");
@@ -100,10 +98,12 @@ namespace QS3D.Core.SmokeTests
             };
         }
 
-        private static ProjectState ProjectWithSingleRebar(string elementId, string projectId)
+        private static ProjectState ProjectWithMalformedRebarIdentity(string invalidId, string projectId)
         {
             var project = new ProjectState(projectId, "Rebar schedule identity");
-            project.Elements.Add(ProjectElement(elementId));
+            var element = ProjectElement("P1");
+            CorruptElementIdForLegacyStateTest(element, invalidId);
+            project.Elements.Add(element);
             return project;
         }
 
@@ -113,6 +113,15 @@ namespace QS3D.Core.SmokeTests
             element.Properties["RebarNotation"] = "1D12";
             element.Properties["RebarCuttingLengthM"] = "1";
             return element;
+        }
+
+        private static void CorruptElementIdForLegacyStateTest(ProjectElement element, string invalidId)
+        {
+            var field = typeof(ProjectElement).GetField("<Id>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null) throw new InvalidOperationException("ProjectElement Id backing field was not found for malformed-state smoke setup.");
+            field.SetValue(element, invalidId);
+            Require(string.Equals(element.Id, invalidId, StringComparison.Ordinal),
+                "Malformed-state smoke setup did not preserve the intended noncanonical ElementId.");
         }
 
         private static void RejectDirect(string invalidId)
