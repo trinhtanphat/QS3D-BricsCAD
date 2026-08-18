@@ -36,8 +36,12 @@ if FLOORS.is_file():
 
 if ZONES.is_file():
     text = ZONES.read_text(encoding="utf-8")
-    if "project.FindZone(normalized)" not in text:
-        errors.append("ProjectZoneService must resolve mutation targets through ProjectState.FindZone")
+    for token in (
+        "var canonicalId = RequiredIdentity(id, nameof(id), 64);",
+        "project.FindZone(canonicalId)",
+    ):
+        if token not in text:
+            errors.append("ProjectZoneService must validate the canonical Zone id before ProjectState.FindZone: " + token)
     if "project.Zones.FirstOrDefault" in text:
         errors.append("ProjectZoneService still contains first-match Zone lookup")
 

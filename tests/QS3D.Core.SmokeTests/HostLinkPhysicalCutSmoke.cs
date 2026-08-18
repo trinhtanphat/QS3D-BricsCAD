@@ -19,6 +19,7 @@ namespace QS3D.Core.SmokeTests
             LegacyCutWithoutTargetStateFailsClosed();
             CorruptTargetStateFailsClosed();
             CodecRoundTripsDeterministically();
+            CodecRejectsPaddedTargetsWithoutMutation();
             CodecRejectsDuplicateTargetsWithoutMutation();
         }
 
@@ -82,7 +83,7 @@ namespace QS3D.Core.SmokeTests
         private static void CodecRoundTripsDeterministically()
         {
             var host = new ProjectElement("W", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
-            PhysicalOpeningCutTargetStateCodec.Write(host, new[] { "B", " a ", "C" });
+            PhysicalOpeningCutTargetStateCodec.Write(host, new[] { "B", "a", "C" });
             True(PhysicalOpeningCutTargetStateCodec.TryRead(host, out var ids));
             Equal(3, ids.Count);
             Equal("a", ids[0]);
@@ -90,13 +91,23 @@ namespace QS3D.Core.SmokeTests
             Equal("C", ids[2]);
         }
 
+        private static void CodecRejectsPaddedTargetsWithoutMutation()
+        {
+            var host = new ProjectElement("W", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            host.Properties[PhysicalOpeningCutTargetStateCodec.OpeningIdsKey] = "sentinel";
+
+            Throws<InvalidOperationException>(() => PhysicalOpeningCutTargetStateCodec.Normalize(new[] { "O1", " o2 " }));
+            Throws<InvalidOperationException>(() => PhysicalOpeningCutTargetStateCodec.Write(host, new[] { "O1", " o2 " }));
+            Equal("sentinel", host.Properties[PhysicalOpeningCutTargetStateCodec.OpeningIdsKey]);
+        }
+
         private static void CodecRejectsDuplicateTargetsWithoutMutation()
         {
             var host = new ProjectElement("W", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
             host.Properties[PhysicalOpeningCutTargetStateCodec.OpeningIdsKey] = "sentinel";
 
-            Throws<InvalidOperationException>(() => PhysicalOpeningCutTargetStateCodec.Normalize(new[] { "O1", " o1 " }));
-            Throws<InvalidOperationException>(() => PhysicalOpeningCutTargetStateCodec.Write(host, new[] { "O1", " o1 " }));
+            Throws<InvalidOperationException>(() => PhysicalOpeningCutTargetStateCodec.Normalize(new[] { "O1", "o1" }));
+            Throws<InvalidOperationException>(() => PhysicalOpeningCutTargetStateCodec.Write(host, new[] { "O1", "o1" }));
             Equal("sentinel", host.Properties[PhysicalOpeningCutTargetStateCodec.OpeningIdsKey]);
         }
 
