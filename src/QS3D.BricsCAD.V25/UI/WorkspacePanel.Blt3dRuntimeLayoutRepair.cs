@@ -76,15 +76,10 @@ namespace QS3D.BricsCAD.V25.UI
             _blt3dRuntimeViewportRecoveryRetriesRemaining = Blt3dRuntimeRecoveryRetryPasses;
             WireBlt3dRuntimeViewportRecovery();
 
-            // Run once behind all existing Loaded/ContextIdle compatibility passes.
             Dispatcher.BeginInvoke(
                 DispatcherPriority.ApplicationIdle,
                 new Action(ReassertBlt3dRuntimeLayout));
 
-            // BricsCAD can apply the native dock layout after WPF ApplicationIdle. Keep the bounded
-            // startup settle so the common case is repaired quickly. Later host changes are handled
-            // by the viewport/layout guards below, but only when the client is actually blank/collapsed;
-            // ordinary nonblank manual resizing therefore keeps the user's splitter geometry.
             var timer = new DispatcherTimer(DispatcherPriority.ApplicationIdle)
             {
                 Interval = Blt3dRuntimeSettleInterval
@@ -151,10 +146,6 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnBlt3dRuntimeViewportLayoutUpdated(object? sender, EventArgs e)
         {
-            // A host reparent/layout pass can strand the plugin body without changing the outer
-            // ScrollViewer's final size or visibility. LayoutUpdated is therefore the last-resort
-            // observation surface, but it stays cheap and non-invasive: a normal healthy layout
-            // returns before queuing any dispatcher work or touching splitter geometry.
             if (_blt3dRuntimeViewportRecoveryApplying ||
                 !IsLoaded ||
                 !WorkspaceOverflow.IsVisible ||
@@ -162,7 +153,12 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
 
             if (NeedsBlt3dRuntimeViewportRecovery())
+            {
                 QueueBlt3dRuntimeViewportRecovery();
+                return;
+            }
+
+            _blt3dRuntimeViewportRecoveryRetriesRemaining = Blt3dRuntimeRecoveryRetryPasses;
         }
 
         private void QueueBlt3dRuntimeViewportRecovery()
@@ -182,9 +178,6 @@ namespace QS3D.BricsCAD.V25.UI
                     if (!IsLoaded || !WorkspaceOverflow.IsVisible || !HasUsableBlt3dRuntimeViewport())
                         return;
 
-                    // A normal resize/layout must not continuously reset the user's splitter widths.
-                    // Only repair when a late host layout left the real client effectively blank or
-                    // when a legacy pass reintroduced the unsafe ViewportWidth binding/visibility state.
                     if (!NeedsBlt3dRuntimeViewportRecovery())
                     {
                         _blt3dRuntimeViewportRecoveryRetriesRemaining = Blt3dRuntimeRecoveryRetryPasses;
@@ -253,10 +246,7 @@ namespace QS3D.BricsCAD.V25.UI
                     child is FrameworkElement element &&
                     element.ActualWidth > 1d &&
                     element.ActualHeight > 1d)
-                {
-                    _blt3dRuntimeViewportRecoveryRetriesRemaining = Blt3dRuntimeRecoveryRetryPasses;
                     return false;
-                }
             }
 
             return true;
@@ -267,9 +257,6 @@ namespace QS3D.BricsCAD.V25.UI
             if (!IsLoaded)
                 return;
 
-            // The later owner screenshot contract supersedes the old side-by-side reference
-            // interpretation: retain the host-owned modelspace in the centre and restore the
-            // compact left QS3D rail with Model above the dedicated Family/Properties region.
             WorkspaceOverflow.VerticalContentAlignment = VerticalAlignment.Stretch;
             WorkspaceContentRoot.VerticalAlignment = VerticalAlignment.Stretch;
             ApplyBlt3dFiveZoneRuntimeLayout();
