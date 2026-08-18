@@ -9,6 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SELF = Path(__file__).resolve()
 CHILD_TIMEOUT_SECONDS = 180
+MAX_FEATURE_GATES = 512
+MAX_FEATURE_GATE_SOURCE_BYTES = 512 * 1024
 
 
 def _relative_candidate(path):
@@ -19,20 +21,40 @@ def _relative_candidate(path):
 
 
 def validate_candidates(candidates):
+    candidates = list(candidates)
+    if len(candidates) > MAX_FEATURE_GATES:
+        raise RuntimeError(
+            "feature preflight discovery count "
+            + str(len(candidates))
+            + " exceeds maximum "
+            + str(MAX_FEATURE_GATES)
+        )
+
     unsafe = []
     by_casefold = {}
 
     for path in candidates:
         rel = _relative_candidate(path)
         try:
-            mode = os.lstat(path).st_mode
+            file_stat = os.lstat(path)
         except OSError as exc:
             raise RuntimeError("cannot inspect feature preflight gate " + str(rel) + ": " + str(exc)) from exc
 
+        mode = file_stat.st_mode
         if path.is_symlink():
             unsafe.append((str(rel), "symlink"))
         elif not stat.S_ISREG(mode):
             unsafe.append((str(rel), "non-regular"))
+        elif file_stat.st_size > MAX_FEATURE_GATE_SOURCE_BYTES:
+            unsafe.append(
+                (
+                    str(rel),
+                    "source size "
+                    + str(file_stat.st_size)
+                    + " bytes exceeds maximum "
+                    + str(MAX_FEATURE_GATE_SOURCE_BYTES),
+                )
+            )
 
         key = path.name.casefold()
         by_casefold.setdefault(key, []).append(path)
@@ -51,10 +73,24 @@ def validate_candidates(candidates):
 
 
 def discover():
+    # Keep discovery itself bounded: Path.glob() is consumed only until the first
+    # boundary violation instead of materializing an arbitrarily large candidate
+    # set before validate_candidates() gets a chance to reject it.
     # Exclude only the aggregate runner's exact directory entry. Do not resolve
     # candidates first: a symlink that targets SELF is still an unsafe gate and
     # must reach validate_candidates() so discovery fails closed.
-    candidates = [path for path in SCRIPTS.glob("preflight-*.py") if str(path) != str(SELF)]
+    candidates = []
+    for path in SCRIPTS.glob("preflight-*.py"):
+        if str(path) == str(SELF):
+            continue
+        candidates.append(path)
+        if len(candidates) > MAX_FEATURE_GATES:
+            raise RuntimeError(
+                "feature preflight discovery count "
+                + str(len(candidates))
+                + " exceeds maximum "
+                + str(MAX_FEATURE_GATES)
+            )
     return validate_candidates(candidates)
 
 
