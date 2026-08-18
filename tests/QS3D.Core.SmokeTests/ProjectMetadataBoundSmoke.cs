@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
         {
             PublicMutationStopsAtBoundAndPreservesUpdates();
             PersistenceReplacementRejectsKnownOversizedInputBeforeEnumeration();
+            PersistenceReplacementRejectsKnownOversizedReadOnlyInputBeforeEnumeration();
             PersistenceReplacementStopsAtBoundAndIsAtomic();
             PersistenceReplacementAcceptsExactKnownBoundary();
             OwnedMappingCapacityFailureDoesNotTouchProject();
@@ -65,6 +66,27 @@ namespace QS3D.Core.SmokeTests
             Equal(false, input.WasEnumerated, "known oversized metadata enumerated");
             Equal(1, project.Metadata.Count, "known oversized atomic metadata replacement count");
             Equal("original", project.Metadata["seed"], "known oversized atomic metadata replacement value");
+        }
+
+        private static void PersistenceReplacementRejectsKnownOversizedReadOnlyInputBeforeEnumeration()
+        {
+            var project = NewProject("known-read-only-count");
+            project.Metadata.Add("seed", "original");
+            var input = new KnownReadOnlyCountMetadataCollection(MaximumEntries + 1);
+
+            try
+            {
+                InvokePersistenceReplacement(project, input);
+                throw new InvalidOperationException("Expected known oversized read-only project metadata input to be rejected.");
+            }
+            catch (TargetInvocationException ex) when (ex.InnerException is InvalidOperationException)
+            {
+                // Expected: reflection wraps the bounded replacement failure.
+            }
+
+            Equal(false, input.WasEnumerated, "known oversized read-only metadata enumerated");
+            Equal(1, project.Metadata.Count, "known oversized read-only atomic metadata replacement count");
+            Equal("original", project.Metadata["seed"], "known oversized read-only atomic metadata replacement value");
         }
 
         private static void PersistenceReplacementStopsAtBoundAndIsAtomic()
@@ -224,6 +246,21 @@ namespace QS3D.Core.SmokeTests
             public bool Contains(KeyValuePair<string, string> item) => false;
             public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex) => throw new NotSupportedException();
             public bool Remove(KeyValuePair<string, string> item) => throw new NotSupportedException();
+        }
+
+        private sealed class KnownReadOnlyCountMetadataCollection : IReadOnlyCollection<KeyValuePair<string, string>>
+        {
+            public KnownReadOnlyCountMetadataCollection(int count) { Count = count; }
+            public int Count { get; }
+            public bool WasEnumerated { get; private set; }
+
+            public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+            {
+                WasEnumerated = true;
+                throw new InvalidOperationException("Known oversized read-only metadata must be rejected before enumeration.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
     }
 }
