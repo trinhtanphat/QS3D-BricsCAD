@@ -6,6 +6,7 @@ XAML_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml"
 COMPACT_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.CompactShell.cs"
 REFERENCE_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.ReferencePaletteLayout.cs"
 RUNTIME_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
+RUNTIME_REPAIR_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dRuntimeLayoutRepair.cs"
 LOCAL_INBOX_REL = "docs/LOCAL-AGENT-INBOX.md"
 
 
@@ -47,6 +48,7 @@ def main():
     compact = read(COMPACT_REL)
     reference = read(REFERENCE_REL)
     runtime = read(RUNTIME_REL)
+    runtime_repair = read(RUNTIME_REPAIR_REL)
     local_inbox = read(LOCAL_INBOX_REL)
 
     # XAML keeps a non-zero bootstrap floor while BricsCAD performs its first PaletteSet measure.
@@ -122,6 +124,47 @@ def main():
         RUNTIME_REL,
     )
 
+    # BricsCAD can show/reparent/resize a PaletteSet after the old two-tick startup window. Keep the
+    # bounded startup repair, but also keep a loaded-lifetime recovery trigger that is gated by an
+    # actually blank/collapsed client. This prevents a late host layout from stranding the body while
+    # also preventing ordinary nonblank resizes from continually resetting splitter geometry.
+    for token in (
+        "WireBlt3dRuntimeViewportRecovery();",
+        "UnwireBlt3dRuntimeViewportRecovery();",
+        "WorkspaceOverflow.SizeChanged += OnBlt3dRuntimeViewportSizeChanged;",
+        "WorkspaceOverflow.IsVisibleChanged += OnBlt3dRuntimeViewportVisibilityChanged;",
+        "WorkspaceOverflow.SizeChanged -= OnBlt3dRuntimeViewportSizeChanged;",
+        "WorkspaceOverflow.IsVisibleChanged -= OnBlt3dRuntimeViewportVisibilityChanged;",
+        "QueueBlt3dRuntimeViewportRecovery();",
+        "if (!NeedsBlt3dRuntimeViewportRecovery())",
+        "BindingOperations.IsDataBound(root, FrameworkElement.WidthProperty)",
+        "root.ActualWidth <= 1d",
+        "root.ActualHeight <= 1d",
+        "workspace.ActualWidth <= 1d",
+        "workspace.ActualHeight <= 1d",
+        "WorkspaceOverflow.VerticalContentAlignment = VerticalAlignment.Stretch;",
+        "WorkspaceContentRoot.VerticalAlignment = VerticalAlignment.Stretch;",
+        "InvalidateBlt3dRuntimeLayout();",
+    ):
+        require(runtime_repair, token, RUNTIME_REPAIR_REL)
+    require_order(
+        runtime_repair,
+        "if (!NeedsBlt3dRuntimeViewportRecovery())",
+        "ReassertBlt3dRuntimeLayout();",
+        RUNTIME_REPAIR_REL,
+    )
+    require_order(
+        runtime_repair,
+        "UnwireBlt3dRuntimeViewportRecovery();",
+        "panel._blt3dRuntimeLayoutRepairStarted = false;",
+        RUNTIME_REPAIR_REL,
+    )
+    forbid(
+        runtime_repair,
+        "WorkspaceOverflow.SizeChanged += (_, __) => ReassertBlt3dRuntimeLayout();",
+        RUNTIME_REPAIR_REL,
+    )
+
     # Real BricsCAD first-render/HiDPI proof is LOCAL_ONLY. Reuse the canonical Workspace local
     # handoff instead of inventing another queue. Validate only the stable scenario identity here:
     # LOCAL-012's workflow status/evidence is intentionally mutable as local qualification advances.
@@ -139,9 +182,10 @@ def main():
         require(local012, token, LOCAL_INBOX_REL)
 
     print(
-        "PASS: Workspace keeps a non-zero first-measure bootstrap, CompactShell no longer collapses "
-        "live columns during Loaded, ApplicationIdle/SystemIdle break the ViewportWidth loop before "
-        "allowing zero minimum width, and the existing LOCAL-012 BricsCAD visual scenario remains referenced."
+        "PASS: Workspace keeps the first-measure bootstrap, authoritative idle passes break the "
+        "ViewportWidth loop, and a gated loaded-lifetime viewport recovery repairs late BricsCAD "
+        "show/reparent/resize blanking without continuously resetting normal splitter resizing; "
+        "LOCAL-012 remains the canonical licensed visual qualification scenario."
     )
     return 0
 
