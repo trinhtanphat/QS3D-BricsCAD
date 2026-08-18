@@ -8,7 +8,7 @@ The canonical boundary between ChatGPT account scheduled tasks and repository ow
 
 `docs/CHATGPT-SCHEDULE-BOUNDARY.md`
 
-A ChatGPT scheduled task is only an external account-side prompt/task trigger. Labels such as `C0`, `W1-W4`, `QS3D-CONTROL`, `QS3D-WORKER-*`, `controller`, `worker`, or `Task 0-4` do not create repository Lane-Keys, GitHub ownership, canonical carriers, CI authority, or merge authority by themselves.
+A ChatGPT scheduled task is only an external account-side prompt/task trigger. Labels such as `C0`, `W1-W4`, `controller`, `worker`, or `Task 0-4` do not create repository Lane-Keys, GitHub ownership, canonical carriers, CI authority, or merge authority by themselves.
 
 Any older wording elsewhere that refers to `scheduled/controller lanes`, `scheduled workers`, hourly controller pools, or similar concepts must be read through `docs/CHATGPT-SCHEDULE-BOUNDARY.md`: the schedule is only the invocation source; the resulting chat/session still follows the ordinary current GitHub Lane-Key / Issue / branch / PR ownership rules.
 
