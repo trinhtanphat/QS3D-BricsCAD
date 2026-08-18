@@ -6,6 +6,7 @@ namespace QS3D.Core.SmokeTests
         {
             ProjectQuantitySmoke.Run();
             QuantityRuleCanonicalNumericKeySmoke.Run();
+            QuantityRuleTokenCanonicalitySmoke.Run();
             QuantityReportDistinctNoteSmoke.Run();
             QuantityRuleTokenXmlPersistabilitySmoke.Run();
             QuantityReportFamilyCategorySmoke.Run();

@@ -30,6 +30,8 @@ namespace QS3D.Core.Rules
         private static string RequiredToken(string value, string name)
         {
             var normalized = Required(value, name);
+            if (!string.Equals(value, normalized, StringComparison.Ordinal))
+                throw new ArgumentException("Value must be canonical without leading or trailing whitespace.", name);
             if (normalized.Any(char.IsControl)) throw new ArgumentException("Value cannot contain control characters.", name);
             try
             {
