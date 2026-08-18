@@ -6,6 +6,7 @@ XAML_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml"
 COMPACT_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.CompactShell.cs"
 REFERENCE_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.ReferencePaletteLayout.cs"
 RUNTIME_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
+LOCAL_INBOX_REL = "docs/LOCAL-AGENT-INBOX.md"
 
 
 def read(rel):
@@ -31,11 +32,22 @@ def require_order(text, first, second, scope):
         )
 
 
+def require_section(text, start_heading, end_heading, scope):
+    start_index = text.find(start_heading)
+    end_index = text.find(end_heading, start_index + len(start_heading)) if start_index >= 0 else -1
+    if start_index < 0 or end_index < 0 or start_index >= end_index:
+        raise SystemExit(
+            f"FAIL: {scope} missing bounded section {start_heading!r} -> {end_heading!r}"
+        )
+    return text[start_index:end_index]
+
+
 def main():
     xaml = read(XAML_REL)
     compact = read(COMPACT_REL)
     reference = read(REFERENCE_REL)
     runtime = read(RUNTIME_REL)
+    local_inbox = read(LOCAL_INBOX_REL)
 
     # XAML keeps a non-zero bootstrap floor while BricsCAD performs its first PaletteSet measure.
     # The legacy ViewportWidth binding may still be present, but it must not be allowed to coerce
@@ -108,10 +120,27 @@ def main():
         RUNTIME_REL,
     )
 
+    # Real BricsCAD first-render/HiDPI proof is LOCAL_ONLY. Reuse the canonical Workspace local
+    # handoff instead of inventing another queue, and fail source preflight if that handoff is lost.
+    local012 = require_section(
+        local_inbox,
+        "## LOCAL-012 — Project Browser native workspace and CAD selection bridge",
+        "## LOCAL-013 — clean-room BRC public capability and eligible CAD quantity round-trip",
+        LOCAL_INBOX_REL,
+    )
+    for token in (
+        "- Status: OPEN",
+        "PENDING_LOCAL / DO_NOT_RETRY_REMOTE",
+        "palette recreation",
+        "100/125/150/200% DPI",
+        "narrow/normal/wide host widths",
+    ):
+        require(local012, token, LOCAL_INBOX_REL)
+
     print(
         "PASS: Workspace keeps a non-zero first-measure bootstrap, CompactShell no longer collapses "
-        "live columns during Loaded, and ApplicationIdle/SystemIdle break the ViewportWidth loop "
-        "before allowing zero minimum width."
+        "live columns during Loaded, ApplicationIdle/SystemIdle break the ViewportWidth loop before "
+        "allowing zero minimum width, and the existing LOCAL-012 BricsCAD visual handoff remains parked."
     )
     return 0
 
