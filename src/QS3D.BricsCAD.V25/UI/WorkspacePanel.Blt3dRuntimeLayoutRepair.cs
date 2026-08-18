@@ -19,7 +19,7 @@ namespace QS3D.BricsCAD.V25.UI
         private const int Blt3dRuntimeRecoveryRetryPasses = 3;
         private const double Blt3dUsableViewportFloor = 32d;
         private const double Blt3dFooterContentHeight = 28d;
-        private const double Blt3dFooterOuterTopGap = 8d;
+        private const double Blt3dViewportHeightTolerance = 1d;
         private static readonly TimeSpan Blt3dRuntimeSettleInterval = TimeSpan.FromMilliseconds(250);
         private static readonly bool Blt3dRuntimeLayoutRepairRegistered = RegisterBlt3dRuntimeLayoutRepair();
 
@@ -296,6 +296,11 @@ namespace QS3D.BricsCAD.V25.UI
                 root.ActualHeight <= 1d)
                 return true;
 
+            var viewportHeight = WorkspaceOverflow.ActualHeight;
+            if (viewportHeight > Blt3dUsableViewportFloor &&
+                root.ActualHeight + Blt3dViewportHeightTolerance < viewportHeight)
+                return true;
+
             Grid? workspace = null;
             foreach (UIElement child in root.Children)
             {
@@ -351,15 +356,38 @@ namespace QS3D.BricsCAD.V25.UI
 
             WorkspaceOverflow.VerticalContentAlignment = VerticalAlignment.Stretch;
             WorkspaceContentRoot.VerticalAlignment = VerticalAlignment.Stretch;
+            ApplyBlt3dViewportFill();
             ApplyBlt3dFiveZoneRuntimeLayout();
-            ApplyBlt3dFooterOuterGap();
+            ApplyBlt3dFooterDocking();
         }
 
-        private void ApplyBlt3dFooterOuterGap()
+        private void ApplyBlt3dViewportFill()
+        {
+            var viewportHeight = WorkspaceOverflow.ActualHeight;
+            if (viewportHeight <= Blt3dUsableViewportFloor ||
+                double.IsNaN(viewportHeight) ||
+                double.IsInfinity(viewportHeight))
+                return;
+
+            WorkspaceContentRoot.Height = double.NaN;
+            WorkspaceContentRoot.MinHeight = viewportHeight;
+        }
+
+        private void ApplyBlt3dFooterDocking()
         {
             var root = WorkspaceContentRoot;
             if (root == null || root.RowDefinitions.Count < 3)
                 return;
+
+            var workspaceRow = root.RowDefinitions[1];
+            workspaceRow.MinHeight = 0;
+            workspaceRow.MaxHeight = double.PositiveInfinity;
+            workspaceRow.Height = new GridLength(1, GridUnitType.Star);
+
+            var footerRow = root.RowDefinitions[2];
+            footerRow.MinHeight = 0;
+            footerRow.MaxHeight = Blt3dFooterContentHeight;
+            footerRow.Height = new GridLength(Blt3dFooterContentHeight);
 
             Border? footer = null;
             foreach (UIElement child in root.Children)
@@ -374,12 +402,9 @@ namespace QS3D.BricsCAD.V25.UI
             if (footer == null)
                 return;
 
-            var footerRow = root.RowDefinitions[2];
-            var totalHeight = Blt3dFooterContentHeight + Blt3dFooterOuterTopGap;
-            footerRow.MinHeight = 0;
-            footerRow.MaxHeight = totalHeight;
-            footerRow.Height = new GridLength(totalHeight);
-            footer.Margin = new Thickness(0, Blt3dFooterOuterTopGap, 0, 0);
+            footer.Margin = new Thickness(0);
+            footer.Height = double.NaN;
+            footer.VerticalAlignment = VerticalAlignment.Stretch;
         }
 
         private void InvalidateBlt3dRuntimeLayout()
