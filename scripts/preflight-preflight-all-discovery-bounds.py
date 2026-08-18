@@ -60,6 +60,39 @@ def test_count_boundary_plus_one_fails_before_inspection():
         )
 
 
+def test_discovery_stops_at_boundary_plus_one():
+    class CountingScripts:
+        def __init__(self):
+            self.emitted = 0
+
+        def glob(self, pattern):
+            assert pattern == "preflight-*.py"
+            for index in range(module.MAX_FEATURE_GATES + 2):
+                self.emitted += 1
+                if self.emitted > module.MAX_FEATURE_GATES + 1:
+                    raise AssertionError("discover consumed candidates beyond the rejection boundary")
+                yield Path("/virtual/scripts/preflight-%04d.py" % index)
+
+    original_root = module.ROOT
+    original_scripts = module.SCRIPTS
+    original_self = module.SELF
+    fake_scripts = CountingScripts()
+    module.ROOT = Path("/virtual")
+    module.SCRIPTS = fake_scripts
+    module.SELF = Path("/virtual/scripts/preflight-all.py")
+    try:
+        expect_runtime_error(
+            module.discover,
+            "discovery count %d exceeds maximum %d" % (module.MAX_FEATURE_GATES + 1, module.MAX_FEATURE_GATES),
+        )
+    finally:
+        module.ROOT = original_root
+        module.SCRIPTS = original_scripts
+        module.SELF = original_self
+
+    assert fake_scripts.emitted == module.MAX_FEATURE_GATES + 1
+
+
 def test_source_size_exact_bound_and_boundary_plus_one():
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp)
@@ -112,6 +145,7 @@ def test_legacy_symlink_and_case_collision_guards():
 def main():
     test_exact_count_and_ordering()
     test_count_boundary_plus_one_fails_before_inspection()
+    test_discovery_stops_at_boundary_plus_one()
     test_source_size_exact_bound_and_boundary_plus_one()
     test_invalid_discovery_never_launches_children()
     test_legacy_symlink_and_case_collision_guards()
