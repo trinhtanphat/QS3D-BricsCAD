@@ -229,6 +229,11 @@ namespace QS3D.Core.Rebar
             OffCutLengthM = RebarMath.NonNegative(offCutLengthM, nameof(offCutLengthM));
             ProcurementLengthM = RebarMath.Multiply(StockLengthM, StockBarCount, "rebar procurement length");
             var wasteLengthM = RebarMath.Add(KerfLengthM, OffCutLengthM, "rebar procurement waste length");
+            if ((KerfLengthM > 0d && wasteLengthM == OffCutLengthM) ||
+                (OffCutLengthM > 0d && wasteLengthM == KerfLengthM))
+            {
+                throw new InvalidOperationException("Rebar procurement waste length lost a positive contribution at double precision.");
+            }
             if (wasteLengthM > ProcurementLengthM)
                 throw new ArgumentOutOfRangeException(nameof(offCutLengthM), "Kerf plus off-cut length cannot exceed procured stock length.");
         }
