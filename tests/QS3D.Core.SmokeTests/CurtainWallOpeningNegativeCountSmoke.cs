@@ -14,6 +14,8 @@ namespace QS3D.Core.SmokeTests
             NegativeOpeningCountFailsBeforeAccess();
             PanelNegativeCountFailsBeforeAccess();
             PanelNegativeOpeningCountFailsBeforeAccess();
+            PanelSnapshotsPanelCountAcrossNestedPlanning();
+            PanelSnapshotsOpeningCountAcrossNestedPlanning();
             EmptyInputsRemainAccepted();
         }
 
@@ -55,6 +57,44 @@ namespace QS3D.Core.SmokeTests
                 "negative opening Count",
                 "Panel planner negative opening Count must fail closed.");
             Equal(0, openings.AccessAttempts, "Panel planner negative opening Count must fail before opening access.");
+        }
+
+        private static void PanelSnapshotsPanelCountAcrossNestedPlanning()
+        {
+            var panels = new ChangingCountList<CurtainWallRect>(
+                new[]
+                {
+                    new CurtainWallRect { X_M = 0d, Z_M = 0d, WidthM = 1d, HeightM = 1d }
+                },
+                firstCount: 1,
+                laterCount: 0);
+
+            var plan = CurtainWallOpeningPanelPlanner.Plan(
+                panels,
+                Array.Empty<CurtainWallOpeningRect>());
+
+            Equal(1, panels.CountReads, "Panel Count must be read exactly once at the public boundary.");
+            Equal(1, plan.SourcePanelCount, "Panel plan must retain the validated Count snapshot.");
+            Equal(1, plan.Pieces.Count, "Nested frame planning must consume the snapshotted panel Count.");
+        }
+
+        private static void PanelSnapshotsOpeningCountAcrossNestedPlanning()
+        {
+            var openings = new ChangingCountList<CurtainWallOpeningRect>(
+                new[]
+                {
+                    new CurtainWallOpeningRect { X_M = 0.25d, Z_M = 0d, WidthM = 0.5d, HeightM = 1d }
+                },
+                firstCount: 1,
+                laterCount: 0);
+
+            var plan = CurtainWallOpeningPanelPlanner.Plan(
+                new[] { new CurtainWallRect { X_M = 0d, Z_M = 0d, WidthM = 1d, HeightM = 1d } },
+                openings);
+
+            Equal(1, openings.CountReads, "Opening Count must be read exactly once at the panel boundary.");
+            Equal(1, plan.InterruptedPanelCount, "Nested frame planning must consume the snapshotted opening Count.");
+            Equal(0.5d, plan.RemainingPanelAreaM2, "Snapshotted opening Count must preserve the expected clipping result.");
         }
 
         private static void EmptyInputsRemainAccepted()
@@ -114,6 +154,34 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Negative Count input must fail before enumeration.");
             }
 
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class ChangingCountList<T> : IReadOnlyList<T>
+        {
+            private readonly IReadOnlyList<T> _items;
+            private readonly int _firstCount;
+            private readonly int _laterCount;
+
+            public ChangingCountList(IReadOnlyList<T> items, int firstCount, int laterCount)
+            {
+                _items = items;
+                _firstCount = firstCount;
+                _laterCount = laterCount;
+            }
+
+            public int CountReads { get; private set; }
+            public int Count
+            {
+                get
+                {
+                    CountReads++;
+                    return CountReads == 1 ? _firstCount : _laterCount;
+                }
+            }
+
+            public T this[int index] => _items[index];
+            public IEnumerator<T> GetEnumerator() => _items.GetEnumerator();
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
     }
