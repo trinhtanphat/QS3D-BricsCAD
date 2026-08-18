@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Threading;
 
 namespace QS3D.BricsCAD.V25.UI
@@ -51,7 +52,18 @@ namespace QS3D.BricsCAD.V25.UI
 
             UseLayoutRounding = true;
             SnapsToDevicePixels = true;
+
+            // Break the legacy Width <- ScrollViewer.ViewportWidth feedback loop before dropping
+            // the bootstrap minimum width. BricsCAD can report a zero viewport during first host
+            // measure; clearing MinWidth while that binding is still active can collapse the whole
+            // WPF client to zero and leave only the PaletteSet chrome visible.
+            BindingOperations.ClearBinding(root, FrameworkElement.WidthProperty);
+            root.Width = double.NaN;
             root.MinWidth = 0;
+            root.HorizontalAlignment = HorizontalAlignment.Stretch;
+            root.Visibility = Visibility.Visible;
+            root.Opacity = 1d;
+            WorkspaceOverflow.HorizontalContentAlignment = HorizontalAlignment.Stretch;
             WorkspaceOverflow.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
             WorkspaceOverflow.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
             WorkspaceOverflow.ScrollToHorizontalOffset(0);
