@@ -47,15 +47,16 @@ Before substantive work, read:
 2. `docs/MAIN-WRITE-AUTHORIZATION.md`;
 3. `docs/PRODUCT-BOUNDARY.md`;
 4. `CI_POLICY.md`;
-5. fetch/read the latest `origin/main` and record its exact SHA;
-6. `docs/AGENT-WORK-REGISTRATION.md`;
-7. `docs/AGENT-PROMPT-TO-RELEASE-CONTRACT.md`;
-8. `docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md`;
-9. relevant open Issues/PRs plus `ACTIVE`/`BLOCKED` historical claims under `docs/agent-work-claims/`;
-10. `docs/REMOTE-AGENT-SCOPE.md`;
-11. the newest current handoff/status docs relevant to the task;
-12. `docs/LOCAL-AGENT-INBOX.md` for LOCAL_ONLY work;
-13. the exact feature/runbook documents required by the assigned lane.
+5. `docs/AGENT-BRANCH-CI-ACTIONS-LOOKUP.md`;
+6. fetch/read the latest `origin/main` and record its exact SHA;
+7. `docs/AGENT-WORK-REGISTRATION.md`;
+8. `docs/AGENT-PROMPT-TO-RELEASE-CONTRACT.md`;
+9. `docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md`;
+10. relevant open Issues/PRs plus `ACTIVE`/`BLOCKED` historical claims under `docs/agent-work-claims/`;
+11. `docs/REMOTE-AGENT-SCOPE.md`;
+12. the newest current handoff/status docs relevant to the task;
+13. `docs/LOCAL-AGENT-INBOX.md` for LOCAL_ONLY work;
+14. the exact feature/runbook documents required by the assigned lane.
 
 Current source wins over stale historical handoffs for implementation truth. `docs/LOCAL-AGENT-INBOX.md` is the live LOCAL_ONLY priority index when older local documents disagree on status/priority.
 
@@ -70,15 +71,15 @@ Before implementation, every normal agent must:
 5. create/update a GitHub Issue for the lane when practical, unless an existing owner-created issue already uniquely identifies the task;
 6. create a dedicated branch from the latest valid baseline, normally `agent/<agent-id>/<scope>`, only when no active canonical carrier already owns the Lane-Key;
 7. put **all** task changes on that one canonical branch, including source, tests, scripts, workflows, docs, Markdown, claim/handoff/status files and chores;
-8. validate, commit and push only that branch;
-9. when watched/integration-relevant paths changed, wait for the automatic shared **branch-push CI on the exact current branch SHA to finish `SUCCESS` before opening a new PR**; a PR or draft PR must not be the first CI attempt;
-10. refresh `origin/main`; if the baseline moved, reconcile the same canonical carrier safely, push the reconciled branch and obtain fresh green branch CI before PR creation;
-11. open/update the single canonical PR and include `Lane-Key`, canonical owner/session, canonical carrier and explicit supersession metadata; protected-main required checks and PR/integration CI then validate merge-candidate freshness as applicable;
+8. validate, commit and push only that branch; automatic shared branch-push CI starts on every `agent/**` / `integration/**` push and remains agent-owned evidence;
+9. inspect/remediate any observable red exact-head branch CI on the same canonical branch; do not hide a known red branch failure behind PR status, but do not invent a branch-CI-completion-before-PR timestamp gate that `CI_POLICY.md` has superseded;
+10. open/continue the single canonical PR when the task is ready for protected review, including `Lane-Key`, canonical owner/session, canonical carrier and explicit supersession metadata; the PR may coexist with a queued/running branch push run;
+11. refresh `origin/main`; if the baseline moved, reconcile the same canonical carrier safely, push it, observe/remediate the new exact-head branch run when available, and require fresh protected current-candidate `preflight` + `core` before merge;
 12. stop before merge unless this session has explicit owner merge/integration authorization.
 
 Historical Markdown work claims may still be used, but new/updated claim files belong on the task branch/PR. A claim does not need to be pushed to `main` before implementation starts.
 
-An Issue plus pushed task branch is the preferred visible coordination surface before PR creation. The PR becomes the review/handoff surface only after the applicable branch-CI gate is green.
+An Issue plus pushed task branch is the preferred visible coordination surface before PR creation. The canonical PR may be opened/continued when the task is ready for protected review while the matching automatic branch run is queued/running; branch/PR timing order alone must not create a replacement carrier.
 
 ### Single-owner / single-carrier invariant
 
@@ -118,7 +119,7 @@ At the end of every such owner prompt, the agent must report the exact state usi
 - canonical owner/session and branch;
 - baseline/current `main` SHA as applicable;
 - latest task commit SHA(s);
-- exact branch-CI run/status and tested SHA;
+- exact branch-CI run/status and tested SHA when observable, or the exact recovery route/evidence used under `docs/AGENT-BRANCH-CI-ACTIONS-LOOKUP.md`;
 - canonical PR and protected-check status;
 - whether the work is actually merged to current `main` and the exact landed SHA;
 - whether a release is required and the exact release/publish result for that landed SHA, or `N/A` with reason;
@@ -141,7 +142,7 @@ Before each branch push and before PR handoff:
 2. verify whether relevant concurrent work moved;
 3. if needed, rebase/reapply/merge safely on the task branch without discarding newer work;
 4. review the final diff so it contains only intended changes;
-5. for watched work, make sure the exact final branch SHA has fresh green branch CI before opening the PR.
+5. observe/remediate the automatic exact-head branch run when available and never ignore a known red branch failure; PR timing follows `CI_POLICY.md`, so branch-run completion need not permanently precede PR creation.
 
 Never force-push `main`, reset it backwards, silently overwrite another agent's work, or use `ours`/`theirs` blindly to hide semantic conflicts.
 
@@ -165,11 +166,11 @@ latest main read
   -> agent/<agent-id>/<scope>
   -> implementation/docs/chore commits
   -> validation
-  -> branch pushed
-  -> watched branch CI SUCCESS on exact branch SHA
+  -> branch pushed; automatic branch CI starts
+  -> inspect/remediate exact-head branch CI when observable
+  -> canonical PR opened/continued when ready
   -> refresh/reconcile main if needed
-  -> PR opened/updated
-  -> protected-main/PR checks as applicable
+  -> protected current-candidate preflight + core SUCCESS
   -> STOP BEFORE MERGE
 ```
 
@@ -283,11 +284,14 @@ Lack of local capability is a handoff condition, not a reason for repeated remot
 
 ## GitHub Actions / release
 
-Follow `CI_POLICY.md` strictly.
+Follow `CI_POLICY.md` strictly and use `docs/AGENT-BRANCH-CI-ACTIONS-LOOKUP.md` for mandatory CI self-observation and evidence recovery.
 
 - Workflows are manual-only by default.
 - The shared non-publishing branch/PR CI in `.github/workflows/ci.yml` is an owner-approved automatic validation exception.
-- For watched task branches, its branch-push run must be green on the exact final branch SHA before a new PR is opened.
+- Every watched `agent/**` / `integration/**` push starts branch CI; inspect/remediate a known red exact-head branch run, but branch-run completion timing does not have to precede creation of the one canonical PR.
+- Protected current-candidate `preflight` + `core`, strict freshness, mergeability/collision checks and expected-head protection are the authoritative merge gate under `CI_POLICY.md`.
+- AI agents/chat sessions must exhaust the repository-native CI recovery ladder before reporting an observability blocker or asking the owner for routine run/check information; an empty generic connector/status result is not proof that Actions evidence is absent.
+- When concrete run provenance is discovered, record enough exact run/branch/SHA/event/attempt/conclusion metadata on the canonical Issue/PR carrier for successor sessions to recover and independently verify it.
 - The sole owner-approved automatic publishing/dispatch exception is `.github/workflows/dispatch-v25-cloud-after-main-integration.yml` after an authorized integration-relevant `main` landing.
 - Normal task authorization does not authorize manual workflow dispatch/re-run/cancel.
 - Manual CI authorization does not imply `main` merge authorization.
