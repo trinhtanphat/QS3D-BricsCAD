@@ -64,7 +64,7 @@ namespace QS3D.Core.SmokeTests
             var panels = new ChangingCountList<CurtainWallRect>(
                 new[]
                 {
-                    new CurtainWallRect { X_M = 0d, Z_M = 0d, WidthM = 1d, HeightM = 1d }
+                    new CurtainWallRect(0d, 0d, 1d, 1d)
                 },
                 firstCount: 1,
                 laterCount: 0);
@@ -89,7 +89,7 @@ namespace QS3D.Core.SmokeTests
                 laterCount: 0);
 
             var plan = CurtainWallOpeningPanelPlanner.Plan(
-                new[] { new CurtainWallRect { X_M = 0d, Z_M = 0d, WidthM = 1d, HeightM = 1d } },
+                new[] { new CurtainWallRect(0d, 0d, 1d, 1d) },
                 openings);
 
             Equal(1, openings.CountReads, "Opening Count must be read exactly once at the panel boundary.");
