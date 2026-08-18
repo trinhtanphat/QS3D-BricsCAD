@@ -118,8 +118,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private static object CreateIcon(RibbonIconKind icon, int pixelSize)
         {
-            // Unknown-but-command-bearing QS3D buttons use the exact repository brand mark as
-            // the final safety net rather than the old generic four-dot Objects glyph.
+            // The product logo is reserved for explicitly branded product-identity actions.
+            // Functional or unclassified command buttons use semantic/neutral icons instead.
             if (icon == RibbonIconKind.Qs3dLogo)
                 return Qs3dBrandIconFactory.Create(pixelSize);
 
@@ -149,12 +149,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
         {
             var normalized = (command + " " + text).Trim().ToUpperInvariant();
 
-            // QS3D shell/catalog surfaces that historically fell through to the generic
-            // Objects glyph. Give every canonical bootstrap action an intentional icon.
+            // Brand identity is intentional only for the product start entry itself.
             if (ContainsAny(normalized, "QS3DSTART", "START CENTER"))
                 return RibbonIconKind.Qs3dLogo;
             if (ContainsAny(normalized, "FAMIL", "FAMILY / TYPE"))
-                return RibbonIconKind.Settings;
+                return RibbonIconKind.Objects;
             if (ContainsAny(normalized, "LAYER", "XREF"))
                 return RibbonIconKind.Workspace;
             if (ContainsAny(normalized, "CAPTURE", "BÓC CHỌN"))
@@ -250,7 +249,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 return RibbonIconKind.Update;
 
             // BricsCAD's native rectangle command is _RECTANG, while the longer spelling may
-            // appear in aliases/labels. Cover both before the branded final safety net.
+            // appear in aliases/labels. Cover both before the neutral final safety net.
             if (normalized.Contains("_RECTANG"))
                 return RibbonIconKind.Draw;
 
@@ -259,10 +258,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
             if (ContainsAny(normalized, "_POINT", "_LINE", "_ARC", "_RECTANGLE", "DRAW"))
                 return RibbonIconKind.Draw;
 
-            // Never leave a QS3D command button with the old generic Objects placeholder. Rich
-            // augmenters keep their own images; any genuinely unknown bootstrap command is still
-            // visibly branded and can be assigned a richer semantic glyph later.
-            return RibbonIconKind.Qs3dLogo;
+            // Do not turn a missing mapping into product branding. Unknown functional commands
+            // get a neutral object/catalog glyph until a richer semantic mapping is added.
+            return RibbonIconKind.Objects;
         }
 
         private static bool ContainsAny(string value, params string[] candidates)

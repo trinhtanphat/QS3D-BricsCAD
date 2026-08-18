@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -166,6 +167,8 @@ namespace QS3D.Core.Documentation
 
         private static List<SemanticSheetAutoLayoutItem> MaterializeItemsBounded(IEnumerable<SemanticSheetAutoLayoutItem> items)
         {
+            RequireKnownCountsWithinLimit(items, "automatic sheet layout items");
+
             var result = new List<SemanticSheetAutoLayoutItem>(Math.Min(MaxItems, 256));
             using (var enumerator = items.GetEnumerator())
             {
@@ -181,6 +184,8 @@ namespace QS3D.Core.Documentation
 
         private static Dictionary<string, SemanticViewPlan> BuildViewIndex(IEnumerable<SemanticViewPlan> availableViews)
         {
+            RequireKnownCountsWithinLimit(availableViews, "automatic sheet layout available views");
+
             var result = new Dictionary<string, SemanticViewPlan>(StringComparer.OrdinalIgnoreCase);
             var count = 0;
             foreach (var view in availableViews)
@@ -194,6 +199,34 @@ namespace QS3D.Core.Documentation
                 result.Add(id, view);
             }
             return result;
+        }
+
+        private static void RequireKnownCountsWithinLimit<T>(IEnumerable<T> values, string label)
+        {
+            var counts = new List<int>(3);
+            if (values is ICollection<T> collection) counts.Add(collection.Count);
+            if (values is IReadOnlyCollection<T> readOnlyCollection) counts.Add(readOnlyCollection.Count);
+            if (values is ICollection nonGenericCollection) counts.Add(nonGenericCollection.Count);
+
+            if (counts.Count == 0) return;
+
+            var expected = counts[0];
+            var maximum = expected;
+            var hasNegative = expected < 0;
+            var hasConflict = false;
+            for (var i = 1; i < counts.Count; i++)
+            {
+                if (counts[i] < 0) hasNegative = true;
+                if (counts[i] != expected) hasConflict = true;
+                if (counts[i] > maximum) maximum = counts[i];
+            }
+
+            if (maximum > MaxItems)
+                throw new InvalidOperationException("Automatic sheet layout supports at most " + MaxItems + " " + label + ".");
+            if (hasNegative)
+                throw new InvalidOperationException("Automatic sheet layout received an invalid negative known count for " + label + ".");
+            if (hasConflict)
+                throw new InvalidOperationException("Automatic sheet layout received conflicting known counts for " + label + ".");
         }
 
         private static void ValidateOptions(SemanticSheetAutoLayoutOptions options)

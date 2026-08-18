@@ -75,9 +75,11 @@ if not errors:
         'SetProperty(button, "ShowText", true);',
         'SetProperty(button, "ShowImage", true);',
         'SetEnumProperty(button, "Size", "Standard");',
-        'SetProperty(button, "Image", CreateIcon(spec.Icon));',
-        'SetProperty(button, "LargeImage", CreateIcon(spec.Icon));',
-        'new DrawingImage(group)',
+        'SetProperty(button, "Image", CreateIcon(spec.Icon, 16));',
+        'SetProperty(button, "LargeImage", CreateIcon(spec.Icon, 32));',
+        'new RenderTargetBitmap(pixelSize, pixelSize, 96, 96, PixelFormats.Pbgra32)',
+        'bitmap.Render(visual);',
+        'bitmap.Freeze();',
         'Brushes.Transparent',
     )
     for token in required_visual_tokens:
@@ -141,6 +143,6 @@ if errors:
 
 print("VIEW RIBBON PARITY PREFLIGHT: PASS")
 print("- XEM preserves the canonical five-panel / fourteen-action view workflow.")
-print("- Every visible XEM action receives a distinct locally-generated vector icon.")
+print("- Every visible XEM action receives a distinct locally-generated vector icon rasterized to a frozen bitmap for BricsCAD V25.")
 print("- The augmenter changes presentation only and preserves existing command routing.")
 print("- Lifecycle order lets XEM icons win over generic bootstrap fallback imagery.")

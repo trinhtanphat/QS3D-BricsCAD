@@ -26,6 +26,7 @@ def main() -> int:
     )
     rebar = require(text, 'ContainsAny(normalized, "REBAR", "BBS", "MESH")')
     generic_draw = require(text, 'ContainsAny(normalized, "_POINT", "_LINE", "_ARC", "_RECTANGLE", "DRAW")')
+    neutral_fallback = text.rfind("return RibbonIconKind.Objects;")
 
     for label, semantic in (
         ("opening", opening),
@@ -43,14 +44,19 @@ def main() -> int:
     require(text, 'ContainsAny(normalized, "QS3DBQ", "_BQ", " BQ", "QUANTITY", "QTY", "BÓC TÁCH")')
     require(text, 'normalized.Contains("_RECTANG")')
     require(text, "Generic drawing is deliberately the last semantic fallback")
+    require(text, 'ContainsAny(normalized, "QS3DSTART", "START CENTER")')
     require(text, "return RibbonIconKind.Qs3dLogo;")
+    require(text, "return RibbonIconKind.Objects;")
 
-    if "return RibbonIconKind.Objects;" in text:
-        raise SystemExit("FAIL: generic Objects placeholder must not be the final QS3D ribbon fallback")
+    if neutral_fallback <= generic_draw:
+        raise SystemExit(
+            "FAIL: neutral Objects fallback must come after every semantic/drawing mapping"
+        )
 
     print(
         "PASS: semantic BIM/rebar/measure/quantity/draw icon resolution precedes the broad DRAW "
-        "fallback, and unknown QS3D commands use the brand mark instead of the generic Objects glyph."
+        "fallback; the QS3D mark is explicit product identity only, and unknown functional commands "
+        "fall back to a neutral Objects glyph instead of product branding."
     )
     return 0
 
