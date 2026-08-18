@@ -50,29 +50,103 @@ def valid_event():
     }
 
 
+def set_path(root, dotted_path, value):
+    target = root
+    parts = dotted_path.split(".")
+    for part in parts[:-1]:
+        target = target[part]
+    target[parts[-1]] = value
+
+
 def payload_regressions(gate):
     qualified = gate.qualify_pr_payload(valid_event(), "trinhtanphat/QS3D-BricsCAD")
-    check(qualified == ("agent/worker/fix", "a" * 40, "trinhtanphat/QS3D-BricsCAD"), "valid internal PR identity drifted")
+    check(
+        qualified == ("agent/worker/fix", "a" * 40, "trinhtanphat/QS3D-BricsCAD"),
+        "valid internal PR identity drifted",
+    )
+
+    event = valid_event()
+    event["action"] = "synchronize"
+    expect_runtime(
+        lambda: gate.qualify_pr_payload(event, "trinhtanphat/QS3D-BricsCAD"),
+        "action=opened",
+    )
+
+    malformed_objects = (
+        ("pull_request", []),
+        ("pull_request.user", "owner"),
+        ("pull_request.head", []),
+        ("pull_request.base", "main"),
+        ("pull_request.head.repo", []),
+        ("pull_request.base.repo", []),
+    )
+    for dotted_path, value in malformed_objects:
+        event = valid_event()
+        set_path(event, dotted_path, value)
+        expect_runtime(
+            lambda event=event, dotted_path=dotted_path: gate.qualify_pr_payload(
+                event, "trinhtanphat/QS3D-BricsCAD"
+            ),
+            dotted_path,
+        )
+
+    canonicality_mutations = (
+        ("pull_request.user.login", " trinhtanphat ", "canonical"),
+        ("pull_request.head.ref", " agent/worker/fix", "canonical"),
+        ("pull_request.head.sha", "a" * 40 + " ", "canonical"),
+        ("pull_request.head.repo.full_name", "trinhtanphat/QS3D-BricsCAD ", "canonical"),
+        ("pull_request.base.repo.full_name", " trinhtanphat/QS3D-BricsCAD", "canonical"),
+    )
+    for dotted_path, value, expected in canonicality_mutations:
+        event = valid_event()
+        set_path(event, dotted_path, value)
+        expect_runtime(
+            lambda event=event: gate.qualify_pr_payload(event, "trinhtanphat/QS3D-BricsCAD"),
+            expected,
+        )
+
+    non_string_mutations = (
+        ("pull_request.user.login", []),
+        ("pull_request.head.ref", {}),
+        ("pull_request.head.sha", 123),
+        ("pull_request.head.repo.full_name", []),
+        ("pull_request.base.repo.full_name", {}),
+    )
+    for dotted_path, value in non_string_mutations:
+        event = valid_event()
+        set_path(event, dotted_path, value)
+        expect_runtime(
+            lambda event=event: gate.qualify_pr_payload(event, "trinhtanphat/QS3D-BricsCAD"),
+            "must be a string",
+        )
 
     event = valid_event()
     event["pull_request"]["head"]["sha"] = "not-a-sha"
-    expect_runtime(lambda: gate.qualify_pr_payload(event, "trinhtanphat/QS3D-BricsCAD"), "invalid PR head SHA")
+    expect_runtime(
+        lambda: gate.qualify_pr_payload(event, "trinhtanphat/QS3D-BricsCAD"),
+        "invalid PR head SHA",
+    )
 
     event = valid_event()
     event["pull_request"]["head"]["ref"] = "fix/not-watched"
-    expect_runtime(lambda: gate.qualify_pr_payload(event, "trinhtanphat/QS3D-BricsCAD"), "outside automatic branch-CI namespaces")
+    expect_runtime(
+        lambda: gate.qualify_pr_payload(event, "trinhtanphat/QS3D-BricsCAD"),
+        "outside automatic branch-CI namespaces",
+    )
 
     event = valid_event()
     event["pull_request"]["user"]["login"] = gate.DEPENDABOT_LOGIN
-    check(gate.qualify_pr_payload(event, "trinhtanphat/QS3D-BricsCAD") is None, "Dependabot exception regressed")
+    check(
+        gate.qualify_pr_payload(event, "trinhtanphat/QS3D-BricsCAD") is None,
+        "Dependabot exception regressed",
+    )
 
     event = valid_event()
     event["pull_request"]["head"]["repo"]["full_name"] = "external/fork"
-    check(gate.qualify_pr_payload(event, "trinhtanphat/QS3D-BricsCAD") is None, "fork exception regressed")
-
-    malformed = valid_event()
-    malformed["pull_request"]["head"] = []
-    expect_runtime(lambda: gate.qualify_pr_payload(malformed, "trinhtanphat/QS3D-BricsCAD"), "pull_request.head")
+    check(
+        gate.qualify_pr_payload(event, "trinhtanphat/QS3D-BricsCAD") is None,
+        "fork exception regressed",
+    )
 
 
 def event_file_regressions(gate):
@@ -99,8 +173,10 @@ def no_timestamp_admission_regression():
     )
     for token in forbidden:
         check(token not in source, f"hard PR-creation-time admission token returned: {token}")
-    check("protected current-candidate preflight/core remain the merge gate" in source,
-          "protected PR gate handoff message is missing")
+    check(
+        "protected current-candidate preflight/core remain the merge gate" in source,
+        "protected PR gate handoff message is missing",
+    )
 
 
 def main():
@@ -117,7 +193,10 @@ def main():
     check("static contract/self-tests PASS" in output.getvalue(), "hermetic aggregate mode message drifted")
     check(not errors.getvalue(), "hermetic aggregate mode emitted unexpected stderr")
 
-    print("PASS: PR branch-CI identity guard preserves namespace/payload fail-closed checks without PR-creation timestamp admission churn; protected preflight/core remain authoritative merge gates.")
+    print(
+        "PASS: PR branch-CI identity guard preserves namespace/SHA/payload fail-closed checks without "
+        "PR-creation timestamp admission churn; protected preflight/core remain authoritative merge gates."
+    )
     return 0
 
 
