@@ -126,7 +126,7 @@ A schedule prompt may request a category of work. It must not manufacture reposi
 
 Historical Issues such as #1910 and #2134 describe earlier hourly controller/worker orchestration designs. They are historical records only and are **not a source of truth for current ChatGPT schedule configuration or repository ownership semantics**.
 
-Do not use those Issues to infer that five schedules exist, that a particular account task is running, that C0/W1-W4 are permanent repository lanes, or that a worker owns a task solely because an old control-board comment assigned it.
+Do not use those Issues to infer that all five account tasks exist, that a particular account task is running, that C0/W1-W4 are permanent repository lanes, or that a worker owns a task solely because an old control-board comment assigned it.
 
 If a historical assignment also corresponds to a valid current GitHub Lane-Key/carrier, the current canonical GitHub reservation controls. Otherwise the historical schedule label creates no ownership.
 
