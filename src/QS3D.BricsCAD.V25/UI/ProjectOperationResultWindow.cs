@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using QS3D.Core.Domain;
 
@@ -20,13 +21,23 @@ namespace QS3D.BricsCAD.V25.UI
         private ProjectOperationResultWindow(string title, string summary, string detail)
         {
             Title = title;
-            Width = 430;
-            Height = 245;
+            Width = 420;
+            Height = 244;
             ResizeMode = ResizeMode.NoResize;
+            WindowStyle = System.Windows.WindowStyle.None;
+            AllowsTransparency = true;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            Background = ShellBrush;
+            Background = Brushes.Transparent;
             ShowInTaskbar = false;
+            UseLayoutRounding = true;
+            SnapsToDevicePixels = true;
             Content = BuildContent(title, summary, detail);
+            KeyDown += (_, args) =>
+            {
+                if (args.Key != Key.Escape) return;
+                Close();
+                args.Handled = true;
+            };
         }
 
         public static void ShowOpenSuccess(string projectPath, ProjectState project, long readMilliseconds, long bindMilliseconds, long totalMilliseconds)
@@ -34,7 +45,10 @@ namespace QS3D.BricsCAD.V25.UI
             if (project == null) throw new ArgumentNullException(nameof(project));
             var fileName = SafeFileName(projectPath);
             var summary = "Đã mở \"" + fileName + "\" — " + project.Zones.Count + " zone, " + project.Elements.Count + " element.";
-            var detail = "Đọc tệp " + readMilliseconds + " ms • mở bản vẽ + dựng project " + bindMilliseconds + " ms\nTổng thời gian " + totalMilliseconds + " ms";
+            var detail =
+                "⚙ Đọc tệp " + readMilliseconds + " ms\n" +
+                "   Mở bản vẽ + dựng project " + bindMilliseconds + " ms\n" +
+                "   Tổng thời gian " + totalMilliseconds + " ms";
             new ProjectOperationResultWindow("Mở dự án", summary, detail).ShowDialog();
         }
 
@@ -65,7 +79,7 @@ namespace QS3D.BricsCAD.V25.UI
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8),
                 Background = ShellBrush,
-                Padding = new Thickness(20, 14, 20, 16)
+                Padding = new Thickness(20, 10, 20, 14)
             };
 
             var root = new Grid();
@@ -73,16 +87,54 @@ namespace QS3D.BricsCAD.V25.UI
             root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
+            var titleBar = new Grid
+            {
+                Background = Brushes.Transparent,
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            titleBar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            titleBar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var dragSurface = new Grid { Background = Brushes.Transparent };
+            dragSurface.MouseLeftButtonDown += (_, args) =>
+            {
+                if (args.ChangedButton == MouseButton.Left)
+                    DragMove();
+            };
+
             var heading = new TextBlock
             {
                 Text = title,
                 Foreground = TextBrush,
                 FontSize = 15,
                 FontWeight = FontWeights.SemiBold,
-                Margin = new Thickness(0, 0, 0, 14)
+                VerticalAlignment = VerticalAlignment.Center
             };
-            Grid.SetRow(heading, 0);
-            root.Children.Add(heading);
+            dragSurface.Children.Add(heading);
+            Grid.SetColumn(dragSurface, 0);
+            titleBar.Children.Add(dragSurface);
+
+            var close = new Button
+            {
+                Content = "×",
+                Width = 28,
+                Height = 26,
+                Padding = new Thickness(0),
+                Margin = new Thickness(8, 0, -5, 0),
+                Background = Brushes.Transparent,
+                Foreground = TextBrush,
+                BorderThickness = new Thickness(0),
+                FontSize = 18,
+                FontWeight = FontWeights.Normal,
+                Focusable = false,
+                IsTabStop = false,
+                ToolTip = "Đóng"
+            };
+            close.Click += (_, __) => Close();
+            Grid.SetColumn(close, 1);
+            titleBar.Children.Add(close);
+            Grid.SetRow(titleBar, 0);
+            root.Children.Add(titleBar);
 
             var body = new Grid();
             body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(48) });
@@ -146,7 +198,7 @@ namespace QS3D.BricsCAD.V25.UI
                 Foreground = Brushes.White,
                 BorderThickness = new Thickness(0),
                 FontWeight = FontWeights.SemiBold,
-                Margin = new Thickness(0, 14, 0, 0),
+                Margin = new Thickness(0, 12, 0, 0),
                 IsDefault = true
             };
             ok.Click += (_, __) => Close();
