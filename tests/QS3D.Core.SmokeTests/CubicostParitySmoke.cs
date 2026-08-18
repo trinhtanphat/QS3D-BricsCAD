@@ -59,7 +59,7 @@ namespace QS3D.Core.SmokeTests
             const double largeGap = 1e200d;
             var clashes = new ClashDetectionService().Detect(new[]
             {
-                new CoordinationElement("S-LARGE", "STRUCTURE", "BEAM", "STRUCT", "ZONE-A", new AxisAlignedBox(0d, 0d, 0d, 1d, 1d, 1d)),
+                new CoordinationElement("S-LARGE", "STRUCTURE", "BEAM", "STRUCT", "ZONE-A", new AxisAlignedBox(-1d, 0d, 0d, 0d, 1d, 1d)),
                 new CoordinationElement("M-LARGE", "MEP", "DUCT", "SA", "ZONE-A", new AxisAlignedBox(largeGap, 0d, 0d, 1.01e200d, 1d, 1d))
             }, 1.1e200d);
 
