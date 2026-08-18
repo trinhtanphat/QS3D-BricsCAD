@@ -121,7 +121,8 @@ def main():
     )
 
     # Real BricsCAD first-render/HiDPI proof is LOCAL_ONLY. Reuse the canonical Workspace local
-    # handoff instead of inventing another queue, and fail source preflight if that handoff is lost.
+    # handoff instead of inventing another queue. Validate only the stable scenario identity here:
+    # LOCAL-012's workflow status/evidence is intentionally mutable as local qualification advances.
     local012 = require_section(
         local_inbox,
         "## LOCAL-012 — Project Browser native workspace and CAD selection bridge",
@@ -129,8 +130,6 @@ def main():
         LOCAL_INBOX_REL,
     )
     for token in (
-        "- Status: OPEN",
-        "PENDING_LOCAL / DO_NOT_RETRY_REMOTE",
         "palette recreation",
         "100/125/150/200% DPI",
         "narrow/normal/wide host widths",
@@ -140,7 +139,7 @@ def main():
     print(
         "PASS: Workspace keeps a non-zero first-measure bootstrap, CompactShell no longer collapses "
         "live columns during Loaded, ApplicationIdle/SystemIdle break the ViewportWidth loop before "
-        "allowing zero minimum width, and the existing LOCAL-012 BricsCAD visual handoff remains parked."
+        "allowing zero minimum width, and the existing LOCAL-012 BricsCAD visual scenario remains referenced."
     )
     return 0
 
