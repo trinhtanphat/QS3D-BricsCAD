@@ -4,6 +4,7 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void RunAll()
         {
+            TakeoffResultHandleCanonicalitySmoke.Run();
             ProjectQuantitySmoke.Run();
             QuantityRuleCanonicalNumericKeySmoke.Run();
             QuantityRuleTokenCanonicalitySmoke.Run();
