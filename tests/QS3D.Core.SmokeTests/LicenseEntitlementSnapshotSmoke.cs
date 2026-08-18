@@ -1,5 +1,7 @@
 using System;
+using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using System.Text;
 using QS3D.Core.Licensing;
 
@@ -13,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             RoundTripsCanonicalSnapshot();
             RejectsNonCanonicalIdentities();
             RejectsTamperedPayload();
+            RejectsNonCanonicalBase64ValueText();
             RejectsNonCanonicalSealText();
             RejectsMalformedAndOversizedPersistence();
             RejectsInvalidUtf16BeforeCanonicalization();
@@ -57,6 +60,26 @@ namespace QS3D.Core.SmokeTests
 
             Require(!string.Equals(serialized, tampered, StringComparison.Ordinal), "tamper fixture did not alter serialized payload");
             Require(!LicenseEntitlementSnapshot.TryDeserialize(tampered, out _), "tampered payload passed the integrity seal");
+        }
+
+        private static void RejectsNonCanonicalBase64ValueText()
+        {
+            var source = LicenseEntitlementSnapshot.Create(
+                "QS3D",
+                "1",
+                "machine",
+                "payload",
+                new DateTime(2026, 8, 18, 11, 0, 0, DateTimeKind.Utc));
+            var lines = source.Serialize().Split('\n');
+            const string CanonicalProductLine = "product:UVMzRA==";
+            Require(string.Equals(lines[1], CanonicalProductLine, StringComparison.Ordinal), "canonical product fixture changed unexpectedly");
+
+            lines[1] = "product:UV MzRA==";
+            var nonCanonicalPayload = string.Join("\n", lines, 0, 6);
+            lines[6] = "sha256:" + ComputeSha256Hex(nonCanonicalPayload);
+            var nonCanonical = string.Join("\n", lines);
+
+            Require(!LicenseEntitlementSnapshot.TryDeserialize(nonCanonical, out _), "whitespace-bearing Base64 value was accepted as canonical persistence");
         }
 
         private static void RejectsNonCanonicalSealText()
@@ -107,6 +130,18 @@ namespace QS3D.Core.SmokeTests
             RequireThrows<ArgumentException>(
                 () => LicenseEntitlementSnapshot.Create("QS3D", "1", "machine", "payload", new DateTime(2026, 8, 16, 12, 0, 0, DateTimeKind.Unspecified)),
                 "unspecified timestamp was accepted");
+        }
+
+        private static string ComputeSha256Hex(string value)
+        {
+            using (var sha256 = SHA256.Create())
+            {
+                var digest = sha256.ComputeHash(new UTF8Encoding(false, true).GetBytes(value));
+                var builder = new StringBuilder(digest.Length * 2);
+                for (var i = 0; i < digest.Length; i++)
+                    builder.Append(digest[i].ToString("x2", CultureInfo.InvariantCulture));
+                return builder.ToString();
+            }
         }
 
         private static void Equal(string expected, string actual, string message)

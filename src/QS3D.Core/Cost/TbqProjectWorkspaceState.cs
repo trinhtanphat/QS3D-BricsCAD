@@ -134,7 +134,13 @@ namespace QS3D.Core.Cost
                 decimal total = 0m;
                 try
                 {
-                    for (var i = 0; i < BillItems.Count; i++) total = checked(total + BillItems[i].TotalCost);
+                    for (var i = 0; i < BillItems.Count; i++)
+                    {
+                        total = CostDecimalMath.AddPreservingNonZeroContribution(
+                            total,
+                            BillItems[i].TotalCost,
+                            "TBQ workspace base total");
+                    }
                     return total;
                 }
                 catch (OverflowException ex)
