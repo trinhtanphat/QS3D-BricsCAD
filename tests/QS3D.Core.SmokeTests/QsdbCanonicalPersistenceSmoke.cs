@@ -23,6 +23,7 @@ namespace QS3D.Core.SmokeTests
             NullAuditEventFailsClosed();
             NonUtcTimestampFailsBeforePersistence();
             UndefinedCategoryFailsClosed();
+            NonCanonicalCategoryCaseFailsOnLoad();
         }
 
         private static void PaddedMapKeyFailsBeforePersistence()
@@ -280,6 +281,55 @@ namespace QS3D.Core.SmokeTests
                 try { if (File.Exists(path)) File.Delete(path); } catch { }
                 try { if (File.Exists(path + ".bak")) File.Delete(path + ".bak"); } catch { }
             }
+        }
+
+        private static void NonCanonicalCategoryCaseFailsOnLoad()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-category-case-load-" + Guid.NewGuid().ToString("N") + ".qsdb");
+            try
+            {
+                var project = NewProject("category-case-load");
+                project.Families.Add(new ProjectFamily("F1", "Family", ElementCategory.ArchitecturalWall));
+                project.QuantityRules.Add(new QuantityRule("R1", ElementCategory.ArchitecturalWall, "Area", "1", "v1"));
+                project.Elements.Add(new ProjectElement("E1", ElementCategory.ArchitecturalWall, "F1", string.Empty, string.Empty));
+
+                var store = new QsdbProjectStore();
+                store.Save(project, path);
+                var canonical = store.Load(path);
+                if (canonical.Families.Count != 1 || canonical.QuantityRules.Count != 1 || canonical.Elements.Count != 1)
+                    throw new Exception("Canonical category fixture did not roundtrip before case tampering.");
+
+                var original = File.ReadAllText(path);
+                RejectCategoryCaseTamper(store, path, original, "families", "family", "family category");
+                RejectCategoryCaseTamper(store, path, original, "rules", "rule", "quantity rule category");
+                RejectCategoryCaseTamper(store, path, original, "elements", "element", "element category");
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+                try { if (File.Exists(path + ".bak")) File.Delete(path + ".bak"); } catch { }
+            }
+        }
+
+        private static void RejectCategoryCaseTamper(QsdbProjectStore store, string path, string original, string sectionName, string itemName, string label)
+        {
+            File.WriteAllText(path, original);
+            var document = XDocument.Load(path, LoadOptions.None);
+            var item = document.Root?.Element(sectionName)?.Element(itemName)
+                ?? throw new Exception("Serialized QSDB " + label + " fixture was not found.");
+            var category = item.Attribute("category")?.Value
+                ?? throw new Exception("Serialized QSDB " + label + " token was not found.");
+            var lower = category.ToLowerInvariant();
+            if (string.Equals(category, lower, StringComparison.Ordinal))
+                throw new Exception("Serialized QSDB " + label + " fixture was already lowercase.");
+            item.SetAttributeValue("category", lower);
+            document.Save(path, SaveOptions.DisableFormatting);
+
+            var rejected = false;
+            try { store.Load(path); }
+            catch (InvalidDataException) { rejected = true; }
+            if (!rejected)
+                throw new Exception("Non-canonical case-only QSDB " + label + " was accepted while loading.");
         }
 
         private static ProjectState NewProject(string id)
