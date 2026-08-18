@@ -152,6 +152,7 @@ namespace QS3D.Core.SmokeTests
             SelectionStateSmoke.Run();
             BulkEditCanonicalizationSmoke.Run();
             SemanticMutationAtomicitySmoke.Run();
+            SemanticMutationOperationCanonicalitySmoke.Run();
             DomainMutationAtomicitySmoke.Run();
             FamilyDefinitionPersistedTextSmoke.Run();
             TemplateApplyAtomicitySmoke.Run();
