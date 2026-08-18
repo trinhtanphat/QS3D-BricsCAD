@@ -81,6 +81,7 @@ namespace QS3D.Core.Domain
         internal void ReplacePersistenceState(IEnumerable<KeyValuePair<string, string>> values)
         {
             if (values == null) throw new ArgumentNullException(nameof(values));
+            RejectKnownOversizedPersistenceInput(values);
             var next = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in values)
             {
@@ -139,6 +140,14 @@ namespace QS3D.Core.Domain
                 if (touchMutation) TouchProject();
             }
             if (addOnly) _items.Add(key, normalizedValue); else _items[key] = normalizedValue;
+        }
+
+        private static void RejectKnownOversizedPersistenceInput(IEnumerable<KeyValuePair<string, string>> values)
+        {
+            if (values is ICollection<KeyValuePair<string, string>> collection && collection.Count > MaximumEntries)
+                throw MetadataCountError();
+            if (values is IReadOnlyCollection<KeyValuePair<string, string>> readOnlyCollection && readOnlyCollection.Count > MaximumEntries)
+                throw MetadataCountError();
         }
 
         private static InvalidOperationException MetadataCountError()
