@@ -121,6 +121,7 @@ namespace QS3D.Core.Coordination
     public sealed class ClashDetectionService
     {
         private const int MaximumElements = 500;
+        private const int MaximumResults = 10000;
 
         public IReadOnlyList<ClashResult> Detect(
             IEnumerable<CoordinationElement> elements,
@@ -170,14 +171,15 @@ namespace QS3D.Core.Coordination
                     var overlapZ = Overlap(left.Bounds.MinZ, left.Bounds.MaxZ, right.Bounds.MinZ, right.Bounds.MaxZ);
                     if (overlapX > 0d && overlapY > 0d && overlapZ > 0d)
                     {
-                        results.Add(new ClashResult(
+                        AddResult(
+                            results,
                             left.ElementId,
                             right.ElementId,
                             ClashKind.Hard,
                             0d,
                             overlapX,
                             overlapY,
-                            overlapZ));
+                            overlapZ);
                         continue;
                     }
 
@@ -188,19 +190,46 @@ namespace QS3D.Core.Coordination
                     var distance = EuclideanDistance(gapX, gapY, gapZ);
                     if (distance <= clearanceM)
                     {
-                        results.Add(new ClashResult(
+                        AddResult(
+                            results,
                             left.ElementId,
                             right.ElementId,
                             ClashKind.Clearance,
                             distance,
                             Math.Max(0d, overlapX),
                             Math.Max(0d, overlapY),
-                            Math.Max(0d, overlapZ)));
+                            Math.Max(0d, overlapZ));
                     }
                 }
             }
 
             return new ReadOnlyCollection<ClashResult>(results.ToArray());
+        }
+
+        private static void AddResult(
+            List<ClashResult> results,
+            string leftElementId,
+            string rightElementId,
+            ClashKind kind,
+            double separationM,
+            double overlapXM,
+            double overlapYM,
+            double overlapZM)
+        {
+            if (results.Count == MaximumResults)
+            {
+                throw new InvalidOperationException(
+                    "Coordination clash detection supports at most " + MaximumResults + " results per operation.");
+            }
+
+            results.Add(new ClashResult(
+                leftElementId,
+                rightElementId,
+                kind,
+                separationM,
+                overlapXM,
+                overlapYM,
+                overlapZM));
         }
 
         private static int? RequireKnownCountWithinLimit(IEnumerable<CoordinationElement> elements)
