@@ -147,6 +147,14 @@ When the task's acceptance includes packaging, cloud build, publish, tag, releas
 - identify the exact release/version/tag that first contains the landed change whenever such a release exists;
 - record the release commit/source SHA and enough ancestry/manifest evidence to show that the release actually contains the change.
 
+Release identity is **publication-based, not reservation- or ordinal-based**:
+
+- a preview ordinal/tag reservation may be consumed even when the release workflow later fails or is cancelled and no published GitHub Release is created;
+- never report the highest reserved ordinal, attempted tag, dispatcher success, child workflow start/run, or draft release as `Current/latest published release` by itself;
+- `Current/latest published release` means the newest **non-draft GitHub Release object whose publication completed successfully**;
+- if higher preview ordinals have no such published Release object, walk backward until the most recent actually published Release is found;
+- `First release containing this change` is a separate provenance claim and additionally requires evidence that the published release contains the target landed change/SHA.
+
 Every release-relevant per-prompt report must distinguish:
 
 ```text
