@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -112,9 +113,16 @@ namespace QS3D.Core.Geometry
             if (double.IsNaN(tolerance) || double.IsInfinity(tolerance) || tolerance <= 0d)
                 throw new ArgumentOutOfRangeException(nameof(tolerance));
 
+            var knownCount = GetKnownInputCount(source);
+            if (knownCount.HasValue && knownCount.Value > MaxInputSegments)
+                ThrowTooManySegments();
+
             var segments = source.Take(MaxInputSegments + 1).ToList();
             if (segments.Count > MaxInputSegments)
-                throw new InvalidOperationException("Room boundary input exceeds the supported segment limit.");
+                ThrowTooManySegments();
+            if (knownCount.HasValue && segments.Count != knownCount.Value)
+                throw new InvalidOperationException("Room boundary diagnostic source known count does not match traversal.");
+
             var candidates = new RoomBoundaryEngine().Discover(segments, tolerance, 0d)
                 .OrderBy(x => x.Key, StringComparer.Ordinal)
                 .ToList();
@@ -150,6 +158,56 @@ namespace QS3D.Core.Geometry
                 accepted.Count,
                 faces.AsReadOnly());
             return new RoomBoundaryDiagnosticAnalysis(report, accepted.AsReadOnly());
+        }
+
+        private static int? GetKnownInputCount(IEnumerable<BoundarySegment> source)
+        {
+            var hasKnownCount = false;
+            var firstKnownCount = 0;
+            var maximumKnownCount = 0;
+            var conflictingKnownCounts = false;
+
+            if (source is ICollection<BoundarySegment> collection)
+                ObserveKnownCount(collection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+            if (source is IReadOnlyCollection<BoundarySegment> readOnlyCollection)
+                ObserveKnownCount(readOnlyCollection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+            if (source is ICollection nonGenericCollection)
+                ObserveKnownCount(nonGenericCollection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+
+            if (maximumKnownCount > MaxInputSegments)
+                return maximumKnownCount;
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Room boundary diagnostic source reports conflicting known counts.");
+            return hasKnownCount ? firstKnownCount : (int?)null;
+        }
+
+        private static void ObserveKnownCount(
+            int candidate,
+            ref bool hasKnownCount,
+            ref int firstKnownCount,
+            ref int maximumKnownCount,
+            ref bool conflictingKnownCounts)
+        {
+            if (candidate < 0)
+                throw new InvalidOperationException("Room boundary diagnostic source reports an invalid negative known count.");
+
+            if (!hasKnownCount)
+            {
+                hasKnownCount = true;
+                firstKnownCount = candidate;
+                maximumKnownCount = candidate;
+                return;
+            }
+
+            if (candidate != firstKnownCount)
+                conflictingKnownCounts = true;
+            if (candidate > maximumKnownCount)
+                maximumKnownCount = candidate;
+        }
+
+        private static void ThrowTooManySegments()
+        {
+            throw new InvalidOperationException("Room boundary input exceeds the supported segment limit.");
         }
 
         private static string Fingerprint(IEnumerable<string> values)
