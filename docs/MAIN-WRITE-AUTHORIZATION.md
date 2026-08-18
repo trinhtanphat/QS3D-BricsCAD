@@ -1,6 +1,6 @@
 # Main write authorization policy
 
-This document is the canonical repository rule for who may change `main`. It overrides older wording in `AGENTS.md`, `CI_POLICY.md`, handoffs, claim files, or historical instructions when those documents conflict with this policy.
+This document is the canonical repository rule for who may change `main` **and for the default merge-completion endpoint of normal owner-requested repository tasks**. It overrides older wording in `AGENTS.md`, `CI_POLICY.md`, `docs/AGENT-PROMPT-TO-RELEASE-CONTRACT.md`, handoffs, claim files, or historical instructions when those documents conflict with this policy on main-write permission or whether an otherwise authorized same-task lifecycle should stop before merge.
 
 ## Default rule: agents treat `main` as read-only
 
@@ -19,6 +19,48 @@ The repository owner has granted a standing integration instruction for normal o
 This standing authorization applies only to the task/PR the current agent is actively completing for an owner request. It does **not** authorize merging unrelated PRs, bulk-merging other agents' work, bypassing required checks, pushing directly to `main`, force-pushing, or weakening branch protection.
 
 The owner may override the standing rule for any task with an explicit instruction such as `do not merge main`, `PR only`, `stop before merge`, `đừng merge`, or another clearly equivalent restriction.
+
+## Default owner-task completion endpoint: `MERGED_MAIN`
+
+For a normal owner-requested repository task, the default successful endpoint is **`MERGED_MAIN`**, not merely edited code, a pushed branch, green branch CI, an open PR, or green PR checks.
+
+Unless the owner explicitly opts out of merge for that exact task, the owning agent/session must proactively advance the same canonical carrier through the complete repository-safe lifecycle:
+
+```text
+implement/fix
+  -> commit + push canonical branch
+  -> exact-head branch CI SUCCESS when applicable
+  -> refresh/reconcile current main
+  -> fresh exact-head branch CI when required
+  -> open/update the one canonical PR
+  -> protected PR preflight + core SUCCESS on the current candidate
+  -> re-check freshness/mergeability
+  -> merge that same task PR through the protected PR path
+  -> refresh and record resulting main SHA
+  -> MERGED_MAIN
+```
+
+The following are **not valid self-selected stopping points** for an otherwise actionable owner task:
+
+- a few minutes of elapsed session time;
+- `edited`, `committed`, or `pushed` while later repository actions are available;
+- branch CI green when the PR has not yet been opened;
+- PR open when protected checks can still be observed/acted on;
+- PR checks green when the same-task standing merge authorization applies;
+- the first failed CI attempt when the failure is safely fixable in the current lane;
+- a stale branch or stale green run that can be reconciled and revalidated safely;
+- a queued/running gate merely because it is inconvenient to continue checking while useful authorized lifecycle work remains.
+
+A task may end before `MERGED_MAIN` only when at least one concrete exception applies:
+
+1. the owner explicitly opted out of merge for that exact task (`PR only`, `do not merge`, `stop before merge`, or equivalent);
+2. another canonical owner/carrier owns the same Lane-Key and current-session mutation would violate collision rules;
+3. a real external/authorization/tooling/platform blocker prevents all safe authorized progress, such as an unavailable secret, third-party outage, unsupported environment, or required LOCAL_ONLY/licensed evidence that is explicitly part of merge acceptance;
+4. GitHub protection itself rejects the candidate and no safe current-lane remediation remains.
+
+A temporary queued/running CI state is a lifecycle gate, not completion. The agent should continue same-lane safe work and re-check/advance the gate within the active execution whenever tooling permits. If an execution/platform boundary makes further observation impossible in that invocation, record the exact current gate and leave the canonical task `ACTIVE`; the next invocation resumes the same carrier automatically without asking the owner to repeat authorization. Do not shift ordinary CI/PR/merge work back to the owner merely because the agent has already spent some time on the task.
+
+A failed CI/check on the current owned carrier is an automatic remediation trigger. Inspect the exact failing run/job/step, fix the root cause safely on the same canonical branch, commit/push, and revalidate. If the next run fails, repeat the loop. **The first attempted CI fix is never a stopping point while another safe current-lane remediation is available.**
 
 ## Main remains PR-only
 
@@ -57,6 +99,8 @@ They do not authorize direct contents writes or direct ref updates to `main`.
 
 A green earlier SHA is not enough. The SHA being merged must be the SHA covered by the current required checks after any required synchronization with `main`.
 
+For normal owner tasks, steps 1-13 are one continuation contract. Do not present an intermediate step as the intended final result while later steps are authorized and executable.
+
 ## Merge safety gates
 
 The standing authorization is conditional. Do **not** merge when any of the following is true:
@@ -69,7 +113,7 @@ The standing authorization is conditional. Do **not** merge when any of the foll
 - the PR includes unrelated or unreviewed work outside the current task scope;
 - repository protection/ruleset state is unexpectedly weakened or bypassed.
 
-When a gate blocks merge, fix/reconcile/revalidate the task branch and continue automatically. Do not ask the owner to repeat `merge main` merely because CI took time to become green.
+When a gate blocks merge, fix/reconcile/revalidate the task branch and continue automatically. Do not ask the owner to repeat `merge main` merely because CI took time to become green. A red gate re-enters the remediation loop; a stale gate re-enters the reconcile/revalidate loop.
 
 ## Documentation, Markdown, claims and chores
 
@@ -114,6 +158,19 @@ A commit message such as `docs:`, `chore:` or `md:` is **not** sufficient eviden
 
 Manual workflow dispatch/re-run/cancel remains separately controlled by `CI_POLICY.md`. The standing green-merge rule does not authorize unrelated manual CI or release operations.
 
+## Release reporting boundary
+
+For ordinary owner-requested code/docs/chore tasks, the default owner-facing completion target is `MERGED_MAIN`. Automatic exact-main/release/publish pipelines may continue separately after landing and are **not routine completion-status fields** for an ordinary merged task.
+
+Do not routinely report release/version/publish status after an ordinary task reaches `MERGED_MAIN` unless one of these is true:
+
+- the owner explicitly asks about release/version/update availability;
+- release/publication/package/deployment is part of the current prompt's acceptance;
+- the current lane is specifically a release/publishing lane;
+- a release failure is the actual blocker to the owner's requested outcome.
+
+This is reporting suppression, not permission to falsify release state or disable automatic release workflows. Automatic release machinery should continue according to its own workflow/policy.
+
 ## GitHub protection
 
 Repository policy must be backed by GitHub branch protection/rulesets where available:
@@ -128,4 +185,4 @@ The standing authorization is designed to work **with** these protections: fix o
 
 ## Precedence
 
-When another repository document conflicts with this file on `main` write/merge permission, this file wins unless the repository owner explicitly changes the policy again.
+When another repository document conflicts with this file on `main` write/merge permission, the standing same-task merge authorization, or the default owner-task completion endpoint through `MERGED_MAIN`, this file wins unless the repository owner explicitly changes the policy again.
