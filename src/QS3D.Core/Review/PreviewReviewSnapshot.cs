@@ -332,8 +332,8 @@ namespace QS3D.Core.Review
             }
             if (changedElements.Count != snapshot.ChangedElementCount)
                 throw new InvalidOperationException("Preview review changed-element summary does not match its entries.");
-            if (string.IsNullOrWhiteSpace(snapshot.Fingerprint) || snapshot.Fingerprint.Length != 64 || snapshot.Fingerprint.Any(ch => !Uri.IsHexDigit(ch)))
-                throw new InvalidOperationException("Preview review fingerprint must be a 64-character SHA-256 hex value.");
+            if (string.IsNullOrWhiteSpace(snapshot.Fingerprint) || snapshot.Fingerprint.Length != 64 || snapshot.Fingerprint.Any(ch => !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f'))))
+                throw new InvalidOperationException("Preview review fingerprint must be a 64-character lowercase SHA-256 hex value.");
         }
 
         internal static void ValidatePersistedKindSpecificInvariants(PreviewReviewSnapshot snapshot)
