@@ -131,7 +131,7 @@ namespace QS3D.Core.Coordination
             if (double.IsNaN(clearanceM) || double.IsInfinity(clearanceM) || clearanceM < 0d)
                 throw new ArgumentOutOfRangeException(nameof(clearanceM));
 
-            RequireKnownCountWithinLimit(elements);
+            var expectedCount = RequireKnownCountWithinLimit(elements);
 
             var snapshot = new List<CoordinationElement>();
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -146,6 +146,11 @@ namespace QS3D.Core.Coordination
                     throw new ArgumentException("Duplicate coordination element id: " + element.ElementId + ".", nameof(elements));
                 snapshot.Add(element);
                 index++;
+            }
+            if (expectedCount.HasValue && snapshot.Count != expectedCount.Value)
+            {
+                throw new InvalidOperationException(
+                    "Coordination input enumeration count did not match its known element count.");
             }
             snapshot.Sort(CompareElements);
 
@@ -198,7 +203,7 @@ namespace QS3D.Core.Coordination
             return new ReadOnlyCollection<ClashResult>(results.ToArray());
         }
 
-        private static void RequireKnownCountWithinLimit(IEnumerable<CoordinationElement> elements)
+        private static int? RequireKnownCountWithinLimit(IEnumerable<CoordinationElement> elements)
         {
             int? genericCount = null;
             int? readOnlyCount = null;
@@ -228,6 +233,7 @@ namespace QS3D.Core.Coordination
             RequireConsistentKnownCount(genericCount, ref expectedCount);
             RequireConsistentKnownCount(readOnlyCount, ref expectedCount);
             RequireConsistentKnownCount(nonGenericCount, ref expectedCount);
+            return expectedCount;
         }
 
         private static void RequireConsistentKnownCount(int? count, ref int? expectedCount)
