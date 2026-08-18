@@ -123,17 +123,51 @@ namespace QS3D.Core.Documentation
 
         private static List<T> MaterializeBounded<T>(IEnumerable<T> source, int maxCount, string label)
         {
+            var knownCount = ValidateKnownCounts(source, maxCount, label);
+
             var result = new List<T>(Math.Min(maxCount, 256));
             using (var enumerator = source.GetEnumerator())
             {
                 while (enumerator.MoveNext())
                 {
                     if (result.Count >= maxCount)
-                        throw new InvalidOperationException("Documentation table supports at most " + maxCount + " " + label + ".");
+                        throw LimitExceeded(maxCount, label);
                     result.Add(enumerator.Current);
                 }
             }
+
+            if (knownCount.HasValue && knownCount.Value != result.Count)
+                throw new InvalidOperationException("Documentation table " + label + " source known count does not match completed traversal.");
+
             return result;
+        }
+
+        private static int? ValidateKnownCounts<T>(IEnumerable<T> source, int maxCount, string label)
+        {
+            int? knownCount = null;
+            if (source is ICollection<T> collection)
+                ValidateKnownCount(collection.Count, maxCount, label, ref knownCount);
+            if (source is IReadOnlyCollection<T> readOnlyCollection)
+                ValidateKnownCount(readOnlyCollection.Count, maxCount, label, ref knownCount);
+            if (source is System.Collections.ICollection nonGenericCollection)
+                ValidateKnownCount(nonGenericCollection.Count, maxCount, label, ref knownCount);
+            return knownCount;
+        }
+
+        private static void ValidateKnownCount(int count, int maxCount, string label, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Documentation table " + label + " source reported an invalid negative known count.");
+            if (count > maxCount)
+                throw LimitExceeded(maxCount, label);
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException("Documentation table " + label + " source exposes conflicting known counts.");
+            knownCount = count;
+        }
+
+        private static InvalidOperationException LimitExceeded(int maxCount, string label)
+        {
+            return new InvalidOperationException("Documentation table supports at most " + maxCount + " " + label + ".");
         }
 
         private static string Required(string? value, string name, int maxLength)
