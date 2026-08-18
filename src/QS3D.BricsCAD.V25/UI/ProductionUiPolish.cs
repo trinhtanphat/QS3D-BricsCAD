@@ -17,21 +17,32 @@ namespace QS3D.BricsCAD.V25.UI
 
         internal static void EnsureRegistered()
         {
-            if (Interlocked.Exchange(ref _registered, 1) != 0)
+            if (Interlocked.CompareExchange(ref _registered, 1, 0) != 0)
             {
                 return;
             }
 
-            EventManager.RegisterClassHandler(
-                typeof(Window),
-                FrameworkElement.LoadedEvent,
-                new RoutedEventHandler(OnQs3dRootLoaded),
-                true);
-            EventManager.RegisterClassHandler(
-                typeof(UserControl),
-                FrameworkElement.LoadedEvent,
-                new RoutedEventHandler(OnQs3dRootLoaded),
-                true);
+            try
+            {
+                EventManager.RegisterClassHandler(
+                    typeof(Window),
+                    FrameworkElement.LoadedEvent,
+                    new RoutedEventHandler(OnQs3dRootLoaded),
+                    true);
+                EventManager.RegisterClassHandler(
+                    typeof(UserControl),
+                    FrameworkElement.LoadedEvent,
+                    new RoutedEventHandler(OnQs3dRootLoaded),
+                    true);
+            }
+            catch
+            {
+                // Registration is process-wide. If WPF is not ready yet, allow the
+                // next QS3D initialization attempt to retry instead of latching a
+                // permanently half-initialized UI state.
+                Interlocked.Exchange(ref _registered, 0);
+                throw;
+            }
         }
 
         private static void OnQs3dRootLoaded(object sender, RoutedEventArgs e)
@@ -42,15 +53,18 @@ namespace QS3D.BricsCAD.V25.UI
             }
 
             // A QS3D Window/UserControl can contain many nested QS3D UserControls.
-            // Only the outermost loaded QS3D root traverses its visual tree so each
-            // control is processed once and BricsCAD-owned visual trees stay untouched.
+            // Only the outermost loaded QS3D root traverses its visual tree for polish,
+            // while nested roots still get a localization refresh because their content
+            // may have been materialized after the outer root's first Loaded event.
             if (HasQs3dRootAncestor(root))
             {
+                UiLocalization.Apply(root);
                 return;
             }
 
             ApplyDpiDefaults(root);
             ApplyVirtualizationDefaults(root);
+            UiLocalization.RegisterAndApply(root);
         }
 
         private static void ApplyDpiDefaults(FrameworkElement root)
