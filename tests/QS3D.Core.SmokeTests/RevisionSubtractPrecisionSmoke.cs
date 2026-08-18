@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
         {
             RightOperandPrecisionLossFailsClosed();
             LeftOperandPrecisionLossFailsClosed();
+            SignedPrecisionLossFailsClosed();
             RevisionComparePrecisionLossFailsClosed();
             OrdinaryAndZeroOperandDeltasRemainStable();
             CompensatedSummaryPrecisionRemainsStable();
@@ -31,6 +32,12 @@ namespace QS3D.Core.SmokeTests
             var error = Capture<OverflowException>(() => ReadDelta(Row("left-loss", 1e16d, 1d)));
             Assert(error.Message.IndexOf("left operand", StringComparison.Ordinal) >= 0,
                 "Revision delta must identify precision loss of the left operand.");
+        }
+
+        private static void SignedPrecisionLossFailsClosed()
+        {
+            Capture<OverflowException>(() => ReadDelta(Row("negative-right-loss", -1d, -1e16d)));
+            Capture<OverflowException>(() => ReadDelta(Row("negative-left-loss", -1e16d, -1d)));
         }
 
         private static void RevisionComparePrecisionLossFailsClosed()
