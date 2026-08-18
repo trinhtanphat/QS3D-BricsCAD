@@ -25,10 +25,18 @@ namespace QS3D.Core.SmokeTests
 
             Throws<ArgumentOutOfRangeException>(() =>
                 new ElementVerticalPlacement(false, false, -double.MaxValue, double.MaxValue));
+            Throws<ArgumentOutOfRangeException>(() =>
+                new ElementVerticalPlacement(false, false, 1d, 1e16d));
+            Throws<ArgumentOutOfRangeException>(() =>
+                new ElementVerticalPlacement(false, false, -1e16d, 1d));
 
             var placement = new ElementVerticalPlacement(false, false, -2d, 3d);
             if (Math.Abs(placement.HeightM - 5d) > 1e-12)
                 throw new InvalidOperationException("Finite placement height was not preserved.");
+
+            var zeroBottomPlacement = new ElementVerticalPlacement(false, false, 0d, 1e16d);
+            if (zeroBottomPlacement.HeightM != 1e16d)
+                throw new InvalidOperationException("Zero bottom endpoint should not trigger operand-loss rejection.");
         }
 
         private static void Throws<TException>(Action action) where TException : Exception

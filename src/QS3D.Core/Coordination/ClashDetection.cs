@@ -121,6 +121,7 @@ namespace QS3D.Core.Coordination
     public sealed class ClashDetectionService
     {
         private const int MaximumElements = 500;
+        private const int MaximumResults = 10000;
 
         public IReadOnlyList<ClashResult> Detect(
             IEnumerable<CoordinationElement> elements,
@@ -165,11 +166,14 @@ namespace QS3D.Core.Coordination
                         StringComparer.OrdinalIgnoreCase.Equals(left.Discipline, right.Discipline))
                         continue;
 
-                    var overlapX = Overlap(left.Bounds.MinX, left.Bounds.MaxX, right.Bounds.MinX, right.Bounds.MaxX);
-                    var overlapY = Overlap(left.Bounds.MinY, left.Bounds.MaxY, right.Bounds.MinY, right.Bounds.MaxY);
-                    var overlapZ = Overlap(left.Bounds.MinZ, left.Bounds.MaxZ, right.Bounds.MinZ, right.Bounds.MaxZ);
-                    if (overlapX > 0d && overlapY > 0d && overlapZ > 0d)
+                    if (HasPositiveOverlap(left.Bounds.MinX, left.Bounds.MaxX, right.Bounds.MinX, right.Bounds.MaxX) &&
+                        HasPositiveOverlap(left.Bounds.MinY, left.Bounds.MaxY, right.Bounds.MinY, right.Bounds.MaxY) &&
+                        HasPositiveOverlap(left.Bounds.MinZ, left.Bounds.MaxZ, right.Bounds.MinZ, right.Bounds.MaxZ))
                     {
+                        EnsureResultCapacity(results);
+                        var overlapX = Overlap(left.Bounds.MinX, left.Bounds.MaxX, right.Bounds.MinX, right.Bounds.MaxX);
+                        var overlapY = Overlap(left.Bounds.MinY, left.Bounds.MaxY, right.Bounds.MinY, right.Bounds.MaxY);
+                        var overlapZ = Overlap(left.Bounds.MinZ, left.Bounds.MaxZ, right.Bounds.MinZ, right.Bounds.MaxZ);
                         results.Add(new ClashResult(
                             left.ElementId,
                             right.ElementId,
@@ -188,6 +192,10 @@ namespace QS3D.Core.Coordination
                     var distance = EuclideanDistance(gapX, gapY, gapZ);
                     if (distance <= clearanceM)
                     {
+                        EnsureResultCapacity(results);
+                        var overlapX = Overlap(left.Bounds.MinX, left.Bounds.MaxX, right.Bounds.MinX, right.Bounds.MaxX);
+                        var overlapY = Overlap(left.Bounds.MinY, left.Bounds.MaxY, right.Bounds.MinY, right.Bounds.MaxY);
+                        var overlapZ = Overlap(left.Bounds.MinZ, left.Bounds.MaxZ, right.Bounds.MinZ, right.Bounds.MaxZ);
                         results.Add(new ClashResult(
                             left.ElementId,
                             right.ElementId,
@@ -201,6 +209,15 @@ namespace QS3D.Core.Coordination
             }
 
             return new ReadOnlyCollection<ClashResult>(results.ToArray());
+        }
+
+        private static void EnsureResultCapacity(List<ClashResult> results)
+        {
+            if (results.Count == MaximumResults)
+            {
+                throw new InvalidOperationException(
+                    "Coordination clash detection supports at most " + MaximumResults + " results per operation.");
+            }
         }
 
         private static int? RequireKnownCountWithinLimit(IEnumerable<CoordinationElement> elements)
@@ -277,12 +294,25 @@ namespace QS3D.Core.Coordination
                 (scaledZ * scaledZ));
             if (double.IsNaN(distance) || double.IsInfinity(distance))
                 throw new OverflowException("Coordination separation distance exceeded the finite double range.");
+            if (distance == scale &&
+                ((x > 0d && x < scale) ||
+                 (y > 0d && y < scale) ||
+                 (z > 0d && z < scale)))
+            {
+                throw new InvalidOperationException(
+                    "Coordination separation distance lost a non-zero orthogonal gap at double precision.");
+            }
             return distance == 0d ? 0d : distance;
+        }
+
+        private static bool HasPositiveOverlap(double aMin, double aMax, double bMin, double bMax)
+        {
+            return aMin < bMax && bMin < aMax;
         }
 
         private static double Overlap(double aMin, double aMax, double bMin, double bMax)
         {
-            if (aMax <= bMin || bMax <= aMin) return 0d;
+            if (!HasPositiveOverlap(aMin, aMax, bMin, bMax)) return 0d;
             var upper = Math.Min(aMax, bMax);
             var lower = Math.Max(aMin, bMin);
             return SubtractFinite(upper, lower, "Coordination overlap extent");
