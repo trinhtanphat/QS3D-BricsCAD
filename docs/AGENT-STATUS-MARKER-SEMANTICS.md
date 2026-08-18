@@ -87,6 +87,30 @@ When current owner clarification conflicts with an older agent-authored interpre
 - any remediation that changes production source requires its own collision-checked Issue/Lane-Key/carrier and normal CI/protected-main lifecycle;
 - do not label an existing product change as owner-requested merely because an earlier agent wrote that claim into an Issue or PR body.
 
+## Pending CI must be reported with exact visible detail
+
+When any required CI/check is queued, pending, or in progress, the owner-facing report must say **which CI is waiting/running and what remains**. A generic line such as `⏳ CI pending`, `đang chờ CI`, `waiting for CI`, or `CI is running` is not sufficient by itself.
+
+For each currently pending CI gate, report the following whenever the evidence/tooling exposes it:
+
+- the CI category/gate, such as branch CI, PR/protected checks, integration CI, exact-main validation, or release validation;
+- workflow/run identifier and exact tested head SHA or PR candidate;
+- current job name/id;
+- current queued/running step name when step-level status is available;
+- important relevant jobs/steps already verified successful;
+- exact jobs/steps/gates still remaining before the lifecycle may advance;
+- whether the next lifecycle action is blocked solely by that pending gate or whether other authorized work can continue.
+
+Use `⏳` for the pending line. If run/job/step detail is not observable through the current connector/tooling, state that observability limitation explicitly instead of inventing an identifier or collapsing the report back to an unexplained generic `CI pending`.
+
+A concise acceptable example is:
+
+```text
+⏳ PR/protected checks: IN_PROGRESS — run 6167 / head 30d9eee; preflight ✅; core job 95555190798 currently `Acquire trusted BricsCAD V25 compile references`; remaining: validate V25 refs -> build V25 plugin -> terminal core SUCCESS before merge.
+```
+
+The purpose is that the owner can tell at a glance **what is currently running, what already passed, what is still waiting, and which exact condition unlocks the next lifecycle action**.
+
 ## Reporting examples
 
 Correct:
