@@ -205,7 +205,7 @@ def validate_guard_parser():
         "    if: ${{ github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]' }}"
     ])
     auto_bad = extract_job_if_expression([
-        "    if: ${{ github.ref == 'refs/heads/main' || github.actor != 'github-actions[bot]' }}"
+        "    if: ${{ github.ref == 'refs/heads/main' || github.actor == 'refs/heads/main' }}"
     ])
     if not is_hard_auto_dispatch_guard(auto_good) or is_hard_auto_dispatch_guard(auto_bad):
         errors.append("automatic dispatcher guard parser regression")
@@ -298,6 +298,7 @@ else:
             for watched in (
                 '"src/**"', '"tests/**"', '"scripts/**"', '"samples/generated/**"', '".github/workflows/**"',
                 '"Directory.Build.props"', '"QS3D.sln"', '"CI_POLICY.md"', '"docs/AGENT-WORK-REGISTRATION.md"',
+                '"docs/AGENT-STATUS-MARKER-SEMANTICS.md"',
             ):
                 if watched not in push_block:
                     errors.append(f"{path.name}: shared branch-push validation scope missing {watched}")
@@ -320,6 +321,7 @@ else:
                 "tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release",
                 "dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64",
                 "cancel-in-progress: true",
+                "'docs/AGENT-STATUS-MARKER-SEMANTICS.md'",
             ), path.name)
             for forbidden in (
                 "contents: write", "actions: write", "issues: write", "packages: write", "id-token: write",
