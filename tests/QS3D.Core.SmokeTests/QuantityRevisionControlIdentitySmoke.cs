@@ -6,6 +6,8 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class QuantityRevisionControlIdentitySmoke
     {
+        private static readonly char[] ControlCharacters = { '\t', '\n', '\r' };
+
         [ModuleInitializer]
         internal static void Initialize() => Run();
 
@@ -20,34 +22,40 @@ namespace QS3D.Core.SmokeTests
 
         private static void ControlCharacterProjectIdsFailClosed()
         {
-            Capture<InvalidOperationException>(() => Build("P\n1", "E1", "Concrete", 1d, 2d));
+            foreach (var control in ControlCharacters)
+                Capture<InvalidOperationException>(() => Build("P" + control + "1", "E1", "Concrete", 1d, 2d));
         }
 
         private static void ControlCharacterElementIdsFailClosed()
         {
-            Capture<InvalidOperationException>(() => Build("P1", "E\t1", "Concrete", 1d, 2d));
+            foreach (var control in ControlCharacters)
+                Capture<InvalidOperationException>(() => Build("P1", "E" + control + "1", "Concrete", 1d, 2d));
         }
 
         private static void ControlCharacterQuantityKeysFailClosed()
         {
-            Capture<InvalidOperationException>(() => Build("P1", "E1", "Concrete\rVolume", 1d, 2d));
+            foreach (var control in ControlCharacters)
+                Capture<InvalidOperationException>(() => Build("P1", "E1", "Concrete" + control + "Volume", 1d, 2d));
         }
 
         private static void ControlCharacterSummaryKeysFailClosed()
         {
-            Capture<InvalidOperationException>(() =>
-                new QuantityRevisionReport().Summarize(new[]
-                {
-                    new QuantityRevisionRow
+            foreach (var control in ControlCharacters)
+            {
+                Capture<InvalidOperationException>(() =>
+                    new QuantityRevisionReport().Summarize(new[]
                     {
-                        ElementId = "E1",
-                        Category = "StructuralColumn",
-                        QuantityName = "Concrete\nVolume",
-                        Change = "Changed",
-                        Before = 1d,
-                        After = 2d
-                    }
-                }));
+                        new QuantityRevisionRow
+                        {
+                            ElementId = "E1",
+                            Category = "StructuralColumn",
+                            QuantityName = "Concrete" + control + "Volume",
+                            Change = "Changed",
+                            Before = 1d,
+                            After = 2d
+                        }
+                    }));
+            }
         }
 
         private static void CanonicalInputsRemainValid()
