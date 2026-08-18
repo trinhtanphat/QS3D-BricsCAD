@@ -14,6 +14,9 @@ namespace QS3D.Core.Domain
             var heightM = topElevationM - bottomElevationM;
             if (double.IsNaN(heightM) || double.IsInfinity(heightM))
                 throw new ArgumentOutOfRangeException(nameof(topElevationM), "Vertical placement height must be finite.");
+            if ((bottomElevationM != 0d && heightM == topElevationM) ||
+                (topElevationM != 0d && heightM == -bottomElevationM))
+                throw new ArgumentOutOfRangeException(nameof(topElevationM), "Vertical placement height cannot preserve both non-zero endpoints at this numeric scale.");
             UsesBottomLevel = usesBottomLevel;
             UsesTopLevel = usesTopLevel;
             BottomElevationM = CanonicalZero(bottomElevationM);
