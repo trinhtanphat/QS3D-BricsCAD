@@ -28,6 +28,7 @@ if AUDIT.is_file():
     ):
         if token not in text:
             errors.append("AuditTrail.cs missing validated deep snapshot token: " + token)
+
     count_pos = text.find("var storedCount = RequireSupportedHistoryCount(requireAppendCapacity: false);")
     snapshot_pos = text.find("var snapshot = new List<AuditEvent>(storedCount);", count_pos)
     validation_pos = text.find("var validationError = GetStoredEventValidationError(item);")
@@ -42,16 +43,20 @@ if AUDIT.is_file():
         errors.append("AuditTrail.Events must validate stored history before deep-cloning each event.")
     if equality_pos < 0 or return_pos < 0 or equality_pos >= return_pos:
         errors.append("AuditTrail.Events must reject a stored Count that disagrees with traversal before returning its snapshot.")
-    if text.count("RequireObservedHistoryCount(storedCount, observed);") < 2:
-        errors.append("AuditTrail reads and modification validation must both enforce stored Count versus traversal equality.")
-    if "var storedCount = RequireSupportedHistoryCount(requireAppendCapacity);" not in text:
-        errors.append("AuditTrail modification validation must preserve the single validated stored Count for traversal equality.")
     if "_events as IReadOnlyList<AuditEvent>" in text:
         errors.append("AuditTrail.Events still exposes the mutable backing list through an interface cast.")
 
-    clear_pos = text.find("public void Clear()")
-    next_method_pos = text.find("private int ValidateExistingHistory", clear_pos)
-    clear_text = text[clear_pos:next_method_pos] if clear_pos >= 0 and next_method_pos > clear_pos else ""
+    record_pos = text.find("public void Record(")
+    clear_pos = text.find("public void Clear()", record_pos)
+    record_text = text[record_pos:clear_pos] if record_pos >= 0 and clear_pos > record_pos else ""
+    record_validate_pos = record_text.find("ValidateExistingHistory(requireAppendCapacity: true);")
+    record_add_pos = record_text.find("_events.Add(item);")
+    if record_validate_pos < 0 or record_add_pos < 0 or record_validate_pos >= record_add_pos:
+        errors.append("AuditTrail.Record must validate existing history before adding a new audit event.")
+
+    clear_method_pos = text.find("public void Clear()")
+    validate_method_pos = text.find("private int ValidateExistingHistory", clear_method_pos)
+    clear_text = text[clear_method_pos:validate_method_pos] if clear_method_pos >= 0 and validate_method_pos > clear_method_pos else ""
     clear_validate_pos = clear_text.find("var observed = ValidateExistingHistory(requireAppendCapacity: false);")
     clear_noop_pos = clear_text.find("if (observed == 0) return;")
     clear_mutation_pos = clear_text.find("_events.Clear();")
@@ -59,8 +64,21 @@ if AUDIT.is_file():
         errors.append("AuditTrail.Clear must validate/traverse stored history before deciding that Clear is a no-op.")
     if "_events.Count == 0" in clear_text:
         errors.append("AuditTrail.Clear must not trust mutable backing Count as an early-return substitute for traversal.")
-    if "private int ValidateExistingHistory(bool requireAppendCapacity)" not in text or "return observed;" not in text:
-        errors.append("AuditTrail history validation must expose observed traversal count for Clear no-op semantics.")
+
+    supported_count_method_pos = text.find("private int RequireSupportedHistoryCount", validate_method_pos)
+    validate_text = text[validate_method_pos:supported_count_method_pos] if validate_method_pos >= 0 and supported_count_method_pos > validate_method_pos else ""
+    validate_count_pos = validate_text.find("var storedCount = RequireSupportedHistoryCount(requireAppendCapacity);")
+    validate_traversal_pos = validate_text.find("foreach (var existing in _events)")
+    validate_equality_pos = validate_text.find("RequireObservedHistoryCount(storedCount, observed);")
+    validate_return_pos = validate_text.find("return observed;")
+    if (
+        validate_count_pos < 0
+        or validate_traversal_pos < 0
+        or validate_equality_pos < 0
+        or validate_return_pos < 0
+        or not (validate_count_pos < validate_traversal_pos < validate_equality_pos < validate_return_pos)
+    ):
+        errors.append("AuditTrail.ValidateExistingHistory must enforce Count -> traversal -> equality -> return ordering inside the modification validator.")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
@@ -102,4 +120,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: AuditTrail reads and mutations validate stored history, enforce Count-versus-traversal equality, and reject dishonest history before mutation.")
+print("PASS: AuditTrail reads and mutations validate stored history, enforce method-local Count-versus-traversal ordering, and reject dishonest history before mutation.")
