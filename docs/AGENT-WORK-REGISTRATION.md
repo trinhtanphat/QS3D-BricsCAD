@@ -2,7 +2,7 @@
 
 **Owner rule:** normal AI agents/chat sessions treat `origin/main` as read-only. Every task—including source, tests, scripts, workflows, documentation, Markdown, claim/handoff/status and chores—must be done on a dedicated issue/branch/PR. Only an agent/session explicitly authorized by the repository owner as an integration/merge coordinator may change `main`.
 
-`docs/MAIN-WRITE-AUTHORIZATION.md` is authoritative for `main` write permission. This file is the canonical work-registration and batch-integration protocol. `docs/AGENT-LANE-LOCK.md` is authoritative for concurrent Lane-Key ownership and canonical-carrier uniqueness. `CI_POLICY.md` is authoritative for CI behavior. `docs/GITHUB-MAIN-PROTECTION.md` records the current hard-protection contract.
+`docs/MAIN-WRITE-AUTHORIZATION.md` is authoritative for `main` write permission. This file is the canonical work-registration and batch-integration protocol. `docs/AGENT-LANE-LOCK.md` is authoritative for concurrent Lane-Key ownership and canonical-carrier uniqueness. `docs/CHATGPT-SCHEDULE-BOUNDARY.md` is authoritative for the boundary between external ChatGPT account scheduled tasks and repository ownership/lane semantics. `CI_POLICY.md` is authoritative for CI behavior. `docs/GITHUB-MAIN-PROTECTION.md` records the current hard-protection contract.
 
 ## Source of truth for reservations
 
@@ -51,7 +51,11 @@ When rebuilding a carrier is genuinely required, explicit supersession/reassignm
 
 Do not create branch-to-branch/internal PRs solely to sync/replay `main` or another task branch into an agent branch. Reconcile the canonical task branch non-force, or explicitly supersede it and create exactly one replacement carrier.
 
-For scheduled/controller lanes, a stale/already-landed/blocked/zero-defect assignment is not permission for a worker to invent competing work under the same scope. Follow the current controller contract and the Lane-Key ownership recorded on GitHub; the repository's collision rule remains authoritative regardless of session history.
+### External ChatGPT scheduler boundary
+
+External invokers, including ChatGPT account scheduled tasks/automations, may include convenience labels such as `C0`, `W1-W4`, `QS3D-CONTROL`, `QS3D-WORKER-*`, `controller`, `worker`, or `Task 0-4` in a prompt. Those labels are **account-side orchestration metadata only**. They do not define a repository lane, persistent repository owner, canonical carrier, GitHub reservation, CI authority, merge authority, or direct-`main` authority.
+
+Schedule existence, count, cadence, enabled/disabled state, account task IDs, and live execution state exist outside this repository and must not be inferred from Markdown, Issues, comments, branches, PRs, or historical controller/worker records. Every scheduled execution must resolve the current GitHub Lane-Key / Issue / branch / PR state at execution time and follow the ordinary collision, ownership, CI, and authorization rules in this document. See `docs/CHATGPT-SCHEDULE-BOUNDARY.md`.
 
 The shared PR preflight enforces Lane-Key uniqueness for same-repository `agent/**` and `integration/**` carriers. PR metadata must include `Lane-Key`, canonical owner/session, canonical carrier, and explicit supersession information.
 
@@ -80,7 +84,7 @@ The only normal exception is a **minimal collision check** against visible reser
 ## Mandatory sequence for a normal agent
 
 1. Fetch/read current `origin/main` and record the exact SHA.
-2. Read `AGENTS.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, `CI_POLICY.md`, this file, `docs/AGENT-LANE-LOCK.md`, and the Issue/claim/runbook for **this lane**.
+2. Read `AGENTS.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, `CI_POLICY.md`, this file, `docs/AGENT-LANE-LOCK.md`, `docs/CHATGPT-SCHEDULE-BOUNDARY.md` when the session was invoked by or discusses an external schedule, and the Issue/claim/runbook for **this lane**.
 3. Perform only the minimal reservation/collision check needed to verify that this lane is not already owned; do not audit other agents' work.
 4. Determine the stable Lane-Key and verify there is no equivalent ACTIVE owner/canonical carrier. If one exists, stop as `DUPLICATE_CARRIER / NO MUTATION`.
 5. Choose a non-overlapping lane.
