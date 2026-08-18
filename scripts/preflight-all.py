@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SELF = Path(__file__).resolve()
 CHILD_TIMEOUT_SECONDS = 180
-MAX_FEATURE_GATES = 512
+MAX_FEATURE_GATES = 1024
 MAX_FEATURE_GATE_SOURCE_BYTES = 512 * 1024
 
 
@@ -79,10 +79,10 @@ def _is_feature_gate_name(name):
 
 def discover():
     # Bound filesystem discovery itself. Use os.scandir() directly so the aggregate
-    # runner controls iteration and can reject candidate 513 without first asking a
-    # higher-level glob implementation to enumerate/materialize the whole directory.
-    # Do not call DirEntry.is_file() here: symlink/non-regular/size checks remain in
-    # validate_candidates() and must happen only after the candidate-count gate.
+    # runner controls iteration and can reject the first candidate beyond the configured
+    # maximum without asking a higher-level glob implementation to enumerate/materialize
+    # the whole directory first. Do not call DirEntry.is_file() here: symlink/non-regular/
+    # size checks remain in validate_candidates() and happen only after the count gate.
     candidates = []
     try:
         with os.scandir(SCRIPTS) as entries:
