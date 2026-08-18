@@ -20,6 +20,7 @@ namespace QS3D.Core.SmokeTests
             OutputSnapshotsAreDefensivelyImmutable();
             UnusedReferenceIndexesStayLazy();
             KnownCountsFailClosedBeforeEnumeration();
+            KnownCountsMustMatchCompletedTraversal();
             OversizedEnumerablesStopAtDeclaredBounds();
         }
 
@@ -237,6 +238,63 @@ namespace QS3D.Core.SmokeTests
             Equal(0, conflictingRows.EnumerationAttempts);
         }
 
+        private static void KnownCountsMustMatchCompletedTraversal()
+        {
+            var project = new ProjectState("table-count-traversal", "Table count traversal");
+            var first = Element(project, "E-1", ElementCategory.Beam, "B1", 1.0);
+            var second = Element(project, "E-2", ElementCategory.Column, "C2", 2.0);
+            var idColumn = new SemanticDocumentationColumn("Id", "{Id}");
+
+            var underRows = new AdvertisedCountCollection<string>(2, first.Id);
+            ThrowsMessage<InvalidOperationException>(() => SemanticDocumentationTableBuilder.Build(
+                project,
+                "Schedule",
+                underRows,
+                new[] { idColumn }), "known count does not match completed traversal");
+
+            var overRows = new AdvertisedCountCollection<string>(1, first.Id, second.Id);
+            ThrowsMessage<InvalidOperationException>(() => SemanticDocumentationTableBuilder.Build(
+                project,
+                "Schedule",
+                overRows,
+                new[] { idColumn }), "known count does not match completed traversal");
+
+            var underColumns = new AdvertisedCountCollection<SemanticDocumentationColumn>(
+                2,
+                idColumn);
+            ThrowsMessage<InvalidOperationException>(() => SemanticDocumentationTableBuilder.Build(
+                project,
+                "Schedule",
+                new[] { first.Id },
+                underColumns), "known count does not match completed traversal");
+
+            var overColumns = new AdvertisedCountCollection<SemanticDocumentationColumn>(
+                1,
+                idColumn,
+                new SemanticDocumentationColumn("Mark", "{P:Mark}"));
+            ThrowsMessage<InvalidOperationException>(() => SemanticDocumentationTableBuilder.Build(
+                project,
+                "Schedule",
+                new[] { first.Id },
+                overColumns), "known count does not match completed traversal");
+
+            var honest = SemanticDocumentationTableBuilder.Build(
+                project,
+                "Honest",
+                new AdvertisedCountCollection<string>(2, first.Id, second.Id),
+                new AdvertisedCountCollection<SemanticDocumentationColumn>(1, idColumn));
+            Equal(2, honest.Rows.Count);
+            Equal(1, honest.Headers.Count);
+
+            var streamed = SemanticDocumentationTableBuilder.Build(
+                project,
+                "Streamed",
+                Stream(first.Id, second.Id),
+                Stream(idColumn));
+            Equal(2, streamed.Rows.Count);
+            Equal(1, streamed.Headers.Count);
+        }
+
         private static void OversizedEnumerablesStopAtDeclaredBounds()
         {
             var project = new ProjectState("table", "Table");
@@ -255,6 +313,11 @@ namespace QS3D.Core.SmokeTests
                 GuardedColumns(33)), "at most 32 columns");
         }
 
+        private static IEnumerable<T> Stream<T>(params T[] items)
+        {
+            foreach (var item in items) yield return item;
+        }
+
         private static IEnumerable<string> GuardedIds(int allowedItems)
         {
             for (var i = 0; i < allowedItems; i++) yield return "ROW-" + i;
@@ -265,6 +328,30 @@ namespace QS3D.Core.SmokeTests
         {
             for (var i = 0; i < allowedItems; i++) yield return new SemanticDocumentationColumn("H-" + i, "{Id}");
             throw new Exception("Documentation table enumerated column input beyond its declared hard limit.");
+        }
+
+        private sealed class AdvertisedCountCollection<T> : ICollection<T>
+        {
+            private readonly T[] items;
+
+            public AdvertisedCountCollection(int count, params T[] items)
+            {
+                Count = count;
+                this.items = items ?? Array.Empty<T>();
+            }
+
+            public int Count { get; }
+            public bool IsReadOnly => true;
+            public IEnumerator<T> GetEnumerator()
+            {
+                foreach (var item in items) yield return item;
+            }
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public bool Contains(T item) => false;
+            public void CopyTo(T[] array, int arrayIndex) => throw new NotSupportedException();
+            public void Add(T item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Remove(T item) => throw new NotSupportedException();
         }
 
         private sealed class NoEnumerationCollection<T> : ICollection<T>
