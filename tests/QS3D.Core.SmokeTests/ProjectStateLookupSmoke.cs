@@ -28,6 +28,9 @@ namespace QS3D.Core.SmokeTests
             project.Zones.Add(zone);
             project.QuantityRules.Add(rule);
 
+            if (!string.Equals(rule.Id, "RULE-1", StringComparison.Ordinal))
+                throw new Exception("Stored QuantityRule identity must remain canonical; only lookup-query whitespace/case is normalized.");
+
             Same(element, project.FindElement(" element-1 "));
             Same(family, project.FindFamily(" family-1 "));
             Same(floor, project.FindFloor(" floor-1 "));
