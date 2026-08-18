@@ -101,7 +101,7 @@ namespace QS3D.Core.SmokeTests
             var element = new RevisionElementSnapshot
             {
                 ElementId = "element-1",
-                Category = "StructuralColumn"
+                Category = "Column"
             };
             element.Quantities["Concrete"] = quantity;
             snapshot.Elements.Add(element);
