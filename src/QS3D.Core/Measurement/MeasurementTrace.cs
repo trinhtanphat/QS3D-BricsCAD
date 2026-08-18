@@ -516,12 +516,32 @@ namespace QS3D.Core.Measurement
 
         private static void RequireSupportedCount<T>(IEnumerable<T> source, string parameterName, string collectionName)
         {
-            if (source is ICollection<T> collection && collection.Count > MaximumCollectionEntries)
+            int? knownCount = null;
+            if (source is ICollection<T> collection)
+                ValidateKnownCount(collection.Count, ref knownCount, parameterName, collectionName);
+            if (source is IReadOnlyCollection<T> readOnlyCollection)
+                ValidateKnownCount(readOnlyCollection.Count, ref knownCount, parameterName, collectionName);
+            if (source is System.Collections.ICollection nonGenericCollection)
+                ValidateKnownCount(nonGenericCollection.Count, ref knownCount, parameterName, collectionName);
+        }
+
+        private static void ValidateKnownCount(
+            int count,
+            ref int? knownCount,
+            string parameterName,
+            string collectionName)
+        {
+            if (count < 0)
+                throw new ArgumentException(
+                    "Measurement trace " + collectionName + " count cannot be negative.",
+                    parameterName);
+            if (count > MaximumCollectionEntries)
                 throw CollectionCountError(parameterName, collectionName);
-            if (source is IReadOnlyCollection<T> readOnlyCollection && readOnlyCollection.Count > MaximumCollectionEntries)
-                throw CollectionCountError(parameterName, collectionName);
-            if (source is System.Collections.ICollection nonGenericCollection && nonGenericCollection.Count > MaximumCollectionEntries)
-                throw CollectionCountError(parameterName, collectionName);
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new ArgumentException(
+                    "Measurement trace " + collectionName + " count contracts disagree.",
+                    parameterName);
+            knownCount = count;
         }
 
         private static ArgumentException CollectionCountError(string parameterName, string collectionName)
