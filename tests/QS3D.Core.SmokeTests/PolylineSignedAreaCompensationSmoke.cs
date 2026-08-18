@@ -9,12 +9,15 @@ namespace QS3D.Core.SmokeTests
         private const double Large = 1e16d;
         private const double SmallInverse = 1e-16d;
         private const double ExpectedArea = 5000000000000001d;
+        private const double ScaledCoordinate = 1e155d;
+        private const double TinyCross = 1d / 1152921504606846976d;
 
         [ModuleInitializer]
         internal static void Initialize()
         {
             PositiveOrientationPreservesRepresentableLowOrderArea();
             NegativeOrientationPreservesRepresentableLowOrderArea();
+            ScaledFallbackPreservesRepresentableLowOrderArea();
             LengthCompensationRemainsStable();
         }
 
@@ -40,6 +43,27 @@ namespace QS3D.Core.SmokeTests
 
             Exact(-ExpectedArea, PolylineMetrics.SignedArea(points), "negative signed area");
             Exact(ExpectedArea, PolylineMetrics.Area(points), "negative absolute area");
+        }
+
+        private static void ScaledFallbackPreservesRepresentableLowOrderArea()
+        {
+            var tinyY = TinyCross * ScaledCoordinate;
+            var points = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(ScaledCoordinate, 0d),
+                new Point2(ScaledCoordinate, tinyY),
+                new Point2(0d, ScaledCoordinate),
+                new Point2(ScaledCoordinate, 0d)
+            };
+
+            // The direct fan crosses overflow on the +1 / -1 terms, forcing the
+            // scaled fallback. Its normalized sequence is TinyCross, +1, -1:
+            // the former Kahan accumulator collapsed this representable residual
+            // to zero, while the retained Neumaier correction preserves it.
+            var expectedArea = ((TinyCross * 0.5d) * ScaledCoordinate) * ScaledCoordinate;
+            Exact(expectedArea, PolylineMetrics.SignedArea(points), "scaled-fallback signed area");
+            Exact(expectedArea, PolylineMetrics.Area(points), "scaled-fallback absolute area");
         }
 
         private static void LengthCompensationRemainsStable()
