@@ -184,11 +184,26 @@ namespace QS3D.BricsCAD.V25.UI
                         return;
                     }
 
+                    Grid? preservedWorkspace;
+                    GridLength preservedModelWidth;
+                    GridLength preservedFamilyWidth;
+                    var preserveSplitterGeometry = TryCaptureBlt3dRuntimeSplitterGeometry(
+                        out preservedWorkspace,
+                        out preservedModelWidth,
+                        out preservedFamilyWidth);
+
                     _blt3dRuntimeViewportRecoveryRetriesRemaining--;
                     _blt3dRuntimeViewportRecoveryApplying = true;
                     try
                     {
                         ReassertBlt3dRuntimeLayout();
+                        if (preserveSplitterGeometry)
+                        {
+                            RestoreBlt3dRuntimeSplitterGeometry(
+                                preservedWorkspace,
+                                preservedModelWidth,
+                                preservedFamilyWidth);
+                        }
                         InvalidateBlt3dRuntimeLayout();
                     }
                     finally
@@ -196,6 +211,66 @@ namespace QS3D.BricsCAD.V25.UI
                         _blt3dRuntimeViewportRecoveryApplying = false;
                     }
                 }));
+        }
+
+        private bool TryCaptureBlt3dRuntimeSplitterGeometry(
+            out Grid? workspace,
+            out GridLength modelWidth,
+            out GridLength familyWidth)
+        {
+            workspace = null;
+            modelWidth = new GridLength(0);
+            familyWidth = new GridLength(0);
+
+            var root = WorkspaceContentRoot;
+            if (root == null)
+                return false;
+
+            foreach (UIElement child in root.Children)
+            {
+                if (child is Grid candidate &&
+                    Grid.GetRow(candidate) == 1 &&
+                    candidate.ColumnDefinitions.Count == 5)
+                {
+                    workspace = candidate;
+                    break;
+                }
+            }
+
+            if (workspace == null)
+                return false;
+
+            var columns = workspace.ColumnDefinitions;
+            var currentModelWidth = columns[0].Width;
+            var currentFamilyWidth = columns[2].Width;
+            if (!IsPreservableBlt3dRuntimeGridLength(currentModelWidth) ||
+                !IsPreservableBlt3dRuntimeGridLength(currentFamilyWidth))
+                return false;
+
+            modelWidth = currentModelWidth;
+            familyWidth = currentFamilyWidth;
+            return true;
+        }
+
+        private static bool IsPreservableBlt3dRuntimeGridLength(GridLength width)
+        {
+            return !width.IsAuto &&
+                   width.Value > 0d &&
+                   !double.IsNaN(width.Value) &&
+                   !double.IsInfinity(width.Value);
+        }
+
+        private void RestoreBlt3dRuntimeSplitterGeometry(
+            Grid? workspace,
+            GridLength modelWidth,
+            GridLength familyWidth)
+        {
+            if (workspace == null || workspace.ColumnDefinitions.Count != 5)
+                return;
+
+            var columns = workspace.ColumnDefinitions;
+            columns[0].Width = modelWidth;
+            columns[2].Width = familyWidth;
         }
 
         private bool HasUsableBlt3dRuntimeViewport()
