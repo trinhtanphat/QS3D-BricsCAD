@@ -18,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             TargetMapRejectsMissingTargetElement();
             TargetMapRejectsNegativeKnownCountBeforeEnumeration();
             TargetMapRejectsOversizedKnownCountBeforeEnumeration();
+            TargetMapAllowsExactMappingLimitToReachEnumeration();
         }
 
         private static void PlanBuildsOneToOneSourceTargetLineage()
@@ -126,6 +127,18 @@ namespace QS3D.Core.SmokeTests
 
             Equal(1, mapping.CountReads);
             False(mapping.EnumerationAttempted);
+            Equal(0, target.Metadata.Count);
+        }
+
+        private static void TargetMapAllowsExactMappingLimitToReachEnumeration()
+        {
+            var target = TargetProject();
+            var mapping = new KnownCountDictionary(50000);
+
+            Throws<Exception>(() => ProjectInterchangeProvenanceTargetMap.Store(target, "SOURCE", "SOURCE-DWG", mapping));
+
+            Equal(1, mapping.CountReads);
+            True(mapping.EnumerationAttempted);
             Equal(0, target.Metadata.Count);
         }
 
