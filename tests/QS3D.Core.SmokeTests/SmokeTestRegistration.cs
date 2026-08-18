@@ -49,6 +49,7 @@ namespace QS3D.Core.SmokeTests
             FormulaFiniteSafetySmoke.Run();
             FormulaVariableCaseSmoke.Run();
             FormulaVariableNameNormalizationSmoke.Run();
+            FormulaVariableKnownCountContractSmoke.Run();
             RebarNotationOverflowSmoke.Run();
             RebarWeightUnderflowSmoke.Run();
             ColumnTieQuantityUnderflowSmoke.Run();
@@ -175,6 +176,7 @@ namespace QS3D.Core.SmokeTests
             MeasuredSolidQuantityPolicySmoke.Run();
             MepTbqDecimalUnderflowSmoke.Run();
             MepRecognitionSmoke.Run();
+            ClashDetectionKnownCountContractSmoke.Run();
             CubicostParitySmoke.Run();
         }
     }

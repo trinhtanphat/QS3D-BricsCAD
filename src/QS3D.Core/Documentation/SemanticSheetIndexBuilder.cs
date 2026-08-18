@@ -95,12 +95,32 @@ namespace QS3D.Core.Documentation
 
         private static void RequireKnownCountsWithinLimit(IEnumerable<SemanticSheetPlan> sheets)
         {
-            if (sheets is ICollection<SemanticSheetPlan> collection && collection.Count > MaxSheets)
-                throw TooManySheets();
-            if (sheets is IReadOnlyCollection<SemanticSheetPlan> readOnlyCollection && readOnlyCollection.Count > MaxSheets)
-                throw TooManySheets();
-            if (sheets is ICollection nonGenericCollection && nonGenericCollection.Count > MaxSheets)
-                throw TooManySheets();
+            var counts = new List<int>(3);
+            if (sheets is ICollection<SemanticSheetPlan> collection)
+                counts.Add(collection.Count);
+            if (sheets is IReadOnlyCollection<SemanticSheetPlan> readOnlyCollection)
+                counts.Add(readOnlyCollection.Count);
+            if (sheets is ICollection nonGenericCollection)
+                counts.Add(nonGenericCollection.Count);
+
+            if (counts.Count == 0) return;
+
+            var expected = counts[0];
+            var maximum = expected;
+            var hasNegative = expected < 0;
+            var hasConflict = false;
+            for (var i = 1; i < counts.Count; i++)
+            {
+                if (counts[i] < 0) hasNegative = true;
+                if (counts[i] != expected) hasConflict = true;
+                if (counts[i] > maximum) maximum = counts[i];
+            }
+
+            if (maximum > MaxSheets) throw TooManySheets();
+            if (hasNegative)
+                throw new InvalidOperationException("Semantic sheet index source reports an invalid negative known count.");
+            if (hasConflict)
+                throw new InvalidOperationException("Semantic sheet index source reports conflicting known counts.");
         }
 
         private static InvalidOperationException TooManySheets()

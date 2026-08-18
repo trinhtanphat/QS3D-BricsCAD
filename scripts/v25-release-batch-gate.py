@@ -55,26 +55,41 @@ def is_release_relevant(path: str) -> bool:
     return any(normalized.startswith(prefix) for prefix in RELEASE_RELEVANT_PREFIXES)
 
 
+def parse_preview_ordinal(tag: str, series_prefix: str, source_label: str) -> int:
+    pattern = re.compile(rf"^{re.escape(series_prefix)}([1-9][0-9]*)$")
+    match = pattern.fullmatch(tag)
+    if not match:
+        raise GateError(f"{source_label} is non-canonical: {tag}")
+    ordinal_text = match.group(1)
+    if len(ordinal_text) > 5:
+        raise GateError(f"{source_label} exceeds FileVersion range: {tag}")
+    ordinal = int(ordinal_text, 10)
+    if ordinal > MAX_PREVIEW_ORDINAL:
+        raise GateError(f"{source_label} exceeds FileVersion range: {tag}")
+    return ordinal
+
+
 def parse_preview_tags(series_prefix: str) -> list[tuple[int, str]]:
     raw = run_git("tag", "--list", f"{series_prefix}*")
     if not raw:
         return []
 
-    pattern = re.compile(rf"^{re.escape(series_prefix)}([1-9][0-9]*)$")
     parsed: list[tuple[int, str]] = []
     for tag in raw.splitlines():
         tag = tag.strip()
-        match = pattern.fullmatch(tag)
-        if not match:
-            raise GateError(f"matching-series tag is non-canonical: {tag}")
-        ordinal_text = match.group(1)
-        if len(ordinal_text) > 5:
-            raise GateError(f"preview ordinal exceeds FileVersion range: {tag}")
-        ordinal = int(ordinal_text, 10)
-        if ordinal > MAX_PREVIEW_ORDINAL:
-            raise GateError(f"preview ordinal exceeds FileVersion range: {tag}")
+        ordinal = parse_preview_ordinal(tag, series_prefix, "matching-series tag")
         parsed.append((ordinal, tag))
     return sorted(parsed)
+
+
+def parse_explicit_published_tag(raw_tag: str, series_prefix: str) -> str | None:
+    if raw_tag == "":
+        return None
+    if raw_tag != raw_tag.strip():
+        raise GateError(f"published preview baseline has surrounding whitespace: {raw_tag!r}")
+    parse_preview_ordinal(raw_tag, series_prefix, "published preview baseline")
+    run_git("rev-parse", "--verify", f"refs/tags/{raw_tag}^{{commit}}")
+    return raw_tag
 
 
 def changed_paths_for_first_parent_commit(commit: str) -> list[str]:
@@ -124,6 +139,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source-sha", required=True, help="Exact 40-hex main source commit to evaluate.")
     parser.add_argument("--minimum-changes", type=int, default=DEFAULT_MINIMUM_CHANGES)
     parser.add_argument("--series-prefix", default=DEFAULT_SERIES_PREFIX)
+    parser.add_argument(
+        "--previous-published-tag",
+        default=None,
+        help=(
+            "Explicit published preview baseline. Pass an empty value to state that no published preview exists; "
+            "omit this option only for legacy standalone local-tag discovery."
+        ),
+    )
     parser.add_argument("--force", action="store_true", help="Allow a non-empty sub-threshold batch for an explicit manual release.")
     parser.add_argument("--require-ready", action="store_true", help="Exit non-zero unless the batch is eligible to publish.")
     return parser.parse_args()
@@ -143,8 +166,14 @@ def main() -> int:
     if resolved_source != source_sha:
         raise GateError(f"source SHA resolved unexpectedly: expected {source_sha}, got {resolved_source}")
 
-    tags = parse_preview_tags(args.series_prefix)
-    previous_tag = tags[-1][1] if tags else None
+    if args.previous_published_tag is None:
+        tags = parse_preview_tags(args.series_prefix)
+        previous_tag = tags[-1][1] if tags else None
+        baseline_mode = "legacy-local-tag-discovery"
+    else:
+        previous_tag = parse_explicit_published_tag(args.previous_published_tag, args.series_prefix)
+        baseline_mode = "explicit-published-release"
+
     integrations = collect_relevant_integrations(source_sha, previous_tag)
     change_count = len(integrations)
     threshold_ready = change_count >= args.minimum_changes
@@ -153,6 +182,7 @@ def main() -> int:
 
     print("QS3D V25 preview batch gate")
     print(f"Source SHA: {source_sha}")
+    print(f"Baseline mode: {baseline_mode}")
     print(f"Previous preview: {previous_tag or '(none)'}")
     print(f"Release-relevant main integrations: {change_count}/{args.minimum_changes}")
     if integrations:
@@ -176,6 +206,7 @@ def main() -> int:
 
     write_github_output({
         "previous_tag": previous_tag or "",
+        "baseline_mode": baseline_mode,
         "change_count": str(change_count),
         "minimum_changes": str(args.minimum_changes),
         "threshold_ready": str(threshold_ready).lower(),
