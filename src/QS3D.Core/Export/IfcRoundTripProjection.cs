@@ -129,6 +129,9 @@ namespace QS3D.Core.Export
                 items.Add(projection);
             }
 
+            if (knownCount.HasValue && items.Count != knownCount.Value)
+                throw new InvalidOperationException("IFC round-trip projection source Count does not match enumerated projection count.");
+
             var ifcGlobalIds = new HashSet<string>(StringComparer.Ordinal);
             var qs3dElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (var index = 0; index < items.Count; index++)
