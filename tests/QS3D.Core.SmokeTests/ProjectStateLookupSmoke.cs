@@ -21,7 +21,7 @@ namespace QS3D.Core.SmokeTests
             var family = new ProjectFamily(" FAMILY-1 ", "Family", ElementCategory.ArchitecturalWall);
             var floor = new FloorDefinition(" FLOOR-1 ", "Floor", 0d);
             var zone = new ZoneDefinition(" ZONE-1 ", "Zone");
-            var rule = new QuantityRule(" RULE-1 ", ElementCategory.ArchitecturalWall, "VolumeM3", "1", "v1");
+            var rule = new QuantityRule("RULE-1", ElementCategory.ArchitecturalWall, "VolumeM3", "1", "v1");
             project.Elements.Add(element);
             project.Families.Add(family);
             project.Floors.Add(floor);
