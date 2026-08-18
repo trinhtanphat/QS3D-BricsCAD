@@ -47,15 +47,16 @@ Before substantive work, read:
 2. `docs/MAIN-WRITE-AUTHORIZATION.md`;
 3. `docs/PRODUCT-BOUNDARY.md`;
 4. `CI_POLICY.md`;
-5. fetch/read the latest `origin/main` and record its exact SHA;
-6. `docs/AGENT-WORK-REGISTRATION.md`;
-7. `docs/AGENT-PROMPT-TO-RELEASE-CONTRACT.md`;
-8. `docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md`;
-9. relevant open Issues/PRs plus `ACTIVE`/`BLOCKED` historical claims under `docs/agent-work-claims/`;
-10. `docs/REMOTE-AGENT-SCOPE.md`;
-11. the newest current handoff/status docs relevant to the task;
-12. `docs/LOCAL-AGENT-INBOX.md` for LOCAL_ONLY work;
-13. the exact feature/runbook documents required by the assigned lane.
+5. `docs/AGENT-BRANCH-CI-ACTIONS-LOOKUP.md`;
+6. fetch/read the latest `origin/main` and record its exact SHA;
+7. `docs/AGENT-WORK-REGISTRATION.md`;
+8. `docs/AGENT-PROMPT-TO-RELEASE-CONTRACT.md`;
+9. `docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md`;
+10. relevant open Issues/PRs plus `ACTIVE`/`BLOCKED` historical claims under `docs/agent-work-claims/`;
+11. `docs/REMOTE-AGENT-SCOPE.md`;
+12. the newest current handoff/status docs relevant to the task;
+13. `docs/LOCAL-AGENT-INBOX.md` for LOCAL_ONLY work;
+14. the exact feature/runbook documents required by the assigned lane.
 
 Current source wins over stale historical handoffs for implementation truth. `docs/LOCAL-AGENT-INBOX.md` is the live LOCAL_ONLY priority index when older local documents disagree on status/priority.
 
@@ -283,11 +284,13 @@ Lack of local capability is a handoff condition, not a reason for repeated remot
 
 ## GitHub Actions / release
 
-Follow `CI_POLICY.md` strictly.
+Follow `CI_POLICY.md` strictly and use `docs/AGENT-BRANCH-CI-ACTIONS-LOOKUP.md` for mandatory CI self-observation and evidence recovery.
 
 - Workflows are manual-only by default.
 - The shared non-publishing branch/PR CI in `.github/workflows/ci.yml` is an owner-approved automatic validation exception.
 - For watched task branches, its branch-push run must be green on the exact final branch SHA before a new PR is opened.
+- AI agents/chat sessions must exhaust the repository-native CI recovery ladder before reporting an observability blocker or asking the owner for routine run/check information; an empty generic connector/status result is not proof that Actions evidence is absent.
+- When concrete run provenance is discovered, record enough exact run/branch/SHA/event/attempt/conclusion metadata on the canonical Issue/PR carrier for successor sessions to recover and independently verify it.
 - The sole owner-approved automatic publishing/dispatch exception is `.github/workflows/dispatch-v25-cloud-after-main-integration.yml` after an authorized integration-relevant `main` landing.
 - Normal task authorization does not authorize manual workflow dispatch/re-run/cancel.
 - Manual CI authorization does not imply `main` merge authorization.
