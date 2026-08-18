@@ -122,7 +122,8 @@ namespace QS3D.Core.Domain
             {
                 var bottomOffset = LevelOffset(element, BottomLevelOffsetKey);
                 var bottomElevation = AddFinite(floor.ElevationM, bottomOffset, element.Id + "/bottom level elevation");
-                if (!element.Properties.TryGetValue(TopLevelIdKey, out var topId) || string.IsNullOrWhiteSpace(topId)) continue;
+                var topId = Property(element, TopLevelIdKey);
+                if (topId.Length == 0) continue;
                 var top = FindRequired(project, topId);
                 var topOffset = LevelOffset(element, TopLevelOffsetKey);
                 var topElevation = AddFinite(top.ElevationM, topOffset, element.Id + "/top level elevation");
@@ -408,7 +409,21 @@ namespace QS3D.Core.Domain
 
         private static string Property(ProjectElement element, string key)
         {
-            return element.Properties.TryGetValue(key, out var raw) ? (raw ?? string.Empty).Trim() : string.Empty;
+            if (!element.Properties.TryGetValue(key, out var raw)) return string.Empty;
+            var value = raw ?? string.Empty;
+            if (!IsVerticalLevelReferenceKey(key)) return value.Trim();
+            if (value.Length == 0) return string.Empty;
+            if (string.IsNullOrWhiteSpace(value))
+                throw new InvalidOperationException(element.Id + "/" + key + " must be empty or a canonical level id.");
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException(element.Id + "/" + key + " must not contain leading/trailing whitespace.");
+            return value;
+        }
+
+        private static bool IsVerticalLevelReferenceKey(string key)
+        {
+            return string.Equals(key, BottomLevelIdKey, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(key, TopLevelIdKey, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void RequireCurrentFloorOwnership(ProjectState project, FloorDefinition floor)
