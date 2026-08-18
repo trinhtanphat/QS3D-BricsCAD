@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
         {
             RoundTripsCanonicalSnapshot();
             RejectsNonCanonicalIdentities();
+            RejectsNonCanonicalPayloadText();
             RejectsTamperedPayload();
             RejectsNonCanonicalBase64ValueText();
             RejectsNonCanonicalSealText();
@@ -50,6 +51,25 @@ namespace QS3D.Core.SmokeTests
             RequireThrows<ArgumentException>(
                 () => LicenseEntitlementSnapshot.Create("QS3D", "1", " machine ", "payload", instant),
                 "padded machine identity was silently normalized");
+        }
+
+        private static void RejectsNonCanonicalPayloadText()
+        {
+            var instant = new DateTime(2026, 8, 18, 12, 40, 0, DateTimeKind.Utc);
+            RequireThrows<ArgumentException>(
+                () => LicenseEntitlementSnapshot.Create("QS3D", "1", "machine", " payload", instant),
+                "leading-whitespace payload created a snapshot that cannot round-trip");
+            RequireThrows<ArgumentException>(
+                () => LicenseEntitlementSnapshot.Create("QS3D", "1", "machine", "payload ", instant),
+                "trailing-whitespace payload created a snapshot that cannot round-trip");
+            RequireThrows<ArgumentException>(
+                () => LicenseEntitlementSnapshot.Create("QS3D", "1", "machine", "   ", instant),
+                "blank payload created a snapshot that cannot round-trip");
+
+            var source = LicenseEntitlementSnapshot.Create("QS3D", "1", "machine", "signed payload text", instant);
+            var serialized = source.Serialize();
+            Require(LicenseEntitlementSnapshot.TryDeserialize(serialized, out var restored), "canonical payload with internal spaces did not round-trip");
+            Equal("signed payload text", restored.EntitlementPayload, "canonical payload text changed during round-trip");
         }
 
         private static void RejectsTamperedPayload()
