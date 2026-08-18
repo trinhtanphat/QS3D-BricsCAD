@@ -30,6 +30,17 @@ def main() -> int:
         )
         assert scan_tree(fixture) == [], "ordinary product prose must remain accepted"
 
+        # This one canonical path documents desired ChatGPT-account tasks. It
+        # intentionally names Control/Worker roles but is not repository
+        # scheduling machinery, so the exact path must remain accepted.
+        write(
+            fixture,
+            "docs/AGENT-SCHEDULE-WORKFLOW.md",
+            "QS3D Control task configures ChatGPT schedules for Worker 1 and Worker 4.\n",
+        )
+        assert scan_tree(fixture) == [], "canonical ChatGPT schedule reference must remain accepted"
+        (fixture / "docs" / "AGENT-SCHEDULE-WORKFLOW.md").unlink()
+
         # Path-only aliases must fail even when their content avoids historical
         # QS3D-CONTROL/QS3D-WORKER tokens.
         write(fixture, "docs/hourly-control.md", "Automation notes live here.\n")
