@@ -127,8 +127,8 @@ def main():
     # BricsCAD can show/reparent/resize/re-layout a PaletteSet after the old two-tick startup window.
     # Keep the bounded startup repair, but also keep loaded-lifetime recovery observations that are
     # gated by an actually blank/collapsed client. LayoutUpdated covers host reparent/layout cases
-    # where the final outer size and visibility do not change, while the cheap healthy-layout return
-    # prevents normal splitter activity from being continuously reset.
+    # where the final outer size and visibility do not change. Recovery is explicitly re-entry guarded
+    # so the invalidation it performs cannot schedule itself recursively.
     for token in (
         "WireBlt3dRuntimeViewportRecovery();",
         "UnwireBlt3dRuntimeViewportRecovery();",
@@ -139,9 +139,12 @@ def main():
         "WorkspaceOverflow.IsVisibleChanged -= OnBlt3dRuntimeViewportVisibilityChanged;",
         "WorkspaceOverflow.LayoutUpdated -= OnBlt3dRuntimeViewportLayoutUpdated;",
         "private void OnBlt3dRuntimeViewportLayoutUpdated(object? sender, EventArgs e)",
+        "_blt3dRuntimeViewportRecoveryApplying",
         "if (NeedsBlt3dRuntimeViewportRecovery())",
         "QueueBlt3dRuntimeViewportRecovery();",
         "if (!NeedsBlt3dRuntimeViewportRecovery())",
+        "_blt3dRuntimeViewportRecoveryApplying = true;",
+        "_blt3dRuntimeViewportRecoveryApplying = false;",
         "BindingOperations.IsDataBound(root, FrameworkElement.WidthProperty)",
         "root.ActualWidth <= 1d",
         "root.ActualHeight <= 1d",
@@ -155,6 +158,12 @@ def main():
     require_order(
         runtime_repair,
         "if (!NeedsBlt3dRuntimeViewportRecovery())",
+        "_blt3dRuntimeViewportRecoveryApplying = true;",
+        RUNTIME_REPAIR_REL,
+    )
+    require_order(
+        runtime_repair,
+        "_blt3dRuntimeViewportRecoveryApplying = true;",
         "ReassertBlt3dRuntimeLayout();",
         RUNTIME_REPAIR_REL,
     )
@@ -193,9 +202,9 @@ def main():
 
     print(
         "PASS: Workspace keeps the first-measure bootstrap, authoritative idle passes break the "
-        "ViewportWidth loop, and gated loaded-lifetime size/visibility/layout recovery repairs late "
-        "BricsCAD blanking without continuously resetting healthy splitter resizing; LOCAL-012 "
-        "remains the canonical licensed visual qualification scenario."
+        "ViewportWidth loop, and gated/re-entry-safe loaded-lifetime size/visibility/layout recovery "
+        "repairs late BricsCAD blanking without continuously resetting healthy splitter resizing; "
+        "LOCAL-012 remains the canonical licensed visual qualification scenario."
     )
     return 0
 
