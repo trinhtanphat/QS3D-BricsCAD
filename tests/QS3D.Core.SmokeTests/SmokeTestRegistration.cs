@@ -175,6 +175,7 @@ namespace QS3D.Core.SmokeTests
             QsdbActiveContextReferentialIntegritySmoke.Run();
             AuditTrailSnapshotSmoke.Run();
             DrawingUnitResolutionSmoke.Run();
+            DrawingUnitWriteAtomicitySmoke.Run();
             DrawingUnitMetadataDiagnosticSafetySmoke.Run();
             ProxyCaptureEligibilitySmoke.Run();
             MeasuredSolidQuantityPolicySmoke.Run();
