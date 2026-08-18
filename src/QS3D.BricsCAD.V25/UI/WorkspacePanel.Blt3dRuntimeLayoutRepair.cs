@@ -10,8 +10,8 @@ namespace QS3D.BricsCAD.V25.UI
     /// Repairs the owner-approved BLT3D five-zone WorkspacePanel after BricsCAD has finished
     /// applying its own palette/workspace layout. Several legacy presentation passes intentionally
     /// share Loaded; host docking can still resize/reparent the palette after their first idle pass.
-    /// The bounded startup settle remains, while a loaded-lifetime viewport guard repairs only a
-    /// measurably blank/collapsed client after a later BricsCAD show/reparent/resize event.
+    /// The bounded startup settle remains, while loaded-lifetime viewport/layout guards repair only
+    /// a measurably blank/collapsed client after a later BricsCAD show/reparent/resize/layout event.
     /// </summary>
     public partial class WorkspacePanel
     {
@@ -77,7 +77,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             // BricsCAD can apply the native dock layout after WPF ApplicationIdle. Keep the bounded
             // startup settle so the common case is repaired quickly. Later host changes are handled
-            // by the viewport guard below, but only when the client is actually blank/collapsed;
+            // by the viewport/layout guards below, but only when the client is actually blank/collapsed;
             // ordinary nonblank manual resizing therefore keeps the user's splitter geometry.
             var timer = new DispatcherTimer(DispatcherPriority.ApplicationIdle)
             {
@@ -109,6 +109,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             WorkspaceOverflow.SizeChanged += OnBlt3dRuntimeViewportSizeChanged;
             WorkspaceOverflow.IsVisibleChanged += OnBlt3dRuntimeViewportVisibilityChanged;
+            WorkspaceOverflow.LayoutUpdated += OnBlt3dRuntimeViewportLayoutUpdated;
             _blt3dRuntimeViewportEventsWired = true;
         }
 
@@ -119,6 +120,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             try { WorkspaceOverflow.SizeChanged -= OnBlt3dRuntimeViewportSizeChanged; } catch { }
             try { WorkspaceOverflow.IsVisibleChanged -= OnBlt3dRuntimeViewportVisibilityChanged; } catch { }
+            try { WorkspaceOverflow.LayoutUpdated -= OnBlt3dRuntimeViewportLayoutUpdated; } catch { }
             _blt3dRuntimeViewportEventsWired = false;
         }
 
@@ -137,6 +139,19 @@ namespace QS3D.BricsCAD.V25.UI
                 QueueBlt3dRuntimeViewportRecovery();
         }
 
+        private void OnBlt3dRuntimeViewportLayoutUpdated(object? sender, EventArgs e)
+        {
+            // A host reparent/layout pass can strand the plugin body without changing the outer
+            // ScrollViewer's final size or visibility. LayoutUpdated is therefore the last-resort
+            // observation surface, but it stays cheap and non-invasive: a normal healthy layout
+            // returns before queuing any dispatcher work or touching splitter geometry.
+            if (!IsLoaded || !WorkspaceOverflow.IsVisible || !HasUsableBlt3dRuntimeViewport())
+                return;
+
+            if (NeedsBlt3dRuntimeViewportRecovery())
+                QueueBlt3dRuntimeViewportRecovery();
+        }
+
         private void QueueBlt3dRuntimeViewportRecovery()
         {
             if (_blt3dRuntimeViewportRecoveryQueued || !IsLoaded)
@@ -151,9 +166,9 @@ namespace QS3D.BricsCAD.V25.UI
                     if (!IsLoaded || !WorkspaceOverflow.IsVisible || !HasUsableBlt3dRuntimeViewport())
                         return;
 
-                    // A normal resize must not continuously reset the user's splitter widths. Only
-                    // repair when a late host layout left the real client effectively blank or when
-                    // a legacy pass reintroduced the unsafe ViewportWidth binding/visibility state.
+                    // A normal resize/layout must not continuously reset the user's splitter widths.
+                    // Only repair when a late host layout left the real client effectively blank or
+                    // when a legacy pass reintroduced the unsafe ViewportWidth binding/visibility state.
                     if (!NeedsBlt3dRuntimeViewportRecovery())
                         return;
 
