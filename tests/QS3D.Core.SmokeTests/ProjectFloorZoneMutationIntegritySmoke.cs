@@ -8,7 +8,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             FloorActiveAliasIsCanonicalRepair();
-            ZoneActiveAliasIsCanonicalRepair();
+            ZonePaddedActiveIdFailsAtomically();
             FloorAssignmentCanonicalIdentityIsNoOp();
             ZoneAssignmentCanonicalIdentityIsNoOp();
             FloorNullTargetFailsAtomically();
@@ -33,22 +33,20 @@ namespace QS3D.Core.SmokeTests
             Equal(canonicalVersion, project.ChangeVersion);
         }
 
-        private static void ZoneActiveAliasIsCanonicalRepair()
+        private static void ZonePaddedActiveIdFailsAtomically()
         {
-            var project = new ProjectState("P-ZONE-ACTIVE-REPAIR", "Zone active repair");
+            var project = new ProjectState("P-ZONE-ACTIVE-STRICT", "Zone active strict");
             var zone = ProjectZoneService.Create(project, "Z-01", "Zone 01");
-            project.ActiveZoneId = "  z-01  ";
             var beforeVersion = project.ChangeVersion;
 
-            ProjectZoneService.SetActive(project, " Z-01 ");
+            ThrowsArgument(() => ProjectZoneService.SetActive(project, " Z-01 "));
 
-            Equal(beforeVersion + 1L, project.ChangeVersion);
+            Equal(beforeVersion, project.ChangeVersion);
             Equal(zone.Id, project.ActiveZoneId);
             Same(zone, project.FindZone(zone.Id));
 
-            var canonicalVersion = project.ChangeVersion;
             ProjectZoneService.SetActive(project, zone.Id);
-            Equal(canonicalVersion, project.ChangeVersion);
+            Equal(beforeVersion, project.ChangeVersion);
         }
 
         private static void FloorAssignmentCanonicalIdentityIsNoOp()
@@ -80,14 +78,14 @@ namespace QS3D.Core.SmokeTests
             var zone = ProjectZoneService.Create(project, "Z-01", "Zone 01");
             var element = new ProjectElement("E-ZONE", ElementCategory.Beam)
             {
-                ZoneId = "  z-01  "
+                ZoneId = "z-01"
             };
             element.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(element);
             var beforeVersion = project.ChangeVersion;
             var beforeUpdatedUtc = element.UpdatedUtc;
 
-            var changed = ProjectZoneService.Assign(project, " Z-01 ", new[] { element });
+            var changed = ProjectZoneService.Assign(project, "Z-01", new[] { element });
 
             Equal(0, changed);
             Equal(beforeVersion, project.ChangeVersion);
@@ -135,6 +133,20 @@ namespace QS3D.Core.SmokeTests
             Equal(string.Empty, element.ZoneId);
             Equal(ElementDirtyFlags.None, element.Dirty);
             Equal(beforeUpdatedUtc, element.UpdatedUtc);
+        }
+
+        private static void ThrowsArgument(Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (ArgumentException)
+            {
+                return;
+            }
+
+            throw new Exception("Expected ArgumentException for a noncanonical Zone semantic identity.");
         }
 
         private static void ThrowsInvalid(Action action, string expectedMessage)
