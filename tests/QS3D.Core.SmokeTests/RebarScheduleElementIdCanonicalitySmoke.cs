@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             DirectBuilderRejectsBlankIdentity();
             DirectBuilderRejectsSurroundingWhitespace();
             DirectBuilderRejectsCommonControlCharactersWithoutEchoingRawIdentity();
+            ProjectBuilderRejectsBlankIdentityBeforeRowEmission();
             ProjectBuilderRejectsNoncanonicalIdentityBeforeRowEmission();
             ProjectBuilderRejectsTrailingWhitespaceBeforeRowEmission();
             ProjectBuilderRejectsCommonControlIdentitiesWithoutEchoingRawIdentity();
@@ -50,6 +51,18 @@ namespace QS3D.Core.SmokeTests
             RejectDirect("E\rX");
             RejectDirect("E\nX");
             RejectDirect("E\u007FX");
+        }
+
+        private static void ProjectBuilderRejectsBlankIdentityBeforeRowEmission()
+        {
+            var invalidIds = new[] { string.Empty, "   " };
+            for (var index = 0; index < invalidIds.Length; index++)
+            {
+                var project = ProjectWithMalformedRebarIdentity(invalidIds[index], "rebar-schedule-blank-id-project-" + index);
+                var error = Capture<InvalidOperationException>(() => ProjectRebarScheduleBuilder.Build(project));
+                Require(error.Message.IndexOf("blank id", StringComparison.OrdinalIgnoreCase) >= 0,
+                    "Project schedule blank identity did not preserve the fail-closed blank-id diagnostic.");
+            }
         }
 
         private static void ProjectBuilderRejectsNoncanonicalIdentityBeforeRowEmission()
