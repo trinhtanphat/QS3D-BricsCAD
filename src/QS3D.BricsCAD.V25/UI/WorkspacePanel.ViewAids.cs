@@ -215,7 +215,7 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     next = string.IsNullOrWhiteSpace(restoreColor)
                         ? DefaultDarkBackgroundColor
-                        : restoreColor;
+                        : restoreColor!;
                     restoreColor = null;
                 }
                 else
