@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             ReportsEachStaleOutputKindWithoutMutation();
             ReplacedHandlesResolveWarningsWithoutMutation();
+            ReportsNonCanonicalStaleStateTokensWithoutMutation();
         }
 
         private static void ReportsEachStaleOutputKindWithoutMutation()
@@ -81,6 +82,64 @@ namespace QS3D.Core.SmokeTests
             False(element.Properties.ContainsKey(ProjectElement.GeneratedSolidStateKey));
             False(element.Properties.ContainsKey(ProjectElement.GeneratedRebarStateKey));
             False(element.Properties.ContainsKey(ProjectElement.GeneratedShapeRebarStateKey));
+        }
+
+        private static void ReportsNonCanonicalStaleStateTokensWithoutMutation()
+        {
+            var project = new ProjectState("stale-health-canonicality", "Stale Health Canonicality");
+            var canonical = AddSolidState(project, "E3", "stale", "A1", true);
+            var uppercase = AddSolidState(project, "E4", "STALE", "A2", true);
+            var mixedCase = AddSolidState(project, "E5", "StAlE", "A3", true);
+            var padded = AddSolidState(project, "E6", " stale ", "A4", true);
+            var missingSnapshot = AddSolidState(project, "E7", "STALE", "A5", false);
+
+            var canonicalBefore = Snapshot(canonical);
+            var uppercaseBefore = Snapshot(uppercase);
+            var mixedCaseBefore = Snapshot(mixedCase);
+            var paddedBefore = Snapshot(padded);
+            var missingBefore = Snapshot(missingSnapshot);
+            var service = new GeneratedGeometryStaleHealthService();
+
+            var first = service.Inspect(project);
+            var second = service.Inspect(project);
+
+            False(first.Any(x => x.Code == "GENERATED_STALE_STATE_NON_CANONICAL" && x.ElementId == "E3"));
+            True(first.Any(x => x.Code == "GENERATED_SOLID_STALE" && x.ElementId == "E3"));
+
+            True(first.Any(x => x.Code == "GENERATED_STALE_STATE_NON_CANONICAL" && x.ElementId == "E4"));
+            True(first.Any(x => x.Code == "GENERATED_SOLID_STALE" && x.ElementId == "E4"));
+            True(first.Any(x => x.Code == "GENERATED_STALE_STATE_NON_CANONICAL" && x.ElementId == "E5"));
+            True(first.Any(x => x.Code == "GENERATED_SOLID_STALE" && x.ElementId == "E5"));
+
+            True(first.Any(x => x.Code == "GENERATED_STALE_STATE_NON_CANONICAL" && x.ElementId == "E6"));
+            False(first.Any(x => x.Code == "GENERATED_SOLID_STALE" && x.ElementId == "E6"));
+
+            True(first.Any(x => x.Code == "GENERATED_STALE_STATE_NON_CANONICAL" && x.ElementId == "E7"));
+            True(first.Any(x => x.Code == "GENERATED_STALE_METADATA_INVALID" && x.ElementId == "E7"));
+            False(first.Any(x => x.Code == "GENERATED_SOLID_STALE" && x.ElementId == "E7"));
+
+            Equal(first.Count, second.Count);
+            Equal(canonicalBefore, Snapshot(canonical));
+            Equal(uppercaseBefore, Snapshot(uppercase));
+            Equal(mixedCaseBefore, Snapshot(mixedCase));
+            Equal(paddedBefore, Snapshot(padded));
+            Equal(missingBefore, Snapshot(missingSnapshot));
+        }
+
+        private static ProjectElement AddSolidState(
+            ProjectState project,
+            string elementId,
+            string state,
+            string handle,
+            bool includeSnapshot)
+        {
+            var element = new ProjectElement(elementId, ElementCategory.Beam, string.Empty, string.Empty, string.Empty);
+            element.Properties["GeneratedSolidHandle"] = handle;
+            element.Properties[ProjectElement.GeneratedSolidStateKey] = state;
+            if (includeSnapshot)
+                element.Properties[ProjectElement.GeneratedSolidStaleSnapshotKey] = handle;
+            project.Elements.Add(element);
+            return element;
         }
 
         private static string Snapshot(ProjectElement element)
