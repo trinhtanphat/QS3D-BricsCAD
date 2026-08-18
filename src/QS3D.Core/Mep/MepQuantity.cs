@@ -98,7 +98,8 @@ namespace QS3D.Core.Mep
         public IReadOnlyList<MepQuantityGroup> Aggregate(IEnumerable<MepElement> elements)
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
-            if (TryGetKnownCount(elements, out var knownCount) && knownCount > MaxElements)
+            var hasKnownCount = TryGetKnownCount(elements, out var knownCount);
+            if (hasKnownCount && knownCount > MaxElements)
                 ThrowTooManyElements();
 
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -122,6 +123,9 @@ namespace QS3D.Core.Mep
                 builder.Add(element);
                 index++;
             }
+
+            if (hasKnownCount && index != knownCount)
+                throw new InvalidOperationException("MEP takeoff source known count does not match the number of elements traversed.");
 
             var result = new List<MepQuantityGroup>(builders.Count);
             foreach (var builder in builders.Values)

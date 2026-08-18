@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using QS3D.Core.Mep;
 
@@ -13,6 +14,8 @@ namespace QS3D.Core.SmokeTests
             ExplicitPriority();
             AmbiguityFailsClosed();
             UnmatchedFailsClosed();
+            QuantityKnownCountTraversalMismatchFailsClosed();
+            QuantityKnownCountPreflightPrecedence();
             MepTbqProjectionSmoke.Run();
         }
 
@@ -73,6 +76,90 @@ namespace QS3D.Core.SmokeTests
             True(result.Category == null, "unmatched category must remain empty");
         }
 
+        private static void QuantityKnownCountTraversalMismatchFailsClosed()
+        {
+            var service = new MepQuantityService();
+            InvalidOperationContains(
+                () => service.Aggregate(new ReportedCountCollection(
+                    2,
+                    new[] { QuantityElement("mep-count-short") })),
+                "known count",
+                "MEP quantity Count 2 -> yield 1");
+
+            InvalidOperationContains(
+                () => service.Aggregate(new ReportedCountCollection(
+                    1,
+                    new[] { QuantityElement("mep-count-long-1"), QuantityElement("mep-count-long-2") })),
+                "known count",
+                "MEP quantity Count 1 -> yield 2");
+        }
+
+        private static void QuantityKnownCountPreflightPrecedence()
+        {
+            var service = new MepQuantityService();
+
+            var negative = new ReportedCountCollection(-1, new[] { QuantityElement("mep-negative") });
+            InvalidOperationContains(
+                () => service.Aggregate(negative),
+                "negative known count",
+                "negative MEP known Count");
+            Equal(0, negative.EnumerationStarts, "negative known Count must fail before enumeration");
+
+            var oversized = new ReportedCountCollection(10001, new[] { QuantityElement("mep-oversized") });
+            InvalidOperationContains(
+                () => service.Aggregate(oversized),
+                "at most 10000",
+                "oversized MEP known Count");
+            Equal(0, oversized.EnumerationStarts, "oversized known Count must fail before enumeration");
+
+            var conflicting = new ConflictingCountCollection(
+                1,
+                2,
+                new[] { QuantityElement("mep-conflicting") });
+            InvalidOperationContains(
+                () => service.Aggregate(conflicting),
+                "conflicting known counts",
+                "conflicting MEP known Counts");
+            Equal(0, conflicting.EnumerationStarts, "conflicting known Counts must fail before enumeration");
+
+            var boundaryItems = new List<MepElement>(10001);
+            for (var i = 0; i < 10001; i++)
+                boundaryItems.Add(QuantityElement("mep-boundary-" + i));
+            InvalidOperationContains(
+                () => service.Aggregate(new ReportedCountCollection(10000, boundaryItems)),
+                "at most 10000",
+                "MEP traversal element 10001 must retain oversize precedence");
+        }
+
+        private static MepElement QuantityElement(string id)
+        {
+            return new MepElement(
+                id,
+                MepElementKind.Pipe,
+                "CHW",
+                "DN25",
+                "L1",
+                count: 1,
+                lengthM: 1d);
+        }
+
+        private static void InvalidOperationContains(Action action, string expectedText, string label)
+        {
+            try
+            {
+                action();
+            }
+            catch (InvalidOperationException ex)
+            {
+                True(
+                    ex.Message.IndexOf(expectedText, StringComparison.OrdinalIgnoreCase) >= 0,
+                    label + ": unexpected error message: " + ex.Message);
+                return;
+            }
+
+            throw new InvalidOperationException(label + ": expected InvalidOperationException.");
+        }
+
         private static void Equal<T>(T expected, T actual, string label)
         {
             if (!EqualityComparer<T>.Default.Equals(expected, actual))
@@ -82,6 +169,70 @@ namespace QS3D.Core.SmokeTests
         private static void True(bool value, string label)
         {
             if (!value) throw new InvalidOperationException(label + ".");
+        }
+
+        private sealed class ReportedCountCollection : ICollection<MepElement>
+        {
+            private readonly int _reportedCount;
+            private readonly IReadOnlyList<MepElement> _items;
+
+            internal ReportedCountCollection(int reportedCount, IReadOnlyList<MepElement> items)
+            {
+                _reportedCount = reportedCount;
+                _items = items;
+            }
+
+            public int Count => _reportedCount;
+            public bool IsReadOnly => true;
+            internal int EnumerationStarts { get; private set; }
+
+            public IEnumerator<MepElement> GetEnumerator()
+            {
+                EnumerationStarts++;
+                return _items.GetEnumerator();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void Add(MepElement item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(MepElement item) => throw new NotSupportedException();
+            public void CopyTo(MepElement[] array, int arrayIndex) => throw new NotSupportedException();
+            public bool Remove(MepElement item) => throw new NotSupportedException();
+        }
+
+        private sealed class ConflictingCountCollection : ICollection<MepElement>, IReadOnlyCollection<MepElement>
+        {
+            private readonly int _collectionCount;
+            private readonly int _readOnlyCount;
+            private readonly IReadOnlyList<MepElement> _items;
+
+            internal ConflictingCountCollection(
+                int collectionCount,
+                int readOnlyCount,
+                IReadOnlyList<MepElement> items)
+            {
+                _collectionCount = collectionCount;
+                _readOnlyCount = readOnlyCount;
+                _items = items;
+            }
+
+            int ICollection<MepElement>.Count => _collectionCount;
+            int IReadOnlyCollection<MepElement>.Count => _readOnlyCount;
+            public bool IsReadOnly => true;
+            internal int EnumerationStarts { get; private set; }
+
+            public IEnumerator<MepElement> GetEnumerator()
+            {
+                EnumerationStarts++;
+                return _items.GetEnumerator();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void Add(MepElement item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(MepElement item) => throw new NotSupportedException();
+            public void CopyTo(MepElement[] array, int arrayIndex) => throw new NotSupportedException();
+            public bool Remove(MepElement item) => throw new NotSupportedException();
         }
     }
 }
