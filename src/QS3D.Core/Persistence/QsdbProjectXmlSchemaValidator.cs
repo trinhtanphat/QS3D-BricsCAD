@@ -284,8 +284,8 @@ namespace QS3D.Core.Persistence
             if (!Enum.TryParse(token, true, out ElementCategory category) || !Enum.IsDefined(typeof(ElementCategory), category))
                 throw new InvalidDataException("QSDB " + owner + " is invalid: " + token + ".");
             var name = Enum.GetName(typeof(ElementCategory), category);
-            if (name == null || !string.Equals(token, name, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("QSDB " + owner + " must use a named ElementCategory token.");
+            if (name == null || !string.Equals(token, name, StringComparison.Ordinal))
+                throw new InvalidDataException("QSDB " + owner + " must use the canonical named ElementCategory token.");
         }
 
         private static void ValidateRequiredCanonicalAttribute(XElement element, string attributeName, string owner)
