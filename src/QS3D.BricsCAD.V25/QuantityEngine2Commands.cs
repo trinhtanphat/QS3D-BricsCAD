@@ -27,6 +27,9 @@ namespace QS3D.BricsCAD.V25
                     .RegenerateDirty(project);
                 var rows = ProjectQuantityReportBuilder.Group(project);
                 var summary = QuantityEngine2Summary.Build(rows, regenerated);
+                if (summary.ElementCount == 0)
+                    throw new InvalidOperationException(
+                        "Chưa có cấu kiện hợp lệ để tính khối lượng. Hãy capture/tạo cấu kiện QS3D rồi chạy lại Engine2.");
 
                 try
                 {
