@@ -13,7 +13,10 @@ namespace QS3D.Core.SmokeTests
             RejectsNonCanonicalExistingActionWithoutMutation();
             RejectsNonUtcExistingTimestampWithoutMutation();
             RejectsMalformedHistoryOnClearWithoutMutation();
+            RejectsNonCanonicalIdentityOnRecordWithoutMutation();
+            RejectsNonCanonicalStoredIdentityWithoutMutation();
             AcceptsCanonicalHistoryAndNormalizesNewAction();
+            AllowsFreeFormDetailAndEmptyIdentity();
             ClearsCanonicalHistoryAndTouchesOnce();
             EmptyClearIsNoOp();
         }
@@ -71,6 +74,59 @@ namespace QS3D.Core.SmokeTests
             }, "XML-invalid detail");
         }
 
+        private static void RejectsNonCanonicalIdentityOnRecordWithoutMutation()
+        {
+            AssertRecordIdentityRejected(" E1 ", "corr", "padded element id");
+            AssertRecordIdentityRejected("E1\tchild", "corr", "control element id");
+            AssertRecordIdentityRejected("E1", " corr ", "padded correlation id");
+            AssertRecordIdentityRejected("E1", "corr\nchild", "control correlation id");
+        }
+
+        private static void AssertRecordIdentityRejected(string elementId, string correlationId, string label)
+        {
+            var project = new ProjectState("AUDIT-IDENTITY-" + label, "Audit identity integrity");
+            var beforeVersion = project.ChangeVersion;
+
+            Throws<ArgumentException>(() => AuditTrail.ForProject(project).Record("new.action", elementId, "detail", "actor", correlationId));
+            Equal(beforeVersion, project.ChangeVersion, label + " record version");
+            Equal(0, project.AuditEvents.Count, label + " record count");
+        }
+
+        private static void RejectsNonCanonicalStoredIdentityWithoutMutation()
+        {
+            AssertStoredIdentityRejected(new AuditEvent
+            {
+                Utc = new DateTime(2026, 8, 12, 0, 0, 0, DateTimeKind.Utc),
+                Action = "existing.action",
+                ElementId = " E1 "
+            }, "padded stored element id");
+            AssertStoredIdentityRejected(new AuditEvent
+            {
+                Utc = new DateTime(2026, 8, 12, 0, 0, 0, DateTimeKind.Utc),
+                Action = "existing.action",
+                CorrelationId = "corr\rchild"
+            }, "control stored correlation id");
+        }
+
+        private static void AssertStoredIdentityRejected(AuditEvent item, string label)
+        {
+            var project = new ProjectState("AUDIT-STORED-" + label, "Audit stored identity integrity");
+            project.AuditEvents.Add(item);
+            var beforeVersion = project.ChangeVersion;
+
+            Throws<InvalidOperationException>(() => _ = AuditTrail.ForProject(project).Events);
+            Equal(beforeVersion, project.ChangeVersion, label + " read version");
+            Equal(1, project.AuditEvents.Count, label + " read count");
+
+            Throws<InvalidOperationException>(() => AuditTrail.ForProject(project).Record("new.action", "E2", "detail", correlationId: "corr"));
+            Equal(beforeVersion, project.ChangeVersion, label + " record version");
+            Equal(1, project.AuditEvents.Count, label + " record count");
+
+            Throws<InvalidOperationException>(() => AuditTrail.ForProject(project).Clear());
+            Equal(beforeVersion, project.ChangeVersion, label + " clear version");
+            Equal(1, project.AuditEvents.Count, label + " clear count");
+        }
+
         private static void AssertClearRejected(AuditEvent? item, string label)
         {
             var project = new ProjectState("AUDIT-CLEAR-" + label, "Audit clear integrity");
@@ -95,12 +151,25 @@ namespace QS3D.Core.SmokeTests
             });
             var beforeVersion = project.ChangeVersion;
 
-            AuditTrail.ForProject(project).Record(" new.action ", "E1", "detail");
+            AuditTrail.ForProject(project).Record(" new.action ", "E1", "detail", correlationId: "corr-1");
 
             Equal(beforeVersion + 1L, project.ChangeVersion, "canonical history version increment");
             Equal(2, project.AuditEvents.Count, "canonical history count");
             Equal("new.action", project.AuditEvents[1].Action, "new action normalization");
+            Equal("E1", project.AuditEvents[1].ElementId, "canonical element id preservation");
+            Equal("corr-1", project.AuditEvents[1].CorrelationId, "canonical correlation id preservation");
             Equal(DateTimeKind.Utc, project.AuditEvents[1].Utc.Kind, "new audit UTC kind");
+        }
+
+        private static void AllowsFreeFormDetailAndEmptyIdentity()
+        {
+            var project = new ProjectState("AUDIT-FREEFORM", "Audit free-form detail");
+            AuditTrail.ForProject(project).Record("new.action", string.Empty, "line one\nline two\tcolumn", "agent", string.Empty);
+
+            Equal(1, project.AuditEvents.Count, "free-form detail count");
+            Equal(string.Empty, project.AuditEvents[0].ElementId, "empty element id");
+            Equal(string.Empty, project.AuditEvents[0].CorrelationId, "empty correlation id");
+            Equal("line one\nline two\tcolumn", project.AuditEvents[0].Detail, "free-form detail preservation");
         }
 
         private static void ClearsCanonicalHistoryAndTouchesOnce()
