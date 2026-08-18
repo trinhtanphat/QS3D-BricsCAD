@@ -35,6 +35,8 @@ namespace QS3D.Core.SmokeTests
                 CreateLine(1));
 
             AssertTraversalMismatch(() => FrozenEstimateProjection.Create(source));
+            Assert(source.CountReads == 1,
+                "Count 2 -> traversal 1 must snapshot the advertised Count exactly once.");
             Assert(source.GetEnumeratorCalls == 1,
                 "Count 2 -> traversal 1 must consume exactly one traversal before failing closed.");
         }
@@ -47,6 +49,8 @@ namespace QS3D.Core.SmokeTests
                 CreateLine(2));
 
             AssertTraversalMismatch(() => FrozenEstimateProjection.Create(source));
+            Assert(source.CountReads == 1,
+                "Count 1 -> traversal 2 must snapshot the advertised Count exactly once.");
             Assert(source.GetEnumeratorCalls == 1,
                 "Count 1 -> traversal 2 must consume exactly one traversal before failing closed.");
         }
@@ -56,6 +60,7 @@ namespace QS3D.Core.SmokeTests
             var source = new DishonestReadOnlyCollection<EstimateLine>(1, CreateLine(1));
             var projection = FrozenEstimateProjection.Create(source);
 
+            Assert(source.CountReads == 1, "Honest counted source must snapshot Count exactly once.");
             Assert(source.GetEnumeratorCalls == 1, "Honest counted source must be traversed once.");
             Assert(projection.Rows.Count == 1, "Honest counted source lost its estimate row.");
             Assert(string.Equals(projection.Rows[0].EstimateLineId, "frozen-traversal-line-1", StringComparison.Ordinal),
@@ -147,7 +152,16 @@ namespace QS3D.Core.SmokeTests
                 _items = items;
             }
 
-            public int Count => _reportedCount;
+            public int Count
+            {
+                get
+                {
+                    CountReads++;
+                    return _reportedCount;
+                }
+            }
+
+            internal int CountReads { get; private set; }
             internal int GetEnumeratorCalls { get; private set; }
 
             public IEnumerator<T> GetEnumerator()
