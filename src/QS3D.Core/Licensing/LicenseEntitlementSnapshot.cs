@@ -111,7 +111,10 @@ namespace QS3D.Core.Licensing
             value = default(DateTime);
             if (!line.StartsWith(Prefix, StringComparison.Ordinal))
                 return false;
-            if (!long.TryParse(line.Substring(Prefix.Length), NumberStyles.None, CultureInfo.InvariantCulture, out var ticks))
+            var text = line.Substring(Prefix.Length);
+            if (!long.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var ticks))
+                return false;
+            if (!string.Equals(text, ticks.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
                 return false;
             if (ticks < DateTime.MinValue.Ticks || ticks > DateTime.MaxValue.Ticks)
                 return false;
