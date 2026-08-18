@@ -50,13 +50,16 @@ if CORE.is_file():
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
     for token in (
+        "CodecRejectsPaddedTargetsWithoutMutation();",
+        'PhysicalOpeningCutTargetStateCodec.Normalize(new[] { "O1", " o2 " })',
+        'PhysicalOpeningCutTargetStateCodec.Write(host, new[] { "O1", " o2 " })',
         "CodecRejectsDuplicateTargetsWithoutMutation();",
-        'PhysicalOpeningCutTargetStateCodec.Normalize(new[] { "O1", " o1 " })',
-        'PhysicalOpeningCutTargetStateCodec.Write(host, new[] { "O1", " o1 " })',
+        'PhysicalOpeningCutTargetStateCodec.Normalize(new[] { "O1", "o1" })',
+        'PhysicalOpeningCutTargetStateCodec.Write(host, new[] { "O1", "o1" })',
         'Equal("sentinel", host.Properties[PhysicalOpeningCutTargetStateCodec.OpeningIdsKey]);',
     ):
         if token not in text:
-            errors.append("physical opening duplicate-target regression smoke missing: " + token)
+            errors.append("physical opening canonical-target regression smoke missing: " + token)
 
 print("QS3D physical opening live target-state preflight")
 if errors:
@@ -64,4 +67,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: straight and curved physical-cut live fingerprints use the persisted exact baked-opening target-set, and duplicate target identities fail closed before metadata mutation.")
+print("PASS: straight and curved physical-cut live fingerprints use the persisted exact baked-opening target-set; padded and duplicate target identities fail closed before metadata mutation.")

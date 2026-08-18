@@ -86,7 +86,8 @@ namespace QS3D.Core.SmokeTests
             project.Zones.Add(new ZoneDefinition("z1", "Zone 2"));
 
             Throws<InvalidOperationException>(() => ProjectFloorService.SetActive(project, " fl1 "));
-            Throws<InvalidOperationException>(() => ProjectZoneService.SetActive(project, " z1 "));
+            Throws<ArgumentException>(() => ProjectZoneService.SetActive(project, " z1 "));
+            Throws<InvalidOperationException>(() => ProjectZoneService.SetActive(project, "z1"));
             if (!string.IsNullOrEmpty(project.ActiveFloorId) || !string.IsNullOrEmpty(project.ActiveZoneId))
                 throw new Exception("Duplicate Floor/Zone mutation lookup must fail before changing active catalog state.");
         }
