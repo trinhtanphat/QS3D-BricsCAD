@@ -42,7 +42,7 @@ namespace QS3D.Core.Persistence
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
-            RejectMalformedKnownCounts(elementIds);
+            var expectedKnownCount = RejectMalformedKnownCounts(elementIds);
 
             var elements = new Dictionary<string, ElementPersistenceState>(StringComparer.OrdinalIgnoreCase);
             var observed = 0;
@@ -63,6 +63,9 @@ namespace QS3D.Core.Persistence
                     ?? throw new InvalidOperationException("Persistence checkpoint element is missing: " + id + ".");
                 elements.Add(id, new ElementPersistenceState(element.Dirty, element.UpdatedUtc));
             }
+
+            if (expectedKnownCount.HasValue && observed != expectedKnownCount.Value)
+                throw new InvalidOperationException("Persistence checkpoint known element count does not match enumerated element count.");
 
             return new ProjectPersistenceCheckpoint(
                 project.ProjectId,
@@ -109,7 +112,7 @@ namespace QS3D.Core.Persistence
             project.RestorePersistenceState(_projectUpdatedUtc, _projectChangeVersion);
         }
 
-        private static void RejectMalformedKnownCounts(IEnumerable<string> elementIds)
+        private static int? RejectMalformedKnownCounts(IEnumerable<string> elementIds)
         {
             var knownCounts = new List<int>(3);
             if (elementIds is ICollection<string> collection)
@@ -130,6 +133,8 @@ namespace QS3D.Core.Persistence
 
             if (knownCounts.Count > 1 && knownCounts.Any(count => count != knownCounts[0]))
                 throw new InvalidOperationException("Persistence checkpoint collection reported conflicting element counts.");
+
+            return knownCounts.Count == 0 ? (int?)null : knownCounts[0];
         }
 
         private sealed class ElementPersistenceState
