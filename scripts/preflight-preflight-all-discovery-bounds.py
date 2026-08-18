@@ -61,36 +61,49 @@ def test_count_boundary_plus_one_fails_before_inspection():
 
 
 def test_discovery_stops_at_boundary_plus_one():
-    class CountingScripts:
+    class FakeDirEntry:
+        def __init__(self, path):
+            self.path = str(path)
+            self.name = path.name
+
+    class CountingScandir:
         def __init__(self):
             self.emitted = 0
 
-        def glob(self, pattern):
-            assert pattern == "preflight-*.py"
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def __iter__(self):
             for index in range(module.MAX_FEATURE_GATES + 2):
                 self.emitted += 1
                 if self.emitted > module.MAX_FEATURE_GATES + 1:
-                    raise AssertionError("discover consumed candidates beyond the rejection boundary")
-                yield Path("/virtual/scripts/preflight-%04d.py" % index)
+                    raise AssertionError("discover consumed directory entries beyond the rejection boundary")
+                yield FakeDirEntry(Path("/virtual/scripts/preflight-%04d.py" % index))
 
     original_root = module.ROOT
     original_scripts = module.SCRIPTS
     original_self = module.SELF
-    fake_scripts = CountingScripts()
+    original_scandir = module.os.scandir
+    fake_scandir = CountingScandir()
     module.ROOT = Path("/virtual")
-    module.SCRIPTS = fake_scripts
+    module.SCRIPTS = Path("/virtual/scripts")
     module.SELF = Path("/virtual/scripts/preflight-all.py")
+    module.os.scandir = lambda path: fake_scandir
     try:
         expect_runtime_error(
             module.discover,
             "discovery count %d exceeds maximum %d" % (module.MAX_FEATURE_GATES + 1, module.MAX_FEATURE_GATES),
         )
     finally:
+        module.os.scandir = original_scandir
         module.ROOT = original_root
         module.SCRIPTS = original_scripts
         module.SELF = original_self
 
-    assert fake_scripts.emitted == module.MAX_FEATURE_GATES + 1
+    assert fake_scandir.emitted == module.MAX_FEATURE_GATES + 1
 
 
 def test_source_size_exact_bound_and_boundary_plus_one():
