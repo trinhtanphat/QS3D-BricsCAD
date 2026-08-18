@@ -21,12 +21,15 @@ namespace QS3D.Core.SmokeTests
             var family = new ProjectFamily(" FAMILY-1 ", "Family", ElementCategory.ArchitecturalWall);
             var floor = new FloorDefinition(" FLOOR-1 ", "Floor", 0d);
             var zone = new ZoneDefinition(" ZONE-1 ", "Zone");
-            var rule = new QuantityRule(" RULE-1 ", ElementCategory.ArchitecturalWall, "VolumeM3", "1", "v1");
+            var rule = new QuantityRule("RULE-1", ElementCategory.ArchitecturalWall, "VolumeM3", "1", "v1");
             project.Elements.Add(element);
             project.Families.Add(family);
             project.Floors.Add(floor);
             project.Zones.Add(zone);
             project.QuantityRules.Add(rule);
+
+            if (!string.Equals(rule.Id, "RULE-1", StringComparison.Ordinal))
+                throw new Exception("Stored QuantityRule identity must remain canonical; only lookup-query whitespace/case is normalized.");
 
             Same(element, project.FindElement(" element-1 "));
             Same(family, project.FindFamily(" family-1 "));

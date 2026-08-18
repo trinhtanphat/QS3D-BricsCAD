@@ -76,7 +76,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     ConfigPanelSourceId,
                     "Cấu hình",
                     new HomeButtonSpec("QS3D_HOME_SETTINGS", "Cài đặt", () => new ProjectToolsCommands().ShowProjectTools(), RibbonIconKind.Settings),
-                    new HomeButtonSpec("QS3D_HOME_SYSTEM_OBJECTS", "Đối tượng\nhệ thống", () => new FamilyManagerCommands().ShowFamilyManager(), RibbonIconKind.Qs3dLogo));
+                    new HomeButtonSpec("QS3D_HOME_SYSTEM_OBJECTS", "Đối tượng\nhệ thống", () => new FamilyManagerCommands().ShowFamilyManager(), RibbonIconKind.Objects));
 
                 _initialized = true;
                 return true;
@@ -118,9 +118,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
             SetProperty(button, "CommandHandler", new DirectActionHandler(spec.Action));
             SetEnumProperty(button, "Size", "Large");
 
-            // The system-object action is QS3D-owned UI, so render the repository-approved cube
-            // mark rather than the generic semantic glyph. BricsCAD's host/application icon is
-            // never touched by this augmenter.
+            // Brand rendering remains available only for explicit product-identity specs.
+            // Functional actions such as System Objects must select a semantic icon instead.
             var smallImage = spec.Icon == RibbonIconKind.Qs3dLogo
                 ? Qs3dBrandIconFactory.Create(16)
                 : RibbonIconFactory.Create(spec.Icon, 16);
