@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 
 namespace QS3D.Core.Rebar
@@ -69,13 +70,14 @@ namespace QS3D.Core.Rebar
             DiameterMm = RebarMath.Positive(diameterMm, nameof(diameterMm));
             StockLengthM = RebarMath.Positive(stockLengthM, nameof(stockLengthM));
             if (requiredCuts == null) throw new ArgumentNullException(nameof(requiredCuts));
-            if (requiredCuts.Count == 0)
+            var knownRequiredCutCount = ValidateKnownRequiredCutCount(requiredCuts, nameof(requiredCuts));
+            if (knownRequiredCutCount == 0)
                 throw new ArgumentException("At least one required cut is required.", nameof(requiredCuts));
-            if (requiredCuts.Count > MaxCutRequirements)
+            if (knownRequiredCutCount > MaxCutRequirements)
                 throw new ArgumentOutOfRangeException(nameof(requiredCuts), "Rebar stock demand exceeds the supported cut-requirement bound.");
             if (allowancePolicy == null) throw new ArgumentNullException(nameof(allowancePolicy));
 
-            var cuts = new List<RebarCutRequirement>(requiredCuts.Count);
+            var cuts = new List<RebarCutRequirement>(knownRequiredCutCount);
             var identities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             long cutCount = 0L;
             var requiredLength = new CompensatedFiniteSum();
@@ -83,6 +85,8 @@ namespace QS3D.Core.Rebar
 
             foreach (var cut in requiredCuts)
             {
+                if (cuts.Count >= MaxCutRequirements)
+                    throw new ArgumentOutOfRangeException(nameof(requiredCuts), "Rebar stock demand exceeds the supported cut-requirement bound.");
                 if (cut == null)
                     throw new ArgumentException("Required cuts must not contain null entries.", nameof(requiredCuts));
                 if (!identities.Add(cut.CutId))
@@ -98,6 +102,9 @@ namespace QS3D.Core.Rebar
                     RebarMath.Multiply(allowancePolicy.AllowancePerRequiredCutM, cut.Quantity, "required rebar cut allowance"),
                     "total required rebar cut allowance");
             }
+
+            if (cuts.Count == 0)
+                throw new ArgumentException("At least one required cut is required.", nameof(requiredCuts));
 
             var requiredLengthM = requiredLength.Value("total required rebar cut length");
             var allowanceLengthM = allowanceLength.Value("total required rebar cut allowance");
@@ -122,6 +129,37 @@ namespace QS3D.Core.Rebar
         public double RequiredCutLengthM { get; }
         public double AllowanceLengthM { get; }
         public double DemandLengthBeforeKerfM { get; }
+
+        private static int ValidateKnownRequiredCutCount(IReadOnlyList<RebarCutRequirement> requiredCuts, string parameterName)
+        {
+            var knownCounts = new List<int>(3)
+            {
+                ((IReadOnlyCollection<RebarCutRequirement>)requiredCuts).Count
+            };
+            if (requiredCuts is ICollection<RebarCutRequirement> genericCollection)
+                knownCounts.Add(genericCollection.Count);
+            if (requiredCuts is ICollection nonGenericCollection)
+                knownCounts.Add(nonGenericCollection.Count);
+
+            foreach (var count in knownCounts)
+            {
+                if (count < 0)
+                    throw new InvalidOperationException("Rebar stock demand requiredCuts exposes an invalid negative known Count.");
+            }
+            foreach (var count in knownCounts)
+            {
+                if (count > MaxCutRequirements)
+                    throw new ArgumentOutOfRangeException(parameterName, "Rebar stock demand exceeds the supported cut-requirement bound.");
+            }
+
+            var expected = knownCounts[0];
+            for (var index = 1; index < knownCounts.Count; index++)
+            {
+                if (knownCounts[index] != expected)
+                    throw new InvalidOperationException("Rebar stock demand requiredCuts exposes conflicting known Count values.");
+            }
+            return expected;
+        }
 
         private static string RequireCanonicalText(string value, string parameterName)
         {
