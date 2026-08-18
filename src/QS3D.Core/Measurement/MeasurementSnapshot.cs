@@ -18,7 +18,7 @@ namespace QS3D.Core.Measurement
         public MeasurementSnapshot(IEnumerable<MeasurementTrace> traces)
         {
             if (traces == null) throw new ArgumentNullException(nameof(traces));
-            RequireSupportedCount(traces, nameof(traces));
+            var knownCount = RequireSupportedCount(traces, nameof(traces));
 
             var items = new List<MeasurementTrace>();
             var identities = new HashSet<string>(StringComparer.Ordinal);
@@ -39,6 +39,7 @@ namespace QS3D.Core.Measurement
                 items.Add(trace);
             }
 
+            RequireObservedCount(knownCount, items.Count, nameof(traces));
             items.Sort(CompareTraces);
             Traces = new ReadOnlyCollection<MeasurementTrace>(items.ToArray());
         }
@@ -57,7 +58,7 @@ namespace QS3D.Core.Measurement
 
         // Inspect every exposed known-count contract before acquiring an enumerator so
         // contradictory in-bound counts fail closed without consuming any trace data.
-        private static void RequireSupportedCount(IEnumerable<MeasurementTrace> traces, string paramName)
+        private static int? RequireSupportedCount(IEnumerable<MeasurementTrace> traces, string paramName)
         {
             int? knownCount = null;
             if (traces is ICollection<MeasurementTrace> collection)
@@ -66,6 +67,7 @@ namespace QS3D.Core.Measurement
                 ValidateKnownCount(readOnlyCollection.Count, ref knownCount, paramName);
             if (traces is System.Collections.ICollection nonGenericCollection)
                 ValidateKnownCount(nonGenericCollection.Count, ref knownCount, paramName);
+            return knownCount;
         }
 
         private static void ValidateKnownCount(int count, ref int? knownCount, string paramName)
@@ -77,6 +79,12 @@ namespace QS3D.Core.Measurement
             if (knownCount.HasValue && knownCount.Value != count)
                 throw new ArgumentException("Measurement snapshot count contracts disagree.", paramName);
             knownCount = count;
+        }
+
+        private static void RequireObservedCount(int? knownCount, int observedCount, string paramName)
+        {
+            if (knownCount.HasValue && knownCount.Value != observedCount)
+                throw new ArgumentException("Measurement snapshot count changed during enumeration.", paramName);
         }
 
         private static ArgumentException TraceCountError(string paramName)
