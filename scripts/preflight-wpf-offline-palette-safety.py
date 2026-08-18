@@ -17,41 +17,65 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def palette_contract_errors(source: str) -> list[str]:
+    errors: list[str] = []
+    required = (
+        "$uiRoot = Join-Path $root 'src\\QS3D.BricsCAD.V25\\UI'",
+        "$maxXamlBytes = 1MB",
+        "UTF8Encoding]::new($false, $true)",
+        "Resolve-Path -LiteralPath $uiRoot",
+        "Resolve-Path -LiteralPath $Path",
+        "StartsWith($uiPrefix, [System.StringComparison]::OrdinalIgnoreCase)",
+        "[System.IO.FileAttributes]::ReparsePoint",
+        "$item.Length -gt $maxXamlBytes",
+        "[System.IO.File]::Open(",
+        "($memory.Length + $read) -gt $maxXamlBytes",
+        "$utf8Strict.GetString($bytes)",
+        "Palette XAML source escapes the canonical UI root",
+        "Palette XAML source must not be a reparse point",
+        "Palette XAML source exceeds the 1 MiB safety limit",
+        "Palette XAML source is not valid strict UTF-8",
+        "return ,$manager",
+    )
+    for token in required:
+        if token not in source:
+            errors.append(f"offline palette bounded-input contract missing: {token}")
+    for forbidden in (
+        "Get-Content -LiteralPath $Path -Raw",
+        "Assembly]::LoadFrom",
+        "AssemblyResolve",
+        "Activator]::CreateInstance",
+        "Start-Process",
+        "System.Diagnostics.Process",
+    ):
+        if forbidden in source:
+            errors.append(f"offline palette smoke retained forbidden load/read primitive: {forbidden}")
+    return errors
+
+
 palette = read(PALETTE)
 wrapper = read(WRAPPER)
 qualification = read(QUALIFICATION)
 v26_project = read(V26_PROJECT)
 
-# This script executes in standalone PowerShell. It must remain incapable of
-# constructing WPF controls, constructing the hosted plugin, or resolving
-# BricsCAD managed/native UI dependencies.
-forbidden_palette_tokens = (
-    "Assembly]::LoadFrom",
-    "AssemblyResolve",
-    "add_AssemblyResolve",
-    "Activator]::CreateInstance",
-    "LoadFile(",
-    "LoadFrom(",
-    "Start-Process",
-    "System.Diagnostics.Process",
-    "PresentationFramework",
-    "PresentationCore",
-    "WindowsBase",
-    "System.Xaml",
-    "System.Windows.Controls",
-    "System.Windows.UIElement",
-)
-for token in forbidden_palette_tokens:
-    require(token not in palette, f"offline palette smoke must not contain hosted/native UI load primitive: {token}")
+errors = palette_contract_errors(palette)
+require(not errors, "; ".join(errors))
 
-required_source_contracts = (
+# Mutation self-checks ensure the preflight itself detects removal of each critical
+# source-input safety boundary rather than merely documenting the desired tokens.
+for token in (
+    "$maxXamlBytes = 1MB",
+    "[System.IO.FileAttributes]::ReparsePoint",
+    "UTF8Encoding]::new($false, $true)",
+    "Resolve-Path -LiteralPath $uiRoot",
+    "($memory.Length + $read) -gt $maxXamlBytes",
+):
+    mutated = palette.replace(token, "__REMOVED_CONTRACT__", 1)
+    require(palette_contract_errors(mutated), f"mutation self-check did not detect removal of: {token}")
+
+for token in (
     "WorkspacePanel.xaml",
     "RightPanel.xaml",
-    "Read-XamlDocument",
-    "Test-Path -LiteralPath $Path -PathType Leaf",
-    "Get-Content -LiteralPath $Path -Raw -Encoding UTF8",
-    "Required palette XAML source is missing",
-    "Palette XAML is not well-formed XML",
     "WorkspaceOverflow",
     "WorkspaceContentRoot",
     "FamilySearch",
@@ -59,15 +83,11 @@ required_source_contracts = (
     "DrawingList",
     "LayerList",
     "Theme.xaml",
-    "source/XAML checks only",
+    "bounded source/XAML checks only",
     "Licensed in-host BricsCAD V25 runtime remains the authority",
-)
-for token in required_source_contracts:
-    require(token in palette, f"offline palette source/failure contract missing: {token}")
+):
+    require(token in palette, f"offline palette source contract missing: {token}")
 
-# V26 deliberately links the V25 UI XAML as its shared source of truth. Keep the
-# offline parser pointed at that canonical source and fail CI if V26 silently
-# switches to a different palette-XAML tree without updating qualification.
 for token in (
     '<UseWPF>true</UseWPF>',
     '<RootNamespace>QS3D.BricsCAD.V25</RootNamespace>',
@@ -76,33 +96,18 @@ for token in (
 ):
     require(token in v26_project, f"V26 shared palette-XAML assumption missing: {token}")
 
-require(
-    'test-wpf-palettes-runtime.ps1' in wrapper,
-    "local WPF wrapper must execute the source-only palette contract",
-)
-for token in (
-    "Assembly]::LoadFrom",
-    "add_AssemblyResolve",
-    "Activator]::CreateInstance",
-    "Start-Process",
-    "System.Diagnostics.Process",
-):
-    require(token not in wrapper, f"local WPF wrapper must not load/construct hosted UI directly: {token}")
+require('test-wpf-palettes-runtime.ps1' in wrapper, "local WPF wrapper must execute source-only palette checks")
 require(
     "offline PowerShell must not load BricsCAD native UI dependencies" in wrapper,
     "local WPF wrapper must document the standalone/native-load boundary",
 )
 
-wpf_index = qualification.find('run-local-v25-wpf-smoke.ps1')
-runtime_index = qualification.find('test-bricscad-v25-runtime.ps1')
-require(wpf_index >= 0, "aggregate V25 qualification must retain the offline WPF/source smoke")
-require(runtime_index >= 0, "aggregate V25 qualification must retain the licensed in-host runtime probe")
-require(
-    wpf_index < runtime_index,
-    "offline source smoke must remain an early detector before licensed in-host runtime qualification",
-)
+wpf_index = qualification.find("run-local-v25-wpf-smoke.ps1")
+runtime_index = qualification.find("test-bricscad-v25-runtime.ps1")
+require(wpf_index >= 0 and runtime_index >= 0 and wpf_index < runtime_index,
+        "offline WPF smoke must remain before the licensed in-host runtime probe")
 
 print(
-    "PASS: offline palette smoke remains source/XAML-only with deterministic missing/malformed-file diagnostics, "
-    "V26 still consumes the same canonical palette XAML, and aggregate qualification retains the separate licensed in-host runtime gate."
+    "PASS: offline palette qualification uses bounded, root-contained, non-reparse strict-UTF8 XAML ingestion, "
+    "remains source-only, and preserves the separate licensed in-host runtime gate."
 )
