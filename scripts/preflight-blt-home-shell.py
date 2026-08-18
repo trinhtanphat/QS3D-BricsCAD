@@ -159,7 +159,7 @@ def main():
         'button.MouseLeave += (_, __) => frame.Background = PanelBrush;',
         'private static Button CreateClickSurface(UIElement content, Cursor cursor)',
         'button.Click += (_, __) => RunUiAction(action);', 'button.Click += (_, __) => OpenRecentProject(recent);',
-        'Application.DocumentManager.Open(normalized, false)',
+        'ProjectFileUiService.OpenProject(normalized)',
         'private const int ObjectSnapSuppressedBit = 16384;',
         'private Button StatusToggleButton(TextBlock label, string text, string toolTip, Action action)',
         '"○ Nền sáng"', '"◐ Tương phản"', '"⌞ Vuông góc"', '"⌖ Bắt điểm"',
@@ -188,6 +188,7 @@ def main():
     ):
         require(toggle_snap_block, needle, shell_rel + '::ToggleEntitySnap')
     for stale in ('SendStringToExecute', '"_.OPEN', '"_.NEW', '"_.QSAVE', '"_.SAVEAS',
+                  'Application.DocumentManager.Open(normalized, false)',
                   'border.MouseLeftButtonUp', 'border.MouseLeftButtonDown', 'FocusVisualStyle = null',
                   'Focusable = false', 'Text = "Nhấp đúp vào dự án để mở trực tiếp và bắt đầu làm việc"',
                   ' : Window', 'ShowModelessWindow', 'using QS3D.BricsCAD.V25.Updates;', 'UpdateCenterWindowHost.Show()',
