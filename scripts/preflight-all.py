@@ -11,6 +11,16 @@ SELF = Path(__file__).resolve()
 CHILD_TIMEOUT_SECONDS = 180
 MAX_FEATURE_GATES = 1024
 MAX_FEATURE_GATE_SOURCE_BYTES = 512 * 1024
+PYTHON_ENVIRONMENT_CONTROLS = (
+    "PYTHONBREAKPOINT",
+    "PYTHONHOME",
+    "PYTHONINSPECT",
+    "PYTHONPATH",
+    "PYTHONPYCACHEPREFIX",
+    "PYTHONSTARTUP",
+    "PYTHONUSERBASE",
+    "PYTHONWARNINGS",
+)
 
 
 def _relative_candidate(path):
@@ -110,6 +120,17 @@ def discover():
     return validate_candidates(candidates)
 
 
+def build_child_env(source=None):
+    child_env = dict(os.environ if source is None else source)
+    for name in PYTHON_ENVIRONMENT_CONTROLS:
+        child_env.pop(name, None)
+    child_env["PYTHONUTF8"] = "1"
+    child_env["PYTHONIOENCODING"] = "utf-8"
+    child_env["PYTHONNOUSERSITE"] = "1"
+    child_env["PYTHONDONTWRITEBYTECODE"] = "1"
+    return child_env
+
+
 def escape_actions_data(value):
     return str(value).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
@@ -144,9 +165,7 @@ def main():
         print(" -", path.relative_to(ROOT))
 
     failed = []
-    child_env = os.environ.copy()
-    child_env["PYTHONUTF8"] = "1"
-    child_env["PYTHONIOENCODING"] = "utf-8"
+    child_env = build_child_env()
     for path in gates:
         rel = path.relative_to(ROOT)
         print("\n===", rel, "===")
