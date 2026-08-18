@@ -60,9 +60,15 @@ namespace QS3D.Core.Units
         {
             if (projectMetadata == null) throw new ArgumentNullException(nameof(projectMetadata));
             Validate(unit);
-            if (TryReadCanonical(projectMetadata, BoundMetadataKey, out var bound) && bound != unit)
+            var hasBound = TryReadCanonical(projectMetadata, BoundMetadataKey, out var bound);
+            if (hasBound && bound != unit)
                 throw new InvalidOperationException("Drawing unit " + unit + " does not match quantities bound to " + bound + ". Remeasure source geometry before changing units.");
+
+            var preserveUnboundLegacyEvidence =
+                !hasBound && projectMetadata.ContainsKey(EffectiveUnitMetadataKey);
             projectMetadata[OverrideMetadataKey] = unit.ToString();
+            if (preserveUnboundLegacyEvidence) return;
+
             projectMetadata[EffectiveUnitMetadataKey] = unit.ToString();
             projectMetadata[BindingSourceMetadataKey] = DrawingUnitResolutionSource.ProjectOverride.ToString();
         }
