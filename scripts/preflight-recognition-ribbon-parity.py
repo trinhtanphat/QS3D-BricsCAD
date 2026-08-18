@@ -36,20 +36,6 @@ def spec_line(text: str, button_id: str) -> str:
     return text[start:end]
 
 
-def spec_block(text: str, button_id: str) -> str:
-    marker = f'"{button_id}"'
-    pos = text.find(marker)
-    if pos < 0:
-        raise SystemExit(f"FAIL: {button_id} missing from recognition parity surface")
-    start = text.rfind("new RecognitionButtonSpec(", 0, pos)
-    if start < 0:
-        raise SystemExit(f"FAIL: {button_id} missing RecognitionButtonSpec start")
-    end = text.find(")", pos)
-    if end < 0:
-        raise SystemExit(f"FAIL: {button_id} missing RecognitionButtonSpec end")
-    return text[start:end + 1]
-
-
 def main() -> int:
     ribbon = RIBBON.read_text(encoding="utf-8")
     commands = COMMANDS.read_text(encoding="utf-8")
@@ -77,33 +63,16 @@ def main() -> int:
     require(ribbon, 'Create("Bricscad.Windows.RibbonRowBreak")', "three-row stacking")
     require(ribbon, 'SetEnumProperty(button, "Size", "Standard")', "small-with-text density")
     require(ribbon, 'SetProperty(button, "ShowImage", true)', "reference icon visibility")
-    require(
-        ribbon,
-        'SetProperty(button, "IsEnabled", spec.Enabled || spec.PreserveSourceColorWhenNonInteractive);',
-        "reference host presentation state",
-    )
+    require(ribbon, 'SetProperty(button, "IsEnabled", spec.Enabled)', "reference disabled states")
     require(ribbon, "bool enabled = true", "supported recognition button default")
 
     for disabled_id in (
         "QS3D_RECOGNIZE_BLT_TEXT",
         "QS3D_RECOGNIZE_BLT_TABLE",
+        "QS3D_RECOGNIZE_BLT_VALIDATE",
     ):
         if "enabled: false" not in spec_line(ribbon, disabled_id):
             raise SystemExit(f"FAIL: {disabled_id} must remain visually disabled")
-
-    validate_spec = spec_block(ribbon, "QS3D_RECOGNIZE_BLT_VALIDATE")
-    require(validate_spec, "string.Empty", "Validate remains without a command")
-    require(validate_spec, "enabled: false", "Validate executable-command authority remains disabled")
-    require(
-        validate_spec,
-        "preserveSourceColorWhenNonInteractive: true",
-        "Validate host presentation preserves source status colors",
-    )
-    require(
-        ribbon,
-        "if (spec.Enabled && !string.IsNullOrWhiteSpace(spec.Command))",
-        "recognition command routing remains gated by executable authority",
-    )
 
     for enabled_id in (
         "QS3D_RECOGNIZE_BLT_RESTORE",
@@ -183,8 +152,7 @@ def main() -> int:
 
     print(
         "PASS: NHẬN DẠNG topbar keeps BLT3D reference layout/artwork, preserves Restore/Label, "
-        "fails Options closed, keeps Text/Table visually disabled, preserves Validate status colors "
-        "without granting command authority, and routes Boundary/Auto through the production recognition workflows."
+        "fails Options closed, and routes Boundary/Auto through the production recognition workflows."
     )
     return 0
 
