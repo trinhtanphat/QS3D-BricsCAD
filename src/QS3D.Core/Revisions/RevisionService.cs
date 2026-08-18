@@ -53,7 +53,7 @@ namespace QS3D.Core.Revisions
                 throw new ArgumentException("Revision id is required and must not contain leading/trailing whitespace.", nameof(revisionId));
             ValidateXmlArgument(revisionId, nameof(revisionId), "Revision id");
             ValidateCanonicalRequired(project.ProjectId, "project id");
-            ValidateXmlState(project.ProjectId, "project id");
+            ValidateXmlState(project.ProjectId, "capture project id");
             var snapshot = new RevisionSnapshot
             {
                 Id = revisionId,
@@ -88,15 +88,14 @@ namespace QS3D.Core.Revisions
                 }
                 foreach (var handle in CanonicalSourceHandles(element)) item.SourceHandles.Add(handle);
                 foreach (var dependency in CanonicalDependencies(element.DependsOn, "element " + element.Id)) item.Dependencies.Add(dependency);
-                ValidateCaptureXmlPayload(item);
+                ValidateElementXmlPayload(item, "capture element " + item.ElementId);
                 snapshot.Elements.Add(item);
             }
             return snapshot;
         }
 
-        private static void ValidateCaptureXmlPayload(RevisionElementSnapshot item)
+        private static void ValidateElementXmlPayload(RevisionElementSnapshot item, string label)
         {
-            var label = "element " + item.ElementId;
             ValidateXmlState(item.ElementId, label + " id");
             ValidateXmlState(item.Category, label + " category");
             ValidateXmlState(item.FamilyId, label + " family id");
@@ -135,7 +134,7 @@ namespace QS3D.Core.Revisions
             }
             catch (XmlException ex)
             {
-                throw new InvalidOperationException("Revision capture " + label + " contains characters that are invalid in XML.", ex);
+                throw new InvalidOperationException("Revision " + label + " contains characters that are invalid in XML.", ex);
             }
         }
 
@@ -184,6 +183,8 @@ namespace QS3D.Core.Revisions
                 throw new InvalidOperationException("Current revision has no project identity; capture a new revision before comparing.");
             ValidateCanonicalRequired(beforeProjectId, "before project id");
             ValidateCanonicalRequired(afterProjectId, "after project id");
+            ValidateXmlState(beforeProjectId, "before project id");
+            ValidateXmlState(afterProjectId, "after project id");
 
             if (!string.Equals(beforeProjectId, afterProjectId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Revision baseline belongs to a different project; capture a new baseline before comparing.");
@@ -268,6 +269,7 @@ namespace QS3D.Core.Revisions
                 if (element == null || string.IsNullOrWhiteSpace(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains an element without id.");
                 if (!string.Equals(element.ElementId, element.ElementId.Trim(), StringComparison.Ordinal))
                     throw new InvalidOperationException("Revision " + label + " contains a non-canonical padded element id: " + element.ElementId + ".");
+                ValidateElementXmlPayload(element, label + " element " + element.ElementId);
                 ValidateCanonicalCategory(element.Category, label + " element " + element.ElementId + " category");
                 ValidateOptionalCanonicalIdentity(element.FamilyId, label + " element " + element.ElementId + " family id");
                 ValidateOptionalCanonicalIdentity(element.FloorId, label + " element " + element.ElementId + " floor id");
