@@ -34,8 +34,8 @@ namespace QS3D.Core.Audit
         {
             get
             {
-                RequireSupportedHistoryCount(requireAppendCapacity: false);
-                var snapshot = new List<AuditEvent>(_events.Count);
+                var storedCount = RequireSupportedHistoryCount(requireAppendCapacity: false);
+                var snapshot = new List<AuditEvent>(storedCount);
                 var observed = 0;
                 foreach (var item in _events)
                 {
@@ -119,12 +119,14 @@ namespace QS3D.Core.Audit
                 throw AppendCapacityExceeded();
         }
 
-        private void RequireSupportedHistoryCount(bool requireAppendCapacity)
+        private int RequireSupportedHistoryCount(bool requireAppendCapacity)
         {
-            if (_events.Count > MaxStoredEvents)
+            var storedCount = _events.Count;
+            if (storedCount > MaxStoredEvents)
                 throw TooManyEvents();
-            if (requireAppendCapacity && _events.Count >= MaxStoredEvents)
+            if (requireAppendCapacity && storedCount >= MaxStoredEvents)
                 throw AppendCapacityExceeded();
+            return storedCount;
         }
 
         private static InvalidOperationException TooManyEvents()
