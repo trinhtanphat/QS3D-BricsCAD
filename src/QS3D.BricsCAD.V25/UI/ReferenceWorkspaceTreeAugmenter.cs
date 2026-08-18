@@ -6,32 +6,14 @@ using System.Windows.Controls;
 namespace QS3D.BricsCAD.V25.UI
 {
     /// <summary>
-    /// Presentation-only completion of the owner reference category tree. Existing semantic tags
-    /// and child items are preserved while the top-level labels/order are normalized to the compact
-    /// QS3D Mô hình reference palette.
+    /// Presentation-only completion of the reference category tree. Existing semantic tags are
+    /// reused so the extra labels route through the same canonical Family/Type selection logic.
+    /// No project state is mutated by this augmenter.
     /// </summary>
     internal static class ReferenceWorkspaceTreeAugmenter
     {
         private static readonly object RegistrationGate = new object();
         private static bool _registered;
-
-        private static readonly string[] ReferenceTopLevelOrder =
-        {
-            "Lưới Trục",
-            "HT_Phong",
-            "Dầm",
-            "Sàn",
-            "Cột",
-            "Vách",
-            "Tường KT",
-            "Cửa",
-            "Cầu Thang",
-            "Móng",
-            "Đào đắp",
-            "Kết cấu thép",
-            "Cấu kiện khác",
-            "KL Tùy chỉnh"
-        };
 
         public static bool EnsureRegistered()
         {
@@ -70,7 +52,7 @@ namespace QS3D.BricsCAD.V25.UI
             EnsureChild(grid, "Lưới Thẳng", "Grid");
             EnsureChild(grid, "Lưới Cong", "Grid");
 
-            var finish = EnsureTopAlias(tree, "HT_Phong", "HT_Phòng", null);
+            var finish = EnsureTop(tree, "HT_Phòng", null);
             EnsureChild(finish, "Phòng", "Room");
             EnsureChild(finish, "Sàn Hoàn Thiện", "FloorFinish");
             EnsureChild(finish, "Chống Thấm", "Waterproofing");
@@ -89,8 +71,8 @@ namespace QS3D.BricsCAD.V25.UI
             EnsureChild(slab, "Sàn Đặc", "Slab");
             EnsureChild(slab, "Đường Dốc", "Slab");
             EnsureChild(slab, "Lỗ Mở Sàn", "Slab");
-            MoveLegacyTopLevelUnder(tree, slab, "Mái Hắt");
-            var canopy = EnsureChildContainer(slab, "Mái Hắt", null);
+
+            var canopy = EnsureTop(tree, "Mái Hắt", null);
             EnsureChild(canopy, "Mái Hắt Diện Tích", "Slab");
             EnsureChild(canopy, "Mái Hắt Biên Dạng", "Slab");
 
@@ -126,11 +108,6 @@ namespace QS3D.BricsCAD.V25.UI
             EnsureChild(earthwork, "Khối giao đào", "Earthwork");
             EnsureChild(earthwork, "Khối đất sau trừ", "Earthwork");
 
-            EnsureTop(tree, "Kết cấu thép", null);
-
-            var other = EnsureTop(tree, "Cấu kiện khác", null);
-            MoveLegacyTopLevelUnder(tree, other, "Modeling");
-
             var custom = EnsureTop(tree, "KL Tùy chỉnh", "CustomQuantity");
             EnsureChild(custom, "KL Chiều dài", "CustomQuantity");
             EnsureChild(custom, "KL Diện tích", "CustomQuantity");
@@ -138,12 +115,13 @@ namespace QS3D.BricsCAD.V25.UI
             EnsureChild(custom, "KL Biên dạng", "CustomQuantity");
             EnsureChild(custom, "KL Mặt phẳng", "CustomQuantity");
 
-            NormalizeReferenceTopLevelOrder(tree);
+            EnsureTop(tree, "Modeling", null);
         }
 
         private static TreeViewItem EnsureTop(TreeView tree, string header, string? tag)
         {
-            var item = FindTop(tree, header);
+            var item = tree.Items.OfType<TreeViewItem>()
+                .FirstOrDefault(candidate => HeaderEquals(candidate, header));
             if (item == null)
             {
                 item = NewItem(header, tag);
@@ -154,46 +132,6 @@ namespace QS3D.BricsCAD.V25.UI
                 item.Tag = tag;
             }
             return item;
-        }
-
-        private static TreeViewItem EnsureTopAlias(
-            TreeView tree,
-            string header,
-            string legacyHeader,
-            string? tag)
-        {
-            var item = FindTop(tree, header) ?? FindTop(tree, legacyHeader);
-            if (item == null)
-            {
-                item = NewItem(header, tag);
-                tree.Items.Add(item);
-            }
-            else
-            {
-                item.Header = header;
-                if (item.Tag == null && !string.IsNullOrWhiteSpace(tag))
-                    item.Tag = tag;
-            }
-            return item;
-        }
-
-        private static TreeViewItem EnsureChildContainer(
-            TreeViewItem parent,
-            string header,
-            string? tag)
-        {
-            var child = parent.Items.OfType<TreeViewItem>()
-                .FirstOrDefault(candidate => HeaderEquals(candidate, header));
-            if (child == null)
-            {
-                child = NewItem(header, tag);
-                parent.Items.Add(child);
-            }
-            else if (child.Tag == null && !string.IsNullOrWhiteSpace(tag))
-            {
-                child.Tag = tag;
-            }
-            return child;
         }
 
         private static void EnsureChild(TreeViewItem parent, string header, string tag)
@@ -209,53 +147,6 @@ namespace QS3D.BricsCAD.V25.UI
                 child.Tag = tag;
             }
         }
-
-        private static void MoveLegacyTopLevelUnder(
-            TreeView tree,
-            TreeViewItem parent,
-            string legacyHeader)
-        {
-            var legacy = FindTop(tree, legacyHeader);
-            if (legacy == null || ReferenceEquals(legacy, parent))
-                return;
-
-            tree.Items.Remove(legacy);
-            if (!parent.Items.OfType<TreeViewItem>().Any(candidate => HeaderEquals(candidate, legacyHeader)))
-            {
-                parent.Items.Add(legacy);
-                return;
-            }
-
-            var existing = parent.Items.OfType<TreeViewItem>()
-                .First(candidate => HeaderEquals(candidate, legacyHeader));
-            foreach (var child in legacy.Items.OfType<TreeViewItem>().ToList())
-            {
-                legacy.Items.Remove(child);
-                if (!existing.Items.OfType<TreeViewItem>().Any(candidate => HeaderEquals(candidate, child.Header as string ?? string.Empty)))
-                    existing.Items.Add(child);
-            }
-        }
-
-        private static void NormalizeReferenceTopLevelOrder(TreeView tree)
-        {
-            for (var index = 0; index < ReferenceTopLevelOrder.Length; index++)
-            {
-                var item = FindTop(tree, ReferenceTopLevelOrder[index]);
-                if (item == null)
-                    continue;
-
-                var currentIndex = tree.Items.IndexOf(item);
-                if (currentIndex == index)
-                    continue;
-
-                tree.Items.Remove(item);
-                tree.Items.Insert(index, item);
-            }
-        }
-
-        private static TreeViewItem? FindTop(TreeView tree, string header) =>
-            tree.Items.OfType<TreeViewItem>()
-                .FirstOrDefault(candidate => HeaderEquals(candidate, header));
 
         private static TreeViewItem NewItem(string header, string? tag) =>
             new TreeViewItem { Header = header, Tag = tag };
