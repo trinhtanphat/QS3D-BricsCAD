@@ -95,6 +95,15 @@ def main() -> int:
         "Do not turn a missing mapping into product branding.",
     ):
         require(bootstrap, token, "canonical Ribbon brand/fallback separation")
+
+    # Exactly one resolver outcome may select the product mark: the explicit QS3D start/product
+    # identity surface. This prevents a second branded functional fallback from silently returning.
+    brand_outcome = "return RibbonIconKind.Qs3dLogo;"
+    if bootstrap.count(brand_outcome) != 1:
+        fail(
+            "canonical Ribbon bootstrap must contain exactly one Qs3dLogo resolver outcome "
+            "for explicit product identity"
+        )
     if bootstrap.rfind("return RibbonIconKind.Objects;") < bootstrap.rfind("return RibbonIconKind.Draw;"):
         fail("canonical Ribbon neutral Objects fallback must remain after semantic mappings")
 
