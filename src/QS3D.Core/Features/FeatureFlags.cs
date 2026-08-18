@@ -18,7 +18,7 @@ namespace QS3D.Core.Features
         {
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Feature name is required.", nameof(name));
             if (!TryNormalizeName(name, out var normalized))
-                throw new ArgumentException("Feature name cannot contain control characters.", nameof(name));
+                throw new ArgumentException("Feature name must be canonical and cannot contain control characters.", nameof(name));
             _flags[normalized] = enabled;
         }
 
@@ -29,14 +29,14 @@ namespace QS3D.Core.Features
         {
             normalized = string.Empty;
             if (string.IsNullOrWhiteSpace(name)) return false;
+            if (!string.Equals(name, name.Trim(), StringComparison.Ordinal)) return false;
 
-            var candidate = name.Trim();
-            for (var index = 0; index < candidate.Length; index++)
+            for (var index = 0; index < name.Length; index++)
             {
-                if (char.IsControl(candidate[index])) return false;
+                if (char.IsControl(name[index])) return false;
             }
 
-            normalized = candidate;
+            normalized = name;
             return true;
         }
     }
