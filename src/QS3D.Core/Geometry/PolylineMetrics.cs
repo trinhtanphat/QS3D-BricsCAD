@@ -59,7 +59,8 @@ namespace QS3D.Core.Geometry
                 AddCompensated(ref sum, ref compensation, cross);
             }
 
-            return MultiplyFinitePreservingNonZero(sum, 0.5d, "Polyline area");
+            var compensatedSum = AddFinite(sum, compensation);
+            return MultiplyFinitePreservingNonZero(compensatedSum, 0.5d, "Polyline area");
         }
 
         private static double SignedAreaScaled(IReadOnlyList<Point2> points)
@@ -126,17 +127,20 @@ namespace QS3D.Core.Geometry
                 AddCompensated(ref sum, ref compensation, cross);
             }
 
-            var normalizedArea = MultiplyFinitePreservingNonZero(sum, 0.5d, "Polyline normalized area");
+            var normalizedAreaSum = AddFinite(sum, compensation);
+            var normalizedArea = MultiplyFinitePreservingNonZero(normalizedAreaSum, 0.5d, "Polyline normalized area");
             return RestoreScaledAreaFinite(normalizedArea, scaleX, scaleY);
         }
 
         private static void AddCompensated(ref double sum, ref double compensation, double value)
         {
-            var corrected = value - compensation;
-            var next = sum + corrected;
-            if (!Finite(next)) throw new OverflowException("Polyline area exceeds the supported numeric range.");
-            compensation = (next - sum) - corrected;
+            var next = AddFinite(sum, value);
+            var correction = Math.Abs(sum) >= Math.Abs(value)
+                ? (sum - next) + value
+                : (value - next) + sum;
+
             sum = next;
+            compensation = AddFinite(compensation, correction);
         }
 
         private static void AddLengthCompensated(ref double total, ref double compensation, double value)
