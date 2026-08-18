@@ -115,9 +115,8 @@ namespace QS3D.Core.Revisions
             var result = new Dictionary<string, RevisionElementSnapshot>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in snapshot.Elements)
             {
-                if (element == null || string.IsNullOrWhiteSpace(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains an element without id.");
-                if (!string.Equals(element.ElementId, element.ElementId.Trim(), StringComparison.Ordinal))
-                    throw new InvalidOperationException("Revision " + label + " contains a non-canonical padded element id: " + element.ElementId + ".");
+                if (element == null) throw new InvalidOperationException("Revision " + label + " contains a null element.");
+                ValidateCanonicalRequired(element.ElementId, label + " element id");
                 ValidateCanonicalCategory(element.Category, label + " element " + element.ElementId + " category");
                 foreach (var quantity in element.Quantities)
                 {
@@ -141,8 +140,14 @@ namespace QS3D.Core.Revisions
 
         private static void ValidateCanonicalRequired(string? value, string label)
         {
-            if (value == null || string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
-                throw new InvalidOperationException("Revision " + label + " must be non-empty and must not contain leading/trailing whitespace.");
+            if (value == null ||
+                string.IsNullOrWhiteSpace(value) ||
+                !string.Equals(value, value.Trim(), StringComparison.Ordinal) ||
+                value.Any(char.IsControl))
+            {
+                throw new InvalidOperationException(
+                    "Revision " + label + " must be non-empty and must not contain leading/trailing whitespace or control characters.");
+            }
         }
 
         private struct CompensatedFiniteSum
