@@ -28,8 +28,6 @@ namespace QS3D.Core.Geometry
             var distance = scale * Math.Sqrt(1d + ratio * ratio);
             if (!Finite(distance))
                 throw new OverflowException("Point distance exceeds the supported numeric range.");
-            if (distance == scale && Math.Min(ax, ay) > 0d)
-                throw new InvalidOperationException("Point distance lost a non-zero orthogonal component at double precision.");
             return distance;
         }
 
