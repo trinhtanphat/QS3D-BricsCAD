@@ -48,6 +48,7 @@ namespace QS3D.Core.SmokeTests
             RejectDirect("E\tX");
             RejectDirect("E\rX");
             RejectDirect("E\nX");
+            RejectDirect("E\u007FX");
         }
 
         private static void ProjectBuilderRejectsNoncanonicalIdentityBeforeRowEmission()
