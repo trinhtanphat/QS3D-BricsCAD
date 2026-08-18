@@ -47,16 +47,19 @@ namespace QS3D.Core.SmokeTests
             var trail = AuditTrail.ForProject(project);
             var beforeVersion = project.ChangeVersion;
 
-            trail.Record("  APPLY_TEMPLATE  ", " E1 ", " detail ", " actor ", " corr ");
+            // ElementId and CorrelationId are persisted identity fields and therefore must
+            // already be canonical. Action still trims by contract, while Detail/Actor keep
+            // their free-form payload semantics.
+            trail.Record("  APPLY_TEMPLATE  ", "E1", " detail ", " actor ", "corr");
 
             Require(project.ChangeVersion == beforeVersion + 1L, "Valid audit record did not advance project revision exactly once.");
             Require(project.AuditEvents.Count == 1, "Valid audit record did not append exactly one event.");
             var item = project.AuditEvents[0];
             Require(item.Action == "APPLY_TEMPLATE", "Audit action was not canonicalized by trimming outer whitespace.");
-            Require(item.ElementId == " E1 ", "Audit element id payload semantics changed.");
+            Require(item.ElementId == "E1", "Audit canonical element id payload changed.");
             Require(item.Detail == " detail ", "Audit detail payload semantics changed.");
             Require(item.Actor == " actor ", "Audit actor payload semantics changed.");
-            Require(item.CorrelationId == " corr ", "Audit correlation payload semantics changed.");
+            Require(item.CorrelationId == "corr", "Audit canonical correlation payload changed.");
         }
 
         private static void Require(bool value, string message)
