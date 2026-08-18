@@ -22,6 +22,7 @@ namespace QS3D.Core.SmokeTests
             RejectsRecordAtCapacityWithoutMutation();
             RecordsIntoLastAvailableSlot();
             RejectsOversizedClearWithoutMutation();
+            ClearsDishonestZeroCountHistory();
         }
 
         private static void ReadsExactBoundWithoutMutation()
@@ -131,6 +132,31 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("AuditTrailHistoryBoundSmoke oversized clear replaced stored evidence.");
         }
 
+        private static void ClearsDishonestZeroCountHistory()
+        {
+            var history = new ZeroCountHistory(new AuditEvent
+            {
+                Utc = new DateTime(2026, 8, 18, 0, 0, 0, DateTimeKind.Utc),
+                Action = "history.event",
+                ElementId = "E1",
+                Detail = "canonical"
+            });
+            var constructor = typeof(AuditTrail).GetConstructor(
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                binder: null,
+                types: new[] { typeof(IList<AuditEvent>), typeof(ProjectState) },
+                modifiers: null);
+            if (constructor == null)
+                throw new Exception("AuditTrailHistoryBoundSmoke could not resolve the bounded-history constructor.");
+
+            var trail = (AuditTrail)constructor.Invoke(new object?[] { history, null });
+            trail.Clear();
+
+            Equal(1, history.EnumeratorRequests, "zero-count clear enumeration requests");
+            Equal(1, history.ClearRequests, "zero-count clear mutation requests");
+            Equal(0, history.ActualCount, "zero-count clear actual count");
+        }
+
         private static ProjectState BuildProject(string id, int count)
         {
             var project = new ProjectState(id, "Audit bound smoke");
@@ -200,6 +226,42 @@ namespace QS3D.Core.SmokeTests
             public bool Contains(AuditEvent item) => _items.Contains(item);
             public void CopyTo(AuditEvent[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
             public IEnumerator<AuditEvent> GetEnumerator() => _items.GetEnumerator();
+            public int IndexOf(AuditEvent item) => _items.IndexOf(item);
+            public void Insert(int index, AuditEvent item) => _items.Insert(index, item);
+            public bool Remove(AuditEvent item) => _items.Remove(item);
+            public void RemoveAt(int index) => _items.RemoveAt(index);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class ZeroCountHistory : IList<AuditEvent>
+        {
+            private readonly List<AuditEvent> _items;
+
+            internal ZeroCountHistory(params AuditEvent[] items)
+            {
+                _items = new List<AuditEvent>(items);
+            }
+
+            internal int EnumeratorRequests { get; private set; }
+            internal int ClearRequests { get; private set; }
+            internal int ActualCount => _items.Count;
+
+            public int Count => 0;
+            public bool IsReadOnly => false;
+            public AuditEvent this[int index] { get => _items[index]; set => _items[index] = value; }
+            public void Add(AuditEvent item) => _items.Add(item);
+            public void Clear()
+            {
+                ClearRequests++;
+                _items.Clear();
+            }
+            public bool Contains(AuditEvent item) => _items.Contains(item);
+            public void CopyTo(AuditEvent[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
+            public IEnumerator<AuditEvent> GetEnumerator()
+            {
+                EnumeratorRequests++;
+                return _items.GetEnumerator();
+            }
             public int IndexOf(AuditEvent item) => _items.IndexOf(item);
             public void Insert(int index, AuditEvent item) => _items.Insert(index, item);
             public bool Remove(AuditEvent item) => _items.Remove(item);
