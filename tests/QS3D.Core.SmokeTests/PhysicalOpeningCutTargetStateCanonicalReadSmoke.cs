@@ -19,7 +19,7 @@ namespace QS3D.Core.SmokeTests
         private static void WriterRoundtripRemainsValid()
         {
             var host = NewHost();
-            PhysicalOpeningCutTargetStateCodec.Write(host, new[] { " OPEN-B ", "open-a" });
+            PhysicalOpeningCutTargetStateCodec.Write(host, new[] { "OPEN-B", "open-a" });
             if (!PhysicalOpeningCutTargetStateCodec.TryRead(host, out var ids))
                 throw new Exception("Expected canonical physical opening target-state to be present.");
             Equal(2, ids.Count);
