@@ -78,8 +78,14 @@ namespace QS3D.Core.Mapping
         public MeasurementWorkItemMappingCatalog(IEnumerable<MeasurementWorkItemMapping> mappings)
         {
             if (mappings == null) throw new ArgumentNullException(nameof(mappings));
-            if (TryGetKnownCount(mappings, out var knownCount) && knownCount > MaximumEntries)
+
+            var knownCount = TryGetKnownCount(mappings, out var conflictingKnownCounts, out var negativeKnownCount);
+            if (knownCount.HasValue && knownCount.Value > MaximumEntries)
                 throw new InvalidOperationException("Measurement/work-item mapping catalog supports at most " + MaximumEntries + " entries.");
+            if (negativeKnownCount)
+                throw new InvalidOperationException("Measurement/work-item mapping source exposes an invalid negative known Count value.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Measurement/work-item mapping source exposes conflicting known Count values.");
 
             var items = new List<MeasurementWorkItemMapping>();
             var mappingIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -129,22 +135,36 @@ namespace QS3D.Core.Mapping
             return MeasurementWorkItemMappingResolution.Unmapped(canonicalCategory, canonicalMeasurementItemId);
         }
 
-        private static bool TryGetKnownCount(IEnumerable<MeasurementWorkItemMapping> mappings, out int count)
+        private static int? TryGetKnownCount(
+            IEnumerable<MeasurementWorkItemMapping> mappings,
+            out bool conflictingKnownCounts,
+            out bool negativeKnownCount)
         {
+            conflictingKnownCounts = false;
+            negativeKnownCount = false;
+            int? knownCount = null;
+
             if (mappings is ICollection<MeasurementWorkItemMapping> genericCollection)
-            {
-                count = genericCollection.Count;
-                return true;
-            }
+                knownCount = ObserveKnownCount(knownCount, genericCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+            if (mappings is IReadOnlyCollection<MeasurementWorkItemMapping> readOnlyCollection)
+                knownCount = ObserveKnownCount(knownCount, readOnlyCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+            if (mappings is System.Collections.ICollection nonGenericCollection)
+                knownCount = ObserveKnownCount(knownCount, nonGenericCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
 
-            if (mappings is System.Collections.ICollection collection)
-            {
-                count = collection.Count;
-                return true;
-            }
+            return knownCount;
+        }
 
-            count = 0;
-            return false;
+        private static int ObserveKnownCount(
+            int? current,
+            int observed,
+            ref bool conflictingKnownCounts,
+            ref bool negativeKnownCount)
+        {
+            if (observed < 0)
+                negativeKnownCount = true;
+            if (current.HasValue && current.Value != observed)
+                conflictingKnownCounts = true;
+            return !current.HasValue || observed > current.Value ? observed : current.Value;
         }
 
         private static int CompareMappings(MeasurementWorkItemMapping left, MeasurementWorkItemMapping right)
