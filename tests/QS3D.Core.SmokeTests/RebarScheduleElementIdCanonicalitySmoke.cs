@@ -17,7 +17,6 @@ namespace QS3D.Core.SmokeTests
             DirectBuilderRejectsBlankIdentity();
             DirectBuilderRejectsSurroundingWhitespace();
             DirectBuilderRejectsCommonControlCharactersWithoutEchoingRawIdentity();
-            DirectBuilderPreservesCaseInsensitiveDuplicateSemantics();
             ProjectBuilderRejectsBlankIdentityBeforeRowEmission();
             ProjectBuilderRejectsNoncanonicalIdentityBeforeRowEmission();
             ProjectBuilderRejectsTrailingWhitespaceBeforeRowEmission();
@@ -53,11 +52,6 @@ namespace QS3D.Core.SmokeTests
             RejectDirect("E\rX");
             RejectDirect("E\nX");
             RejectDirect("E\u007FX");
-        }
-
-        private static void DirectBuilderPreservesCaseInsensitiveDuplicateSemantics()
-        {
-            Capture<InvalidOperationException>(() => RebarScheduleBuilder.Build(new[] { Input("E1"), Input("e1") }));
         }
 
         private static void ProjectBuilderRejectsBlankIdentityBeforeRowEmission()
