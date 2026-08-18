@@ -213,7 +213,7 @@ def main() -> int:
             "permissions:\n  contents: read", "persist-credentials: false", '"pull_request":',
             "Classify validation scope", "source_validation:", "build_validation:",
             "steps.scope.outputs.source_validation", "needs.preflight.outputs.build_validation",
-            "Lightweight non-build candidate", '"samples/generated/**"',
+            "Lightweight non-build candidate", "samples/generated/",
             "python scripts/preflight-repository-professionalism.py",
             "dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64",
         ),
@@ -222,9 +222,12 @@ def main() -> int:
     )
     if "contents: write" in ci:
         failures.append("shared branch/PR CI must not gain contents:write")
+    push_trigger = ci.split('  "push":', 1)[1].split('  "pull_request":', 1)[0] if '  "push":' in ci and '  "pull_request":' in ci else ""
+    if "paths:" in push_trigger or "paths-ignore:" in push_trigger:
+        failures.append("shared CI push trigger must remain unfiltered so docs-only or ancestry-only reconciliation heads still receive exact-head branch CI")
     pr_trigger = ci.split('  "pull_request":', 1)[1].split("\npermissions:", 1)[0] if '  "pull_request":' in ci else ""
     if "paths:" in pr_trigger or "paths-ignore:" in pr_trigger:
-        failures.append("shared CI pull_request trigger must always emit protected-main required contexts; path filters belong only on branch pushes")
+        failures.append("shared CI pull_request trigger must always emit protected-main required contexts and must not use path filters")
 
     forbidden_merge_tokens = (
         "pull_request_target:", "gh pr merge", "enablepullrequestautomerge", "enable-pull-request-auto-merge",
@@ -249,7 +252,7 @@ def main() -> int:
     print(" - security reporting avoids public disclosure of sensitive material")
     print(" - critical governance/release surfaces have explicit ownership")
     print(" - dependency maintenance is bounded and its bot exception cannot grant merge/release authority")
-    print(" - every PR emits stable required contexts; policy-only candidates retain guards while non-build changes avoid redundant Core/V25 builds")
+    print(" - every task/integration branch push and every PR can emit stable exact-head required contexts while non-build changes avoid redundant Core/V25 builds")
     print(" - synthetic generated fixtures are treated as build-relevant validation inputs")
     print(" - external scheduler/controller-worker orchestration artifacts are kept out of the QS3D source tree")
     print(" - no workflow implements autonomous PR-to-main merging")
