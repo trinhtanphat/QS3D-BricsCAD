@@ -43,6 +43,21 @@ def test_feature_gate_name_filter_is_case_insensitive():
     assert not module._is_feature_gate_name("preflight-alpha.ps1")
 
 
+def test_aggregate_runner_case_alias_fails_before_launch():
+    with tempfile.TemporaryDirectory() as temp:
+        root = Path(temp)
+        with_root(root)
+        write_gate(module.SCRIPTS, "Preflight-All.PY")
+        calls = []
+        original_run = module.subprocess.run
+        module.subprocess.run = lambda *args, **kwargs: calls.append((args, kwargs))
+        try:
+            assert module.main() == 1
+        finally:
+            module.subprocess.run = original_run
+        assert calls == []
+
+
 def test_exact_count_and_ordering():
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp)
@@ -164,6 +179,7 @@ def test_legacy_symlink_and_case_collision_guards():
 
 def main():
     test_feature_gate_name_filter_is_case_insensitive()
+    test_aggregate_runner_case_alias_fails_before_launch()
     test_exact_count_and_ordering()
     test_count_boundary_plus_one_fails_before_inspection()
     test_discovery_stops_at_boundary_plus_one()
