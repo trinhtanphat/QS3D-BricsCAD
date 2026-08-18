@@ -13,9 +13,11 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             CanonicalIdentityRemainsStableAndSuppliesFallbackMark();
+            DirectBuilderRejectsBlankIdentity();
             DirectBuilderRejectsSurroundingWhitespace();
-            DirectBuilderRejectsControlCharactersWithoutEchoingRawIdentity();
+            DirectBuilderRejectsCommonControlCharactersWithoutEchoingRawIdentity();
             ProjectBuilderRejectsNoncanonicalIdentityBeforeRowEmission();
+            ProjectBuilderRejectsControlIdentityWithoutEchoingRawIdentity();
             ProjectBuilderPreservesCaseInsensitiveDuplicateSemantics();
         }
 
@@ -27,32 +29,44 @@ namespace QS3D.Core.SmokeTests
             Require(rows[0].BarMark == "E1", "Blank BarMark did not fall back to the canonical ElementId.");
         }
 
+        private static void DirectBuilderRejectsBlankIdentity()
+        {
+            Capture<ArgumentException>(() => RebarScheduleBuilder.Build(new[] { Input(string.Empty) }));
+            Capture<ArgumentException>(() => RebarScheduleBuilder.Build(new[] { Input("   ") }));
+        }
+
         private static void DirectBuilderRejectsSurroundingWhitespace()
         {
             RejectDirect(" E1");
             RejectDirect("E1 ");
         }
 
-        private static void DirectBuilderRejectsControlCharactersWithoutEchoingRawIdentity()
+        private static void DirectBuilderRejectsCommonControlCharactersWithoutEchoingRawIdentity()
         {
-            const string invalidId = "E\u0001X";
-            var error = Capture<ArgumentException>(() => RebarScheduleBuilder.Build(new[] { Input(invalidId) }));
-            Require(error.Message.IndexOf(invalidId, StringComparison.Ordinal) < 0,
-                "Malformed identity diagnostic echoed the hostile raw ElementId.");
+            RejectDirect("E\u0001X");
+            RejectDirect("E\tX");
+            RejectDirect("E\rX");
+            RejectDirect("E\nX");
         }
 
         private static void ProjectBuilderRejectsNoncanonicalIdentityBeforeRowEmission()
         {
             const string invalidId = " P1";
-            var project = new ProjectState("rebar-schedule-id-project", "Rebar schedule identity");
-            var element = new ProjectElement(invalidId, ElementCategory.Beam, string.Empty, string.Empty, string.Empty);
-            element.Properties["RebarNotation"] = "1D12";
-            element.Properties["RebarCuttingLengthM"] = "1";
-            project.Elements.Add(element);
+            var project = ProjectWithSingleRebar(invalidId, "rebar-schedule-id-project");
 
             var error = Capture<InvalidOperationException>(() => ProjectRebarScheduleBuilder.Build(project));
             Require(error.Message.IndexOf(invalidId, StringComparison.Ordinal) < 0,
                 "Project schedule diagnostic echoed the hostile raw ElementId.");
+        }
+
+        private static void ProjectBuilderRejectsControlIdentityWithoutEchoingRawIdentity()
+        {
+            const string invalidId = "P\u0001X";
+            var project = ProjectWithSingleRebar(invalidId, "rebar-schedule-control-id-project");
+
+            var error = Capture<InvalidOperationException>(() => ProjectRebarScheduleBuilder.Build(project));
+            Require(error.Message.IndexOf(invalidId, StringComparison.Ordinal) < 0,
+                "Project schedule control-identity diagnostic echoed the hostile raw ElementId.");
         }
 
         private static void ProjectBuilderPreservesCaseInsensitiveDuplicateSemantics()
@@ -72,6 +86,13 @@ namespace QS3D.Core.SmokeTests
                 Notation = "1D12",
                 CuttingLengthM = 1d
             };
+        }
+
+        private static ProjectState ProjectWithSingleRebar(string elementId, string projectId)
+        {
+            var project = new ProjectState(projectId, "Rebar schedule identity");
+            project.Elements.Add(ProjectElement(elementId));
+            return project;
         }
 
         private static ProjectElement ProjectElement(string elementId)
