@@ -38,7 +38,7 @@ namespace QS3D.Core.Formulas
             var normalized = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
             if (variables == null) return normalized;
 
-            ValidateKnownVariableCounts(variables);
+            var expectedVariableCount = ValidateKnownVariableCounts(variables);
 
             var variableCount = 0;
             foreach (var pair in variables)
@@ -46,6 +46,8 @@ namespace QS3D.Core.Formulas
                 variableCount++;
                 if (variableCount > MaxVariableCount)
                     throw new InvalidOperationException($"Variable count exceeds the supported maximum of {MaxVariableCount}.");
+                if (variableCount > expectedVariableCount)
+                    throw new InvalidOperationException("Variable source enumeration count does not match its advertised Count.");
                 if (string.IsNullOrWhiteSpace(pair.Key))
                     throw new InvalidOperationException("Variable names cannot be blank or whitespace-only.");
 
@@ -59,10 +61,13 @@ namespace QS3D.Core.Formulas
                 normalized.Add(normalizedName, pair.Value);
             }
 
+            if (variableCount != expectedVariableCount)
+                throw new InvalidOperationException("Variable source enumeration count does not match its advertised Count.");
+
             return normalized;
         }
 
-        private static void ValidateKnownVariableCounts(IReadOnlyDictionary<string, double> variables)
+        private static int ValidateKnownVariableCounts(IReadOnlyDictionary<string, double> variables)
         {
             var knownCounts = new List<int>(3) { variables.Count };
             if (variables is ICollection<KeyValuePair<string, double>> genericCollection)
@@ -88,6 +93,8 @@ namespace QS3D.Core.Formulas
                 if (knownCounts[i] != expectedCount)
                     throw new InvalidOperationException("Variable source reports conflicting known counts.");
             }
+
+            return expectedCount;
         }
 
         private static bool IsValidIdentifier(string value)

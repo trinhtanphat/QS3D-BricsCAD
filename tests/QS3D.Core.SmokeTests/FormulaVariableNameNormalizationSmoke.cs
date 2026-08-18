@@ -59,6 +59,27 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => evaluator.Evaluate("1", reportedNegative), "reported negative variable count rejected before enumeration");
             if (reportedNegative.EnumerationAttempted)
                 throw new InvalidOperationException("reported negative variable count: evaluator enumerated after the count guard should have rejected input.");
+
+            var underEnumerated = new ReportedCountDictionary(
+                2,
+                new KeyValuePair<string, double>("v0", 1d));
+            Throws<InvalidOperationException>(
+                () => evaluator.Evaluate("v0", underEnumerated),
+                "advertised count larger than observed traversal");
+
+            var overEnumerated = new ReportedCountDictionary(
+                1,
+                new KeyValuePair<string, double>("v0", 1d),
+                new KeyValuePair<string, double>("v1", 2d));
+            Throws<InvalidOperationException>(
+                () => evaluator.Evaluate("v0", overEnumerated),
+                "advertised count smaller than observed traversal");
+
+            var consistentReportedCount = new ReportedCountDictionary(
+                2,
+                new KeyValuePair<string, double>("v0", 1d),
+                new KeyValuePair<string, double>("v1", 2d));
+            Near(3d, evaluator.Evaluate("v0 + v1", consistentReportedCount), 1e-12, "consistent advertised and observed variable count");
         }
 
         private static Dictionary<string, double> BuildVariables(int count)
@@ -86,6 +107,69 @@ namespace QS3D.Core.SmokeTests
             }
 
             throw new InvalidOperationException($"{label}: expected {typeof(TException).Name}.");
+        }
+
+        private sealed class ReportedCountDictionary : IReadOnlyDictionary<string, double>
+        {
+            private readonly int _reportedCount;
+            private readonly KeyValuePair<string, double>[] _entries;
+
+            public ReportedCountDictionary(int reportedCount, params KeyValuePair<string, double>[] entries)
+            {
+                _reportedCount = reportedCount;
+                _entries = entries ?? throw new ArgumentNullException(nameof(entries));
+            }
+
+            public int Count => _reportedCount;
+
+            public IEnumerable<string> Keys
+            {
+                get
+                {
+                    for (var i = 0; i < _entries.Length; i++)
+                        yield return _entries[i].Key;
+                }
+            }
+
+            public IEnumerable<double> Values
+            {
+                get
+                {
+                    for (var i = 0; i < _entries.Length; i++)
+                        yield return _entries[i].Value;
+                }
+            }
+
+            public double this[string key]
+            {
+                get
+                {
+                    if (TryGetValue(key, out var value)) return value;
+                    throw new KeyNotFoundException();
+                }
+            }
+
+            public bool ContainsKey(string key) => TryGetValue(key, out _);
+
+            public bool TryGetValue(string key, out double value)
+            {
+                for (var i = 0; i < _entries.Length; i++)
+                {
+                    if (string.Equals(_entries[i].Key, key, StringComparison.Ordinal))
+                    {
+                        value = _entries[i].Value;
+                        return true;
+                    }
+                }
+
+                value = default;
+                return false;
+            }
+
+            public IEnumerator<KeyValuePair<string, double>> GetEnumerator()
+                => ((IEnumerable<KeyValuePair<string, double>>)_entries).GetEnumerator();
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private sealed class ReportedOversizeDictionary : IReadOnlyDictionary<string, double>
