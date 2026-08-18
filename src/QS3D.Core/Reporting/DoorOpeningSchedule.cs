@@ -186,6 +186,8 @@ namespace QS3D.Core.Reporting
         {
             var value = left * right;
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new OverflowException(label + " overflowed.");
+            if (value == 0d && left > 0d && right > 0d)
+                throw new InvalidOperationException(label + " underflowed: positive finite dimensions rounded to zero area.");
             return value;
         }
 

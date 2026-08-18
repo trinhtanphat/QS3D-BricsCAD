@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             CommonAndMixedValuesAreStable();
+            SelectedIdsMustBeCanonical();
             QuantitySignedZeroProjectionIsCanonical();
             NegativeInjectedQuantityFailsClosed();
             QuantityKeysMustBeCanonical();
@@ -61,6 +62,37 @@ namespace QS3D.Core.SmokeTests
             var length = result.Quantities.Single(x => x.Name == "LengthM");
             Equal(true, length.IsMixed);
             Equal(2, length.PresentCount);
+        }
+
+        private static void SelectedIdsMustBeCanonical()
+        {
+            var project = BuildProject();
+            var version = project.ChangeVersion;
+            var canonical = SemanticSelectionInspector.Inspect(project, new[] { "b-001" });
+            Equal(1, canonical.Count);
+            Equal("B-001", canonical.ElementIds[0]);
+            Equal(version, project.ChangeVersion);
+
+            RejectPaddedSelectedId(project, " B-001 ");
+            RejectPaddedSelectedId(project, "\tB-001");
+            RejectPaddedSelectedId(project, "B-001\n");
+            Equal(version, project.ChangeVersion);
+        }
+
+        private static void RejectPaddedSelectedId(ProjectState project, string selectedId)
+        {
+            try
+            {
+                SemanticSelectionInspector.Inspect(project, new[] { selectedId });
+            }
+            catch (ArgumentException ex)
+            {
+                if (ex.Message.IndexOf("leading or trailing whitespace", StringComparison.Ordinal) < 0)
+                    throw new Exception("Unexpected padded selected semantic-id rejection: " + ex.Message);
+                return;
+            }
+
+            throw new Exception("Padded selected semantic IDs must fail closed instead of aliasing canonical project elements.");
         }
 
         private static void QuantitySignedZeroProjectionIsCanonical()

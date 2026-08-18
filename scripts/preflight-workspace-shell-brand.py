@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import re
 
 ROOT = Path(__file__).resolve().parents[1]
 LAYOUT_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
+WORKSPACE_XAML_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml"
 WORKSPACE_BRAND_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Qs3dBrandMark.cs"
 SHELL_REL = "src/QS3D.BricsCAD.V25/Ribbon/Blt3dShellChromeCoordinator.cs"
 ACTIVATION_REL = "src/QS3D.BricsCAD.V25/Ribbon/BltBimWorkspaceActivationCoordinator.cs"
@@ -26,13 +26,12 @@ def forbid(text, needle, scope):
 
 def main():
     layout = read(LAYOUT_REL)
-    workspace_brand = read(WORKSPACE_BRAND_REL)
+    workspace_xaml = read(WORKSPACE_XAML_REL)
     shell = read(SHELL_REL)
     activation = read(ACTIVATION_REL)
     logo = read(LOGO_REL)
 
-    # BricsCAD PaletteSet can transiently report zero viewport width during initial measure. The
-    # final runtime pass must break the old ViewportWidth feedback loop and expose real content.
+    # Preserve the independently valid BricsCAD PaletteSet blank-rendering fix from #2610.
     for token in (
         "BindingOperations.ClearBinding(root, FrameworkElement.WidthProperty);",
         "root.Width = double.NaN;",
@@ -47,75 +46,91 @@ def main():
         require(layout, token, LAYOUT_REL)
     require(layout, "using System.Windows.Data;", LAYOUT_REL)
 
-    # The Workspace itself must visibly carry the original QS3D red-X / green-V identity. Guard
-    # not only the vector art but also the Loaded lifecycle and deterministic insertion point so a
-    # future carrier/rebase cannot silently keep the file while disconnecting it from the live UI.
-    # LOCAL-012 remains the real licensed BricsCAD/HiDPI visual qualification gate.
-    for token in (
-        "Qs3dWorkspaceBrandMark",
-        "EventManager.RegisterClassHandler(",
-        "FrameworkElement.LoadedEvent",
-        "OnQs3dWorkspaceBrandLoaded",
-        "DispatcherPriority.Loaded",
-        "EnsureQs3dWorkspaceBrandMark",
-        "WorkspaceContentRoot.Children",
-        "Grid.GetRow(child) == 0",
-        "Grid.GetColumn(child) == 0",
-        "RegisterName(Qs3dWorkspaceBrandName, mark);",
-        "X đỏ / V xanh",
-        "Color.FromRgb(232, 74, 74)",
-        "Color.FromRgb(82, 190, 108)",
-        'Geometry.Parse("M 5,4 L 13,13 M 13,4 L 5,13")',
-        'Geometry.Parse("M 17,8 L 21,13 L 27,4")',
-        "left.Children.Insert(0, mark);",
-    ):
-        require(workspace_brand, token, WORKSPACE_BRAND_REL)
-    for stale in ("BLT3D.exe", "BLT3D.dll", "private-user-images", "screenshot crop"):
-        forbid(workspace_brand, stale, WORKSPACE_BRAND_REL)
+    # Owner-corrected status-marker semantics: the live Workspace must not contain the X/V tile
+    # that was introduced solely from progress/reporting shorthand.
+    workspace_brand = ROOT / WORKSPACE_BRAND_REL
+    if workspace_brand.exists():
+        raise SystemExit(
+            f"FAIL: {WORKSPACE_BRAND_REL} is status-derived product artwork and must remain removed"
+        )
 
-    # Shell branding must be QS3D-owned clean-room artwork, not screenshot-cropped BLT pixels.
+    # The cancelled #2617 carrier attempted to make the same status-derived mark declarative in
+    # WorkspacePanel.xaml. Guard names, source colors, and the historical vector geometry so a
+    # rename/recolor cannot replay the same rejected product mark through the declarative path.
+    for stale in (
+        'x:Name="Qs3dWorkspaceBrandMark"',
+        'x:Name="Qs3dBrandRedX"',
+        'x:Name="Qs3dBrandGreenV"',
+        'ToolTip="QS3D • X đỏ / V xanh"',
+        'Stroke="#FFE84A4A"',
+        'Stroke="#FF52BE6C"',
+        'Data="M 5,4 L 13,13 M 13,4 L 5,13"',
+        'Data="M 17,8 L 21,13 L 27,4"',
+    ):
+        forbid(workspace_xaml, stale, WORKSPACE_XAML_REL)
+
+    # Preserve compact shell chrome/reassert behavior, but leave application icon ownership to the
+    # BricsCAD host. Never restore the old screenshot-cropped BLT3D payload or the status-derived X/V ICO.
     for token in (
-        "Qs3dBrandIconIcoBase64",
-        "red-X / green-V",
         "public static bool Reassert()",
-        "ExtractLargestEmbeddedPngFromIco()",
-        "qs3d-brand-icon-",
+        'CollapseKnownChromeProperty(control, "QuickAccessToolBar");',
+        'CollapseKnownChromeProperty(control, "ApplicationButton");',
+        'CollapseKnownChromeProperty(control, "SearchBox");',
+        "CollapseNonReferenceChrome(ribbonRoot);",
+        "HiddenElements.Clear();",
     ):
         require(shell, token, SHELL_REL)
+
+    # Guard both the historical helper names and lower-level host-icon takeover primitives. This
+    # prevents an equivalent WPF/native icon override from returning under renamed helper methods.
     for stale in (
+        "Qs3dBrandIconIcoBase64",
         "Blt3dIconIcoBase64",
+        "ApplyWpfWindowIcon",
+        "ApplyNativeWindowIcon",
+        "WmSetIcon",
+        "WM_SETICON",
+        ".Icon =",
+        "WindowInteropHelper",
+        "SendMessage(",
+        "GetHicon(",
+        "Icon.FromHandle",
+        "DestroyIcon(",
         "cropped from the user-provided reference screenshot",
         "private-user-images",
         "BLT3D.exe",
         "BLT3D.dll",
+        "red-X / green-V app mark",
     ):
         forbid(shell, stale, SHELL_REL)
 
-    base64_match = re.search(
-        r'private const string Qs3dBrandIconIcoBase64\s*=\s*\n?\s*"([A-Za-z0-9+/=]+)";',
-        shell,
-    )
-    if base64_match is None or len(base64_match.group(1)) < 1000:
-        raise SystemExit(f"FAIL: {SHELL_REL} must embed deterministic 16/32px QS3D brand ICO data")
-
-    # Reassert only on host tab/workspace transitions; do not continuously overwrite manual state.
+    # Existing lifecycle points remain valid for reapplying host chrome visibility after Ribbon or
+    # workspace reconstruction; they no longer imply application-icon ownership.
     require(activation, "Blt3dShellChromeCoordinator.Reassert();", ACTIVATION_REL)
     if activation.count("Blt3dShellChromeCoordinator.Reassert();") < 2:
-        raise SystemExit(f"FAIL: {ACTIVATION_REL} must reassert shell chrome on tab transition and BIM settle")
+        raise SystemExit(
+            f"FAIL: {ACTIVATION_REL} must reassert shell chrome on tab transition and BIM settle"
+        )
 
-    # Repository branding uses the same independently-authored red/green visual identity.
+    # Restore the independent pre-#2610 QS3D product logo instead of status-marker-derived artwork.
     for token in (
-        '#E84A4A',
-        '#52BE6C',
-        'QS3D original red X and green V BIM/CAD product mark',
-        'd="M108 122 222 282M222 122 108 282"',
-        'd="M270 207 329 286 422 124"',
+        "QS3D product family isometric precision cube mark",
+        "#061323",
+        "#0A2340",
+        "#00C8FF",
+        "#168BFF",
+        "#2457FF",
+        'd="M256 92 388 168 256 244 124 168Z"',
+        'd="M124 168v152l132 78V244M388 168v152l-132 78"',
     ):
         require(logo, token, LOGO_REL)
+    for stale in ("#E84A4A", "#52BE6C", "red X", "green V"):
+        forbid(logo, stale, LOGO_REL)
 
     print(
-        "PASS: Workspace breaks the zero-viewport width loop, restores visible two-column BIM content, "
-        "and QS3D Workspace/shell/repository branding uses original red-X green-V artwork with live UI wiring."
+        "PASS: Workspace blank rendering and shell lifecycle behavior remain guarded, the host retains "
+        "application-icon ownership, status-derived Workspace/shell X/V artwork is absent from both "
+        "runtime and declarative paths, and the repository uses the independent QS3D cube mark."
     )
     return 0
 

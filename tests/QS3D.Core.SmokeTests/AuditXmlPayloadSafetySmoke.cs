@@ -32,7 +32,7 @@ namespace QS3D.Core.SmokeTests
                 const string elementId = "E-1";
                 const string detail = " line1\tline2\nline3\r ";
                 const string actor = " user@example.test ";
-                const string correlationId = " corr-1 ";
+                const string correlationId = "corr-1";
                 audit.Record("AUDIT_XML_VALID", elementId, detail, actor, correlationId);
 
                 new QsdbProjectStore().SaveNew(project, path);

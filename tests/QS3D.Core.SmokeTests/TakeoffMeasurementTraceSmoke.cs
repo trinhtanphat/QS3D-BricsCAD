@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             CanonicalResultParityAndProvenance();
             SignedZeroResultParity();
+            TakeoffResultHandleCanonicality();
             MissingMetricStillFailsThroughCanonicalPath();
             InvalidDrawingUnitStillFailsThroughCanonicalPath();
         }
@@ -45,6 +46,52 @@ namespace QS3D.Core.SmokeTests
             PositiveZero(traced.Trace.GrossValue, "Trace gross zero must remain canonical.");
             PositiveZero(traced.Trace.NetValue, "Trace net zero must remain canonical.");
             Equal(traced.Trace.NetValue, traced.Result.Value, "Takeoff result and trace zero quantities must remain equal.");
+        }
+
+        private static void TakeoffResultHandleCanonicality()
+        {
+            var trimmed = new TakeoffResult("  H1  ", TakeoffKind.Count, 1d, "  ea  ");
+            Equal("H1", trimmed.Handle, "TakeoffResult must preserve existing surrounding-space handle canonicalization.");
+            Equal("ea", trimmed.Unit, "TakeoffResult must preserve existing surrounding-space unit canonicalization.");
+            Equal(TakeoffKind.Count, trimmed.Kind, "TakeoffResult kind changed during handle hardening.");
+            Equal(1d, trimmed.Value, "TakeoffResult value changed during handle hardening.");
+
+            var controls = new[]
+            {
+                '\0',       // NUL / C0
+                '\u0001',   // SOH / C0
+                '\t',       // TAB / C0
+                '\n',       // LF / C0
+                '\u001F',   // Unit Separator / C0
+                '\u007F',   // DEL
+                '\u0085',   // NEL / C1
+                '\u009F'    // C1 boundary
+            };
+
+            foreach (var control in controls)
+            {
+                var handle = "H" + control + "1";
+                var message = Capture<ArgumentException>(() => new TakeoffResult(handle, TakeoffKind.Count, 1d, "ea"));
+                Contains(message, "Takeoff handle must not contain control characters.",
+                    "Embedded control character U+" + ((int)control).ToString("X4") + " must fail with the canonical handle diagnostic.");
+            }
+
+            var trimmedControl = new TakeoffResult("\t H2 \t", TakeoffKind.Count, 2d, "ea");
+            Equal("H2", trimmedControl.Handle,
+                "Control whitespace removed entirely by the existing surrounding trim must remain compatible.");
+
+            var entity = new EntitySnapshot("H3", "Point", "QTO");
+            var canonical = QuantityEngine.Calculate(entity, TakeoffKind.Count, DrawingUnit.Meter);
+            var traced = QuantityEngine.CalculateWithTrace(entity, TakeoffKind.Count, DrawingUnit.Meter);
+            Equal("H3", canonical.Handle, "Canonical QuantityEngine handle changed unexpectedly.");
+            Equal(canonical.Handle, traced.Result.Handle,
+                "Trace projection must preserve canonical result handle after hardening.");
+            Equal(canonical.Kind, traced.Result.Kind,
+                "Trace projection kind parity changed during TakeoffResult hardening.");
+            Equal(canonical.Value, traced.Result.Value,
+                "Trace projection value parity changed during TakeoffResult hardening.");
+            Equal(canonical.Unit, traced.Result.Unit,
+                "Trace projection unit parity changed during TakeoffResult hardening.");
         }
 
         private static void AssertParity(
@@ -118,6 +165,12 @@ namespace QS3D.Core.SmokeTests
                 return exception.Message;
             }
             throw new InvalidOperationException("Expected " + typeof(TException).Name + ".");
+        }
+
+        private static void Contains(string actual, string expectedFragment, string message)
+        {
+            if (actual.IndexOf(expectedFragment, StringComparison.Ordinal) < 0)
+                throw new InvalidOperationException(message + " Actual: " + actual);
         }
 
         private static void PositiveZero(double value, string message)

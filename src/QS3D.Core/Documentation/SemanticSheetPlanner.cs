@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -232,6 +233,8 @@ namespace QS3D.Core.Documentation
 
         private static List<SemanticSheetDefinition> MaterializeCatalogBounded(IEnumerable<SemanticSheetDefinition> definitions)
         {
+            RequireKnownCountsWithinLimit(definitions, MaxCatalogSheets, "Semantic sheet catalog", "sheets");
+
             var result = new List<SemanticSheetDefinition>(Math.Min(MaxCatalogSheets, 256));
             using (var enumerator = definitions.GetEnumerator())
             {
@@ -247,6 +250,8 @@ namespace QS3D.Core.Documentation
 
         private static List<SemanticViewPlan> MaterializeAvailableViewsBounded(IEnumerable<SemanticViewPlan> availableViews)
         {
+            RequireKnownCountsWithinLimit(availableViews, MaxAvailableViews, "Semantic sheet planner", "available views");
+
             var result = new List<SemanticViewPlan>(Math.Min(MaxAvailableViews, 256));
             using (var enumerator = availableViews.GetEnumerator())
             {
@@ -258,6 +263,29 @@ namespace QS3D.Core.Documentation
                 }
             }
             return result;
+        }
+
+        private static void RequireKnownCountsWithinLimit<T>(IEnumerable<T> values, int limit, string owner, string itemLabel)
+        {
+            var knownCounts = new List<int>(3);
+            if (values is ICollection<T> collection) knownCounts.Add(collection.Count);
+            if (values is IReadOnlyCollection<T> readOnlyCollection) knownCounts.Add(readOnlyCollection.Count);
+            if (values is ICollection nonGenericCollection) knownCounts.Add(nonGenericCollection.Count);
+
+            for (var i = 0; i < knownCounts.Count; i++)
+            {
+                var count = knownCounts[i];
+                if (count < 0)
+                    throw new InvalidOperationException(owner + " received an invalid negative known count for " + itemLabel + ".");
+                if (count > limit)
+                    throw new InvalidOperationException(owner + " supports at most " + limit + " " + itemLabel + ".");
+            }
+
+            if (knownCounts.Count <= 1) return;
+            var expected = knownCounts[0];
+            for (var i = 1; i < knownCounts.Count; i++)
+                if (knownCounts[i] != expected)
+                    throw new InvalidOperationException(owner + " received conflicting known counts for " + itemLabel + ".");
         }
 
         private static Dictionary<string, SemanticViewPlan> BuildUniqueViewIndex(IEnumerable<SemanticViewPlan> views)

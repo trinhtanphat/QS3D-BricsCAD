@@ -61,6 +61,8 @@ namespace QS3D.Core.Audit
             var safeDetail = detail ?? string.Empty;
             var safeActor = actor ?? string.Empty;
             var safeCorrelationId = correlationId ?? string.Empty;
+            RequireCanonicalOptionalIdentity(safeElementId, nameof(elementId), "Audit element id");
+            RequireCanonicalOptionalIdentity(safeCorrelationId, nameof(correlationId), "Audit correlation id");
             RequireXmlCharacters(normalizedAction, nameof(action), "Audit action");
             RequireXmlCharacters(safeElementId, nameof(elementId), "Audit element id");
             RequireXmlCharacters(safeDetail, nameof(detail), "Audit detail");
@@ -113,16 +115,35 @@ namespace QS3D.Core.Audit
                 ContainsInvalidXmlCharacters(action))
                 return "Audit trail contains a non-canonical action.";
 
-            if (ContainsInvalidXmlCharacters(item.ElementId ?? string.Empty))
+            var elementId = item.ElementId ?? string.Empty;
+            if (!IsCanonicalOptionalIdentity(elementId))
+                return "Audit trail contains a non-canonical element id.";
+            if (ContainsInvalidXmlCharacters(elementId))
                 return "Audit trail contains an XML-invalid element id.";
             if (ContainsInvalidXmlCharacters(item.Detail ?? string.Empty))
                 return "Audit trail contains XML-invalid detail.";
             if (ContainsInvalidXmlCharacters(item.Actor ?? string.Empty))
                 return "Audit trail contains an XML-invalid actor.";
-            if (ContainsInvalidXmlCharacters(item.CorrelationId ?? string.Empty))
+
+            var correlationId = item.CorrelationId ?? string.Empty;
+            if (!IsCanonicalOptionalIdentity(correlationId))
+                return "Audit trail contains a non-canonical correlation id.";
+            if (ContainsInvalidXmlCharacters(correlationId))
                 return "Audit trail contains an XML-invalid correlation id.";
 
             return null;
+        }
+
+        private static void RequireCanonicalOptionalIdentity(string value, string parameterName, string label)
+        {
+            if (!IsCanonicalOptionalIdentity(value))
+                throw new ArgumentException(label + " must be empty or canonical without surrounding whitespace or control characters.", parameterName);
+        }
+
+        private static bool IsCanonicalOptionalIdentity(string value)
+        {
+            return value.Length == 0 ||
+                (string.Equals(value, value.Trim(), StringComparison.Ordinal) && !ContainsControlCharacter(value));
         }
 
         private static void RequireXmlCharacters(string value, string parameterName, string label)

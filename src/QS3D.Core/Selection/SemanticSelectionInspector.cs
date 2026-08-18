@@ -87,7 +87,10 @@ namespace QS3D.Core.Selection
             {
                 if (requested.Count >= MaxSelection) throw new InvalidOperationException("Semantic property inspector supports at most " + MaxSelection + " selected elements.");
                 if (string.IsNullOrWhiteSpace(rawId)) throw new ArgumentException("Selected semantic element id is required.", nameof(elementIds));
-                var id = rawId.Trim();
+                var canonicalId = rawId.Trim();
+                if (!string.Equals(rawId, canonicalId, StringComparison.Ordinal))
+                    throw new ArgumentException("Selected semantic element id must not contain leading or trailing whitespace.", nameof(elementIds));
+                var id = rawId;
                 if (!requestedSet.Add(id)) throw new InvalidOperationException("Semantic property inspector received duplicate selected element id: " + id + ".");
                 if (!projectIndex.ContainsKey(id)) throw new InvalidOperationException("Semantic property inspector references missing element id: " + id + ".");
                 requested.Add(id);

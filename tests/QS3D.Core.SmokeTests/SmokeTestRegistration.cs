@@ -28,6 +28,7 @@ namespace QS3D.Core.SmokeTests
             XlsxHandleReaderCoordinateSmoke.Run();
             XlsxExporterRowBoundSmoke.Run();
             QuantityReportRevisionReviewSmoke.Run();
+            QuantityRevisionProjectIdentitySmoke.Run();
             PersistenceHardeningSmoke.Run();
             LicenseVerifierSmoke.Run();
             AdvancedDomainSmoke.Run();
@@ -49,6 +50,7 @@ namespace QS3D.Core.SmokeTests
             FormulaFiniteSafetySmoke.Run();
             FormulaVariableCaseSmoke.Run();
             FormulaVariableNameNormalizationSmoke.Run();
+            FormulaVariableKnownCountContractSmoke.Run();
             RebarNotationOverflowSmoke.Run();
             RebarWeightUnderflowSmoke.Run();
             ColumnTieQuantityUnderflowSmoke.Run();
@@ -88,6 +90,7 @@ namespace QS3D.Core.SmokeTests
             LevelReferenceSmoke.Run();
             ElementVerticalPlacementAdditivePrecisionSmoke.Run();
             ProjectFloorMutationTargetBoundSmoke.Run();
+            ProjectFloorPersistedLevelCanonicalitySmoke.Run();
             FloorGeneratedIdentitySmoke.Run();
             ModelHealthIdentityAmbiguitySmoke.Run();
             ModelHealthSourceHandleSmoke.Run();
@@ -175,6 +178,7 @@ namespace QS3D.Core.SmokeTests
             MeasuredSolidQuantityPolicySmoke.Run();
             MepTbqDecimalUnderflowSmoke.Run();
             MepRecognitionSmoke.Run();
+            ClashDetectionKnownCountContractSmoke.Run();
             CubicostParitySmoke.Run();
         }
     }

@@ -142,6 +142,9 @@ namespace QS3D.Core.Measurement
             var deltaValue = current.NetValue - previous.NetValue;
             if (double.IsNaN(deltaValue) || double.IsInfinity(deltaValue))
                 throw new InvalidOperationException("Measurement snapshot delta produced a non-finite value for a canonical measurement identity.");
+            if ((deltaValue == current.NetValue && previous.NetValue != 0d) ||
+                (deltaValue == -previous.NetValue && current.NetValue != 0d))
+                throw new InvalidOperationException("Measurement snapshot delta lost a finite non-zero endpoint during subtraction.");
 
             return new MeasurementSnapshotDeltaLine(
                 previous.Equals(current) ? MeasurementSnapshotChangeKind.Unchanged : MeasurementSnapshotChangeKind.Changed,

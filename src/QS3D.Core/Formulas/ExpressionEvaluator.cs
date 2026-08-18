@@ -38,11 +38,7 @@ namespace QS3D.Core.Formulas
             var normalized = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
             if (variables == null) return normalized;
 
-            var reportedCount = variables.Count;
-            if (reportedCount < 0)
-                throw new InvalidOperationException("Variable source reports an invalid negative count.");
-            if (reportedCount > MaxVariableCount)
-                throw new InvalidOperationException($"Variable count exceeds the supported maximum of {MaxVariableCount}.");
+            ValidateKnownVariableCounts(variables);
 
             var variableCount = 0;
             foreach (var pair in variables)
@@ -64,6 +60,34 @@ namespace QS3D.Core.Formulas
             }
 
             return normalized;
+        }
+
+        private static void ValidateKnownVariableCounts(IReadOnlyDictionary<string, double> variables)
+        {
+            var knownCounts = new List<int>(3) { variables.Count };
+            if (variables is ICollection<KeyValuePair<string, double>> genericCollection)
+                knownCounts.Add(genericCollection.Count);
+            if (variables is System.Collections.ICollection nonGenericCollection)
+                knownCounts.Add(nonGenericCollection.Count);
+
+            for (var i = 0; i < knownCounts.Count; i++)
+            {
+                if (knownCounts[i] > MaxVariableCount)
+                    throw new InvalidOperationException($"Variable count exceeds the supported maximum of {MaxVariableCount}.");
+            }
+
+            for (var i = 0; i < knownCounts.Count; i++)
+            {
+                if (knownCounts[i] < 0)
+                    throw new InvalidOperationException("Variable source reports an invalid negative count.");
+            }
+
+            var expectedCount = knownCounts[0];
+            for (var i = 1; i < knownCounts.Count; i++)
+            {
+                if (knownCounts[i] != expectedCount)
+                    throw new InvalidOperationException("Variable source reports conflicting known counts.");
+            }
         }
 
         private static bool IsValidIdentifier(string value)

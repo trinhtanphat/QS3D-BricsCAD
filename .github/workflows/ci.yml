@@ -2,28 +2,14 @@ name: QS3D Shared Branch and Integration CI
 
 on:
   workflow_dispatch:
-  # Task branches keep a watched-path filter so ordinary docs-only branch pushes
-  # do not burn CI. PR validation intentionally has no paths filter because
-  # protected main always requires stable `preflight` and `core` contexts.
+  # Every task/integration branch push must produce an exact-head validation run.
+  # The jobs classify changed paths against main and keep docs/metadata-only candidates lightweight.
+  # PR validation intentionally has no paths filter because protected main always requires
+  # stable `preflight` and `core` contexts.
   "push":
     branches:
       - "agent/**"
       - "integration/**"
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "scripts/**"
-      - "samples/generated/**"
-      - ".github/workflows/**"
-      - "Directory.Build.props"
-      - "QS3D.sln"
-      - "QS3D.V26.sln"
-      - "CI_POLICY.md"
-      - "AGENTS.md"
-      - "README.md"
-      - "docs/MAIN-WRITE-AUTHORIZATION.md"
-      - "docs/AGENT-WORK-REGISTRATION.md"
-      - "docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md"
   "pull_request":
     branches:
       - main
@@ -94,7 +80,7 @@ jobs:
                 continue
               }
 
-              if ($path -in @('CI_POLICY.md', 'AGENTS.md', 'README.md', 'docs/MAIN-WRITE-AUTHORIZATION.md', 'docs/AGENT-WORK-REGISTRATION.md', 'docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md')) {
+              if ($path -in @('CI_POLICY.md', 'AGENTS.md', 'README.md', 'docs/MAIN-WRITE-AUTHORIZATION.md', 'docs/AGENT-WORK-REGISTRATION.md', 'docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md', 'docs/AGENT-STATUS-MARKER-SEMANTICS.md', 'docs/AGENT-BRANCH-CI-ACTIONS-LOOKUP.md')) {
                 $sourceValidation = $true
               }
             }
