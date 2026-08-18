@@ -61,9 +61,13 @@ def main() -> int:
     ):
         require(validate, token, "neutral Validate artwork")
 
+    # Reject the historical status-derived geometry, identifiers, and their exact saturated RGB
+    # values so a future refactor cannot reintroduce the same product cue merely by inlining colors.
     for stale in (
         "statusRed",
         "statusGreen",
+        "Color.FromRgb(224, 62, 62)",
+        "Color.FromRgb(55, 176, 90)",
         "M8,11 L14,17 M14,11 L8,17",
         "M17,18 L21,22 L27,12",
         "red X",
@@ -91,6 +95,9 @@ def main() -> int:
         "Stroke(accentDark",
         "Stroke(accent,",
         "Fill(warning",
+        "Color.FromRgb(14, 79, 170)",
+        "Color.FromRgb(32, 137, 245)",
+        "Color.FromRgb(224, 72, 72)",
     ):
         forbid(ribbon_validate, stale, "neutral Validate Ribbon fallback")
 
