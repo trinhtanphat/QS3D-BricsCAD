@@ -20,8 +20,17 @@ if SUMMARY.is_file():
         "public bool IsReleaseReady => Errors == 0 && Warnings == 0;",
         "public const int MaxIssueCount = 1000000;",
         "var normalized = MaterializeIssues(issues);",
+        "var expectedKnownCount = RequireKnownCountsWithinLimit(issues);",
+        "private static int? RequireKnownCountsWithinLimit",
+        "issues is ICollection<ModelHealthIssue> collection",
+        "issues is IReadOnlyCollection<ModelHealthIssue> readOnlyCollection",
+        "issues is System.Collections.ICollection nonGenericCollection",
         "while (enumerator.MoveNext())",
         "if (result.Count >= MaxIssueCount)",
+        "if (expectedKnownCount.HasValue && result.Count != expectedKnownCount.Value)",
+        'throw new InvalidOperationException("Health summary known issue count does not match enumerated issue count.");',
+        'throw new InvalidOperationException("Health summary received an invalid negative known issue count.");',
+        'throw new InvalidOperationException("Health summary received conflicting known issue counts.");',
         "if (normalized.Any(x => x == null))",
         'throw new InvalidOperationException("Health summary cannot contain a null diagnostic issue.");',
         "Issues = normalized.AsReadOnly();",
@@ -47,6 +56,15 @@ if BOUNDED_SMOKE.is_file():
         "ExactCapIsAcceptedInOnePass",
         "FirstIssueBeyondCapIsRejectedInOnePass",
         "ThrowingInputPropagatesWithoutAResult",
+        "OversizedKnownCountIsRejectedBeforeEnumeration",
+        "NegativeKnownCountIsRejectedBeforeEnumeration",
+        "ConflictingKnownCountsAreRejectedBeforeEnumeration",
+        "KnownCountUnderEnumerationIsRejected",
+        "KnownCountOverEnumerationIsRejected",
+        "HonestKnownCountIsAccepted",
+        "StreamingInputWithoutKnownCountRemainsAccepted",
+        "AdversarialKnownCountCollection",
+        "KnownCountTraversalCollection",
         "HealthSummary.MaxIssueCount + 1",
         "source.EnumerationCount",
         "[ModuleInitializer]",
@@ -63,4 +81,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Core distinguishes health from release readiness, bounds single-pass issue input, rejects malformed diagnostics fail-closed, and warnings block IsReleaseReady. This gate does not inspect V25 runtime/native files.")
+print("PASS: Core distinguishes health from release readiness, rejects invalid known issue-count contracts before enumeration, rejects known Count/traversal mismatches after bounded single-pass traversal, rejects malformed diagnostics fail-closed, and warnings block IsReleaseReady. This gate does not inspect V25 runtime/native files.")

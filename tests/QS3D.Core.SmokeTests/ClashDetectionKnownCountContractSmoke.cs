@@ -17,7 +17,12 @@ namespace QS3D.Core.SmokeTests
             CapacityViolationPrecedesCountConflict();
             ExactBoundRemainsAccepted();
             ConsistentKnownCountsPreserveDeterministicClassification();
+            UnderEnumeratingKnownCountFailsAfterTraversal();
+            OverEnumeratingKnownCountFailsAfterTraversal();
             DishonestKnownCountStillStopsAtStreamingBoundary();
+            LostOrthogonalGapFailsClosed();
+            OneAxisClearanceBoundaryRemainsAccepted();
+            OrdinaryMultiAxisDistanceRemainsAccepted();
         }
 
         private static void ConflictingKnownCountsFailBeforeEnumeration()
@@ -122,6 +127,44 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Consistent known-count clash input must enumerate exactly once per Detect call.");
         }
 
+        private static void UnderEnumeratingKnownCountFailsAfterTraversal()
+        {
+            var source = new MultiCountCollection(
+                new[] { Element("A", "Architecture") },
+                genericCount: 2,
+                readOnlyCount: 2,
+                nonGenericCount: 2,
+                throwOnEnumeration: false);
+
+            ExpectInvalidOperation(
+                () => new ClashDetectionService().Detect(source),
+                "did not match its known element count",
+                "Clash detection must fail closed when traversal yields fewer elements than the validated known Count.");
+            if (!source.EnumerationRequested || source.EnumerationRequestCount != 1)
+                throw new Exception("Under-enumeration mismatch must be detected after exactly one traversal.");
+        }
+
+        private static void OverEnumeratingKnownCountFailsAfterTraversal()
+        {
+            var source = new MultiCountCollection(
+                new[]
+                {
+                    Element("A", "Architecture"),
+                    Element("B", "Structure")
+                },
+                genericCount: 1,
+                readOnlyCount: 1,
+                nonGenericCount: 1,
+                throwOnEnumeration: false);
+
+            ExpectInvalidOperation(
+                () => new ClashDetectionService().Detect(source),
+                "did not match its known element count",
+                "Clash detection must fail closed when traversal yields more in-bound elements than the validated known Count.");
+            if (!source.EnumerationRequested || source.EnumerationRequestCount != 1)
+                throw new Exception("Over-enumeration mismatch must be detected after exactly one traversal.");
+        }
+
         private static void DishonestKnownCountStillStopsAtStreamingBoundary()
         {
             var source = new DishonestReadOnlyCollection(MaximumElements + 1, reportedCount: 1);
@@ -133,7 +176,71 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Clash detection must stop immediately after observing element 501 and never request element 502.");
         }
 
+        private static void LostOrthogonalGapFailsClosed()
+        {
+            var elements = new[]
+            {
+                Element(
+                    "A",
+                    "Architecture",
+                    new AxisAlignedBox(-1d, -1d, -1d, 0d, 0d, 0d)),
+                Element(
+                    "B",
+                    "Structure",
+                    new AxisAlignedBox(1d, 1e-200d, -1d, 2d, 1d, 0d))
+            };
+
+            ExpectInvalidOperation(
+                () => new ClashDetectionService().Detect(elements, clearanceM: 1d),
+                "lost a non-zero orthogonal gap",
+                "Clash distance must fail closed when a positive orthogonal gap disappears from the representable norm.");
+        }
+
+        private static void OneAxisClearanceBoundaryRemainsAccepted()
+        {
+            var elements = new[]
+            {
+                Element(
+                    "A",
+                    "Architecture",
+                    new AxisAlignedBox(-1d, -1d, -1d, 0d, 0d, 0d)),
+                Element(
+                    "B",
+                    "Structure",
+                    new AxisAlignedBox(1d, -1d, -1d, 2d, 0d, 0d))
+            };
+
+            var results = new ClashDetectionService().Detect(elements, clearanceM: 1d);
+            AssertSingleClearance(results, "A", "B", 1d);
+        }
+
+        private static void OrdinaryMultiAxisDistanceRemainsAccepted()
+        {
+            var elements = new[]
+            {
+                Element(
+                    "A",
+                    "Architecture",
+                    new AxisAlignedBox(-1d, -1d, -1d, 0d, 0d, 0d)),
+                Element(
+                    "B",
+                    "Structure",
+                    new AxisAlignedBox(3d, 4d, -1d, 4d, 5d, 0d))
+            };
+
+            var results = new ClashDetectionService().Detect(elements, clearanceM: 5d);
+            AssertSingleClearance(results, "A", "B", 5d);
+        }
+
         private static CoordinationElement Element(string id, string discipline)
+        {
+            return Element(
+                id,
+                discipline,
+                new AxisAlignedBox(0d, 0d, 0d, 1d, 1d, 1d));
+        }
+
+        private static CoordinationElement Element(string id, string discipline, AxisAlignedBox bounds)
         {
             return new CoordinationElement(
                 id,
@@ -141,7 +248,7 @@ namespace QS3D.Core.SmokeTests
                 "Generic",
                 "System",
                 "Region",
-                new AxisAlignedBox(0d, 0d, 0d, 1d, 1d, 1d));
+                bounds);
         }
 
         private static void AssertSingleHardClash(IReadOnlyList<ClashResult> results, string leftId, string rightId)
@@ -152,6 +259,22 @@ namespace QS3D.Core.SmokeTests
                 !string.Equals(results[0].RightElementId, rightId, StringComparison.Ordinal))
             {
                 throw new Exception("Valid multi-count input must preserve deterministic hard-clash ordering/classification.");
+            }
+        }
+
+        private static void AssertSingleClearance(
+            IReadOnlyList<ClashResult> results,
+            string leftId,
+            string rightId,
+            double expectedSeparation)
+        {
+            if (results.Count != 1 ||
+                results[0].Kind != ClashKind.Clearance ||
+                !string.Equals(results[0].LeftElementId, leftId, StringComparison.Ordinal) ||
+                !string.Equals(results[0].RightElementId, rightId, StringComparison.Ordinal) ||
+                results[0].SeparationM != expectedSeparation)
+            {
+                throw new Exception("Valid clash distance input must preserve deterministic clearance classification and separation.");
             }
         }
 
