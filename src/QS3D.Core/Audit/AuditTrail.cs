@@ -122,6 +122,8 @@ namespace QS3D.Core.Audit
         private int RequireSupportedHistoryCount(bool requireAppendCapacity)
         {
             var storedCount = _events.Count;
+            if (storedCount < 0)
+                throw new InvalidOperationException("Audit trail exposes an invalid negative event count. Repair the existing audit history before reading or modifying it.");
             if (storedCount > MaxStoredEvents)
                 throw TooManyEvents();
             if (requireAppendCapacity && storedCount >= MaxStoredEvents)
