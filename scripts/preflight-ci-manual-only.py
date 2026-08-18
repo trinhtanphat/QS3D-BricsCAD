@@ -205,7 +205,7 @@ def validate_guard_parser():
         "    if: ${{ github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]' }}"
     ])
     auto_bad = extract_job_if_expression([
-        "    if: ${{ github.ref == 'refs/heads/main' || github.actor == 'refs/heads/main' }}"
+        "    if: ${{ github.ref == 'refs/heads/main' || github.actor != 'github-actions[bot]' }}"
     ])
     if not is_hard_auto_dispatch_guard(auto_good) or is_hard_auto_dispatch_guard(auto_bad):
         errors.append("automatic dispatcher guard parser regression")
