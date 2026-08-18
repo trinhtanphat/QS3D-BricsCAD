@@ -22,7 +22,10 @@ namespace QS3D.Core.SmokeTests
             RejectsRecordAtCapacityWithoutMutation();
             RecordsIntoLastAvailableSlot();
             RejectsOversizedClearWithoutMutation();
-            ClearsDishonestZeroCountHistory();
+            RejectsUnderreportedReadWithoutMutation();
+            RejectsUnderreportedRecordWithoutMutation();
+            RejectsUnderreportedClearWithoutMutation();
+            RejectsOverreportedReadWithoutMutation();
         }
 
         private static void ReadsExactBoundWithoutMutation()
@@ -55,37 +58,17 @@ namespace QS3D.Core.SmokeTests
         private static void RejectsNegativeKnownCountBeforeEnumeration()
         {
             var history = new NegativeCountHistory();
-            var constructor = typeof(AuditTrail).GetConstructor(
-                BindingFlags.Instance | BindingFlags.NonPublic,
-                binder: null,
-                types: new[] { typeof(IList<AuditEvent>), typeof(ProjectState) },
-                modifiers: null);
-            if (constructor == null)
-                throw new Exception("AuditTrailHistoryBoundSmoke could not resolve the bounded-history constructor.");
+            var trail = BuildTrail(history);
 
-            var trail = (AuditTrail)constructor.Invoke(new object?[] { history, null });
             Throws<InvalidOperationException>(() => _ = trail.Events);
             Equal(0, history.EnumeratorRequests, "negative-count enumeration requests");
         }
 
         private static void SnapshotUsesValidatedCountOnce()
         {
-            var history = new SingleCountReadHistory(new AuditEvent
-            {
-                Utc = new DateTime(2026, 8, 18, 0, 0, 0, DateTimeKind.Utc),
-                Action = "history.event",
-                ElementId = "E1",
-                Detail = "canonical"
-            });
-            var constructor = typeof(AuditTrail).GetConstructor(
-                BindingFlags.Instance | BindingFlags.NonPublic,
-                binder: null,
-                types: new[] { typeof(IList<AuditEvent>), typeof(ProjectState) },
-                modifiers: null);
-            if (constructor == null)
-                throw new Exception("AuditTrailHistoryBoundSmoke could not resolve the bounded-history constructor.");
+            var history = new SingleCountReadHistory(CanonicalEvent());
+            var trail = BuildTrail(history);
 
-            var trail = (AuditTrail)constructor.Invoke(new object?[] { history, null });
             var events = trail.Events;
 
             Equal(1, events.Count, "single-count snapshot count");
@@ -132,15 +115,60 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("AuditTrailHistoryBoundSmoke oversized clear replaced stored evidence.");
         }
 
-        private static void ClearsDishonestZeroCountHistory()
+        private static void RejectsUnderreportedReadWithoutMutation()
         {
-            var history = new ZeroCountHistory(new AuditEvent
-            {
-                Utc = new DateTime(2026, 8, 18, 0, 0, 0, DateTimeKind.Utc),
-                Action = "history.event",
-                ElementId = "E1",
-                Detail = "canonical"
-            });
+            var history = new DishonestCountHistory(0, CanonicalEvent());
+            var trail = BuildTrail(history);
+
+            Throws<InvalidOperationException>(() => _ = trail.Events);
+
+            Equal(1, history.EnumeratorRequests, "underreported read enumeration requests");
+            Equal(0, history.AddRequests, "underreported read add requests");
+            Equal(0, history.ClearRequests, "underreported read clear requests");
+            Equal(1, history.ActualCount, "underreported read actual count");
+        }
+
+        private static void RejectsUnderreportedRecordWithoutMutation()
+        {
+            var history = new DishonestCountHistory(0, CanonicalEvent());
+            var trail = BuildTrail(history);
+
+            Throws<InvalidOperationException>(() => trail.Record("new.action", "E2", "detail"));
+
+            Equal(1, history.EnumeratorRequests, "underreported record enumeration requests");
+            Equal(0, history.AddRequests, "underreported record add requests");
+            Equal(0, history.ClearRequests, "underreported record clear requests");
+            Equal(1, history.ActualCount, "underreported record actual count");
+        }
+
+        private static void RejectsUnderreportedClearWithoutMutation()
+        {
+            var history = new DishonestCountHistory(0, CanonicalEvent());
+            var trail = BuildTrail(history);
+
+            Throws<InvalidOperationException>(() => trail.Clear());
+
+            Equal(1, history.EnumeratorRequests, "underreported clear enumeration requests");
+            Equal(0, history.AddRequests, "underreported clear add requests");
+            Equal(0, history.ClearRequests, "underreported clear mutation requests");
+            Equal(1, history.ActualCount, "underreported clear actual count");
+        }
+
+        private static void RejectsOverreportedReadWithoutMutation()
+        {
+            var history = new DishonestCountHistory(2, CanonicalEvent());
+            var trail = BuildTrail(history);
+
+            Throws<InvalidOperationException>(() => _ = trail.Events);
+
+            Equal(1, history.EnumeratorRequests, "overreported read enumeration requests");
+            Equal(0, history.AddRequests, "overreported read add requests");
+            Equal(0, history.ClearRequests, "overreported read clear requests");
+            Equal(1, history.ActualCount, "overreported read actual count");
+        }
+
+        private static AuditTrail BuildTrail(IList<AuditEvent> history)
+        {
             var constructor = typeof(AuditTrail).GetConstructor(
                 BindingFlags.Instance | BindingFlags.NonPublic,
                 binder: null,
@@ -148,13 +176,18 @@ namespace QS3D.Core.SmokeTests
                 modifiers: null);
             if (constructor == null)
                 throw new Exception("AuditTrailHistoryBoundSmoke could not resolve the bounded-history constructor.");
+            return (AuditTrail)constructor.Invoke(new object?[] { history, null });
+        }
 
-            var trail = (AuditTrail)constructor.Invoke(new object?[] { history, null });
-            trail.Clear();
-
-            Equal(1, history.EnumeratorRequests, "zero-count clear enumeration requests");
-            Equal(1, history.ClearRequests, "zero-count clear mutation requests");
-            Equal(0, history.ActualCount, "zero-count clear actual count");
+        private static AuditEvent CanonicalEvent()
+        {
+            return new AuditEvent
+            {
+                Utc = new DateTime(2026, 8, 18, 0, 0, 0, DateTimeKind.Utc),
+                Action = "history.event",
+                ElementId = "E1",
+                Detail = "canonical"
+            };
         }
 
         private static ProjectState BuildProject(string id, int count)
@@ -233,23 +266,30 @@ namespace QS3D.Core.SmokeTests
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
-        private sealed class ZeroCountHistory : IList<AuditEvent>
+        private sealed class DishonestCountHistory : IList<AuditEvent>
         {
+            private readonly int _reportedCount;
             private readonly List<AuditEvent> _items;
 
-            internal ZeroCountHistory(params AuditEvent[] items)
+            internal DishonestCountHistory(int reportedCount, params AuditEvent[] items)
             {
+                _reportedCount = reportedCount;
                 _items = new List<AuditEvent>(items);
             }
 
             internal int EnumeratorRequests { get; private set; }
+            internal int AddRequests { get; private set; }
             internal int ClearRequests { get; private set; }
             internal int ActualCount => _items.Count;
 
-            public int Count => 0;
+            public int Count => _reportedCount;
             public bool IsReadOnly => false;
             public AuditEvent this[int index] { get => _items[index]; set => _items[index] = value; }
-            public void Add(AuditEvent item) => _items.Add(item);
+            public void Add(AuditEvent item)
+            {
+                AddRequests++;
+                _items.Add(item);
+            }
             public void Clear()
             {
                 ClearRequests++;
