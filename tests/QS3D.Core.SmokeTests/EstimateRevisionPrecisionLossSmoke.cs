@@ -13,11 +13,30 @@ namespace QS3D.Core.SmokeTests
 
         internal static void Run()
         {
+            SwallowedPreviousMeasuredQuantityFailsClosed();
+            SwallowedCurrentMeasuredQuantityFailsClosed();
             SwallowedPreviousAdjustmentFailsClosed();
             SwallowedCurrentAdjustmentFailsClosed();
             SwallowedPreviousRateFailsClosed();
+            SwallowedCurrentRateFailsClosed();
             ExactLargeAdjustmentDeltaRemainsValid();
+            ExactLargeRateDeltaRemainsValid();
+            ZeroCancellationRemainsValid();
             OrdinaryDecompositionStillReconciles();
+        }
+
+        private static void SwallowedPreviousMeasuredQuantityFailsClosed()
+        {
+            var previous = Line(0.1d, 0m, 0m);
+            var current = Line(1e28d, 0m, 0m);
+            ThrowsOverflow(() => EstimateRevisionCostImpact.Create(previous, current));
+        }
+
+        private static void SwallowedCurrentMeasuredQuantityFailsClosed()
+        {
+            var previous = Line(1e28d, 0m, 0m);
+            var current = Line(0.1d, 0m, 0m);
+            ThrowsOverflow(() => EstimateRevisionCostImpact.Create(previous, current));
         }
 
         private static void SwallowedPreviousAdjustmentFailsClosed()
@@ -41,6 +60,13 @@ namespace QS3D.Core.SmokeTests
             ThrowsOverflow(() => EstimateRevisionCostImpact.Create(previous, current));
         }
 
+        private static void SwallowedCurrentRateFailsClosed()
+        {
+            var previous = Line(0d, decimal.MaxValue, 0m);
+            var current = Line(0d, 0.1m, 0m);
+            ThrowsOverflow(() => EstimateRevisionCostImpact.Create(previous, current));
+        }
+
         private static void ExactLargeAdjustmentDeltaRemainsValid()
         {
             var previous = Line(0d, 0m, 1m);
@@ -52,6 +78,34 @@ namespace QS3D.Core.SmokeTests
             Equal(decimal.MaxValue - 1m, impact.EstimatingQuantityDelta,
                 "Exact representable estimating-quantity delta changed.");
             Equal(0m, impact.CostDelta, "Zero-rate exact large delta must keep zero cost impact.");
+            Reconciles(impact);
+        }
+
+        private static void ExactLargeRateDeltaRemainsValid()
+        {
+            var previous = Line(0d, 1m, 0m);
+            var current = Line(0d, decimal.MaxValue, 0m);
+            var impact = EstimateRevisionCostImpact.Create(previous, current);
+
+            Equal(decimal.MaxValue - 1m, impact.UnitRateDelta,
+                "Exact representable unit-rate delta changed.");
+            Equal(0m, impact.CostDelta, "Zero-quantity exact large rate delta must keep zero cost impact.");
+            Reconciles(impact);
+        }
+
+        private static void ZeroCancellationRemainsValid()
+        {
+            var previous = Line(12d, 120m, -2m);
+            var current = Line(12d, 120m, -2m);
+            var impact = EstimateRevisionCostImpact.Create(previous, current);
+
+            Equal(0m, impact.MeasuredQuantityDelta, "Equal measured quantities must cancel to zero.");
+            Equal(0m, impact.CommercialAdjustmentQuantityDelta, "Equal adjustments must cancel to zero.");
+            Equal(0m, impact.EstimatingQuantityDelta, "Equal estimating quantities must cancel to zero.");
+            Equal(0m, impact.UnitRateDelta, "Equal unit rates must cancel to zero.");
+            Equal(0m, impact.QuantityDrivenCostDelta, "Equal revisions must have zero quantity-driven effect.");
+            Equal(0m, impact.RateDrivenCostDelta, "Equal revisions must have zero rate-driven effect.");
+            Equal(0m, impact.CostDelta, "Equal revisions must have zero total impact.");
             Reconciles(impact);
         }
 
