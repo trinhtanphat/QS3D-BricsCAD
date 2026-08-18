@@ -73,10 +73,24 @@ def validate_candidates(candidates):
 
 
 def discover():
+    # Keep discovery itself bounded: Path.glob() is consumed only until the first
+    # boundary violation instead of materializing an arbitrarily large candidate
+    # set before validate_candidates() gets a chance to reject it.
     # Exclude only the aggregate runner's exact directory entry. Do not resolve
     # candidates first: a symlink that targets SELF is still an unsafe gate and
     # must reach validate_candidates() so discovery fails closed.
-    candidates = [path for path in SCRIPTS.glob("preflight-*.py") if str(path) != str(SELF)]
+    candidates = []
+    for path in SCRIPTS.glob("preflight-*.py"):
+        if str(path) == str(SELF):
+            continue
+        candidates.append(path)
+        if len(candidates) > MAX_FEATURE_GATES:
+            raise RuntimeError(
+                "feature preflight discovery count "
+                + str(len(candidates))
+                + " exceeds maximum "
+                + str(MAX_FEATURE_GATES)
+            )
     return validate_candidates(candidates)
 
 
