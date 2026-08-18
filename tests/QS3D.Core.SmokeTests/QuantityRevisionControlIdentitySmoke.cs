@@ -42,20 +42,26 @@ namespace QS3D.Core.SmokeTests
         {
             foreach (var control in ControlCharacters)
             {
-                Capture<InvalidOperationException>(() =>
-                    new QuantityRevisionReport().Summarize(new[]
-                    {
-                        new QuantityRevisionRow
-                        {
-                            ElementId = "E1",
-                            Category = "StructuralColumn",
-                            QuantityName = "Concrete" + control + "Volume",
-                            Change = "Changed",
-                            Before = 1d,
-                            After = 2d
-                        }
-                    }));
+                RejectSummaryKey("Concrete" + control + "Volume");
+                RejectSummaryKey(control.ToString());
             }
+        }
+
+        private static void RejectSummaryKey(string quantityName)
+        {
+            Capture<InvalidOperationException>(() =>
+                new QuantityRevisionReport().Summarize(new[]
+                {
+                    new QuantityRevisionRow
+                    {
+                        ElementId = "E1",
+                        Category = "StructuralColumn",
+                        QuantityName = quantityName,
+                        Change = "Changed",
+                        Before = 1d,
+                        After = 2d
+                    }
+                }));
         }
 
         private static void CanonicalInputsRemainValid()
