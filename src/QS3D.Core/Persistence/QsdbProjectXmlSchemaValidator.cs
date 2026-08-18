@@ -197,6 +197,8 @@ namespace QS3D.Core.Persistence
                     new[] { "utc", "action", "elementId", "detail", "actor", "correlationId" },
                     Array.Empty<string>());
                 ValidateRequiredCanonicalAttribute(item, "action", "audit action");
+                ValidateOptionalCanonicalIdentityAttribute(item, "elementId", "audit element id");
+                ValidateOptionalCanonicalIdentityAttribute(item, "correlationId", "audit correlation id");
             }
         }
 
@@ -303,6 +305,19 @@ namespace QS3D.Core.Persistence
             if (value == null || value.Length == 0) return;
             if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
                 throw new InvalidDataException("QSDB " + owner + " must not contain leading/trailing whitespace.");
+        }
+
+        private static void ValidateOptionalCanonicalIdentityAttribute(XElement element, string attributeName, string owner)
+        {
+            var value = element.Attribute(attributeName)?.Value;
+            if (value == null || value.Length == 0) return;
+            if (string.IsNullOrWhiteSpace(value) ||
+                !string.Equals(value, value.Trim(), StringComparison.Ordinal) ||
+                value.Any(char.IsControl))
+            {
+                throw new InvalidDataException(
+                    "QSDB " + owner + " must be empty or canonical without surrounding whitespace or control characters.");
+            }
         }
 
         private static void ValidateCanonicalText(XElement element, string owner)
