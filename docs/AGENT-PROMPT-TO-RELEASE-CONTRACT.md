@@ -2,15 +2,15 @@
 
 This document supplements `AGENTS.md`, `docs/AGENT-WORK-REGISTRATION.md`, `docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, `docs/LOCAL-ONLY-RUNTIME-REPORTING.md`, and `CI_POLICY.md`.
 
-Its purpose is to prevent repeated AI/agent/chat prompts from producing disconnected edits that never become a validated PR, never reach `main`, or are reported as complete before the required release evidence exists.
+`docs/MAIN-WRITE-AUTHORIZATION.md` remains authoritative for same-task merge authorization and the normal `MERGED_MAIN` completion endpoint. This file is authoritative for **owner-facing lifecycle reporting behavior**. When older wording in `AGENTS.md`, historical handoffs, claims, or this file's previous revisions requires a per-prompt intermediate status report, allows a routine task to stop at queued/running/red CI, or otherwise encourages report-first behavior, the terminal-first rules below win.
 
-## Owner intent
+## Owner intent: action first, terminal state first
 
-A new owner prompt about an existing feature, bug, UI surface, workflow, or release is normally a request to **continue the one canonical GitHub carrier for that work**, not permission to start another independent implementation.
+An owner prompt to change, continue, fix, validate, integrate, merge, or release repository work is an instruction to **perform the work and advance the one canonical GitHub lifecycle**, not an instruction to narrate each intermediate state.
 
-Every agent/chat session must determine the exact lifecycle state of the requested work before mutation and must leave the work in a visible GitHub state before claiming progress.
+For normal owner-requested repository work, the owning agent/session must keep advancing the same canonical carrier while safe authorized actions remain. The normal successful endpoint is `MERGED_MAIN` unless the owner explicitly opts out of merge for that exact task or a stricter release/runtime acceptance is explicitly part of the prompt.
 
-The lifecycle is not complete merely because code was edited. The following are distinct states and must never be conflated:
+The following are lifecycle states, not acceptable self-selected completion points:
 
 ```text
 edited locally
@@ -20,300 +20,193 @@ edited locally
   != PR ready/open
   != PR CI/protected candidate green
   != merged to main
-  != exact-main validated
-  != released/published
 ```
 
-## Mandatory continuation check for every owner prompt
+**Reporting is not a substitute for execution.** Discovering a bug, failed test, red CI check, stale branch, review feedback, merge conflict, or missing regression is normally an automatic action trigger. If the agent can safely fix or reconcile it inside the owned lane, it must do so immediately, commit/push the remediation, re-check the exact current evidence, and continue toward the terminal endpoint.
 
-Before changing source, tests, docs, workflows, configuration, or release metadata for a requested behavior:
+## Mandatory continuation check
 
-1. Fetch/read the exact current `origin/main` SHA.
-2. Search for a semantically matching open or recently relevant GitHub Issue and determine the stable Lane-Key.
-3. Search for the canonical branch for that Lane-Key or equivalent behavior.
-4. Search for the canonical open PR and its current head SHA/status.
-5. Check the minimum active claim/reservation metadata needed to detect another owner/session.
-6. Determine whether the requested behavior already landed on current `main`.
-7. Determine whether applicable CI, exact-main validation, packaging, or release work is still pending.
-8. When the task is product/release relevant, determine the currently published release/version and whether any published release already contains the exact landed change.
+Before mutation, determine the current canonical lifecycle from GitHub rather than from chat memory:
 
-Use semantic behavior, Lane-Key, expected files/symbols and acceptance criteria—not only titles or branch names—to decide whether work is the same lane.
+1. Fetch/read exact current `origin/main`.
+2. Search for the semantically matching Issue/Lane-Key.
+3. Search for the canonical branch and open PR for that lane.
+4. Check the minimum active claim/reservation metadata required to detect ownership collision.
+5. Determine whether the requested behavior already landed on current `main`.
+6. Continue the existing canonical carrier when this session owns it; do not create a duplicate carrier merely because the existing branch is stale, red, queued, or inconvenient.
+7. If no equivalent carrier exists, create/reuse one Issue, one Lane-Key, and one canonical task branch from the latest valid baseline.
 
-## Existing carrier wins
+Use semantic behavior, expected files/symbols, acceptance criteria, Issue metadata, and current GitHub state—not titles alone—to decide whether work is the same lane.
 
-If the requested work already has a valid canonical Issue/branch/PR carrier:
+## One lane, one carrier
 
-- continue or update that carrier when this session is its authorized owner;
-- do not create a second Issue, branch, implementation or PR for the same lane;
-- if another session owns it, stop overlapping mutation as `DUPLICATE_CARRIER / NO MUTATION` unless the owner/coordinator explicitly reassigns it;
-- if the carrier is behind `main`, red, queued, stale-looking or incomplete, that does not release ownership;
-- if the implementation already landed on current `main`, do not recreate it; inspect current `main` and create a narrowly scoped follow-up lane only for a real remaining gap.
-
-A repeated owner prompt does not reset GitHub state and does not create a new lane automatically.
-
-## No existing carrier
-
-If no equivalent active carrier exists:
-
-1. create or reuse one uniquely identifying GitHub Issue;
-2. assign the stable Lane-Key, normally `issue-<number>`;
-3. create exactly one dedicated canonical task branch from the latest valid `main` baseline;
-4. record scope, exclusions, expected validation and carrier identity;
-5. implement all related code/tests/docs on that branch;
-6. validate, commit and push real changes to that branch.
-
-An unpushed local edit or chat-only explanation is not a completed task and is not a visible reservation.
+- One Lane-Key has at most one active owner, one canonical task branch, and one open canonical PR.
+- Another active canonical owner means `DUPLICATE_CARRIER / NO MUTATION` unless the owner/coordinator explicitly reassigns the lane.
+- Red, stale, behind, queued, or incomplete work remains owned; those states do not authorize a replacement carrier.
+- Reconcile the same carrier safely and non-force when `main` moves.
+- Never broaden the current Lane-Key merely to absorb unrelated defects discovered during the work. Register a separate lane when policy permits and when the finding is genuinely separate.
 
 ## Required delivery sequence
 
-For watched/integration-relevant changes, the normal delivery path is:
+For normal owner-requested work, follow the repository-safe path continuously:
 
 ```text
 owner prompt
-  -> current main + semantic Issue/branch/PR collision check
-  -> continue existing canonical carrier OR register one new carrier
-  -> implement + regression coverage/docs as needed
-  -> validate locally/remotely within actual capability
+  -> current main + collision check
+  -> continue/register one canonical carrier
+  -> implement/fix + regression coverage/docs as needed
+  -> validate within actual capability
   -> coherent commit(s)
-  -> push canonical task branch
-  -> exact branch SHA shared CI SUCCESS
-  -> refresh current main
-  -> reconcile same carrier if main moved
-  -> fresh exact branch SHA CI SUCCESS if reconciliation changed the tree
+  -> push canonical branch
+  -> exact-head branch CI SUCCESS when required
+  -> refresh/reconcile current main
+  -> fresh exact-head branch CI when reconciliation changes the candidate
   -> open/update one canonical PR
-  -> PR/protected-main checks on the current candidate
-  -> owner-authorized merge only
-  -> refresh and record exact resulting main SHA
-  -> applicable exact-main validation/release pipeline
-  -> verify release/publish outcome when release is part of acceptance
-  -> identify the exact published version/tag that first contains the change
-  -> report exact state using the mandatory form below
+  -> protected PR preflight + core SUCCESS on the current candidate
+  -> re-check freshness/mergeability/review blockers
+  -> merge the same task PR under MAIN-WRITE-AUTHORIZATION
+  -> refresh and record resulting main SHA
+  -> MERGED_MAIN
 ```
 
-A watched branch must not use a new PR or draft PR as its first CI attempt. Fix branch failures on the canonical branch until the exact current branch SHA is green, then create/update the PR according to repository policy.
+A watched branch must not use a new PR as its first CI attempt. A stale or failed earlier run is never evidence for the new exact head.
 
-## CI gates are lifecycle dependencies, not idle time
+## CI is agent-owned work, not owner homework
 
-When repository policy says a branch must **wait for CI**, **await CI**, or cannot advance until CI is `SUCCESS`, that wording describes a lifecycle/admission condition. It does **not** instruct an AI agent/chat session to sit idle, repeatedly poll GitHub Actions, or spend the remainder of the prompt doing nothing while a queued/in-progress run executes.
+The owning agent/session is responsible for checking the applicable CI state itself through the available GitHub/Actions tooling. Do not tell the owner to check CI, paste logs, press refresh, retry a routine gate, or determine whether checks are green when the session has a tool surface that can obtain that evidence.
 
-For every queued or running CI gate:
+For every required branch/PR check:
 
-1. Check and record the exact run/status/head SHA once when the current work reaches that gate.
-2. In the owner-facing report, make the pending state visually obvious with the mandatory waiting marker, for example `⏳ Branch CI: IN_PROGRESS — run 123 / abc1234` or `⏳ PR checks: QUEUED — candidate abc1234`. Do not write a plain unmarked sentence such as `đang chờ CI`, `waiting for CI`, or `CI is running` as the lifecycle status.
-3. Continue other **already authorized, non-overlapping, race-safe work** that does not depend on the pending CI result when useful work exists. Examples include same-lane audit/regression review, current-main/collision review, handoff/report preparation, or another explicitly assigned non-overlapping lane. Pending CI does not grant permission to take over someone else's lane or invent filler work.
-4. Do not bypass the gate: do not open a PR before required exact-head branch CI is green, do not claim a pending run passed, and do not manually rerun/dispatch/cancel Actions unless separately authorized.
-5. If no other safe authorized work remains, end the current prompt with the exact `⏳` pending status instead of idling or polling indefinitely. A future continuation prompt/session rechecks the run and advances the same canonical carrier from the new evidence.
+1. Bind the observation to the exact current branch/PR head or merge candidate.
+2. Inspect the terminal result and, for failures, the exact failing job/step/log evidence available.
+3. If the check is queued/running and the current execution can continue observing it, keep observing/advancing the same lifecycle instead of emitting an owner-facing lifecycle report merely because the gate is pending.
+4. Do not bypass admission gates, invent success, reuse stale green evidence, manufacture no-op commits, or manually dispatch/re-run/cancel workflows unless separately authorized by `CI_POLICY.md`.
+5. If the available execution environment genuinely cannot observe a required gate at all and no other safe authorized progress remains, that tooling/observability boundary may be reported as a blocker with exact attempted evidence. It must not be disguised as CI success or failure.
 
-A normal queued/in-progress CI run is therefore usually an `ACTIVE` lifecycle with a `⏳` gate, not a reason to report the whole task as `BLOCKED`. Use `BLOCKED` only when a real blocker prevents all currently authorized progress.
+A pending CI gate is ordinarily **ACTIVE work**, not a terminal outcome.
 
-## Mandatory red-CI self-remediation loop
+## Mandatory bug and red-CI self-remediation loop
 
-A red/failed CI result on the **current canonical carrier owned by this session** is an automatic remediation trigger, not a terminal handoff, whenever the session has the repository authorization, tooling, and execution capability to correct the failure safely.
+A fixable defect or failed repository-safe check on the current owned carrier is an automatic remediation trigger.
 
-When branch CI, PR/protected checks, integration CI, or another required repository-safe check reaches terminal `FAILURE`, `ERROR`, or an equivalent red state, the owning agent/session must continue the same carrier through this loop without requiring the owner to repeat `fix CI`, `continue`, or `fix lại`:
+When implementation review, local deterministic validation, branch CI, PR/protected checks, or merge-candidate validation exposes a defect inside the current lane:
 
-1. Verify the exact failing run/check, tested SHA or merge candidate, failed job/step, and the smallest useful log/error evidence. Never diagnose a stale run as if it tested the current head.
-2. Classify the root cause before editing: current-lane regression; missing/incorrect regression coverage; stale `main`/merge-candidate incompatibility; workflow/build/tooling defect; deterministic environment/configuration problem; transient CI infrastructure/service failure; external secret/credential/service dependency; LOCAL_ONLY/licensed-runtime dependency; or a separately owned lane.
-3. For every safely fixable cause inside the current Lane-Key, **fix it automatically on the same canonical branch**. Update implementation, tests, guards, diagnostics, workflow/configuration, or documentation as actually required by the evidence; do not apply a cosmetic workaround that merely hides the failing check.
-4. Commit/push the remediation to the same canonical carrier, let the repository's authorized automatic CI validate the new exact SHA/candidate, and repeat diagnosis → fix → push → revalidate until the required checks are green. A second or later red run re-enters the same loop; the first attempted fix is not a stopping point.
-5. A PR/protected-check failure is repaired through the PR's canonical source branch and revalidated on the fresh candidate. If `main` moved and strict freshness or compatibility is involved, reconcile the same carrier safely and obtain fresh evidence; do not create a replacement carrier merely because CI is red.
-6. Do not ask the owner to manually repair, retry, or reissue authorization for work that this session is already authorized and technically able to perform. `CI red -> inspect -> fix -> revalidate` is the default automatic next action.
-7. Manual workflow rerun/dispatch/cancel remains governed by `CI_POLICY.md`. If the correct retry requires a manual CI operation that is not authorized and there is no code/configuration change to make, do **not** manufacture a no-op commit merely to retrigger CI. Record the exact authorization/external blocker instead.
-8. If logs prove the failure belongs to another active Lane-Key, a third-party outage, unavailable secret/credential, unsupported runner/platform, or required LOCAL_ONLY/licensed environment, do not violate ownership or invent a fake fix. Capture the smallest evidence, classify the blocker precisely, create/identify a separate follow-up carrier when policy permits, and keep the current task state truthful.
-9. While a fixable red CI is being remediated, report it as `❌` at the failed check line but normally keep the overall lifecycle `ACTIVE`; use `BLOCKED` only when no safe authorized remediation remains. Never report a fixable red run as the final state merely because the first CI attempt failed.
+1. Verify the exact current failing evidence; never diagnose a stale SHA as the current head.
+2. Identify the root cause before editing.
+3. Fix the root cause on the same canonical branch. Add or strengthen regression coverage/source guards when the defect demonstrates a missing invariant.
+4. Commit and push the remediation to the same carrier.
+5. Re-run/re-observe the repository-authorized automatic validation for the new exact head/candidate.
+6. If it fails again for another safely fixable cause, repeat diagnosis -> fix -> commit/push -> revalidate.
+7. If `main` moved, reconcile safely and obtain fresh evidence before PR/merge when required.
+8. Continue through PR and merge once all gates are green/current/mergeable.
 
-The success condition for a repository-safe red-CI loop is fresh green evidence on the exact current SHA/candidate required by the lifecycle gate, not merely a plausible local edit or a manually dismissed failure.
+**Do not stop after merely finding or reporting a fixable bug. Do not stop after the first failed CI attempt. Do not ask the owner to repeat `fix`, `continue`, `check CI`, or `merge main` when the same-task authorization and tooling already permit the next action.**
+
+## Legitimate terminal blocker boundary
+
+A normal task may produce an owner-facing blocker report before `MERGED_MAIN` only when no safe authorized remediation/progress remains in the current execution. Examples include:
+
+- another canonical owner/carrier owns the same Lane-Key and mutation would violate collision policy;
+- an owner-only decision or authorization is genuinely required and is not already present;
+- a required secret, third-party service, licensed/private runtime, signing credential, hardware capability, or other non-repository dependency is unavailable and is an explicit acceptance gate;
+- GitHub protection rejects the candidate and no safe current-lane remediation remains;
+- the available GitHub/tooling surface cannot perform or observe a required action/evidence and all permitted fallback paths have actually been attempted;
+- the defect has been investigated and cannot be safely fixed inside the current lane without violating ownership, scope, product boundary, or repository policy.
+
+A blocker report must state the exact blocker, what was attempted, the last exact Git/CI evidence, and why no safe authorized remediation remains. `CI is running`, `CI is red`, `branch is behind`, `PR is open`, or `review found a bug` are **not** terminal blockers by themselves.
+
+## Terminal-only owner-facing lifecycle reporting
+
+For normal owner-requested repository work, suppress routine lifecycle/status reports until one of these two conditions is true:
+
+1. **Success terminal:** the requested repository work reached `MERGED_MAIN` (or a stricter explicitly requested release/runtime terminal state); or
+2. **Blocker terminal:** a legitimate blocker under the section above prevents all further safe authorized progress.
+
+This terminal-only rule replaces the previous requirement to emit a full lifecycle table at the end of every prompt. It also replaces previous wording that allowed ending a prompt merely because branch/PR CI was queued or running.
+
+Intermediate progress may still be recorded in GitHub Issues/PRs/commits as repository evidence. Brief execution-environment progress updates may also be emitted when the surrounding tool/runtime requires them, but they are not owner-facing lifecycle reports and must not become a substitute for continuing the work.
+
+### Successful terminal report
+
+After `MERGED_MAIN`, keep the owner-facing report concise and evidence-based:
+
+```text
+✅ Prompt result: MERGED_MAIN
+✅ Issue / Lane-Key: #<number> / issue-<number>
+✅ Canonical branch: <branch>
+✅ Final task head: <sha>
+✅ Branch CI: SUCCESS — <run + tested sha, when applicable>
+✅ PR: #<number> — MERGED
+✅ Protected checks: SUCCESS — <candidate/run>
+✅ Merged to main: YES — main@<landed sha>
+```
+
+Omit fields that are genuinely not applicable. Do not add release/version/runtime status unless it is part of the current prompt's acceptance or is the actual blocker.
+
+### Blocker terminal report
+
+When no safe progress remains:
+
+```text
+❌ Prompt result: BLOCKED
+✅ Issue / Lane-Key: #<number> / issue-<number>
+✅ Canonical branch/head: <branch>@<sha>
+<marker> Last verified CI/PR evidence: <exact evidence>
+❌ Exact blocker: <specific external/authorization/tooling/ownership/unfixable condition>
+❌ Remediation attempted: <what was actually tried>
+➖ Further safe action: none in current execution — <why>
+```
+
+Do not label a merely pending or fixable state as `BLOCKED`.
+
+## Visual status markers
+
+When a terminal report is emitted, each lifecycle line begins with:
+
+- `✅` verified satisfied/successful;
+- `❌` verified failed/blocked/unsatisfied;
+- `⏳` genuinely pending only when pending state is itself part of a legitimate terminal external blocker explanation;
+- `➖` not applicable.
+
+Do not use markers to create an intermediate status dump while executable work remains.
 
 ## Merge authorization boundary
 
-Normal prompts such as `fix`, `continue`, `update code`, `commit push git`, `fix CI`, or repeated requests for the same feature authorize work on the canonical task carrier but do not by themselves authorize a write/merge to `main`.
+`docs/MAIN-WRITE-AUTHORIZATION.md` is authoritative. Its standing owner instruction requires a normal owner-requested task PR to merge itself once required branch/PR checks are green, current, and mergeable, unless the owner explicitly opts out for that exact task.
 
-Only explicit owner merge/integration authorization permits the session to merge the named PR/batch/task. Branch protection and required checks must still be satisfied. Never bypass protection merely to finish the prompt.
+This authorization is PR-only. It never permits direct contents writes/ref updates to `main`, force-push, protection bypass, merging unrelated PRs, or weakening required checks.
 
-If merge authorization is absent, the correct endpoint is a validated canonical branch/PR plus an exact report that merge/release remain pending.
+## Release and LOCAL_ONLY reporting boundary
 
-## Release completion and version provenance boundary
+After an authorized merge, ordinary code/docs/chore tasks are complete at `MERGED_MAIN` unless release/publication/package/deployment or licensed/local runtime evidence is explicitly part of the owner's acceptance.
 
-After an authorized merge, first refresh `main` and record the exact landed SHA.
+- Do not append routine `release pending` bookkeeping to an otherwise completed merged fix.
+- Do not claim `RELEASED` without exact publication evidence.
+- Remote/source-only agents never infer `LOCAL_PASS`.
+- Parked LOCAL_ONLY evidence is not an owner-facing blocker unless the prompt explicitly makes that evidence a completion gate.
 
-When the task's acceptance includes packaging, cloud build, publish, tag, release, installer/package artifact, or another release side effect:
+## Durable owner corrections
 
-- branch CI is not release proof;
-- PR CI is not release proof;
-- merge success is not release proof;
-- an older successful release run is not proof for the newly landed SHA;
-- the latest public release is not automatically proof that it contains the change;
-- verify the applicable exact-main release pipeline and its artifact/tag/publish result for the landed SHA before reporting `RELEASED`;
-- identify the exact release/version/tag that first contains the landed change whenever such a release exists;
-- record the release commit/source SHA and enough ancestry/manifest evidence to show that the release actually contains the change.
+When the owner corrects how agents should work, report, continue, merge, release, or communicate, treat a durable correction as repository policy work rather than a chat-only promise.
 
-Release identity is **publication-based, not reservation- or ordinal-based**:
+- Persist the correction in the canonical policy Markdown on the same task carrier.
+- Do not substitute `từ giờ mình sẽ...`, `noted`, or a status explanation for actually updating policy.
+- If the current session can perform the next lifecycle action, perform it instead of assigning the owner unnecessary work.
+- Ask the owner only for input that is genuinely required and unavailable.
 
-- a preview ordinal/tag reservation may be consumed even when the release workflow later fails or is cancelled and no published GitHub Release is created;
-- never report the highest reserved ordinal, attempted tag, dispatcher success, child workflow start/run, or draft release as `Current/latest published release` by itself;
-- `Current/latest published release` means the newest **non-draft GitHub Release object whose publication completed successfully**;
-- if higher preview ordinals have no such published Release object, walk backward until the most recent actually published Release is found;
-- `First release containing this change` is a separate provenance claim and additionally requires evidence that the published release contains the target landed change/SHA.
-
-### Owner-facing release-status suppression
-
-Release provenance remains part of repository lifecycle truth, but it is **not automatically part of every owner-facing fix-completion answer**.
-
-- When the owner asks whether a code/source fix is finished, and the fix is already validated and merged as required, answer that fix-completion question directly. Do **not** append a routine line such as `⏳ release chứa fix vẫn pending`, `release pending`, or `first release containing this change: PENDING` merely because an automatic product release has not yet published.
-- A pending release must not make a verified merged code fix sound unfinished. Keep the distinction internally and in GitHub Issue/handoff evidence without turning it into an unsolicited owner-facing blocker.
-- Include release/publish/version status in the owner-facing response only when at least one of these conditions applies: the owner explicitly asks about release/version/update availability; release/publication/package/deployment is part of the current prompt's stated acceptance; the current task is specifically a release/publishing lane; or a release failure is the actual current blocker to what the owner asked to complete.
-- If none of those conditions applies, omit the release fields entirely from the concise owner-facing report. Do not print `Release required`, `Current/latest published release`, `First release containing this change`, `Release source/commit`, or `Release` merely as routine lifecycle bookkeeping.
-- Suppression is presentation-only. Agents must still preserve accurate release provenance in repository evidence and must never falsely claim `RELEASED` when publication has not been verified.
-
-When release status is owner-facing under the conditions above, distinguish:
-
-```text
-Current/latest published release: <version/tag or none>
-First release containing this change: <version/tag | PENDING | NONE/N/A>
-Release source/commit: <sha or N/A>
-```
-
-When release status is in scope and the change is merged to `main` but has not yet appeared in a published release, report `First release containing this change: ⏳ PENDING`; do not name a future version unless it is already formally defined by repository/release metadata.
-
-When release status is in scope and the change does not require a product release under `CI_POLICY.md`, report `Release required: ➖ N/A` and `First release containing this change: ➖ N/A` with the reason instead of pretending a release occurred.
-
-Licensed BricsCAD runtime validation remains separate. Remote/source-only agents must follow `docs/LOCAL-ONLY-RUNTIME-REPORTING.md`: once a LOCAL_ONLY gate is parked, do not recheck it remotely **and do not routinely include a LOCAL/runtime status line in owner-facing reports**. Routine local/runtime evidence is reported by compatible local-machine agents when they actually execute or report local work. A remote agent may mention an exact local gate only when the owner explicitly asks about local validation/status or when that evidence is an explicit current acceptance/blocking gate for the request. Only compatible local evidence tied to the exact tested SHA may be reported as `LOCAL_PASS`.
-
-## Mandatory visual status markers
-
-Every lifecycle/status line in the final per-prompt report must begin with one of these markers so the owner can scan the state without interpreting prose:
-
-- `✅` — verified satisfied/successful/reached using current evidence;
-- `❌` — verified failed, red, rejected, or a required condition is currently unsatisfied;
-- `⏳` — pending, queued, in progress, waiting for an allowed next gate, or an explicitly task-gating `PENDING_LOCAL`;
-- `➖` — genuinely not applicable; include the reason when it is not obvious.
-
-Do not use `✅` for assumptions, stale runs, chat-memory claims, or work that merely appears likely to pass. Do not use `❌` for ordinary in-progress work when the correct state is `⏳`. A queued/running CI line **must** use `⏳`; do not omit the marker even when the surrounding prose already says the run is pending.
-
-For yes/no lifecycle questions, make the meaning visually explicit. Examples:
-
-```text
-✅ Branch pushed: YES — abc1234
-✅ Branch CI: SUCCESS — run 123 / abc1234
-⏳ Branch CI: IN_PROGRESS — run 124 / def5678; report the gate and continue other authorized work instead of idling
-⏳ PR: not opened yet — required exact-head branch CI is still pending
-❌ PR/protected checks: FAILURE — required check core failed; owning agent automatically diagnoses/fixes/revalidates the same carrier
-❌ Merged to main: NO — PR not merged
-When release status is explicitly in scope: ⏳ First release containing this change: PENDING — merged but release pipeline not complete
-➖ Local/runtime evidence: N/A — docs-only change (local-agent report or explicitly requested local status only)
-```
-
-## Durable owner corrections and owner-facing brevity
-
-When the owner corrects how agents should work, report, continue, merge, release, or communicate, treat a durable correction as repository policy work rather than as a chat-only preference.
-
-- Persist a durable correction in the relevant canonical `.md` policy on the same task carrier when repository policy is the intended source of truth.
-- Do not substitute a chat promise such as `từ giờ mình sẽ...`, `from now on I will...`, or a repeated explanation of the workflow for actually updating the policy Markdown.
-- After the policy change is recorded, report the concrete repository state/evidence only; do not lecture the owner by restating rules they just supplied.
-- Do not assign the owner unnecessary next steps. If the current session is authorized and technically able to perform the next repository lifecycle action, perform or continue that action on the canonical carrier instead of telling the owner to do it.
-- Ask the owner for an action or decision only when repository policy genuinely requires owner-only authorization/input that is not already present.
-- When no repository action remains, `Next exact action` is `none`; do not append procedural advice, a workflow promise, or instructions telling the owner what to do next.
-
-## Mandatory per-prompt status report
-
-At the end of **every owner prompt that asks an agent/chat session to change, continue, fix, validate, integrate, merge, or release repository work**, report the exact current state in this form. Do not replace it with a generic `done`, `fixed`, or `completed` statement.
-
-```text
-<marker> Prompt result: <ACTIVE | DUPLICATE_CARRIER | BRANCH_GREEN | PR_OPEN | PR_GREEN | MERGED_MAIN | RELEASED | BLOCKED | PENDING_LOCAL>
-<marker> Issue: #<number> — <title/status>
-<marker> Lane-Key: issue-<number>
-<marker> Canonical owner/session: <id>
-<marker> Canonical branch: <branch or N/A>
-<marker> Baseline/current main: <sha used to start/currently reconciled base>
-<marker> Latest task commit: <sha(s) or N/A>
-<marker> Branch pushed: <YES/NO + exact head SHA>
-<marker> Branch CI: <run/job + exact tested SHA + SUCCESS/FAILURE/PENDING/N/A>
-<marker> PR: #<number or N/A> — <OPEN/DRAFT/READY/MERGED/CLOSED/NOT_OPENED>
-<marker> PR/protected checks: <SUCCESS/FAILURE/PENDING/N/A + exact candidate when known>
-<marker> Merged to main: <NO | YES, main@sha>
-<marker> Exact-main validation: <run + landed SHA + SUCCESS/FAILURE/PENDING/N/A>
-<marker> Remaining blocker: <exact blocker or none>
-<marker> Next exact action: <one concrete next lifecycle action or none>
-```
-
-Only when release status is owner-facing under `Owner-facing release-status suppression`, append the applicable release block:
-
-```text
-<marker> Release required: <YES | NO/N/A + reason>
-<marker> Current/latest published release: <version/tag/none/N/A>
-<marker> First release containing this change: <version/tag/PENDING/NONE/N/A>
-<marker> Release source/commit: <sha or N/A>
-<marker> Release: <run/tag/artifact/deployment + SUCCESS/FAILURE/PENDING/N/A>
-```
-
-For a compatible local-machine agent, append the local evidence line when local work is actually in scope or being reported:
-
-```text
-<marker> Local/runtime evidence: <LOCAL_PASS | PENDING_LOCAL | exact local failure/blocker | N/A; never infer LOCAL_PASS>
-```
-
-For a remote/hybrid/source-only agent, **omit the local/runtime field entirely by default**. This is the required exception to any generic minimum-field wording in `AGENTS.md`. Do not print `LOCAL_ONLY/PARKED` merely to prove awareness of a parked local gate. Mention local status only if the owner explicitly asks for it or the exact local evidence is an explicit current blocker/acceptance requirement; in that exceptional case, report only the exact task-gating state needed for the current request. A parked local gate must not become the overall `Prompt result`, `Remaining blocker`, or reason to withhold an otherwise eligible remote PR/merge unless the prompt's explicit acceptance requires the local evidence before completion/merge.
-
-The report must use real GitHub/CI/release evidence from the current carrier and current published state. Do not fill unknown fields with guessed identifiers, predicted versions, or stale conversation state.
-
-## Conditional `Hướng đề xuất làm việc tiếp theo là gì?` section
-
-Include a dedicated section with the exact heading below **only when a real next repository action remains or an explicit owner decision/input is genuinely required**:
-
-```text
-## Hướng đề xuất làm việc tiếp theo là gì?
-```
-
-Do not include this section merely to restate the workflow, promise future behavior, or tell the owner to repeat an instruction already authorized.
-
-- State the **required next lifecycle action first**, and make it agree with the `Next exact action` lifecycle field above. Then make the remainder a **program-sized / mega-scope roadmap**, not a short punch list. When the current evidence provides any meaningful adjacent surface to investigate, the default planning target is roughly **6–12 distinct workstreams and 20–50+ concrete work packages**, with no hard maximum. Organize them into execution waves such as immediate stabilization, correctness/data integrity, regression/test expansion, CI/diagnostics/observability, architecture/maintainability, UX/workflow/product consistency, compatibility/migration, performance/security/reliability, documentation/contracts, and packaging/release readiness as relevant. The roadmap should be large enough to represent substantial multi-hour or multi-day follow-up work rather than a handful of tiny chores.
-- A mega-scope roadmap is **planning breadth, not blanket implementation authorization**. Every unrelated work package still requires semantic collision checking and, when pursued, its own appropriate Issue/Lane-Key/canonical carrier. Never stretch the current Lane-Key merely to make the recommendation section look large.
-- **Do not invent fake defects to reach the large scope.** Where current evidence is insufficient to assert a bug or fix, define an explicit discovery/audit/profiling/validation work package with a target, hypothesis/question, evidence to collect, decision gate, and exit criteria. Convert it into a remediation package only after evidence supports the finding. This lets the roadmap remain genuinely broad and deep without fabricating facts.
-- Before writing the roadmap, perform a **relevance-based coverage sweep of the evidence already available for the current task/report** and deliberately search for adjacent risk classes that could expand into independent workstreams. Consider, when implicated: lifecycle/authorization/blockers; correctness/regression/data integrity; tests/CI/diagnostics/observability; architecture/maintainability/technical debt; UX/workflow/product consistency/accessibility; docs/contracts/migration/backward compatibility; packaging/versioning/deployment/release; and performance/security/reliability/resource-use concerns. The recommendation may propose separate evidence-gathering audits for high-value unknowns, but it must distinguish known findings from hypotheses.
-- Structure the mega-scope hierarchically so the owner can see both the big picture and executable units: **Program goal -> Workstream -> Work package -> concrete target/action -> dependency -> definition of done -> proof/evidence**. Prefer phased waves and dependency ordering over one flat list of dozens of bullets. Call out which workstreams can run in parallel and which are sequencing gates.
-- Prefer breadth across **separate real problems or evidence-gathering questions** rather than repeating several bullets that are different wordings of one root cause. Group findings only when they share the same root cause, target, and remediation path; otherwise keep them distinct so the owner can see the actual problem count and trade-offs.
-- Classify and order roadmap items by urgency/value, for example `Required now`, `P0 Stabilization`, `P1 High-value`, `P2 Structural`, and `P3 Optional/Exploratory`. The first item remains the lifecycle action required to advance the current carrier; lower-priority workstreams must not be presented as equal blockers unless current evidence shows that they are.
-- Make each recommendation **decision-ready rather than label-only**. For every proposed action, include the decision-critical detail that applies: the problem/finding or question and concrete evidence; severity/impact and affected user/system surface; the exact target/carrier/gate/file/symbol/surface; the concrete work to perform; why it is worth doing now; the expected outcome or definition of done; important dependencies, collision boundaries, risks, compatibility/authorization constraints; and the validation/evidence that would prove success. If a root cause is only a hypothesis, label it explicitly as a hypothesis and state what evidence would confirm or reject it instead of presenting it as fact.
-- Prefer an information-dense format such as `Priority/Class — Problem or question & evidence — Impact — Target — Action — Why now — Done when — Constraints/Risks/Dependencies — Proof`, nested under named workstreams. Omit a field only when it genuinely does not apply; do not shorten a recommendation so aggressively that the owner must ask a follow-up merely to understand what would be changed, why it matters, or how success would be judged.
-- When the current report exposes multiple concerns, include **adjacent evidence-backed follow-ups** instead of discussing only the immediate CI/merge/release gate. Examples include a regression test gap exposed by the fix, an error-handling/diagnostic gap seen in the same failure, a compatibility or migration risk created by the same contract, a UX inconsistency revealed by the changed flow, or a release/documentation gap required for users to consume the change. Keep each asserted finding grounded in evidence from the current work; use discovery packages for unverified adjacent risks.
-- For each workstream, identify meaningful **dependencies and parallelization**: which packages are prerequisites, which can run concurrently on separate non-overlapping Lane-Keys, which require local/runtime evidence, which are gated by CI/release infrastructure, and which should wait until an architecture/product decision lands. A huge scope without sequencing is not decision-ready.
-- Include **proof gates and rollback/containment thinking** for high-risk workstreams: exact tests/checks, telemetry or diagnostics, compatibility matrices, data-migration checks, performance/security thresholds, release evidence, and rollback criteria where applicable. The roadmap should explain how the repository proves each wave safe, not merely what code to change.
-- If a recommendation is outside the current Lane-Key/scope or would collide with separately owned work, **do not silently expand the current task**. Mark it as a separate follow-up requiring its own collision check and, when implementation is pursued, a separate Issue/Lane-Key/carrier. The recommendation may explain the dependency or sequencing, but current-lane authorization must not be stretched to absorb unrelated work.
-- If multiple next items are alternatives rather than sequential lifecycle steps, say so explicitly, state the meaningful trade-off, and identify which option is recommended and why. Do not present mutually exclusive choices as if all must be performed.
-- If progress depends on a gate or blocker, name the exact condition first (for example: branch CI `SUCCESS` on the current head, PR protected checks green, exact-main validation, or required LOCAL_ONLY evidence), then state what action follows when that condition is satisfied.
-- Distinguish a **required next lifecycle action** from high-value workstreams and optional/exploratory packages. Do not elevate speculative cleanup, generic hardening, or unverified hypotheses into required blockers merely to make the scope large.
-- If this session can perform the next lifecycle action under current repository authorization and tooling, continue it on the same canonical carrier rather than asking the owner to repeat an already-authorized instruction. In particular, a fixable red CI result automatically routes back into the mandatory self-remediation loop above.
-- Do not use vague wording such as `continue`, `check later`, `wait`, `monitor`, or `do more` without naming the concrete carrier/gate/action, the reason it matters, and the success condition.
-- If the lifecycle is terminal and `Next exact action: none`, omit this section entirely. The terminal status report is sufficient.
-
-This section is conditional owner-facing guidance. `Next exact action` remains the compact lifecycle field used for traceability and must stay consistent with it whenever the section is present. The roadmap is intentionally expected to have a **very large planning scope** when follow-up work remains, but its size must come from real findings plus explicitly labeled discovery/validation packages—not fabricated defects. Preserve repository scope/ownership boundaries while making the follow-up program broad, deep, phased, and executable.
-
-## Completion wording rules
+## Completion wording
 
 Use completion language precisely:
 
-- `BRANCH_GREEN`: implementation is committed/pushed and applicable exact-branch CI is green, but PR/main/release may still be pending.
-- `PR_OPEN`: canonical PR exists; do not imply its protected candidate is green unless verified.
-- `PR_GREEN`: current PR/protected candidate is green, but it is not merged.
-- `MERGED_MAIN`: owner-authorized merge completed and exact current `main` contains the work; release may still be pending.
-- `RELEASED`: only when release is required and the applicable exact-main release/publish outcome for the landed SHA is verified successful, including the exact release/version/tag that contains it.
-- `PENDING_LOCAL`: use only when required licensed/private/runtime evidence is explicitly the current completion gate for this prompt or is actually pending under a compatible local agent; a merely parked LOCAL_ONLY item is not enough and remote agents do not emit it routinely.
-- `DUPLICATE_CARRIER`: another canonical owner/carrier already owns the same lane; no overlapping mutation was performed.
+- `MERGED_MAIN`: protected PR merge completed and refreshed current `main` contains the work.
+- `RELEASED`: only when release is explicitly in scope and exact publication evidence is verified.
+- `BLOCKED`: no safe authorized remediation/progress remains for a concrete external/authorization/tooling/ownership/unfixable condition.
+- `DUPLICATE_CARRIER`: another canonical owner/carrier owns the lane; no overlapping mutation was performed.
 
-Never say `ALL MERGED TO MAIN`, `released`, `production complete`, or equivalent unless the repository's stricter definitions and evidence requirements are actually satisfied.
+`BRANCH_GREEN`, `PR_OPEN`, `PR_GREEN`, queued CI, red CI under active remediation, and stale-branch states are internal lifecycle states only. They are **not normal owner-facing completion reports** and are not valid self-selected stopping points.
 
 ## Success criterion for repeated prompts
 
-Repeated prompts about one feature should advance the **same canonical lifecycle** toward completion, not create an expanding collection of disconnected Issues/branches/PRs.
+Repeated prompts about one feature advance the same canonical carrier toward the requested terminal state. A future agent must be able to read GitHub and determine the Issue/Lane-Key, canonical branch/PR, exact current head and CI evidence, whether the work landed on current `main`, and the exact blocker only if the task genuinely could not be completed.
 
-A future agent receiving another prompt for the same function should be able to read GitHub and answer immediately:
-
-1. what Issue/Lane-Key owns it;
-2. which one branch/PR is canonical;
-3. what exact commit and CI evidence exist;
-4. whether it is merged into current `main`;
-5. what the current published release is when release status is actually relevant to the owner's request;
-6. whether a release is required and, when release status is in scope, the exact first published version/tag that contains the landed change or that it is still pending;
-7. what single next action remains.
-
-That traceability is part of the deliverable, not optional reporting overhead.
+Traceability supports execution; it must never replace execution.
