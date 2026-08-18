@@ -80,10 +80,14 @@ if HISTORY_SMOKE.is_file():
         "RejectsUnderreportedRecordWithoutMutation();",
         "RejectsUnderreportedClearWithoutMutation();",
         "RejectsOverreportedReadWithoutMutation();",
+        "RejectsOverreportedRecordWithoutMutation();",
+        "RejectsOverreportedClearWithoutMutation();",
         "private sealed class DishonestCountHistory : IList<AuditEvent>",
         "public int Count => _reportedCount;",
         "Equal(0, history.AddRequests, \"underreported record add requests\");",
         "Equal(0, history.ClearRequests, \"underreported clear mutation requests\");",
+        "Equal(0, history.AddRequests, \"overreported record add requests\");",
+        "Equal(0, history.ClearRequests, \"overreported clear mutation requests\");",
         "var history = new DishonestCountHistory(2, CanonicalEvent());",
     ):
         if token not in text:
