@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -18,15 +19,30 @@ namespace QS3D.Core.Recognition
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             if (maxCount <= 0) throw new ArgumentOutOfRangeException(nameof(maxCount));
-            if (source is ICollection<T> collection && collection.Count > maxCount)
-                throw new InvalidOperationException(label + " supports at most " + maxCount + " items.");
-            if (source is IReadOnlyCollection<T> readOnlyCollection && readOnlyCollection.Count > maxCount)
-                throw new InvalidOperationException(label + " supports at most " + maxCount + " items.");
 
+            var knownCount = ReadKnownCount(source, maxCount, label);
             var materialized = source.Take(maxCount + 1).ToList();
             if (materialized.Count > maxCount)
                 throw new InvalidOperationException(label + " supports at most " + maxCount + " items.");
+            if (knownCount.HasValue && materialized.Count != knownCount.Value)
+                throw new InvalidOperationException(label + " reported Count " + knownCount.Value + " but enumerated " + materialized.Count + " items.");
             return materialized;
+        }
+
+        private static int? ReadKnownCount<T>(IEnumerable<T> source, int maxCount, string label)
+        {
+            var counts = new List<int>(3);
+            if (source is ICollection<T> collection) counts.Add(collection.Count);
+            if (source is IReadOnlyCollection<T> readOnlyCollection) counts.Add(readOnlyCollection.Count);
+            if (source is ICollection nonGenericCollection) counts.Add(nonGenericCollection.Count);
+
+            if (counts.Any(count => count > maxCount))
+                throw new InvalidOperationException(label + " supports at most " + maxCount + " items.");
+            if (counts.Any(count => count < 0))
+                throw new InvalidOperationException(label + " reported a negative Count.");
+            if (counts.Count > 1 && counts.Any(count => count != counts[0]))
+                throw new InvalidOperationException(label + " reported conflicting Count values.");
+            return counts.Count == 0 ? (int?)null : counts[0];
         }
     }
 
