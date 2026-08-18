@@ -83,6 +83,18 @@ For every required branch/PR check:
 4. Do not bypass admission gates, invent success, reuse stale green evidence, manufacture no-op commits, or manually dispatch/re-run/cancel workflows unless separately authorized by `CI_POLICY.md`.
 5. If the available execution environment genuinely cannot observe a required gate at all and no other safe authorized progress remains, that tooling/observability boundary may be reported as a blocker with exact attempted evidence. It must not be disguised as CI success or failure.
 
+### GitHub Actions branch-run observability fallback
+
+Before declaring a pre-PR branch-CI run unobservable, exhaust the repository-safe lookup paths that can identify the exact Actions run:
+
+1. Query the repository Actions page by exact branch using the URL form `https://github.com/<owner>/<repo>/actions?query=branch%3A<url-encoded-branch>` through any available GitHub/browser surface. This is the preferred discovery fallback when a commit-workflow wrapper only returns `pull_request` runs.
+2. For each plausible result, inspect the exact run URL `https://github.com/<owner>/<repo>/actions/runs/<run-id>` and verify the run payload itself: `event`, exact `head_branch`, exact `head_sha`, attempt number when relevant, terminal `status`, `conclusion`, and required job conclusions.
+3. If an exact run ID is already available from the owner, an Issue/PR record, or another trustworthy repository artifact, inspect that exact run URL directly instead of requiring the branch listing to work first.
+4. A green `pull_request` run on the same head is **not** proof of a required automatic `push` run. Evidence classes must not be conflated.
+5. Only after branch-filter discovery and exact-run inspection are unavailable or fail may the session classify the CI evidence as a tooling/observability blocker.
+
+This lookup guidance changes no CI admission or merge semantics; `CI_POLICY.md` remains authoritative for which evidence is actually required.
+
 A pending CI gate is ordinarily **ACTIVE work**, not a terminal outcome.
 
 ## Mandatory bug and red-CI self-remediation loop
