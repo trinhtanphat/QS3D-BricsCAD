@@ -17,9 +17,11 @@ namespace QS3D.Core.SmokeTests
         private static void AcceptsExactHardResultBoundary()
         {
             var service = new ClashDetectionService();
-            var results = service.Detect(BuildTwoDisciplineSet(100, 100, clearance: false));
+            var elements = BuildTwoDisciplineSet(100, 100, clearance: false);
+            AddIsolatedTail(elements);
+            var results = service.Detect(elements);
             if (results.Count != 10000)
-                throw new InvalidOperationException("Exact hard-clash result boundary should remain accepted.");
+                throw new InvalidOperationException("Exact hard-clash result boundary should remain accepted when later pairs do not produce results.");
             if (results[0].Kind != ClashKind.Hard || results[9999].Kind != ClashKind.Hard)
                 throw new InvalidOperationException("Exact hard-clash boundary should contain only hard clashes.");
         }
@@ -34,9 +36,11 @@ namespace QS3D.Core.SmokeTests
         private static void AcceptsExactClearanceResultBoundary()
         {
             var service = new ClashDetectionService();
-            var results = service.Detect(BuildTwoDisciplineSet(100, 100, clearance: true), clearanceM: 0.5d);
+            var elements = BuildTwoDisciplineSet(100, 100, clearance: true);
+            AddIsolatedTail(elements);
+            var results = service.Detect(elements, clearanceM: 0.5d);
             if (results.Count != 10000)
-                throw new InvalidOperationException("Exact clearance result boundary should remain accepted.");
+                throw new InvalidOperationException("Exact clearance result boundary should remain accepted when later pairs do not produce results.");
             if (results[0].Kind != ClashKind.Clearance || results[9999].Kind != ClashKind.Clearance)
                 throw new InvalidOperationException("Exact clearance boundary should contain only clearance clashes.");
             if (Math.Abs(results[0].SeparationM - 0.5d) > 1e-12)
@@ -81,6 +85,17 @@ namespace QS3D.Core.SmokeTests
                     rightBounds));
             }
             return elements;
+        }
+
+        private static void AddIsolatedTail(List<CoordinationElement> elements)
+        {
+            elements.Add(new CoordinationElement(
+                "ZZZ-NO-CLASH",
+                "MEP",
+                "Generic",
+                "C",
+                "R",
+                new AxisAlignedBox(100d, 100d, 100d, 101d, 101d, 101d)));
         }
 
         private static void ThrowsResultLimit(Action action, string scenario)
