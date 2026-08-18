@@ -25,7 +25,18 @@ namespace QS3D.Core.Rebar
             var trimmed = value.Trim();
             if (!string.Equals(value, trimmed, StringComparison.Ordinal))
                 throw new ArgumentException("Rebar cut identity must not contain leading or trailing whitespace.", parameterName);
+            if (ContainsControlCharacter(value))
+                throw new ArgumentException("Rebar cut identity must not contain control characters.", parameterName);
             return value;
+        }
+
+        private static bool ContainsControlCharacter(string value)
+        {
+            for (var index = 0; index < value.Length; index++)
+            {
+                if (char.IsControl(value[index])) return true;
+            }
+            return false;
         }
     }
 
@@ -119,7 +130,18 @@ namespace QS3D.Core.Rebar
             var trimmed = value.Trim();
             if (!string.Equals(value, trimmed, StringComparison.Ordinal))
                 throw new ArgumentException("Rebar stock-demand identity must not contain leading or trailing whitespace.", parameterName);
+            if (ContainsControlCharacter(value))
+                throw new ArgumentException("Rebar stock-demand identity must not contain control characters.", parameterName);
             return value;
+        }
+
+        private static bool ContainsControlCharacter(string value)
+        {
+            for (var index = 0; index < value.Length; index++)
+            {
+                if (char.IsControl(value[index])) return true;
+            }
+            return false;
         }
 
         private struct CompensatedFiniteSum
