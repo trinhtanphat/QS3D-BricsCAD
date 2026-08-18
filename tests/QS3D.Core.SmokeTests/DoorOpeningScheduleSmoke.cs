@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             InstanceOverrideSplitsFamilyInheritedRow();
             RejectsInvalidSemanticDimensions();
             RejectsDerivedAreaUnderflow();
+            RejectsPrecisionLosingAreaAggregation();
         }
 
         private static void GroupsDoorsByDimensionsAndDistinctHosts()
@@ -125,6 +126,31 @@ namespace QS3D.Core.SmokeTests
             var rows = DoorOpeningScheduleBuilder.Build(explicitArea);
             if (rows.Count != 1 || rows[0].OpeningAreaM2 != 0d)
                 throw new Exception("Explicit stored zero OpeningAreaM2 must retain existing semantics.");
+        }
+
+        private static void RejectsPrecisionLosingAreaAggregation()
+        {
+            var project = new ProjectState("p6", "Opening area precision");
+            project.Floors.Add(new FloorDefinition("f", "Floor", 0d));
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
+            var family = new ProjectFamily("door", "Door", ElementCategory.Door);
+            family.Properties["WidthM"] = "1";
+            family.Properties["HeightM"] = "1";
+            project.Families.Add(family);
+
+            var large = new ProjectElement("a-large", ElementCategory.Door, family.Id, "f", "z");
+            large.Quantities["OpeningAreaM2"] = 1e16d;
+            var small = new ProjectElement("b-small", ElementCategory.Door, family.Id, "f", "z");
+            small.Quantities["OpeningAreaM2"] = 1d;
+            project.Elements.Add(large);
+            project.Elements.Add(small);
+
+            Throws<OverflowException>(() => DoorOpeningScheduleBuilder.Build(project));
+
+            small.Quantities["OpeningAreaM2"] = 0d;
+            var rows = DoorOpeningScheduleBuilder.Build(project);
+            if (rows.Count != 1 || rows[0].OpeningAreaM2 != 1e16d || rows[0].Count != 2)
+                throw new Exception("Explicit zero area must remain a valid grouped contribution.");
         }
 
         private static ProjectElement Door(string id, string familyId, string floorId, string hostId)
