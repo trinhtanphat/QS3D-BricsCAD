@@ -8,10 +8,16 @@ The canonical boundary between ChatGPT account scheduled tasks and repository ow
 
 `docs/CHATGPT-SCHEDULE-BOUNDARY.md`
 
+The owner-approved PR-CI timing correction is:
+
+`docs/PR-CI-LIFECYCLE.md`
+
 A ChatGPT scheduled task is only an external account-side prompt/task trigger. Labels such as `C0`, `W1-W4`, `controller`, `worker`, or `Task 0-4` do not create repository Lane-Keys, GitHub ownership, canonical carriers, CI authority, or merge authority by themselves.
 
 Any older wording elsewhere that refers to `scheduled/controller lanes`, `scheduled workers`, hourly controller pools, or similar concepts must be read through `docs/CHATGPT-SCHEDULE-BOUNDARY.md`: the schedule is only the invocation source; the resulting chat/session still follows the ordinary current GitHub Lane-Key / Issue / branch / PR ownership rules.
 
-This file contains no independent duplicate-carrier policy. It exists as a compatibility pointer for branch/claim/handoff references while making the external-scheduler boundary unambiguous.
+Any older wording that treats the timestamp ordering of automatic branch-CI completion versus PR creation as a permanent admission boundary must be read through `docs/PR-CI-LIFECYCLE.md`: timing alone does not poison a canonical PR or require replacement. Protected current-candidate `preflight`/`core`, freshness, Lane-Key uniqueness and expected-head merge safety remain mandatory.
 
-Read and follow the canonical policies above together with `AGENTS.md` and `docs/AGENT-WORK-REGISTRATION.md`.
+This file contains no independent duplicate-carrier policy. It exists as a compatibility pointer for branch/claim/handoff references while making the external-scheduler and PR-CI timing boundaries unambiguous.
+
+Read and follow the canonical policies above together with `AGENTS.md`, `CI_POLICY.md`, and `docs/AGENT-WORK-REGISTRATION.md`.
