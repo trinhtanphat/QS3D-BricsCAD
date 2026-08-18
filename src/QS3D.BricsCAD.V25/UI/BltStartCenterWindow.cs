@@ -5,7 +5,9 @@ using System.Linq;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Markup;
 using System.Windows.Media;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.Updates;
@@ -59,7 +61,9 @@ namespace QS3D.BricsCAD.V25.UI
             Grid.SetRow(body, 0);
             root.Children.Add(body);
 
-            var left = BuildLeftPane();
+            var leftContent = BuildLeftPane();
+            var left = CreateVerticalScrollViewer(leftContent);
+            left.SizeChanged += (_, e) => leftContent.MinHeight = Math.Max(0d, e.NewSize.Height);
             Grid.SetColumn(left, 0);
             body.Children.Add(left);
 
@@ -197,15 +201,106 @@ namespace QS3D.BricsCAD.V25.UI
             Grid.SetRow(help, 1);
             grid.Children.Add(help);
 
+            var scroll = CreateVerticalScrollViewer(_recentPanel);
+            Grid.SetRow(scroll, 2);
+            grid.Children.Add(scroll);
+            return grid;
+        }
+
+        private static ScrollViewer CreateVerticalScrollViewer(UIElement content)
+        {
             var scroll = new ScrollViewer
             {
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                Content = _recentPanel
+                CanContentScroll = false,
+                PanningMode = PanningMode.VerticalOnly,
+                PanningDeceleration = 0.001,
+                Content = content
             };
-            Grid.SetRow(scroll, 2);
-            grid.Children.Add(scroll);
-            return grid;
+
+            scroll.Resources[typeof(ScrollBar)] = CreateCompactScrollBarStyle();
+            return scroll;
+        }
+
+        private static Style CreateCompactScrollBarStyle()
+        {
+            var style = new Style(typeof(ScrollBar));
+            style.Setters.Add(new Setter(FrameworkElement.WidthProperty, 12d));
+            style.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 12d));
+            style.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(4, 0, 0, 0)));
+            style.Setters.Add(new Setter(UIElement.SnapsToDevicePixelsProperty, true));
+            style.Setters.Add(new Setter(FrameworkElement.UseLayoutRoundingProperty, true));
+            style.Setters.Add(new Setter(Control.TemplateProperty, CreateCompactScrollBarTemplate()));
+            return style;
+        }
+
+        private static ControlTemplate CreateCompactScrollBarTemplate()
+        {
+            const string xaml = @"
+<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
+                 xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'
+                 TargetType='{x:Type ScrollBar}'>
+  <Border Background='#343434'
+          BorderBrush='#606060'
+          BorderThickness='1'
+          CornerRadius='5'
+          Padding='1'
+          SnapsToDevicePixels='True'>
+    <Track x:Name='PART_Track'
+           Orientation='Vertical'
+           IsDirectionReversed='True'>
+      <Track.DecreaseRepeatButton>
+        <RepeatButton Command='{x:Static ScrollBar.PageUpCommand}' Focusable='False'>
+          <RepeatButton.Template>
+            <ControlTemplate TargetType='{x:Type RepeatButton}'>
+              <Border Background='Transparent' />
+            </ControlTemplate>
+          </RepeatButton.Template>
+        </RepeatButton>
+      </Track.DecreaseRepeatButton>
+      <Track.Thumb>
+        <Thumb MinHeight='30'
+               MinWidth='7'
+               Background='#747474'
+               BorderBrush='#9A9A9A'
+               BorderThickness='1'
+               SnapsToDevicePixels='True'>
+          <Thumb.Template>
+            <ControlTemplate TargetType='{x:Type Thumb}'>
+              <Border x:Name='ThumbBorder'
+                      Background='{TemplateBinding Background}'
+                      BorderBrush='{TemplateBinding BorderBrush}'
+                      BorderThickness='{TemplateBinding BorderThickness}'
+                      CornerRadius='4'
+                      SnapsToDevicePixels='True' />
+              <ControlTemplate.Triggers>
+                <Trigger Property='IsMouseOver' Value='True'>
+                  <Setter TargetName='ThumbBorder' Property='Background' Value='#898989' />
+                  <Setter TargetName='ThumbBorder' Property='BorderBrush' Value='#B0B0B0' />
+                </Trigger>
+                <Trigger Property='IsDragging' Value='True'>
+                  <Setter TargetName='ThumbBorder' Property='Background' Value='#969696' />
+                  <Setter TargetName='ThumbBorder' Property='BorderBrush' Value='#C0C0C0' />
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Thumb.Template>
+        </Thumb>
+      </Track.Thumb>
+      <Track.IncreaseRepeatButton>
+        <RepeatButton Command='{x:Static ScrollBar.PageDownCommand}' Focusable='False'>
+          <RepeatButton.Template>
+            <ControlTemplate TargetType='{x:Type RepeatButton}'>
+              <Border Background='Transparent' />
+            </ControlTemplate>
+          </RepeatButton.Template>
+        </RepeatButton>
+      </Track.IncreaseRepeatButton>
+    </Track>
+  </Border>
+</ControlTemplate>";
+            return (ControlTemplate)XamlReader.Parse(xaml);
         }
 
         private Border BuildStatusBar()
