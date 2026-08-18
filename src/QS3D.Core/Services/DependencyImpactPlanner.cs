@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -195,13 +196,25 @@ namespace QS3D.Core.Services
         private static IReadOnlyList<string> CanonicalRoots(IEnumerable<string> sourceElementIds, int maxRootCount)
         {
             if (sourceElementIds == null) throw new ArgumentNullException(nameof(sourceElementIds));
+            var knownCount = TryGetKnownCount(sourceElementIds, out var conflictingKnownCounts, out var invalidNegativeKnownCount);
+            if (invalidNegativeKnownCount)
+                throw new ArgumentException("Dependency impact source exposes an invalid negative known Count.", nameof(sourceElementIds));
+            if (conflictingKnownCounts)
+                throw new ArgumentException("Dependency impact source exposes conflicting known Count values.", nameof(sourceElementIds));
+            if (knownCount.HasValue && knownCount.Value > maxRootCount)
+                throw RootCountLimitError(maxRootCount, nameof(sourceElementIds));
+
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var value in sourceElementIds)
             {
+                if (knownCount.HasValue && index >= knownCount.Value)
+                    throw new ArgumentException(
+                        "Dependency impact source traversal exceeds its advertised Count of " + knownCount.Value.ToString(CultureInfo.InvariantCulture) + ".",
+                        nameof(sourceElementIds));
                 if (index >= maxRootCount)
-                    throw new ArgumentException("Dependency impact source count cannot exceed project semantic element count of " + maxRootCount.ToString(CultureInfo.InvariantCulture) + ".", nameof(sourceElementIds));
+                    throw RootCountLimitError(maxRootCount, nameof(sourceElementIds));
                 var raw = value ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(raw))
                     throw new ArgumentException("Dependency impact source id cannot be blank at index " + index.ToString(CultureInfo.InvariantCulture) + ".", nameof(sourceElementIds));
@@ -212,10 +225,52 @@ namespace QS3D.Core.Services
                 result.Add(raw);
                 index++;
             }
+            if (knownCount.HasValue && index != knownCount.Value)
+                throw new ArgumentException(
+                    "Dependency impact source traversal count " + index.ToString(CultureInfo.InvariantCulture) +
+                    " does not match its advertised Count of " + knownCount.Value.ToString(CultureInfo.InvariantCulture) + ".",
+                    nameof(sourceElementIds));
             if (result.Count == 0)
                 throw new ArgumentException("Dependency impact planning requires at least one source element id.", nameof(sourceElementIds));
             result.Sort(StringComparer.OrdinalIgnoreCase);
             return result.AsReadOnly();
+        }
+
+        private static int? TryGetKnownCount(
+            IEnumerable<string> source,
+            out bool conflictingKnownCounts,
+            out bool invalidNegativeKnownCount)
+        {
+            conflictingKnownCounts = false;
+            invalidNegativeKnownCount = false;
+            int? knownCount = null;
+            if (source is ICollection<string> collection)
+                knownCount = ObserveKnownCount(knownCount, collection.Count, ref conflictingKnownCounts, ref invalidNegativeKnownCount);
+            if (source is IReadOnlyCollection<string> readOnlyCollection)
+                knownCount = ObserveKnownCount(knownCount, readOnlyCollection.Count, ref conflictingKnownCounts, ref invalidNegativeKnownCount);
+            if (source is ICollection nonGenericCollection)
+                knownCount = ObserveKnownCount(knownCount, nonGenericCollection.Count, ref conflictingKnownCounts, ref invalidNegativeKnownCount);
+            return knownCount;
+        }
+
+        private static int ObserveKnownCount(
+            int? current,
+            int observed,
+            ref bool conflictingKnownCounts,
+            ref bool invalidNegativeKnownCount)
+        {
+            if (observed < 0)
+                invalidNegativeKnownCount = true;
+            if (current.HasValue && current.Value != observed)
+                conflictingKnownCounts = true;
+            return !current.HasValue || observed > current.Value ? observed : current.Value;
+        }
+
+        private static ArgumentException RootCountLimitError(int maxRootCount, string parameterName)
+        {
+            return new ArgumentException(
+                "Dependency impact source count cannot exceed project semantic element count of " + maxRootCount.ToString(CultureInfo.InvariantCulture) + ".",
+                parameterName);
         }
 
         private sealed class WalkState
