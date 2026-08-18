@@ -80,7 +80,7 @@ jobs:
                 continue
               }
 
-              if ($path -in @('CI_POLICY.md', 'AGENTS.md', 'README.md', 'docs/MAIN-WRITE-AUTHORIZATION.md', 'docs/AGENT-WORK-REGISTRATION.md', 'docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md')) {
+              if ($path -in @('CI_POLICY.md', 'AGENTS.md', 'README.md', 'docs/MAIN-WRITE-AUTHORIZATION.md', 'docs/AGENT-WORK-REGISTRATION.md', 'docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md', 'docs/AGENT-STATUS-MARKER-SEMANTICS.md', 'docs/AGENT-BRANCH-CI-ACTIONS-LOOKUP.md')) {
                 $sourceValidation = $true
               }
             }
