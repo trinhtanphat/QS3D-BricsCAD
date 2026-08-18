@@ -50,7 +50,7 @@ namespace QS3D.Core.Cost
         public RateReferenceGraph(IEnumerable<RateReferenceEdge> edges)
         {
             if (edges == null) throw new ArgumentNullException(nameof(edges));
-            ValidateKnownCount(edges);
+            var knownCount = ValidateKnownCount(edges);
 
             var snapshot = new List<RateReferenceEdge>();
             var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -67,6 +67,10 @@ namespace QS3D.Core.Cost
                 snapshot.Add(edge);
                 index++;
             }
+            if (knownCount.HasValue && index != knownCount.Value)
+                throw new ArgumentException(
+                    "Rate reference edge collection known count does not match the observed traversal.",
+                    nameof(edges));
             snapshot.Sort(CompareEdges);
             _edges = new ReadOnlyCollection<RateReferenceEdge>(snapshot.ToArray());
         }
@@ -104,7 +108,7 @@ namespace QS3D.Core.Cost
             return new ReadOnlyCollection<string>(result.ToArray());
         }
 
-        private static void ValidateKnownCount(IEnumerable<RateReferenceEdge> edges)
+        private static int? ValidateKnownCount(IEnumerable<RateReferenceEdge> edges)
         {
             var counts = new List<int>(3);
             if (edges is ICollection<RateReferenceEdge> collection)
@@ -114,7 +118,7 @@ namespace QS3D.Core.Cost
             if (edges is ICollection nonGenericCollection)
                 counts.Add(nonGenericCollection.Count);
 
-            if (counts.Count == 0) return;
+            if (counts.Count == 0) return null;
 
             var expected = counts[0];
             var maximumReported = expected;
@@ -134,6 +138,7 @@ namespace QS3D.Core.Cost
                 throw new ArgumentException("Rate reference edge collection reports an invalid negative known count.", nameof(edges));
             if (hasConflict)
                 throw new ArgumentException("Rate reference edge collection reports conflicting known counts.", nameof(edges));
+            return expected;
         }
 
         private static int CompareEdges(RateReferenceEdge left, RateReferenceEdge right)
