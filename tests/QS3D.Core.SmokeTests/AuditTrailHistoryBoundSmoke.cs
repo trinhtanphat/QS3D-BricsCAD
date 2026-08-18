@@ -1,4 +1,7 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
@@ -14,6 +17,7 @@ namespace QS3D.Core.SmokeTests
         {
             ReadsExactBoundWithoutMutation();
             RejectsOversizedReadWithoutMutation();
+            SnapshotUsesValidatedCountOnce();
             RejectsRecordAtCapacityWithoutMutation();
             RecordsIntoLastAvailableSlot();
             RejectsOversizedClearWithoutMutation();
@@ -44,6 +48,30 @@ namespace QS3D.Core.SmokeTests
             Equal(MaxStoredEvents + 1, project.AuditEvents.Count, "oversized read count");
             if (!ReferenceEquals(first, project.AuditEvents[0]))
                 throw new Exception("AuditTrailHistoryBoundSmoke oversized read replaced stored evidence.");
+        }
+
+        private static void SnapshotUsesValidatedCountOnce()
+        {
+            var history = new SingleCountReadHistory(new AuditEvent
+            {
+                Utc = new DateTime(2026, 8, 18, 0, 0, 0, DateTimeKind.Utc),
+                Action = "history.event",
+                ElementId = "E1",
+                Detail = "canonical"
+            });
+            var constructor = typeof(AuditTrail).GetConstructor(
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                binder: null,
+                types: new[] { typeof(IList<AuditEvent>), typeof(ProjectState) },
+                modifiers: null);
+            if (constructor == null)
+                throw new Exception("AuditTrailHistoryBoundSmoke could not resolve the bounded-history constructor.");
+
+            var trail = (AuditTrail)constructor.Invoke(new object?[] { history, null });
+            var events = trail.Events;
+
+            Equal(1, events.Count, "single-count snapshot count");
+            Equal(1, history.CountReads, "single-count snapshot Count reads");
         }
 
         private static void RejectsRecordAtCapacityWithoutMutation()
@@ -101,6 +129,42 @@ namespace QS3D.Core.SmokeTests
                 });
             }
             return project;
+        }
+
+        private sealed class SingleCountReadHistory : IList<AuditEvent>
+        {
+            private readonly List<AuditEvent> _items;
+
+            internal SingleCountReadHistory(params AuditEvent[] items)
+            {
+                _items = new List<AuditEvent>(items);
+            }
+
+            internal int CountReads { get; private set; }
+
+            public int Count
+            {
+                get
+                {
+                    CountReads++;
+                    if (CountReads > 1)
+                        throw new InvalidOperationException("Audit history Count was read more than once before snapshot traversal.");
+                    return _items.Count;
+                }
+            }
+
+            public bool IsReadOnly => false;
+            public AuditEvent this[int index] { get => _items[index]; set => _items[index] = value; }
+            public void Add(AuditEvent item) => _items.Add(item);
+            public void Clear() => _items.Clear();
+            public bool Contains(AuditEvent item) => _items.Contains(item);
+            public void CopyTo(AuditEvent[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
+            public IEnumerator<AuditEvent> GetEnumerator() => _items.GetEnumerator();
+            public int IndexOf(AuditEvent item) => _items.IndexOf(item);
+            public void Insert(int index, AuditEvent item) => _items.Insert(index, item);
+            public bool Remove(AuditEvent item) => _items.Remove(item);
+            public void RemoveAt(int index) => _items.RemoveAt(index);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private static void Equal<T>(T expected, T actual, string label)
