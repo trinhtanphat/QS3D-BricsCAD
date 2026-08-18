@@ -207,7 +207,7 @@ namespace QS3D.Core.Diagnostics
                 if (observedCount > MaximumLiveHandleInputs)
                     throw LiveHandleInputTooLarge(label);
 
-                var handle = (raw ?? string.Empty).Trim();
+                var handle = RequireCanonicalLiveHandle(raw, label);
                 if (handle.Length > 0) normalized.Add(handle);
             }
             ValidateTraversalCount(label, expectedCount, observedCount);
@@ -228,11 +228,22 @@ namespace QS3D.Core.Diagnostics
                 if (observedCount > MaximumLiveHandleInputs)
                     throw LiveHandleInputTooLarge(label);
 
-                var handle = (raw ?? string.Empty).Trim();
+                var handle = RequireCanonicalLiveHandle(raw, label);
                 if (handle.Length > 0) normalized.Add(handle);
             }
             ValidateTraversalCount(label, expectedCount, observedCount);
             return normalized;
+        }
+
+        private static string RequireCanonicalLiveHandle(string? raw, string label)
+        {
+            var value = raw ?? string.Empty;
+            var canonical = value.Trim();
+            if (canonical.Length == 0) return string.Empty;
+            if (!string.Equals(value, canonical, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Comprehensive model-health live " + label + " Handle input contains a non-canonical identity with surrounding whitespace.");
+            return canonical;
         }
 
         private static int ValidateKnownCounts(ISet<string> handles, string label)
