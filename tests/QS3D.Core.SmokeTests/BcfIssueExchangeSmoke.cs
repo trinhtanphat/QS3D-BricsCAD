@@ -83,6 +83,15 @@ namespace QS3D.Core.SmokeTests
             if (tinyNonCollinear.Direction.X != double.Epsilon || tinyNonCollinear.UpVector.Y != double.Epsilon)
                 throw new Exception("Underflow-prone but non-collinear BCF camera vectors must remain valid.");
 
+            var skewNonCollinear = new BcfOrthogonalCamera(
+                new BcfPoint3(0d, 0d, 0d),
+                new BcfPoint3(1d, 0d, 0d),
+                new BcfPoint3(1d, 1d, 0d),
+                1d,
+                1d);
+            if (skewNonCollinear.Direction.X != 1d || skewNonCollinear.UpVector.X != 1d || skewNonCollinear.UpVector.Y != 1d)
+                throw new Exception("Non-collinear BCF camera vectors must remain valid even when they are not orthogonal.");
+
             ThrowsArgument(() => new BcfTopic(TopicA, "Bad UTC", "Open", "Error", string.Empty, "qa@qs3d", DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Local), Array.Empty<BcfComment>(), Array.Empty<BcfViewpoint>()), "BCF topic creation timestamps must be UTC.");
         }
 
