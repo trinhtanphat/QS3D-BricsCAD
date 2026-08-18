@@ -8,7 +8,13 @@ ROOT = Path(__file__).resolve().parents[1]
 SCAN_SUFFIXES = {".md", ".txt", ".yml", ".yaml", ".json", ".toml", ".py", ".ps1", ".sh"}
 SELF_PATH = "scripts/preflight-external-orchestration-aliases.py"
 REGRESSION_PATH = "scripts/preflight-external-orchestration-aliases-regression.py"
-EXCLUDED_PATHS = {SELF_PATH, REGRESSION_PATH}
+CHATGPT_SCHEDULE_CONFIG_PATH = "docs/AGENT-SCHEDULE-WORKFLOW.md"
+EXCLUDED_PATHS = {SELF_PATH, REGRESSION_PATH, CHATGPT_SCHEDULE_CONFIG_PATH}
+
+# The canonical schedule document is an owner-facing reference used to configure
+# ChatGPT account scheduled tasks. It intentionally names C0/W1-W4 but does not
+# implement repository scheduling. Keep this exemption exact-path only so the
+# same controller/worker topology remains forbidden everywhere else in source.
 
 # PR #1964 already protects the historical exact names. This guard covers a
 # deliberately small set of obvious aliases so the same external scheduler
