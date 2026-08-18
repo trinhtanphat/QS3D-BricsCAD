@@ -92,6 +92,13 @@ namespace QS3D.Core.SmokeTests
                 () => evaluator.Evaluate("1e-300 / 1e300"));
             Contains("Division underflowed to zero.", divisionUnderflow.Message);
 
+            var swallowedDivision = Capture<InvalidOperationException>(
+                () => evaluator.Evaluate("Tiny / Factor", precisionVariables));
+            Contains("Division lost the divisor contribution at double precision.", swallowedDivision.Message);
+            Near(double.Epsilon, evaluator.Evaluate("Tiny / 1", precisionVariables), 0d);
+            Near(double.Epsilon * 2d, evaluator.Evaluate("Tiny / 0.5", precisionVariables), 0d);
+            Near(0d, evaluator.Evaluate("0 / Factor", precisionVariables), 0d);
+
             var literalUnderflow = Capture<InvalidOperationException>(
                 () => evaluator.Evaluate("1e-4000"));
             Contains("Number '1e-4000' underflowed to zero.", literalUnderflow.Message);
