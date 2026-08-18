@@ -9,6 +9,7 @@ namespace QS3D.Core.Persistence
 {
     public sealed class ProjectPersistenceStamp
     {
+        private const int MaximumSnapshotEntries = 10_000;
         private const string RecoveredFromBackupKey = "QS3D.RecoveredFromBackup";
         private const string ProjectBrowserWorkspaceStateKey = "QS3D.ProjectBrowser.WorkspaceState";
         private readonly ProjectState _project;
@@ -75,8 +76,9 @@ namespace QS3D.Core.Persistence
 
         private static Dictionary<string, string> SnapshotMetadata(IDictionary<string, string> metadata)
         {
+            var items = SnapshotBounded(metadata, metadata.Count, "project metadata");
             var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in metadata)
+            foreach (var item in items)
             {
                 if (!TracksSemanticDirtyState(item.Key)) continue;
                 snapshot[item.Key] = item.Value;
@@ -86,8 +88,9 @@ namespace QS3D.Core.Persistence
 
         private static bool MetadataMatches(IDictionary<string, string> metadata, IReadOnlyDictionary<string, string> savedMetadata)
         {
+            var items = SnapshotBounded(metadata, metadata.Count, "project metadata");
             var trackedCount = 0;
-            foreach (var item in metadata)
+            foreach (var item in items)
             {
                 if (!TracksSemanticDirtyState(item.Key)) continue;
                 trackedCount++;
@@ -104,31 +107,35 @@ namespace QS3D.Core.Persistence
             AppendString(snapshot, project.Name);
             AppendDateTime(snapshot, project.UpdatedUtc);
 
-            AppendSequenceCount(snapshot, project.Zones.Count);
-            foreach (var zone in project.Zones)
+            var zones = SnapshotBounded(project.Zones, project.Zones.Count, "project zones");
+            AppendSequenceCount(snapshot, zones.Count);
+            foreach (var zone in zones)
             {
                 AppendString(snapshot, zone?.Id);
                 AppendString(snapshot, zone?.Name);
             }
 
-            AppendSequenceCount(snapshot, project.Floors.Count);
-            foreach (var floor in project.Floors)
+            var floors = SnapshotBounded(project.Floors, project.Floors.Count, "project floors");
+            AppendSequenceCount(snapshot, floors.Count);
+            foreach (var floor in floors)
             {
                 AppendString(snapshot, floor?.Id);
                 AppendString(snapshot, floor?.Name);
                 AppendDouble(snapshot, floor?.ElevationM ?? double.NaN);
             }
 
-            AppendSequenceCount(snapshot, project.Families.Count);
-            foreach (var family in project.Families)
+            var families = SnapshotBounded(project.Families, project.Families.Count, "project families");
+            AppendSequenceCount(snapshot, families.Count);
+            foreach (var family in families)
             {
                 AppendString(snapshot, family?.Id);
                 AppendString(snapshot, family?.Name);
                 AppendInt32(snapshot, family == null ? int.MinValue : (int)family.Category);
-                AppendStringMap(snapshot, family?.Properties);
+                AppendStringMap(snapshot, family?.Properties, "family properties");
             }
 
-            var rules = project.QuantityRules
+            var ruleSnapshot = SnapshotBounded(project.QuantityRules, project.QuantityRules.Count, "project quantity rules");
+            var rules = ruleSnapshot
                 .OrderBy(x => x?.Id ?? string.Empty, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             AppendSequenceCount(snapshot, rules.Length);
@@ -141,8 +148,9 @@ namespace QS3D.Core.Persistence
                 AppendString(snapshot, rule?.Version);
             }
 
-            AppendSequenceCount(snapshot, project.Elements.Count);
-            foreach (var element in project.Elements)
+            var elements = SnapshotBounded(project.Elements, project.Elements.Count, "project elements");
+            AppendSequenceCount(snapshot, elements.Count);
+            foreach (var element in elements)
             {
                 AppendString(snapshot, element?.Id);
                 AppendInt32(snapshot, element == null ? int.MinValue : (int)element.Category);
@@ -152,13 +160,14 @@ namespace QS3D.Core.Persistence
                 AppendString(snapshot, element?.DrawingFingerprint);
                 AppendInt32(snapshot, element == null ? int.MinValue : (int)element.Dirty);
                 AppendDateTime(snapshot, element?.UpdatedUtc);
-                AppendStringSequence(snapshot, element?.SourceHandles);
-                AppendStringSequence(snapshot, element?.DependsOn);
-                AppendStringMap(snapshot, element?.Properties);
-                AppendDoubleMap(snapshot, element?.Quantities);
+                AppendStringSequence(snapshot, element?.SourceHandles, "element source handles");
+                AppendStringSequence(snapshot, element?.DependsOn, "element dependencies");
+                AppendStringMap(snapshot, element?.Properties, "element properties");
+                AppendDoubleMap(snapshot, element?.Quantities, "element quantities");
             }
 
-            var auditEvents = project.AuditEvents
+            var auditSnapshot = SnapshotBounded(project.AuditEvents, project.AuditEvents.Count, "project audit events");
+            var auditEvents = auditSnapshot
                 .Select((item, index) => new { Item = item, Index = index })
                 .OrderBy(x => x.Item?.Utc ?? DateTime.MinValue)
                 .ThenBy(x => x.Index)
@@ -178,7 +187,10 @@ namespace QS3D.Core.Persistence
             return snapshot.ToString();
         }
 
-        private static void AppendStringMap(StringBuilder snapshot, IDictionary<string, string>? values)
+        private static void AppendStringMap(
+            StringBuilder snapshot,
+            IDictionary<string, string>? values,
+            string collectionLabel)
         {
             if (values == null)
             {
@@ -186,7 +198,8 @@ namespace QS3D.Core.Persistence
                 return;
             }
 
-            var ordered = values.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).ToArray();
+            var bounded = SnapshotBounded(values, values.Count, collectionLabel);
+            var ordered = bounded.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).ToArray();
             AppendSequenceCount(snapshot, ordered.Length);
             foreach (var item in ordered)
             {
@@ -195,7 +208,10 @@ namespace QS3D.Core.Persistence
             }
         }
 
-        private static void AppendDoubleMap(StringBuilder snapshot, IDictionary<string, double>? values)
+        private static void AppendDoubleMap(
+            StringBuilder snapshot,
+            IDictionary<string, double>? values,
+            string collectionLabel)
         {
             if (values == null)
             {
@@ -203,7 +219,8 @@ namespace QS3D.Core.Persistence
                 return;
             }
 
-            var ordered = values.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).ToArray();
+            var bounded = SnapshotBounded(values, values.Count, collectionLabel);
+            var ordered = bounded.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).ToArray();
             AppendSequenceCount(snapshot, ordered.Length);
             foreach (var item in ordered)
             {
@@ -212,7 +229,10 @@ namespace QS3D.Core.Persistence
             }
         }
 
-        private static void AppendStringSequence(StringBuilder snapshot, IList<string>? values)
+        private static void AppendStringSequence(
+            StringBuilder snapshot,
+            IList<string>? values,
+            string collectionLabel)
         {
             if (values == null)
             {
@@ -220,8 +240,38 @@ namespace QS3D.Core.Persistence
                 return;
             }
 
-            AppendSequenceCount(snapshot, values.Count);
-            foreach (var value in values) AppendString(snapshot, value);
+            var bounded = SnapshotBounded(values, values.Count, collectionLabel);
+            AppendSequenceCount(snapshot, bounded.Count);
+            foreach (var value in bounded) AppendString(snapshot, value);
+        }
+
+        private static List<T> SnapshotBounded<T>(IEnumerable<T> values, int knownCount, string collectionLabel)
+        {
+            RequireSupportedCount(knownCount, collectionLabel);
+            var bounded = new List<T>(knownCount);
+            foreach (var value in values)
+            {
+                if (bounded.Count == MaximumSnapshotEntries)
+                    ThrowTooManyEntries(collectionLabel);
+                bounded.Add(value);
+            }
+            return bounded;
+        }
+
+        private static void RequireSupportedCount(int count, string collectionLabel)
+        {
+            if (count < 0)
+                throw new InvalidOperationException(
+                    "Persistence stamp " + collectionLabel + " reports an invalid negative count.");
+            if (count > MaximumSnapshotEntries)
+                ThrowTooManyEntries(collectionLabel);
+        }
+
+        private static void ThrowTooManyEntries(string collectionLabel)
+        {
+            throw new InvalidOperationException(
+                "Persistence stamp " + collectionLabel + " supports at most " +
+                MaximumSnapshotEntries.ToString(CultureInfo.InvariantCulture) + " entries.");
         }
 
         private static void AppendSequenceCount(StringBuilder snapshot, int value)
