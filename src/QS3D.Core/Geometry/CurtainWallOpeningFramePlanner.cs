@@ -181,7 +181,7 @@ namespace QS3D.Core.Geometry
             if (count < 0)
                 throw new InvalidOperationException("Curtain frame interruption input reports an invalid negative " + label + " Count.");
             if (count > maximum)
-                throw new InvalidOperationException("Curtain frame interruption input exceeds " + maximum + " " + label + (label == "frame" ? "s" : "s") + ".");
+                throw new InvalidOperationException("Curtain frame interruption input exceeds " + maximum + " " + label + "s.");
         }
 
         private static List<Rect> Subtract(Rect source, Rect cut)
