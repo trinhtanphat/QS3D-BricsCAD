@@ -59,6 +59,7 @@ namespace QS3D.Core.Rebar
 
         private static void Append(RebarScheduleInput input, ICollection<RebarScheduleRow> rows, string inputParameterName)
         {
+            var elementId = RequireCanonicalElementId(input.ElementId, nameof(input.ElementId));
             if (string.IsNullOrWhiteSpace(input.Notation)) throw new ArgumentException("Rebar notation is required.", nameof(input));
             EnsureFiniteNonNegative(input.CuttingLengthM, nameof(input.CuttingLengthM));
             EnsureFiniteNonNegative(input.DistributionLengthM, nameof(input.DistributionLengthM));
@@ -78,7 +79,7 @@ namespace QS3D.Core.Rebar
             cuttingLengthParts.Add(input.HookAllowanceM, "cutting + hook allowance");
             var cuttingLength = cuttingLengthParts.Value;
             if (cuttingLength <= 0d) throw new InvalidOperationException("Rebar cutting length must be greater than zero.");
-            var baseMark = string.IsNullOrWhiteSpace(input.BarMark) ? (string.IsNullOrWhiteSpace(input.ElementId) ? "BAR" : input.ElementId) : input.BarMark.Trim();
+            var baseMark = string.IsNullOrWhiteSpace(input.BarMark) ? elementId : input.BarMark.Trim();
             var fabricationStatus = Normalize(input.FabricationStatus);
             var fabricationStandardCode = Normalize(input.FabricationStandardCode);
             var fabricationDetailingRevision = Normalize(input.FabricationDetailingRevision);
@@ -96,7 +97,7 @@ namespace QS3D.Core.Rebar
                 var totalWeight = RebarWeight.TotalKilograms(group.DiameterMm, totalLength, input.WastePercent);
                 rows.Add(new RebarScheduleRow
                 {
-                    ElementId = input.ElementId ?? string.Empty,
+                    ElementId = elementId,
                     BarMark = mark,
                     ShapeCode = string.IsNullOrWhiteSpace(input.ShapeCode) ? "00" : input.ShapeCode.Trim(),
                     Notation = group.ToString(),
@@ -113,6 +114,20 @@ namespace QS3D.Core.Rebar
                     FabricationDetailingRevision = fabricationDetailingRevision
                 });
             }
+        }
+
+        internal static string RequireCanonicalElementId(string value, string parameterName)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException("Rebar schedule element id is required.", parameterName);
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Rebar schedule element id must not contain surrounding whitespace.", parameterName);
+            for (var index = 0; index < value.Length; index++)
+            {
+                if (char.IsControl(value[index]))
+                    throw new ArgumentException("Rebar schedule element id must not contain control characters.", parameterName);
+            }
+            return value;
         }
 
         private static void ValidateAggregate(IReadOnlyList<RebarScheduleRow> rows)
@@ -227,8 +242,18 @@ namespace QS3D.Core.Rebar
             foreach (var element in project.Elements)
             {
                 if (element == null) throw new InvalidOperationException("Project contains a null semantic element entry.");
-                if (string.IsNullOrWhiteSpace(element.Id)) throw new InvalidOperationException("Project contains a semantic element with a blank id.");
-                if (!ids.Add(element.Id)) throw new InvalidOperationException("Project contains duplicate semantic element id: " + element.Id);
+                if (string.IsNullOrWhiteSpace(element.Id))
+                    throw new InvalidOperationException("Project contains a semantic element with a blank id.");
+                string elementId;
+                try
+                {
+                    elementId = RebarScheduleBuilder.RequireCanonicalElementId(element.Id, nameof(element.Id));
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new InvalidOperationException("Project contains a semantic element with a noncanonical id.", ex);
+                }
+                if (!ids.Add(elementId)) throw new InvalidOperationException("Project contains duplicate semantic element id: " + elementId);
                 elements.Add(element);
             }
             return elements.AsReadOnly();
