@@ -34,6 +34,11 @@ def require_order(text, tokens, label):
         cursor = position
 
 
+def forbid(text, needle, label):
+    if needle in text:
+        fail(f"{label}: forbidden source contract remains: {needle}")
+
+
 def fail(message):
     print("ERROR:", message)
     raise SystemExit(1)
@@ -78,14 +83,25 @@ def main():
         require_once(icons, token, "Draw icon map")
 
     for token in (
+        'using System.Windows.Media.Imaging;',
         'SetProperty(button, "ShowImage", true);',
-        'SetProperty(button, "Image", CreateIcon(spec.Value));',
-        'SetProperty(button, "LargeImage", CreateIcon(spec.Value));',
+        'SetProperty(button, "Image", CreateIcon(spec.Value, 16));',
+        'SetProperty(button, "LargeImage", CreateIcon(spec.Value, 32));',
+        'private static ImageSource CreateIcon(IconKind kind, int pixelSize)',
+        'if (pixelSize <= 0)',
+        'thread.CurrentCulture = CultureInfo.InvariantCulture;',
+        'thread.CurrentCulture = previousCulture;',
         'new RectangleGeometry(new Rect(0, 0, 32, 32))',
+        'new DrawingVisual()',
+        'drawing.PushTransform(new ScaleTransform(pixelSize / 32.0, pixelSize / 32.0));',
+        'drawing.DrawDrawing(group);',
+        'new RenderTargetBitmap(pixelSize, pixelSize, 96, 96, PixelFormats.Pbgra32)',
+        'image.Render(visual);',
         "PenLineCap.Round",
         "PenLineJoin.Round",
     ):
-        require(icons, token, "BLT3D-style vector icon contract")
+        require(icons, token, "BLT3D-style bitmap icon contract")
+    forbid(icons, "new DrawingImage(", "BricsCAD V25 ribbon bitmap boundary")
 
     # The supplied VẼ reference ends after Công cụ. IFC remains a staging panel only long
     # enough for MÔ HÌNH BIM to clone its independent qualified IFC surface.
@@ -131,7 +147,7 @@ def main():
         "BLT3D topbar tab order",
     )
 
-    print("PASS: VẼ keeps the BLT3D compact topbar, semantic vector icons, and no final IFC panel while BIM retains IFC.")
+    print("PASS: VẼ keeps the BLT3D compact topbar, command-specific bitmap-backed 16/32 icons, and no final IFC panel while BIM retains IFC.")
     return 0
 
 

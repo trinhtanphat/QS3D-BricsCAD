@@ -85,9 +85,10 @@ namespace QS3D.Core.Services
 
             var openingArea = openingAreaSum.Value;
             var clampedOpeningArea = Math.Min(grossArea, openingArea);
-            var netArea = grossArea - clampedOpeningArea;
+            var netArea = QuantityMath.SubtractFloorZero(grossArea, clampedOpeningArea, "net wall area");
             var grossVolume = FiniteProduct(grossArea, thicknessM, "gross wall volume");
             var deductionVolume = FiniteProduct(clampedOpeningArea, thicknessM, "wall deduction volume");
+            var netVolume = QuantityMath.SubtractFloorZero(grossVolume, deductionVolume, "net wall volume");
             var twoSideFinishArea = FiniteProduct(netArea, 2d, "two-side finish area");
 
             return new WallQuantities
@@ -97,7 +98,7 @@ namespace QS3D.Core.Services
                 NetAreaM2 = netArea,
                 GrossVolumeM3 = grossVolume,
                 DeductionVolumeM3 = deductionVolume,
-                NetVolumeM3 = grossVolume - deductionVolume,
+                NetVolumeM3 = netVolume,
                 TwoSideFinishAreaM2 = twoSideFinishArea
             };
         }

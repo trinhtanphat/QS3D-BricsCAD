@@ -28,6 +28,11 @@ def require(text: str, needle: str, label: str) -> None:
         fail(f"{label}: expected source contract not found: {needle}")
 
 
+def forbid(text: str, needle: str, label: str) -> None:
+    if needle in text:
+        fail(f"{label}: forbidden source contract remains: {needle}")
+
+
 def require_order(text: str, needles: list[str], label: str) -> None:
     cursor = -1
     for needle in needles:
@@ -184,7 +189,8 @@ def main() -> int:
     )
 
     # Every visible owner-reference button must carry an explicit semantic glyph. The icon
-    # decorator is clean-room vector presentation only; it cannot alter commands or CAD logic.
+    # decorator is presentation-only and rasterizes clean-room geometry into exact-size
+    # BricsCAD-safe 16/32 bitmap sources without altering commands or CAD logic.
     for button_id in (
         "QS3D_DRAW_BLT_POINT",
         "QS3D_DRAW_BLT_LINE",
@@ -210,13 +216,21 @@ def main() -> int:
     for token in (
         'private const string DrawPanelSourceId = "QS3D_DRAW_BLT_DRAW_PANEL_SOURCE";',
         'private const string ToolsPanelSourceId = "QS3D_DRAW_BLT_TOOLS_PANEL_SOURCE";',
+        'using System.Windows.Media.Imaging;',
         'SetProperty(button, "ShowImage", true);',
-        'SetProperty(button, "Image", CreateIcon(spec.Value));',
-        'SetProperty(button, "LargeImage", CreateIcon(spec.Value));',
+        'SetProperty(button, "Image", CreateIcon(spec.Value, 16));',
+        'SetProperty(button, "LargeImage", CreateIcon(spec.Value, 32));',
+        'private static ImageSource CreateIcon(IconKind kind, int pixelSize)',
         'string.Equals(typeName, "RibbonRowPanel", StringComparison.Ordinal)',
         'new RectangleGeometry(new Rect(0, 0, 32, 32))',
+        'new DrawingVisual()',
+        'drawing.PushTransform(new ScaleTransform(pixelSize / 32.0, pixelSize / 32.0));',
+        'drawing.DrawDrawing(group);',
+        'new RenderTargetBitmap(pixelSize, pixelSize, 96, 96, PixelFormats.Pbgra32)',
+        'image.Render(visual);',
     ):
-        require(icons, token, "BLT3D-familiar vector icon contract")
+        require(icons, token, "BLT3D-familiar bitmap icon contract")
+    forbid(icons, "new DrawingImage(", "BricsCAD V25 ribbon bitmap boundary")
 
     # The compact refiner remains presentation-only for Vẽ/Công cụ. IFC is a staging source
     # created by the rich augmenter so MÔ HÌNH BIM can mirror it, then the finalizer removes
@@ -288,9 +302,9 @@ def main() -> int:
 
     print(
         "PASS: QS3D VẼ matches the BLT3D compact Vẽ/Công cụ source contract, pins every button "
-        "to its audited command, gives every visible action a vector icon, keeps Cắt sàn on the "
-        "guarded QS3D slabOpen workflow, removes IFC from VẼ only after BIM mirroring, and repairs "
-        "BricsCAD CommandParameter/handler dispatch failures."
+        "to its audited command, gives every visible action a BricsCAD-safe bitmap-backed 16/32 icon, "
+        "keeps Cắt sàn on the guarded QS3D slabOpen workflow, removes IFC from VẼ only after BIM "
+        "mirroring, and repairs BricsCAD CommandParameter/handler dispatch failures."
     )
     return 0
 

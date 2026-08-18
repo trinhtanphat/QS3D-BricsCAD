@@ -1,9 +1,12 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection;
+using System.Threading;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace QS3D.BricsCAD.V25.Ribbon
 {
@@ -97,8 +100,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
                         return false;
 
                     SetProperty(button, "ShowImage", true);
-                    SetProperty(button, "Image", CreateIcon(spec.Value));
-                    SetProperty(button, "LargeImage", CreateIcon(spec.Value));
+                    SetProperty(button, "Image", CreateIcon(spec.Value, 16));
+                    SetProperty(button, "LargeImage", CreateIcon(spec.Value, 32));
                 }
 
                 return true;
@@ -133,7 +136,28 @@ namespace QS3D.BricsCAD.V25.Ribbon
             }
         }
 
-        private static ImageSource CreateIcon(IconKind kind)
+        private static ImageSource CreateIcon(IconKind kind, int pixelSize)
+        {
+            if (pixelSize <= 0)
+                throw new ArgumentOutOfRangeException(nameof(pixelSize));
+
+            // Geometry.Parse consumes decimal path data using the host thread culture. Keep
+            // Vietnamese/comma-decimal Windows locales from turning a presentation-only icon
+            // failure into a blank VẼ ribbon, then restore BricsCAD's original culture.
+            var thread = Thread.CurrentThread;
+            var previousCulture = thread.CurrentCulture;
+            try
+            {
+                thread.CurrentCulture = CultureInfo.InvariantCulture;
+                return CreateIconCore(kind, pixelSize);
+            }
+            finally
+            {
+                thread.CurrentCulture = previousCulture;
+            }
+        }
+
+        private static ImageSource CreateIconCore(IconKind kind, int pixelSize)
         {
             var blue = FrozenBrush(Color.FromRgb(30, 132, 235));
             var blueDark = FrozenBrush(Color.FromRgb(17, 76, 165));
@@ -253,7 +277,22 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     break;
             }
 
-            var image = new DrawingImage(group);
+            if (group.CanFreeze)
+                group.Freeze();
+
+            // BricsCAD V25 can display a raw DrawingImage as a blank/missing Ribbon icon even
+            // when the WPF vector is valid. Rasterize the clean-room glyph to the exact host size,
+            // matching the repository's already proven Project Setup / QS3D brand icon pipeline.
+            var visual = new DrawingVisual();
+            using (var drawing = visual.RenderOpen())
+            {
+                drawing.PushTransform(new ScaleTransform(pixelSize / 32.0, pixelSize / 32.0));
+                drawing.DrawDrawing(group);
+                drawing.Pop();
+            }
+
+            var image = new RenderTargetBitmap(pixelSize, pixelSize, 96, 96, PixelFormats.Pbgra32);
+            image.Render(visual);
             if (image.CanFreeze)
                 image.Freeze();
             return image;

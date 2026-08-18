@@ -113,6 +113,7 @@ namespace QS3D.Core.Templates
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (profile == null) throw new ArgumentNullException(nameof(profile));
             Validate(profile);
+            EnsureSerializedLowerBoundWithinLimit(profile);
             var familyPlans = ValidateApply(project, profile);
             var rollback = ProjectStateSnapshot.Capture(project);
 

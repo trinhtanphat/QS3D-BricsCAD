@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
@@ -49,9 +50,7 @@ namespace QS3D.Core.Cost
         public RateReferenceGraph(IEnumerable<RateReferenceEdge> edges)
         {
             if (edges == null) throw new ArgumentNullException(nameof(edges));
-            if (AdvancedCostCollectionContract.TryGetKnownCount(edges, out var knownEdgeCount) &&
-                knownEdgeCount > MaximumEdges)
-                ThrowTooManyEdges();
+            ValidateKnownCount(edges);
 
             var snapshot = new List<RateReferenceEdge>();
             var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -103,6 +102,38 @@ namespace QS3D.Core.Cost
             }
             result.Sort(StringComparer.OrdinalIgnoreCase);
             return new ReadOnlyCollection<string>(result.ToArray());
+        }
+
+        private static void ValidateKnownCount(IEnumerable<RateReferenceEdge> edges)
+        {
+            var counts = new List<int>(3);
+            if (edges is ICollection<RateReferenceEdge> collection)
+                counts.Add(collection.Count);
+            if (edges is IReadOnlyCollection<RateReferenceEdge> readOnlyCollection)
+                counts.Add(readOnlyCollection.Count);
+            if (edges is ICollection nonGenericCollection)
+                counts.Add(nonGenericCollection.Count);
+
+            if (counts.Count == 0) return;
+
+            var expected = counts[0];
+            var maximumReported = expected;
+            var hasNegative = expected < 0;
+            var hasConflict = false;
+            for (var i = 1; i < counts.Count; i++)
+            {
+                var current = counts[i];
+                if (current < 0) hasNegative = true;
+                if (current != expected) hasConflict = true;
+                if (current > maximumReported) maximumReported = current;
+            }
+
+            if (maximumReported > MaximumEdges)
+                ThrowTooManyEdges();
+            if (hasNegative)
+                throw new ArgumentException("Rate reference edge collection reports an invalid negative known count.", nameof(edges));
+            if (hasConflict)
+                throw new ArgumentException("Rate reference edge collection reports conflicting known counts.", nameof(edges));
         }
 
         private static int CompareEdges(RateReferenceEdge left, RateReferenceEdge right)

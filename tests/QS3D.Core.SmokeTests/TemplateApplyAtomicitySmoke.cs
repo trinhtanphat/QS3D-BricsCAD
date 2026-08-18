@@ -13,7 +13,57 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
+            OversizedProfileRejectedBeforePlanning();
+            BelowBoundProfileStillApplies();
             AuditOverflowRestoresWholeTemplateApply();
+        }
+
+        private static void OversizedProfileRejectedBeforePlanning()
+        {
+            var project = new ProjectState("P-TEMPLATE-BOUND", "Template apply bound");
+            project.Families.Add(new ProjectFamily("DUP", "Existing A", ElementCategory.ArchitecturalWall));
+            project.Families.Add(new ProjectFamily("DUP", "Existing B", ElementCategory.StructuralWall));
+            var beforeFamilies = project.Families.Count;
+            var beforeAudits = project.AuditEvents.Count;
+            var beforeVersion = project.ChangeVersion;
+            var beforeUtc = project.UpdatedUtc;
+
+            var profile = new TemplateProfile("T-OVERSIZED", "Oversized template");
+            var family = new ProjectFamily("F-OVERSIZED", "Oversized wall", ElementCategory.ArchitecturalWall);
+            family.Properties["Payload"] = new string('x', 8 * 1024 * 1024);
+            profile.Families.Add(family);
+
+            try
+            {
+                new TemplateProfileStore().Apply(project, profile);
+                throw new Exception("Expected oversized in-memory template apply to fail.");
+            }
+            catch (InvalidDataException ex)
+            {
+                if (!ex.Message.Contains("exceeds 8 MiB", StringComparison.Ordinal))
+                    throw new Exception("Oversized template apply did not fail through the established size contract: " + ex.Message);
+            }
+
+            Equal(beforeFamilies, project.Families.Count, "Oversized template apply changed project families.");
+            Equal(beforeAudits, project.AuditEvents.Count, "Oversized template apply appended an audit event.");
+            Equal(beforeVersion, project.ChangeVersion, "Oversized template apply changed project version.");
+            Equal(beforeUtc, project.UpdatedUtc, "Oversized template apply changed UpdatedUtc.");
+        }
+
+        private static void BelowBoundProfileStillApplies()
+        {
+            var project = new ProjectState("P-TEMPLATE-BOUND-OK", "Template apply bound control");
+            var profile = new TemplateProfile("T-BOUND-OK", "Bounded template");
+            var family = new ProjectFamily("F-BOUND-OK", "Bounded wall", ElementCategory.ArchitecturalWall);
+            family.Properties["WidthM"] = "0.2";
+            profile.Families.Add(family);
+
+            var result = new TemplateProfileStore().Apply(project, profile);
+
+            Equal(1, result.FamiliesAdded, "Below-bound template did not add its family.");
+            Equal(1, project.Families.Count, "Below-bound template apply produced the wrong family count.");
+            Equal("F-BOUND-OK", project.Families[0].Id, "Below-bound template apply added the wrong family.");
+            Equal("0.2", project.Families[0].Properties["WidthM"], "Below-bound template apply lost family defaults.");
         }
 
         private static void AuditOverflowRestoresWholeTemplateApply()
