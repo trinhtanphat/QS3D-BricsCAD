@@ -288,7 +288,7 @@ namespace QS3D.Core.Export
             string overflowMessage)
         {
             if (values == null) throw new ArgumentNullException(parameterName);
-            ValidateKnownCounts(values, maximumCount, parameterName, overflowMessage);
+            var knownCount = ValidateKnownCounts(values, maximumCount, parameterName, overflowMessage);
 
             var items = new List<T>();
             var observedCount = 0;
@@ -300,10 +300,13 @@ namespace QS3D.Core.Export
                 items.Add(value);
             }
 
+            if (knownCount.HasValue && observedCount != knownCount.Value)
+                throw new ArgumentException("BCF collection Count does not match enumerated item count.", parameterName);
+
             return items;
         }
 
-        private static void ValidateKnownCounts<T>(
+        private static int? ValidateKnownCounts<T>(
             IEnumerable<T> values,
             int maximumCount,
             string parameterName,
@@ -341,6 +344,7 @@ namespace QS3D.Core.Export
                 throw new ArgumentException("BCF collection reports a negative known Count.", parameterName);
             if (conflictingKnownCounts)
                 throw new ArgumentException("BCF collection reports conflicting known Count values.", parameterName);
+            return knownCount;
         }
 
         internal static string RequireBcfGuid(string value, string parameterName)
