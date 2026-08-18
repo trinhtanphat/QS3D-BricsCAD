@@ -60,7 +60,9 @@ namespace QS3D.BricsCAD.V25.UI
         {
             _ = ViewAidClassHandlerRegistered;
             if (_viewportAidsApplied) return;
-            if (!(Content is Grid root)) return;
+
+            var root = WorkspaceContentRoot;
+            if (root == null) return;
 
             Border? footer = null;
             foreach (var child in root.Children)

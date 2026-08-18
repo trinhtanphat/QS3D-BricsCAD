@@ -34,6 +34,8 @@ if PARTIAL.is_file():
         "panel.EnsureViewportAidControls();",
         "panel.RefreshViewportAidState();",
         "if (_viewportAidsApplied) return;",
+        "var root = WorkspaceContentRoot;",
+        "if (root == null) return;",
         "Grid.GetRow(border) == 2",
         "string.Equals(stack.Tag as string, ViewportAidPanelTag, StringComparison.Ordinal)",
         "DockPanel.SetDock(viewportStatus, Dock.Right);",
@@ -74,9 +76,15 @@ if PARTIAL.is_file():
         if needle not in text:
             errors.append("WorkspacePanel.ViewAids missing complete reference-footer contract: " + needle)
 
+    if "Content is Grid root" in text:
+        errors.append(
+            "viewport aids must bind the named WorkspaceContentRoot inside WorkspaceOverflow, not assume UserControl.Content is a Grid"
+        )
+
     ensure_pos = text.find("private void EnsureViewportAidControls()")
     idempotent_pos = text.find("if (_viewportAidsApplied) return;", ensure_pos)
-    footer_pos = text.find("Grid.GetRow(border) == 2", idempotent_pos)
+    named_root_pos = text.find("var root = WorkspaceContentRoot;", idempotent_pos)
+    footer_pos = text.find("Grid.GetRow(border) == 2", named_root_pos)
     tag_pos = text.find("ViewportAidPanelTag", footer_pos)
     dock_pos = text.find("DockPanel.SetDock(viewportStatus, Dock.Right);", tag_pos)
     add_light_pos = text.find("viewportStatus.Children.Add(_lightBackgroundButton);", dock_pos)
@@ -88,6 +96,7 @@ if PARTIAL.is_file():
     if min(
         ensure_pos,
         idempotent_pos,
+        named_root_pos,
         footer_pos,
         tag_pos,
         dock_pos,
@@ -100,6 +109,7 @@ if PARTIAL.is_file():
     ) < 0 or not (
         ensure_pos
         < idempotent_pos
+        < named_root_pos
         < footer_pos
         < tag_pos
         < dock_pos
@@ -111,7 +121,7 @@ if PARTIAL.is_file():
         < applied_pos
     ):
         errors.append(
-            "viewport-aid injection must be idempotent, live in its own right-docked footer panel, "
+            "viewport-aid injection must be idempotent, bind WorkspaceContentRoot, live in its own right-docked footer panel, "
             "and expose the complete reference control order"
         )
 
@@ -211,6 +221,8 @@ if PARTIAL.is_file():
 if XAML.is_file():
     text = XAML.read_text(encoding="utf-8")
     preserved = (
+        '<ScrollViewer x:Name="WorkspaceOverflow"',
+        '<Grid x:Name="WorkspaceContentRoot"',
         'Grid.Row="2" Background="{StaticResource Bg1Brush}"',
         'Content="Mô hình"',
         'Click="OnViewModel3DClick"',
@@ -284,7 +296,7 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: Workspace keeps model/BQ/floor context, surfaces a dedicated visible right footer with "
+    "PASS: Workspace keeps model/BQ/floor context, binds the real named WorkspaceContentRoot, surfaces a dedicated visible right footer with "
     "light/contrast/ortho/entity-snap controls, exposes the requested four OSNAP modes, preserves "
     "native OSMODE bits/suppression state, and shares the implementation with V26."
 )
