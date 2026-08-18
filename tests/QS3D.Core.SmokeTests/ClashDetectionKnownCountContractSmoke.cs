@@ -17,6 +17,8 @@ namespace QS3D.Core.SmokeTests
             CapacityViolationPrecedesCountConflict();
             ExactBoundRemainsAccepted();
             ConsistentKnownCountsPreserveDeterministicClassification();
+            UnderEnumeratingKnownCountFailsAfterTraversal();
+            OverEnumeratingKnownCountFailsAfterTraversal();
             DishonestKnownCountStillStopsAtStreamingBoundary();
         }
 
@@ -120,6 +122,44 @@ namespace QS3D.Core.SmokeTests
             AssertSingleHardClash(second, "A", "B");
             if (source.EnumerationRequestCount != 2)
                 throw new Exception("Consistent known-count clash input must enumerate exactly once per Detect call.");
+        }
+
+        private static void UnderEnumeratingKnownCountFailsAfterTraversal()
+        {
+            var source = new MultiCountCollection(
+                new[] { Element("A", "Architecture") },
+                genericCount: 2,
+                readOnlyCount: 2,
+                nonGenericCount: 2,
+                throwOnEnumeration: false);
+
+            ExpectInvalidOperation(
+                () => new ClashDetectionService().Detect(source),
+                "did not match its known element count",
+                "Clash detection must fail closed when traversal yields fewer elements than the validated known Count.");
+            if (!source.EnumerationRequested || source.EnumerationRequestCount != 1)
+                throw new Exception("Under-enumeration mismatch must be detected after exactly one traversal.");
+        }
+
+        private static void OverEnumeratingKnownCountFailsAfterTraversal()
+        {
+            var source = new MultiCountCollection(
+                new[]
+                {
+                    Element("A", "Architecture"),
+                    Element("B", "Structure")
+                },
+                genericCount: 1,
+                readOnlyCount: 1,
+                nonGenericCount: 1,
+                throwOnEnumeration: false);
+
+            ExpectInvalidOperation(
+                () => new ClashDetectionService().Detect(source),
+                "did not match its known element count",
+                "Clash detection must fail closed when traversal yields more in-bound elements than the validated known Count.");
+            if (!source.EnumerationRequested || source.EnumerationRequestCount != 1)
+                throw new Exception("Over-enumeration mismatch must be detected after exactly one traversal.");
         }
 
         private static void DishonestKnownCountStillStopsAtStreamingBoundary()
