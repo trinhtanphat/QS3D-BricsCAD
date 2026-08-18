@@ -124,20 +124,33 @@ namespace QS3D.Core.Selection
 
         private static void RequireSelectionKnownCountWithinLimit(IEnumerable<string> elementIds)
         {
+            var counts = new List<int>(3);
             if (elementIds is ICollection<string> collection)
-                RequireValidSelectionKnownCount(collection.Count);
+                counts.Add(collection.Count);
             if (elementIds is IReadOnlyCollection<string> readOnlyCollection)
-                RequireValidSelectionKnownCount(readOnlyCollection.Count);
+                counts.Add(readOnlyCollection.Count);
             if (elementIds is System.Collections.ICollection nonGenericCollection)
-                RequireValidSelectionKnownCount(nonGenericCollection.Count);
-        }
+                counts.Add(nonGenericCollection.Count);
 
-        private static void RequireValidSelectionKnownCount(int count)
-        {
-            if (count < 0)
-                throw new InvalidOperationException("Semantic property inspector selection source exposes an invalid negative known count.");
-            if (count > MaxSelection)
+            if (counts.Count == 0) return;
+
+            var expected = counts[0];
+            var maximum = expected;
+            var hasNegative = expected < 0;
+            var hasConflict = false;
+            for (var i = 1; i < counts.Count; i++)
+            {
+                if (counts[i] < 0) hasNegative = true;
+                if (counts[i] != expected) hasConflict = true;
+                if (counts[i] > maximum) maximum = counts[i];
+            }
+
+            if (maximum > MaxSelection)
                 throw new InvalidOperationException("Semantic property inspector supports at most " + MaxSelection + " selected elements.");
+            if (hasNegative)
+                throw new InvalidOperationException("Semantic property inspector selection source exposes an invalid negative known count.");
+            if (hasConflict)
+                throw new InvalidOperationException("Semantic property inspector selection source exposes conflicting known counts.");
         }
 
         private static Dictionary<string, ProjectElement> BuildUniqueProjectIndex(ProjectState project)
