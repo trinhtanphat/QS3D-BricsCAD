@@ -194,7 +194,10 @@ namespace QS3D.Core.Licensing
         private static string RequirePayload(string payload)
         {
             if (payload == null) throw new ArgumentNullException(nameof(payload));
-            if (payload.Length == 0) throw new ArgumentException("Entitlement payload must not be empty.", nameof(payload));
+            var canonical = payload.Trim();
+            if (canonical.Length == 0) throw new ArgumentException("Entitlement payload must not be blank.", nameof(payload));
+            if (!string.Equals(payload, canonical, StringComparison.Ordinal))
+                throw new ArgumentException("Entitlement payload must not contain leading or trailing whitespace.", nameof(payload));
             if (StrictUtf8.GetByteCount(payload) > MaxPayloadBytes) throw new ArgumentException("Entitlement payload exceeds the persistence bound.", nameof(payload));
             return payload;
         }
