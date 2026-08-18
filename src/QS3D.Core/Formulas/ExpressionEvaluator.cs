@@ -158,9 +158,11 @@ namespace QS3D.Core.Formulas
                     }
                     else
                     {
-                        return _evaluate
-                            ? EnsureFinite(sum + compensation, "Addition/subtraction produced a non-finite result.")
-                            : sum;
+                        if (!_evaluate) return sum;
+                        var result = EnsureFinite(sum + compensation, "Addition/subtraction produced a non-finite result.");
+                        if (compensation != 0d && result == sum)
+                            throw Error("Addition/subtraction lost the compensated contribution at double precision.");
+                        return result;
                     }
                 }
             }
@@ -191,6 +193,13 @@ namespace QS3D.Core.Formulas
                             var product = EnsureFinite(value * right, "Multiplication produced a non-finite result.");
                             if (product == 0d && value != 0d && right != 0d)
                                 throw Error("Multiplication underflowed to zero.");
+                            if (value != 0d && right != 0d)
+                            {
+                                if (right != 1d && product == value)
+                                    throw Error("Multiplication lost the right operand contribution at double precision.");
+                                if (value != 1d && product == right)
+                                    throw Error("Multiplication lost the left operand contribution at double precision.");
+                            }
                             value = product;
                         }
                         else value = 0d;
@@ -204,6 +213,8 @@ namespace QS3D.Core.Formulas
                             var quotient = EnsureFinite(value / divisor, "Division produced a non-finite result.");
                             if (quotient == 0d && value != 0d)
                                 throw Error("Division underflowed to zero.");
+                            if (value != 0d && divisor != 1d && quotient == value)
+                                throw Error("Division lost the divisor contribution at double precision.");
                             value = quotient;
                         }
                         else value = 0d;

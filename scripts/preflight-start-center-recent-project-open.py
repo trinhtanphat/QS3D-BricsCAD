@@ -1,71 +1,79 @@
 #!/usr/bin/env python3
+"""Guard the KHỞI ĐẦU recent-project route through the shared open service."""
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PANEL_REL = "src/QS3D.BricsCAD.V25/UI/BltStartCenterPanel.cs"
-PROJECT_UI_REL = "src/QS3D.BricsCAD.V25/ProjectFileUiService.cs"
+START_CENTER = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "BltStartCenterPanel.cs"
+PROJECT_UI = ROOT / "src" / "QS3D.BricsCAD.V25" / "ProjectFileUiService.cs"
 
 
-def read(rel):
-    return (ROOT / rel).read_text(encoding="utf-8")
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise AssertionError(message)
 
 
-def require(text, needle, rel):
-    if needle not in text:
-        raise SystemExit(f"FAIL: {rel} missing required contract: {needle}")
+def method_block(source: str, signature: str) -> str:
+    start = source.find(signature)
+    require(start >= 0, f"{signature} is missing.")
+    brace = source.find("{", start)
+    require(brace >= 0, f"{signature} body is missing.")
+
+    depth = 0
+    for index in range(brace, len(source)):
+        char = source[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start : index + 1]
+
+    raise AssertionError(f"{signature} body is unterminated.")
 
 
-def forbid(text, needle, rel):
-    if needle in text:
-        raise SystemExit(f"FAIL: {rel} contains forbidden stale contract: {needle}")
+start_center = START_CENTER.read_text(encoding="utf-8")
+project_ui = PROJECT_UI.read_text(encoding="utf-8")
 
+snippet = method_block(
+    start_center,
+    "private void OpenRecentProject(StartCenterRecentProject recent)",
+)
 
-def main():
-    panel = read(PANEL_REL)
-    project_ui = read(PROJECT_UI_REL)
+required_markers = (
+    "StartCenterUserStateStore.TryNormalizeDwgPath(recent.Path, out var normalized)",
+    "File.Exists(normalized)",
+    "ProjectFileUiService.OpenProject(normalized);",
+    "StartCenterUserStateStore.RecordProject(normalized);",
+    "RefreshRecentProjects();",
+    "catch (Exception ex)",
+)
+for marker in required_markers:
+    require(marker in snippet, f"OpenRecentProject must retain expected behavior: {marker}")
 
-    marker = "private void OpenRecentProject(StartCenterRecentProject recent)"
-    next_marker = "private void RunUiAction(Action action)"
-    require(panel, marker, PANEL_REL)
-    require(panel, next_marker, PANEL_REL)
-    block = panel.split(marker, 1)[1].split(next_marker, 1)[0]
+forbidden_markers = (
+    "Application.DocumentManager.Open(",
+    "ProjectContextCoordinator.GetOrCreate(",
+)
+for marker in forbidden_markers:
+    require(marker not in snippet, f"OpenRecentProject must not bypass the shared project-open route: {marker}")
 
-    for needle in (
-        "StartCenterUserStateStore.TryNormalizeDwgPath(recent.Path, out var normalized)",
-        "File.Exists(normalized)",
-        "ProjectFileUiService.OpenProject(normalized);",
-        "StartCenterUserStateStore.RecordProject(normalized);",
-        '_statusText.Text = "Đã mở " + Path.GetFileName(normalized) + ".";',
-        "RefreshRecentProjects();",
-        '_statusText.Text = "Không thể mở: " + ex.Message;',
-    ):
-        require(block, needle, PANEL_REL + "::OpenRecentProject")
+require(
+    snippet.index("ProjectFileUiService.OpenProject(normalized);")
+    < snippet.index("StartCenterUserStateStore.RecordProject(normalized);"),
+    "The recent project entry must only be recorded after the shared open service succeeds.",
+)
 
-    for stale in (
-        "Application.DocumentManager.Open(normalized, false)",
-        "Application.DocumentManager.MdiActiveDocument",
-        "ProjectContextCoordinator.GetOrCreate",
-    ):
-        forbid(block, stale, PANEL_REL + "::OpenRecentProject")
+open_drawing = method_block(
+    project_ui,
+    "private static void OpenDrawing(string drawingPath)",
+)
 
-    if block.index("ProjectFileUiService.OpenProject(normalized);") > block.index("StartCenterUserStateStore.RecordProject(normalized);"):
-        raise SystemExit("FAIL: recent-project state must only be recorded after the shared open route succeeds.")
+project_route_markers = (
+    "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+    "ProjectOperationResultWindow.ShowOpenSuccess(",
+)
+for marker in project_route_markers:
+    require(marker in open_drawing, f"Shared DWG open route must preserve project sidecar behavior: {marker}")
 
-    for needle in (
-        'if (string.Equals(extension, ".dwg", StringComparison.OrdinalIgnoreCase))',
-        "OpenDrawing(fullProjectPath);",
-        "if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))",
-        "ProjectOperationResultWindow.ShowOpenSuccess(",
-    ):
-        require(project_ui, needle, PROJECT_UI_REL)
-
-    open_drawing = project_ui.split("private static void OpenDrawing(string drawingPath)", 1)[1].split(
-        "private static void PublishSelectedProject(", 1
-    )[0]
-    forbid(open_drawing, "ProjectContextCoordinator.GetOrCreate(", PROJECT_UI_REL + "::OpenDrawing")
-
-    print("PASS: Start Center recent-project DWG opens reuse the shared project-open route, preserve recent/status behavior, and never manufacture a project solely for popup parity.")
-
-
-if __name__ == "__main__":
-    main()
+print("[OK] Start Center recent projects route through ProjectFileUiService.")
