@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Xml;
 
 namespace QS3D.Core.Export
@@ -54,6 +55,7 @@ namespace QS3D.Core.Export
             UpVector = upVector ?? throw new ArgumentNullException(nameof(upVector));
             if (Direction.IsZero) throw new ArgumentException("BCF camera direction must be non-zero.", nameof(direction));
             if (UpVector.IsZero) throw new ArgumentException("BCF camera up vector must be non-zero.", nameof(upVector));
+            if (AreCollinear(Direction, UpVector)) throw new ArgumentException("BCF camera direction and up vector must not be collinear.", nameof(upVector));
             ViewToWorldScale = BcfIssueExchangeContract.RequirePositiveFinite(viewToWorldScale, nameof(viewToWorldScale));
             AspectRatio = BcfIssueExchangeContract.RequirePositiveFinite(aspectRatio, nameof(aspectRatio));
         }
@@ -63,6 +65,56 @@ namespace QS3D.Core.Export
         public BcfPoint3 UpVector { get; }
         public double ViewToWorldScale { get; }
         public double AspectRatio { get; }
+
+        private static bool AreCollinear(BcfPoint3 left, BcfPoint3 right)
+        {
+            return ProductsEqual(left.X, right.Y, left.Y, right.X) &&
+                   ProductsEqual(left.X, right.Z, left.Z, right.X) &&
+                   ProductsEqual(left.Y, right.Z, left.Z, right.Y);
+        }
+
+        private static bool ProductsEqual(double leftA, double leftB, double rightA, double rightB)
+        {
+            DecomposeFinite(leftA, out var leftASignificand, out var leftAExponent);
+            DecomposeFinite(leftB, out var leftBSignificand, out var leftBExponent);
+            DecomposeFinite(rightA, out var rightASignificand, out var rightAExponent);
+            DecomposeFinite(rightB, out var rightBSignificand, out var rightBExponent);
+
+            var leftSignificand = leftASignificand * leftBSignificand;
+            var rightSignificand = rightASignificand * rightBSignificand;
+            if (leftSignificand.IsZero || rightSignificand.IsZero)
+                return leftSignificand.IsZero && rightSignificand.IsZero;
+
+            var leftExponent = leftAExponent + leftBExponent;
+            var rightExponent = rightAExponent + rightBExponent;
+            if (leftExponent == rightExponent)
+                return leftSignificand == rightSignificand;
+            if (leftExponent > rightExponent)
+                return (leftSignificand << (leftExponent - rightExponent)) == rightSignificand;
+            return leftSignificand == (rightSignificand << (rightExponent - leftExponent));
+        }
+
+        private static void DecomposeFinite(double value, out BigInteger significand, out int exponent)
+        {
+            var bits = BitConverter.DoubleToInt64Bits(value);
+            var negative = bits < 0;
+            var biasedExponent = (int)((bits >> 52) & 0x7ffL);
+            var fraction = (ulong)bits & 0x000fffffffffffffUL;
+
+            if (biasedExponent == 0)
+            {
+                significand = fraction;
+                exponent = -1074;
+            }
+            else
+            {
+                significand = fraction | (1UL << 52);
+                exponent = biasedExponent - 1075;
+            }
+
+            if (negative)
+                significand = BigInteger.Negate(significand);
+        }
     }
 
     public sealed class BcfViewpoint
