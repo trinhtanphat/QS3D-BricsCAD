@@ -92,6 +92,11 @@ def discover():
                 path = Path(entry.path)
                 if str(path) == str(SELF):
                     continue
+                if entry.name.casefold() == SELF.name.casefold():
+                    raise RuntimeError(
+                        "case-insensitive preflight filename collision with aggregate runner: "
+                        + entry.name
+                    )
                 candidates.append(path)
                 if len(candidates) > MAX_FEATURE_GATES:
                     raise RuntimeError(
