@@ -61,6 +61,25 @@ def main() -> int:
     ):
         require(validate, token, "neutral Validate artwork")
 
+    # The Validate block itself may use only its neutral/paper/graphite family. This catches a
+    # future regression that references an existing active/accent palette under different geometry,
+    # even when the old statusRed/statusGreen names or exact historical RGB literals are gone.
+    for active_palette in (
+        "Stroke(blue",
+        "Fill(blue",
+        "Stroke(blueDeep",
+        "Fill(blueDeep",
+        "Stroke(blueLight",
+        "Fill(blueLight",
+        "Stroke(amber",
+        "Fill(amber",
+        "Stroke(orange",
+        "Fill(orange",
+        "Stroke(status",
+        "Fill(status",
+    ):
+        forbid(validate, active_palette, "neutral Validate artwork")
+
     # Reject the historical status-derived geometry, identifiers, and their exact saturated RGB
     # values so a future refactor cannot reintroduce the same product cue merely by inlining colors.
     for stale in (
