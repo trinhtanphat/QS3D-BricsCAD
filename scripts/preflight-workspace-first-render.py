@@ -115,8 +115,9 @@ def main():
     )
 
     # BricsCAD may show/reparent/re-layout after the startup settle. The loaded-lifetime observers
-    # must detect that blank client, avoid recovery re-entry loops, and keep retries bounded so a
-    # permanently invalid host state cannot create unbounded layout churn.
+    # must detect that blank client, avoid recovery re-entry loops, keep retries bounded, and preserve
+    # an existing user-adjusted model/family split when a genuine late blank-state repair reasserts
+    # the authoritative five-zone defaults.
     for token in (
         "private const int Blt3dRuntimeRecoveryRetryPasses = 3;",
         "WireBlt3dRuntimeViewportRecovery();",
@@ -138,6 +139,12 @@ def main():
         "if (!NeedsBlt3dRuntimeViewportRecovery())",
         "_blt3dRuntimeViewportRecoveryApplying = true;",
         "_blt3dRuntimeViewportRecoveryApplying = false;",
+        "var preserveSplitterGeometry = TryCaptureBlt3dRuntimeSplitterGeometry(",
+        "private bool TryCaptureBlt3dRuntimeSplitterGeometry(",
+        "private void RestoreBlt3dRuntimeSplitterGeometry(",
+        "if (preserveSplitterGeometry)",
+        "columns[0].Width = modelWidth;",
+        "columns[2].Width = familyWidth;",
         "BindingOperations.IsDataBound(root, FrameworkElement.WidthProperty)",
         "root.ActualWidth <= 1d",
         "root.ActualHeight <= 1d",
@@ -149,6 +156,30 @@ def main():
     ):
         require(runtime_repair, token, RUNTIME_REPAIR_REL)
 
+    recovery_section = require_section(
+        runtime_repair,
+        "private void QueueBlt3dRuntimeViewportRecovery()",
+        "private bool TryCaptureBlt3dRuntimeSplitterGeometry(",
+        RUNTIME_REPAIR_REL,
+    )
+    require_order(
+        recovery_section,
+        "var preserveSplitterGeometry = TryCaptureBlt3dRuntimeSplitterGeometry(",
+        "_blt3dRuntimeViewportRecoveryRetriesRemaining--;",
+        RUNTIME_REPAIR_REL,
+    )
+    require_order(
+        recovery_section,
+        "_blt3dRuntimeViewportRecoveryApplying = true;",
+        "ReassertBlt3dRuntimeLayout();",
+        RUNTIME_REPAIR_REL,
+    )
+    require_order(
+        recovery_section,
+        "ReassertBlt3dRuntimeLayout();",
+        "RestoreBlt3dRuntimeSplitterGeometry(",
+        RUNTIME_REPAIR_REL,
+    )
     require_order(
         runtime_repair,
         "if (!NeedsBlt3dRuntimeViewportRecovery())",
@@ -159,12 +190,6 @@ def main():
         runtime_repair,
         "_blt3dRuntimeViewportRecoveryRetriesRemaining--;",
         "_blt3dRuntimeViewportRecoveryApplying = true;",
-        RUNTIME_REPAIR_REL,
-    )
-    require_order(
-        runtime_repair,
-        "_blt3dRuntimeViewportRecoveryApplying = true;",
-        "ReassertBlt3dRuntimeLayout();",
         RUNTIME_REPAIR_REL,
     )
     require_order(
@@ -201,7 +226,8 @@ def main():
     print(
         "PASS: Workspace keeps the first-measure bootstrap, authoritative idle passes break the "
         "ViewportWidth loop, and loaded-lifetime size/visibility/layout recovery is gated, "
-        "re-entry-safe and bounded while LOCAL-012 remains the licensed visual qualification lane."
+        "re-entry-safe, bounded, and preserves the user splitter while LOCAL-012 remains the "
+        "licensed visual qualification lane."
     )
     return 0
 
