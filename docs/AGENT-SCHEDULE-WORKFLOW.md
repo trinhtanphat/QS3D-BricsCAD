@@ -6,65 +6,187 @@ Repository context:
 
 `trinhtanphat/QS3D-BricsCAD`
 
-Optional coordination surface used by the tasks when they perform repository work:
+Canonical schedule/repository boundary:
 
-`#1910`
+`docs/CHATGPT-SCHEDULE-BOUNDARY.md`
 
-## 1. Critical boundary — what this file is and is not
+## 1. What this file configures
 
-This file is **not a repository scheduler contract**.
+This file is a durable reference for creating, inspecting, updating, enabling, disabling, or recreating **ChatGPT account scheduled tasks**.
 
-Its only purpose is to give ChatGPT a durable configuration/reference that ChatGPT can read when the owner asks it to create, inspect, update, replace, enable, disable, or recreate **scheduled tasks/automations on the owner's ChatGPT account**.
+It is not a repository scheduler contract. The actual tasks live in ChatGPT account automation state, not in GitHub.
 
-The actual scheduled tasks do **not** live in this repository.
+GitHub Markdown, Issues, branches, PRs, Actions, or historical controller comments do not prove whether a ChatGPT scheduled task currently exists, is enabled, or is running.
 
-Their real existence and state live in ChatGPT account automation/task state, including:
+When the owner asks about the actual schedules, inspect or mutate ChatGPT account task state with the appropriate task tooling.
 
-- whether a task currently exists;
-- whether it is enabled or disabled;
-- its exact recurrence;
-- its next run;
-- its account/task identifier;
-- its prompt payload;
-- whether a previous scheduled task was deleted, replaced, or paused.
+## 2. One ChatGPT account = one local five-task group
 
-Therefore this Markdown file MUST NOT be used as proof that any scheduled task currently exists or is running.
+For one ChatGPT account, the intended QS3D set is:
 
-To answer questions such as:
+| Account-local task | Hourly time | Primary affinity |
+|---|---:|---|
+| C0 / QS3D Control | `HH:00` | Portfolio scan, broad local coordination, plus its own useful repository work |
+| W1 | `HH:10` | Core correctness / production bug-fix |
+| W2 | `HH:15` | Tests / regression / defect discovery |
+| W3 | `HH:20` | Build / CI / config / dependency / workflow reliability |
+| W4 | `HH:25` | Robustness / performance / maintainability / UI integration |
 
-- "how many schedules are running?";
-- "is Control task 0 active?";
-- "stop the schedules";
-- "create the five hourly tasks";
-- "change the timing";
-- "show me the task IDs";
+These five tasks are **lightly related inside the same account**:
 
-a ChatGPT session must inspect or mutate **ChatGPT scheduled-task/automation state with the appropriate ChatGPT task tooling**. It must not infer the answer from GitHub files, Issues, branches, PRs, or Actions.
+- C0 runs first;
+- W1-W4 run later in staggered slots;
+- the five tasks use complementary affinities;
+- later siblings may observe current GitHub reservations/carriers created by earlier siblings;
+- C0 may identify useful candidate areas for the sibling schedules.
 
-### Explicit non-equivalences
+This relationship is account-local orchestration only. It is not repository ownership.
 
-The ChatGPT scheduled tasks described here are NOT:
+A C0 suggestion is advisory. It does not bind a worker to a concrete Issue/Lane-Key or reserve a GitHub lane on that worker's behalf.
 
-- GitHub Actions scheduled workflows;
-- GitHub cron jobs;
-- repository-owned background workers;
-- repository services or daemons;
-- Windows Task Scheduler jobs;
-- BricsCAD runtime jobs;
-- source-code timers;
-- CI jobs;
-- a declaration that five agents are always active in the repository;
-- a repository mechanism that can create or manage ChatGPT account tasks.
+## 3. Multiple ChatGPT accounts are independent
 
-GitHub cannot create, enumerate, enable, disable, or time these ChatGPT account scheduled tasks merely because this file exists.
+Every ChatGPT account has its own independent schedule state.
 
-No agent may add or change `.github/workflows`, cron expressions, services, background loops, product runtime timers, or other repository machinery merely to "implement" the schedules in this document unless the owner separately and explicitly asks for such repository functionality.
+If the owner configures this five-task set on 10 ChatGPT accounts, the result is 10 independent local groups and potentially 50 scheduled tasks.
 
-## 2. Relationship to repository rules
+There is no global C0/W1/W2/W3/W4 shared between accounts.
 
-This file is a **configuration source for ChatGPT account tasks**, not a higher-precedence repository policy.
+Therefore:
 
-When a ChatGPT scheduled task fires and its prompt asks ChatGPT to work on `QS3D-BricsCAD`, that particular execution must then follow the repository rules that are current at execution time, including as applicable:
+- account A's C0 is not account B's C0;
+- account A's W1 is not account B's W1;
+- the same applies to W2-W4;
+- one account cannot infer another account's schedule state, previous task, pending work, or local coordination context;
+- identical schedule labels across accounts do not create identical GitHub ownership.
+
+Each task should use a stable account-local automation/task identity when possible so current GitHub reservations can distinguish one schedule from another schedule carrying the same logical label on another account.
+
+## 4. The repository is the global collision domain
+
+All schedules from all accounts ultimately share the same GitHub repository.
+
+Repository conflict prevention is therefore controlled by the current GitHub ownership rules, not by schedule labels.
+
+Before substantive mutation, every scheduled execution must:
+
+1. refresh current `main`;
+2. read the current authoritative repository rules;
+3. determine the concrete semantic task and Lane-Key;
+4. perform the required minimal collision check;
+5. inspect the current valid visible reservation / canonical Issue / branch / PR carrier;
+6. refuse duplicate ownership when an equivalent carrier already exists.
+
+The first visible valid reservation/canonical carrier owns overlapping work under current repository policy.
+
+A later schedule from the same account or another account must not create a competing carrier merely because the first owner is slow, blocked, red in CI, behind `main`, queued, or inconvenient.
+
+## 5. Persistent schedule prompts are task-generic
+
+The persistent automation prompt for C0/W1/W2/W3/W4 MUST remain reusable and task-generic.
+
+Do not permanently embed or rewrite a schedule prompt with a concrete:
+
+- Issue number;
+- Lane-Key;
+- branch;
+- PR;
+- commit SHA;
+- CI run/job;
+- specific feature;
+- specific bug;
+- specific release;
+- controller assignment;
+- historical coordination comment.
+
+A schedule prompt may contain:
+
+- the repository name;
+- its account-local role label;
+- its stable account-local automation/task identity;
+- its hourly timing;
+- its work affinity;
+- required repository-rule reading and collision behavior;
+- lifecycle/safety instructions.
+
+Every run must rediscover current repository work from GitHub.
+
+## 6. Work continuation across hourly runs
+
+A schedule label alone does not own a GitHub task forever.
+
+At the start of a run, determine whether current GitHub metadata explicitly shows that this exact account-local schedule identity owns one valid non-terminal canonical carrier.
+
+If yes, and current repository rules permit continuation:
+
+- continue that same carrier from the latest safe checkpoint;
+- do not abandon it merely because another hour passed;
+- do not create a replacement lane merely because CI is red, pending, stale, or the branch is behind;
+- continue through the normal remediation/reconciliation/PR lifecycle until the repository carrier becomes terminal or ownership is explicitly released/reassigned/superseded.
+
+If no current carrier belongs to that exact schedule identity:
+
+- the schedule is free to select new useful work matching its affinity;
+- it must collision-check first;
+- it must establish the required GitHub Issue/Lane-Key/canonical carrier before substantive mutation.
+
+Thus:
+
+`elapsed time != repository task completion`
+
+but also:
+
+`schedule label != repository ownership`
+
+Current GitHub ownership evidence controls both continuation and conflict prevention.
+
+## 7. C0 prompt intent
+
+C0 is the first account-local schedule at `HH:00`.
+
+Its reusable prompt should direct it to:
+
+- refresh current `main` and current rules;
+- inspect current repository state broadly enough to identify useful unowned work;
+- consider the complementary affinities of this account's W1-W4 schedules;
+- avoid creating duplicate work already reserved by any schedule/account/session;
+- optionally identify candidate areas that later sibling schedules may independently evaluate;
+- take its own concrete lane only after ordinary GitHub collision checking and reservation;
+- continue its own current canonical carrier when current GitHub metadata proves that this exact schedule identity still owns it.
+
+C0 must not create a permanent GitHub assignment table for the sibling schedules merely because they share one ChatGPT account.
+
+C0 must not treat a historical control-board Issue as the authoritative schedule registry.
+
+## 8. W1-W4 prompt intent
+
+### W1 — core correctness / production bugs
+
+Prefer production defects, invariant correctness, user-visible correctness, and directly related regression coverage.
+
+### W2 — tests / regression / defect discovery
+
+Prefer deterministic reproduction, edge/boundary coverage, regression discovery, and justified production fixes discovered from that evidence.
+
+Never add tests merely to hide a production defect or weaken a gate.
+
+### W3 — build / CI / configuration reliability
+
+Prefer build, CI, dependency, configuration, tooling, preflight, and workflow reliability defects supported by current evidence.
+
+Red CI on W3's own canonical carrier follows the current repository red-CI self-remediation rules; W3 must not treat unrelated agents' failures as its automatic backlog.
+
+### W4 — robustness / performance / maintainability / UI integration
+
+Prefer robustness, lifecycle/resource handling, measurable performance issues, maintainability with concrete product impact, and valid UI integration work.
+
+Licensed/private/local BricsCAD runtime evidence remains subject to current LOCAL_ONLY boundaries.
+
+Each worker independently re-checks GitHub ownership before taking work. A C0 candidate suggestion from the same account is only advisory until current GitHub reservation/carrier state establishes ownership.
+
+## 9. Mandatory repository rule gate after a schedule fires
+
+Before substantive repository work, every scheduled execution must read current applicable repository rules, including as relevant:
 
 - `AGENTS.md`;
 - `docs/MAIN-WRITE-AUTHORIZATION.md`;
@@ -74,194 +196,72 @@ When a ChatGPT scheduled task fires and its prompt asks ChatGPT to work on `QS3D
 - `docs/AGENT-PROMPT-TO-RELEASE-CONTRACT.md`;
 - `docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md`;
 - `docs/REMOTE-AGENT-SCOPE.md`;
-- relevant live Issues, PRs, claims, handoffs, and feature-specific rules.
+- `docs/CHATGPT-SCHEDULE-BOUNDARY.md`;
+- directly applicable live Issue/claim/runbook/feature rules.
 
-Those repository rules govern the **repository work performed after a ChatGPT task runs**.
+Do not rely on remembered rules from a previous scheduled run.
 
-They do not create the ChatGPT task, do not set its timer, and do not prove its account-level state.
+If required rules cannot be read, conflict, leave ownership ambiguous, or prohibit the intended operation, fail closed.
 
-Likewise, this file does not grant permission to bypass repository ownership, CI, branch, PR, merge, release, or product-boundary rules.
+## 10. Historical coordination surfaces
 
-## 3. Desired ChatGPT account task set
+Historical Issues such as `#1910` and `#2134` are not authoritative schedule registries and do not establish current repository ownership merely because an old C0/W1-W4 assignment appears there.
 
-When the owner asks ChatGPT to create or recreate the QS3D scheduled-task set, the intended logical set is five ChatGPT account scheduled tasks:
+Do not require every schedule run to update such an Issue unless a current repository rule or explicit owner instruction independently makes that Issue relevant to the concrete current lane.
 
-| Logical task | Desired hourly time | Purpose |
-|---|---:|---|
-| C0 / QS3D Control / Task 0 | `HH:00` | Inspect current QS3D state, coordinate C0 + W1-W4, and execute/continue Task 0 |
-| W1 / Worker 1 | `HH:10` | Core correctness / production bug-fix work |
-| W2 / Worker 2 | `HH:15` | Tests / regression / defect discovery work |
-| W3 / Worker 3 | `HH:20` | Build / CI / config / dependency reliability work |
-| W4 / Worker 4 | `HH:25` | Robustness / performance / maintainability / UI integration work |
+## 11. Repository lifecycle and safety
 
-These times are **desired ChatGPT account schedule configuration**.
+A scheduled execution that takes or continues a real GitHub lane must obey the same repository lifecycle as any other agent/session, including:
 
-They are not GitHub scheduling semantics and are not enforced by repository code.
+- single Lane-Key / single canonical carrier;
+- no stolen scope;
+- no duplicate competing branch/PR;
+- dedicated task branch;
+- exact-head branch CI before a new PR when required;
+- red-CI self-remediation only for the owned carrier and only when safely in scope;
+- current-main freshness/reconciliation requirements;
+- protected PR checks;
+- merge authorization rules;
+- release rules;
+- LOCAL_ONLY/runtime evidence boundaries;
+- no direct write to protected `main`;
+- no force-push/reset;
+- no CI/protection bypass;
+- no weakening gates merely to get green;
+- no fabricated CI/runtime evidence;
+- no unauthorized manual rerun/dispatch/cancel.
 
-The actual ChatGPT task state is authoritative. If the actual account tasks differ from this reference, ChatGPT must report the difference instead of pretending this file changed the account automatically.
+## 12. GitHub Actions boundary
 
-## 4. Task creation/update behavior
+The desired ChatGPT account timings `HH:00`, `HH:10`, `HH:15`, `HH:20`, and `HH:25` are not GitHub Actions cron semantics.
 
-When the owner asks ChatGPT to create or update this set:
+Do not copy these timings into `.github/workflows/**`, repository services, background loops, product timers, BricsCAD runtime loops, or other repository machinery merely because this reference exists.
 
-1. inspect the existing ChatGPT account scheduled tasks first when the tooling supports it;
-2. avoid creating duplicate logical C0/W1/W2/W3/W4 tasks;
-3. preserve or update the intended five logical roles rather than multiplying tasks every time the request is repeated;
-4. use hourly recurrence with the intended minute offsets unless the owner gives a newer schedule;
-5. treat C0 as logical task `0`, with W1-W4 as the other four logical tasks;
-6. keep task prompts self-contained enough to operate when triggered later;
-7. make each task read current repository rules and current GitHub state at execution time rather than relying on stale state embedded in this file;
-8. if the owner asks to stop/disable/delete the schedules, mutate the ChatGPT account tasks themselves rather than editing this Markdown and claiming the schedules stopped.
+## 13. Actual account-state truthfulness
 
-This repository document may be updated to record a new desired configuration, but such an edit alone never mutates ChatGPT account automation state.
+This file records the **desired configuration**, not live account state.
 
-## 5. Shared behavior for a scheduled task after it fires
+Future ChatGPT sessions must:
 
-Once a ChatGPT account task actually fires, it may use this repository as its work target.
+- inspect ChatGPT task tooling to say how many schedules actually exist or are enabled;
+- not claim a schedule stopped merely because Markdown changed;
+- not claim a schedule exists merely because it appears in this file;
+- keep ChatGPT account state separate from GitHub Issue/branch/PR/CI/release state.
 
-At that point the task should:
+## 14. Configuration summary
 
-1. refresh current `main` and current repository rules;
-2. inspect current Issues, PRs, branches, CI, and ownership relevant to its assigned logical role;
-3. collision-check before creating or taking work;
-4. continue the same canonical lane when that lane is still non-terminal and continuation is allowed;
-5. avoid taking over a separately owned active lane;
-6. perform only repository-safe work available to the current execution environment;
-7. follow the current repository branch/CI/PR/merge/release lifecycle;
-8. report current evidence truthfully.
+Unless a newer owner instruction overrides it, recreate **per ChatGPT account**:
 
-This behavior is part of the **prompt template for the ChatGPT task execution**. It does not mean the repository itself is running a scheduler.
+- C0 — hourly at `:00`;
+- W1 — hourly at `:10`;
+- W2 — hourly at `:15`;
+- W3 — hourly at `:20`;
+- W4 — hourly at `:25`.
 
-## 6. C0 / Task 0 prompt intent
+Treat the five tasks as one lightly coordinated account-local group with complementary affinities.
 
-C0 is the logical control task at `HH:00` in the desired ChatGPT account configuration.
+Treat separate ChatGPT accounts as independent groups.
 
-When C0 fires, its prompt should direct ChatGPT to:
+Use GitHub Lane-Key / visible reservation / canonical carrier state as the shared global conflict-control mechanism across all accounts and sessions.
 
-- inspect current `main` and current repository rules;
-- inspect C0/W1/W2/W3/W4 logical task work state using current GitHub evidence;
-- use issue `#1910` when it is still the applicable shared coordination surface;
-- determine which logical workers already have non-terminal canonical lanes;
-- keep unfinished work sticky to the same logical worker rather than creating replacement work every hour;
-- assign new work only to logical workers that are actually free under current repository state;
-- make newly assigned engineering packages substantive, normally representing at least about one hour of coherent work rather than filler;
-- collision-check each new package and give independent work its own appropriate Issue/Lane-Key/carrier when implementation begins;
-- also execute or continue C0's own Task 0 rather than acting only as a coordinator.
-
-C0's presence in this file does not prove a C0 ChatGPT scheduled task currently exists. Actual ChatGPT task state must be inspected to establish that.
-
-## 7. W1-W4 prompt intent
-
-### W1 — core correctness / production bugs
-
-When the W1 ChatGPT scheduled task fires, it should prefer core correctness, production defect investigation, invariant repair, and directly related regression coverage.
-
-If W1 already owns a valid non-terminal canonical lane, continue that lane rather than inventing a new one.
-
-### W2 — tests / regression / defect discovery
-
-When the W2 ChatGPT scheduled task fires, it should prefer deterministic regression coverage, adversarial cases, defect discovery, and justified production fixes that arise from that evidence.
-
-Do not add tests merely to mask a production defect or weaken a gate.
-
-### W3 — build / CI / configuration reliability
-
-When the W3 ChatGPT scheduled task fires, it should prefer build, CI, dependency, configuration, tooling, and workflow reliability problems supported by current evidence.
-
-A red CI result on W3's own canonical carrier should follow the repository's current red-CI self-remediation rules.
-
-### W4 — robustness / performance / maintainability / UI integration
-
-When the W4 ChatGPT scheduled task fires, it should prefer robustness, lifecycle/resource handling, measurable performance issues, maintainability with concrete product impact, and UI integration work that is valid for the current execution environment.
-
-Licensed/private/local runtime work remains subject to current repository local/remote boundaries.
-
-## 8. Sticky logical assignment across ChatGPT task runs
-
-The desired behavior of these ChatGPT tasks is to avoid hourly task multiplication.
-
-A logical worker should not receive or invent a different heavy repository lane solely because another hour elapsed.
-
-If current GitHub evidence shows that the logical worker still owns a non-terminal canonical lane, the next ChatGPT scheduled execution for that logical worker should normally continue that same lane, subject to current repository rules and actual ownership.
-
-If the previous lane is terminal or no longer belongs to that logical worker, a new assignment may be selected after collision checking.
-
-This is **prompt behavior for the ChatGPT account tasks**. It is not a repository-level declaration that a timer owns a GitHub lane forever.
-
-Repository ownership truth remains the current Issue/Lane-Key/canonical-carrier state.
-
-## 9. Coordination surface boundary
-
-Issue `#1910` may be used by the scheduled ChatGPT tasks as a shared coordination surface when it remains applicable.
-
-It is not the scheduler.
-
-Creating or editing issue `#1910` does not create, start, stop, delay, or reschedule ChatGPT account tasks.
-
-Likewise, deleting or disabling a ChatGPT account task does not automatically edit issue `#1910` or any repository branch/PR.
-
-ChatGPT must keep these two state domains separate:
-
-- **ChatGPT account automation state** — task existence, schedule, enabled state, task ID, next run;
-- **GitHub repository state** — Issues, Lane-Keys, branches, PRs, CI, commits, merges, releases.
-
-## 10. GitHub Actions boundary
-
-GitHub Actions remains governed by `.github/workflows/**` and `CI_POLICY.md`.
-
-The desired ChatGPT times `HH:00`, `HH:10`, `HH:15`, `HH:20`, and `HH:25` must not be copied into GitHub Actions cron schedules merely because they appear here.
-
-A GitHub Actions workflow named or described as a "schedule" may refer to a product feature, build workflow, or GitHub cron concept and is a different thing from a ChatGPT account scheduled task.
-
-Agents must resolve the context instead of assuming every use of the word `schedule` means the ChatGPT automation set.
-
-## 11. Source/product boundary
-
-Nothing in this file is a product feature requirement.
-
-Do not add the following to QS3D source merely because this reference exists:
-
-- an agent scheduler;
-- a background orchestration service;
-- a timer daemon;
-- a scheduling UI;
-- task persistence for these ChatGPT automations;
-- a QS3D-owned cloud worker fleet;
-- a BricsCAD timer loop.
-
-If the owner later asks for a real QS3D product scheduling feature, that is a separate product request requiring its own scope, Issue/Lane-Key, design, implementation, and validation.
-
-## 12. Truthfulness rules for future ChatGPT sessions
-
-A future ChatGPT session reading this file must follow these rules:
-
-- NEVER say that five schedules are active merely because this file lists five desired tasks;
-- NEVER say a schedule was stopped merely because this file was edited or deleted;
-- NEVER use GitHub Actions status as proof of ChatGPT account scheduled-task status;
-- NEVER use ChatGPT scheduled-task status as proof that repository work merged or CI passed;
-- ALWAYS inspect ChatGPT automation/task state when the owner asks about actual scheduled tasks;
-- ALWAYS inspect current GitHub state when the task asks about repository work;
-- KEEP the two state domains separate in reports;
-- if one domain cannot be inspected with available tooling, state that limitation instead of inferring from the other domain.
-
-## 13. Configuration summary for ChatGPT task creation
-
-When the owner says to recreate the intended QS3D ChatGPT scheduled-task set, use this summary as the desired logical configuration unless a newer owner instruction overrides it:
-
-- C0 / Task 0 — hourly at `:00` — coordination plus its own engineering task;
-- W1 — hourly at `:10` — core correctness / production bugs;
-- W2 — hourly at `:15` — regression / testing / defect discovery;
-- W3 — hourly at `:20` — build / CI / configuration / dependency reliability;
-- W4 — hourly at `:25` — robustness / performance / maintainability / UI integration.
-
-The tasks should be separate ChatGPT account scheduled tasks and should use current repository rules when they execute.
-
-The actual account task IDs, enabled states, and next-run times must be obtained from ChatGPT task tooling and must not be recorded here as permanent truth unless explicitly captured as time-stamped informational evidence.
-
-## 14. Supersession note
-
-This document supersedes the earlier interpretation introduced by PR `#2648` that labeled this file `Status: ACTIVE CONTRACT` and described the five entries as active scheduled repository engineering roles.
-
-The corrected interpretation is:
-
-**this file is a repository-hosted reference used by ChatGPT to configure and guide ChatGPT account scheduled tasks; it is not itself a repository scheduling rule or scheduler.**
+Never persist a concrete GitHub task inside the reusable schedule prompt.
