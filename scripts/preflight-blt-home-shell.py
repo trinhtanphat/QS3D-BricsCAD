@@ -175,7 +175,7 @@ def main():
     status_toggle_block = shell.split(
         'private Button StatusToggleButton(TextBlock label, string text, string toolTip, Action action)', 1)[1].split(
         'private void RefreshStatusControls()', 1)[0]
-    require(status_toggle_block, 'var button = CreateClickSurface(label, Cursors.Hand);', shell_rel + '::StatusToggleButton')
+    require(status_toggle_block, 'var button = CreateClickSurface(frame, Cursors.Hand);', shell_rel + '::StatusToggleButton')
     require(status_toggle_block, 'button.Click += (_, __) => RunUiAction(action);', shell_rel + '::StatusToggleButton')
     toggle_snap_block = shell.split('private static void ToggleEntitySnap()', 1)[1].split(
         'private static Button CreateClickSurface(UIElement content, Cursor cursor)', 1)[0]

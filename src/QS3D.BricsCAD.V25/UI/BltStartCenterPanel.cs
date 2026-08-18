@@ -22,6 +22,7 @@ namespace QS3D.BricsCAD.V25.UI
     internal sealed class BltStartCenterPanel : UserControl
     {
         private const int ObjectSnapSuppressedBit = 16384;
+        private static readonly CornerRadius InteractiveCornerRadius = new CornerRadius(5);
         private static readonly Brush ShellBrush = BrushFromRgb(29, 29, 29);
         private static readonly Brush PanelBrush = BrushFromRgb(39, 39, 39);
         private static readonly Brush PanelHoverBrush = BrushFromRgb(47, 47, 47);
@@ -33,6 +34,7 @@ namespace QS3D.BricsCAD.V25.UI
         private static readonly Brush ScrollThumbHoverBrush = BrushFromRgb(116, 122, 132);
         private static readonly Brush TextBrush = Brushes.White;
         private static readonly ControlTemplate ClickSurfaceTemplate = CreateClickSurfaceTemplate();
+        private static readonly ControlTemplate ScrollThumbTemplate = CreateCompactScrollThumbTemplate();
 
         private readonly StackPanel _recentPanel = new StackPanel();
         private readonly TextBlock _floorText = new TextBlock();
@@ -300,8 +302,8 @@ namespace QS3D.BricsCAD.V25.UI
             var style = new Style(typeof(ScrollBar));
             style.Setters.Add(new Setter(Control.BackgroundProperty, ScrollTrackBrush));
             style.Setters.Add(new Setter(Control.ForegroundProperty, ScrollThumbBrush));
-            style.Setters.Add(new Setter(Control.BorderBrushProperty, Brushes.Transparent));
-            style.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(0)));
+            style.Setters.Add(new Setter(Control.BorderBrushProperty, ShellBorderBrush));
+            style.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(1)));
             style.Setters.Add(new Setter(FrameworkElement.WidthProperty, 10d));
             style.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 10d));
             style.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(4, 0, 0, 0)));
@@ -311,9 +313,10 @@ namespace QS3D.BricsCAD.V25.UI
         private static Style CreateCompactScrollThumbStyle()
         {
             var style = new Style(typeof(Thumb));
+            style.Setters.Add(new Setter(Control.TemplateProperty, ScrollThumbTemplate));
             style.Setters.Add(new Setter(Control.BackgroundProperty, ScrollThumbBrush));
-            style.Setters.Add(new Setter(Control.BorderBrushProperty, Brushes.Transparent));
-            style.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(0)));
+            style.Setters.Add(new Setter(Control.BorderBrushProperty, ShellBorderBrush));
+            style.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(1)));
             style.Setters.Add(new Setter(FrameworkElement.MinHeightProperty, 30d));
             style.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 6d));
             style.Setters.Add(new Setter(UIElement.OpacityProperty, 0.82d));
@@ -327,6 +330,20 @@ namespace QS3D.BricsCAD.V25.UI
             hover.Setters.Add(new Setter(UIElement.OpacityProperty, 1d));
             style.Triggers.Add(hover);
             return style;
+        }
+
+        private static ControlTemplate CreateCompactScrollThumbTemplate()
+        {
+            var root = new FrameworkElementFactory(typeof(Border));
+            root.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
+            root.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Control.BorderBrushProperty));
+            root.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Control.BorderThicknessProperty));
+            root.SetValue(Border.CornerRadiusProperty, InteractiveCornerRadius);
+
+            return new ControlTemplate(typeof(Thumb))
+            {
+                VisualTree = root
+            };
         }
 
         private Border BuildStatusBar()
@@ -411,7 +428,7 @@ namespace QS3D.BricsCAD.V25.UI
                 Background = PanelBrush,
                 BorderBrush = ShellBorderBrush,
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(5),
+                CornerRadius = InteractiveCornerRadius,
                 Padding = compact ? new Thickness(14, 10, 14, 10) : new Thickness(14, 11, 14, 11)
             };
 
@@ -470,7 +487,7 @@ namespace QS3D.BricsCAD.V25.UI
                 Background = AccentBrush,
                 BorderBrush = AccentBrush,
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(2),
+                CornerRadius = InteractiveCornerRadius,
                 Padding = new Thickness(12, 3, 12, 3)
             };
             frame.Child = new TextBlock
@@ -496,9 +513,21 @@ namespace QS3D.BricsCAD.V25.UI
             label.FontWeight = FontWeights.Normal;
             label.VerticalAlignment = VerticalAlignment.Center;
 
-            var button = CreateClickSurface(label, Cursors.Hand);
-            button.Margin = new Thickness(16, 0, 0, 0);
+            var frame = new Border
+            {
+                Background = Brushes.Transparent,
+                BorderBrush = ShellBorderBrush,
+                BorderThickness = new Thickness(1),
+                CornerRadius = InteractiveCornerRadius,
+                Padding = new Thickness(8, 2, 8, 2),
+                Child = label
+            };
+
+            var button = CreateClickSurface(frame, Cursors.Hand);
+            button.Margin = new Thickness(6, 0, 0, 0);
             button.ToolTip = toolTip;
+            button.MouseEnter += (_, __) => frame.Background = PanelHoverBrush;
+            button.MouseLeave += (_, __) => frame.Background = Brushes.Transparent;
             button.Click += (_, __) => RunUiAction(action);
             return button;
         }
@@ -637,8 +666,10 @@ namespace QS3D.BricsCAD.V25.UI
         {
             var frame = new Border
             {
-                BorderBrush = BrushFromRgb(42, 42, 42),
-                BorderThickness = new Thickness(0, 0, 0, 1),
+                BorderBrush = ShellBorderBrush,
+                BorderThickness = new Thickness(1),
+                CornerRadius = InteractiveCornerRadius,
+                Margin = new Thickness(0, 0, 0, 5),
                 Padding = new Thickness(12, 12, 6, 12)
             };
 
