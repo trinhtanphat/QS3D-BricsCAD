@@ -17,6 +17,8 @@ namespace QS3D.Core.SmokeTests
             NonGenericCountedOversizeFailsBeforeEnumeration();
             ConflictingKnownCountsFailBeforeEnumeration();
             ConsistentKnownCountsRemainAccepted();
+            KnownCountUnderEnumerationFailsClosed();
+            KnownCountOverEnumerationFailsClosed();
             StreamingOversizeStopsAtFirstDisallowedTrace();
             ExactBoundaryRemainsAccepted();
             CanonicalOrderingAndValidationRemainStable();
@@ -58,6 +60,24 @@ namespace QS3D.Core.SmokeTests
             Equal(3, snapshot.Traces.Count, "Consistent multi-contract snapshot count changed.");
             Equal("SEM-00000", snapshot.Traces[0].SemanticIdentity, "Consistent multi-contract snapshot ordering changed.");
             Equal("SEM-00002", snapshot.Traces[2].SemanticIdentity, "Consistent multi-contract snapshot final identity changed.");
+        }
+
+        private static void KnownCountUnderEnumerationFailsClosed()
+        {
+            var source = new MultiCountedTraces(2, 2, 2, new[] { Trace(0) });
+            var error = Capture<ArgumentException>(() => new MeasurementSnapshot(source));
+
+            Equal(1, source.GetEnumeratorCalls, "Known-count under-enumeration must consume the source only once.");
+            Contains("count changed during enumeration", error.Message, "Known-count under-enumeration must report traversal mismatch.");
+        }
+
+        private static void KnownCountOverEnumerationFailsClosed()
+        {
+            var source = new MultiCountedTraces(1, 1, 1, new[] { Trace(0), Trace(1) });
+            var error = Capture<ArgumentException>(() => new MeasurementSnapshot(source));
+
+            Equal(1, source.GetEnumeratorCalls, "Known-count over-enumeration must consume the source only once.");
+            Contains("count changed during enumeration", error.Message, "Known-count over-enumeration must report traversal mismatch.");
         }
 
         private static void StreamingOversizeStopsAtFirstDisallowedTrace()
