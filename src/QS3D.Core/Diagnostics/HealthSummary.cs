@@ -31,7 +31,7 @@ namespace QS3D.Core.Diagnostics
 
         private static List<ModelHealthIssue> MaterializeIssues(IEnumerable<ModelHealthIssue> issues)
         {
-            RequireKnownCountsWithinLimit(issues);
+            var expectedKnownCount = RequireKnownCountsWithinLimit(issues);
 
             var result = new List<ModelHealthIssue>(Math.Min(MaxIssueCount, 256));
             using (var enumerator = issues.GetEnumerator())
@@ -43,17 +43,21 @@ namespace QS3D.Core.Diagnostics
                     result.Add(enumerator.Current);
                 }
             }
+
+            if (expectedKnownCount.HasValue && result.Count != expectedKnownCount.Value)
+                throw new InvalidOperationException("Health summary known issue count does not match enumerated issue count.");
+
             return result;
         }
 
-        private static void RequireKnownCountsWithinLimit(IEnumerable<ModelHealthIssue> issues)
+        private static int? RequireKnownCountsWithinLimit(IEnumerable<ModelHealthIssue> issues)
         {
             var counts = new List<int>(3);
             if (issues is ICollection<ModelHealthIssue> collection) counts.Add(collection.Count);
             if (issues is IReadOnlyCollection<ModelHealthIssue> readOnlyCollection) counts.Add(readOnlyCollection.Count);
             if (issues is System.Collections.ICollection nonGenericCollection) counts.Add(nonGenericCollection.Count);
 
-            if (counts.Count == 0) return;
+            if (counts.Count == 0) return null;
 
             var expected = counts[0];
             var maximum = expected;
@@ -72,6 +76,8 @@ namespace QS3D.Core.Diagnostics
                 throw new InvalidOperationException("Health summary received an invalid negative known issue count.");
             if (hasConflict)
                 throw new InvalidOperationException("Health summary received conflicting known issue counts.");
+
+            return expected;
         }
     }
 }
