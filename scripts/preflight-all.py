@@ -9,6 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SELF = Path(__file__).resolve()
 CHILD_TIMEOUT_SECONDS = 180
+MAX_FEATURE_GATES = 512
+MAX_FEATURE_GATE_SOURCE_BYTES = 512 * 1024
 
 
 def _relative_candidate(path):
@@ -19,20 +21,40 @@ def _relative_candidate(path):
 
 
 def validate_candidates(candidates):
+    candidates = list(candidates)
+    if len(candidates) > MAX_FEATURE_GATES:
+        raise RuntimeError(
+            "feature preflight discovery count "
+            + str(len(candidates))
+            + " exceeds maximum "
+            + str(MAX_FEATURE_GATES)
+        )
+
     unsafe = []
     by_casefold = {}
 
     for path in candidates:
         rel = _relative_candidate(path)
         try:
-            mode = os.lstat(path).st_mode
+            file_stat = os.lstat(path)
         except OSError as exc:
             raise RuntimeError("cannot inspect feature preflight gate " + str(rel) + ": " + str(exc)) from exc
 
+        mode = file_stat.st_mode
         if path.is_symlink():
             unsafe.append((str(rel), "symlink"))
         elif not stat.S_ISREG(mode):
             unsafe.append((str(rel), "non-regular"))
+        elif file_stat.st_size > MAX_FEATURE_GATE_SOURCE_BYTES:
+            unsafe.append(
+                (
+                    str(rel),
+                    "source size "
+                    + str(file_stat.st_size)
+                    + " bytes exceeds maximum "
+                    + str(MAX_FEATURE_GATE_SOURCE_BYTES),
+                )
+            )
 
         key = path.name.casefold()
         by_casefold.setdefault(key, []).append(path)
@@ -50,11 +72,41 @@ def validate_candidates(candidates):
     return sorted(candidates, key=lambda path: (path.name.casefold(), path.name))
 
 
+def _is_feature_gate_name(name):
+    folded = name.casefold()
+    return folded.startswith("preflight-") and folded.endswith(".py")
+
+
 def discover():
-    # Exclude only the aggregate runner's exact directory entry. Do not resolve
-    # candidates first: a symlink that targets SELF is still an unsafe gate and
-    # must reach validate_candidates() so discovery fails closed.
-    candidates = [path for path in SCRIPTS.glob("preflight-*.py") if str(path) != str(SELF)]
+    # Bound filesystem discovery itself. Use os.scandir() directly so the aggregate
+    # runner controls iteration and can reject candidate 513 without first asking a
+    # higher-level glob implementation to enumerate/materialize the whole directory.
+    # Do not call DirEntry.is_file() here: symlink/non-regular/size checks remain in
+    # validate_candidates() and must happen only after the candidate-count gate.
+    candidates = []
+    try:
+        with os.scandir(SCRIPTS) as entries:
+            for entry in entries:
+                if not _is_feature_gate_name(entry.name):
+                    continue
+                path = Path(entry.path)
+                if str(path) == str(SELF):
+                    continue
+                if entry.name.casefold() == SELF.name.casefold():
+                    raise RuntimeError(
+                        "case-insensitive preflight filename collision with aggregate runner: "
+                        + entry.name
+                    )
+                candidates.append(path)
+                if len(candidates) > MAX_FEATURE_GATES:
+                    raise RuntimeError(
+                        "feature preflight discovery count "
+                        + str(len(candidates))
+                        + " exceeds maximum "
+                        + str(MAX_FEATURE_GATES)
+                    )
+    except OSError as exc:
+        raise RuntimeError("cannot scan feature preflight directory " + str(SCRIPTS) + ": " + str(exc)) from exc
     return validate_candidates(candidates)
 
 
