@@ -187,59 +187,27 @@ namespace QS3D.Core.Persistence
             return snapshot.ToString();
         }
 
-        private static void AppendStringMap(
-            StringBuilder snapshot,
-            IDictionary<string, string>? values,
-            string collectionLabel)
+        private static void AppendStringMap(StringBuilder snapshot, IDictionary<string, string>? values, string collectionLabel)
         {
-            if (values == null)
-            {
-                AppendSequenceCount(snapshot, -1);
-                return;
-            }
-
+            if (values == null) { AppendSequenceCount(snapshot, -1); return; }
             var bounded = SnapshotBounded(values, values.Count, collectionLabel);
             var ordered = bounded.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).ToArray();
             AppendSequenceCount(snapshot, ordered.Length);
-            foreach (var item in ordered)
-            {
-                AppendString(snapshot, item.Key);
-                AppendString(snapshot, item.Value ?? string.Empty);
-            }
+            foreach (var item in ordered) { AppendString(snapshot, item.Key); AppendString(snapshot, item.Value ?? string.Empty); }
         }
 
-        private static void AppendDoubleMap(
-            StringBuilder snapshot,
-            IDictionary<string, double>? values,
-            string collectionLabel)
+        private static void AppendDoubleMap(StringBuilder snapshot, IDictionary<string, double>? values, string collectionLabel)
         {
-            if (values == null)
-            {
-                AppendSequenceCount(snapshot, -1);
-                return;
-            }
-
+            if (values == null) { AppendSequenceCount(snapshot, -1); return; }
             var bounded = SnapshotBounded(values, values.Count, collectionLabel);
             var ordered = bounded.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).ToArray();
             AppendSequenceCount(snapshot, ordered.Length);
-            foreach (var item in ordered)
-            {
-                AppendString(snapshot, item.Key);
-                AppendDouble(snapshot, item.Value);
-            }
+            foreach (var item in ordered) { AppendString(snapshot, item.Key); AppendDouble(snapshot, item.Value); }
         }
 
-        private static void AppendStringSequence(
-            StringBuilder snapshot,
-            IList<string>? values,
-            string collectionLabel)
+        private static void AppendStringSequence(StringBuilder snapshot, IList<string>? values, string collectionLabel)
         {
-            if (values == null)
-            {
-                AppendSequenceCount(snapshot, -1);
-                return;
-            }
-
+            if (values == null) { AppendSequenceCount(snapshot, -1); return; }
             var bounded = SnapshotBounded(values, values.Count, collectionLabel);
             AppendSequenceCount(snapshot, bounded.Count);
             foreach (var value in bounded) AppendString(snapshot, value);
@@ -255,64 +223,35 @@ namespace QS3D.Core.Persistence
                     ThrowTooManyEntries(collectionLabel);
                 bounded.Add(value);
             }
+            if (bounded.Count != knownCount)
+                throw new InvalidOperationException(
+                    "Persistence stamp " + collectionLabel + " known count does not match enumerated entry count.");
             return bounded;
         }
 
         private static void RequireSupportedCount(int count, string collectionLabel)
         {
             if (count < 0)
-                throw new InvalidOperationException(
-                    "Persistence stamp " + collectionLabel + " reports an invalid negative count.");
-            if (count > MaximumSnapshotEntries)
-                ThrowTooManyEntries(collectionLabel);
+                throw new InvalidOperationException("Persistence stamp " + collectionLabel + " reports an invalid negative count.");
+            if (count > MaximumSnapshotEntries) ThrowTooManyEntries(collectionLabel);
         }
 
         private static void ThrowTooManyEntries(string collectionLabel)
         {
-            throw new InvalidOperationException(
-                "Persistence stamp " + collectionLabel + " supports at most " +
-                MaximumSnapshotEntries.ToString(CultureInfo.InvariantCulture) + " entries.");
+            throw new InvalidOperationException("Persistence stamp " + collectionLabel + " supports at most " + MaximumSnapshotEntries.ToString(CultureInfo.InvariantCulture) + " entries.");
         }
 
-        private static void AppendSequenceCount(StringBuilder snapshot, int value)
-        {
-            snapshot.Append('C').Append(value.ToString(CultureInfo.InvariantCulture)).Append(';');
-        }
-
-        private static void AppendInt32(StringBuilder snapshot, int value)
-        {
-            snapshot.Append('I').Append(value.ToString(CultureInfo.InvariantCulture)).Append(';');
-        }
-
-        private static void AppendDouble(StringBuilder snapshot, double value)
-        {
-            snapshot.Append('D').Append(value.ToString("R", CultureInfo.InvariantCulture)).Append(';');
-        }
-
-        private static void AppendDateTime(StringBuilder snapshot, DateTime? value)
-        {
-            AppendString(snapshot, value.HasValue
-                ? value.Value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)
-                : null);
-        }
+        private static void AppendSequenceCount(StringBuilder snapshot, int value) => snapshot.Append('C').Append(value.ToString(CultureInfo.InvariantCulture)).Append(';');
+        private static void AppendInt32(StringBuilder snapshot, int value) => snapshot.Append('I').Append(value.ToString(CultureInfo.InvariantCulture)).Append(';');
+        private static void AppendDouble(StringBuilder snapshot, double value) => snapshot.Append('D').Append(value.ToString("R", CultureInfo.InvariantCulture)).Append(';');
+        private static void AppendDateTime(StringBuilder snapshot, DateTime? value) => AppendString(snapshot, value.HasValue ? value.Value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture) : null);
 
         private static void AppendString(StringBuilder snapshot, string? value)
         {
-            if (value == null)
-            {
-                snapshot.Append("S-1:");
-                return;
-            }
-
-            snapshot.Append('S')
-                .Append(value.Length.ToString(CultureInfo.InvariantCulture))
-                .Append(':')
-                .Append(value);
+            if (value == null) { snapshot.Append("S-1:"); return; }
+            snapshot.Append('S').Append(value.Length.ToString(CultureInfo.InvariantCulture)).Append(':').Append(value);
         }
 
-        private static bool TracksSemanticDirtyState(string key)
-        {
-            return !string.Equals(key, ProjectBrowserWorkspaceStateKey, StringComparison.OrdinalIgnoreCase);
-        }
+        private static bool TracksSemanticDirtyState(string key) => !string.Equals(key, ProjectBrowserWorkspaceStateKey, StringComparison.OrdinalIgnoreCase);
     }
 }
