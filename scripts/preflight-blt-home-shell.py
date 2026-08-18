@@ -100,9 +100,14 @@ def main():
     forbid(save_block, 'GetOrCreate(', context_rel + '::Save')
 
     result = read(result_rel)
-    for needle in ('var summary = "Đã mở', '+ fileName +', 'project.Zones.Count', 'project.Elements.Count',
-                   'readMilliseconds', 'totalMilliseconds', 'ShowSaveAsSuccess',
-                   'DWG hiện hành đã chuyển sang đường dẫn mới.', 'Content = "OK"'):
+    for needle in (
+        'var summary = "Đã mở', '+ fileName +', 'project.Zones.Count', 'project.Elements.Count',
+        'readMilliseconds', 'bindMilliseconds', 'totalMilliseconds', 'ShowSaveAsSuccess',
+        'DWG hiện hành đã chuyển sang đường dẫn mới.', 'Content = "OK"',
+        'WindowStyle = WindowStyle.None', 'AllowsTransparency = true', 'Background = Brushes.Transparent',
+        'Content = "×"', 'DragMove();', 'Text = "✓"', '"⚙ Đọc tệp "',
+        '"   Mở bản vẽ + dựng project "', 'args.Key != Key.Escape',
+    ):
         require(result, needle, result_rel)
     for stale in ('savedAsCopy', 'project hiện hành vẫn giữ liên kết với DWG đang mở'):
         forbid(result, stale, result_rel)
@@ -200,7 +205,7 @@ def main():
     require(host, '_palette.AddVisual("Khởi đầu", _panel, true);', host_rel)
     require(host, 'Dock = DockSides.Left', host_rel)
 
-    print("PASS: QS3D KHỞI ĐẦU matches the BLT3D reference surface with Dự án + Cấu hình ribbon groups, semantic vector icons, and exactly four embedded quick actions, while preserving branded/rasterized Ribbon icons, native WPF Button.Click and keyboard/focus semantics, responsive embedded PaletteSet layout, project/sidecar safety, truthful dynamic versioning, recent projects, and bottom status routing with scoped native Button and OSMODE preservation guards.")
+    print("PASS: QS3D KHỞI ĐẦU matches the BLT3D reference surface with Dự án + Cấu hình ribbon groups, semantic vector icons, and exactly four embedded quick actions, while preserving branded/rasterized Ribbon icons, native WPF Button.Click and keyboard/focus semantics, responsive embedded PaletteSet layout, project/sidecar safety, truthful dynamic versioning, recent projects, owner-reference open-project result chrome, and bottom status routing with scoped native Button and OSMODE preservation guards.")
     return 0
 
 
