@@ -14,6 +14,9 @@ namespace QS3D.Core.SmokeTests
             ExactCapIsAcceptedInOnePass();
             FirstIssueBeyondCapIsRejectedInOnePass();
             ThrowingInputPropagatesWithoutAResult();
+            OversizedKnownCountIsRejectedBeforeEnumeration();
+            NegativeKnownCountIsRejectedBeforeEnumeration();
+            ConflictingKnownCountsAreRejectedBeforeEnumeration();
         }
 
         private static void ExactCapIsAcceptedInOnePass()
@@ -69,6 +72,39 @@ namespace QS3D.Core.SmokeTests
             }
 
             throw new InvalidOperationException("HealthSummary must propagate the source enumeration failure.");
+        }
+
+        private static void OversizedKnownCountIsRejectedBeforeEnumeration()
+        {
+            var source = new AdversarialKnownCountCollection(
+                HealthSummary.MaxIssueCount + 1,
+                HealthSummary.MaxIssueCount + 1,
+                HealthSummary.MaxIssueCount + 1);
+
+            Throws<InvalidOperationException>(
+                () => _ = new HealthSummary(source),
+                "Health summary supports at most " + HealthSummary.MaxIssueCount + " diagnostic issues.");
+            Equal(0, source.EnumerationCount);
+        }
+
+        private static void NegativeKnownCountIsRejectedBeforeEnumeration()
+        {
+            var source = new AdversarialKnownCountCollection(-1, -1, -1);
+
+            Throws<InvalidOperationException>(
+                () => _ = new HealthSummary(source),
+                "Health summary received an invalid negative known issue count.");
+            Equal(0, source.EnumerationCount);
+        }
+
+        private static void ConflictingKnownCountsAreRejectedBeforeEnumeration()
+        {
+            var source = new AdversarialKnownCountCollection(1, 2, 1);
+
+            Throws<InvalidOperationException>(
+                () => _ = new HealthSummary(source),
+                "Health summary received conflicting known issue counts.");
+            Equal(0, source.EnumerationCount);
         }
 
         private sealed class SingleUseIssueSequence : IEnumerable<ModelHealthIssue>
@@ -133,8 +169,64 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private sealed class AdversarialKnownCountCollection :
+            ICollection<ModelHealthIssue>,
+            IReadOnlyCollection<ModelHealthIssue>,
+            ICollection
+        {
+            private readonly int _genericCount;
+            private readonly int _readOnlyCount;
+            private readonly int _nonGenericCount;
+
+            public AdversarialKnownCountCollection(int genericCount, int readOnlyCount, int nonGenericCount)
+            {
+                _genericCount = genericCount;
+                _readOnlyCount = readOnlyCount;
+                _nonGenericCount = nonGenericCount;
+            }
+
+            public int EnumerationCount { get; private set; }
+
+            int ICollection<ModelHealthIssue>.Count => _genericCount;
+            int IReadOnlyCollection<ModelHealthIssue>.Count => _readOnlyCount;
+            int ICollection.Count => _nonGenericCount;
+            bool ICollection<ModelHealthIssue>.IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+
+            public IEnumerator<ModelHealthIssue> GetEnumerator()
+            {
+                EnumerationCount++;
+                throw new InvalidOperationException("Invalid known-count input must be rejected before enumeration.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            void ICollection<ModelHealthIssue>.Add(ModelHealthIssue item) => throw new NotSupportedException();
+            void ICollection<ModelHealthIssue>.Clear() => throw new NotSupportedException();
+            bool ICollection<ModelHealthIssue>.Contains(ModelHealthIssue item) => false;
+            void ICollection<ModelHealthIssue>.CopyTo(ModelHealthIssue[] array, int arrayIndex) => throw new NotSupportedException();
+            bool ICollection<ModelHealthIssue>.Remove(ModelHealthIssue item) => throw new NotSupportedException();
+            void ICollection.CopyTo(Array array, int index) => throw new NotSupportedException();
+        }
+
         private sealed class SyntheticIssueEnumerationException : Exception
         {
+        }
+
+        private static void Throws<T>(Action action, string expectedMessage) where T : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (T ex)
+            {
+                Equal(expectedMessage, ex.Message);
+                return;
+            }
+
+            throw new InvalidOperationException("Expected exception " + typeof(T).Name + ".");
         }
 
         private static void Equal<T>(T expected, T actual)
