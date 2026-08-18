@@ -197,7 +197,7 @@ namespace QS3D.Core.Diagnostics
         private static ISet<string>? NormalizeHandleSet(ISet<string>? handles, string label)
         {
             if (handles == null) return null;
-            ValidateKnownCounts(handles, label);
+            var expectedKnownCount = ValidateKnownCounts(handles, label);
 
             var normalized = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var observedCount = 0;
@@ -210,13 +210,14 @@ namespace QS3D.Core.Diagnostics
                 var handle = (raw ?? string.Empty).Trim();
                 if (handle.Length > 0) normalized.Add(handle);
             }
+            RequireObservedCount(expectedKnownCount, observedCount, label);
             return normalized;
         }
 
         private static ISet<string>? NormalizeGeneratedHandleSet(ISet<string>? handles)
         {
             if (handles == null) return null;
-            ValidateKnownCounts(handles, "generated-solid");
+            var expectedKnownCount = ValidateKnownCounts(handles, "generated-solid");
 
             var normalized = new HashSet<string>(GeneratedHandleIdentityComparer.Instance);
             var observedCount = 0;
@@ -229,10 +230,11 @@ namespace QS3D.Core.Diagnostics
                 var handle = (raw ?? string.Empty).Trim();
                 if (handle.Length > 0) normalized.Add(handle);
             }
+            RequireObservedCount(expectedKnownCount, observedCount, "generated-solid");
             return normalized;
         }
 
-        private static void ValidateKnownCounts(ISet<string> handles, string label)
+        private static int ValidateKnownCounts(ISet<string> handles, string label)
         {
             var counts = new List<int> { handles.Count };
             if (handles is IReadOnlyCollection<string> readOnly)
@@ -260,6 +262,14 @@ namespace QS3D.Core.Diagnostics
                 throw new InvalidOperationException(
                     "Comprehensive model-health live " + label + " Handle input exposes conflicting Count contracts.");
             }
+            return expected;
+        }
+
+        private static void RequireObservedCount(int expectedCount, int observedCount, string label)
+        {
+            if (observedCount == expectedCount) return;
+            throw new InvalidOperationException(
+                "Comprehensive model-health live " + label + " Handle Count contract does not match enumerated Handle count.");
         }
 
         private static InvalidOperationException LiveHandleInputTooLarge(string label)
