@@ -157,6 +157,9 @@ namespace QS3D.Core.Export
                     stateDetail: DuplicateExternalIdentityDetail);
             }
 
+            if (knownCount.HasValue && observedResultCount != knownCount.Value)
+                throw new InvalidOperationException("IFC exchange result source Count does not match enumerated result count.");
+
             var items = byExternalIdentity.Values.ToList();
             items.Sort(IfcRoundTripExchangeResultComparer.Instance);
             return new IfcRoundTripExchangeResultSet(Array.AsReadOnly(items.ToArray()));
