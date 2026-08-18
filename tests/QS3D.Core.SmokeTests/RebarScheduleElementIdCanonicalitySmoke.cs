@@ -135,6 +135,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void CorruptElementIdForLegacyStateTest(ProjectElement element, string invalidId)
         {
+            // Test-only injection models legacy/corrupt persisted state without weakening production construction invariants.
             var field = typeof(ProjectElement).GetField("<Id>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic);
             if (field == null) throw new InvalidOperationException("ProjectElement Id backing field was not found for malformed-state smoke setup.");
             field.SetValue(element, invalidId);
