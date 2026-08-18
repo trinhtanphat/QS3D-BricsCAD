@@ -104,7 +104,8 @@ def main():
         'var summary = "Đã mở', '+ fileName +', 'project.Zones.Count', 'project.Elements.Count',
         'readMilliseconds', 'bindMilliseconds', 'totalMilliseconds', 'ShowSaveAsSuccess',
         'DWG hiện hành đã chuyển sang đường dẫn mới.', 'Content = "OK"',
-        'WindowStyle = WindowStyle.None', 'AllowsTransparency = true', 'Background = Brushes.Transparent',
+        'WindowStyle = System.Windows.WindowStyle.None', 'AllowsTransparency = true',
+        'Background = Brushes.Transparent', 'UseLayoutRounding = true', 'SnapsToDevicePixels = true',
         'Content = "×"', 'DragMove();', 'Text = "✓"', '"⚙ Đọc tệp "',
         '"   Mở bản vẽ + dựng project "', 'args.Key != Key.Escape',
     ):
