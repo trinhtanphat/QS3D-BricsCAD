@@ -78,6 +78,9 @@ def main():
         "HiddenElements.Clear();",
     ):
         require(shell, token, SHELL_REL)
+
+    # Guard both the historical helper names and lower-level host-icon takeover primitives. This
+    # prevents an equivalent WPF/native icon override from returning under renamed helper methods.
     for stale in (
         "Qs3dBrandIconIcoBase64",
         "Blt3dIconIcoBase64",
@@ -85,6 +88,12 @@ def main():
         "ApplyNativeWindowIcon",
         "WmSetIcon",
         "WM_SETICON",
+        ".Icon =",
+        "WindowInteropHelper",
+        "SendMessage(",
+        "GetHicon(",
+        "Icon.FromHandle",
+        "DestroyIcon(",
         "cropped from the user-provided reference screenshot",
         "private-user-images",
         "BLT3D.exe",
