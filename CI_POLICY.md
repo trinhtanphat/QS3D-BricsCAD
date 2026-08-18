@@ -33,7 +33,7 @@ QS3D separates validation from publishing. A branch must not need to land on `ma
 
 The approved stages are:
 
-1. **automatic branch/PR validation** — `.github/workflows/ci.yml`; every push to `agent/**` and `integration/**` produces an exact-head branch run, while internal scope classification keeps non-build candidates lightweight; watched/integration-relevant human/AI task branches must be green before a new PR is opened;
+1. **automatic branch/PR validation** — `.github/workflows/ci.yml`; every push to `agent/**` and `integration/**` produces an exact-head branch run for early isolated validation, while every PR receives protected current-candidate validation; branch-run completion timing does not poison or permanently invalidate the canonical PR;
 2. **combined integration validation** — the same `ci.yml` on PR merge candidates and `integration/**` combined trees when applicable;
 3. **exact-main release** — `.github/workflows/dispatch-v25-cloud-after-main-integration.yml` dispatches `.github/workflows/release-v25-cloud.yml` only after an authorized integration-relevant landing on `main`.
 
@@ -41,38 +41,45 @@ Green branch CI proves only the tested branch SHA. Green PR CI proves only the t
 
 Licensed BricsCAD `NETLOAD`, native UI/runtime, private-DWG behavior, signing credentials, and other environment-gated evidence remain `LOCAL_ONLY` / `PENDING_LOCAL` unless actually executed in the required environment.
 
-## Mandatory branch-CI-before-PR gate
+## Automatic branch CI and canonical PR lifecycle
 
-For every human/AI task that changes a path watched by shared CI, the task branch must obtain a terminal green automatic branch-push CI run on the exact current branch SHA **before a new PR is opened**.
+Every human/AI task branch under `agent/**` or `integration/**` receives automatic branch-push CI on the exact pushed SHA. Branch CI is the early isolated validation layer and agents should inspect and remediate a red exact-head branch run when it is observable.
 
-The required sequence is:
+The preferred low-churn sequence is:
 
 ```text
-implement on agent/**
-  -> commit/push task branch
-  -> automatic shared branch CI on exact branch SHA
-  -> fix on the branch until terminal SUCCESS
-  -> refresh main and verify evidence is still fresh
-  -> only then open the PR
+implement on agent/** or integration/**
+  -> commit/push canonical branch
+  -> automatic shared branch CI starts on exact branch SHA
+  -> fix any observed red branch-CI defect on the same branch
+  -> open/continue the one canonical PR when the task is ready for protected review
+  -> protected current-candidate preflight + core
+  -> refresh/reconcile current main when required
+  -> fresh protected candidate checks
+  -> merge only when current/green/mergeable
 ```
 
-A PR must not be used as the first CI attempt for watched human/AI work. Do not open a draft PR merely to obtain the first CI run. If branch CI fails, fix the failure on the task branch and obtain a new green run before PR creation.
+Automatic branch CI remains valuable evidence, but **its completion timestamp is not a permanent PR-admission identity**. A canonical PR may already exist while the matching branch run is queued, running, or completes later. Do not close/recreate or supersede a correct PR merely to make a branch-run completion timestamp precede PR creation.
 
-This rule avoids filling the PR queue with candidates that have never passed their own isolated validation. It does **not** mean that two independent full CI passes are always logically required for an unchanged tree. After PR creation, GitHub's protected-main ruleset controls the merge gate. If `main` moves, the branch is reconciled, or GitHub produces a different/fresher merge candidate, the applicable required checks must be fresh again before merge.
+A PR must not be used to hide or ignore a known red branch failure. If branch CI is red on the current canonical branch, inspect the exact failure and remediate the same branch. The existing PR remains the canonical review/merge carrier and its synchronized protected checks validate the resulting current candidate.
 
-Every push to `agent/**` and `integration/**` is intentionally eligible for shared CI even when the pushed commit is docs-only or ancestry-only. This is required because a safe reconciliation can create a new exact head SHA with no watched first-parent file delta; a push path filter would then suppress the only automatic run that can satisfy exact-head admission. The workflow's internal diff classifier, not the event trigger, decides whether source guards and the full Core/V25 build are needed. Ordinary documentation/claim/handoff-only candidates therefore receive lightweight validation rather than no branch run.
+The authoritative merge gate is GitHub's protected-main current PR candidate: required `preflight` and `core` must be terminal `SUCCESS`, strict freshness must be satisfied, the PR must be mergeable/collision-clean, and the expected-head SHA guard must match immediately before merge. A stale green branch run or stale green PR candidate is never sufficient.
 
-### Narrow maintenance-bot exception
+Every push to `agent/**` and `integration/**` is intentionally eligible for shared CI even when the pushed commit is docs-only or ancestry-only. This is required because a safe reconciliation can create a new exact head SHA with no watched first-parent file delta. The workflow's internal diff classifier, not the event trigger, decides whether source guards and the full Core/V25 build are needed. Ordinary documentation/claim/handoff-only candidates therefore receive lightweight validation rather than no branch run.
 
-GitHub Dependabot is the only standing exception to branch-CI-before-PR. Dependabot is allowed to create dependency-update PRs directly from the configuration in `.github/dependabot.yml` because GitHub owns the bot branch/PR lifecycle and there is no meaningful pre-PR reservation step for that generated work.
+`docs/PR-CI-LIFECYCLE.md` records the owner-approved timing correction in more detail. Older wording that treats branch-CI completion-before-PR-creation as a permanent admission requirement is superseded by this section. Branch CI remains automatic and actionable; protected current-candidate PR checks remain mandatory before merge.
 
-This exception is deliberately narrow:
+### Dependabot generated-PR boundary
+
+GitHub Dependabot may create dependency-update PRs directly from the configuration in `.github/dependabot.yml` because GitHub owns that generated branch/PR lifecycle.
+
+This boundary is deliberately narrow:
 
 - it applies only to PRs authored by the GitHub Dependabot service from the repository's committed Dependabot configuration;
 - it does **not** authorize Dependabot to merge, enable auto-merge, bypass protection, write `main`, publish a release, or dispatch a release workflow;
 - every Dependabot PR must still produce and pass the protected-main `preflight` and `core` contexts on the current merge candidate before any authorized merge;
 - dependency PRs that touch source/build/workflow inputs receive the same source/build/V25 validation tier as equivalent human changes;
-- a human or AI agent must not use or imitate this exception to skip normal task registration or branch CI.
+- a human or AI agent must not imitate Dependabot to bypass normal task registration, Lane-Key ownership, or protected PR validation.
 
 Repository-wide blind auto-merge remains intentionally disabled. A green PR is merge-eligible evidence, not merge authorization.
 
@@ -101,7 +108,7 @@ The workflow uses `contents: read`; validation checkouts set `persist-credential
 
 The workflow must not tag, publish, release, sign, dispatch release workflows, mutate Issues, merge PRs, or write repository contents. Repository policy guards must reject autonomous PR-to-main merge primitives in committed workflows.
 
-A push run on `agent/**` validates that branch SHA. A `pull_request` run validates GitHub's PR merge candidate against its target branch. An `integration/**` push validates the exact combined integration tree. These are complementary evidence classes. Branch CI is the mandatory pre-PR gate for watched human/AI task branches; PR/integration checks are freshness and compatibility evidence for the candidate GitHub may actually merge.
+A push run on `agent/**` validates that branch SHA. A `pull_request` run validates GitHub's PR merge candidate against its target branch. An `integration/**` push validates the exact combined integration tree. These are complementary evidence classes. Branch CI provides early isolated defect evidence; a known red branch run must be remediated on the same canonical branch. Protected current-candidate `preflight` and `core` are the mandatory merge gate, and branch/PR timing order alone must not force a replacement PR.
 
 The protected-main ruleset currently requires stable contexts `preflight` and `core`. Renaming or removing those job contexts, or changing workflow event behavior so the required contexts can no longer be produced for legitimate protected-main PRs, is a protection-compatibility change and must be reviewed as governance-sensitive work.
 
@@ -158,7 +165,7 @@ The shared `ci.yml` now runs automatically for every push to `agent/**` and `int
 
 This all-push branch trigger is intentionally separate from the exact-main release dispatcher. After an authorized `main` merge, documentation-only landings outside the dispatcher's watched set must still not trigger the V25 release path.
 
-**Changed paths are authoritative for validation tier and release-dispatch eligibility, not commit-message prefixes.** A commit named `docs:` or `chore:` that modifies `scripts/**`, workflows, build props, solutions, source, tests or synthetic generated fixtures is integration-relevant.
+**Changed paths are authoritative for validation tier and release-dispatch eligibility, not commit-message prefixes.** A commit named `docs:`, `chore:` or `md:` that modifies `scripts/**`, workflow files, solution files, build props or production source is integration-relevant.
 
 ## Manual workflow authorization
 
@@ -205,8 +212,8 @@ A branch existing/deleted, Issue state, PR `Merged` UI state, or green CI for an
 - Automatic event keys for the two approved workflows are deliberately quoted in YAML; `scripts/preflight-ci-manual-only.py` is the strict allowlist that validates their exact trigger scopes, permissions, jobs and publishing boundaries.
 - `scripts/preflight-ci-manual-only.py` must reject any third automatic workflow, automatic release workflow, branch validation on direct `main` pushes, branch-push `paths`/`paths-ignore` filters that can suppress exact-head reconciliation evidence, broadened publishing permission, PR path filters that can suppress required contexts, or dispatcher target other than `release-v25-cloud.yml`.
 - `scripts/preflight-repository-professionalism.py` must retain the professional repository surfaces, bounded maintenance configuration, stable required PR contexts and prohibition on autonomous PR-to-main merging.
-- Dependabot is the only standing branch-CI-before-PR exception and must never gain autonomous merge/release permission through committed configuration.
+- Dependabot's generated branch/PR lifecycle is a narrow repository-maintenance boundary and must never gain autonomous merge/release permission through committed configuration.
 - Release workflows must retain explicit `RELEASE` confirmation.
 - Markdown policy and GitHub hard protection are complementary. Do not claim the repository is hard-protected solely because the Markdown says so; verify the effective GitHub rules when that claim matters.
 
-Related canonical documents: `AGENTS.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, `docs/AGENT-WORK-REGISTRATION.md`, `docs/GITHUB-MAIN-PROTECTION.md` when present, and the manual/local qualification runbooks.
+Related canonical documents: `AGENTS.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, `docs/AGENT-WORK-REGISTRATION.md`, `docs/PR-CI-LIFECYCLE.md`, `docs/GITHUB-MAIN-PROTECTION.md` when present, and the manual/local qualification runbooks.
