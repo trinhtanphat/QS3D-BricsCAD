@@ -94,10 +94,42 @@ jobs:
             exit 0
           fi
 
+          series_prefix="v0.1.0-preview."
+          published_preview_tag=""
+          published_preview_ordinal=0
+          while IFS=$'\t' read -r release_tag release_draft release_published_at; do
+            [[ -n "${release_tag}" ]] || continue
+            if [[ "${release_draft}" != "false" || -z "${release_published_at}" ]]; then
+              continue
+            fi
+            if [[ ! "${release_tag}" =~ ^v0\.1\.0-preview\.([1-9][0-9]*)$ ]]; then
+              continue
+            fi
+            ordinal_text="${BASH_REMATCH[1]}"
+            if (( ${#ordinal_text} > 5 )); then
+              echo "Published preview ordinal exceeds the FileVersion 0..65535 range: ${release_tag}" >&2
+              exit 1
+            fi
+            ordinal=$((10#${ordinal_text}))
+            if (( ordinal > 65535 )); then
+              echo "Published preview ordinal exceeds the FileVersion 0..65535 range: ${release_tag}" >&2
+              exit 1
+            fi
+            if (( ordinal > published_preview_ordinal )); then
+              published_preview_ordinal=${ordinal}
+              published_preview_tag="${release_tag}"
+            fi
+          done < <(
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq '.[] | [.tag_name, (.draft | tostring), (.published_at // "")] | @tsv'
+          )
+          echo "Published V25 preview baseline: ${published_preview_tag:-'(none)'}"
+
           gate_args=(
             scripts/v25-release-batch-gate.py
             --source-sha "${source_sha}"
             --minimum-changes "${MINIMUM_RELEASE_CHANGES}"
+            --previous-published-tag "${published_preview_tag}"
             --require-ready
           )
           set +e
@@ -113,7 +145,6 @@ jobs:
             exit "${gate_status}"
           fi
 
-          series_prefix="v0.1.0-preview."
           reservation_issue=1441
           reservation_prefix="QS3D_V25_PREVIEW_RESERVATION"
           max_preview=0
@@ -147,7 +178,7 @@ jobs:
               echo "Matching-series tag is non-canonical and blocks automatic preview derivation: ${existing_tag}" >&2
               exit 1
             fi
-            consider_preview "${BASH_REMATCH[1]}" "Published"
+            consider_preview "${BASH_REMATCH[1]}" "Existing tag"
           done < <(git tag --list "${series_prefix}*")
 
           reservation_regex="^${reservation_prefix} ordinal=([1-9][0-9]*) source_sha=([0-9a-f]{40}) run_id=([1-9][0-9]*)$"
