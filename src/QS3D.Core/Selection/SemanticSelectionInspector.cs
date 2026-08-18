@@ -78,7 +78,7 @@ namespace QS3D.Core.Selection
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
             var inspectionVersion = project.ChangeVersion;
-            RequireSelectionKnownCountWithinLimit(elementIds);
+            var knownSelectionCount = RequireSelectionKnownCountWithinLimit(elementIds);
             var projectIndex = BuildUniqueProjectIndex(project);
             var familyIndex = BuildUniqueFamilyIndex(project);
             var requested = new List<string>();
@@ -95,6 +95,8 @@ namespace QS3D.Core.Selection
                 if (!projectIndex.ContainsKey(id)) throw new InvalidOperationException("Semantic property inspector references missing element id: " + id + ".");
                 requested.Add(id);
             }
+            if (knownSelectionCount.HasValue && requested.Count != knownSelectionCount.Value)
+                throw new InvalidOperationException("Semantic property inspector selection source known count does not match traversal.");
             RequireProjectFresh(project, inspectionVersion, projectIndex, familyIndex);
 
             var selected = requested
@@ -122,35 +124,42 @@ namespace QS3D.Core.Selection
             return inspection;
         }
 
-        private static void RequireSelectionKnownCountWithinLimit(IEnumerable<string> elementIds)
+        private static int? RequireSelectionKnownCountWithinLimit(IEnumerable<string> elementIds)
         {
             var counts = new List<int>(3);
             if (elementIds is ICollection<string> collection)
-                counts.Add(collection.Count);
-            if (elementIds is IReadOnlyCollection<string> readOnlyCollection)
-                counts.Add(readOnlyCollection.Count);
-            if (elementIds is System.Collections.ICollection nonGenericCollection)
-                counts.Add(nonGenericCollection.Count);
-
-            if (counts.Count == 0) return;
-
-            var expected = counts[0];
-            var maximum = expected;
-            var hasNegative = expected < 0;
-            var hasConflict = false;
-            for (var i = 1; i < counts.Count; i++)
             {
-                if (counts[i] < 0) hasNegative = true;
-                if (counts[i] != expected) hasConflict = true;
-                if (counts[i] > maximum) maximum = counts[i];
+                var count = collection.Count;
+                RequireValidSelectionKnownCount(count);
+                counts.Add(count);
+            }
+            if (elementIds is IReadOnlyCollection<string> readOnlyCollection)
+            {
+                var count = readOnlyCollection.Count;
+                RequireValidSelectionKnownCount(count);
+                counts.Add(count);
+            }
+            if (elementIds is System.Collections.ICollection nonGenericCollection)
+            {
+                var count = nonGenericCollection.Count;
+                RequireValidSelectionKnownCount(count);
+                counts.Add(count);
             }
 
-            if (maximum > MaxSelection)
-                throw new InvalidOperationException("Semantic property inspector supports at most " + MaxSelection + " selected elements.");
-            if (hasNegative)
+            if (counts.Count == 0) return null;
+            var knownCount = counts[0];
+            for (var index = 1; index < counts.Count; index++)
+                if (counts[index] != knownCount)
+                    throw new InvalidOperationException("Semantic property inspector selection source exposes conflicting known counts.");
+            return knownCount;
+        }
+
+        private static void RequireValidSelectionKnownCount(int count)
+        {
+            if (count < 0)
                 throw new InvalidOperationException("Semantic property inspector selection source exposes an invalid negative known count.");
-            if (hasConflict)
-                throw new InvalidOperationException("Semantic property inspector selection source exposes conflicting known counts.");
+            if (count > MaxSelection)
+                throw new InvalidOperationException("Semantic property inspector supports at most " + MaxSelection + " selected elements.");
         }
 
         private static Dictionary<string, ProjectElement> BuildUniqueProjectIndex(ProjectState project)
