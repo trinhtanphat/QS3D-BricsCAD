@@ -155,11 +155,16 @@ namespace QS3D.Core.Cost
         {
             try
             {
-                return checked(left + right);
+                return CostDecimalMath.AddPreservingNonZeroContribution(
+                    left,
+                    right,
+                    "estimate revision " + operation);
             }
             catch (OverflowException ex)
             {
-                throw new OverflowException("Estimate revision " + operation + " overflowed decimal arithmetic.", ex);
+                throw new OverflowException(
+                    "Estimate revision " + operation + " overflowed or lost decimal precision.",
+                    ex);
             }
         }
 
@@ -167,11 +172,16 @@ namespace QS3D.Core.Cost
         {
             try
             {
-                return checked(left - right);
+                return CostDecimalMath.AddPreservingNonZeroContribution(
+                    left,
+                    checked(-right),
+                    "estimate revision " + operation);
             }
             catch (OverflowException ex)
             {
-                throw new OverflowException("Estimate revision " + operation + " overflowed decimal arithmetic.", ex);
+                throw new OverflowException(
+                    "Estimate revision " + operation + " overflowed or lost decimal precision.",
+                    ex);
             }
         }
 
