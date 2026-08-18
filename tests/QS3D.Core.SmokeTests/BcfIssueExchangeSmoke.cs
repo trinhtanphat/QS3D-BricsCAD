@@ -73,6 +73,7 @@ namespace QS3D.Core.SmokeTests
             ThrowsArgument(() => new BcfOrthogonalCamera(new BcfPoint3(0d, 0d, 0d), new BcfPoint3(1d, 2d, 3d), new BcfPoint3(-2d, -4d, -6d), 1d, 1d), "Anti-parallel BCF camera direction/up vectors must fail closed.");
             ThrowsArgument(() => new BcfOrthogonalCamera(new BcfPoint3(0d, 0d, 0d), new BcfPoint3(double.MaxValue, double.MaxValue, 0d), new BcfPoint3(double.MaxValue, double.MaxValue, 0d), 1d, 1d), "Overflow-prone collinear BCF camera vectors must fail closed.");
 
+            // Keep a tiny non-collinear basis valid so the guard remains exact rather than epsilon-based.
             var tinyNonCollinear = new BcfOrthogonalCamera(
                 new BcfPoint3(0d, 0d, 0d),
                 new BcfPoint3(double.Epsilon, 0d, 0d),
