@@ -77,6 +77,17 @@ namespace QS3D.Core.SmokeTests
             Near(0d, evaluator.Evaluate("Tiny * 0", precisionVariables), 0d);
             Near(0d, evaluator.Evaluate("0 * Tiny", precisionVariables), 0d);
 
+            var swallowedAddition = Capture<InvalidOperationException>(
+                () => evaluator.Evaluate("1e300 + 1"));
+            Contains("Addition/subtraction lost the compensated contribution at double precision.", swallowedAddition.Message);
+            var swallowedSubtraction = Capture<InvalidOperationException>(
+                () => evaluator.Evaluate("1e300 - 1"));
+            Contains("Addition/subtraction lost the compensated contribution at double precision.", swallowedSubtraction.Message);
+
+            Near(1d, evaluator.Evaluate("1e300 + 1 - 1e300"), 0d);
+            Near(1e300, evaluator.Evaluate("1e300 + 0"), 0d);
+            Near(1e300, evaluator.Evaluate("1e300 - 0"), 0d);
+
             var divisionUnderflow = Capture<InvalidOperationException>(
                 () => evaluator.Evaluate("1e-300 / 1e300"));
             Contains("Division underflowed to zero.", divisionUnderflow.Message);
