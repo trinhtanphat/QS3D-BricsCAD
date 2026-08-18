@@ -87,7 +87,6 @@ namespace QS3D.Core.Geometry
     {
         private const int MaxOpenings = 4096;
         private const int MaxOutputFragments = 20000;
-        private const double Epsilon = 1e-10d;
 
         public static IReadOnlyList<CurtainWallRect> Interrupt(
             IEnumerable<CurtainWallRect> frames,
@@ -156,7 +155,7 @@ namespace QS3D.Core.Geometry
             var cutRight = Math.Min(right, opening.Right);
             var cutBottom = Math.Max(bottom, opening.Bottom);
             var cutTop = Math.Min(top, opening.Top);
-            if (cutRight - cutLeft <= Epsilon || cutTop - cutBottom <= Epsilon)
+            if (cutRight - cutLeft <= 0d || cutTop - cutBottom <= 0d)
             {
                 output.Add(frame);
                 return;
@@ -170,7 +169,7 @@ namespace QS3D.Core.Geometry
 
         private static void Add(ICollection<CurtainWallRect> output, double x, double z, double width, double height)
         {
-            if (width <= Epsilon || height <= Epsilon) return;
+            if (width <= 0d || height <= 0d) return;
             output.Add(new CurtainWallRect(x, z, width, height));
         }
     }
