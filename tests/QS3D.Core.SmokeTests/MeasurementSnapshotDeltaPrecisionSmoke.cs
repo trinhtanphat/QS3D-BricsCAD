@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             IncreasingPrecisionCollapseFailsClosed();
             DecreasingPrecisionCollapseFailsClosed();
+            SignedPrecisionCollapseFailsClosed();
             ExactFiniteDeltaRemainsStable();
             ZeroEndpointDeltasRemainStable();
         }
@@ -31,6 +32,12 @@ namespace QS3D.Core.SmokeTests
                 "lost a finite non-zero endpoint",
                 error.Message,
                 "Measurement snapshot delta must reject a current finite non-zero endpoint swallowed by subtraction.");
+        }
+
+        private static void SignedPrecisionCollapseFailsClosed()
+        {
+            Capture<InvalidOperationException>(() => Compare(-1d, -1e16d));
+            Capture<InvalidOperationException>(() => Compare(-1e16d, -1d));
         }
 
         private static void ExactFiniteDeltaRemainsStable()
