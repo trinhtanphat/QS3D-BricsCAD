@@ -18,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             PositiveOrientationPreservesRepresentableLowOrderArea();
             NegativeOrientationPreservesRepresentableLowOrderArea();
             ScaledFallbackPreservesRepresentableLowOrderArea();
+            ScaledFallbackPreservesNegativeRepresentableLowOrderArea();
             LengthCompensationRemainsStable();
         }
 
@@ -47,23 +48,28 @@ namespace QS3D.Core.SmokeTests
 
         private static void ScaledFallbackPreservesRepresentableLowOrderArea()
         {
-            var tinyY = TinyCross * ScaledCoordinate;
-            var points = new[]
-            {
-                new Point2(0d, 0d),
-                new Point2(ScaledCoordinate, 0d),
-                new Point2(ScaledCoordinate, tinyY),
-                new Point2(0d, ScaledCoordinate),
-                new Point2(ScaledCoordinate, 0d)
-            };
+            var points = ScaledFallbackPolygon();
+            var expectedArea = ScaledFallbackExpectedArea();
 
-            // The direct fan crosses overflow on the +1 / -1 terms, forcing the
-            // scaled fallback. Its normalized sequence is TinyCross, +1, -1:
-            // the former Kahan accumulator collapsed this representable residual
-            // to zero, while the retained Neumaier correction preserves it.
-            var expectedArea = ((TinyCross * 0.5d) * ScaledCoordinate) * ScaledCoordinate;
             Exact(expectedArea, PolylineMetrics.SignedArea(points), "scaled-fallback signed area");
             Exact(expectedArea, PolylineMetrics.Area(points), "scaled-fallback absolute area");
+        }
+
+        private static void ScaledFallbackPreservesNegativeRepresentableLowOrderArea()
+        {
+            var positive = ScaledFallbackPolygon();
+            var points = new[]
+            {
+                positive[0],
+                positive[4],
+                positive[3],
+                positive[2],
+                positive[1]
+            };
+            var expectedArea = ScaledFallbackExpectedArea();
+
+            Exact(-expectedArea, PolylineMetrics.SignedArea(points), "scaled-fallback negative signed area");
+            Exact(expectedArea, PolylineMetrics.Area(points), "scaled-fallback negative absolute area");
         }
 
         private static void LengthCompensationRemainsStable()
@@ -88,6 +94,28 @@ namespace QS3D.Core.SmokeTests
                 new Point2(-Large, 0d),
                 new Point2(0d, -SmallInverse)
             };
+        }
+
+        private static Point2[] ScaledFallbackPolygon()
+        {
+            var tinyY = TinyCross * ScaledCoordinate;
+            return new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(ScaledCoordinate, 0d),
+                new Point2(ScaledCoordinate, tinyY),
+                new Point2(0d, ScaledCoordinate),
+                new Point2(ScaledCoordinate, 0d)
+            };
+        }
+
+        private static double ScaledFallbackExpectedArea()
+        {
+            // The direct fan crosses overflow on the +1 / -1 terms, forcing the
+            // scaled fallback. Its normalized sequence is TinyCross, +1, -1:
+            // the former Kahan accumulator collapsed this representable residual
+            // to zero, while the retained Neumaier correction preserves it.
+            return ((TinyCross * 0.5d) * ScaledCoordinate) * ScaledCoordinate;
         }
 
         private static void Exact(double expected, double actual, string scenario)
