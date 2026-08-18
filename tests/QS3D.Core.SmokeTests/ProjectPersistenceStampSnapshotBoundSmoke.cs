@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
@@ -116,7 +117,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void Equal<T>(T expected, T actual, string message)
         {
-            if (!Equals(expected, actual))
+            if (!EqualityComparer<T>.Default.Equals(expected, actual))
                 throw new InvalidOperationException(
                     message + " Expected: " + expected + "; actual: " + actual + ".");
         }
