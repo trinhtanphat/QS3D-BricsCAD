@@ -78,7 +78,7 @@ namespace QS3D.Core.Selection
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
             var inspectionVersion = project.ChangeVersion;
-            RequireSelectionKnownCountWithinLimit(elementIds);
+            var knownSelectionCount = RequireSelectionKnownCountWithinLimit(elementIds);
             var projectIndex = BuildUniqueProjectIndex(project);
             var familyIndex = BuildUniqueFamilyIndex(project);
             var requested = new List<string>();
@@ -95,6 +95,8 @@ namespace QS3D.Core.Selection
                 if (!projectIndex.ContainsKey(id)) throw new InvalidOperationException("Semantic property inspector references missing element id: " + id + ".");
                 requested.Add(id);
             }
+            if (knownSelectionCount.HasValue && requested.Count != knownSelectionCount.Value)
+                throw new InvalidOperationException("Semantic property inspector selection source known count does not match traversal.");
             RequireProjectFresh(project, inspectionVersion, projectIndex, familyIndex);
 
             var selected = requested
@@ -122,14 +124,34 @@ namespace QS3D.Core.Selection
             return inspection;
         }
 
-        private static void RequireSelectionKnownCountWithinLimit(IEnumerable<string> elementIds)
+        private static int? RequireSelectionKnownCountWithinLimit(IEnumerable<string> elementIds)
         {
+            var counts = new List<int>(3);
             if (elementIds is ICollection<string> collection)
-                RequireValidSelectionKnownCount(collection.Count);
+            {
+                var count = collection.Count;
+                RequireValidSelectionKnownCount(count);
+                counts.Add(count);
+            }
             if (elementIds is IReadOnlyCollection<string> readOnlyCollection)
-                RequireValidSelectionKnownCount(readOnlyCollection.Count);
+            {
+                var count = readOnlyCollection.Count;
+                RequireValidSelectionKnownCount(count);
+                counts.Add(count);
+            }
             if (elementIds is System.Collections.ICollection nonGenericCollection)
-                RequireValidSelectionKnownCount(nonGenericCollection.Count);
+            {
+                var count = nonGenericCollection.Count;
+                RequireValidSelectionKnownCount(count);
+                counts.Add(count);
+            }
+
+            if (counts.Count == 0) return null;
+            var knownCount = counts[0];
+            for (var index = 1; index < counts.Count; index++)
+                if (counts[index] != knownCount)
+                    throw new InvalidOperationException("Semantic property inspector selection source exposes conflicting known counts.");
+            return knownCount;
         }
 
         private static void RequireValidSelectionKnownCount(int count)
