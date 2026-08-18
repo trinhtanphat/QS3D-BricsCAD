@@ -23,6 +23,8 @@ namespace QS3D.Core.Geometry
                 AddLengthCompensated(ref total, ref compensation, points[points.Count - 1].DistanceTo(points[0]));
 
             var length = AddFinite(total, compensation);
+            if (compensation != 0d && length == total)
+                throw new OverflowException("Polyline length lost a non-zero compensated segment below the supported numeric precision.");
             return length == 0d ? 0d : length;
         }
 
