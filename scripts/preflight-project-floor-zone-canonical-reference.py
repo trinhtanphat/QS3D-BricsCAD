@@ -27,23 +27,28 @@ def main():
         'string.Equals(Property(element, TopLevelIdKey), normalizedFloorId, StringComparison.OrdinalIgnoreCase)',
     ], "floor", missing)
     require(zone, [
-        'string.Equals((project.ActiveZoneId ?? string.Empty).Trim(), zone.Id, StringComparison.OrdinalIgnoreCase)',
+        'var activeZoneId = OptionalIdentity(project.ActiveZoneId, "Project ActiveZoneId", 64);',
         '.Where(x => ReferencesZone(x, zone.Id))',
         'ResolveProjectElements(project).Count(x => ReferencesZone(x, zone.Id))',
         'private static bool ReferencesZone(ProjectElement element, string zoneId)',
-        'string.Equals((element.ZoneId ?? string.Empty).Trim(), zoneId, StringComparison.OrdinalIgnoreCase)',
+        'OptionalIdentity(element.ZoneId, "Element ZoneId", 64)',
+        'var canonicalId = RequiredIdentity(id, nameof(id), 64);',
+        'var elementId = RequiredIdentity(element.Id, "Project semantic element id", 128);',
+        'private static string RequiredIdentity(string value, string parameterName, int maxLength)',
+        'private static string OptionalIdentity(string value, string parameterName, int maxLength)',
     ], "zone", missing)
     require(smoke, [
         'FloorReferenceIdentityIsCanonical();',
         'PaddedActiveFloorBlocksDelete();',
-        'ZoneReferenceIdentityIsCanonical();',
-        'PaddedActiveZoneBlocksDelete();',
+        'ZoneReferenceIdentityFailsClosed();',
+        'PaddedActiveZoneFailsClosed();',
         'FloorId = "  f-01  "',
-        'ZoneId = "  z-01  "',
         'ProjectFloorService.ReferenceCount(project, " F-01 ")',
-        'ProjectZoneService.ReferenceCount(project, " Z-01 ")',
-        'ProjectFloorService.Update(project, floor.Id, floor.Name, 0.25d);',
-        'ProjectZoneService.Update(project, zone.Id, "Zone 01 renamed");',
+        'SetRawZoneId(element, "  z-01  ");',
+        'ThrowsArgument(() => ProjectZoneService.ReferenceCount(project, zone.Id));',
+        'ThrowsArgument(() => ProjectZoneService.Update(project, zone.Id, "Zone 01 renamed"));',
+        'SetRawActiveZoneId(project, "  zONE-a  ");',
+        'ThrowsArgument(() => ProjectZoneService.Delete(project, zone.Id));',
     ], "smoke", missing)
     require(registration, [
         '[ModuleInitializer]',
@@ -62,22 +67,39 @@ def main():
         ('zone', zone, 'string.Equals(project.ActiveZoneId, zone.Id, StringComparison.OrdinalIgnoreCase)'),
         ('zone', zone, '.Count(x => string.Equals(x.ZoneId, zone.Id, StringComparison.OrdinalIgnoreCase))'),
         ('zone', zone, '.Where(x => string.Equals(x.ZoneId, zone.Id, StringComparison.OrdinalIgnoreCase))'),
+        ('zone', zone, 'string.Equals((element.ZoneId ?? string.Empty).Trim(), zoneId, StringComparison.OrdinalIgnoreCase)'),
+        ('zone', zone, 'string.Equals((project.ActiveZoneId ?? string.Empty).Trim(), zone.Id, StringComparison.OrdinalIgnoreCase)'),
     ]
     for label, text, token in unsafe:
         if token in text:
-            print("ERROR: raw " + label + " reference comparison returned: " + token)
+            print("ERROR: raw/trim-alias " + label + " reference comparison returned: " + token)
             return 1
 
-    floor_delete = floor[floor.find('public static bool Delete(ProjectState project, string floorId)'):floor.find('public static int ReferenceCount', floor.find('public static bool Delete(ProjectState project, string floorId)'))]
-    zone_delete = zone[zone.find('public static bool Delete(ProjectState project, string zoneId)'):zone.find('public static int ReferenceCount', zone.find('public static bool Delete(ProjectState project, string zoneId)'))]
+    floor_delete_start = floor.find('public static bool Delete(ProjectState project, string floorId)')
+    floor_delete = floor[floor_delete_start:floor.find('public static int ReferenceCount', floor_delete_start)]
+    zone_delete_start = zone.find('public static bool Delete(ProjectState project, string zoneId)')
+    zone_delete = zone[zone_delete_start:zone.find('public static int ReferenceCount', zone_delete_start)]
     if floor_delete.find('.Trim()') < 0 or floor_delete.find('.Trim()') > floor_delete.find('project.Touch();'):
         print("ERROR: active Floor canonical guard must run before mutation.")
         return 1
-    if zone_delete.find('.Trim()') < 0 or zone_delete.find('.Trim()') > zone_delete.find('project.Touch();'):
-        print("ERROR: active Zone canonical guard must run before mutation.")
+
+    zone_active_validation = zone_delete.find('OptionalIdentity(project.ActiveZoneId, "Project ActiveZoneId", 64)')
+    if zone_active_validation < 0 or zone_active_validation > zone_delete.find('project.Touch();'):
+        print("ERROR: active Zone canonical validation must run before mutation.")
         return 1
 
-    print("PASS: Floor/Zone mutable references and active ids use canonical trimmed identity in update/reference/delete safety paths with module-registered smoke coverage.")
+    resolve_start = zone.find('private static IReadOnlyList<ProjectElement> ResolveProjectElements(ProjectState project)')
+    resolve_end = zone.find('private static void EnsureUniqueName', resolve_start)
+    resolve = zone[resolve_start:resolve_end]
+    if resolve.find('RequiredIdentity(element.Id, "Project semantic element id", 128)') < 0:
+        print("ERROR: project semantic element ids must be validated before Zone indexing.")
+        return 1
+    zone_reference_validation = resolve.find('OptionalIdentity(element.ZoneId, "Element ZoneId", 64)')
+    if zone_reference_validation < 0 or zone_reference_validation > resolve.find('resolved.Add(element);'):
+        print("ERROR: stored Zone references must be validated before project element materialization completes.")
+        return 1
+
+    print("PASS: Floor retains canonical trimmed-reference compatibility while Zone semantic identities/references fail closed before lookup or mutation with focused smoke coverage.")
     return 0
 
 
