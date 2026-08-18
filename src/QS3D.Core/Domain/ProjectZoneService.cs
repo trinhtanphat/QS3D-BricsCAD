@@ -67,7 +67,7 @@ namespace QS3D.Core.Domain
             var zone = FindRequired(project, zoneId);
 
             var targetEnumerationVersion = project.ChangeVersion;
-            RequireAssignmentTargetCountWithinLimit(elements);
+            var knownTargetCount = SnapshotAssignmentTargetKnownCount(elements);
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Zone assignment targets were being counted. Retry assignment against the current project state.");
 
@@ -90,6 +90,8 @@ namespace QS3D.Core.Domain
             }
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Zone assignment targets were being enumerated. Retry assignment against the current project state.");
+            if (knownTargetCount.HasValue && observedEntries != knownTargetCount.Value)
+                throw new InvalidOperationException("Zone assignment target collection known count does not match the observed target traversal.");
             RequireCurrentAssignmentOwnership(project, zone, unique.Values);
 
             var changed = unique.Values
@@ -132,14 +134,24 @@ namespace QS3D.Core.Domain
             return string.Equals(OptionalIdentity(element.ZoneId, "Element ZoneId", 64), zoneId, StringComparison.OrdinalIgnoreCase);
         }
 
-        private static void RequireAssignmentTargetCountWithinLimit(IEnumerable<ProjectElement> elements)
+        private static int? SnapshotAssignmentTargetKnownCount(IEnumerable<ProjectElement> elements)
         {
+            int? knownCount = null;
             if (elements is ICollection<ProjectElement> collection)
-                RequireValidAssignmentTargetKnownCount(collection.Count);
+                ValidateAssignmentTargetKnownCount(collection.Count, ref knownCount);
             if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection)
-                RequireValidAssignmentTargetKnownCount(readOnlyCollection.Count);
+                ValidateAssignmentTargetKnownCount(readOnlyCollection.Count, ref knownCount);
             if (elements is System.Collections.ICollection nonGenericCollection)
-                RequireValidAssignmentTargetKnownCount(nonGenericCollection.Count);
+                ValidateAssignmentTargetKnownCount(nonGenericCollection.Count, ref knownCount);
+            return knownCount;
+        }
+
+        private static void ValidateAssignmentTargetKnownCount(int count, ref int? knownCount)
+        {
+            RequireValidAssignmentTargetKnownCount(count);
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException("Zone assignment target collection exposes conflicting known counts.");
+            knownCount = count;
         }
 
         private static void RequireValidAssignmentTargetKnownCount(int count)
