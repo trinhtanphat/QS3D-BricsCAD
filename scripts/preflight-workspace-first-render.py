@@ -5,7 +5,9 @@ ROOT = Path(__file__).resolve().parents[1]
 XAML_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml"
 COMPACT_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.CompactShell.cs"
 REFERENCE_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.ReferencePaletteLayout.cs"
+TREE_REL = "src/QS3D.BricsCAD.V25/UI/ReferenceWorkspaceTreeAugmenter.cs"
 RUNTIME_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
+RUNTIME_REPAIR_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dRuntimeLayoutRepair.cs"
 LOCAL_INBOX_REL = "docs/LOCAL-AGENT-INBOX.md"
 
 
@@ -46,20 +48,16 @@ def main():
     xaml = read(XAML_REL)
     compact = read(COMPACT_REL)
     reference = read(REFERENCE_REL)
+    tree = read(TREE_REL)
     runtime = read(RUNTIME_REL)
+    runtime_repair = read(RUNTIME_REPAIR_REL)
     local_inbox = read(LOCAL_INBOX_REL)
 
-    # XAML keeps a non-zero bootstrap floor while BricsCAD performs its first PaletteSet measure.
-    # The legacy ViewportWidth binding may still be present, but it must not be allowed to coerce
-    # the entire client to zero before the authoritative idle pass can break the feedback loop.
     require(xaml, 'x:Name="WorkspaceContentRoot"', XAML_REL)
     require(xaml, 'Width="{Binding ViewportWidth, ElementName=WorkspaceOverflow}"', XAML_REL)
     require(xaml, 'MinWidth="560"', XAML_REL)
     require(xaml, 'HorizontalContentAlignment="Stretch"', XAML_REL)
 
-    # Loaded-time compact presentation must preserve a measurable/visible client and leave final
-    # model/family column geometry to the Reference/FiveZone owners. It must never zero every live
-    # column while the Width binding is still active.
     for token in (
         "root.MinWidth = Math.Max(root.MinWidth, 560);",
         "root.HorizontalAlignment = HorizontalAlignment.Stretch;",
@@ -82,9 +80,6 @@ def main():
     ):
         forbid(compact, stale, COMPACT_REL)
 
-    # ApplicationIdle is the earliest authoritative presentation pass. It must break the zero-width
-    # binding before removing the bootstrap minimum, so even if SystemIdle is delayed the client is
-    # already stretch-sized and visible.
     for token in (
         "using System.Windows.Data;",
         "BindingOperations.ClearBinding(root, FrameworkElement.WidthProperty);",
@@ -103,7 +98,55 @@ def main():
         REFERENCE_REL,
     )
 
-    # The later SystemIdle pass remains the final idempotent repair and must retain the same ordering.
+    # Figure-2 parity is a top-level presentation contract, not permission to throw away existing
+    # semantic children. Keep the legacy canopy/modeling content reachable under the reference
+    # categories while normalizing the visible headers and exact top-level order.
+    for token in (
+        '"HT_Phong",',
+        '"Kết cấu thép",',
+        '"Cấu kiện khác",',
+        'EnsureTopAlias(tree, "HT_Phong", "HT_Phòng", null);',
+        'MoveLegacyTopLevelUnder(tree, slab, "Mái Hắt");',
+        'var canopy = EnsureChildContainer(slab, "Mái Hắt", null);',
+        'EnsureTop(tree, "Kết cấu thép", null);',
+        'var other = EnsureTop(tree, "Cấu kiện khác", null);',
+        'MoveLegacyTopLevelUnder(tree, other, "Modeling");',
+        "NormalizeReferenceTopLevelOrder(tree);",
+    ):
+        require(tree, token, TREE_REL)
+
+    reference_order = require_section(
+        tree,
+        "private static readonly string[] ReferenceTopLevelOrder =",
+        "public static bool EnsureRegistered()",
+        TREE_REL,
+    )
+    desired_top_level = (
+        '"Lưới Trục"',
+        '"HT_Phong"',
+        '"Dầm"',
+        '"Sàn"',
+        '"Cột"',
+        '"Vách"',
+        '"Tường KT"',
+        '"Cửa"',
+        '"Cầu Thang"',
+        '"Móng"',
+        '"Đào đắp"',
+        '"Kết cấu thép"',
+        '"Cấu kiện khác"',
+        '"KL Tùy chỉnh"',
+    )
+    for first, second in zip(desired_top_level, desired_top_level[1:]):
+        require_order(reference_order, first, second, TREE_REL)
+
+    for stale in (
+        'var finish = EnsureTop(tree, "HT_Phòng", null);',
+        'var canopy = EnsureTop(tree, "Mái Hắt", null);',
+        'EnsureTop(tree, "Modeling", null);',
+    ):
+        forbid(tree, stale, TREE_REL)
+
     for token in (
         "BindingOperations.ClearBinding(root, FrameworkElement.WidthProperty);",
         "root.Width = double.NaN;",
@@ -122,9 +165,102 @@ def main():
         RUNTIME_REL,
     )
 
-    # Real BricsCAD first-render/HiDPI proof is LOCAL_ONLY. Reuse the canonical Workspace local
-    # handoff instead of inventing another queue. Validate only the stable scenario identity here:
-    # LOCAL-012's workflow status/evidence is intentionally mutable as local qualification advances.
+    # BricsCAD may show/reparent/re-layout after the startup settle. The loaded-lifetime observers
+    # must detect that blank client, avoid recovery re-entry loops, keep retries bounded, and preserve
+    # an existing user-adjusted model/family split when a genuine late blank-state repair reasserts
+    # the authoritative five-zone defaults.
+    for token in (
+        "private const int Blt3dRuntimeRecoveryRetryPasses = 3;",
+        "WireBlt3dRuntimeViewportRecovery();",
+        "UnwireBlt3dRuntimeViewportRecovery();",
+        "WorkspaceOverflow.SizeChanged += OnBlt3dRuntimeViewportSizeChanged;",
+        "WorkspaceOverflow.IsVisibleChanged += OnBlt3dRuntimeViewportVisibilityChanged;",
+        "WorkspaceOverflow.LayoutUpdated += OnBlt3dRuntimeViewportLayoutUpdated;",
+        "WorkspaceOverflow.SizeChanged -= OnBlt3dRuntimeViewportSizeChanged;",
+        "WorkspaceOverflow.IsVisibleChanged -= OnBlt3dRuntimeViewportVisibilityChanged;",
+        "WorkspaceOverflow.LayoutUpdated -= OnBlt3dRuntimeViewportLayoutUpdated;",
+        "private void OnBlt3dRuntimeViewportLayoutUpdated(object? sender, EventArgs e)",
+        "_blt3dRuntimeViewportRecoveryApplying",
+        "_blt3dRuntimeViewportRecoveryRetriesRemaining",
+        "_blt3dRuntimeViewportRecoveryRetriesRemaining = Blt3dRuntimeRecoveryRetryPasses;",
+        "_blt3dRuntimeViewportRecoveryRetriesRemaining <= 0",
+        "_blt3dRuntimeViewportRecoveryRetriesRemaining--;",
+        "if (NeedsBlt3dRuntimeViewportRecovery())",
+        "QueueBlt3dRuntimeViewportRecovery();",
+        "if (!NeedsBlt3dRuntimeViewportRecovery())",
+        "_blt3dRuntimeViewportRecoveryApplying = true;",
+        "_blt3dRuntimeViewportRecoveryApplying = false;",
+        "var preserveSplitterGeometry = TryCaptureBlt3dRuntimeSplitterGeometry(",
+        "private bool TryCaptureBlt3dRuntimeSplitterGeometry(",
+        "private void RestoreBlt3dRuntimeSplitterGeometry(",
+        "if (preserveSplitterGeometry)",
+        "columns[0].Width = modelWidth;",
+        "columns[2].Width = familyWidth;",
+        "BindingOperations.IsDataBound(root, FrameworkElement.WidthProperty)",
+        "root.ActualWidth <= 1d",
+        "root.ActualHeight <= 1d",
+        "workspace.ActualWidth <= 1d",
+        "workspace.ActualHeight <= 1d",
+        "WorkspaceOverflow.VerticalContentAlignment = VerticalAlignment.Stretch;",
+        "WorkspaceContentRoot.VerticalAlignment = VerticalAlignment.Stretch;",
+        "InvalidateBlt3dRuntimeLayout();",
+    ):
+        require(runtime_repair, token, RUNTIME_REPAIR_REL)
+
+    recovery_section = require_section(
+        runtime_repair,
+        "private void QueueBlt3dRuntimeViewportRecovery()",
+        "private bool TryCaptureBlt3dRuntimeSplitterGeometry(",
+        RUNTIME_REPAIR_REL,
+    )
+    require_order(
+        recovery_section,
+        "var preserveSplitterGeometry = TryCaptureBlt3dRuntimeSplitterGeometry(",
+        "_blt3dRuntimeViewportRecoveryRetriesRemaining--;",
+        RUNTIME_REPAIR_REL,
+    )
+    require_order(
+        recovery_section,
+        "_blt3dRuntimeViewportRecoveryApplying = true;",
+        "ReassertBlt3dRuntimeLayout();",
+        RUNTIME_REPAIR_REL,
+    )
+    require_order(
+        recovery_section,
+        "ReassertBlt3dRuntimeLayout();",
+        "RestoreBlt3dRuntimeSplitterGeometry(",
+        RUNTIME_REPAIR_REL,
+    )
+    require_order(
+        runtime_repair,
+        "if (!NeedsBlt3dRuntimeViewportRecovery())",
+        "_blt3dRuntimeViewportRecoveryRetriesRemaining--;",
+        RUNTIME_REPAIR_REL,
+    )
+    require_order(
+        runtime_repair,
+        "_blt3dRuntimeViewportRecoveryRetriesRemaining--;",
+        "_blt3dRuntimeViewportRecoveryApplying = true;",
+        RUNTIME_REPAIR_REL,
+    )
+    require_order(
+        runtime_repair,
+        "UnwireBlt3dRuntimeViewportRecovery();",
+        "panel._blt3dRuntimeLayoutRepairStarted = false;",
+        RUNTIME_REPAIR_REL,
+    )
+
+    forbid(
+        runtime_repair,
+        "WorkspaceOverflow.SizeChanged += (_, __) => ReassertBlt3dRuntimeLayout();",
+        RUNTIME_REPAIR_REL,
+    )
+    forbid(
+        runtime_repair,
+        "WorkspaceOverflow.LayoutUpdated += (_, __) => ReassertBlt3dRuntimeLayout();",
+        RUNTIME_REPAIR_REL,
+    )
+
     local012 = require_section(
         local_inbox,
         "## LOCAL-012 — Project Browser native workspace and CAD selection bridge",
@@ -139,9 +275,11 @@ def main():
         require(local012, token, LOCAL_INBOX_REL)
 
     print(
-        "PASS: Workspace keeps a non-zero first-measure bootstrap, CompactShell no longer collapses "
-        "live columns during Loaded, ApplicationIdle/SystemIdle break the ViewportWidth loop before "
-        "allowing zero minimum width, and the existing LOCAL-012 BricsCAD visual scenario remains referenced."
+        "PASS: Workspace keeps the first-measure bootstrap, authoritative idle passes break the "
+        "ViewportWidth loop, loaded-lifetime size/visibility/layout recovery is gated/re-entry-safe/"
+        "bounded, the user splitter is preserved, and the visible reference tree matches the owner "
+        "figure while legacy functional children stay reachable; LOCAL-012 remains the licensed "
+        "visual qualification lane."
     )
     return 0
 
