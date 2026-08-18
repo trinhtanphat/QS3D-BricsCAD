@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
-using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
 using QS3D.Core.Services;
@@ -11,8 +10,6 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class ProjectSessionTransitionAtomicitySmoke
     {
-        private const int MaximumAuditEvents = 10_000;
-
         [ModuleInitializer]
         internal static void Initialize() => Run();
 
@@ -20,7 +17,7 @@ namespace QS3D.Core.SmokeTests
         {
             FailedSaveRollsBackAuditAndVersionAndRetainsLock();
             BackupRecoveredFailedSaveKeepsRecoveryStateAndValidatedBackup();
-            ReloadAuditCapacityFailureKeepsOldSessionAuthoritative();
+            ReloadAuditOverflowKeepsOldSessionAuthoritative();
             SuccessfulRepeatedSaveReloadTransitionsRemainCoherent();
         }
 
@@ -118,44 +115,36 @@ namespace QS3D.Core.SmokeTests
             });
         }
 
-        private static void ReloadAuditCapacityFailureKeepsOldSessionAuthoritative()
+        private static void ReloadAuditOverflowKeepsOldSessionAuthoritative()
         {
             WithTemporaryDirectory(root =>
             {
-                var path = Path.Combine(root, "reload-audit-capacity.qsdb");
+                var path = Path.Combine(root, "reload-audit-overflow.qsdb");
                 var oldProject = new ProjectState("SESSION-OLD", "Old authoritative session");
                 var store = new QsdbProjectStore();
+                var replacement = new ProjectState("SESSION-REPLACEMENT", "Replacement at max revision");
+                store.SaveNew(replacement, path);
+                RewriteChangeVersion(path, long.MaxValue);
 
                 using (var session = new ProjectSession(oldProject, path, store))
                 {
                     session.AcquireWriteLock();
-                    var replacement = new ProjectState("SESSION-REPLACEMENT", "Replacement at audit capacity");
-                    for (var index = 0; index < MaximumAuditEvents; index++)
-                    {
-                        replacement.AuditEvents.Add(new AuditEvent
-                        {
-                            Utc = DateTime.UtcNow,
-                            Action = "FIXTURE",
-                            Detail = index.ToString()
-                        });
-                    }
-                    store.SaveNew(replacement, path);
-
                     var projectBefore = session.Project;
                     var auditBefore = session.Audit;
                     var versionBefore = projectBefore.ChangeVersion;
                     var updatedBefore = projectBefore.UpdatedUtc;
                     var auditCountBefore = projectBefore.AuditEvents.Count;
 
-                    var error = Capture<InvalidOperationException>(() => session.Reload());
-                    Contains("10000", error.Message,
-                        "Reload audit-capacity failure did not identify the supported history bound.");
+                    Capture<OverflowException>(() => session.Reload());
+
                     Same(projectBefore, session.Project, "Failed reload replaced the authoritative Project instance.");
                     Same(auditBefore, session.Audit, "Failed reload replaced the authoritative Audit instance.");
                     Equal(true, session.HasWriteLock, "Failed reload released the session write lock.");
                     Equal(versionBefore, projectBefore.ChangeVersion, "Failed reload mutated the old Project ChangeVersion.");
                     Equal(updatedBefore, projectBefore.UpdatedUtc, "Failed reload mutated the old Project UpdatedUtc.");
                     Equal(auditCountBefore, projectBefore.AuditEvents.Count, "Failed reload mutated the old Project audit history.");
+                    Equal(long.MaxValue, store.Load(path).ChangeVersion,
+                        "Reload overflow fixture no longer exercised the loaded max ChangeVersion public path.");
                 }
             });
         }
@@ -197,6 +186,16 @@ namespace QS3D.Core.SmokeTests
             });
         }
 
+        private static void RewriteChangeVersion(string path, long value)
+        {
+            var text = File.ReadAllText(path);
+            const string marker = "changeVersion=\"1\"";
+            if (text.IndexOf(marker, StringComparison.Ordinal) < 0)
+                throw new InvalidOperationException("Reload overflow fixture could not find the canonical initial changeVersion attribute.");
+            text = text.Replace(marker, "changeVersion=\"" + value.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\"");
+            File.WriteAllText(path, text);
+        }
+
         private static bool HasAudit(ProjectState project, string action)
         {
             foreach (var item in project.AuditEvents)
@@ -232,12 +231,6 @@ namespace QS3D.Core.SmokeTests
             }
 
             throw new InvalidOperationException("Expected " + typeof(TException).Name + ".");
-        }
-
-        private static void Contains(string expected, string actual, string message)
-        {
-            if (actual == null || actual.IndexOf(expected, StringComparison.OrdinalIgnoreCase) < 0)
-                throw new InvalidOperationException(message + " Actual: " + actual);
         }
 
         private static void Same(object expected, object actual, string message)
