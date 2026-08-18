@@ -73,7 +73,8 @@ def validate_candidates(candidates):
 
 
 def _is_feature_gate_name(name):
-    return name.startswith("preflight-") and name.endswith(".py")
+    folded = name.casefold()
+    return folded.startswith("preflight-") and folded.endswith(".py")
 
 
 def discover():
