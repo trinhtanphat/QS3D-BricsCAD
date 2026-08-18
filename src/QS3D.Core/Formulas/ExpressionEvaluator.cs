@@ -46,8 +46,6 @@ namespace QS3D.Core.Formulas
                 variableCount++;
                 if (variableCount > MaxVariableCount)
                     throw new InvalidOperationException($"Variable count exceeds the supported maximum of {MaxVariableCount}.");
-                if (variableCount > expectedVariableCount)
-                    throw new InvalidOperationException("Variable source enumeration count does not match its advertised Count.");
                 if (string.IsNullOrWhiteSpace(pair.Key))
                     throw new InvalidOperationException("Variable names cannot be blank or whitespace-only.");
 
@@ -62,7 +60,7 @@ namespace QS3D.Core.Formulas
             }
 
             if (variableCount != expectedVariableCount)
-                throw new InvalidOperationException("Variable source enumeration count does not match its advertised Count.");
+                throw new InvalidOperationException($"Variable source known count reported {expectedVariableCount}, but traversal produced {variableCount}.");
 
             return normalized;
         }
