@@ -20,7 +20,7 @@ GitHub Markdown, Issues, branches, PRs, Actions, or historical controller commen
 
 When the owner asks about the actual schedules, inspect or mutate ChatGPT account task state with the appropriate task tooling.
 
-## 2. One ChatGPT account = one local group of five schedules
+## 2. One ChatGPT account = one local five-task group
 
 For one ChatGPT account, the intended QS3D set is:
 
