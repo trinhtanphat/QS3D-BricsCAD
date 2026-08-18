@@ -317,7 +317,13 @@ namespace QS3D.Core.Documentation
         private static bool FitsWithin(double start, double extent, double limit)
         {
             if (start > limit) return false;
-            return extent <= limit - start;
+            var remaining = limit - start;
+            if (start != 0d && remaining == limit)
+            {
+                throw new InvalidOperationException(
+                    "Semantic sheet placement bounds lost a non-zero start coordinate to floating-point precision.");
+            }
+            return extent <= remaining;
         }
 
         private static void PositiveFinite(double value, string name)
