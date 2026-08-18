@@ -55,14 +55,15 @@ namespace QS3D.Core.Geometry
             var origin = points[0];
             double sum = 0d;
             double compensation = 0d;
+            var swallowedContribution = false;
 
             for (var i = 1; i < points.Count - 1; i++)
             {
                 var cross = TranslatedCrossFinite(origin, points[i], points[i + 1]);
-                AddCompensated(ref sum, ref compensation, cross);
+                AddCompensated(ref sum, ref compensation, cross, ref swallowedContribution);
             }
 
-            var compensatedSum = AddFinite(sum, compensation);
+            var compensatedSum = AddFinitePreservingCompensation(sum, compensation, swallowedContribution, "Polyline area");
             return MultiplyFinitePreservingNonZero(compensatedSum, 0.5d, "Polyline area");
         }
 
@@ -104,6 +105,7 @@ namespace QS3D.Core.Geometry
 
             double sum = 0d;
             double compensation = 0d;
+            var swallowedContribution = false;
             for (var i = 1; i < points.Count - 1; i++)
             {
                 double ax;
@@ -127,17 +129,19 @@ namespace QS3D.Core.Geometry
 
                 var cross = ax * by - ay * bx;
                 if (!Finite(cross)) throw new OverflowException("Polyline normalized area exceeds the supported numeric range.");
-                AddCompensated(ref sum, ref compensation, cross);
+                AddCompensated(ref sum, ref compensation, cross, ref swallowedContribution);
             }
 
-            var normalizedAreaSum = AddFinite(sum, compensation);
+            var normalizedAreaSum = AddFinitePreservingCompensation(sum, compensation, swallowedContribution, "Polyline normalized area");
             var normalizedArea = MultiplyFinitePreservingNonZero(normalizedAreaSum, 0.5d, "Polyline normalized area");
             return RestoreScaledAreaFinite(normalizedArea, scaleX, scaleY);
         }
 
-        private static void AddCompensated(ref double sum, ref double compensation, double value)
+        private static void AddCompensated(ref double sum, ref double compensation, double value, ref bool swallowedContribution)
         {
             var next = AddFinite(sum, value);
+            if (value != 0d && next == sum)
+                swallowedContribution = true;
             var correction = Math.Abs(sum) >= Math.Abs(value)
                 ? (sum - next) + value
                 : (value - next) + sum;
@@ -172,6 +176,14 @@ namespace QS3D.Core.Geometry
         {
             var value = first + second;
             if (!Finite(value)) throw new OverflowException("Polyline metric exceeds the supported numeric range.");
+            return value;
+        }
+
+        private static double AddFinitePreservingCompensation(double sum, double compensation, bool swallowedContribution, string operation)
+        {
+            var value = AddFinite(sum, compensation);
+            if (swallowedContribution && compensation != 0d && value == sum)
+                throw new OverflowException(operation + " lost a non-zero compensated contribution below the supported numeric precision.");
             return value;
         }
 
