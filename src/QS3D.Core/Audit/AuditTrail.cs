@@ -17,6 +17,8 @@ namespace QS3D.Core.Audit
 
     public sealed class AuditTrail
     {
+        private const int MaxStoredEvents = 10_000;
+
         private readonly IList<AuditEvent> _events;
         private readonly ProjectState? _project;
 
@@ -32,9 +34,15 @@ namespace QS3D.Core.Audit
         {
             get
             {
-                var snapshot = new List<AuditEvent>(_events.Count);
+                var storedCount = RequireSupportedHistoryCount(requireAppendCapacity: false);
+                var snapshot = new List<AuditEvent>(storedCount);
+                var observed = 0;
                 foreach (var item in _events)
                 {
+                    observed++;
+                    if (observed > MaxStoredEvents)
+                        throw TooManyEvents();
+
                     var validationError = GetStoredEventValidationError(item);
                     if (validationError != null) throw new InvalidOperationException(validationError);
                     snapshot.Add(Clone(item!));
@@ -68,7 +76,7 @@ namespace QS3D.Core.Audit
             RequireXmlCharacters(safeDetail, nameof(detail), "Audit detail");
             RequireXmlCharacters(safeActor, nameof(actor), "Audit actor");
             RequireXmlCharacters(safeCorrelationId, nameof(correlationId), "Audit correlation id");
-            ValidateExistingHistory();
+            ValidateExistingHistory(requireAppendCapacity: true);
 
             var item = new AuditEvent
             {
@@ -85,21 +93,50 @@ namespace QS3D.Core.Audit
 
         public void Clear()
         {
-            if (_events.Count == 0) return;
-            ValidateExistingHistory();
+            var observed = ValidateExistingHistory(requireAppendCapacity: false);
+            if (observed == 0) return;
             _project?.Touch();
             _events.Clear();
         }
 
-        private void ValidateExistingHistory()
+        private int ValidateExistingHistory(bool requireAppendCapacity)
         {
+            RequireSupportedHistoryCount(requireAppendCapacity);
+
+            var observed = 0;
             foreach (var existing in _events)
             {
+                observed++;
+                if (observed > MaxStoredEvents)
+                    throw TooManyEvents();
+
                 var validationError = GetStoredEventValidationError(existing);
                 if (validationError != null)
                     throw new InvalidOperationException(validationError + " Repair the existing audit history before modifying it.");
             }
+
+            if (requireAppendCapacity && observed >= MaxStoredEvents)
+                throw AppendCapacityExceeded();
+            return observed;
         }
+
+        private int RequireSupportedHistoryCount(bool requireAppendCapacity)
+        {
+            var storedCount = _events.Count;
+            if (storedCount < 0)
+                throw new InvalidOperationException("Audit trail exposes an invalid negative event count. Repair the existing audit history before reading or modifying it.");
+            if (storedCount > MaxStoredEvents)
+                throw TooManyEvents();
+            if (requireAppendCapacity && storedCount >= MaxStoredEvents)
+                throw AppendCapacityExceeded();
+            return storedCount;
+        }
+
+        private static InvalidOperationException TooManyEvents()
+            => new InvalidOperationException("Audit trail contains more than 10000 events. Repair the existing audit history before reading or modifying it.");
+
+        private static InvalidOperationException AppendCapacityExceeded()
+            => new InvalidOperationException("Audit trail already contains 10000 events and cannot record another event.");
 
         private static string? GetStoredEventValidationError(AuditEvent? item)
         {
@@ -123,7 +160,7 @@ namespace QS3D.Core.Audit
             if (ContainsInvalidXmlCharacters(item.Detail ?? string.Empty))
                 return "Audit trail contains XML-invalid detail.";
             if (ContainsInvalidXmlCharacters(item.Actor ?? string.Empty))
-                return "Audit trail contains an XML-invalid actor.";
+                return "Audit trail contains XML-invalid actor.";
 
             var correlationId = item.CorrelationId ?? string.Empty;
             if (!IsCanonicalOptionalIdentity(correlationId))
