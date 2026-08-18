@@ -11,7 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             NormalizeRejectsWhitespaceTarget();
             WriteFailurePreservesExistingState();
-            ValidTargetsRemainTrimmedSortedAndUnique();
+            CanonicalTargetsRemainSortedAndUnique();
         }
 
         private static void NormalizeRejectsWhitespaceTarget()
@@ -34,15 +34,18 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Failed physical opening target write changed persisted target-state.");
         }
 
-        private static void ValidTargetsRemainTrimmedSortedAndUnique()
+        private static void CanonicalTargetsRemainSortedAndUnique()
         {
-            var ids = PhysicalOpeningCutTargetStateCodec.Normalize(new[] { " OPEN-B ", "open-a" });
+            var ids = PhysicalOpeningCutTargetStateCodec.Normalize(new[] { "OPEN-B", "open-a" });
             Equal(2, ids.Count);
             Equal("open-a", ids[0]);
             Equal("OPEN-B", ids[1]);
 
             Throws<InvalidOperationException>(() =>
-                PhysicalOpeningCutTargetStateCodec.Normalize(new[] { " OPEN-1 ", "open-1" }));
+                PhysicalOpeningCutTargetStateCodec.Normalize(new[] { " OPEN-B ", "open-a" }));
+
+            Throws<InvalidOperationException>(() =>
+                PhysicalOpeningCutTargetStateCodec.Normalize(new[] { "OPEN-1", "open-1" }));
         }
 
         private static void Equal<T>(T expected, T actual)
