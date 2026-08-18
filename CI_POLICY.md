@@ -165,7 +165,7 @@ The shared `ci.yml` now runs automatically for every push to `agent/**` and `int
 
 This all-push branch trigger is intentionally separate from the exact-main release dispatcher. After an authorized `main` merge, documentation-only landings outside the dispatcher's watched set must still not trigger the V25 release path.
 
-**Changed paths are authoritative for validation tier and release-dispatch eligibility, not commit-message prefixes.** A commit named `docs:`, `chore:` or `md:` that modifies `scripts/**`, workflow files, solution files, build props or production source is integration-relevant.
+**Changed paths are authoritative for validation tier and release-dispatch eligibility, not commit-message prefixes.** A commit named `docs:`, `chore:` or `md:` that modifies `scripts/**`, workflow files, solution files, build props, production source, tests, or synthetic generated fixtures is integration-relevant.
 
 ## Manual workflow authorization
 
