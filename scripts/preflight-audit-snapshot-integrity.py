@@ -21,7 +21,9 @@ if AUDIT.is_file():
         "var validationError = GetStoredEventValidationError(item);",
         "if (validationError != null) throw new InvalidOperationException(validationError);",
         "snapshot.Add(Clone(item!));",
+        "RequireObservedHistoryCount(storedCount, observed);",
         "return snapshot.AsReadOnly();",
+        "private static void RequireObservedHistoryCount(int storedCount, int observed)",
         "private static AuditEvent Clone(AuditEvent item)",
     ):
         if token not in text:
@@ -30,12 +32,20 @@ if AUDIT.is_file():
     snapshot_pos = text.find("var snapshot = new List<AuditEvent>(storedCount);", count_pos)
     validation_pos = text.find("var validationError = GetStoredEventValidationError(item);")
     clone_pos = text.find("snapshot.Add(Clone(item!));", validation_pos)
+    equality_pos = text.find("RequireObservedHistoryCount(storedCount, observed);", clone_pos)
+    return_pos = text.find("return snapshot.AsReadOnly();", equality_pos)
     if count_pos < 0 or snapshot_pos < 0 or count_pos >= snapshot_pos:
         errors.append("AuditTrail.Events must allocate its read snapshot from the single validated stored Count.")
     if "new List<AuditEvent>(_events.Count)" in text:
         errors.append("AuditTrail.Events must not re-read mutable backing Count after validation.")
     if validation_pos < 0 or clone_pos < 0 or validation_pos >= clone_pos:
         errors.append("AuditTrail.Events must validate stored history before deep-cloning each event.")
+    if equality_pos < 0 or return_pos < 0 or equality_pos >= return_pos:
+        errors.append("AuditTrail.Events must reject a stored Count that disagrees with traversal before returning its snapshot.")
+    if text.count("RequireObservedHistoryCount(storedCount, observed);") < 2:
+        errors.append("AuditTrail reads and modification validation must both enforce stored Count versus traversal equality.")
+    if "var storedCount = RequireSupportedHistoryCount(requireAppendCapacity);" not in text:
+        errors.append("AuditTrail modification validation must preserve the single validated stored Count for traversal equality.")
     if "_events as IReadOnlyList<AuditEvent>" in text:
         errors.append("AuditTrail.Events still exposes the mutable backing list through an interface cast.")
 
@@ -66,14 +76,18 @@ if SMOKE.is_file():
 if HISTORY_SMOKE.is_file():
     text = HISTORY_SMOKE.read_text(encoding="utf-8")
     for token in (
-        "ClearsDishonestZeroCountHistory();",
-        "private sealed class ZeroCountHistory : IList<AuditEvent>",
-        "public int Count => 0;",
-        "Equal(1, history.EnumeratorRequests, \"zero-count clear enumeration requests\");",
-        "Equal(1, history.ClearRequests, \"zero-count clear mutation requests\");",
+        "RejectsUnderreportedReadWithoutMutation();",
+        "RejectsUnderreportedRecordWithoutMutation();",
+        "RejectsUnderreportedClearWithoutMutation();",
+        "RejectsOverreportedReadWithoutMutation();",
+        "private sealed class DishonestCountHistory : IList<AuditEvent>",
+        "public int Count => _reportedCount;",
+        "Equal(0, history.AddRequests, \"underreported record add requests\");",
+        "Equal(0, history.ClearRequests, \"underreported clear mutation requests\");",
+        "var history = new DishonestCountHistory(2, CanonicalEvent());",
     ):
         if token not in text:
-            errors.append("AuditTrailHistoryBoundSmoke.cs missing dishonest-zero-count Clear regression token: " + token)
+            errors.append("AuditTrailHistoryBoundSmoke.cs missing Count-versus-traversal fail-closed regression token: " + token)
 
 if REG.is_file() and "AuditTrailSnapshotSmoke.Run();" not in REG.read_text(encoding="utf-8"):
     errors.append("Audit snapshot integrity smoke is not registered.")
@@ -84,4 +98,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: AuditTrail reads use validated snapshots and Clear validates traversal before zero-history no-op semantics.")
+print("PASS: AuditTrail reads and mutations validate stored history, enforce Count-versus-traversal equality, and reject dishonest history before mutation.")
