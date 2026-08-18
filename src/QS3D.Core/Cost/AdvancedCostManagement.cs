@@ -86,6 +86,20 @@ namespace QS3D.Core.Cost
             throw new InvalidOperationException(
                 collectionLabel + " supports at most " + MaximumEntries + " entries.");
         }
+
+        internal static void RequireKnownCountMatchesTraversal(
+            bool hasKnownCount,
+            int knownCount,
+            int observedCount,
+            string collectionLabel)
+        {
+            if (!hasKnownCount || knownCount == observedCount)
+                return;
+
+            throw new InvalidOperationException(
+                collectionLabel + " traversal produced " + observedCount +
+                " entries but its known count reported " + knownCount + ".");
+        }
     }
 
     public sealed class CostResourceComponent
@@ -136,8 +150,8 @@ namespace QS3D.Core.Cost
             if (components == null) throw new ArgumentNullException(nameof(components));
             ValidatePercentageForScaling(overheadPercent, nameof(overheadPercent));
             ValidatePercentageForScaling(profitPercent, nameof(profitPercent));
-            if (AdvancedCostCollectionContract.TryGetKnownCount(components, out var knownComponentCount) &&
-                knownComponentCount > AdvancedCostCollectionContract.MaximumEntries)
+            var hasKnownComponentCount = AdvancedCostCollectionContract.TryGetKnownCount(components, out var knownComponentCount);
+            if (hasKnownComponentCount && knownComponentCount > AdvancedCostCollectionContract.MaximumEntries)
                 AdvancedCostCollectionContract.ThrowTooManyEntries("Rate build-up component collection");
 
             var snapshot = new List<CostResourceComponent>();
@@ -154,6 +168,11 @@ namespace QS3D.Core.Cost
                 snapshot.Add(component);
                 index++;
             }
+            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+                hasKnownComponentCount,
+                knownComponentCount,
+                index,
+                "Rate build-up component collection");
             snapshot.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.ResourceCode, right.ResourceCode));
             Components = new ReadOnlyCollection<CostResourceComponent>(snapshot.ToArray());
             OverheadPercent = overheadPercent;
@@ -242,8 +261,8 @@ namespace QS3D.Core.Cost
         public HistoricalCostCatalog(IEnumerable<HistoricalCostRecord> records)
         {
             if (records == null) throw new ArgumentNullException(nameof(records));
-            if (AdvancedCostCollectionContract.TryGetKnownCount(records, out var knownRecordCount) &&
-                knownRecordCount > AdvancedCostCollectionContract.MaximumEntries)
+            var hasKnownRecordCount = AdvancedCostCollectionContract.TryGetKnownCount(records, out var knownRecordCount);
+            if (hasKnownRecordCount && knownRecordCount > AdvancedCostCollectionContract.MaximumEntries)
                 AdvancedCostCollectionContract.ThrowTooManyEntries("Historical cost catalog");
 
             var snapshot = new List<HistoricalCostRecord>();
@@ -260,6 +279,11 @@ namespace QS3D.Core.Cost
                 snapshot.Add(record);
                 index++;
             }
+            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+                hasKnownRecordCount,
+                knownRecordCount,
+                index,
+                "Historical cost catalog");
             snapshot.Sort(CompareHistoricalRecords);
             _records = new ReadOnlyCollection<HistoricalCostRecord>(snapshot.ToArray());
         }
@@ -449,8 +473,8 @@ namespace QS3D.Core.Cost
             Bidder = bidder.Trim();
             Currency = RateBookContract.RequireCurrency(currency, nameof(currency));
             if (lines == null) throw new ArgumentNullException(nameof(lines));
-            if (AdvancedCostCollectionContract.TryGetKnownCount(lines, out var knownLineCount) &&
-                knownLineCount > AdvancedCostCollectionContract.MaximumEntries)
+            var hasKnownLineCount = AdvancedCostCollectionContract.TryGetKnownCount(lines, out var knownLineCount);
+            if (hasKnownLineCount && knownLineCount > AdvancedCostCollectionContract.MaximumEntries)
                 AdvancedCostCollectionContract.ThrowTooManyEntries("Tender quote line collection");
 
             var byItem = new Dictionary<string, TenderQuoteLine>(StringComparer.OrdinalIgnoreCase);
@@ -466,6 +490,11 @@ namespace QS3D.Core.Cost
                 byItem.Add(line.ItemCode, line);
                 index++;
             }
+            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+                hasKnownLineCount,
+                knownLineCount,
+                index,
+                "Tender quote line collection");
             Lines = new ReadOnlyDictionary<string, TenderQuoteLine>(byItem);
         }
 
@@ -580,8 +609,8 @@ namespace QS3D.Core.Cost
 
         private static List<TenderRequirement> SnapshotRequirements(IEnumerable<TenderRequirement> requirements)
         {
-            if (AdvancedCostCollectionContract.TryGetKnownCount(requirements, out var knownRequirementCount) &&
-                knownRequirementCount > AdvancedCostCollectionContract.MaximumEntries)
+            var hasKnownRequirementCount = AdvancedCostCollectionContract.TryGetKnownCount(requirements, out var knownRequirementCount);
+            if (hasKnownRequirementCount && knownRequirementCount > AdvancedCostCollectionContract.MaximumEntries)
                 AdvancedCostCollectionContract.ThrowTooManyEntries("Tender requirement collection");
 
             var result = new List<TenderRequirement>();
@@ -598,14 +627,19 @@ namespace QS3D.Core.Cost
                 result.Add(requirement);
                 index++;
             }
+            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+                hasKnownRequirementCount,
+                knownRequirementCount,
+                index,
+                "Tender requirement collection");
             result.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.ItemCode, right.ItemCode));
             return result;
         }
 
         private static List<TenderBid> SnapshotBids(IEnumerable<TenderBid> bids)
         {
-            if (AdvancedCostCollectionContract.TryGetKnownCount(bids, out var knownBidCount) &&
-                knownBidCount > AdvancedCostCollectionContract.MaximumEntries)
+            var hasKnownBidCount = AdvancedCostCollectionContract.TryGetKnownCount(bids, out var knownBidCount);
+            if (hasKnownBidCount && knownBidCount > AdvancedCostCollectionContract.MaximumEntries)
                 AdvancedCostCollectionContract.ThrowTooManyEntries("Tender bid collection");
 
             var result = new List<TenderBid>();
@@ -622,6 +656,11 @@ namespace QS3D.Core.Cost
                 result.Add(bid);
                 index++;
             }
+            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+                hasKnownBidCount,
+                knownBidCount,
+                index,
+                "Tender bid collection");
             result.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.BidId, right.BidId));
             return result;
         }
@@ -741,11 +780,11 @@ namespace QS3D.Core.Cost
                 throw new ArgumentOutOfRangeException(nameof(retentionPercent));
             if (retentionPercent > 0m && retentionPercent / 100m == 0m)
                 throw new ArgumentOutOfRangeException(nameof(retentionPercent), retentionPercent, "Positive retention percentage is too small to preserve at decimal precision.");
-            if (AdvancedCostCollectionContract.TryGetKnownCount(contractItems, out var knownContractCount) &&
-                knownContractCount > AdvancedCostCollectionContract.MaximumEntries)
+            var hasKnownContractCount = AdvancedCostCollectionContract.TryGetKnownCount(contractItems, out var knownContractCount);
+            if (hasKnownContractCount && knownContractCount > AdvancedCostCollectionContract.MaximumEntries)
                 AdvancedCostCollectionContract.ThrowTooManyEntries("Progress contract item collection");
-            if (AdvancedCostCollectionContract.TryGetKnownCount(claimLines, out var knownClaimCount) &&
-                knownClaimCount > AdvancedCostCollectionContract.MaximumEntries)
+            var hasKnownClaimCount = AdvancedCostCollectionContract.TryGetKnownCount(claimLines, out var knownClaimCount);
+            if (hasKnownClaimCount && knownClaimCount > AdvancedCostCollectionContract.MaximumEntries)
                 AdvancedCostCollectionContract.ThrowTooManyEntries("Progress claim line collection");
 
             var contracts = new Dictionary<string, ProgressContractItem>(StringComparer.OrdinalIgnoreCase);
@@ -760,6 +799,11 @@ namespace QS3D.Core.Cost
                 contracts.Add(item.ItemCode, item);
                 contractIndex++;
             }
+            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+                hasKnownContractCount,
+                knownContractCount,
+                contractIndex,
+                "Progress contract item collection");
 
             var claims = new Dictionary<string, ProgressClaimLine>(StringComparer.OrdinalIgnoreCase);
             var claimIndex = 0;
@@ -775,6 +819,11 @@ namespace QS3D.Core.Cost
                 claims.Add(line.ItemCode, line);
                 claimIndex++;
             }
+            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+                hasKnownClaimCount,
+                knownClaimCount,
+                claimIndex,
+                "Progress claim line collection");
 
             var itemCodes = new List<string>(contracts.Keys);
             itemCodes.Sort(StringComparer.OrdinalIgnoreCase);
