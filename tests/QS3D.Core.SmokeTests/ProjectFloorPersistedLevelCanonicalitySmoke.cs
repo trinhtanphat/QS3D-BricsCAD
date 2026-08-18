@@ -102,7 +102,7 @@ namespace QS3D.Core.SmokeTests
             project.Floors.Add(upper);
             project.ActiveFloorId = lower.Id;
 
-            var element = new ProjectElement("E1", ElementCategory.Beam, string.Empty, lower.Id, string.Empty);
+            var element = new ProjectElement("E1", ElementCategory.Beam, string.Empty, string.Empty, string.Empty);
             project.Elements.Add(element);
             return new Fixture(project, lower, upper, element);
         }
