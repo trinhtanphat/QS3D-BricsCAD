@@ -34,6 +34,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void DirectBuilderRejectsBlankIdentity()
         {
+            Capture<ArgumentException>(() => RebarScheduleBuilder.Build(new[] { Input(null) }));
             Capture<ArgumentException>(() => RebarScheduleBuilder.Build(new[] { Input(string.Empty) }));
             Capture<ArgumentException>(() => RebarScheduleBuilder.Build(new[] { Input("   ") }));
         }
@@ -55,7 +56,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void ProjectBuilderRejectsBlankIdentityBeforeRowEmission()
         {
-            var invalidIds = new[] { string.Empty, "   " };
+            var invalidIds = new[] { null, string.Empty, "   " };
             for (var index = 0; index < invalidIds.Length; index++)
             {
                 var project = ProjectWithMalformedRebarIdentity(invalidIds[index], "rebar-schedule-blank-id-project-" + index);
