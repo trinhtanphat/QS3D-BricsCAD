@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using QS3D.Core.Domain;
 using QS3D.Core.Mapping;
 
 namespace QS3D.Core.SmokeTests
@@ -14,6 +15,10 @@ namespace QS3D.Core.SmokeTests
             OversizedKnownCountFailsBeforeEnumeration();
             NegativeKnownCountFailsBeforeEnumeration();
             ConflictingKnownCountsFailBeforeEnumeration();
+            AdvertisedCountGreaterThanTraversalFailsClosed();
+            AdvertisedCountSmallerThanTraversalFailsClosed();
+            MatchingKnownCountRemainsValid();
+            PureStreamingInputRemainsValid();
         }
 
         private static void EmptyInputRemainsValid()
@@ -50,6 +55,54 @@ namespace QS3D.Core.SmokeTests
             Contains("conflicting known counts", error.Message, "Conflicting coverage-report Count contracts must fail closed explicitly.");
         }
 
+        private static void AdvertisedCountGreaterThanTraversalFailsClosed()
+        {
+            var finding = CreateValidFinding();
+            var source = new CountedSequence<MeasurementWorkItemCoverageFinding>(2, new[] { finding });
+            var error = Capture<ArgumentException>(() => MeasurementWorkItemCoverageReport.Create(source));
+            Contains("traversal count", error.Message, "Coverage-report under-enumeration must fail on the Count/traversal contract.");
+        }
+
+        private static void AdvertisedCountSmallerThanTraversalFailsClosed()
+        {
+            var finding = CreateValidFinding();
+            var source = new CountedSequence<MeasurementWorkItemCoverageFinding>(0, new[] { finding });
+            var error = Capture<ArgumentException>(() => MeasurementWorkItemCoverageReport.Create(source));
+            Contains("traversal count", error.Message, "Coverage-report over-enumeration must fail on the Count/traversal contract.");
+        }
+
+        private static void MatchingKnownCountRemainsValid()
+        {
+            var finding = CreateValidFinding();
+            var source = new CountedSequence<MeasurementWorkItemCoverageFinding>(1, new[] { finding });
+            var report = MeasurementWorkItemCoverageReport.Create(source);
+            Equal(1, report.TotalCount, "An honest known Count must remain accepted.");
+        }
+
+        private static void PureStreamingInputRemainsValid()
+        {
+            var finding = CreateValidFinding();
+            var report = MeasurementWorkItemCoverageReport.Create(Stream(finding));
+            Equal(1, report.TotalCount, "A pure streaming source without a known Count must remain accepted.");
+        }
+
+        private static MeasurementWorkItemCoverageFinding CreateValidFinding()
+        {
+            var project = new ProjectState("coverage-count-project", "Coverage Count Project");
+            var element = new ProjectElement("coverage-element", ElementCategory.Column);
+            element.SetQuantity("LengthM", 1d);
+            project.Elements.Add(element);
+
+            var findings = MeasurementWorkItemCoverageEvaluator.Evaluate(project);
+            Equal(1, findings.Count, "Coverage fixture must produce exactly one finding.");
+            return findings[0];
+        }
+
+        private static IEnumerable<MeasurementWorkItemCoverageFinding> Stream(MeasurementWorkItemCoverageFinding finding)
+        {
+            yield return finding;
+        }
+
         private static void AssertAllCountContractsReadOnce<T>(MultiCountNeverEnumerated<T> source, string message)
         {
             Equal(1, source.GenericCountReads, message + " must inspect ICollection<T>.Count exactly once.");
@@ -82,6 +135,34 @@ namespace QS3D.Core.SmokeTests
         {
             if (!EqualityComparer<T>.Default.Equals(expected, actual))
                 throw new InvalidOperationException(message + " Expected=" + expected + ", actual=" + actual + ".");
+        }
+
+        private sealed class CountedSequence<T> : ICollection<T>
+        {
+            private readonly int _advertisedCount;
+            private readonly IReadOnlyList<T> _items;
+
+            internal CountedSequence(int advertisedCount, IReadOnlyList<T> items)
+            {
+                _advertisedCount = advertisedCount;
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+            }
+
+            public int Count => _advertisedCount;
+            public bool IsReadOnly => true;
+
+            public IEnumerator<T> GetEnumerator()
+            {
+                for (var i = 0; i < _items.Count; i++)
+                    yield return _items[i];
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            void ICollection<T>.Add(T item) => throw new NotSupportedException();
+            void ICollection<T>.Clear() => throw new NotSupportedException();
+            bool ICollection<T>.Contains(T item) => false;
+            void ICollection<T>.CopyTo(T[] array, int arrayIndex) => throw new NotSupportedException();
+            bool ICollection<T>.Remove(T item) => throw new NotSupportedException();
         }
 
         private sealed class MultiCountNeverEnumerated<T> : ICollection<T>, IReadOnlyCollection<T>, ICollection
