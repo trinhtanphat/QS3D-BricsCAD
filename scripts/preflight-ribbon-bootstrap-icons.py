@@ -76,12 +76,19 @@ def main():
         'return RibbonIconKind.Settings;',
         'return RibbonIconKind.Update;',
         'return RibbonIconKind.Qs3dLogo;',
+        'return RibbonIconKind.Objects;',
         'return commandButtons > 0;',
     ):
         require(augmenter, needle, augmenter_rel)
 
+    # The brand mark is reserved for explicit identity (QS3DSTART), not as the unknown-command
+    # safety net. Unknown functional actions must receive a neutral semantic icon instead.
+    if augmenter.rfind('return RibbonIconKind.Objects;') < augmenter.rfind('return RibbonIconKind.Draw;'):
+        raise SystemExit(
+            f"FAIL: {augmenter_rel} neutral Objects fallback must remain the final icon fallback"
+        )
+
     forbid(augmenter, 'SetProperty(item, "ShowImage", false);', augmenter_rel)
-    forbid(augmenter, 'return RibbonIconKind.Objects;', augmenter_rel)
 
     for needle in (
         "ready = RibbonBootstrapIconAugmenter.TryInitialize() && ready;",
@@ -105,8 +112,8 @@ def main():
 
     print(
         "PASS: every canonical QS3D ribbon tab gets deterministic culture-safe semantic icons; "
-        "known bootstrap gaps are classified explicitly and unknown commands use the exact QS3D "
-        "brand mark instead of the generic Objects placeholder."
+        "existing rich icons are preserved, explicit product identity may use the QS3D mark, and "
+        "unknown functional commands use a neutral Objects fallback instead of product branding."
     )
     return 0
 
