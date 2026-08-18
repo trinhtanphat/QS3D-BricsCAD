@@ -277,6 +277,14 @@ namespace QS3D.Core.Coordination
                 (scaledZ * scaledZ));
             if (double.IsNaN(distance) || double.IsInfinity(distance))
                 throw new OverflowException("Coordination separation distance exceeded the finite double range.");
+            if (distance == scale &&
+                ((x > 0d && x < scale) ||
+                 (y > 0d && y < scale) ||
+                 (z > 0d && z < scale)))
+            {
+                throw new InvalidOperationException(
+                    "Coordination separation distance lost a non-zero orthogonal gap at double precision.");
+            }
             return distance == 0d ? 0d : distance;
         }
 
