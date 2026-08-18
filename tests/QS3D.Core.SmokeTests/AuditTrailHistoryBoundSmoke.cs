@@ -26,6 +26,8 @@ namespace QS3D.Core.SmokeTests
             RejectsUnderreportedRecordWithoutMutation();
             RejectsUnderreportedClearWithoutMutation();
             RejectsOverreportedReadWithoutMutation();
+            RejectsOverreportedRecordWithoutMutation();
+            RejectsOverreportedClearWithoutMutation();
         }
 
         private static void ReadsExactBoundWithoutMutation()
@@ -165,6 +167,32 @@ namespace QS3D.Core.SmokeTests
             Equal(0, history.AddRequests, "overreported read add requests");
             Equal(0, history.ClearRequests, "overreported read clear requests");
             Equal(1, history.ActualCount, "overreported read actual count");
+        }
+
+        private static void RejectsOverreportedRecordWithoutMutation()
+        {
+            var history = new DishonestCountHistory(2, CanonicalEvent());
+            var trail = BuildTrail(history);
+
+            Throws<InvalidOperationException>(() => trail.Record("new.action", "E2", "detail"));
+
+            Equal(1, history.EnumeratorRequests, "overreported record enumeration requests");
+            Equal(0, history.AddRequests, "overreported record add requests");
+            Equal(0, history.ClearRequests, "overreported record clear requests");
+            Equal(1, history.ActualCount, "overreported record actual count");
+        }
+
+        private static void RejectsOverreportedClearWithoutMutation()
+        {
+            var history = new DishonestCountHistory(2, CanonicalEvent());
+            var trail = BuildTrail(history);
+
+            Throws<InvalidOperationException>(() => trail.Clear());
+
+            Equal(1, history.EnumeratorRequests, "overreported clear enumeration requests");
+            Equal(0, history.AddRequests, "overreported clear add requests");
+            Equal(0, history.ClearRequests, "overreported clear mutation requests");
+            Equal(1, history.ActualCount, "overreported clear actual count");
         }
 
         private static AuditTrail BuildTrail(IList<AuditEvent> history)
