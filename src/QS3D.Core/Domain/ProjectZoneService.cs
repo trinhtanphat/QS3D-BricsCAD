@@ -14,17 +14,18 @@ namespace QS3D.Core.Domain
         public static ZoneDefinition Create(ProjectState project, string id, string name)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var normalizedId = Required(id, nameof(id), 64);
+            var canonicalId = RequiredIdentity(id, nameof(id), 64);
             var normalizedName = Required(name, nameof(name), MaxNameLength);
+            var activeZoneId = OptionalIdentity(project.ActiveZoneId, "Project ActiveZoneId", 64);
             if (project.Zones.Any(x => x == null))
                 throw new InvalidOperationException("Project zone collection contains a null zone.");
             ValidateUniqueZoneIds(project);
             if (project.Zones.Count >= MaxZones) throw new InvalidOperationException("Project supports at most " + MaxZones + " zones.");
-            if (project.Zones.Any(x => string.Equals(x.Id, normalizedId, StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidOperationException("Zone id already exists: " + normalizedId);
+            if (project.Zones.Any(x => string.Equals(x.Id, canonicalId, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Zone id already exists: " + canonicalId);
             EnsureUniqueName(project, normalizedName, string.Empty);
-            var zone = new ZoneDefinition(normalizedId, normalizedName);
-            var activate = string.IsNullOrWhiteSpace(project.ActiveZoneId);
+            var zone = new ZoneDefinition(canonicalId, normalizedName);
+            var activate = activeZoneId.Length == 0;
             if (activate) project.ActiveZoneId = zone.Id;
             else project.Touch();
             project.Zones.Add(zone);
@@ -54,7 +55,8 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var zone = FindRequired(project, zoneId);
-            if (string.Equals(project.ActiveZoneId, zone.Id, StringComparison.Ordinal)) return;
+            var activeZoneId = OptionalIdentity(project.ActiveZoneId, "Project ActiveZoneId", 64);
+            if (string.Equals(activeZoneId, zone.Id, StringComparison.Ordinal)) return;
             project.ActiveZoneId = zone.Id;
         }
 
@@ -64,13 +66,13 @@ namespace QS3D.Core.Domain
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var zone = FindRequired(project, zoneId);
 
-            var projectElements = ResolveProjectElements(project)
-                .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
-
             var targetEnumerationVersion = project.ChangeVersion;
             RequireAssignmentTargetCountWithinLimit(elements);
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Zone assignment targets were being counted. Retry assignment against the current project state.");
+
+            var projectElements = ResolveProjectElements(project)
+                .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
 
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             var observedEntries = 0;
@@ -81,16 +83,17 @@ namespace QS3D.Core.Domain
                     throw AssignmentTargetLimitExceeded();
                 if (element == null)
                     throw new InvalidOperationException("Zone assignment target collection contains a null element.");
-                if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
-                    throw new InvalidOperationException("Element does not belong to the project instance: " + element.Id);
-                unique[element.Id] = owned;
+                var elementId = RequiredIdentity(element.Id, "Zone assignment target element id", 128);
+                if (!projectElements.TryGetValue(elementId, out var owned) || !ReferenceEquals(owned, element))
+                    throw new InvalidOperationException("Element does not belong to the project instance: " + elementId);
+                unique[elementId] = owned;
             }
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Zone assignment targets were being enumerated. Retry assignment against the current project state.");
             RequireCurrentAssignmentOwnership(project, zone, unique.Values);
 
             var changed = unique.Values
-                .Where(x => !string.Equals((x.ZoneId ?? string.Empty).Trim(), zone.Id, StringComparison.OrdinalIgnoreCase))
+                .Where(x => !string.Equals(OptionalIdentity(x.ZoneId, "Element ZoneId", 64), zone.Id, StringComparison.OrdinalIgnoreCase))
                 .ToList();
             if (changed.Count == 0) return 0;
 
@@ -107,7 +110,8 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var zone = FindRequired(project, zoneId);
-            if (string.Equals((project.ActiveZoneId ?? string.Empty).Trim(), zone.Id, StringComparison.OrdinalIgnoreCase))
+            var activeZoneId = OptionalIdentity(project.ActiveZoneId, "Project ActiveZoneId", 64);
+            if (string.Equals(activeZoneId, zone.Id, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Cannot delete the active zone. Activate another zone first.");
             var references = ResolveProjectElements(project).Count(x => ReferencesZone(x, zone.Id));
             if (references > 0)
@@ -125,16 +129,24 @@ namespace QS3D.Core.Domain
 
         private static bool ReferencesZone(ProjectElement element, string zoneId)
         {
-            return string.Equals((element.ZoneId ?? string.Empty).Trim(), zoneId, StringComparison.OrdinalIgnoreCase);
+            return string.Equals(OptionalIdentity(element.ZoneId, "Element ZoneId", 64), zoneId, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void RequireAssignmentTargetCountWithinLimit(IEnumerable<ProjectElement> elements)
         {
-            if (elements is ICollection<ProjectElement> collection && collection.Count > MaxAssignmentTargetEntries)
-                throw AssignmentTargetLimitExceeded();
-            if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection && readOnlyCollection.Count > MaxAssignmentTargetEntries)
-                throw AssignmentTargetLimitExceeded();
-            if (elements is System.Collections.ICollection nonGenericCollection && nonGenericCollection.Count > MaxAssignmentTargetEntries)
+            if (elements is ICollection<ProjectElement> collection)
+                RequireValidAssignmentTargetKnownCount(collection.Count);
+            if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection)
+                RequireValidAssignmentTargetKnownCount(readOnlyCollection.Count);
+            if (elements is System.Collections.ICollection nonGenericCollection)
+                RequireValidAssignmentTargetKnownCount(nonGenericCollection.Count);
+        }
+
+        private static void RequireValidAssignmentTargetKnownCount(int count)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Zone assignment target collection reported an invalid negative known count.");
+            if (count > MaxAssignmentTargetEntries)
                 throw AssignmentTargetLimitExceeded();
         }
 
@@ -156,16 +168,17 @@ namespace QS3D.Core.Domain
 
             foreach (var element in elements)
             {
-                if (!currentElements.TryGetValue(element.Id, out var current) || !ReferenceEquals(current, element))
-                    throw new InvalidOperationException("Element no longer belongs to the project after Zone assignment target enumeration: " + element.Id + ".");
+                var elementId = RequiredIdentity(element.Id, "Zone assignment target element id", 128);
+                if (!currentElements.TryGetValue(elementId, out var current) || !ReferenceEquals(current, element))
+                    throw new InvalidOperationException("Element no longer belongs to the project after Zone assignment target enumeration: " + elementId + ".");
             }
         }
 
         private static ZoneDefinition FindRequired(ProjectState project, string id)
         {
-            var normalized = Required(id, nameof(id), 64);
+            var canonicalId = RequiredIdentity(id, nameof(id), 64);
             ValidateUniqueZoneIds(project);
-            return project.FindZone(normalized) ?? throw new InvalidOperationException("Zone not found: " + normalized);
+            return project.FindZone(canonicalId) ?? throw new InvalidOperationException("Zone not found: " + canonicalId);
         }
 
         private static void ValidateUniqueZoneIds(ProjectState project)
@@ -175,8 +188,9 @@ namespace QS3D.Core.Domain
             {
                 if (zone == null)
                     throw new InvalidOperationException("Project zone collection contains a null zone.");
-                if (!seenIds.Add(zone.Id))
-                    throw new InvalidOperationException("Project contains duplicate zone id: " + zone.Id + ".");
+                var zoneId = RequiredIdentity(zone.Id, "Persisted Zone id", 64);
+                if (!seenIds.Add(zoneId))
+                    throw new InvalidOperationException("Project contains duplicate zone id: " + zoneId + ".");
             }
         }
 
@@ -188,9 +202,8 @@ namespace QS3D.Core.Domain
             {
                 if (element == null)
                     throw new InvalidOperationException("Project element collection contains a null entry.");
-                var elementId = (element.Id ?? string.Empty).Trim();
-                if (elementId.Length == 0)
-                    throw new InvalidOperationException("Project element collection contains an element with a blank semantic id.");
+                var elementId = RequiredIdentity(element.Id, "Project semantic element id", 128);
+                OptionalIdentity(element.ZoneId, "Element ZoneId", 64);
                 if (!seenIds.Add(elementId))
                     throw new InvalidOperationException("Project contains duplicate semantic element id: " + elementId);
                 resolved.Add(element);
@@ -202,6 +215,22 @@ namespace QS3D.Core.Domain
         {
             if (project.Zones.Any(x => !string.Equals(x.Id, exceptId, StringComparison.OrdinalIgnoreCase) && string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Another zone already uses the name '" + name + "'.");
+        }
+
+        private static string RequiredIdentity(string value, string parameterName, int maxLength)
+        {
+            if (value == null)
+                throw new ArgumentException(parameterName + " must contain 1.." + maxLength + " characters.", parameterName);
+            var canonical = Required(value, parameterName, maxLength);
+            if (!string.Equals(value, canonical, StringComparison.Ordinal))
+                throw new ArgumentException(parameterName + " must be a canonical semantic identity without leading or trailing whitespace.", parameterName);
+            return canonical;
+        }
+
+        private static string OptionalIdentity(string value, string parameterName, int maxLength)
+        {
+            if (string.IsNullOrEmpty(value)) return string.Empty;
+            return RequiredIdentity(value, parameterName, maxLength);
         }
 
         private static string Required(string value, string parameterName, int maxLength)
