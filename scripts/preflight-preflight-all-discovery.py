@@ -61,7 +61,7 @@ def discovery_regressions(runner):
         assert_raises_runtime(runner.discover, "non-regular")
         non_regular.rmdir()
 
-        regular_mode = type("StatResult", (), {"st_mode": stat.S_IFREG | 0o644})()
+        regular_mode = type("StatResult", (), {"st_mode": stat.S_IFREG | 0o644, "st_size": 0})()
         synthetic_upper = scripts / "preflight-Collision.py"
         synthetic_lower = scripts / "preflight-collision.py"
         synthetic_upper.write_text("", encoding="utf-8")
