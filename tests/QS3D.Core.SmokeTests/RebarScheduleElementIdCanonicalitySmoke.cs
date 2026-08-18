@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             DirectBuilderRejectsSurroundingWhitespace();
             DirectBuilderRejectsCommonControlCharactersWithoutEchoingRawIdentity();
             ProjectBuilderRejectsNoncanonicalIdentityBeforeRowEmission();
+            ProjectBuilderRejectsTrailingWhitespaceBeforeRowEmission();
             ProjectBuilderRejectsControlIdentityWithoutEchoingRawIdentity();
             ProjectBuilderPreservesCaseInsensitiveDuplicateSemantics();
         }
@@ -57,6 +58,16 @@ namespace QS3D.Core.SmokeTests
             var error = Capture<InvalidOperationException>(() => ProjectRebarScheduleBuilder.Build(project));
             Require(error.Message.IndexOf(invalidId, StringComparison.Ordinal) < 0,
                 "Project schedule diagnostic echoed the hostile raw ElementId.");
+        }
+
+        private static void ProjectBuilderRejectsTrailingWhitespaceBeforeRowEmission()
+        {
+            const string invalidId = "P1 ";
+            var project = ProjectWithSingleRebar(invalidId, "rebar-schedule-trailing-id-project");
+
+            var error = Capture<InvalidOperationException>(() => ProjectRebarScheduleBuilder.Build(project));
+            Require(error.Message.IndexOf(invalidId, StringComparison.Ordinal) < 0,
+                "Project schedule trailing-whitespace diagnostic echoed the hostile raw ElementId.");
         }
 
         private static void ProjectBuilderRejectsControlIdentityWithoutEchoingRawIdentity()
