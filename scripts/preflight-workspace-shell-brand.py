@@ -55,8 +55,8 @@ def main():
         )
 
     # The cancelled #2617 carrier attempted to make the same status-derived mark declarative in
-    # WorkspacePanel.xaml. Guard that exact regression path too so a future merge/replay cannot
-    # bypass the removed runtime partial while still restoring the rejected product pixels.
+    # WorkspacePanel.xaml. Guard names, source colors, and the historical vector geometry so a
+    # rename/recolor cannot replay the same rejected product mark through the declarative path.
     for stale in (
         'x:Name="Qs3dWorkspaceBrandMark"',
         'x:Name="Qs3dBrandRedX"',
@@ -64,6 +64,8 @@ def main():
         'ToolTip="QS3D • X đỏ / V xanh"',
         'Stroke="#FFE84A4A"',
         'Stroke="#FF52BE6C"',
+        'Data="M 5,4 L 13,13 M 13,4 L 5,13"',
+        'Data="M 17,8 L 21,13 L 27,4"',
     ):
         forbid(workspace_xaml, stale, WORKSPACE_XAML_REL)
 
