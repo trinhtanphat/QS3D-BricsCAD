@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 XAML_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml"
 COMPACT_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.CompactShell.cs"
 REFERENCE_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.ReferencePaletteLayout.cs"
+TREE_REL = "src/QS3D.BricsCAD.V25/UI/ReferenceWorkspaceTreeAugmenter.cs"
 RUNTIME_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
 RUNTIME_REPAIR_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dRuntimeLayoutRepair.cs"
 LOCAL_INBOX_REL = "docs/LOCAL-AGENT-INBOX.md"
@@ -47,6 +48,7 @@ def main():
     xaml = read(XAML_REL)
     compact = read(COMPACT_REL)
     reference = read(REFERENCE_REL)
+    tree = read(TREE_REL)
     runtime = read(RUNTIME_REL)
     runtime_repair = read(RUNTIME_REPAIR_REL)
     local_inbox = read(LOCAL_INBOX_REL)
@@ -95,6 +97,55 @@ def main():
         "root.MinWidth = 0;",
         REFERENCE_REL,
     )
+
+    # Figure-2 parity is a top-level presentation contract, not permission to throw away existing
+    # semantic children. Keep the legacy canopy/modeling content reachable under the reference
+    # categories while normalizing the visible headers and exact top-level order.
+    for token in (
+        '"HT_Phong",',
+        '"Kết cấu thép",',
+        '"Cấu kiện khác",',
+        'EnsureTopAlias(tree, "HT_Phong", "HT_Phòng", null);',
+        'MoveLegacyTopLevelUnder(tree, slab, "Mái Hắt");',
+        'var canopy = EnsureChildContainer(slab, "Mái Hắt", null);',
+        'EnsureTop(tree, "Kết cấu thép", null);',
+        'var other = EnsureTop(tree, "Cấu kiện khác", null);',
+        'MoveLegacyTopLevelUnder(tree, other, "Modeling");',
+        "NormalizeReferenceTopLevelOrder(tree);",
+    ):
+        require(tree, token, TREE_REL)
+
+    reference_order = require_section(
+        tree,
+        "private static readonly string[] ReferenceTopLevelOrder =",
+        "public static bool EnsureRegistered()",
+        TREE_REL,
+    )
+    desired_top_level = (
+        '"Lưới Trục"',
+        '"HT_Phong"',
+        '"Dầm"',
+        '"Sàn"',
+        '"Cột"',
+        '"Vách"',
+        '"Tường KT"',
+        '"Cửa"',
+        '"Cầu Thang"',
+        '"Móng"',
+        '"Đào đắp"',
+        '"Kết cấu thép"',
+        '"Cấu kiện khác"',
+        '"KL Tùy chỉnh"',
+    )
+    for first, second in zip(desired_top_level, desired_top_level[1:]):
+        require_order(reference_order, first, second, TREE_REL)
+
+    for stale in (
+        'var finish = EnsureTop(tree, "HT_Phòng", null);',
+        'var canopy = EnsureTop(tree, "Mái Hắt", null);',
+        'EnsureTop(tree, "Modeling", null);',
+    ):
+        forbid(tree, stale, TREE_REL)
 
     for token in (
         "BindingOperations.ClearBinding(root, FrameworkElement.WidthProperty);",
@@ -225,9 +276,10 @@ def main():
 
     print(
         "PASS: Workspace keeps the first-measure bootstrap, authoritative idle passes break the "
-        "ViewportWidth loop, and loaded-lifetime size/visibility/layout recovery is gated, "
-        "re-entry-safe, bounded, and preserves the user splitter while LOCAL-012 remains the "
-        "licensed visual qualification lane."
+        "ViewportWidth loop, loaded-lifetime size/visibility/layout recovery is gated/re-entry-safe/" 
+        "bounded, the user splitter is preserved, and the visible reference tree matches the owner "
+        "figure while legacy functional children stay reachable; LOCAL-012 remains the licensed "
+        "visual qualification lane."
     )
     return 0
 
