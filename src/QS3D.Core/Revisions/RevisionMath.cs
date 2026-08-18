@@ -25,6 +25,10 @@ namespace QS3D.Core.Revisions
             Finite(right, label);
             var result = left - right;
             if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException("Revision quantity delta overflow: " + label);
+            if (right != 0d && result == left)
+                throw new OverflowException("Revision quantity delta lost a non-zero right operand at floating-point precision: " + label);
+            if (left != 0d && result == -right)
+                throw new OverflowException("Revision quantity delta lost a non-zero left operand at floating-point precision: " + label);
             return result == 0d ? 0d : result;
         }
 

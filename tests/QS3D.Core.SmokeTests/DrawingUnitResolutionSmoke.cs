@@ -16,6 +16,9 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Undefined INSUNITS must remain unresolved without an explicit project override.");
 
             DrawingUnitResolutionPolicy.SetProjectOverride(metadata, LengthUnit.Meter);
+            if (metadata.ContainsKey(DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey) ||
+                metadata.ContainsKey(DrawingUnitResolutionPolicy.BindingSourceMetadataKey))
+                throw new Exception("An unbound override must not manufacture quantity-binding evidence before first quantity use.");
             if (!DrawingUnitResolutionPolicy.TryResolve(null, metadata, out var project) ||
                 project.Unit != LengthUnit.Meter || project.Source != DrawingUnitResolutionSource.ProjectOverride)
                 throw new Exception("Explicit project drawing-unit override was not resolved.");
@@ -56,6 +59,75 @@ namespace QS3D.Core.SmokeTests
             };
             DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(legacy, true, LengthUnit.Millimeter);
             Throws<InvalidOperationException>(() => DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(legacy, true, LengthUnit.Meter));
+
+            var legacyOverride = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey] = "Millimeter (assumed)",
+                [DrawingUnitResolutionPolicy.LegacyAssumptionMetadataKey] = "INSUNITS unsupported/undefined; assumed Millimeter"
+            };
+            DrawingUnitResolutionPolicy.SetProjectOverride(legacyOverride, LengthUnit.Meter);
+            if (legacyOverride[DrawingUnitResolutionPolicy.OverrideMetadataKey] != LengthUnit.Meter.ToString())
+                throw new Exception("Explicit override must still be stored for an unbound legacy project.");
+            if (legacyOverride[DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey] != "Millimeter (assumed)")
+                throw new Exception("Setting an override must preserve unbound legacy effective-unit evidence until quantity compatibility is resolved.");
+            if (!DrawingUnitResolutionPolicy.TryResolve(null, legacyOverride, out var legacyOverrideResolution) ||
+                legacyOverrideResolution.Unit != LengthUnit.Meter ||
+                legacyOverrideResolution.Source != DrawingUnitResolutionSource.ProjectOverride)
+                throw new Exception("Preserving legacy binding evidence must not prevent explicit override resolution.");
+            Throws<InvalidOperationException>(() =>
+                DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(legacyOverride, true, LengthUnit.Meter));
+            Throws<InvalidOperationException>(() =>
+                DrawingUnitResolutionPolicy.BindQuantityUnit(
+                    legacyOverride,
+                    true,
+                    LengthUnit.Meter,
+                    DrawingUnitResolutionSource.ProjectOverride));
+            if (legacyOverride.ContainsKey(DrawingUnitResolutionPolicy.BoundMetadataKey) ||
+                legacyOverride[DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey] != "Millimeter (assumed)")
+                throw new Exception("Rejected legacy quantity rebinding must not establish a false bound or rewrite historical unit evidence.");
+            if (!DrawingUnitResolutionPolicy.BindQuantityUnit(
+                    legacyOverride,
+                    false,
+                    LengthUnit.Meter,
+                    DrawingUnitResolutionSource.ProjectOverride))
+                throw new Exception("An empty legacy project must remain free to adopt the explicit override.");
+            if (legacyOverride[DrawingUnitResolutionPolicy.BoundMetadataKey] != LengthUnit.Meter.ToString() ||
+                legacyOverride[DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey] != LengthUnit.Meter.ToString() ||
+                legacyOverride[DrawingUnitResolutionPolicy.BindingSourceMetadataKey] != DrawingUnitResolutionSource.ProjectOverride.ToString())
+                throw new Exception("Binding an empty legacy project must replace old evidence with the canonical override binding.");
+
+            var unknownLegacyOverride = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            DrawingUnitResolutionPolicy.SetProjectOverride(unknownLegacyOverride, LengthUnit.Meter);
+            if (!DrawingUnitResolutionPolicy.TryResolve(null, unknownLegacyOverride, out var unknownLegacyResolution) ||
+                unknownLegacyResolution.Unit != LengthUnit.Meter ||
+                unknownLegacyResolution.Source != DrawingUnitResolutionSource.ProjectOverride)
+                throw new Exception("An override must resolve even when an unbound legacy project has no effective-unit evidence.");
+            if (unknownLegacyOverride.ContainsKey(DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey) ||
+                unknownLegacyOverride.ContainsKey(DrawingUnitResolutionPolicy.BindingSourceMetadataKey) ||
+                unknownLegacyOverride.ContainsKey(DrawingUnitResolutionPolicy.BoundMetadataKey))
+                throw new Exception("Setting an override must not manufacture binding evidence for an unbound project with unknown historical units.");
+            Throws<InvalidOperationException>(() =>
+                DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(unknownLegacyOverride, true, LengthUnit.Meter));
+            Throws<InvalidOperationException>(() =>
+                DrawingUnitResolutionPolicy.BindQuantityUnit(
+                    unknownLegacyOverride,
+                    true,
+                    LengthUnit.Meter,
+                    DrawingUnitResolutionSource.ProjectOverride));
+            if (unknownLegacyOverride.ContainsKey(DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey) ||
+                unknownLegacyOverride.ContainsKey(DrawingUnitResolutionPolicy.BindingSourceMetadataKey) ||
+                unknownLegacyOverride.ContainsKey(DrawingUnitResolutionPolicy.BoundMetadataKey))
+                throw new Exception("Rejected unknown-unit quantity rebinding must leave binding evidence absent.");
+            if (!DrawingUnitResolutionPolicy.BindQuantityUnit(
+                    unknownLegacyOverride,
+                    false,
+                    LengthUnit.Meter,
+                    DrawingUnitResolutionSource.ProjectOverride))
+                throw new Exception("An empty unbound project with unknown historical units must remain free to adopt the override.");
+            if (unknownLegacyOverride[DrawingUnitResolutionPolicy.BoundMetadataKey] != LengthUnit.Meter.ToString() ||
+                unknownLegacyOverride[DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey] != LengthUnit.Meter.ToString() ||
+                unknownLegacyOverride[DrawingUnitResolutionPolicy.BindingSourceMetadataKey] != DrawingUnitResolutionSource.ProjectOverride.ToString())
+                throw new Exception("First quantity binding must create canonical unit evidence after an explicit override.");
 
             var lowercaseOverride = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
