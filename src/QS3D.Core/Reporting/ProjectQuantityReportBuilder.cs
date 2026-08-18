@@ -218,6 +218,13 @@ namespace QS3D.Core.Reporting
                 throw new OverflowException("Quantity report mass overflow: " + element.Id + "/volume*density.");
             if (mass == 0d && volume.Value > 0d && densityKgM3.Value > 0d)
                 throw new InvalidOperationException("Quantity report mass underflow: " + element.Id + "/volume*density rounded positive finite inputs to zero.");
+            if (volume.Value != 0d && densityKgM3.Value != 0d)
+            {
+                if (densityKgM3.Value != 1d && mass == volume.Value)
+                    throw new InvalidOperationException("Quantity report mass lost the density contribution at double precision: " + element.Id + "/volume*density.");
+                if (volume.Value != 1d && mass == densityKgM3.Value)
+                    throw new InvalidOperationException("Quantity report mass lost the volume contribution at double precision: " + element.Id + "/volume*density.");
+            }
             return mass;
         }
 
