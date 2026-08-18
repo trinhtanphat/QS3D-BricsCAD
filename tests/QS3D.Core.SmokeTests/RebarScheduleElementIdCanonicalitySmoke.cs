@@ -105,18 +105,18 @@ namespace QS3D.Core.SmokeTests
             Capture<InvalidOperationException>(() => ProjectRebarScheduleBuilder.Build(project));
         }
 
-        private static RebarScheduleInput Input(string elementId)
+        private static RebarScheduleInput Input(string? elementId)
         {
             return new RebarScheduleInput
             {
-                ElementId = elementId,
+                ElementId = elementId!,
                 BarMark = " ",
                 Notation = "1D12",
                 CuttingLengthM = 1d
             };
         }
 
-        private static ProjectState ProjectWithMalformedRebarIdentity(string invalidId, string projectId)
+        private static ProjectState ProjectWithMalformedRebarIdentity(string? invalidId, string projectId)
         {
             var project = new ProjectState(projectId, "Rebar schedule identity");
             var element = ProjectElement("P1");
@@ -133,7 +133,7 @@ namespace QS3D.Core.SmokeTests
             return element;
         }
 
-        private static void CorruptElementIdForLegacyStateTest(ProjectElement element, string invalidId)
+        private static void CorruptElementIdForLegacyStateTest(ProjectElement element, string? invalidId)
         {
             // Test-only injection models legacy/corrupt persisted state without weakening production construction invariants.
             var field = typeof(ProjectElement).GetField("<Id>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic);
