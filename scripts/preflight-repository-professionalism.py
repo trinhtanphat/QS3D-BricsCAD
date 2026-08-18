@@ -191,8 +191,11 @@ def main() -> int:
     require(
         ci_policy,
         (
-            "### Narrow maintenance-bot exception",
-            "GitHub Dependabot is the only standing exception to branch-CI-before-PR",
+            "## Automatic branch CI and canonical PR lifecycle",
+            "its completion timestamp is not a permanent PR-admission identity",
+            "required `preflight` and `core` must be terminal `SUCCESS`",
+            "### Dependabot generated-PR boundary",
+            "GitHub Dependabot may create dependency-update PRs directly",
             "does **not** authorize Dependabot to merge",
             "Repository-wide blind auto-merge remains intentionally disabled",
             "repository-metadata tier",
@@ -251,8 +254,9 @@ def main() -> int:
     print(" - contributor, PR and issue surfaces require auditable task/evidence metadata")
     print(" - security reporting avoids public disclosure of sensitive material")
     print(" - critical governance/release surfaces have explicit ownership")
-    print(" - dependency maintenance is bounded and its bot exception cannot grant merge/release authority")
-    print(" - every task/integration branch push and every PR can emit stable exact-head required contexts while non-build changes avoid redundant Core/V25 builds")
+    print(" - dependency maintenance is bounded and its generated-PR boundary cannot grant merge/release authority")
+    print(" - branch CI provides early exact-head defect evidence without turning PR-creation timing into a permanent admission blocker")
+    print(" - every task/integration branch push and every PR can emit stable required contexts while non-build changes avoid redundant Core/V25 builds")
     print(" - synthetic generated fixtures are treated as build-relevant validation inputs")
     print(" - external scheduler/controller-worker orchestration artifacts are kept out of the QS3D source tree")
     print(" - no workflow implements autonomous PR-to-main merging")
