@@ -72,13 +72,13 @@ def main() -> int:
         forbid(polisher, stale, "Recognition semantic icon source")
 
     # Guard the initial/fallback Ribbon image as well as the semantic polisher. The fallback must
-    # remain an ordinary inspection/check glyph so initialization order or a future host failure
-    # cannot re-expose the rejected status-derived X/V pair before the polisher/finalizer runs.
+    # remain an ordinary neutral inspection/check glyph so initialization order or a future host
+    # failure cannot re-expose saturated status-derived colors before the polisher/finalizer runs.
     ribbon_validate = section(ribbon, "case IconKind.Validate:", "break;", "Ribbon Validate fallback block")
     for token in (
-        "Stroke(accentDark, 2.2, new RectangleGeometry(new System.Windows.Rect(5, 6, 21, 20), 2, 2))",
-        'Stroke(accent, 2.4, Geometry.Parse("M9,16 L14,21 23,11"))',
-        "Fill(warning, new EllipseGeometry(new System.Windows.Point(26, 7), 3.0, 3.0))",
+        "Stroke(ink, 2.2, new RectangleGeometry(new System.Windows.Rect(5, 6, 21, 20), 2, 2))",
+        'Stroke(neutral, 2.4, Geometry.Parse("M9,16 L14,21 23,11"))',
+        "Fill(neutral, new EllipseGeometry(new System.Windows.Point(26, 7), 3.0, 3.0))",
     ):
         require(ribbon_validate, token, "neutral Validate Ribbon fallback")
     for stale in (
@@ -88,8 +88,13 @@ def main() -> int:
         "M17,18 L21,22 L27,12",
         "red X",
         "green V",
+        "Stroke(accentDark",
+        "Stroke(accent,",
+        "Fill(warning",
     ):
         forbid(ribbon_validate, stale, "neutral Validate Ribbon fallback")
+
+    require(ribbon, "var neutral = FrozenBrush(Color.FromRgb(154, 164, 174));", "neutral fallback palette")
 
     validate_spec = spec_block(ribbon, "QS3D_RECOGNIZE_BLT_VALIDATE")
     require(validate_spec, "string.Empty", "Validate remains without a command")
