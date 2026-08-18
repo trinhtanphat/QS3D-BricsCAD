@@ -19,7 +19,7 @@ namespace QS3D.Core.SmokeTests
             DirectBuilderRejectsCommonControlCharactersWithoutEchoingRawIdentity();
             ProjectBuilderRejectsNoncanonicalIdentityBeforeRowEmission();
             ProjectBuilderRejectsTrailingWhitespaceBeforeRowEmission();
-            ProjectBuilderRejectsControlIdentityWithoutEchoingRawIdentity();
+            ProjectBuilderRejectsCommonControlIdentitiesWithoutEchoingRawIdentity();
             ProjectBuilderPreservesCaseInsensitiveDuplicateSemantics();
         }
 
@@ -70,13 +70,17 @@ namespace QS3D.Core.SmokeTests
                 "Project schedule trailing-whitespace diagnostic echoed the hostile raw ElementId.");
         }
 
-        private static void ProjectBuilderRejectsControlIdentityWithoutEchoingRawIdentity()
+        private static void ProjectBuilderRejectsCommonControlIdentitiesWithoutEchoingRawIdentity()
         {
-            const string invalidId = "P\u0001X";
-            var project = ProjectWithMalformedRebarIdentity(invalidId, "rebar-schedule-control-id-project");
-            var error = Capture<InvalidOperationException>(() => ProjectRebarScheduleBuilder.Build(project));
-            Require(error.Message.IndexOf(invalidId, StringComparison.Ordinal) < 0,
-                "Project schedule control-identity diagnostic echoed the hostile raw ElementId.");
+            var invalidIds = new[] { "P\u0001X", "P\tX", "P\rX", "P\nX", "P\u007FX" };
+            for (var index = 0; index < invalidIds.Length; index++)
+            {
+                var invalidId = invalidIds[index];
+                var project = ProjectWithMalformedRebarIdentity(invalidId, "rebar-schedule-control-id-project-" + index);
+                var error = Capture<InvalidOperationException>(() => ProjectRebarScheduleBuilder.Build(project));
+                Require(error.Message.IndexOf(invalidId, StringComparison.Ordinal) < 0,
+                    "Project schedule control-identity diagnostic echoed the hostile raw ElementId.");
+            }
         }
 
         private static void ProjectBuilderPreservesCaseInsensitiveDuplicateSemantics()
