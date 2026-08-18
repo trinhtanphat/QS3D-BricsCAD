@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -49,7 +50,10 @@ namespace QS3D.Core.Geometry
             if (openingCount > MaxOpenings)
                 throw new InvalidOperationException("Curtain panel interruption input exceeds " + MaxOpenings + " openings.");
 
-            var clipped = CurtainWallOpeningFramePlanner.Plan(panels, openings, clearanceM);
+            var clipped = CurtainWallOpeningFramePlanner.Plan(
+                new CountSnapshotList<CurtainWallRect>(panels, panelCount),
+                new CountSnapshotList<CurtainWallOpeningRect>(openings, openingCount),
+                clearanceM);
             if (clipped.Pieces.Count > MaxOutputPieces)
                 throw new InvalidOperationException("Curtain panel interruption output exceeds " + MaxOutputPieces + " pieces.");
 
@@ -75,6 +79,22 @@ namespace QS3D.Core.Geometry
                 OriginalPanelAreaM2 = clipped.OriginalFrameAreaM2,
                 RemainingPanelAreaM2 = clipped.RemainingFrameAreaM2
             };
+        }
+
+        private sealed class CountSnapshotList<T> : IReadOnlyList<T>
+        {
+            private readonly IReadOnlyList<T> _source;
+
+            public CountSnapshotList(IReadOnlyList<T> source, int count)
+            {
+                _source = source ?? throw new ArgumentNullException(nameof(source));
+                Count = count;
+            }
+
+            public int Count { get; }
+            public T this[int index] => _source[index];
+            public IEnumerator<T> GetEnumerator() => _source.GetEnumerator();
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
     }
 }
