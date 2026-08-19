@@ -129,22 +129,28 @@ namespace QS3D.Core.SmokeTests
         {
             var detail = ProjectQuantityReportBuilder.Detail(project);
             Equal(7, detail.Count, "detail row count");
-            var expectedCategories = new[]
+            var expectedProvenance = new Dictionary<ElementCategory, string[]>
             {
-                ElementCategory.ArchitecturalWall,
-                ElementCategory.Door,
-                ElementCategory.Beam,
-                ElementCategory.Column,
-                ElementCategory.Slab,
-                ElementCategory.StructuralWall,
-                ElementCategory.Foundation
+                [ElementCategory.ArchitecturalWall] = new[] { "A100" },
+                [ElementCategory.Door] = new[] { "A110", "A100" },
+                [ElementCategory.Beam] = new[] { "S100" },
+                [ElementCategory.Column] = new[] { "S110" },
+                [ElementCategory.Slab] = new[] { "S120" },
+                [ElementCategory.StructuralWall] = new[] { "S130" },
+                [ElementCategory.Foundation] = new[] { "S140" }
             };
-            foreach (var category in expectedCategories)
+            foreach (var pair in expectedProvenance)
             {
+                var category = pair.Key;
                 var row = detail.SingleOrDefault(x => string.Equals(x.Category, category.ToString(), StringComparison.Ordinal));
-                if (row == null || row.ElementIds.Count != 1 || row.SourceHandles.Count != 1 ||
-                    row.DrawingFingerprint != project.DrawingFingerprint)
-                    throw new InvalidOperationException("Golden report provenance failed for " + category + ".");
+                if (row == null || row.ElementIds.Count != 1 || row.DrawingFingerprint != project.DrawingFingerprint)
+                    throw new InvalidOperationException("Golden report identity provenance failed for " + category + ".");
+
+                var actualHandles = new HashSet<string>(row.SourceHandles, StringComparer.OrdinalIgnoreCase);
+                if (!actualHandles.SetEquals(pair.Value))
+                    throw new InvalidOperationException(
+                        "Golden report source provenance failed for " + category + ": expected [" +
+                        string.Join(",", pair.Value) + "] but was [" + string.Join(",", actualHandles) + "].");
             }
         }
 
