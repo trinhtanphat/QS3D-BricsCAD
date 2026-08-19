@@ -184,28 +184,75 @@ namespace QS3D.Core.Documentation
 
         private static IReadOnlyList<SemanticViewDefinition> MaterializeViews(IEnumerable<SemanticViewDefinition> values)
         {
-            var result = new List<SemanticViewDefinition>(Math.Min(MaxCatalogViews, 256));
-            foreach (var value in values)
-            {
-                if (result.Count >= MaxCatalogViews)
-                    throw new InvalidOperationException("Semantic view catalog supports at most " + MaxCatalogViews + " views.");
-                if (value == null) throw new ArgumentException("Semantic documentation view cannot be null.", nameof(values));
-                result.Add(value);
-            }
-            return result.AsReadOnly();
+            return MaterializeBounded(
+                values,
+                MaxCatalogViews,
+                "Semantic view catalog supports at most " + MaxCatalogViews + " views.",
+                "Semantic documentation view cannot be null.");
         }
 
         private static IReadOnlyList<SemanticSheetDefinition> MaterializeSheets(IEnumerable<SemanticSheetDefinition> values)
         {
-            var result = new List<SemanticSheetDefinition>(Math.Min(MaxCatalogSheets, 256));
-            foreach (var value in values)
+            return MaterializeBounded(
+                values,
+                MaxCatalogSheets,
+                "Semantic sheet catalog supports at most " + MaxCatalogSheets + " sheets.",
+                "Semantic documentation sheet cannot be null.");
+        }
+
+        private static IReadOnlyList<T> MaterializeBounded<T>(
+            IEnumerable<T> values,
+            int maxCount,
+            string capacityError,
+            string nullEntryError)
+        {
+            int? knownCount = null;
+            ValidateKnownCount(values as ICollection<T>, maxCount, capacityError, ref knownCount);
+            ValidateKnownCount(values as IReadOnlyCollection<T>, maxCount, capacityError, ref knownCount);
+            ValidateKnownCount(values as System.Collections.ICollection, maxCount, capacityError, ref knownCount);
+
+            var result = new List<T>(knownCount ?? Math.Min(maxCount, 256));
+            using (var enumerator = values.GetEnumerator())
             {
-                if (result.Count >= MaxCatalogSheets)
-                    throw new InvalidOperationException("Semantic sheet catalog supports at most " + MaxCatalogSheets + " sheets.");
-                if (value == null) throw new ArgumentException("Semantic documentation sheet cannot be null.", nameof(values));
-                result.Add(value);
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= maxCount)
+                        throw new InvalidOperationException(capacityError);
+                    var value = enumerator.Current;
+                    if (value is null) throw new ArgumentException(nullEntryError, nameof(values));
+                    result.Add(value);
+                }
             }
+
+            if (knownCount.HasValue && result.Count != knownCount.Value)
+                throw new InvalidOperationException("Semantic documentation catalog source known Count does not match completed traversal.");
             return result.AsReadOnly();
+        }
+
+        private static void ValidateKnownCount<T>(ICollection<T>? values, int maxCount, string capacityError, ref int? knownCount)
+        {
+            if (values != null) ValidateKnownCount(values.Count, maxCount, capacityError, ref knownCount);
+        }
+
+        private static void ValidateKnownCount<T>(IReadOnlyCollection<T>? values, int maxCount, string capacityError, ref int? knownCount)
+        {
+            if (values != null) ValidateKnownCount(values.Count, maxCount, capacityError, ref knownCount);
+        }
+
+        private static void ValidateKnownCount(System.Collections.ICollection? values, int maxCount, string capacityError, ref int? knownCount)
+        {
+            if (values != null) ValidateKnownCount(values.Count, maxCount, capacityError, ref knownCount);
+        }
+
+        private static void ValidateKnownCount(int count, int maxCount, string capacityError, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Semantic documentation catalog source reports an invalid negative known Count.");
+            if (count > maxCount)
+                throw new InvalidOperationException(capacityError);
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException("Semantic documentation catalog source exposes conflicting known Count values.");
+            knownCount = count;
         }
 
         private static string Serialize(
