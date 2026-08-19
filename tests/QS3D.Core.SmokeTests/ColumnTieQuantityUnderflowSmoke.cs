@@ -9,24 +9,16 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             OrdinaryQuantityRemainsStable();
-            SwallowedHookAllowanceFailsClosed();
             TotalWeightUnderflowFailsClosed();
         }
 
         private static void OrdinaryQuantityRemainsStable()
         {
-            var quantity = ColumnTieQuantityCalculator.Calculate(Layout(4d), 16d, 0.25d);
-            Near(4.25d, quantity.CuttingLengthPerTieM);
-            Near(4.25d, quantity.TotalLengthM);
+            var quantity = ColumnTieQuantityCalculator.Calculate(Layout(4d), 16d);
+            Near(4d, quantity.CuttingLengthPerTieM);
+            Near(4d, quantity.TotalLengthM);
             Near(256d / 162d, quantity.KgPerMeter);
-            Near(4.25d * 256d / 162d, quantity.TotalWeightKg);
-        }
-
-        private static void SwallowedHookAllowanceFailsClosed()
-        {
-            var error = Capture<OverflowException>(() =>
-                ColumnTieQuantityCalculator.Calculate(Layout(9007199254740992d), 16d, 1d));
-            Equal("tie cutting length lost a positive contribution at the current coordinate scale.", error.Message);
+            Near(4d * 256d / 162d, quantity.TotalWeightKg);
         }
 
         private static void TotalWeightUnderflowFailsClosed()
