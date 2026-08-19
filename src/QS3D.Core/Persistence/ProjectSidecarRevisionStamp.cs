@@ -29,8 +29,7 @@ namespace QS3D.Core.Persistence
 
         public static ProjectSidecarRevisionStamp Capture(string primaryPath)
         {
-            if (string.IsNullOrWhiteSpace(primaryPath))
-                throw new ArgumentException("A QSDB primary path is required.", nameof(primaryPath));
+            RequireCanonicalPath(primaryPath, nameof(primaryPath));
 
             var fullPath = Path.GetFullPath(primaryPath);
             using (var primary = FileCapture.Open(fullPath))
@@ -50,7 +49,7 @@ namespace QS3D.Core.Persistence
 
         public bool IsForPath(string primaryPath)
         {
-            if (string.IsNullOrWhiteSpace(primaryPath)) return false;
+            if (!IsCanonicalPath(primaryPath)) return false;
             try
             {
                 return PathComparer.Equals(_primaryPath, Path.GetFullPath(primaryPath));
@@ -85,6 +84,19 @@ namespace QS3D.Core.Persistence
                 hash = (hash * 397) ^ _primary.GetHashCode();
                 return (hash * 397) ^ _backup.GetHashCode();
             }
+        }
+
+        private static void RequireCanonicalPath(string path, string parameterName)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                throw new ArgumentException("A QSDB primary path is required.", parameterName);
+            if (!string.Equals(path, path.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("QSDB primary path must not contain leading or trailing whitespace.", parameterName);
+        }
+
+        private static bool IsCanonicalPath(string path)
+        {
+            return !string.IsNullOrWhiteSpace(path) && string.Equals(path, path.Trim(), StringComparison.Ordinal);
         }
 
         private sealed class FileCapture : IDisposable
