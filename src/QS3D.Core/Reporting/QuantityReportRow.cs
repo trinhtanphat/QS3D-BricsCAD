@@ -28,6 +28,18 @@ namespace QS3D.Core.Reporting
         public double BottomAreaM2 { get; set; }
         public double TopAreaM2 { get; set; }
         public double OtherAreaM2 { get; set; }
+        public bool HasGrossConcreteM3Evidence { get; set; } = true;
+        public bool HasDeductionM3Evidence { get; set; } = true;
+        public bool HasNetConcreteM3Evidence { get; set; } = true;
+        public bool HasFormworkM2Evidence { get; set; } = true;
+        public bool HasLengthMEvidence { get; set; } = true;
+        public bool HasOuterPerimeterMEvidence { get; set; } = true;
+        public bool HasInnerPerimeterMEvidence { get; set; } = true;
+        public bool HasDoorAreaM2Evidence { get; set; } = true;
+        public bool HasSideAreaM2Evidence { get; set; } = true;
+        public bool HasBottomAreaM2Evidence { get; set; } = true;
+        public bool HasTopAreaM2Evidence { get; set; } = true;
+        public bool HasOtherAreaM2Evidence { get; set; } = true;
         public double? DensityKgM3 { get; set; }
         public double? MassKg { get; set; }
         public IList<string> ElementIds { get; }
