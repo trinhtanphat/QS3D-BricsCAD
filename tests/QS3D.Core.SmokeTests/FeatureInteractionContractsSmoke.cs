@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             FormDrivenFeatureIsRepresentable();
             RegistryIsDeterministicAndUnique();
             InvalidProfilesFailClosed();
+            WorkspaceInteractionSafetyContractsSmoke.Run();
             InteractionSurfaceCoordinatorSmoke.Run();
         }
 
