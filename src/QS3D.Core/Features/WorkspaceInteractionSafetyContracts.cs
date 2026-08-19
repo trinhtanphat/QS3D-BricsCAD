@@ -39,7 +39,7 @@ namespace QS3D.Core.Features
         public static FeatureCapabilityState Disabled(FeatureId featureId, string reason, CapabilityStateSource source) =>
             new FeatureCapabilityState(featureId, false, reason, source);
 
-        private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
     }
 
     public enum InspectorSelectionState
