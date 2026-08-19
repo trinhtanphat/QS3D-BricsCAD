@@ -3,6 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace QS3D.BricsCAD.V25.Ribbon
 {
@@ -22,9 +25,9 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private static readonly PanelMirrorSpec[] PanelSpecs =
         {
-            new PanelMirrorSpec("QS3D_DRAW_BLT_DRAW_PANEL_SOURCE", "QS3D_BIM_BLT_DRAW_PANEL_SOURCE"),
-            new PanelMirrorSpec("QS3D_DRAW_BLT_TOOLS_PANEL_SOURCE", "QS3D_BIM_BLT_TOOLS_PANEL_SOURCE"),
-            new PanelMirrorSpec("QS3D_DRAW_BLT_IFC_PANEL_SOURCE", "QS3D_BIM_BLT_IFC_PANEL_SOURCE")
+            new PanelMirrorSpec("QS3D_DRAW_BLT_DRAW_PANEL_SOURCE", "QS3D_BIM_BLT_DRAW_PANEL_SOURCE", false),
+            new PanelMirrorSpec("QS3D_DRAW_BLT_TOOLS_PANEL_SOURCE", "QS3D_BIM_BLT_TOOLS_PANEL_SOURCE", false),
+            new PanelMirrorSpec("QS3D_DRAW_BLT_IFC_PANEL_SOURCE", "QS3D_BIM_BLT_IFC_PANEL_SOURCE", true)
         };
 
         private static bool _initialized;
@@ -114,7 +117,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             foreach (var sourceItem in sourceItems)
             {
                 if (sourceItem == null) continue;
-                var mirrored = CloneRibbonItem(sourceItem, ref buttonCount);
+                var mirrored = CloneRibbonItem(sourceItem, ref buttonCount, spec.RasterizeImages);
                 if (mirrored == null) continue;
                 Add(mirroredItems, mirrored);
             }
@@ -127,7 +130,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             Add(targetPanels, panel);
         }
 
-        private static object? CloneRibbonItem(object source, ref int buttonCount)
+        private static object? CloneRibbonItem(object source, ref int buttonCount, bool rasterizeImages)
         {
             var typeName = source.GetType().Name;
             if (string.Equals(typeName, "RibbonButton", StringComparison.Ordinal))
@@ -144,14 +147,26 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     SetProperty(target, "Id", mirroredId);
                 }
 
-                // Copy presentation and routing from the already-qualified BLT panel. ImageSource
-                // instances are frozen by the source augmenter and are safe to share.
+                // Copy presentation and routing from the already-qualified BLT panel. The BIM IFC
+                // mirror deliberately rasterizes its WPF ImageSource values: BricsCAD can display a
+                // question-mark placeholder when a mirrored DrawingImage is reused across surfaces.
                 foreach (var property in new[]
                 {
                     "Name", "Text", "ShowText", "ShowImage", "CommandParameter", "CommandHandler",
-                    "Description", "ToolTip", "Size", "Image", "LargeImage", "IsEnabled", "IsVisible"
+                    "Description", "ToolTip", "Size", "IsEnabled", "IsVisible"
                 })
                     CopyProperty(source, target, property);
+
+                if (rasterizeImages)
+                {
+                    CopyRasterizedImageProperty(source, target, "Image", 16);
+                    CopyRasterizedImageProperty(source, target, "LargeImage", 32);
+                }
+                else
+                {
+                    CopyProperty(source, target, "Image");
+                    CopyProperty(source, target, "LargeImage");
+                }
 
                 buttonCount++;
                 return target;
@@ -175,7 +190,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 foreach (var sourceItem in sourceItems)
                 {
                     if (sourceItem == null) continue;
-                    var mirrored = CloneRibbonItem(sourceItem, ref buttonCount);
+                    var mirrored = CloneRibbonItem(sourceItem, ref buttonCount, rasterizeImages);
                     if (mirrored != null)
                         Add(targetItems, mirrored);
                 }
@@ -186,6 +201,39 @@ namespace QS3D.BricsCAD.V25.Ribbon
             // Unknown QS3D-owned ribbon item shapes are never guessed. Fail the mirror rather than
             // silently emitting a different BIM surface.
             return null;
+        }
+
+        private static void CopyRasterizedImageProperty(object source, object target, string name, int pixels)
+        {
+            var value = GetProperty(source, name);
+            if (value is ImageSource imageSource)
+            {
+                SetProperty(target, name, RasterizeImageSource(imageSource, pixels));
+                return;
+            }
+
+            CopyProperty(source, target, name);
+        }
+
+        private static ImageSource RasterizeImageSource(ImageSource source, int pixels)
+        {
+            try
+            {
+                var visual = new DrawingVisual();
+                using (var drawing = visual.RenderOpen())
+                    drawing.DrawImage(source, new Rect(0, 0, pixels, pixels));
+
+                var bitmap = new RenderTargetBitmap(pixels, pixels, 96.0, 96.0, PixelFormats.Pbgra32);
+                bitmap.Render(visual);
+                if (bitmap.CanFreeze)
+                    bitmap.Freeze();
+                return bitmap;
+            }
+            catch
+            {
+                // Keep the source icon rather than dropping the image if rasterization is unavailable.
+                return source;
+            }
         }
 
         private static object? FindPanelBySourceId(object panels, string sourceId)
@@ -294,14 +342,16 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private sealed class PanelMirrorSpec
         {
-            public PanelMirrorSpec(string sourceId, string targetId)
+            public PanelMirrorSpec(string sourceId, string targetId, bool rasterizeImages)
             {
                 SourceId = sourceId;
                 TargetId = targetId;
+                RasterizeImages = rasterizeImages;
             }
 
             public string SourceId { get; }
             public string TargetId { get; }
+            public bool RasterizeImages { get; }
         }
     }
 }
