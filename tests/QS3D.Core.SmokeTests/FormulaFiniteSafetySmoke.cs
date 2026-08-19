@@ -91,8 +91,17 @@ namespace QS3D.Core.SmokeTests
                 () => evaluator.Evaluate("1e16 + 1 - 1e16 - 1e-300"));
             Contains("Addition/subtraction lost the primary sum at double precision.", swallowedPrimarySubtraction.Message);
 
+            var swallowedCorrection = Capture<InvalidOperationException>(
+                () => evaluator.Evaluate("1e16 + 1 + 1e-300 - 1e16"));
+            Contains("Addition compensation lost the correction contribution at double precision.", swallowedCorrection.Message);
+            var swallowedAccumulatedCompensation = Capture<InvalidOperationException>(
+                () => evaluator.Evaluate("1e16 + 1e-300 + 1 - 1e16"));
+            Contains("Addition compensation lost the accumulated contribution at double precision.", swallowedAccumulatedCompensation.Message);
+
             Near(1d, evaluator.Evaluate("1e300 + 1 - 1e300"), 0d);
             Near(1d, evaluator.Evaluate("1e16 + 1 - 1e16"), 0d);
+            Near(2d, evaluator.Evaluate("1e16 + 1 + 1 - 1e16"), 0d);
+            Near(1e-300, evaluator.Evaluate("1e16 + 1e-300 - 1e16"), 0d);
             Near(1e300, evaluator.Evaluate("1e300 + 0"), 0d);
             Near(1e300, evaluator.Evaluate("1e300 - 0"), 0d);
 
