@@ -83,7 +83,7 @@ require_order(
     quantity,
     (
         '"QS3D_QTY_BLT_SETTINGS",\n                "Cài đặt\\ntính toán",\n                "QS3DQUANTITYSETTINGS"',
-        '"QS3D_QTY_BLT_CALCULATE",\n                "Tính khối lượng\\n(Engine2)",\n                "QS3DREGEN"',
+        '"QS3D_QTY_BLT_CALCULATE",\n                "Tính khối lượng\\n(Engine2)",\n                "QS3DQUANTITYENGINE2"',
         '"QS3D_QTY_BLT_EXPORT",\n                "Xuất\\n.blte2",\n                "QS3DED2"',
         '"QS3D_QTY_BLT_VIEW",\n                "Xem khối\\nlượng",\n                "QS3DBQ"',
         '"QS3D_QTY_BLT_EXPLAIN",\n                "Diễn\\ngiải",\n                "QS3DQUANTITYINSIGHT"',
