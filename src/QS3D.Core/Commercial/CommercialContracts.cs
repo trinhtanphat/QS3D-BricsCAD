@@ -80,15 +80,62 @@ namespace QS3D.Core.Commercial
         public void AppendBatch(IEnumerable<CommercialAuditRecord> records)
         {
             if (records == null) throw new ArgumentNullException(nameof(records));
+
+            var remainingCapacity = MaximumEvents - _events.Count;
+            var knownCount = TryGetKnownCount(records, out var conflictingKnownCounts, out var negativeKnownCount);
+            if (knownCount.HasValue && knownCount.Value > remainingCapacity)
+                throw new InvalidOperationException("Commercial audit log supports at most 10000 events.");
+            if (negativeKnownCount)
+                throw new InvalidOperationException("Commercial audit batch source exposes an invalid negative known Count value.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Commercial audit batch source exposes conflicting known Count values.");
+
             var snapshot = new List<CommercialAuditRecord>();
             foreach (var record in records)
             {
                 if (record == null) throw new ArgumentException("Commercial audit batch contains a null record.", nameof(records));
-                if (_events.Count + snapshot.Count >= MaximumEvents)
+                if (snapshot.Count == remainingCapacity)
                     throw new InvalidOperationException("Commercial audit log supports at most 10000 events.");
                 snapshot.Add(record);
             }
+
+            if (knownCount.HasValue && snapshot.Count != knownCount.Value)
+                throw new InvalidOperationException(
+                    "Commercial audit batch source known Count does not match completed traversal cardinality.");
+
             _events.AddRange(snapshot);
+        }
+
+        private static int? TryGetKnownCount(
+            IEnumerable<CommercialAuditRecord> records,
+            out bool conflictingKnownCounts,
+            out bool negativeKnownCount)
+        {
+            conflictingKnownCounts = false;
+            negativeKnownCount = false;
+            int? knownCount = null;
+
+            if (records is ICollection<CommercialAuditRecord> genericCollection)
+                knownCount = ObserveKnownCount(knownCount, genericCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+            if (records is IReadOnlyCollection<CommercialAuditRecord> readOnlyCollection)
+                knownCount = ObserveKnownCount(knownCount, readOnlyCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+            if (records is System.Collections.ICollection nonGenericCollection)
+                knownCount = ObserveKnownCount(knownCount, nonGenericCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+
+            return knownCount;
+        }
+
+        private static int ObserveKnownCount(
+            int? current,
+            int observed,
+            ref bool conflictingKnownCounts,
+            ref bool negativeKnownCount)
+        {
+            if (observed < 0)
+                negativeKnownCount = true;
+            if (current.HasValue && current.Value != observed)
+                conflictingKnownCounts = true;
+            return !current.HasValue || observed > current.Value ? observed : current.Value;
         }
     }
 
