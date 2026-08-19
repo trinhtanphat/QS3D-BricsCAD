@@ -19,12 +19,20 @@ namespace QS3D.Core.Diagnostics
             ISet<string>? liveHandleIndex = null;
             if (livePanelHandles != null)
             {
+                var reportedCount = livePanelHandles.Count;
+                if (reportedCount < 0)
+                    throw new InvalidOperationException("Curtain panel live handle input reported a negative Count.");
+
                 var index = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var observedCount = 0;
                 foreach (var handle in livePanelHandles)
                 {
+                    observedCount++;
                     var normalized = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
                     if (normalized.Length > 0) index.Add(normalized);
                 }
+                if (observedCount != reportedCount)
+                    throw new InvalidOperationException("Curtain panel live handle Count does not match traversal count.");
                 liveHandleIndex = index;
             }
 
