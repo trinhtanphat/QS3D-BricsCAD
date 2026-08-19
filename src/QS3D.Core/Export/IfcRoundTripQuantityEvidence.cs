@@ -80,6 +80,9 @@ namespace QS3D.Core.Export
                 candidates.Add(candidate);
             }
 
+            if (knownCount.HasValue && candidates.Count != knownCount.Value)
+                throw new InvalidOperationException("IFC round-trip quantity evidence source Count does not match enumerated candidate count.");
+
             candidates.Sort(IfcRoundTripQuantityEvidenceComparer.Instance);
             var groups = new List<IfcRoundTripQuantityEvidenceGroup>();
 
