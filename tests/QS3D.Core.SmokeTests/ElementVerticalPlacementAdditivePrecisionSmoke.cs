@@ -95,12 +95,14 @@ namespace QS3D.Core.SmokeTests
         private static void HostedOpeningRejectsSwallowedHostSubtraction()
         {
             var project = NewProject();
+            project.Floors.Add(new FloorDefinition("HUGE", "Huge", 1e16d));
             var opening = NewElement(project, "hosted-opening", ElementCategory.WallOpening);
+            opening.Properties[ProjectFloorService.BottomLevelIdKey] = "HUGE";
             var host = new ElementVerticalPlacement(false, false, 1d, 2d);
             var version = project.ChangeVersion;
             Contains(
                 ThrowsMessage<InvalidOperationException>(() =>
-                    ElementVerticalPlacementService.ResolveHostedOpening(project, host, opening, 4d, 1e16d)),
+                    ElementVerticalPlacementService.ResolveHostedOpening(project, host, opening, 4d, 0d)),
                 "relative sill elevation cannot preserve its non-zero additive term");
             Equal(version, project.ChangeVersion);
         }
