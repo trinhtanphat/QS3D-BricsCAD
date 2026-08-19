@@ -24,7 +24,7 @@ if command.is_file():
         "double.IsNaN",
         "double.IsInfinity",
         "SemanticCaptureService.Capture(document, ElementCategory.Grid)",
-        "FinalizeUi(document, count);",
+        "FinalizeUi(document, count, subtype);",
         "private static void FinalizeUi",
         "PaletteCoordinator.RefreshProject()",
         "UI sync warning: ",
@@ -37,7 +37,7 @@ if command.is_file():
 
     capture = text.find("count = SemanticCaptureService.Capture(document, ElementCategory.Grid);")
     catch = text.find("catch (Exception ex)", capture)
-    finalize = text.find("FinalizeUi(document, count);", catch)
+    finalize = text.find("FinalizeUi(document, count, subtype);", catch)
     if min(capture, catch, finalize) < 0 or not capture < catch < finalize:
         errors.append("QS3DGRID must finish transactional semantic capture before entering best-effort post-capture UI synchronization")
 
