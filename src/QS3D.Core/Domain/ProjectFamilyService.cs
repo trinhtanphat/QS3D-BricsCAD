@@ -280,7 +280,7 @@ namespace QS3D.Core.Domain
             }
 
             var targetEnumerationVersion = project.ChangeVersion;
-            RequireAssignmentTargetCountWithinLimit(elements);
+            var expectedKnownCount = RequireAssignmentTargetCountWithinLimit(elements);
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Family assignment targets were being counted. Retry the operation against the current project state.");
 
@@ -289,6 +289,8 @@ namespace QS3D.Core.Domain
             foreach (var element in elements)
             {
                 observedEntries++;
+                if (expectedKnownCount.HasValue && observedEntries > expectedKnownCount.Value)
+                    throw new InvalidOperationException("Family assignment target collection yielded more entries than its known Count.");
                 if (observedEntries > MaxAssignmentTargetEntries)
                     throw AssignmentTargetLimitExceeded();
                 if (element == null) throw new ArgumentException("Family assignment elements cannot contain null entries.", nameof(elements));
@@ -300,25 +302,41 @@ namespace QS3D.Core.Domain
             }
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Family assignment targets were being enumerated. Retry the operation against the current project state.");
+            if (expectedKnownCount.HasValue && observedEntries != expectedKnownCount.Value)
+                throw new InvalidOperationException("Family assignment target collection known Count does not match traversed target count.");
             return unique.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
         }
 
-        private static void RequireAssignmentTargetCountWithinLimit(IEnumerable<ProjectElement> elements)
+        private static int? RequireAssignmentTargetCountWithinLimit(IEnumerable<ProjectElement> elements)
         {
+            var knownCounts = new List<int>(3);
             if (elements is ICollection<ProjectElement> collection)
-                RequireValidAssignmentTargetKnownCount(collection.Count);
+                knownCounts.Add(collection.Count);
             if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection)
-                RequireValidAssignmentTargetKnownCount(readOnlyCollection.Count);
+                knownCounts.Add(readOnlyCollection.Count);
             if (elements is System.Collections.ICollection nonGenericCollection)
-                RequireValidAssignmentTargetKnownCount(nonGenericCollection.Count);
-        }
+                knownCounts.Add(nonGenericCollection.Count);
 
-        private static void RequireValidAssignmentTargetKnownCount(int count)
-        {
-            if (count < 0)
-                throw new InvalidOperationException("Family assignment target collection reported an invalid negative known count.");
-            if (count > MaxAssignmentTargetEntries)
-                throw AssignmentTargetLimitExceeded();
+            if (knownCounts.Count == 0) return null;
+
+            foreach (var count in knownCounts)
+            {
+                if (count < 0)
+                    throw new InvalidOperationException("Family assignment target collection reported an invalid negative known count.");
+            }
+            foreach (var count in knownCounts)
+            {
+                if (count > MaxAssignmentTargetEntries)
+                    throw AssignmentTargetLimitExceeded();
+            }
+
+            var expected = knownCounts[0];
+            for (var index = 1; index < knownCounts.Count; index++)
+            {
+                if (knownCounts[index] != expected)
+                    throw new InvalidOperationException("Family assignment target collection reported conflicting known counts.");
+            }
+            return expected;
         }
 
         private static InvalidOperationException AssignmentTargetLimitExceeded()
