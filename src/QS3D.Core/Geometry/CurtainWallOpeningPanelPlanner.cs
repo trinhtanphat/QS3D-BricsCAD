@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -37,12 +38,22 @@ namespace QS3D.Core.Geometry
         {
             if (panels == null) throw new ArgumentNullException(nameof(panels));
             if (openings == null) throw new ArgumentNullException(nameof(openings));
-            if (panels.Count > MaxInputPanels)
+
+            var panelCount = panels.Count;
+            var openingCount = openings.Count;
+            if (panelCount < 0)
+                throw new InvalidOperationException("Curtain panel input reports an invalid negative panel Count.");
+            if (openingCount < 0)
+                throw new InvalidOperationException("Curtain panel interruption input reports an invalid negative opening Count.");
+            if (panelCount > MaxInputPanels)
                 throw new InvalidOperationException("Curtain panel input exceeds " + MaxInputPanels + " panels.");
-            if (openings.Count > MaxOpenings)
+            if (openingCount > MaxOpenings)
                 throw new InvalidOperationException("Curtain panel interruption input exceeds " + MaxOpenings + " openings.");
 
-            var clipped = CurtainWallOpeningFramePlanner.Plan(panels, openings, clearanceM);
+            var clipped = CurtainWallOpeningFramePlanner.Plan(
+                new CountSnapshotList<CurtainWallRect>(panels, panelCount),
+                new CountSnapshotList<CurtainWallOpeningRect>(openings, openingCount),
+                clearanceM);
             if (clipped.Pieces.Count > MaxOutputPieces)
                 throw new InvalidOperationException("Curtain panel interruption output exceeds " + MaxOutputPieces + " pieces.");
 
@@ -63,11 +74,27 @@ namespace QS3D.Core.Geometry
                     .ThenBy(x => x.HeightM)
                     .ThenBy(x => x.WidthM)
                     .ToArray()),
-                SourcePanelCount = panels.Count,
+                SourcePanelCount = panelCount,
                 InterruptedPanelCount = clipped.InterruptedFrameCount,
                 OriginalPanelAreaM2 = clipped.OriginalFrameAreaM2,
                 RemainingPanelAreaM2 = clipped.RemainingFrameAreaM2
             };
+        }
+
+        private sealed class CountSnapshotList<T> : IReadOnlyList<T>
+        {
+            private readonly IReadOnlyList<T> _source;
+
+            public CountSnapshotList(IReadOnlyList<T> source, int count)
+            {
+                _source = source ?? throw new ArgumentNullException(nameof(source));
+                Count = count;
+            }
+
+            public int Count { get; }
+            public T this[int index] => _source[index];
+            public IEnumerator<T> GetEnumerator() => _source.GetEnumerator();
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
     }
 }
