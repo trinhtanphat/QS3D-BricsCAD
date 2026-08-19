@@ -16,6 +16,10 @@ namespace QS3D.Core.Services
         public void Replace(IEnumerable<string> ids)
         {
             if (ids == null) throw new ArgumentNullException(nameof(ids));
+            if (ids is ICollection<string> collection && collection.Count > MaxInputCount)
+                throw new InvalidOperationException("Semantic selection cannot exceed " + MaxInputCount + " input entries.");
+            if (ids is IReadOnlyCollection<string> readOnlyCollection && readOnlyCollection.Count > MaxInputCount)
+                throw new InvalidOperationException("Semantic selection cannot exceed " + MaxInputCount + " input entries.");
             var knownCount = ResolveKnownCount(ids);
 
             var enumerationVersion = _changeVersion;
