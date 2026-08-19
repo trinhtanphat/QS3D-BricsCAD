@@ -27,12 +27,15 @@ def main():
     ):
         require(commands, token, COMMANDS_REL)
 
+    # Guard the behavior, not one particular top-level-window enumeration syntax.
+    # QS3D is hosted by BricsCAD, so the live-window discovery contract must also
+    # work when System.Windows.Application.Current is not available.
     for token in (
         "public partial class QuantitySummaryWindow",
         "protected override void OnSourceInitialized(EventArgs e)",
         "Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(ReuseExistingLogicalWindow));",
-        "System.Windows.Application.Current",
-        ".OfType<QuantitySummaryWindow>()",
+        "EnumerateLiveReviewWindows()",
+        "PresentationSource.CurrentSources",
         "!ReferenceEquals(window, this)",
         "ReferenceEquals(window._document, _document)",
         'existing.EnsureCurrentProject("làm mới BQ khi gọi lại QS3DBQ");',
@@ -49,11 +52,12 @@ def main():
         "ConditionalWeakTable",
         "WorkspaceFloatingToolHost",
         "new Window",
+        "if (application == null) return;",
     ):
         forbid(window, token, WINDOW_REL)
 
     print(
-        "PASS: repeated QS3DBQ reconciles against the live WPF window set, refreshes/focuses the existing "
+        "PASS: repeated QS3DBQ discovers live hosted-WPF review windows, refreshes/focuses the existing "
         "same-document quantity review before render, keeps different DWGs independent, and introduces no "
         "feature-specific window registry/host."
     )
