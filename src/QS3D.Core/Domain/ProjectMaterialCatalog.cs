@@ -12,7 +12,7 @@ namespace QS3D.Core.Domain
 
         public ProjectMaterial(string id, string name, string unit, string description, bool builtIn)
         {
-            Id = RequireCanonicalId(id, nameof(id));
+            Id = RequireMaterialId(id, nameof(id));
             Name = Required(name, nameof(name), 120);
             Unit = Optional(unit, nameof(unit), 24);
             Description = Optional(description, nameof(description), 240);
@@ -25,12 +25,11 @@ namespace QS3D.Core.Domain
         public string Description { get; }
         public bool IsBuiltIn { get; }
 
-        internal static string RequireCanonicalId(string value, string name)
+        internal static string RequireMaterialId(string value, string name)
         {
-            var text = Required(value, name, 64);
-            if (!string.Equals(value, text, StringComparison.Ordinal))
-                throw new ArgumentException(name + " must not contain leading or trailing whitespace.", name);
-            return text;
+            var raw = value ?? string.Empty;
+            if (raw.Any(char.IsControl)) throw new ArgumentException(name + " cannot contain control characters.", name);
+            return Required(value, name, 64);
         }
 
         private static string Required(string value, string name, int max)
@@ -156,7 +155,7 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (string.IsNullOrWhiteSpace(id)) return false;
-            var normalized = ProjectMaterial.RequireCanonicalId(id, nameof(id));
+            var normalized = ProjectMaterial.RequireMaterialId(id, nameof(id));
             var custom = ReadCustom(project);
             var material = custom.FirstOrDefault(x => string.Equals(x.Id, normalized, StringComparison.OrdinalIgnoreCase));
             if (material == null) return false;
