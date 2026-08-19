@@ -83,7 +83,9 @@ namespace QS3D.Core.SmokeTests
         private static void ExistingNullAndDuplicateValidationRemain()
         {
             var nullError = Capture<ArgumentException>(() =>
-                CreateOptions(new ReportedCountCollection(1, null!)));
+                CreateOptions(new ReportedCountCollection(
+                    1,
+                    new IdentificationColorRule[] { null! })));
             Contains("null item", nullError.Message,
                 "Existing null color-rule validation must remain active.");
 
