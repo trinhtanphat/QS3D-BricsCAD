@@ -436,7 +436,16 @@ namespace QS3D.Core.Persistence
                 if (target.ContainsKey(key)) throw new InvalidDataException("Duplicate QSDB map key: " + key);
                 var value = RawValue(item, "value");
                 if (target is ProjectMetadataDictionary projectMetadata)
-                    projectMetadata.SetPersistenceValue(key, value);
+                {
+                    try
+                    {
+                        projectMetadata.SetPersistenceValue(key, value);
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        throw new InvalidDataException("QSDB project metadata exceeds or violates the supported persisted metadata contract.", ex);
+                    }
+                }
                 else
                     target[key] = value;
             }
