@@ -15,14 +15,16 @@ namespace QS3D.BricsCAD.V25.UI
         private static readonly Brush TextBrush = Brushes.White;
         private static readonly Brush MutedBrush = FrozenBrush(205, 209, 216);
         private static readonly Brush SuccessBrush = FrozenBrush(59, 196, 118);
+        private static readonly Brush AttentionBrush = FrozenBrush(209, 143, 41);
         private static readonly Brush ErrorBrush = FrozenBrush(219, 68, 68);
         private static readonly Brush AccentBrush = FrozenBrush(25, 113, 238);
+        private bool _openModelRequested;
 
-        private QuantityCalculationResultWindow(string title, string heading, string detail, bool success)
+        private QuantityCalculationResultWindow(string title, string heading, string detail, bool success, bool offerModeling = false)
         {
             Title = title;
             Width = 420;
-            Height = success ? 302 : 238;
+            Height = success ? 302 : offerModeling ? 270 : 238;
             ResizeMode = ResizeMode.NoResize;
             WindowStyle = System.Windows.WindowStyle.None;
             AllowsTransparency = true;
@@ -31,7 +33,7 @@ namespace QS3D.BricsCAD.V25.UI
             ShowInTaskbar = false;
             UseLayoutRounding = true;
             SnapsToDevicePixels = true;
-            Content = BuildContent(title, heading, detail, success);
+            Content = BuildContent(title, heading, detail, success, offerModeling);
             KeyDown += (_, args) =>
             {
                 if (args.Key != Key.Escape) return;
@@ -59,6 +61,23 @@ namespace QS3D.BricsCAD.V25.UI
             new QuantityCalculationResultWindow("Tính khối lượng", heading, detail, true).ShowDialog();
         }
 
+        public static bool ShowNoElements(string message)
+        {
+            var detail = string.IsNullOrWhiteSpace(message)
+                ? "Chưa có cấu kiện QS3D để tính khối lượng. Hãy Tạo mới/Capture cấu kiện trong Mô hình rồi chạy lại Engine2."
+                : message.Trim();
+            detail += "\n\nChọn “Về Mô hình” để tiếp tục đúng luồng Project/Floor/Family → Tạo mới/Capture → 3D → Khối lượng.";
+
+            var window = new QuantityCalculationResultWindow(
+                "Tính khối lượng",
+                "Chưa có cấu kiện QS3D để tính khối lượng.",
+                detail,
+                false,
+                offerModeling: true);
+            window.ShowDialog();
+            return window._openModelRequested;
+        }
+
         public static void ShowError(string message)
         {
             var detail = string.IsNullOrWhiteSpace(message)
@@ -71,7 +90,7 @@ namespace QS3D.BricsCAD.V25.UI
                 false).ShowDialog();
         }
 
-        private UIElement BuildContent(string title, string heading, string detail, bool success)
+        private UIElement BuildContent(string title, string heading, string detail, bool success, bool offerModeling)
         {
             var frame = new Border
             {
@@ -137,13 +156,13 @@ namespace QS3D.BricsCAD.V25.UI
                 Width = 38,
                 Height = 38,
                 CornerRadius = new CornerRadius(19),
-                Background = success ? SuccessBrush : ErrorBrush,
+                Background = success ? SuccessBrush : offerModeling ? AttentionBrush : ErrorBrush,
                 VerticalAlignment = VerticalAlignment.Top,
                 HorizontalAlignment = HorizontalAlignment.Left
             };
             stateCircle.Child = new TextBlock
             {
-                Text = success ? "✓" : "!",
+                Text = success ? "✓" : offerModeling ? "→" : "!",
                 Foreground = Brushes.White,
                 FontSize = 23,
                 FontWeight = FontWeights.Bold,
@@ -180,6 +199,30 @@ namespace QS3D.BricsCAD.V25.UI
             Grid.SetRow(body, 1);
             root.Children.Add(body);
 
+            var footer = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 12, 0, 0)
+            };
+
+            if (offerModeling)
+            {
+                var dismiss = new Button
+                {
+                    Content = "Đóng",
+                    Width = 88,
+                    Height = 34,
+                    Background = Brushes.Transparent,
+                    Foreground = TextBrush,
+                    BorderBrush = DividerBrush,
+                    BorderThickness = new Thickness(1),
+                    Margin = new Thickness(0, 0, 8, 0)
+                };
+                dismiss.Click += (_, __) => Close();
+                footer.Children.Add(dismiss);
+            }
+
             var ok = new Button
             {
                 Content = "OK",
@@ -190,12 +233,24 @@ namespace QS3D.BricsCAD.V25.UI
                 Foreground = Brushes.White,
                 BorderThickness = new Thickness(0),
                 FontWeight = FontWeights.SemiBold,
-                Margin = new Thickness(0, 12, 0, 0),
                 IsDefault = true
             };
-            ok.Click += (_, __) => Close();
-            Grid.SetRow(ok, 2);
-            root.Children.Add(ok);
+            if (offerModeling)
+            {
+                ok.Content = "Về Mô hình";
+                ok.Click += (_, __) =>
+                {
+                    _openModelRequested = true;
+                    Close();
+                };
+            }
+            else
+            {
+                ok.Click += (_, __) => Close();
+            }
+            footer.Children.Add(ok);
+            Grid.SetRow(footer, 2);
+            root.Children.Add(footer);
 
             frame.Child = root;
             return frame;
