@@ -107,7 +107,7 @@ def main():
     # enough for MÔ HÌNH BIM to clone its independent qualified IFC surface.
     require(
         bim_mirror,
-        'new PanelMirrorSpec("QS3D_DRAW_BLT_IFC_PANEL_SOURCE", "QS3D_BIM_BLT_IFC_PANEL_SOURCE")',
+        'new PanelMirrorSpec("QS3D_DRAW_BLT_IFC_PANEL_SOURCE", "QS3D_BIM_BLT_IFC_PANEL_SOURCE", true)',
         "BIM IFC mirror",
     )
     for token in (
