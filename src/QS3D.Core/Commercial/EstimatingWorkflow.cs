@@ -234,6 +234,9 @@ namespace QS3D.Core.Commercial
 
     public sealed class BulkRateAssignmentRequest
     {
+        private const int MaximumSelectedLines = 10000;
+        private const int MaximumUnitRates = 256;
+
         public BulkRateAssignmentRequest(
             IEnumerable<string> lineIds,
             string costCode,
@@ -246,32 +249,42 @@ namespace QS3D.Core.Commercial
             RateRevision = CommercialGuard.RequireToken(rateRevision, nameof(rateRevision));
 
             if (lineIds == null) throw new ArgumentNullException(nameof(lineIds));
-            var ids = new List<string>();
+            var lineIdKnownCount = SnapshotKnownCount(lineIds, MaximumSelectedLines, "selected-line");
+            var ids = lineIdKnownCount.HasValue
+                ? new List<string>(lineIdKnownCount.Value)
+                : new List<string>();
             var uniqueIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var raw in lineIds)
             {
-                if (ids.Count == 10000)
+                if (ids.Count == MaximumSelectedLines)
                     throw new InvalidOperationException("Bulk rate assignment supports at most 10000 selected lines.");
                 var id = CommercialGuard.RequireToken(raw, nameof(lineIds));
                 if (!uniqueIds.Add(id))
                     throw new ArgumentException("Bulk rate assignment contains duplicate line id: " + id + ".", nameof(lineIds));
                 ids.Add(id);
             }
+            if (lineIdKnownCount.HasValue && ids.Count != lineIdKnownCount.Value)
+                throw new InvalidOperationException("Bulk rate assignment selected-line count changed during enumeration.");
             if (ids.Count == 0) throw new ArgumentException("Bulk rate assignment requires at least one selected line.", nameof(lineIds));
             LineIds = new ReadOnlyCollection<string>(ids.ToArray());
 
             if (unitRates == null) throw new ArgumentNullException(nameof(unitRates));
-            var rates = new List<UnitRateAssignment>();
+            var unitRateKnownCount = SnapshotKnownCount(unitRates, MaximumUnitRates, "unit-rate");
+            var rates = unitRateKnownCount.HasValue
+                ? new List<UnitRateAssignment>(unitRateKnownCount.Value)
+                : new List<UnitRateAssignment>();
             var units = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var assignment in unitRates)
             {
-                if (rates.Count == 256)
+                if (rates.Count == MaximumUnitRates)
                     throw new InvalidOperationException("Bulk rate assignment supports at most 256 unit rates.");
                 if (assignment == null) throw new ArgumentException("Bulk rate assignment contains a null unit rate.", nameof(unitRates));
                 if (!units.Add(assignment.Unit))
                     throw new ArgumentException("Duplicate unit-rate assignment for unit: " + assignment.Unit + ".", nameof(unitRates));
                 rates.Add(assignment);
             }
+            if (unitRateKnownCount.HasValue && rates.Count != unitRateKnownCount.Value)
+                throw new InvalidOperationException("Bulk rate assignment unit-rate count changed during enumeration.");
             UnitRates = new ReadOnlyCollection<UnitRateAssignment>(rates.ToArray());
         }
 
@@ -280,6 +293,29 @@ namespace QS3D.Core.Commercial
         public string RateSourceId { get; }
         public string RateRevision { get; }
         public IReadOnlyList<UnitRateAssignment> UnitRates { get; }
+
+        private static int? SnapshotKnownCount<T>(IEnumerable<T> values, int maximum, string subject)
+        {
+            int? knownCount = null;
+            if (values is ICollection<T> genericCollection)
+                AcceptKnownCount(genericCollection.Count, maximum, subject, ref knownCount);
+            if (values is IReadOnlyCollection<T> readOnlyCollection)
+                AcceptKnownCount(readOnlyCollection.Count, maximum, subject, ref knownCount);
+            if (values is System.Collections.ICollection nonGenericCollection)
+                AcceptKnownCount(nonGenericCollection.Count, maximum, subject, ref knownCount);
+            return knownCount;
+        }
+
+        private static void AcceptKnownCount(int count, int maximum, string subject, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Bulk rate assignment exposes an invalid negative " + subject + " count.");
+            if (count > maximum)
+                throw new InvalidOperationException("Bulk rate assignment exceeds the supported " + maximum + " " + subject + " limit.");
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException("Bulk rate assignment exposes conflicting known " + subject + " counts.");
+            knownCount = count;
+        }
     }
 
     public sealed class UnitDistributionItem
