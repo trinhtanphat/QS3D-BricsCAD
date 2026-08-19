@@ -634,17 +634,37 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 case 201: return "Phòng";
                 case 202: return "Sàn hoàn thiện";
+                case 203: return "Chống thấm";
                 case 204: return "Chân tường";
                 case 205: return "Hoàn thiện tường";
+                case 206: return "Trát trần";
                 case 207: return "Lan can";
                 case 301: return "Dầm HCN";
                 case 302: return "Giằng tường";
-                case 703: return "Lanh tô";
                 case 401: return "Sàn đặc";
+                case 403: return "Khối đất";
                 case 501: return "Đường dốc";
                 case 601: return "Cột";
                 case 701: return "Vách BTCT";
+                case 703: return "Lanh tô";
                 case 704: return "Tường gạch";
+                case 705: return "Vách kính";
+                case 706: return "Trụ tường";
+                case 801: return "Cọc";
+                case 802: return "Đài cọc";
+                case 803: return "Dầm móng";
+                case 804: return "Móng băng";
+                case 805: return "Móng bè";
+                case 806: return "Bê tông lót";
+                case 901: return "Đào đắp hố móng";
+                case 902: return "Dầm thép";
+                case 903: return "Mái hắt";
+                case 904: return "KL Chiều dài";
+                case 905: return "KL Diện tích";
+                case 906: return "KL Thể tích";
+                case 907: return "KL Biến dạng";
+                case 1301: return "KL Mặt phẳng";
+                case 1302: return "KL Array biến dạng";
                 default: return null;
             }
         }
