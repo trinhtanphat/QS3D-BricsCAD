@@ -8,7 +8,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             LegacyBottomOffsetRejectsSwallowedPositiveAndNegativeTerms();
-            LegacyBottomOffsetRejectsSwallowedBaseTerm();
+            LegacyBottomOffsetRejectsSwallowedBaseTerms();
             LegacyHeightRejectsSwallowedPositiveTerm();
             BottomLevelOffsetRejectsSwallowedPositiveAndNegativeTerms();
             TopLevelOffsetRejectsSwallowedPositiveAndNegativeTerms();
@@ -31,16 +31,19 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
-        private static void LegacyBottomOffsetRejectsSwallowedBaseTerm()
+        private static void LegacyBottomOffsetRejectsSwallowedBaseTerms()
         {
-            var project = NewProject();
-            var element = NewElement(project, "legacy-bottom-base-term");
-            var version = project.ChangeVersion;
-            Contains(
-                ThrowsMessage<InvalidOperationException>(() =>
-                    ElementVerticalPlacementService.Resolve(project, element, 1d, 4d, 1e16d)),
-                "legacy bottom elevation cannot preserve its non-zero additive term");
-            Equal(version, project.ChangeVersion);
+            foreach (var sourceBaseElevationM in new[] { 1d, -1d })
+            {
+                var project = NewProject();
+                var element = NewElement(project, "legacy-bottom-base-term-" + sourceBaseElevationM);
+                var version = project.ChangeVersion;
+                Contains(
+                    ThrowsMessage<InvalidOperationException>(() =>
+                        ElementVerticalPlacementService.Resolve(project, element, sourceBaseElevationM, 4d, 1e16d)),
+                    "legacy bottom elevation cannot preserve its non-zero additive term");
+                Equal(version, project.ChangeVersion);
+            }
         }
 
         private static void LegacyHeightRejectsSwallowedPositiveTerm()
