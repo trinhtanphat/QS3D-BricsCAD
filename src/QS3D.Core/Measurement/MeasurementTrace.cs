@@ -445,7 +445,7 @@ namespace QS3D.Core.Measurement
         internal static IReadOnlyList<MeasurementTraceFact> SnapshotFacts(IEnumerable<MeasurementTraceFact> source, string parameterName)
         {
             if (source == null) throw new ArgumentNullException(parameterName);
-            RequireSupportedCount(source, parameterName, "facts");
+            var knownCount = RequireSupportedCount(source, parameterName, "facts");
             var items = new List<MeasurementTraceFact>();
             foreach (var item in source)
             {
@@ -454,6 +454,7 @@ namespace QS3D.Core.Measurement
                 if (item == null) throw new ArgumentException("Measurement trace facts cannot contain null entries.", parameterName);
                 items.Add(item);
             }
+            RequireObservedCount(knownCount, items.Count, parameterName, "facts");
             items.Sort(CompareFacts);
             for (var i = 1; i < items.Count; i++)
             {
@@ -476,7 +477,7 @@ namespace QS3D.Core.Measurement
         internal static IReadOnlyList<MeasurementTraceAdjustment> SnapshotAdjustments(IEnumerable<MeasurementTraceAdjustment> source, string parameterName)
         {
             if (source == null) throw new ArgumentNullException(parameterName);
-            RequireSupportedCount(source, parameterName, "adjustments");
+            var knownCount = RequireSupportedCount(source, parameterName, "adjustments");
             var items = new List<MeasurementTraceAdjustment>();
             foreach (var item in source)
             {
@@ -485,6 +486,7 @@ namespace QS3D.Core.Measurement
                 if (item == null) throw new ArgumentException("Measurement trace adjustments cannot contain null entries.", parameterName);
                 items.Add(item);
             }
+            RequireObservedCount(knownCount, items.Count, parameterName, "adjustments");
             items.Sort(CompareAdjustments);
             for (var i = 1; i < items.Count; i++)
             {
@@ -497,7 +499,7 @@ namespace QS3D.Core.Measurement
         internal static IReadOnlyList<string> SnapshotMessages(IEnumerable<string>? source)
         {
             if (source == null) return new ReadOnlyCollection<string>(Array.Empty<string>());
-            RequireSupportedCount(source, nameof(source), "messages");
+            var knownCount = RequireSupportedCount(source, nameof(source), "messages");
             var items = new List<string>();
             foreach (var item in source)
             {
@@ -505,6 +507,7 @@ namespace QS3D.Core.Measurement
                     throw CollectionCountError(nameof(source), "messages");
                 items.Add(RequireText(item, nameof(source)));
             }
+            RequireObservedCount(knownCount, items.Count, nameof(source), "messages");
             items.Sort(StringComparer.Ordinal);
             for (var i = 1; i < items.Count; i++)
             {
@@ -514,7 +517,7 @@ namespace QS3D.Core.Measurement
             return new ReadOnlyCollection<string>(items.ToArray());
         }
 
-        private static void RequireSupportedCount<T>(IEnumerable<T> source, string parameterName, string collectionName)
+        private static int? RequireSupportedCount<T>(IEnumerable<T> source, string parameterName, string collectionName)
         {
             int? knownCount = null;
             if (source is ICollection<T> collection)
@@ -523,6 +526,7 @@ namespace QS3D.Core.Measurement
                 ValidateKnownCount(readOnlyCollection.Count, ref knownCount, parameterName, collectionName);
             if (source is System.Collections.ICollection nonGenericCollection)
                 ValidateKnownCount(nonGenericCollection.Count, ref knownCount, parameterName, collectionName);
+            return knownCount;
         }
 
         private static void ValidateKnownCount(
@@ -542,6 +546,18 @@ namespace QS3D.Core.Measurement
                     "Measurement trace " + collectionName + " count contracts disagree.",
                     parameterName);
             knownCount = count;
+        }
+
+        private static void RequireObservedCount(
+            int? knownCount,
+            int observedCount,
+            string parameterName,
+            string collectionName)
+        {
+            if (knownCount.HasValue && knownCount.Value != observedCount)
+                throw new ArgumentException(
+                    "Measurement trace " + collectionName + " count does not match source traversal.",
+                    parameterName);
         }
 
         private static ArgumentException CollectionCountError(string parameterName, string collectionName)
