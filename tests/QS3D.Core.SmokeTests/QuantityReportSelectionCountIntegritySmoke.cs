@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Reporting;
 
@@ -20,7 +19,7 @@ namespace QS3D.Core.SmokeTests
             OverTraversalFailsClosed();
             HonestKnownCountPreservesSelectionSemantics();
             PureStreamRejectsItem10001();
-            PureStreamExactBoundReachesIdentityValidation();
+            ExactKnownCountEntersEnumeration();
         }
 
         private static void NegativeNonGenericCountFailsBeforeEnumeration()
@@ -49,14 +48,16 @@ namespace QS3D.Core.SmokeTests
 
         private static void UnderTraversalFailsClosed()
         {
+            var project = ProjectWithElements("under", "E1");
             var source = new ReadOnlyCountSequence(2, new[] { "E1" });
-            ExpectInvalidOperation(() => ProjectQuantityReportBuilder.Detail(EmptyProject("under"), source));
+            ExpectInvalidOperation(() => ProjectQuantityReportBuilder.Detail(project, source));
         }
 
         private static void OverTraversalFailsClosed()
         {
+            var project = ProjectWithElements("over", "E1", "E2");
             var source = new ReadOnlyCountSequence(1, new[] { "E1", "E2" });
-            ExpectInvalidOperation(() => ProjectQuantityReportBuilder.Detail(EmptyProject("over"), source));
+            ExpectInvalidOperation(() => ProjectQuantityReportBuilder.Detail(project, source));
         }
 
         private static void HonestKnownCountPreservesSelectionSemantics()
@@ -70,29 +71,40 @@ namespace QS3D.Core.SmokeTests
 
         private static void PureStreamRejectsItem10001()
         {
+            var project = EmptyProject("stream-overflow");
+            var family = new ProjectFamily("family", "Family", ElementCategory.Slab);
+            project.Families.Add(family);
             ExpectInvalidOperation(() => ProjectQuantityReportBuilder.Detail(
-                EmptyProject("stream-overflow"),
-                PureIds(SelectionBound + 1)));
+                project,
+                RotatingValidIds(project, family.Id, SelectionBound + 1)));
         }
 
-        private static void PureStreamExactBoundReachesIdentityValidation()
+        private static void ExactKnownCountEntersEnumeration()
         {
+            var source = new ReadOnlyCountSequence(SelectionBound, Array.Empty<string>(), throwOnEnumeration: true);
             try
             {
-                ProjectQuantityReportBuilder.Detail(EmptyProject("stream-boundary"), PureIds(SelectionBound));
+                ProjectQuantityReportBuilder.Detail(EmptyProject("exact-bound"), source);
             }
-            catch (KeyNotFoundException)
+            catch (EnumerationEnteredException)
             {
+                if (!source.EnumeratorEntered)
+                    throw new Exception("Quantity report exact-bound Count control did not enter enumeration.");
                 return;
             }
 
-            throw new Exception("Quantity report pure-stream exact bound must be accepted by the traversal guard and proceed to normal id validation.");
+            throw new Exception("Quantity report exact-bound known Count must pass preflight and enter enumeration.");
         }
 
-        private static IEnumerable<string> PureIds(int count)
+        private static IEnumerable<string> RotatingValidIds(ProjectState project, string familyId, int count)
         {
             for (var i = 0; i < count; i++)
-                yield return "S" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            {
+                var id = "S" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                project.Elements.Clear();
+                project.Elements.Add(new ProjectElement(id, ElementCategory.Slab, familyId, string.Empty, string.Empty));
+                yield return id;
+            }
         }
 
         private static ProjectState EmptyProject(string id)

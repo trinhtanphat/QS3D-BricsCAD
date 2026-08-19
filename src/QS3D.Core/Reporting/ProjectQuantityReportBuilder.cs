@@ -138,30 +138,20 @@ namespace QS3D.Core.Reporting
         {
             if (elementIds == null) return null;
 
-            var knownCount = SnapshotKnownSelectionCount(elementIds);
             var selectionVersion = project.ChangeVersion;
-            var rawIds = knownCount.HasValue
-                ? new List<string?>(knownCount.Value)
-                : new List<string?>();
+            var knownCount = SnapshotKnownSelectionCount(elementIds);
+            if (project.ChangeVersion != selectionVersion)
+                throw new InvalidOperationException("Project changed while quantity report element-id Count contracts were being inspected; recompute the selection against the current project state.");
+
+            var selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var selectedInstances = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             var observedCount = 0;
             foreach (var raw in elementIds)
             {
                 observedCount++;
                 if (observedCount > MaxSelectionElementIds)
                     throw SelectionTooLarge();
-                rawIds.Add(raw);
-            }
 
-            if (knownCount.HasValue && observedCount != knownCount.Value)
-                throw SelectionCountMismatch(knownCount.Value, observedCount);
-
-            if (project.ChangeVersion != selectionVersion)
-                throw new InvalidOperationException("Project changed while quantity report element ids were being enumerated; recompute the selection against the current project state.");
-
-            var selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var selectedInstances = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
-            foreach (var raw in rawIds)
-            {
                 var id = (raw ?? string.Empty).Trim();
                 if (id.Length == 0) throw new ArgumentException("Quantity report element ids must not be blank.", nameof(elementIds));
                 if (!selected.Add(id))
@@ -172,6 +162,8 @@ namespace QS3D.Core.Reporting
 
             if (project.ChangeVersion != selectionVersion)
                 throw new InvalidOperationException("Project changed while quantity report element ids were being enumerated; recompute the selection against the current project state.");
+            if (knownCount.HasValue && observedCount != knownCount.Value)
+                throw SelectionCountMismatch(knownCount.Value, observedCount);
 
             ReportingProjectIdentityGuard.RequireUniqueElementIds(project, "Quantity report selection");
             foreach (var selectedInstance in selectedInstances)
