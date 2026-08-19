@@ -450,7 +450,7 @@ namespace QS3D.BricsCAD.V25.UI
             if (family != null && family.Category == ElementCategory.Foundation)
             {
                 var inferred = InferFoundationSubtype(family.Name);
-                if (_inspection.Count > 0 && inferred.Length > 0 &&
+                if (_loadingContext && _inspection.Count > 0 && inferred.Length > 0 &&
                     !string.Equals(_familySubtypeFilter, inferred, StringComparison.OrdinalIgnoreCase))
                 {
                     _familySubtypeFilter = inferred;
