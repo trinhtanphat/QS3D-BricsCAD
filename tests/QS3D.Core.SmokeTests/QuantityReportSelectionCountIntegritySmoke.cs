@@ -72,11 +72,27 @@ namespace QS3D.Core.SmokeTests
         private static void PureStreamRejectsItem10001()
         {
             var project = EmptyProject("stream-overflow");
+            project.Floors.Add(new FloorDefinition("floor", "Floor", 0d));
+            project.Zones.Add(new ZoneDefinition("zone", "Zone"));
             var family = new ProjectFamily("family", "Family", ElementCategory.Slab);
             project.Families.Add(family);
-            ExpectInvalidOperation(() => ProjectQuantityReportBuilder.Detail(
-                project,
-                RotatingValidIds(project, family.Id, SelectionBound + 1)));
+
+            var ids = new string[SelectionBound];
+            for (var i = 0; i < SelectionBound; i++)
+            {
+                var id = "S" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                ids[i] = id;
+                project.Elements.Add(new ProjectElement(id, ElementCategory.Slab, family.Id, "floor", "zone"));
+            }
+
+            ExpectInvalidOperation(() => ProjectQuantityReportBuilder.Detail(project, StableIdsThenOverflow(ids)));
+        }
+
+        private static IEnumerable<string> StableIdsThenOverflow(IReadOnlyList<string> ids)
+        {
+            for (var i = 0; i < ids.Count; i++)
+                yield return ids[i];
+            yield return "S-overflow";
         }
 
         private static void ExactKnownCountEntersEnumeration()
@@ -94,17 +110,6 @@ namespace QS3D.Core.SmokeTests
             }
 
             throw new Exception("Quantity report exact-bound known Count must pass preflight and enter enumeration.");
-        }
-
-        private static IEnumerable<string> RotatingValidIds(ProjectState project, string familyId, int count)
-        {
-            for (var i = 0; i < count; i++)
-            {
-                var id = "S" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                project.Elements.Clear();
-                project.Elements.Add(new ProjectElement(id, ElementCategory.Slab, familyId, string.Empty, string.Empty));
-                yield return id;
-            }
         }
 
         private static ProjectState EmptyProject(string id)
