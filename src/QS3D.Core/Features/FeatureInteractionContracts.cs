@@ -48,7 +48,7 @@ namespace QS3D.Core.Features
 
     public sealed class CreateRecipeDescriptor
     {
-        public CreateRecipeDescriptor(string id, CreateInputMode inputMode, string schemaKey = null)
+        public CreateRecipeDescriptor(string id, CreateInputMode inputMode, string? schemaKey = null)
         {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Recipe id cannot be blank.", nameof(id));
             Id = id.Trim();
@@ -58,9 +58,9 @@ namespace QS3D.Core.Features
 
         public string Id { get; }
         public CreateInputMode InputMode { get; }
-        public string SchemaKey { get; }
+        public string? SchemaKey { get; }
         public bool RequiresForm => InputMode == CreateInputMode.FormThenCreate || InputMode == CreateInputMode.FormThenPick || InputMode == CreateInputMode.PickThenForm || InputMode == CreateInputMode.Wizard;
-        private static string NormalizeOptional(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        private static string? NormalizeOptional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     public sealed class InteractionProfile
@@ -68,14 +68,14 @@ namespace QS3D.Core.Features
         public InteractionProfile(
             FeatureOnSelectBehavior onSelect,
             IEnumerable<CreateRecipeDescriptor> recipes,
-            string primaryRecipeId,
+            string? primaryRecipeId,
             IEnumerable<InteractionSurface> persistentSurfaces,
             FeatureCapability capabilities,
             bool allowsModal = false,
             bool allowsFloatingTool = false,
-            string propertySchemaKey = null,
-            string dependencyPolicyKey = null,
-            string semanticMappingKey = null)
+            string? propertySchemaKey = null,
+            string? dependencyPolicyKey = null,
+            string? semanticMappingKey = null)
         {
             OnSelect = onSelect;
             Recipes = Snapshot(recipes);
@@ -92,14 +92,14 @@ namespace QS3D.Core.Features
 
         public FeatureOnSelectBehavior OnSelect { get; }
         public IReadOnlyList<CreateRecipeDescriptor> Recipes { get; }
-        public string PrimaryRecipeId { get; }
+        public string? PrimaryRecipeId { get; }
         public IReadOnlyList<InteractionSurface> PersistentSurfaces { get; }
         public FeatureCapability Capabilities { get; }
         public bool AllowsModal { get; }
         public bool AllowsFloatingTool { get; }
-        public string PropertySchemaKey { get; }
-        public string DependencyPolicyKey { get; }
-        public string SemanticMappingKey { get; }
+        public string? PropertySchemaKey { get; }
+        public string? DependencyPolicyKey { get; }
+        public string? SemanticMappingKey { get; }
 
         private void Validate()
         {
@@ -126,12 +126,12 @@ namespace QS3D.Core.Features
             return new ReadOnlyCollection<T>((source ?? Enumerable.Empty<T>()).ToArray());
         }
 
-        private static string NormalizeOptional(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        private static string? NormalizeOptional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     public sealed class FeatureDescriptor
     {
-        public FeatureDescriptor(FeatureId id, string groupKey, int order, string labelKey, InteractionProfile interactionProfile, string iconKey = null)
+        public FeatureDescriptor(FeatureId id, string groupKey, int order, string labelKey, InteractionProfile interactionProfile, string? iconKey = null)
         {
             if (string.IsNullOrWhiteSpace(groupKey)) throw new ArgumentException("Group key cannot be blank.", nameof(groupKey));
             if (string.IsNullOrWhiteSpace(labelKey)) throw new ArgumentException("Label key cannot be blank.", nameof(labelKey));
@@ -147,7 +147,7 @@ namespace QS3D.Core.Features
         public string GroupKey { get; }
         public int Order { get; }
         public string LabelKey { get; }
-        public string IconKey { get; }
+        public string? IconKey { get; }
         public InteractionProfile InteractionProfile { get; }
     }
 
@@ -174,7 +174,7 @@ namespace QS3D.Core.Features
 
         public IReadOnlyList<FeatureDescriptor> Descriptors => _descriptors;
 
-        public bool TryGet(FeatureId id, out FeatureDescriptor descriptor) => _byId.TryGetValue(id, out descriptor);
+        public bool TryGet(FeatureId id, out FeatureDescriptor? descriptor) => _byId.TryGetValue(id, out descriptor);
 
         public FeatureDescriptor GetRequired(FeatureId id)
         {
