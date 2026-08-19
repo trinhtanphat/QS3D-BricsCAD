@@ -16,8 +16,11 @@ namespace QS3D.Core.SmokeTests
             RejectNegativeKnownCountBeforeEnumeration();
             RejectConflictingKnownCountsBeforeEnumeration();
             RejectOversizedKnownCountBeforeEnumeration();
+            RejectKnownCountUnderEnumeration();
+            RejectKnownCountOverEnumeration();
             AcceptConsistentKnownCounts();
             AcceptExactKnownBound();
+            AcceptPureStreamingSource();
             PreserveStreamingRowBoundaryForDishonestCount();
         }
 
@@ -51,6 +54,34 @@ namespace QS3D.Core.SmokeTests
             AssertNotEnumerated(source, "oversized known Count");
         }
 
+        private static void RejectKnownCountUnderEnumeration()
+        {
+            var source = new MultiCountSource(
+                new[] { ValidInput("UNDER-1") },
+                2,
+                2,
+                2,
+                throwOnEnumeration: false);
+            ExpectInvalidOperation(
+                () => RebarScheduleBuilder.Build(source),
+                "known Count does not match traversal",
+                "Rebar schedule must reject Count=2 when traversal yields one valid input.");
+        }
+
+        private static void RejectKnownCountOverEnumeration()
+        {
+            var source = new MultiCountSource(
+                new[] { ValidInput("OVER-1"), ValidInput("OVER-2") },
+                1,
+                1,
+                1,
+                throwOnEnumeration: false);
+            ExpectInvalidOperation(
+                () => RebarScheduleBuilder.Build(source),
+                "known Count does not match traversal",
+                "Rebar schedule must reject Count=1 when traversal yields two valid inputs.");
+        }
+
         private static void AcceptConsistentKnownCounts()
         {
             var source = new MultiCountSource(Array.Empty<RebarScheduleInput>(), 0, 0, 0, throwOnEnumeration: false);
@@ -63,12 +94,26 @@ namespace QS3D.Core.SmokeTests
 
         private static void AcceptExactKnownBound()
         {
-            var source = new MultiCountSource(Array.Empty<RebarScheduleInput>(), MaxRowCount, MaxRowCount, MaxRowCount, throwOnEnumeration: false);
+            var source = new DishonestReadOnlyCollection(MaxRowCount, reportedCount: MaxRowCount);
             var rows = RebarScheduleBuilder.Build(source);
-            if (!source.EnumeratorRequested)
-                throw new InvalidOperationException("The exact known rebar-schedule Count bound must remain admissible to streaming validation.");
-            if (rows.Count != 0)
-                throw new InvalidOperationException("Exact-bound empty rebar-schedule source produced unexpected rows.");
+            if (rows.Count != MaxRowCount)
+                throw new InvalidOperationException("Honest exact-bound rebar-schedule source must produce exactly " + MaxRowCount + " rows.");
+            if (source.MoveNextCalls != MaxRowCount + 1)
+                throw new InvalidOperationException(
+                    "Honest exact-bound rebar-schedule traversal must terminate after exactly one final MoveNext. MoveNext calls: " + source.MoveNextCalls + ".");
+        }
+
+        private static void AcceptPureStreamingSource()
+        {
+            var rows = RebarScheduleBuilder.Build(PureStreamingInputs());
+            if (rows.Count != 2)
+                throw new InvalidOperationException("Pure streaming rebar-schedule input without known Count metadata must remain supported.");
+        }
+
+        private static IEnumerable<RebarScheduleInput> PureStreamingInputs()
+        {
+            yield return ValidInput("PURE-1");
+            yield return ValidInput("PURE-2");
         }
 
         private static void PreserveStreamingRowBoundaryForDishonestCount()
@@ -81,6 +126,16 @@ namespace QS3D.Core.SmokeTests
             if (source.MoveNextCalls != MaxRowCount + 1)
                 throw new InvalidOperationException(
                     "Rebar schedule streaming guard must stop after observing input 10,001 without requesting another item. MoveNext calls: " + source.MoveNextCalls + ".");
+        }
+
+        private static RebarScheduleInput ValidInput(string id)
+        {
+            return new RebarScheduleInput
+            {
+                ElementId = id,
+                Notation = "1D8",
+                CuttingLengthM = 1d
+            };
         }
 
         private static void AssertNotEnumerated(MultiCountSource source, string label)
@@ -196,12 +251,7 @@ namespace QS3D.Core.SmokeTests
                     _owner.MoveNextCalls++;
                     _index++;
                     if (_index >= _owner._actualCount) return false;
-                    Current = new RebarScheduleInput
-                    {
-                        ElementId = "STREAM-" + _index,
-                        Notation = "1D8",
-                        CuttingLengthM = 1d
-                    };
+                    Current = ValidInput("STREAM-" + _index);
                     return true;
                 }
 
