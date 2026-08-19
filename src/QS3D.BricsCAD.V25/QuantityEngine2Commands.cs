@@ -52,7 +52,9 @@ namespace QS3D.BricsCAD.V25
                     // must not hide the authoritative result popup from the user.
                 }
 
-                QuantityCalculationResultWindow.ShowSuccess(summary);
+                var openQuantityReview = QuantityCalculationResultWindow.ShowSuccess(summary);
+                if (openQuantityReview)
+                    new Commands().ShowQuantitySummary();
             }
             catch (Exception ex)
             {
