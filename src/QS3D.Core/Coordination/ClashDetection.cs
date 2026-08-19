@@ -72,6 +72,11 @@ namespace QS3D.Core.Coordination
             var normalized = value.Trim();
             if (!string.Equals(value, normalized, StringComparison.Ordinal))
                 throw new ArgumentException("Coordination element id must not contain surrounding whitespace.", parameterName);
+            for (var index = 0; index < value.Length; index++)
+            {
+                if (char.IsControl(value[index]))
+                    throw new ArgumentException("Coordination element id must not contain control characters.", parameterName);
+            }
             return value;
         }
 
