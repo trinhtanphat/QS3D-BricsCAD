@@ -12,7 +12,7 @@ namespace QS3D.Core.Domain
 
         public ProjectMaterial(string id, string name, string unit, string description, bool builtIn)
         {
-            Id = Required(id, nameof(id), 64);
+            Id = RequireMaterialId(id, nameof(id));
             Name = Required(name, nameof(name), 120);
             Unit = Optional(unit, nameof(unit), 24);
             Description = Optional(description, nameof(description), 240);
@@ -24,6 +24,13 @@ namespace QS3D.Core.Domain
         public string Unit { get; }
         public string Description { get; }
         public bool IsBuiltIn { get; }
+
+        internal static string RequireMaterialId(string value, string name)
+        {
+            var raw = value ?? string.Empty;
+            if (raw.Any(char.IsControl)) throw new ArgumentException(name + " cannot contain control characters.", name);
+            return Required(raw, name, 64);
+        }
 
         private static string Required(string value, string name, int max)
         {
@@ -147,8 +154,8 @@ namespace QS3D.Core.Domain
         public static bool DeleteCustom(ProjectState project, string id)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var normalized = (id ?? string.Empty).Trim();
-            if (normalized.Length == 0) return false;
+            if (string.IsNullOrWhiteSpace(id)) return false;
+            var normalized = ProjectMaterial.RequireMaterialId(id, nameof(id));
             var custom = ReadCustom(project);
             var material = custom.FirstOrDefault(x => string.Equals(x.Id, normalized, StringComparison.OrdinalIgnoreCase));
             if (material == null) return false;
