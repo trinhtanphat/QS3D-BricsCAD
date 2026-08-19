@@ -92,8 +92,8 @@ namespace QS3D.Core.Features
             if (string.IsNullOrWhiteSpace(title)) throw new ArgumentException("Modal title cannot be blank.", nameof(title));
 
             Kind = kind;
-            ContextKey = contextKey.Trim();
-            Title = title.Trim();
+            ContextKey = contextKey!.Trim();
+            Title = title!.Trim();
             SchemaKey = string.IsNullOrWhiteSpace(schemaKey) ? null : schemaKey.Trim();
             IsDestructive = isDestructive;
             DefaultFocusKey = string.IsNullOrWhiteSpace(defaultFocusKey) ? null : defaultFocusKey.Trim();
