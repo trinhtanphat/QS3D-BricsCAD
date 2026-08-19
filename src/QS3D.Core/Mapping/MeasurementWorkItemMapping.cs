@@ -117,6 +117,10 @@ namespace QS3D.Core.Mapping
                 index++;
             }
 
+            if (knownCount.HasValue && index != knownCount.Value)
+                throw new InvalidOperationException(
+                    "Measurement/work-item mapping source known Count does not match completed traversal cardinality.");
+
             items.Sort(CompareMappings);
             Mappings = new ReadOnlyCollection<MeasurementWorkItemMapping>(items.ToArray());
         }
