@@ -92,13 +92,11 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
             }
 
+            // Grid Add is an inline Family-authoring action, not a mode chooser. Create the
+            // selected Grid subtype immediately; RefreshAfterCommit below selects the new Family
+            // and shows its Properties surface in-place.
             e.Handled = true;
-            var menu = CreateContextMenu();
-            menu.Items.Add(CreateMenuItem("Tham số", (s, args) => CreateGridFamilyFromWorkspaceSubtype(false)));
-            menu.Items.Add(CreateMenuItem("Solid3D", (s, args) => CreateGridFamilyFromWorkspaceSubtype(true)));
-            menu.PlacementTarget = sender as UIElement ?? FamilyList;
-            menu.Placement = sender is Button ? System.Windows.Controls.Primitives.PlacementMode.Bottom : System.Windows.Controls.Primitives.PlacementMode.MousePoint;
-            menu.IsOpen = true;
+            CreateGridFamilyFromWorkspaceSubtype(false);
         }
 
         private void OnWorkspaceFamilySubtypeTreeSelectionChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
