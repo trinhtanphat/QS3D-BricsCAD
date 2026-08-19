@@ -20,7 +20,9 @@ namespace QS3D.Core.SmokeTests
             DuplicateRequestedViewFailsClosed();
             KnownItemCountsFailBeforeEnumeration();
             KnownAvailableViewCountsFailBeforeEnumeration();
-            ExactKnownCountBoundaryRemainsAccepted();
+            HonestKnownCountsRemainAccepted();
+            ItemKnownCountTraversalMismatchFailsClosed();
+            AvailableViewKnownCountTraversalMismatchFailsClosed();
             BoundedItemsDoNotOverEnumerate();
             BoundedAvailableViewsDoNotOverEnumerate();
         }
@@ -217,21 +219,52 @@ namespace QS3D.Core.SmokeTests
                 "Conflicting available-view Counts must fail before enumeration.");
         }
 
-        private static void ExactKnownCountBoundaryRemainsAccepted()
+        private static void HonestKnownCountsRemainAccepted()
         {
             var options = new SemanticSheetAutoLayoutOptions("S", "A-", "Sheet", 297d, 210d);
-            var views = new MultiCountCollection<SemanticViewPlan>(BuildViews(1), 10000, 10000, 10000);
+            var views = new MultiCountCollection<SemanticViewPlan>(BuildViews(1), 1, 1, 1);
             var items = new MultiCountCollection<SemanticSheetAutoLayoutItem>(
                 new[] { new SemanticSheetAutoLayoutItem("V1", 100d, 80d) },
-                10000,
-                10000,
-                10000);
+                1,
+                1,
+                1);
 
             var sheets = SemanticSheetAutoLayoutPlanner.Build(items, views, options);
             Equal(1, sheets.Count);
             Equal(1, sheets[0].Placements.Count);
             if (!items.EnumerationStarted || !views.EnumerationStarted)
-                throw new Exception("Exact-bound known Counts should remain eligible for normal enumeration.");
+                throw new Exception("Honest known Counts should remain eligible for normal enumeration.");
+        }
+
+        private static void ItemKnownCountTraversalMismatchFailsClosed()
+        {
+            var options = new SemanticSheetAutoLayoutOptions("S", "A-", "Sheet", 297d, 210d);
+            var items = new MultiCountCollection<SemanticSheetAutoLayoutItem>(
+                new[] { new SemanticSheetAutoLayoutItem("V1", 100d, 80d) },
+                2,
+                2,
+                2);
+
+            MustFail(
+                () => SemanticSheetAutoLayoutPlanner.Build(items, BuildViews(1), options),
+                "Item known Count must match the traversal cardinality.");
+            if (!items.EnumerationStarted)
+                throw new Exception("Item Count/traversal mismatch must be detected after bounded traversal.");
+        }
+
+        private static void AvailableViewKnownCountTraversalMismatchFailsClosed()
+        {
+            var options = new SemanticSheetAutoLayoutOptions("S", "A-", "Sheet", 297d, 210d);
+            var views = new MultiCountCollection<SemanticViewPlan>(BuildViews(1), 2, 2, 2);
+
+            MustFail(
+                () => SemanticSheetAutoLayoutPlanner.Build(
+                    new[] { new SemanticSheetAutoLayoutItem("V1", 100d, 80d) },
+                    views,
+                    options),
+                "Available-view known Count must match the traversal cardinality.");
+            if (!views.EnumerationStarted)
+                throw new Exception("Available-view Count/traversal mismatch must be detected after bounded traversal.");
         }
 
         private static void BoundedItemsDoNotOverEnumerate()
