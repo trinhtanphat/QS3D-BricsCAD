@@ -36,6 +36,9 @@ namespace QS3D.Core.Diagnostics
                     var normalized = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
                     if (normalized.Length > 0) index.Add(normalized);
                 }
+                if (observedHandleCount != reportedHandleCount)
+                    throw LiveHandleInputCountMismatch(reportedHandleCount, observedHandleCount);
+
                 liveHandleIndex = index;
             }
 
@@ -176,6 +179,13 @@ namespace QS3D.Core.Diagnostics
         private static InvalidOperationException LiveHandleInputTooLarge()
         {
             return new InvalidOperationException("BOM live generated Handle input exceeds the supported bound of " + MaxLiveGeneratedHandleInputs + ".");
+        }
+
+        private static InvalidOperationException LiveHandleInputCountMismatch(int reportedCount, int observedCount)
+        {
+            return new InvalidOperationException(
+                "BOM live generated Handle input changed during enumeration; Count reported " + reportedCount +
+                " items but enumeration produced " + observedCount + ".");
         }
     }
 }
