@@ -208,7 +208,7 @@ namespace QS3D.Core.Diagnostics
                     throw LiveHandleInputTooLarge(label);
 
                 var handle = RequireCanonicalLiveHandle(raw, label);
-                if (handle.Length > 0) normalized.Add(handle);
+                if (handle.Length > 0) normalized.Add(GeneratedHandleIdentity.Normalize(handle));
             }
             ValidateTraversalCount(label, expectedCount, observedCount);
             return normalized;
@@ -325,7 +325,8 @@ namespace QS3D.Core.Diagnostics
                 var hasLiveSourceHandle = false;
                 foreach (var raw in element.SourceHandles)
                 {
-                    var handle = (raw ?? string.Empty).Trim();
+                    if (string.IsNullOrWhiteSpace(raw)) continue;
+                    var handle = GeneratedHandleIdentity.Normalize(raw);
                     if (handle.Length == 0) continue;
                     hasSourceHandle = true;
                     if (!liveSourceHandles.Contains(handle)) continue;
