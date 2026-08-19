@@ -30,6 +30,14 @@ namespace QS3D.Core.Cost
                 throw new OverflowException("Cost addition precision loss: " + label + ".");
             return result;
         }
+
+        public static decimal SubtractPreservingNonZeroDeduction(decimal left, decimal right, string label)
+        {
+            var result = checked(left - right);
+            if (right != 0m && result == left)
+                throw new OverflowException("Cost subtraction precision loss: " + label + ".");
+            return result;
+        }
     }
 
     internal static class AdvancedCostCollectionContract
@@ -839,10 +847,19 @@ namespace QS3D.Core.Cost
                     var requested = claim?.ClaimedThisPeriodQuantity ?? 0m;
                     if (previous > item.ContractQuantity)
                         throw new InvalidOperationException("Previous certified quantity exceeds the contract quantity for item " + item.ItemCode + ".");
-                    var available = item.ContractQuantity - previous;
+                    var available = CostDecimalMath.SubtractPreservingNonZeroDeduction(
+                        item.ContractQuantity,
+                        previous,
+                        "progress available quantity");
                     var certified = requested <= available ? requested : available;
-                    var rejected = requested - certified;
-                    var remaining = available - certified;
+                    var rejected = CostDecimalMath.SubtractPreservingNonZeroDeduction(
+                        requested,
+                        certified,
+                        "progress rejected quantity");
+                    var remaining = CostDecimalMath.SubtractPreservingNonZeroDeduction(
+                        available,
+                        certified,
+                        "progress remaining quantity");
                     var value = CostDecimalMath.MultiplyPreservingNonZero(certified, item.UnitRate, "progress certified line value");
                     gross = CostDecimalMath.AddPreservingNonZeroContribution(
                         gross,

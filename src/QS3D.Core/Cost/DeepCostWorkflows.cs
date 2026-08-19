@@ -50,7 +50,7 @@ namespace QS3D.Core.Cost
         public RateReferenceGraph(IEnumerable<RateReferenceEdge> edges)
         {
             if (edges == null) throw new ArgumentNullException(nameof(edges));
-            ValidateKnownCount(edges);
+            var knownCount = ValidateKnownCount(edges);
 
             var snapshot = new List<RateReferenceEdge>();
             var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -67,6 +67,10 @@ namespace QS3D.Core.Cost
                 snapshot.Add(edge);
                 index++;
             }
+            if (knownCount.HasValue && index != knownCount.Value)
+                throw new ArgumentException(
+                    "Rate reference edge collection known count does not match the observed traversal.",
+                    nameof(edges));
             snapshot.Sort(CompareEdges);
             _edges = new ReadOnlyCollection<RateReferenceEdge>(snapshot.ToArray());
         }
@@ -104,7 +108,7 @@ namespace QS3D.Core.Cost
             return new ReadOnlyCollection<string>(result.ToArray());
         }
 
-        private static void ValidateKnownCount(IEnumerable<RateReferenceEdge> edges)
+        private static int? ValidateKnownCount(IEnumerable<RateReferenceEdge> edges)
         {
             var counts = new List<int>(3);
             if (edges is ICollection<RateReferenceEdge> collection)
@@ -114,7 +118,7 @@ namespace QS3D.Core.Cost
             if (edges is ICollection nonGenericCollection)
                 counts.Add(nonGenericCollection.Count);
 
-            if (counts.Count == 0) return;
+            if (counts.Count == 0) return null;
 
             var expected = counts[0];
             var maximumReported = expected;
@@ -134,6 +138,7 @@ namespace QS3D.Core.Cost
                 throw new ArgumentException("Rate reference edge collection reports an invalid negative known count.", nameof(edges));
             if (hasConflict)
                 throw new ArgumentException("Rate reference edge collection reports conflicting known counts.", nameof(edges));
+            return expected;
         }
 
         private static int CompareEdges(RateReferenceEdge left, RateReferenceEdge right)
@@ -194,8 +199,8 @@ namespace QS3D.Core.Cost
         {
             if (rates == null) throw new ArgumentNullException(nameof(rates));
             if (references == null) throw new ArgumentNullException(nameof(references));
-            if (AdvancedCostCollectionContract.TryGetKnownCount(rates, out var knownRateCount) &&
-                knownRateCount > AdvancedCostCollectionContract.MaximumEntries)
+            var hasKnownRateCount = AdvancedCostCollectionContract.TryGetKnownCount(rates, out var knownRateCount);
+            if (hasKnownRateCount && knownRateCount > AdvancedCostCollectionContract.MaximumEntries)
                 AdvancedCostCollectionContract.ThrowTooManyEntries("Build-up analysis rate collection");
 
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -220,6 +225,11 @@ namespace QS3D.Core.Cost
                 }
                 index++;
             }
+            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+                hasKnownRateCount,
+                knownRateCount,
+                index,
+                "Build-up analysis rate collection");
             result.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.Rate.RateCode, right.Rate.RateCode));
             return new ReadOnlyCollection<BuildUpAnalysisLine>(result.ToArray());
         }
@@ -373,8 +383,8 @@ namespace QS3D.Core.Cost
         {
             if (items == null) throw new ArgumentNullException(nameof(items));
             if (cfaM2 < 0m) throw new ArgumentOutOfRangeException(nameof(cfaM2));
-            if (AdvancedCostCollectionContract.TryGetKnownCount(items, out var knownItemCount) &&
-                knownItemCount > AdvancedCostCollectionContract.MaximumEntries)
+            var hasKnownItemCount = AdvancedCostCollectionContract.TryGetKnownCount(items, out var knownItemCount);
+            if (hasKnownItemCount && knownItemCount > AdvancedCostCollectionContract.MaximumEntries)
                 AdvancedCostCollectionContract.ThrowTooManyEntries("Trade analysis item collection");
 
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -407,6 +417,11 @@ namespace QS3D.Core.Cost
                 }
                 index++;
             }
+            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+                hasKnownItemCount,
+                knownItemCount,
+                index,
+                "Trade analysis item collection");
             var rows = new List<TradeCostAnalysisRow>(totals.Count);
             foreach (var aggregate in totals.Values)
                 rows.Add(new TradeCostAnalysisRow(aggregate.TradeCode, aggregate.ItemCount, aggregate.TotalCost, cfaM2));
@@ -460,8 +475,8 @@ namespace QS3D.Core.Cost
         {
             LibraryId = RateBookContract.RequireToken(libraryId, nameof(libraryId));
             if (entries == null) throw new ArgumentNullException(nameof(entries));
-            if (AdvancedCostCollectionContract.TryGetKnownCount(entries, out var knownEntryCount) &&
-                knownEntryCount > AdvancedCostCollectionContract.MaximumEntries)
+            var hasKnownEntryCount = AdvancedCostCollectionContract.TryGetKnownCount(entries, out var knownEntryCount);
+            if (hasKnownEntryCount && knownEntryCount > AdvancedCostCollectionContract.MaximumEntries)
                 AdvancedCostCollectionContract.ThrowTooManyEntries("BQ library entry collection");
 
             var snapshot = new List<BqLibraryEntry>();
@@ -478,6 +493,11 @@ namespace QS3D.Core.Cost
                 snapshot.Add(entry);
                 index++;
             }
+            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+                hasKnownEntryCount,
+                knownEntryCount,
+                index,
+                "BQ library entry collection");
             snapshot.Sort(CompareEntries);
             _entries = new ReadOnlyCollection<BqLibraryEntry>(snapshot.ToArray());
         }
@@ -488,8 +508,8 @@ namespace QS3D.Core.Cost
         public BqLibraryCatalog ImportFromProject(IEnumerable<BqLibraryEntry> projectEntries, bool replaceExisting)
         {
             if (projectEntries == null) throw new ArgumentNullException(nameof(projectEntries));
-            if (AdvancedCostCollectionContract.TryGetKnownCount(projectEntries, out var knownProjectEntryCount) &&
-                knownProjectEntryCount > AdvancedCostCollectionContract.MaximumEntries)
+            var hasKnownProjectEntryCount = AdvancedCostCollectionContract.TryGetKnownCount(projectEntries, out var knownProjectEntryCount);
+            if (hasKnownProjectEntryCount && knownProjectEntryCount > AdvancedCostCollectionContract.MaximumEntries)
                 AdvancedCostCollectionContract.ThrowTooManyEntries("BQ project import collection");
 
             var merged = new Dictionary<string, BqLibraryEntry>(StringComparer.OrdinalIgnoreCase);
@@ -509,6 +529,11 @@ namespace QS3D.Core.Cost
                 merged[entry.ItemCode] = entry;
                 index++;
             }
+            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+                hasKnownProjectEntryCount,
+                knownProjectEntryCount,
+                index,
+                "BQ project import collection");
             return new BqLibraryCatalog(LibraryId, merged.Values);
         }
 

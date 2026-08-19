@@ -38,7 +38,16 @@ namespace QS3D.Core.Geometry
         public IReadOnlyList<CurtainWallFramePiece> Pieces { get; set; } = Array.Empty<CurtainWallFramePiece>();
         public double OriginalFrameAreaM2 { get; set; }
         public double RemainingFrameAreaM2 { get; set; }
-        public double RemovedFrameAreaM2 => Math.Max(0d, OriginalFrameAreaM2 - RemainingFrameAreaM2);
+        public double RemovedFrameAreaM2
+        {
+            get
+            {
+                var removed = OriginalFrameAreaM2 - RemainingFrameAreaM2;
+                if (double.IsNaN(removed) || double.IsInfinity(removed))
+                    throw new OverflowException("Curtain removed frame area is not representable.");
+                return removed <= 0d ? 0d : removed;
+            }
+        }
         public int InterruptedFrameCount { get; set; }
     }
 
@@ -68,11 +77,14 @@ namespace QS3D.Core.Geometry
             if (frames == null) throw new ArgumentNullException(nameof(frames));
             if (openings == null) throw new ArgumentNullException(nameof(openings));
             FiniteNonNegative(clearanceM, nameof(clearanceM));
-            if (frames.Count > MaxInputFrames) throw new InvalidOperationException("Curtain frame interruption input exceeds " + MaxInputFrames + " frames.");
-            if (openings.Count > MaxOpenings) throw new InvalidOperationException("Curtain frame interruption input exceeds " + MaxOpenings + " openings.");
 
-            var expandedOpenings = new List<Rect>(openings.Count);
-            for (var i = 0; i < openings.Count; i++)
+            var frameCount = frames.Count;
+            var openingCount = openings.Count;
+            RequireSupportedInputCount(frameCount, MaxInputFrames, "frame");
+            RequireSupportedInputCount(openingCount, MaxOpenings, "opening");
+
+            var expandedOpenings = new List<Rect>(openingCount);
+            for (var i = 0; i < openingCount; i++)
             {
                 var opening = openings[i] ?? throw new InvalidOperationException("Curtain opening rectangle cannot be null.");
                 var label = "opening[" + i + "]";
@@ -108,7 +120,7 @@ namespace QS3D.Core.Geometry
             var output = new List<CurtainWallFramePiece>();
             var originalArea = 0d;
             var interrupted = 0;
-            for (var frameIndex = 0; frameIndex < frames.Count; frameIndex++)
+            for (var frameIndex = 0; frameIndex < frameCount; frameIndex++)
             {
                 var frame = frames[frameIndex] ?? throw new InvalidOperationException("Curtain frame rectangle cannot be null.");
                 ValidateRect(frame.X_M, frame.Z_M, frame.WidthM, frame.HeightM, "frame[" + frameIndex + "]");
@@ -171,6 +183,14 @@ namespace QS3D.Core.Geometry
                 RemainingFrameAreaM2 = remainingArea,
                 InterruptedFrameCount = interrupted
             };
+        }
+
+        private static void RequireSupportedInputCount(int count, int maximum, string label)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Curtain frame interruption input reports an invalid negative " + label + " Count.");
+            if (count > maximum)
+                throw new InvalidOperationException("Curtain frame interruption input exceeds " + maximum + " " + label + "s.");
         }
 
         private static List<Rect> Subtract(Rect source, Rect cut)
