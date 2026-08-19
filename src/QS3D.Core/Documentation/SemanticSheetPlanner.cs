@@ -53,7 +53,25 @@ namespace QS3D.Core.Documentation
 
         private static IReadOnlyList<SemanticSheetPlacementDefinition> SnapshotPlacements(IEnumerable<SemanticSheetPlacementDefinition> placements)
         {
-            var result = new List<SemanticSheetPlacementDefinition>(SemanticSheetPlanner.MaxPlacements);
+            var knownCounts = new List<int>(3);
+            if (placements is ICollection<SemanticSheetPlacementDefinition> collection) knownCounts.Add(collection.Count);
+            if (placements is IReadOnlyCollection<SemanticSheetPlacementDefinition> readOnlyCollection) knownCounts.Add(readOnlyCollection.Count);
+            if (placements is ICollection nonGenericCollection) knownCounts.Add(nonGenericCollection.Count);
+
+            int? knownCount = null;
+            for (var index = 0; index < knownCounts.Count; index++)
+            {
+                var count = knownCounts[index];
+                if (count < 0)
+                    throw new InvalidOperationException("Semantic sheet placement source exposes an invalid negative known Count value.");
+                if (count > SemanticSheetPlanner.MaxPlacements)
+                    throw new InvalidOperationException("Semantic sheet supports at most " + SemanticSheetPlanner.MaxPlacements + " view placements.");
+                if (knownCount.HasValue && knownCount.Value != count)
+                    throw new InvalidOperationException("Semantic sheet placement source exposes conflicting known Count values.");
+                knownCount = count;
+            }
+
+            var result = new List<SemanticSheetPlacementDefinition>(knownCount ?? SemanticSheetPlanner.MaxPlacements);
             using (var enumerator = placements.GetEnumerator())
             {
                 while (enumerator.MoveNext())
@@ -63,6 +81,10 @@ namespace QS3D.Core.Documentation
                     result.Add(enumerator.Current);
                 }
             }
+
+            if (knownCount.HasValue && result.Count != knownCount.Value)
+                throw new InvalidOperationException("Semantic sheet placement source known Count does not match the number of placements traversed.");
+
             return result.AsReadOnly();
         }
     }
