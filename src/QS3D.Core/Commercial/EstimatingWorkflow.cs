@@ -269,6 +269,7 @@ namespace QS3D.Core.Commercial
     {
         internal BulkRateAssignmentPreview(
             BulkRateAssignmentRequest request,
+            IReadOnlyList<EstimatingLine> sourceLines,
             int affectedCount,
             int replacementCount,
             IReadOnlyList<UnitDistributionItem> unitDistribution,
@@ -278,6 +279,7 @@ namespace QS3D.Core.Commercial
             decimal totalAfter)
         {
             Request = request;
+            SourceLines = sourceLines;
             AffectedCount = affectedCount;
             ReplacementCount = replacementCount;
             UnitDistribution = unitDistribution;
@@ -289,6 +291,7 @@ namespace QS3D.Core.Commercial
         }
 
         public BulkRateAssignmentRequest Request { get; }
+        internal IReadOnlyList<EstimatingLine> SourceLines { get; }
         public int AffectedCount { get; }
         public int ReplacementCount { get; }
         public IReadOnlyList<UnitDistributionItem> UnitDistribution { get; }
@@ -313,6 +316,7 @@ namespace QS3D.Core.Commercial
             for (var i = 0; i < request.UnitRates.Count; i++)
                 ratesByUnit.Add(request.UnitRates[i].Unit, request.UnitRates[i].Rate);
 
+            var sourceLines = new List<EstimatingLine>(request.LineIds.Count);
             var units = new Dictionary<string, UnitAccumulator>(StringComparer.OrdinalIgnoreCase);
             var unmatched = new List<string>();
             var blocked = new List<string>();
@@ -323,6 +327,7 @@ namespace QS3D.Core.Commercial
             for (var i = 0; i < request.LineIds.Count; i++)
             {
                 var line = portfolio.GetLine(request.LineIds[i]);
+                sourceLines.Add(line);
                 if (!units.TryGetValue(line.Unit, out var aggregate))
                 {
                     aggregate = new UnitAccumulator(line.Unit);
@@ -366,6 +371,7 @@ namespace QS3D.Core.Commercial
 
             return new BulkRateAssignmentPreview(
                 request,
+                new ReadOnlyCollection<EstimatingLine>(sourceLines.ToArray()),
                 request.LineIds.Count,
                 replacements,
                 new ReadOnlyCollection<UnitDistributionItem>(distribution.ToArray()),
@@ -393,6 +399,9 @@ namespace QS3D.Core.Commercial
                 throw new InvalidOperationException("Bulk rate assignment preview contains blocking or unmatched rows and cannot be committed.");
 
             var request = preview.Request;
+            if (!SourceLinesMatch(preview.SourceLines, portfolio, request))
+                throw new InvalidOperationException("Bulk rate assignment preview is stale and must be regenerated before commit.");
+
             var recomputed = PreviewBulkRateAssignment(portfolio, request);
             if (!recomputed.CanCommit ||
                 recomputed.AffectedCount != preview.AffectedCount ||
@@ -525,6 +534,47 @@ namespace QS3D.Core.Commercial
             reason = CommercialGuard.RequireCanonicalText(reason, nameof(reason));
             var line = portfolio.GetLine(lineId);
             return Replace(portfolio, line.WithStaleState(reason));
+        }
+
+        private static bool SourceLinesMatch(
+            IReadOnlyList<EstimatingLine> expectedLines,
+            EstimatingPortfolio portfolio,
+            BulkRateAssignmentRequest request)
+        {
+            if (expectedLines.Count != request.LineIds.Count) return false;
+
+            for (var i = 0; i < expectedLines.Count; i++)
+            {
+                EstimatingLine current;
+                try
+                {
+                    current = portfolio.GetLine(request.LineIds[i]);
+                }
+                catch (KeyNotFoundException)
+                {
+                    return false;
+                }
+
+                var expected = expectedLines[i];
+                if (!StringComparer.OrdinalIgnoreCase.Equals(expected.LineId, current.LineId) ||
+                    !string.Equals(expected.QuantitySourceId, current.QuantitySourceId, StringComparison.Ordinal) ||
+                    !string.Equals(expected.QuantityRevision, current.QuantityRevision, StringComparison.Ordinal) ||
+                    expected.Quantity != current.Quantity ||
+                    !string.Equals(expected.Unit, current.Unit, StringComparison.Ordinal) ||
+                    !string.Equals(expected.CostCode, current.CostCode, StringComparison.Ordinal) ||
+                    !string.Equals(expected.RateSourceId, current.RateSourceId, StringComparison.Ordinal) ||
+                    !string.Equals(expected.RateRevision, current.RateRevision, StringComparison.Ordinal) ||
+                    expected.ReferencedRate != current.ReferencedRate ||
+                    expected.OverrideRate != current.OverrideRate ||
+                    !string.Equals(expected.OverrideReason, current.OverrideReason, StringComparison.Ordinal) ||
+                    expected.IsBlocked != current.IsBlocked ||
+                    !string.Equals(expected.BlockReason, current.BlockReason, StringComparison.Ordinal) ||
+                    expected.IsStale != current.IsStale ||
+                    !string.Equals(expected.StaleReason, current.StaleReason, StringComparison.Ordinal))
+                    return false;
+            }
+
+            return true;
         }
 
         private static EstimatingPortfolio Replace(EstimatingPortfolio portfolio, EstimatingLine replacement)

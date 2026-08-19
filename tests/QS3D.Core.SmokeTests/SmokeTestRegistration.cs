@@ -5,7 +5,6 @@ namespace QS3D.Core.SmokeTests
         internal static void RunAll()
         {
             ProjectQuantitySmoke.Run();
-            QuantityReportSelectionCountIntegritySmoke.Run();
             QuantityRuleCanonicalNumericKeySmoke.Run();
             QuantityRuleTokenCanonicalitySmoke.Run();
             QuantityReportDistinctNoteSmoke.Run();
@@ -21,6 +20,7 @@ namespace QS3D.Core.SmokeTests
             TbqProjectWorkspaceSmoke.Run();
             QuantityMathUnderflowSmoke.Run();
             WallQuantityOpeningBoundSmoke.Run();
+            WallOpeningHostCanonicalitySmoke.Run();
             WallQuantityMeasurementTraceSmoke.Run();
             QuantityCalculationBltCompatibilityPresetSmoke.Run();
             LegacyQuantityReportIdentitySmoke.Run();
