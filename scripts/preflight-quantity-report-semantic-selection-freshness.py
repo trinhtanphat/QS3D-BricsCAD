@@ -11,6 +11,8 @@ method = source[method_start:method_end]
 
 for token in (
     "var selectionVersion = project.ChangeVersion;",
+    "var knownCount = SnapshotKnownSelectionCount(elementIds);",
+    "Project changed while quantity report element-id Count contracts were being inspected",
     "foreach (var raw in elementIds)",
     "if (project.ChangeVersion != selectionVersion)",
     "Project changed while quantity report element ids were being enumerated",
@@ -21,11 +23,13 @@ for token in (
     assert token in method, f"missing quantity report semantic-freshness contract: {token}"
 
 capture = method.index("var selectionVersion = project.ChangeVersion;")
-enumeration = method.index("foreach (var raw in elementIds)")
-version_check = method.index("if (project.ChangeVersion != selectionVersion)")
+count_snapshot = method.index("var knownCount = SnapshotKnownSelectionCount(elementIds);", capture)
+count_version_check = method.index("if (project.ChangeVersion != selectionVersion)", count_snapshot)
+enumeration = method.index("foreach (var raw in elementIds)", count_version_check)
+version_check = method.index("if (project.ChangeVersion != selectionVersion)", enumeration)
 structural_guard = method.index('ReportingProjectIdentityGuard.RequireUniqueElementIds(project, "Quantity report selection")')
-assert capture < enumeration < version_check < structural_guard, (
-    "quantity report selection freshness ordering drifted: expected capture -> enumerate -> semantic check -> structural guard"
+assert capture < count_snapshot < count_version_check < enumeration < version_check < structural_guard, (
+    "quantity report selection freshness ordering drifted: expected capture -> Count snapshot/check -> enumerate -> semantic check -> structural guard"
 )
 
 for token in (
@@ -44,4 +48,4 @@ assert "ProjectQuantityReportSemanticSelectionFreshnessSmoke.Run();" in registra
     "quantity report semantic-freshness registration drifted"
 )
 
-print("PASS: quantity report lazy selection fails closed across ProjectState.ChangeVersion changes")
+print("PASS: quantity report lazy selection fails closed across Count inspection and ProjectState.ChangeVersion changes")

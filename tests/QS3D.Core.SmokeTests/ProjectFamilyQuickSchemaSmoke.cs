@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             SchemasMatchQsForms();
+            EveryFamilyCategoryHasAnIntentionalSchema();
             MillimeterConversionIsCanonical();
             SuggestedNamesMatchQsConventions();
             AutoIdentityMatchingIsDeterministic();
@@ -19,27 +20,69 @@ namespace QS3D.Core.SmokeTests
 
         private static void SchemasMatchQsForms()
         {
+            AssertSchema(ElementCategory.FloorFinish, new[] { "ThicknessM", "BottomOffsetM" }, new[] { "ThicknessM" });
+            AssertSchema(ElementCategory.Waterproofing, new[] { "ThicknessM", "BottomOffsetM" }, new[] { "ThicknessM" });
+            AssertSchema(ElementCategory.Skirting, new[] { "HeightM", "ThicknessM", "BottomOffsetM" }, new[] { "HeightM", "ThicknessM" });
+            AssertSchema(ElementCategory.WallFinish, new[] { "ThicknessM", "HeightM", "BottomOffsetM" }, new[] { "ThicknessM", "HeightM" });
+            AssertSchema(ElementCategory.CeilingFinish, new[] { "ThicknessM", "BottomOffsetM" }, new[] { "ThicknessM" });
+            AssertSchema(ElementCategory.Railing, new[] { "HeightM", "WidthM", "BottomOffsetM" }, new[] { "HeightM", "WidthM" });
+            AssertSchema(ElementCategory.WallOpening, new[] { "WidthM", "HeightM", "BottomOffsetM" }, new[] { "WidthM", "HeightM" });
+            AssertSchema(ElementCategory.Beam, new[] { "WidthM", "HeightM", "BottomOffsetM" }, new[] { "WidthM", "HeightM" });
+            AssertSchema(ElementCategory.Column, new[] { "WidthM", "DepthM", "HeightM", "BottomOffsetM" }, new[] { "WidthM", "DepthM", "HeightM" });
+            AssertSchema(ElementCategory.ArchitecturalWall, new[] { "ThicknessM", "HeightM", "BottomOffsetM" }, new[] { "ThicknessM", "HeightM" });
+            AssertSchema(ElementCategory.StructuralWall, new[] { "ThicknessM", "HeightM", "BottomOffsetM" }, new[] { "ThicknessM", "HeightM" });
+            AssertSchema(ElementCategory.WallPier, new[] { "ThicknessM", "HeightM", "BottomOffsetM" }, new[] { "ThicknessM", "HeightM" });
+            AssertSchema(ElementCategory.GlassWall, new[] { "ThicknessM", "HeightM", "BottomOffsetM" }, new[] { "ThicknessM", "HeightM" });
+            AssertSchema(ElementCategory.Slab, new[] { "ThicknessM", "BottomOffsetM" }, new[] { "ThicknessM" });
+            AssertSchema(ElementCategory.Door, new[] { "WidthM", "HeightM", "BottomOffsetM" }, new[] { "WidthM", "HeightM" });
+            AssertSchema(ElementCategory.Stair, new[] { "WidthM", "HeightM", "DepthM", "BottomOffsetM" }, new[] { "WidthM", "HeightM", "DepthM" });
+            AssertSchema(ElementCategory.Foundation, new[] { "ThicknessM", "BottomOffsetM" }, new[] { "ThicknessM" });
+            AssertSchema(ElementCategory.Earthwork, new[] { "LengthM", "WidthM", "DepthM", "BottomOffsetM" }, new[] { "LengthM", "WidthM", "DepthM" });
+            AssertSchema(ElementCategory.CustomQuantity, new[] { "LengthM", "WidthM", "HeightM" }, new[] { "LengthM", "WidthM", "HeightM" });
+
             var beam = ProjectFamilyQuickSchemaService.GetSchema(ElementCategory.Beam);
-            Sequence(new[] { "WidthM", "HeightM", "BottomOffsetM" }, beam.FormKeys, "Beam form keys mismatch.");
-            Sequence(new[] { "WidthM", "HeightM" }, beam.IdentityKeys, "Beam identity keys mismatch.");
             Near(0.3d, beam.DefaultsM["WidthM"], 1e-12, "Beam default width mismatch.");
             Near(0.5d, beam.DefaultsM["HeightM"], 1e-12, "Beam default height mismatch.");
             Equal("Bê tông", beam.DefaultMaterial, "Beam default material mismatch.");
 
-            var column = ProjectFamilyQuickSchemaService.GetSchema(ElementCategory.Column);
-            Sequence(new[] { "WidthM", "DepthM", "HeightM", "BottomOffsetM" }, column.FormKeys, "Column form keys mismatch.");
-            Sequence(new[] { "WidthM", "DepthM", "HeightM" }, column.IdentityKeys, "Column identity keys mismatch.");
-
             var wall = ProjectFamilyQuickSchemaService.GetSchema(ElementCategory.ArchitecturalWall);
-            Sequence(new[] { "ThicknessM", "HeightM", "BottomOffsetM" }, wall.FormKeys, "Wall form keys mismatch.");
-            Sequence(new[] { "ThicknessM", "HeightM" }, wall.IdentityKeys, "Wall identity keys mismatch.");
             Equal("Gạch", wall.DefaultMaterial, "Wall default material mismatch.");
 
-            var slab = ProjectFamilyQuickSchemaService.GetSchema(ElementCategory.Slab);
-            Sequence(new[] { "ThicknessM", "BottomOffsetM" }, slab.FormKeys, "Slab form keys mismatch.");
+            var door = ProjectFamilyQuickSchemaService.GetSchema(ElementCategory.Door);
+            Near(0.9d, door.DefaultsM["WidthM"], 1e-12, "Door default width mismatch.");
+            Near(2.2d, door.DefaultsM["HeightM"], 1e-12, "Door default height mismatch.");
 
-            var foundation = ProjectFamilyQuickSchemaService.GetSchema(ElementCategory.Foundation);
-            Sequence(new[] { "ThicknessM", "BottomOffsetM" }, foundation.FormKeys, "Foundation form keys mismatch.");
+            var earthwork = ProjectFamilyQuickSchemaService.GetSchema(ElementCategory.Earthwork);
+            Near(0.5d, earthwork.DefaultsM["DepthM"], 1e-12, "Earthwork default depth mismatch.");
+        }
+
+        private static void EveryFamilyCategoryHasAnIntentionalSchema()
+        {
+            foreach (ElementCategory category in Enum.GetValues(typeof(ElementCategory)))
+            {
+                var schema = ProjectFamilyQuickSchemaService.GetSchema(category);
+                if (category == ElementCategory.Grid || category == ElementCategory.Room)
+                {
+                    if (schema.SupportsQuickForm)
+                        throw new Exception(category + " has a dedicated Workspace workflow and must not be routed through the shared quick form.");
+                    continue;
+                }
+
+                if (!schema.SupportsQuickForm)
+                    throw new Exception(category + " silently fell back to the empty generic quick schema.");
+                Equal(category, schema.Category, category + " quick schema category mismatch.");
+
+                foreach (var key in schema.FormKeys)
+                {
+                    if (!schema.DefaultsM.ContainsKey(key))
+                        throw new Exception(category + " quick schema does not seed visible field " + key + ".");
+                }
+                foreach (var key in schema.IdentityKeys)
+                {
+                    if (!schema.Contains(key))
+                        throw new Exception(category + " identity field " + key + " is not present in its own form schema.");
+                }
+            }
         }
 
         private static void MillimeterConversionIsCanonical()
@@ -79,11 +122,19 @@ namespace QS3D.Core.SmokeTests
 
         private static void SuggestedNamesMatchQsConventions()
         {
+            Equal("HTS20", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.FloorFinish, Values(("ThicknessM", "0.02"))), "Floor finish suggested name mismatch.");
+            Equal("ChanTuong100x15", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.Skirting, Values(("HeightM", "0.1"), ("ThicknessM", "0.015"))), "Skirting suggested name mismatch.");
+            Equal("LanCanH1100x50", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.Railing, Values(("HeightM", "1.1"), ("WidthM", "0.05"))), "Railing suggested name mismatch.");
+            Equal("LoTuong1000x2100", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.WallOpening, Values(("WidthM", "1"), ("HeightM", "2.1"))), "Wall opening suggested name mismatch.");
             Equal("D300x500", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.Beam, Values(("WidthM", "0.3"), ("HeightM", "0.5"))), "Beam suggested name mismatch.");
             Equal("C400x400", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.Column, Values(("WidthM", "0.4"), ("DepthM", "0.4"))), "Column suggested name mismatch.");
             Equal("T200", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.ArchitecturalWall, Values(("ThicknessM", "0.2"))), "Wall suggested name mismatch.");
             Equal("S120", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.Slab, Values(("ThicknessM", "0.12"))), "Slab suggested name mismatch.");
+            Equal("Cua900x2200", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.Door, Values(("WidthM", "0.9"), ("HeightM", "2.2"))), "Door suggested name mismatch.");
+            Equal("CauThang1200xH3600xD300", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.Stair, Values(("WidthM", "1.2"), ("HeightM", "3.6"), ("DepthM", "0.3"))), "Stair suggested name mismatch.");
             Equal("Móng BTCT H500", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.Foundation, Values(("ThicknessM", "0.5"))), "Foundation suggested name mismatch.");
+            Equal("DaoDap1000x1000x500", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.Earthwork, Values(("LengthM", "1"), ("WidthM", "1"), ("DepthM", "0.5"))), "Earthwork suggested name mismatch.");
+            Equal("Khac1000x1000x1000", ProjectFamilyQuickSchemaService.SuggestName(ElementCategory.CustomQuantity, Values(("LengthM", "1"), ("WidthM", "1"), ("HeightM", "1"))), "Custom component suggested name mismatch.");
 
             var overflowMeters = double.MaxValue.ToString("R", CultureInfo.InvariantCulture);
             Throws<InvalidOperationException>(() => ProjectFamilyQuickSchemaService.SuggestName(
@@ -155,6 +206,15 @@ namespace QS3D.Core.SmokeTests
                 0,
                 ProjectFamilyQuickSchemaService.FindIdentityMatches(project, ElementCategory.ArchitecturalWall, wallDifferentHeight, "Gạch").Count,
                 "Auto Family must not reuse a Wall with a different height and then mutate inherited instances.");
+        }
+
+        private static void AssertSchema(ElementCategory category, IEnumerable<string> formKeys, IEnumerable<string> identityKeys)
+        {
+            var schema = ProjectFamilyQuickSchemaService.GetSchema(category);
+            if (!schema.SupportsQuickForm) throw new Exception(category + " should expose a category-specific quick form.");
+            Equal(category, schema.Category, category + " schema category mismatch.");
+            Sequence(formKeys, schema.FormKeys, category + " form keys mismatch.");
+            Sequence(identityKeys, schema.IdentityKeys, category + " identity keys mismatch.");
         }
 
         private static IReadOnlyDictionary<string, string> Values(params (string Key, string Value)[] items)
