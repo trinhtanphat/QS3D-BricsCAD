@@ -191,7 +191,11 @@ namespace QS3D.Core.Commercial
             where T : class
         {
             if (source == null) throw new ArgumentNullException(paramName);
-            var result = new List<T>();
+
+            var knownCount = SnapshotKnownCount(source, paramName, maximum);
+            var result = knownCount.HasValue
+                ? new List<T>(knownCount.Value)
+                : new List<T>();
             foreach (var item in source)
             {
                 if (result.Count == maximum)
@@ -200,7 +204,34 @@ namespace QS3D.Core.Commercial
                     throw new ArgumentException(paramName + " contains a null item.", paramName);
                 result.Add(item);
             }
+
+            if (knownCount.HasValue && result.Count != knownCount.Value)
+                throw new InvalidOperationException(paramName + " known Count does not match completed traversal cardinality.");
+
             return new ReadOnlyCollection<T>(result.ToArray());
+        }
+
+        private static int? SnapshotKnownCount<T>(IEnumerable<T> source, string paramName, int maximum)
+        {
+            int? knownCount = null;
+            if (source is ICollection<T> genericCollection)
+                AcceptKnownCount(genericCollection.Count, paramName, maximum, ref knownCount);
+            if (source is IReadOnlyCollection<T> readOnlyCollection)
+                AcceptKnownCount(readOnlyCollection.Count, paramName, maximum, ref knownCount);
+            if (source is System.Collections.ICollection nonGenericCollection)
+                AcceptKnownCount(nonGenericCollection.Count, paramName, maximum, ref knownCount);
+            return knownCount;
+        }
+
+        private static void AcceptKnownCount(int count, string paramName, int maximum, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException(paramName + " exposes an invalid negative known Count value.");
+            if (count > maximum)
+                throw new InvalidOperationException(paramName + " supports at most " + maximum + " entries.");
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException(paramName + " exposes conflicting known Count values.");
+            knownCount = count;
         }
 
         internal static decimal Multiply(decimal left, decimal right, string label)
