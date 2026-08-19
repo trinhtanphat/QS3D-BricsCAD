@@ -49,11 +49,17 @@ namespace QS3D.BricsCAD.V25.UI
             if (!GridFamilySubtypeInteractionsRegistered || _gridFamilySubtypeInteractionsAttached) return;
             _gridFamilySubtypeInteractionsAttached = true;
 
-            ModelTree.SelectedItemChanged += OnGridFamilySubtypeTreeSelectionChanged;
-            FamilySearch.TextChanged += OnGridFamilySubtypeSearchChanged;
+            // Ensure the legacy Foundation handlers exist first, then replace only the shared
+            // tree/search routing with subtype-aware dispatch. This prevents a Grid leaf/search
+            // from being transiently filtered through the Foundation-only matcher.
+            AttachFamilySubtypeInteractions();
+            ModelTree.SelectedItemChanged -= OnFamilySubtypeTreeSelectionChanged;
+            FamilySearch.TextChanged -= OnFamilySubtypeSearchChanged;
+            ModelTree.SelectedItemChanged += OnWorkspaceFamilySubtypeTreeSelectionChanged;
+            FamilySearch.TextChanged += OnWorkspaceFamilySubtypeSearchChanged;
             RewireGridAwareFamilyAddActions();
 
-            if (ModelTree.SelectedItem is TreeViewItem selected)
+            if (ModelTree.SelectedItem is TreeViewItem selected && ResolveGridSubtype(selected).Length > 0)
                 ApplyGridTreeSelection(selected);
         }
 
@@ -95,10 +101,27 @@ namespace QS3D.BricsCAD.V25.UI
             menu.IsOpen = true;
         }
 
-        private void OnGridFamilySubtypeTreeSelectionChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        private void OnWorkspaceFamilySubtypeTreeSelectionChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
-            if (e.NewValue is TreeViewItem item)
+            if (!(e.NewValue is TreeViewItem item)) return;
+            if (ResolveGridSubtype(item).Length > 0)
+            {
                 ApplyGridTreeSelection(item);
+                return;
+            }
+
+            OnFamilySubtypeTreeSelectionChanged(sender, e);
+        }
+
+        private void OnWorkspaceFamilySubtypeSearchChanged(object sender, TextChangedEventArgs e)
+        {
+            if (IsGridSubtype(_familySubtypeFilter))
+            {
+                ApplyGridFamilySubtypeFilter();
+                return;
+            }
+
+            OnFamilySubtypeSearchChanged(sender, e);
         }
 
         private void ApplyGridTreeSelection(TreeViewItem item)
@@ -130,12 +153,6 @@ namespace QS3D.BricsCAD.V25.UI
             }
             finally { _loadingContext = false; }
             RefreshSelectedFamilyHighlight();
-        }
-
-        private void OnGridFamilySubtypeSearchChanged(object sender, TextChangedEventArgs e)
-        {
-            if (IsGridSubtype(_familySubtypeFilter))
-                ApplyGridFamilySubtypeFilter();
         }
 
         private void ApplyGridFamilySubtypeFilter()
