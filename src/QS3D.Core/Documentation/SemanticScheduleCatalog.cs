@@ -56,7 +56,12 @@ namespace QS3D.Core.Documentation
 
         private static IReadOnlyList<T> SnapshotBounded<T>(IEnumerable<T> values, int maxCount, string capacityError)
         {
-            var result = new List<T>(Math.Min(maxCount, 256));
+            int? knownCount = null;
+            ValidateKnownCount(values as ICollection<T>, maxCount, capacityError, ref knownCount);
+            ValidateKnownCount(values as IReadOnlyCollection<T>, maxCount, capacityError, ref knownCount);
+            ValidateKnownCount(values as System.Collections.ICollection, maxCount, capacityError, ref knownCount);
+
+            var result = new List<T>(knownCount ?? Math.Min(maxCount, 256));
             using (var enumerator = values.GetEnumerator())
             {
                 while (enumerator.MoveNext())
@@ -65,7 +70,36 @@ namespace QS3D.Core.Documentation
                     result.Add(enumerator.Current);
                 }
             }
+
+            if (knownCount.HasValue && result.Count != knownCount.Value)
+                throw new InvalidOperationException("Semantic schedule collection source known Count does not match completed traversal.");
             return result.AsReadOnly();
+        }
+
+        private static void ValidateKnownCount<T>(ICollection<T>? values, int maxCount, string capacityError, ref int? knownCount)
+        {
+            if (values != null) ValidateKnownCount(values.Count, maxCount, capacityError, ref knownCount);
+        }
+
+        private static void ValidateKnownCount<T>(IReadOnlyCollection<T>? values, int maxCount, string capacityError, ref int? knownCount)
+        {
+            if (values != null) ValidateKnownCount(values.Count, maxCount, capacityError, ref knownCount);
+        }
+
+        private static void ValidateKnownCount(System.Collections.ICollection? values, int maxCount, string capacityError, ref int? knownCount)
+        {
+            if (values != null) ValidateKnownCount(values.Count, maxCount, capacityError, ref knownCount);
+        }
+
+        private static void ValidateKnownCount(int count, int maxCount, string capacityError, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Semantic schedule collection source reports an invalid negative known Count.");
+            if (count > maxCount)
+                throw new InvalidOperationException(capacityError);
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException("Semantic schedule collection source exposes conflicting known Count values.");
+            knownCount = count;
         }
     }
 
