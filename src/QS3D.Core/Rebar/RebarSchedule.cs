@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -51,8 +52,16 @@ namespace QS3D.Core.Rebar
         public static IReadOnlyList<RebarScheduleRow> Build(IEnumerable<RebarScheduleInput> inputs)
         {
             if (inputs == null) throw new ArgumentNullException(nameof(inputs));
+            var expectedInputCount = ValidateKnownInputCount(inputs, nameof(inputs));
+            var observedInputCount = 0;
             var rows = new List<RebarScheduleRow>();
-            foreach (var input in inputs) Append(input ?? throw new ArgumentException("Rebar schedule input cannot contain null.", nameof(inputs)), rows, nameof(inputs));
+            foreach (var input in inputs)
+            {
+                Append(input ?? throw new ArgumentException("Rebar schedule input cannot contain null.", nameof(inputs)), rows, nameof(inputs));
+                observedInputCount++;
+            }
+            if (expectedInputCount.HasValue && observedInputCount != expectedInputCount.Value)
+                throw new InvalidOperationException("Rebar schedule input known Count does not match traversal.");
             ValidateAggregate(rows);
             return rows.AsReadOnly();
         }
@@ -128,6 +137,37 @@ namespace QS3D.Core.Rebar
                     throw new ArgumentException("Rebar schedule element id must not contain control characters.", parameterName);
             }
             return value;
+        }
+
+        private static int? ValidateKnownInputCount(IEnumerable<RebarScheduleInput> inputs, string parameterName)
+        {
+            var knownCounts = new List<int>(3);
+            if (inputs is ICollection<RebarScheduleInput> genericCollection)
+                knownCounts.Add(genericCollection.Count);
+            if (inputs is IReadOnlyCollection<RebarScheduleInput> readOnlyCollection)
+                knownCounts.Add(readOnlyCollection.Count);
+            if (inputs is ICollection nonGenericCollection)
+                knownCounts.Add(nonGenericCollection.Count);
+
+            foreach (var count in knownCounts)
+            {
+                if (count < 0)
+                    throw new InvalidOperationException("Rebar schedule input exposes an invalid negative known Count.");
+            }
+            foreach (var count in knownCounts)
+            {
+                if (count > MaxRowCount)
+                    throw new ArgumentOutOfRangeException(parameterName, "Rebar schedule input Count exceeds the supported row bound of " + MaxRowCount + ".");
+            }
+            if (knownCounts.Count == 0) return null;
+
+            var expected = knownCounts[0];
+            for (var index = 1; index < knownCounts.Count; index++)
+            {
+                if (knownCounts[index] != expected)
+                    throw new InvalidOperationException("Rebar schedule input exposes conflicting known Count values.");
+            }
+            return expected;
         }
 
         private static void ValidateAggregate(IReadOnlyList<RebarScheduleRow> rows)

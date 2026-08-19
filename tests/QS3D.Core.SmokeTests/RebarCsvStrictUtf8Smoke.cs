@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             RejectsInvalidUtf16BeforeEncoding();
             PreservesExistingTargetOnInvalidUtf16();
             PreservesValidUtf8BomFormulaAndCultureBehavior();
+            UsesCanonicalCrlfForScheduleAndProcurement();
         }
 
         private static void RejectsInvalidUtf16BeforeEncoding()
@@ -73,6 +74,38 @@ namespace QS3D.Core.SmokeTests
             {
                 if (File.Exists(path)) File.Delete(path);
             }
+        }
+
+        private static void UsesCanonicalCrlfForScheduleAndProcurement()
+        {
+            var scheduleCsv = RebarCsvExporter.ToCsv(new[] { ValidRow() });
+            RequireCanonicalCrlf(scheduleCsv, 2, "Rebar schedule CSV");
+
+            var demand = new RebarStockDemand(
+                "G1",
+                "CB400",
+                16d,
+                12d,
+                new[] { new RebarCutRequirement("C1", 2d, 1) },
+                new RebarCutAllowancePolicy());
+            var result = RebarCuttingOptimizer.Plan(demand);
+            var procurementRows = RebarProcurementReportBuilder.Build(new[] { result });
+            var procurementCsv = RebarProcurementCsvExporter.ToCsv(procurementRows);
+            RequireCanonicalCrlf(procurementCsv, 2, "Rebar procurement CSV");
+        }
+
+        private static void RequireCanonicalCrlf(string csv, int expectedPhysicalLines, string label)
+        {
+            if (!csv.EndsWith("\r\n", StringComparison.Ordinal))
+                throw new InvalidOperationException(label + " must end with canonical CRLF.");
+
+            var withoutCrlf = csv.Replace("\r\n", string.Empty);
+            if (withoutCrlf.IndexOf('\r') >= 0 || withoutCrlf.IndexOf('\n') >= 0)
+                throw new InvalidOperationException(label + " must not contain platform-dependent or lone line-feed characters.");
+
+            var lines = csv.Split(new[] { "\r\n" }, StringSplitOptions.None);
+            if (lines.Length != expectedPhysicalLines + 1 || lines[lines.Length - 1].Length != 0)
+                throw new InvalidOperationException(label + " must contain exactly " + expectedPhysicalLines + " CRLF-terminated physical lines.");
         }
 
         private static RebarScheduleRow ValidRow()
