@@ -165,7 +165,7 @@ namespace QS3D.Core.Features
 
         private static string? NormalizeOptional(string? value)
         {
-            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            return value == null || string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         }
 
         private static string NormalizeRequired(string value, string parameterName)
