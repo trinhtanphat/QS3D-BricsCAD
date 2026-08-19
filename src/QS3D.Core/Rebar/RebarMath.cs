@@ -24,6 +24,8 @@ namespace QS3D.Core.Rebar
             NonNegative(right, label);
             var result = left + right;
             if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException("Rebar addition overflow: " + label);
+            if (left != 0d && right != 0d && (result.Equals(left) || result.Equals(right)))
+                throw new InvalidOperationException("Rebar addition lost a positive contribution at floating-point precision: " + label);
             return result;
         }
 
