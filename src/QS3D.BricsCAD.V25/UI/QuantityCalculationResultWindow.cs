@@ -19,8 +19,15 @@ namespace QS3D.BricsCAD.V25.UI
         private static readonly Brush ErrorBrush = FrozenBrush(219, 68, 68);
         private static readonly Brush AccentBrush = FrozenBrush(25, 113, 238);
         private bool _openModelRequested;
+        private bool _openQuantityRequested;
 
-        private QuantityCalculationResultWindow(string title, string heading, string detail, bool success, bool offerModeling = false)
+        private QuantityCalculationResultWindow(
+            string title,
+            string heading,
+            string detail,
+            bool success,
+            bool offerModeling = false,
+            bool offerQuantity = false)
         {
             Title = title;
             Width = 420;
@@ -33,7 +40,7 @@ namespace QS3D.BricsCAD.V25.UI
             ShowInTaskbar = false;
             UseLayoutRounding = true;
             SnapsToDevicePixels = true;
-            Content = BuildContent(title, heading, detail, success, offerModeling);
+            Content = BuildContent(title, heading, detail, success, offerModeling, offerQuantity);
             KeyDown += (_, args) =>
             {
                 if (args.Key != Key.Escape) return;
@@ -42,7 +49,7 @@ namespace QS3D.BricsCAD.V25.UI
             };
         }
 
-        public static void ShowSuccess(QuantityEngine2Summary summary)
+        public static bool ShowSuccess(QuantityEngine2Summary summary)
         {
             if (summary == null) throw new ArgumentNullException(nameof(summary));
 
@@ -56,9 +63,16 @@ namespace QS3D.BricsCAD.V25.UI
                 "• Cốp pha: " + F3(summary.FormworkM2) + " m²\n" +
                 "• Chiều dài (dầm/tường): " + F2(summary.BeamWallLengthM) + " m\n" +
                 "• Chu vi biên (sàn/móng): ngoài " + F2(summary.OuterPerimeterM) + " m, trong " + F2(summary.InnerPerimeterM) + " m\n\n" +
-                "Bấm “Xem khối lượng” để mở bảng tổng hợp chi tiết.";
+                "Chọn “Xem khối lượng” để mở bảng tổng hợp chi tiết.";
 
-            new QuantityCalculationResultWindow("Tính khối lượng", heading, detail, true).ShowDialog();
+            var window = new QuantityCalculationResultWindow(
+                "Tính khối lượng",
+                heading,
+                detail,
+                true,
+                offerQuantity: true);
+            window.ShowDialog();
+            return window._openQuantityRequested;
         }
 
         public static bool ShowNoElements(string message)
@@ -90,7 +104,13 @@ namespace QS3D.BricsCAD.V25.UI
                 false).ShowDialog();
         }
 
-        private UIElement BuildContent(string title, string heading, string detail, bool success, bool offerModeling)
+        private UIElement BuildContent(
+            string title,
+            string heading,
+            string detail,
+            bool success,
+            bool offerModeling,
+            bool offerQuantity)
         {
             var frame = new Border
             {
@@ -208,7 +228,7 @@ namespace QS3D.BricsCAD.V25.UI
                 Margin = new Thickness(0, 12, 0, 0)
             };
 
-            if (offerModeling)
+            if (offerModeling || offerQuantity)
             {
                 var dismiss = new Button
                 {
@@ -243,6 +263,15 @@ namespace QS3D.BricsCAD.V25.UI
                 ok.Click += (_, __) =>
                 {
                     _openModelRequested = true;
+                    Close();
+                };
+            }
+            else if (offerQuantity)
+            {
+                ok.Content = "Xem khối lượng";
+                ok.Click += (_, __) =>
+                {
+                    _openQuantityRequested = true;
                     Close();
                 };
             }

@@ -146,7 +146,11 @@ namespace QS3D.Core.Commercial
         public EstimatingPortfolio(IEnumerable<EstimatingLine> lines)
         {
             if (lines == null) throw new ArgumentNullException(nameof(lines));
-            var snapshot = new List<EstimatingLine>();
+
+            var knownCount = SnapshotKnownCount(lines);
+            var snapshot = knownCount.HasValue
+                ? new List<EstimatingLine>(knownCount.Value)
+                : new List<EstimatingLine>();
             _byId = new Dictionary<string, EstimatingLine>(StringComparer.OrdinalIgnoreCase);
             foreach (var line in lines)
             {
@@ -158,6 +162,10 @@ namespace QS3D.Core.Commercial
                 _byId.Add(line.LineId, line);
                 snapshot.Add(line);
             }
+
+            if (knownCount.HasValue && snapshot.Count != knownCount.Value)
+                throw new InvalidOperationException("Estimating portfolio line count changed during enumeration.");
+
             snapshot.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.LineId, right.LineId));
             _lines = new ReadOnlyCollection<EstimatingLine>(snapshot.ToArray());
         }
@@ -185,6 +193,29 @@ namespace QS3D.Core.Commercial
                 }
                 return total;
             }
+        }
+
+        private static int? SnapshotKnownCount(IEnumerable<EstimatingLine> lines)
+        {
+            int? knownCount = null;
+            if (lines is ICollection<EstimatingLine> genericCollection)
+                AcceptKnownCount(genericCollection.Count, ref knownCount);
+            if (lines is IReadOnlyCollection<EstimatingLine> readOnlyCollection)
+                AcceptKnownCount(readOnlyCollection.Count, ref knownCount);
+            if (lines is System.Collections.ICollection nonGenericCollection)
+                AcceptKnownCount(nonGenericCollection.Count, ref knownCount);
+            return knownCount;
+        }
+
+        private static void AcceptKnownCount(int count, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Estimating portfolio exposes an invalid negative line count.");
+            if (count > MaximumLines)
+                throw new InvalidOperationException("Estimating portfolio exceeds the supported 10000-line limit.");
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException("Estimating portfolio exposes conflicting known line counts.");
+            knownCount = count;
         }
     }
 
