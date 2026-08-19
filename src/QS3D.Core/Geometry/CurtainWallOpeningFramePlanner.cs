@@ -68,11 +68,14 @@ namespace QS3D.Core.Geometry
             if (frames == null) throw new ArgumentNullException(nameof(frames));
             if (openings == null) throw new ArgumentNullException(nameof(openings));
             FiniteNonNegative(clearanceM, nameof(clearanceM));
-            if (frames.Count > MaxInputFrames) throw new InvalidOperationException("Curtain frame interruption input exceeds " + MaxInputFrames + " frames.");
-            if (openings.Count > MaxOpenings) throw new InvalidOperationException("Curtain frame interruption input exceeds " + MaxOpenings + " openings.");
 
-            var expandedOpenings = new List<Rect>(openings.Count);
-            for (var i = 0; i < openings.Count; i++)
+            var frameCount = frames.Count;
+            var openingCount = openings.Count;
+            RequireSupportedInputCount(frameCount, MaxInputFrames, "frame");
+            RequireSupportedInputCount(openingCount, MaxOpenings, "opening");
+
+            var expandedOpenings = new List<Rect>(openingCount);
+            for (var i = 0; i < openingCount; i++)
             {
                 var opening = openings[i] ?? throw new InvalidOperationException("Curtain opening rectangle cannot be null.");
                 var label = "opening[" + i + "]";
@@ -108,7 +111,7 @@ namespace QS3D.Core.Geometry
             var output = new List<CurtainWallFramePiece>();
             var originalArea = 0d;
             var interrupted = 0;
-            for (var frameIndex = 0; frameIndex < frames.Count; frameIndex++)
+            for (var frameIndex = 0; frameIndex < frameCount; frameIndex++)
             {
                 var frame = frames[frameIndex] ?? throw new InvalidOperationException("Curtain frame rectangle cannot be null.");
                 ValidateRect(frame.X_M, frame.Z_M, frame.WidthM, frame.HeightM, "frame[" + frameIndex + "]");
@@ -171,6 +174,14 @@ namespace QS3D.Core.Geometry
                 RemainingFrameAreaM2 = remainingArea,
                 InterruptedFrameCount = interrupted
             };
+        }
+
+        private static void RequireSupportedInputCount(int count, int maximum, string label)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Curtain frame interruption input reports an invalid negative " + label + " Count.");
+            if (count > maximum)
+                throw new InvalidOperationException("Curtain frame interruption input exceeds " + maximum + " " + label + "s.");
         }
 
         private static List<Rect> Subtract(Rect source, Rect cut)
