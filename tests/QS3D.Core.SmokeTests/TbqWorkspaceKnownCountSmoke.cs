@@ -23,6 +23,12 @@ namespace QS3D.Core.SmokeTests
             NegativeLibraryEntryCountFailsBeforeEnumeration();
             ConflictingBillItemCountsFailBeforeEnumeration();
             ConflictingRateReferenceCountsAboveTenThousandFailBeforeEnumeration();
+            BillItemTraversalMustMatchKnownCount();
+            BuildUpTraversalMustMatchKnownCount();
+            RateReferenceTraversalMustMatchKnownCount();
+            LibraryTraversalMustMatchKnownCount();
+            ExactKnownCountsRemainAccepted();
+            PureStreamingSourcesRemainAccepted();
         }
 
         private static void OversizedBillItemsFailBeforeEnumeration()
@@ -111,6 +117,97 @@ namespace QS3D.Core.SmokeTests
             Contains("conflicting known counts", error.Message, "Rate-reference Count conflicts below 50,000 must not be hidden by a 10,000-entry helper threshold.");
         }
 
+        private static void BillItemTraversalMustMatchKnownCount()
+        {
+            var under = new CountedSequence<TbqBillItem>(2, Bill("B1"));
+            var underError = Capture<InvalidOperationException>(() => Workspace(billItems: under));
+            AssertTraversalMismatch(under, "bill items", 2, 1, underError);
+
+            var over = new CountedSequence<TbqBillItem>(1, Bill("B1"), Bill("B2"));
+            var overError = Capture<InvalidOperationException>(() => Workspace(billItems: over));
+            AssertTraversalMismatch(over, "bill items", 1, 2, overError);
+        }
+
+        private static void BuildUpTraversalMustMatchKnownCount()
+        {
+            var under = new CountedSequence<BuildUpRateSnapshot>(2, BuildUp("R1"));
+            var underError = Capture<InvalidOperationException>(() => Workspace(buildUpRates: under));
+            AssertTraversalMismatch(under, "build-up rates", 2, 1, underError);
+
+            var over = new CountedSequence<BuildUpRateSnapshot>(1, BuildUp("R1"), BuildUp("R2"));
+            var overError = Capture<InvalidOperationException>(() => Workspace(buildUpRates: over));
+            AssertTraversalMismatch(over, "build-up rates", 1, 2, overError);
+        }
+
+        private static void RateReferenceTraversalMustMatchKnownCount()
+        {
+            var under = new CountedSequence<RateReferenceEdge>(2, Reference("R1"));
+            var underError = Capture<InvalidOperationException>(() => Workspace(rateReferences: under));
+            AssertTraversalMismatch(under, "rate references", 2, 1, underError);
+
+            var over = new CountedSequence<RateReferenceEdge>(1, Reference("R1"), Reference("R2"));
+            var overError = Capture<InvalidOperationException>(() => Workspace(rateReferences: over));
+            AssertTraversalMismatch(over, "rate references", 1, 2, overError);
+        }
+
+        private static void LibraryTraversalMustMatchKnownCount()
+        {
+            var under = new CountedSequence<BqLibraryEntry>(2, Library("L1"));
+            var underError = Capture<InvalidOperationException>(() => Workspace(libraryEntries: under));
+            AssertTraversalMismatch(under, "BQ library entries", 2, 1, underError);
+
+            var over = new CountedSequence<BqLibraryEntry>(1, Library("L1"), Library("L2"));
+            var overError = Capture<InvalidOperationException>(() => Workspace(libraryEntries: over));
+            AssertTraversalMismatch(over, "BQ library entries", 1, 2, overError);
+        }
+
+        private static void ExactKnownCountsRemainAccepted()
+        {
+            var billItems = new CountedSequence<TbqBillItem>(1, Bill("B1"));
+            var buildUps = new CountedSequence<BuildUpRateSnapshot>(1, BuildUp("R1"));
+            var references = new CountedSequence<RateReferenceEdge>(1, Reference("R1"));
+            var library = new CountedSequence<BqLibraryEntry>(1, Library("L1"));
+            var workspace = Workspace(billItems, buildUps, references, library);
+
+            Equal(1, workspace.BillItems.Count, "Exact counted bill-item traversal must remain accepted.");
+            Equal(1, workspace.BuildUpRates.Count, "Exact counted build-up traversal must remain accepted.");
+            Equal(1, workspace.RateReferences.Edges.Count, "Exact counted rate-reference traversal must remain accepted.");
+            Equal(1, workspace.Library.Entries.Count, "Exact counted library traversal must remain accepted.");
+            Equal(1, billItems.CountReads, "Exact bill-item Count must be snapshotted once.");
+            Equal(1, buildUps.CountReads, "Exact build-up Count must be snapshotted once.");
+            Equal(1, references.CountReads, "Exact rate-reference Count must be snapshotted once.");
+            Equal(1, library.CountReads, "Exact library Count must be snapshotted once.");
+        }
+
+        private static void PureStreamingSourcesRemainAccepted()
+        {
+            var workspace = Workspace(
+                Stream(Bill("B1")),
+                Stream(BuildUp("R1")),
+                Stream(Reference("R1")),
+                Stream(Library("L1")));
+
+            Equal(1, workspace.BillItems.Count, "Pure streaming bill items must remain accepted.");
+            Equal(1, workspace.BuildUpRates.Count, "Pure streaming build-ups must remain accepted.");
+            Equal(1, workspace.RateReferences.Edges.Count, "Pure streaming rate references must remain accepted.");
+            Equal(1, workspace.Library.Entries.Count, "Pure streaming library entries must remain accepted.");
+        }
+
+        private static TbqBillItem Bill(string id) => new TbqBillItem(id, "Item " + id, "m", "TRADE", 1m, 1m);
+
+        private static BuildUpRateSnapshot BuildUp(string id) => new BuildUpRateSnapshot(id, 1m);
+
+        private static RateReferenceEdge Reference(string id) =>
+            new RateReferenceEdge(id, RateReferenceTargetKind.BillItem, "ITEM-" + id);
+
+        private static BqLibraryEntry Library(string id) => new BqLibraryEntry(id, "Item " + id, "m", "CAT");
+
+        private static IEnumerable<T> Stream<T>(params T[] items)
+        {
+            for (var i = 0; i < items.Length; i++)
+                yield return items[i];
+        }
+
         private static TbqProjectWorkspaceState Workspace(
             IEnumerable<TbqBillItem>? billItems = null,
             IEnumerable<BuildUpRateSnapshot>? buildUpRates = null,
@@ -125,6 +222,19 @@ namespace QS3D.Core.SmokeTests
                 rateReferences ?? Array.Empty<RateReferenceEdge>(),
                 "LIB",
                 libraryEntries ?? Array.Empty<BqLibraryEntry>());
+        }
+
+        private static void AssertTraversalMismatch<T>(
+            CountedSequence<T> source,
+            string label,
+            int expectedCount,
+            int observedCount,
+            InvalidOperationException error)
+        {
+            Equal(1, source.CountReads, "TBQ " + label + " Count must be snapshotted exactly once.");
+            Equal(1, source.GetEnumeratorCalls, "TBQ " + label + " mismatch source must be enumerated exactly once.");
+            Contains(label + " traversal produced " + observedCount, error.Message, "TBQ " + label + " mismatch must report observed traversal count.");
+            Contains("known count reported " + expectedCount, error.Message, "TBQ " + label + " mismatch must report snapshotted Count.");
         }
 
         private static void AssertAllCountContractsReadOnce<T>(MultiCountNeverEnumerated<T> source, string message)
@@ -198,6 +308,38 @@ namespace QS3D.Core.SmokeTests
             {
                 GetEnumeratorCalls++;
                 throw new InvalidOperationException("Negative-count TBQ source must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class CountedSequence<T> : IReadOnlyCollection<T>
+        {
+            private readonly T[] _items;
+            private readonly int _advertisedCount;
+
+            internal CountedSequence(int advertisedCount, params T[] items)
+            {
+                _advertisedCount = advertisedCount;
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+            }
+
+            public int Count
+            {
+                get
+                {
+                    CountReads++;
+                    return _advertisedCount;
+                }
+            }
+
+            internal int CountReads { get; private set; }
+            internal int GetEnumeratorCalls { get; private set; }
+
+            public IEnumerator<T> GetEnumerator()
+            {
+                GetEnumeratorCalls++;
+                return ((IEnumerable<T>)_items).GetEnumerator();
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
