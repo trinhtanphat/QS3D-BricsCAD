@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             MismatchedFamilyCategoryFailsClosed();
             MatchingFamilyCategoryPreservesProjection();
             MissingFamilyFailsClosed();
+            LostNonZeroLengthAddendFailsClosed();
         }
 
         private static void MismatchedFamilyCategoryFailsClosed()
@@ -51,6 +52,22 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(new ProjectElement("CW1", ElementCategory.GlassWall, "MISSING", "F1", "Z1"));
 
             Throws<InvalidOperationException>(() => CurtainWallScheduleBuilder.Build(project));
+        }
+
+        private static void LostNonZeroLengthAddendFailsClosed()
+        {
+            var project = NewProject("curtain-addend-loss");
+            var curtainFamily = new ProjectFamily("CW-FAMILY", "Curtain family", ElementCategory.GlassWall);
+            project.Families.Add(curtainFamily);
+
+            var large = new ProjectElement("CW1", ElementCategory.GlassWall, curtainFamily.Id, "F1", "Z1");
+            large.Quantities["LengthM"] = 9007199254740992d;
+            var small = new ProjectElement("CW2", ElementCategory.GlassWall, curtainFamily.Id, "F1", "Z1");
+            small.Quantities["LengthM"] = 1d;
+            project.Elements.Add(large);
+            project.Elements.Add(small);
+
+            Throws<OverflowException>(() => CurtainWallScheduleBuilder.Build(project));
         }
 
         private static ProjectState NewProject(string id)
