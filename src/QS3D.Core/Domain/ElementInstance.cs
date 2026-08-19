@@ -22,8 +22,7 @@ namespace QS3D.Core.Domain
 
         public ElementInstance(string id, FamilyDefinition family, string floor)
         {
-            if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Element id is required.", nameof(id));
-            Id = id.Trim();
+            Id = RequireCanonicalId(id);
             Family = family ?? throw new ArgumentNullException(nameof(family));
             _floor = NormalizeFloor(floor);
             SourceHandles = new List<string>();
@@ -115,6 +114,20 @@ namespace QS3D.Core.Domain
                     throw new OverflowException("Net concrete deduction is below numeric resolution and cannot be represented safely.");
                 return Math.Max(0d, value);
             }
+        }
+
+        private static string RequireCanonicalId(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException("Element id is required.", nameof(value));
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Element id must not contain leading or trailing whitespace.", nameof(value));
+            foreach (var ch in value)
+            {
+                if (char.IsControl(ch))
+                    throw new ArgumentException("Element id must not contain control characters.", nameof(value));
+            }
+            return value;
         }
 
         private static string NormalizeFloor(string value) =>
