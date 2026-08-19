@@ -21,6 +21,7 @@ namespace QS3D.Core.SmokeTests
             NegativeCountFailsBeforeEnumerationOrProjectMutation();
             OversizedCountFailsBeforeEnumerationOrProjectMutation();
             DishonestCountCannotEvadeStreamingBound();
+            CountTraversalMismatchFailsClosedBeforeProjectTraversal();
             CanonicalDuplicateAndBlankHandlesPreserveDiagnostics();
             NullAndEmptyInputsPreserveExistingSemantics();
         }
@@ -85,6 +86,21 @@ namespace QS3D.Core.SmokeTests
                 "Streaming bound must stop immediately on the first disallowed live handle.");
             Require(project.ChangeVersion == changeVersion && project.UpdatedUtc == updatedUtc && project.Elements.Count == 1 && project.Elements[0] == null,
                 "Streaming cardinality rejection mutated or traversed-repaired project state.");
+        }
+
+        private static void CountTraversalMismatchFailsClosedBeforeProjectTraversal()
+        {
+            var project = new ProjectState("bom-live-count-mismatch", "BOM live count mismatch");
+            project.Elements.Add(null!);
+            var changeVersion = project.ChangeVersion;
+            var updatedUtc = project.UpdatedUtc;
+            var handles = new DishonestCountSet(actualCount: 1, reportedCount: 2);
+
+            ThrowsCountMismatch(() => BomReleaseGuardService.Inspect(project, handles), reportedCount: 2, observedCount: 1);
+
+            Require(handles.YieldedCount == 1, "Count mismatch guard must validate the completed bounded traversal exactly once.");
+            Require(project.ChangeVersion == changeVersion && project.UpdatedUtc == updatedUtc && project.Elements.Count == 1 && project.Elements[0] == null,
+                "Rejected Count/traversal mismatch mutated or traversed project state.");
         }
 
         private static void CanonicalDuplicateAndBlankHandlesPreserveDiagnostics()
@@ -246,6 +262,22 @@ namespace QS3D.Core.SmokeTests
                 var expected = "BOM live generated Handle input exceeds the supported bound of " + MaxLiveGeneratedHandleInputs + ".";
                 if (!string.Equals(ex.Message, expected, StringComparison.Ordinal))
                     throw new Exception("Unexpected BOM live-handle bound diagnostic: " + ex.Message);
+            }
+        }
+
+        private static void ThrowsCountMismatch(Action action, int reportedCount, int observedCount)
+        {
+            try
+            {
+                action();
+                throw new Exception("Live generated Handle Count/traversal mismatch must fail closed.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                var expected = "BOM live generated Handle input changed during enumeration; Count reported " + reportedCount +
+                               " items but enumeration produced " + observedCount + ".";
+                if (!string.Equals(ex.Message, expected, StringComparison.Ordinal))
+                    throw new Exception("Unexpected BOM live-handle Count/traversal diagnostic: " + ex.Message);
             }
         }
 
