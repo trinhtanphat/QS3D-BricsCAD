@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
@@ -60,13 +61,18 @@ namespace QS3D.Core.Reporting
         public static IReadOnlyList<QuantityReportRow> Group(IEnumerable<ElementInstance> elements)
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
+            var knownCount = SnapshotKnownElementCount(elements);
             var order = new List<string>();
             var grouped = new Dictionary<string, QuantityReportRow>(StringComparer.OrdinalIgnoreCase);
             var accumulators = new Dictionary<string, QuantityAccumulatorSet>(StringComparer.OrdinalIgnoreCase);
             var seenElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var elementIndex = 0;
+            var observedCount = 0;
             foreach (var element in elements)
             {
+                observedCount++;
+                if (knownCount.HasValue && observedCount > knownCount.Value)
+                    throw ElementCountMismatch(knownCount.Value, observedCount);
                 if (element == null)
                     throw new ArgumentException("Quantity report elements cannot contain null entries. Invalid element index: " + elementIndex + ".", nameof(elements));
                 if (!seenElementIds.Add(element.Id))
@@ -92,6 +98,9 @@ namespace QS3D.Core.Reporting
                 accumulators[key].Add(element);
                 elementIndex++;
             }
+            if (knownCount.HasValue && observedCount != knownCount.Value)
+                throw ElementCountMismatch(knownCount.Value, observedCount);
+
             var result = new List<QuantityReportRow>(order.Count);
             foreach (var key in order)
             {
@@ -100,6 +109,35 @@ namespace QS3D.Core.Reporting
                 result.Add(row);
             }
             return result.AsReadOnly();
+        }
+
+        private static int? SnapshotKnownElementCount(IEnumerable<ElementInstance> elements)
+        {
+            int? knownCount = null;
+            if (elements is ICollection<ElementInstance> genericCollection)
+                ObserveKnownElementCount(genericCollection.Count, ref knownCount);
+            if (elements is IReadOnlyCollection<ElementInstance> readOnlyCollection)
+                ObserveKnownElementCount(readOnlyCollection.Count, ref knownCount);
+            if (elements is ICollection nonGenericCollection)
+                ObserveKnownElementCount(nonGenericCollection.Count, ref knownCount);
+            return knownCount;
+        }
+
+        private static void ObserveKnownElementCount(int count, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Quantity report element input reported a negative known count.");
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException(
+                    "Quantity report element input exposes conflicting known counts: " + knownCount.Value + " and " + count + ".");
+            knownCount = count;
+        }
+
+        private static InvalidOperationException ElementCountMismatch(int reportedCount, int observedCount)
+        {
+            return new InvalidOperationException(
+                "Quantity report element input changed during enumeration; Count reported " + reportedCount +
+                " items but enumeration produced " + observedCount + ".");
         }
 
         private static string GroupKey(params string[] tokens)
