@@ -73,7 +73,7 @@ namespace QS3D.Core.Features
         {
             Navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
             Descriptor = descriptor ?? throw new ArgumentNullException(nameof(descriptor));
-            if (navigation.FeatureId != descriptor.Id)
+            if (Navigation.FeatureId != Descriptor.Id)
                 throw new InvalidOperationException("Navigation registration and feature descriptor must have the same FeatureId.");
         }
 
