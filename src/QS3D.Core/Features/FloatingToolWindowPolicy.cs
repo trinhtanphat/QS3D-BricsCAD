@@ -30,7 +30,19 @@ namespace QS3D.Core.Features
         }
 
         public override bool Equals(object? obj) => obj is FloatingToolBounds other && Equals(other);
-        public override int GetHashCode() => HashCode.Combine(Left, Top, Width, Height);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                var hash = 17;
+                hash = (hash * 31) + Left.GetHashCode();
+                hash = (hash * 31) + Top.GetHashCode();
+                hash = (hash * 31) + Width.GetHashCode();
+                hash = (hash * 31) + Height.GetHashCode();
+                return hash;
+            }
+        }
     }
 
     public static class FloatingToolWindowPolicy
