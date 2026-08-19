@@ -16,50 +16,69 @@ namespace QS3D.Core.Scheduling
         StartToFinish = 3
     }
 
+    public enum ActivityAllocationBasis
+    {
+        AbsoluteQuantity = 0
+    }
+
     /// <summary>
-    /// Immutable planned activity. Schedule dates are normalized to UTC so snapshots are
-    /// deterministic and independent from workstation/local timezone settings.
+    /// Immutable planned activity expressed in project-local calendar time. Project schedule
+    /// values deliberately use DateTimeKind.Unspecified plus an explicit schedule timezone and
+    /// calendar identity; workstation timezone and UTC conversion are not implicit inputs.
     /// </summary>
     public sealed class ScheduleActivity
     {
         public ScheduleActivity(
             string id,
             string name,
-            DateTimeOffset startUtc,
-            DateTimeOffset finishUtc,
-            string? wbsCode = null)
+            DateTime plannedStartLocal,
+            DateTime plannedFinishLocal,
+            string calendarId,
+            string calendarVersion,
+            string? wbsCode = null,
+            string? externalSourceId = null)
         {
             Id = ScheduleContract.RequireToken(id, nameof(id));
             Name = ScheduleContract.RequireText(name, nameof(name));
-            StartUtc = ScheduleContract.RequireUtc(startUtc, nameof(startUtc));
-            FinishUtc = ScheduleContract.RequireUtc(finishUtc, nameof(finishUtc));
-            if (FinishUtc < StartUtc)
-                throw new ArgumentException("Schedule activity finish must not precede start.", nameof(finishUtc));
+            PlannedStartLocal = ScheduleContract.RequireProjectLocalDateTime(plannedStartLocal, nameof(plannedStartLocal));
+            PlannedFinishLocal = ScheduleContract.RequireProjectLocalDateTime(plannedFinishLocal, nameof(plannedFinishLocal));
+            if (PlannedFinishLocal < PlannedStartLocal)
+                throw new ArgumentException("Schedule activity finish must not precede start.", nameof(plannedFinishLocal));
+
+            CalendarId = ScheduleContract.RequireToken(calendarId, nameof(calendarId));
+            CalendarVersion = ScheduleContract.RequireToken(calendarVersion, nameof(calendarVersion));
             WbsCode = wbsCode == null ? null : ScheduleContract.RequireToken(wbsCode, nameof(wbsCode));
+            ExternalSourceId = externalSourceId == null ? null : ScheduleContract.RequireToken(externalSourceId, nameof(externalSourceId));
         }
 
         public string Id { get; }
         public string Name { get; }
-        public DateTimeOffset StartUtc { get; }
-        public DateTimeOffset FinishUtc { get; }
+        public DateTime PlannedStartLocal { get; }
+        public DateTime PlannedFinishLocal { get; }
+        public string CalendarId { get; }
+        public string CalendarVersion { get; }
         public string? WbsCode { get; }
+        public string? ExternalSourceId { get; }
 
         public string ToCanonicalString()
         {
             var builder = new StringBuilder();
-            ScheduleContract.AppendToken(builder, "ACT1");
+            ScheduleContract.AppendToken(builder, "ACT2");
             ScheduleContract.AppendToken(builder, Id);
             ScheduleContract.AppendToken(builder, Name);
-            ScheduleContract.AppendToken(builder, StartUtc.ToString("O", CultureInfo.InvariantCulture));
-            ScheduleContract.AppendToken(builder, FinishUtc.ToString("O", CultureInfo.InvariantCulture));
+            ScheduleContract.AppendProjectLocalDateTime(builder, PlannedStartLocal);
+            ScheduleContract.AppendProjectLocalDateTime(builder, PlannedFinishLocal);
+            ScheduleContract.AppendToken(builder, CalendarId);
+            ScheduleContract.AppendToken(builder, CalendarVersion);
             ScheduleContract.AppendNullableToken(builder, WbsCode);
+            ScheduleContract.AppendNullableToken(builder, ExternalSourceId);
             return builder.ToString();
         }
     }
 
     /// <summary>
-    /// Logical relationship between two activities. Dependencies are sidecar schedule truth;
-    /// they never mutate model geometry or measurement facts.
+    /// Logical relationship between two activities. Dependencies are schedule-side facts and
+    /// never mutate model geometry, measurement traces, rates or estimate history.
     /// </summary>
     public sealed class ScheduleDependency
     {
@@ -98,16 +117,24 @@ namespace QS3D.Core.Scheduling
     }
 
     /// <summary>
-    /// Immutable allocation of a frozen MeasurementTrace quantity to a planned activity.
-    /// The trace fingerprint captures rule/adjustment/input provenance at link creation time.
+    /// Immutable absolute-quantity allocation from a frozen MeasurementTrace to a planned
+    /// activity. MeasurementSnapshotId and trace fingerprint preserve upstream provenance.
     /// </summary>
     public sealed class ScheduleQuantityLink
     {
-        public ScheduleQuantityLink(string activityId, MeasurementTrace measurement, double allocatedValue)
+        public ScheduleQuantityLink(
+            string allocationId,
+            string activityId,
+            string measurementSnapshotId,
+            MeasurementTrace measurement,
+            double allocatedValue)
         {
             if (measurement == null) throw new ArgumentNullException(nameof(measurement));
 
+            AllocationId = ScheduleContract.RequireToken(allocationId, nameof(allocationId));
             ActivityId = ScheduleContract.RequireToken(activityId, nameof(activityId));
+            MeasurementSnapshotId = ScheduleContract.RequireToken(measurementSnapshotId, nameof(measurementSnapshotId));
+            Basis = ActivityAllocationBasis.AbsoluteQuantity;
             SemanticIdentity = measurement.SemanticIdentity;
             SourceIdentity = measurement.SourceIdentity;
             QuantityKey = measurement.QuantityKey;
@@ -121,7 +148,10 @@ namespace QS3D.Core.Scheduling
                 throw new ArgumentOutOfRangeException(nameof(allocatedValue), "Schedule allocation cannot exceed the frozen measured quantity.");
         }
 
+        public string AllocationId { get; }
         public string ActivityId { get; }
+        public string MeasurementSnapshotId { get; }
+        public ActivityAllocationBasis Basis { get; }
         public string SemanticIdentity { get; }
         public string SourceIdentity { get; }
         public string QuantityKey { get; }
@@ -135,8 +165,11 @@ namespace QS3D.Core.Scheduling
         public string ToCanonicalString()
         {
             var builder = new StringBuilder();
-            ScheduleContract.AppendToken(builder, "QLN1");
+            ScheduleContract.AppendToken(builder, "QLN2");
+            ScheduleContract.AppendToken(builder, AllocationId);
             ScheduleContract.AppendToken(builder, ActivityId);
+            ScheduleContract.AppendToken(builder, MeasurementSnapshotId);
+            ScheduleContract.AppendNumber(builder, (int)Basis);
             ScheduleContract.AppendToken(builder, SemanticIdentity);
             ScheduleContract.AppendToken(builder, SourceIdentity);
             ScheduleContract.AppendToken(builder, QuantityKey);
@@ -149,18 +182,30 @@ namespace QS3D.Core.Scheduling
     }
 
     /// <summary>
-    /// Deterministic 4D sidecar snapshot. It validates referential integrity, dependency
-    /// acyclicity and measurement allocation bounds while preserving upstream quantity truth.
+    /// Deterministic immutable schedule/allocation version. Project calendar semantics are
+    /// explicit, dependency cycles fail closed, and aggregate allocations cannot exceed the
+    /// referenced frozen measurement quantity.
     /// </summary>
     public sealed class ScheduleSnapshot
     {
         private const int MaximumEntries = 10000;
 
         public ScheduleSnapshot(
+            string scheduleId,
+            string scheduleVersionId,
+            string allocationVersionId,
+            string projectTimeZoneId,
+            DateTime dataDate,
             IEnumerable<ScheduleActivity> activities,
             IEnumerable<ScheduleDependency>? dependencies = null,
             IEnumerable<ScheduleQuantityLink>? quantityLinks = null)
         {
+            ScheduleId = ScheduleContract.RequireToken(scheduleId, nameof(scheduleId));
+            ScheduleVersionId = ScheduleContract.RequireToken(scheduleVersionId, nameof(scheduleVersionId));
+            AllocationVersionId = ScheduleContract.RequireToken(allocationVersionId, nameof(allocationVersionId));
+            ProjectTimeZoneId = ScheduleContract.RequireText(projectTimeZoneId, nameof(projectTimeZoneId));
+            DataDate = ScheduleContract.RequireProjectDate(dataDate, nameof(dataDate));
+
             Activities = SnapshotActivities(activities, nameof(activities));
             var activityIds = new HashSet<string>(StringComparer.Ordinal);
             for (var i = 0; i < Activities.Count; i++)
@@ -173,6 +218,11 @@ namespace QS3D.Core.Scheduling
             ValidateAllocations(QuantityLinks);
         }
 
+        public string ScheduleId { get; }
+        public string ScheduleVersionId { get; }
+        public string AllocationVersionId { get; }
+        public string ProjectTimeZoneId { get; }
+        public DateTime DataDate { get; }
         public IReadOnlyList<ScheduleActivity> Activities { get; }
         public IReadOnlyList<ScheduleDependency> Dependencies { get; }
         public IReadOnlyList<ScheduleQuantityLink> QuantityLinks { get; }
@@ -196,7 +246,12 @@ namespace QS3D.Core.Scheduling
         public string ToCanonicalString()
         {
             var builder = new StringBuilder();
-            ScheduleContract.AppendToken(builder, "SCH1");
+            ScheduleContract.AppendToken(builder, "SCH2");
+            ScheduleContract.AppendToken(builder, ScheduleId);
+            ScheduleContract.AppendToken(builder, ScheduleVersionId);
+            ScheduleContract.AppendToken(builder, AllocationVersionId);
+            ScheduleContract.AppendToken(builder, ProjectTimeZoneId);
+            ScheduleContract.AppendProjectDate(builder, DataDate);
             ScheduleContract.AppendNumber(builder, Activities.Count);
             for (var i = 0; i < Activities.Count; i++)
                 ScheduleContract.AppendToken(builder, Activities[i].ToCanonicalString());
@@ -256,10 +311,13 @@ namespace QS3D.Core.Scheduling
                 return new ReadOnlyCollection<ScheduleQuantityLink>(Array.Empty<ScheduleQuantityLink>());
 
             var items = Snapshot(source, parameterName, "quantity links");
+            var allocationIds = new HashSet<string>(StringComparer.Ordinal);
             for (var i = 0; i < items.Count; i++)
             {
                 if (!activityIds.Contains(items[i].ActivityId))
                     throw new ArgumentException("Schedule quantity link references an unknown activity.", parameterName);
+                if (!allocationIds.Add(items[i].AllocationId))
+                    throw new ArgumentException("Schedule allocation IDs must be unique.", parameterName);
             }
 
             items.Sort(CompareQuantityLinks);
@@ -270,7 +328,7 @@ namespace QS3D.Core.Scheduling
                 if (string.Equals(previous.ActivityId, current.ActivityId, StringComparison.Ordinal) &&
                     string.Equals(previous.MeasurementIdentity, current.MeasurementIdentity, StringComparison.Ordinal))
                 {
-                    throw new ArgumentException("An activity may link a frozen measurement identity only once.", parameterName);
+                    throw new ArgumentException("An activity may allocate a frozen measurement identity only once per allocation version.", parameterName);
                 }
             }
             return new ReadOnlyCollection<ScheduleQuantityLink>(items.ToArray());
@@ -338,7 +396,11 @@ namespace QS3D.Core.Scheduling
             if (compare != 0) return compare;
             compare = StringComparer.Ordinal.Compare(left.QuantityKey, right.QuantityKey);
             if (compare != 0) return compare;
-            return StringComparer.Ordinal.Compare(left.MeasurementFingerprint, right.MeasurementFingerprint);
+            compare = StringComparer.Ordinal.Compare(left.MeasurementSnapshotId, right.MeasurementSnapshotId);
+            if (compare != 0) return compare;
+            compare = StringComparer.Ordinal.Compare(left.MeasurementFingerprint, right.MeasurementFingerprint);
+            if (compare != 0) return compare;
+            return StringComparer.Ordinal.Compare(left.AllocationId, right.AllocationId);
         }
 
         private static void ValidateAcyclic(IReadOnlyList<ScheduleActivity> activities, IReadOnlyList<ScheduleDependency> dependencies)
@@ -393,10 +455,15 @@ namespace QS3D.Core.Scheduling
                 AllocationState state;
                 if (!states.TryGetValue(link.MeasurementIdentity, out state))
                 {
-                    state = new AllocationState(link.MeasurementFingerprint, link.MeasuredValue, link.Unit);
+                    state = new AllocationState(
+                        link.MeasurementSnapshotId,
+                        link.MeasurementFingerprint,
+                        link.MeasuredValue,
+                        link.Unit);
                     states.Add(link.MeasurementIdentity, state);
                 }
-                else if (!string.Equals(state.Fingerprint, link.MeasurementFingerprint, StringComparison.Ordinal) ||
+                else if (!string.Equals(state.MeasurementSnapshotId, link.MeasurementSnapshotId, StringComparison.Ordinal) ||
+                         !string.Equals(state.Fingerprint, link.MeasurementFingerprint, StringComparison.Ordinal) ||
                          !state.MeasuredValue.Equals(link.MeasuredValue) ||
                          !string.Equals(state.Unit, link.Unit, StringComparison.Ordinal))
                 {
@@ -412,13 +479,15 @@ namespace QS3D.Core.Scheduling
 
         private sealed class AllocationState
         {
-            public AllocationState(string fingerprint, double measuredValue, string unit)
+            public AllocationState(string measurementSnapshotId, string fingerprint, double measuredValue, string unit)
             {
+                MeasurementSnapshotId = measurementSnapshotId;
                 Fingerprint = fingerprint;
                 MeasuredValue = measuredValue;
                 Unit = unit;
             }
 
+            public string MeasurementSnapshotId { get; }
             public string Fingerprint { get; }
             public double MeasuredValue { get; }
             public string Unit { get; }
@@ -454,10 +523,18 @@ namespace QS3D.Core.Scheduling
             return value;
         }
 
-        internal static DateTimeOffset RequireUtc(DateTimeOffset value, string parameterName)
+        internal static DateTime RequireProjectLocalDateTime(DateTime value, string parameterName)
         {
-            if (value.Offset != TimeSpan.Zero)
-                throw new ArgumentException("Schedule timestamps must use UTC (+00:00).", parameterName);
+            if (value.Kind != DateTimeKind.Unspecified)
+                throw new ArgumentException("Project schedule date/time must use DateTimeKind.Unspecified with explicit project timezone/calendar metadata.", parameterName);
+            return value;
+        }
+
+        internal static DateTime RequireProjectDate(DateTime value, string parameterName)
+        {
+            value = RequireProjectLocalDateTime(value, parameterName);
+            if (value.TimeOfDay != TimeSpan.Zero)
+                throw new ArgumentException("Project data date must be a local calendar date at 00:00:00.", parameterName);
             return value;
         }
 
@@ -516,6 +593,16 @@ namespace QS3D.Core.Scheduling
                 return;
             }
             AppendToken(builder, "+" + value);
+        }
+
+        internal static void AppendProjectLocalDateTime(StringBuilder builder, DateTime value)
+        {
+            AppendToken(builder, value.ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff", CultureInfo.InvariantCulture));
+        }
+
+        internal static void AppendProjectDate(StringBuilder builder, DateTime value)
+        {
+            AppendToken(builder, value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         }
 
         internal static void AppendNumber(StringBuilder builder, double value)
