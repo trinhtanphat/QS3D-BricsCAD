@@ -17,6 +17,7 @@ def require(text, needle, label, failures):
 def main():
     subtype = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.GridFamilySubtype.cs")
     sync = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.FamilySubtypeSelectionSync.cs")
+    recovery = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dParameterModeRecovery.cs")
     quick = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.QuickDraw.cs")
     grid = read("src/QS3D.BricsCAD.V25/GridCommands.cs")
 
@@ -26,8 +27,24 @@ def main():
     require(subtype, 'ElementCategory.Grid', "grid category routing", failures)
     require(subtype, 'SeedGridDefault(family, "GridRadiusM", "0.5");', "curved grid 500 mm radius default", failures)
     require(subtype, 'ApplyGridFamilySubtypeFilter();', "grid family subtype filtering", failures)
+
+    require(subtype, 'AttachFamilySubtypeInteractions();', "base subtype handlers must be attached before Grid routing replaces shared handlers", failures)
+    require(subtype, 'ModelTree.SelectedItemChanged -= OnFamilySubtypeTreeSelectionChanged;', "Grid routing must detach Foundation-only tree handler", failures)
+    require(subtype, 'FamilySearch.TextChanged -= OnFamilySubtypeSearchChanged;', "Grid routing must detach Foundation-only search handler", failures)
+    require(subtype, 'ModelTree.SelectedItemChanged += OnWorkspaceFamilySubtypeTreeSelectionChanged;', "subtype-aware tree dispatcher", failures)
+    require(subtype, 'FamilySearch.TextChanged += OnWorkspaceFamilySubtypeSearchChanged;', "subtype-aware search dispatcher", failures)
+    require(subtype, 'if (ResolveGridSubtype(item).Length > 0)', "Grid tree selection must be handled before Foundation fallback", failures)
+    require(subtype, 'OnFamilySubtypeTreeSelectionChanged(sender, e);', "non-Grid tree selection must preserve legacy Foundation routing", failures)
+    require(subtype, 'if (IsGridSubtype(_familySubtypeFilter))', "Grid search must bypass Foundation-only filtering", failures)
+    require(subtype, 'OnFamilySubtypeSearchChanged(sender, e);', "non-Grid search must preserve legacy routing", failures)
+
     require(sync, 'family.Category == ElementCategory.Grid', "programmatic grid subtype sync", failures)
     require(sync, 'InferFoundationSubtype(family.Name)', "legacy foundation subtype sync", failures)
+
+    require(recovery, 'if (IsGridSubtype(panel._familySubtypeFilter))', "BLT3D parameter recovery must recognize Grid subtype", failures)
+    require(recovery, 'panel.ApplyGridFamilySubtypeFilter();', "BLT3D parameter recovery must use Grid filter", failures)
+    require(recovery, 'panel.ApplyFamilySubtypeFilter();', "BLT3D parameter recovery must retain non-Grid fallback", failures)
+
     require(quick, 'Send("QS3DGRID");', "workspace grid quick route", failures)
     require(quick, 'var command = advanced ? "QS3DDRAWACTIVEADV" : "QS3DDRAWACTIVE";', "existing active-family draw route", failures)
     require(grid, 'Cad.CadSelectionGuard.AcquireCurrentSelection(document)', "interactive grid selection", failures)
@@ -40,7 +57,7 @@ def main():
             print(" -", failure)
         return 1
 
-    print("PASS: Workspace Grid subtype routing preserves Lưới Thẳng/Lưới Cong and routes capture by LINE/ARC.")
+    print("PASS: Workspace Grid subtype routing preserves Grid selection/search/recovery and routes capture by LINE/ARC.")
     return 0
 
 
