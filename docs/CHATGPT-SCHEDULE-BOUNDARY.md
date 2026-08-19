@@ -31,6 +31,25 @@ This account-local relationship is convenience orchestration only. It does not i
 
 A C0 suggestion does not reserve a repository lane for W1-W4. A worker becomes the repository owner of a concrete task only when the current GitHub state contains the valid Lane-Key / visible reservation / canonical carrier required by repository rules.
 
+## Interactive continuation is independent of schedule cadence
+
+The configured clock/cadence is only the **automatic trigger** for a scheduled task. It is not a dependency, permission gate, ownership gate, or reason for an interactive owner session to wait before advancing work.
+
+When the owner interactively asks to `check 5 schedules`, `đẩy tiếp`, `continue`, or equivalent, the interactive session should:
+
+1. inspect the live account-side state of the five schedules;
+2. identify which previous scheduled invocations have completed and which, if any, are still actively running;
+3. for each completed schedule, immediately inspect current GitHub ownership/dependency state and advance that schedule's repository workflow logically **without waiting for its next clock time**;
+4. if that schedule identity still owns one valid non-terminal canonical carrier, continuation means advancing the **same carrier** toward its repository endpoint (normally `MERGED_MAIN` under the standing owner rule);
+5. if its previous carrier is terminal/landed, advance to the next READY and UNCLAIMED task permitted by that schedule's affinity/queue and normal collision/dependency rules;
+6. if the scheduled invocation is genuinely still running, do not create duplicate concurrent mutation for the same carrier; inspect other completed schedules instead.
+
+Interactive continuation and automatic recurrence are deliberately independent. The recurring schedules stay enabled and keep running at their configured cadence in the background; an interactive continuation request must **not** reschedule, delay, serialize, or reorder them merely to make progress.
+
+Do not report this interactive behavior as a manual scheduler trigger. If the account tooling exposes no direct `run now` primitive, the interactive session still performs the coordination/repository-continuation work that is safe and authorized in the current chat, while the external schedules continue their ordinary automatic cadence.
+
+Schedule-run completion and repository-task completion are also different states. A schedule invocation ending does not release a non-terminal GitHub carrier. The next interactive or scheduled continuation resumes the same current carrier unless GitHub state shows it terminal, released, superseded, or explicitly reassigned.
+
 ## Multiple ChatGPT accounts are independent groups
 
 Each ChatGPT account is independent.
