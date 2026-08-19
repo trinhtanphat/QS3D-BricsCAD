@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
@@ -210,5 +211,11 @@ namespace QS3D.Core.SmokeTests
         {
             if (!condition) throw new Exception(message);
         }
+    }
+
+    internal static class QuantityExportEvidenceRegistration
+    {
+        [ModuleInitializer]
+        internal static void Initialize() => QuantityExportEvidenceSmoke.Run();
     }
 }
