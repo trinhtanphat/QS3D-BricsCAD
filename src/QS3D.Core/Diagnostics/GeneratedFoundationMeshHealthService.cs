@@ -15,6 +15,26 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
+            ISet<string>? liveHandleIndex = null;
+            if (liveSolidHandles != null)
+            {
+                var reportedCount = liveSolidHandles.Count;
+                if (reportedCount < 0)
+                    throw new InvalidOperationException("Foundation mesh live Solid handle input reported a negative Count.");
+
+                var index = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var observedCount = 0;
+                foreach (var handle in liveSolidHandles)
+                {
+                    observedCount++;
+                    var normalized = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
+                    if (normalized.Length > 0) index.Add(normalized);
+                }
+                if (observedCount != reportedCount)
+                    throw new InvalidOperationException("Foundation mesh live Solid handle Count does not match traversal count.");
+                liveHandleIndex = index;
+            }
+
             var ownership = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
@@ -46,7 +66,7 @@ namespace QS3D.Core.Diagnostics
                         issues.Add(new ModelHealthIssue("FOUNDATION_MESH_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated foundation mesh solid xung đột owner/project handle khác: " + ownership.Describe(identity), element.Id));
                     if (element.SourceHandles.Any(x => string.Equals(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x), identity, StringComparison.OrdinalIgnoreCase)))
                         issues.Add(new ModelHealthIssue("FOUNDATION_MESH_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated foundation mesh handle không được nằm trong SourceHandles.", element.Id));
-                    if (liveSolidHandles != null && !ContainsLogicalHandle(liveSolidHandles, identity))
+                    if (liveHandleIndex != null && !liveHandleIndex.Contains(identity))
                         issues.Add(new ModelHealthIssue("FOUNDATION_MESH_GENERATED_SOLID_MISSING", HealthSeverity.Error, "Không còn tìm thấy generated foundation mesh Solid3d: " + handle, element.Id));
                 }
 
@@ -88,9 +108,6 @@ namespace QS3D.Core.Diagnostics
             }
             return issues.AsReadOnly();
         }
-
-        private static bool ContainsLogicalHandle(IEnumerable<string> handles, string identity) =>
-            handles.Any(x => string.Equals(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x), identity, StringComparison.OrdinalIgnoreCase));
 
         private static void ValidatePositive(ProjectElement element, string key, string code, List<ModelHealthIssue> issues)
         {
