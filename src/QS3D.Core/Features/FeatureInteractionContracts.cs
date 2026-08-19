@@ -60,7 +60,12 @@ namespace QS3D.Core.Features
         public CreateInputMode InputMode { get; }
         public string? SchemaKey { get; }
         public bool RequiresForm => InputMode == CreateInputMode.FormThenCreate || InputMode == CreateInputMode.FormThenPick || InputMode == CreateInputMode.PickThenForm || InputMode == CreateInputMode.Wizard;
-        private static string? NormalizeOptional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+        private static string? NormalizeOptional(string? value)
+        {
+            if (value == null || string.IsNullOrWhiteSpace(value)) return null;
+            return value.Trim();
+        }
     }
 
     public sealed class InteractionProfile
@@ -126,7 +131,11 @@ namespace QS3D.Core.Features
             return new ReadOnlyCollection<T>((source ?? Enumerable.Empty<T>()).ToArray());
         }
 
-        private static string? NormalizeOptional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        private static string? NormalizeOptional(string? value)
+        {
+            if (value == null || string.IsNullOrWhiteSpace(value)) return null;
+            return value.Trim();
+        }
     }
 
     public sealed class FeatureDescriptor
@@ -139,7 +148,7 @@ namespace QS3D.Core.Features
             GroupKey = groupKey.Trim();
             Order = order;
             LabelKey = labelKey.Trim();
-            IconKey = string.IsNullOrWhiteSpace(iconKey) ? null : iconKey.Trim();
+            IconKey = NormalizeOptional(iconKey);
             InteractionProfile = interactionProfile ?? throw new ArgumentNullException(nameof(interactionProfile));
         }
 
@@ -149,6 +158,12 @@ namespace QS3D.Core.Features
         public string LabelKey { get; }
         public string? IconKey { get; }
         public InteractionProfile InteractionProfile { get; }
+
+        private static string? NormalizeOptional(string? value)
+        {
+            if (value == null || string.IsNullOrWhiteSpace(value)) return null;
+            return value.Trim();
+        }
     }
 
     public sealed class FeatureRegistry
