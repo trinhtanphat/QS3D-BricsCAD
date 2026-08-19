@@ -288,6 +288,11 @@ namespace QS3D.Core.Domain
         private static string Optional(string? value, string name, int maxLength)
         {
             var normalized = value?.Trim() ?? string.Empty;
+            for (var index = 0; index < normalized.Length; index++)
+            {
+                if (char.IsControl(normalized[index]))
+                    throw new ArgumentException("Grid naming prefix/suffix cannot contain control characters.", name);
+            }
             if (normalized.Length > maxLength) throw new ArgumentException("Value exceeds " + maxLength + " characters.", name);
             try
             {
