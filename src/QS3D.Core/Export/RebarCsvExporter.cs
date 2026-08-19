@@ -42,7 +42,7 @@ namespace QS3D.Core.Export
         {
             if (rows == null) throw new ArgumentNullException(nameof(rows));
             var sb = new StringBuilder();
-            sb.AppendLine("ElementId,BarMark,ShapeCode,Notation,DiameterMm,Quantity,CuttingLengthM,TotalLengthM,UnitWeightKgM,NetWeightKg,WastePercent,TotalWeightKg,FabricationStatus,FabricationStandardCode,FabricationDetailingRevision");
+            sb.Append("ElementId,BarMark,ShapeCode,Notation,DiameterMm,Quantity,CuttingLengthM,TotalLengthM,UnitWeightKgM,NetWeightKg,WastePercent,TotalWeightKg,FabricationStatus,FabricationStandardCode,FabricationDetailingRevision").Append("\r\n");
             var rowCount = 0;
             foreach (var row in rows)
             {
@@ -64,7 +64,7 @@ namespace QS3D.Core.Export
                     .Append(F(row.TotalWeightKg)).Append(',')
                     .Append(Q(row.FabricationStatus)).Append(',')
                     .Append(Q(row.FabricationStandardCode)).Append(',')
-                    .Append(Q(row.FabricationDetailingRevision)).AppendLine();
+                    .Append(Q(row.FabricationDetailingRevision)).Append("\r\n");
             }
             var content = sb.ToString();
             StrictUtf8WithBom.GetByteCount(content);
