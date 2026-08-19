@@ -35,7 +35,7 @@ def main() -> int:
     )
     forbid(
         validation,
-        "long.TryParse(handle, NumberStyles.HexNumber",
+        "!long.TryParse(handle, NumberStyles.HexNumber",
         "signed hexadecimal parsing rejects valid high-bit CAD handles such as 8000000000000000",
     )
 

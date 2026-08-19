@@ -20,6 +20,7 @@ namespace QS3D.Core.Services
                 throw new InvalidOperationException("Semantic selection cannot exceed " + MaxInputCount + " input entries.");
             if (ids is IReadOnlyCollection<string> readOnlyCollection && readOnlyCollection.Count > MaxInputCount)
                 throw new InvalidOperationException("Semantic selection cannot exceed " + MaxInputCount + " input entries.");
+            var knownCount = ResolveKnownCount(ids);
 
             var enumerationVersion = _changeVersion;
             var next = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -35,6 +36,10 @@ namespace QS3D.Core.Services
 
             if (_changeVersion != enumerationVersion)
                 throw new InvalidOperationException("Selection changed while replacement element ids were being enumerated. Retry replacement against the current selection state.");
+            if (knownCount.HasValue && inputCount != knownCount.Value)
+                throw new InvalidOperationException(
+                    "Semantic selection known Count reported " + knownCount.Value +
+                    " entries but traversal produced " + inputCount + ".");
             if (_ids.SetEquals(next)) return;
 
             var nextVersion = checked(_changeVersion + 1L);
@@ -51,6 +56,28 @@ namespace QS3D.Core.Services
             _ids.Clear();
             _changeVersion = nextVersion;
             Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        private static int? ResolveKnownCount(IEnumerable<string> ids)
+        {
+            int? knownCount = null;
+            if (ids is ICollection<string> collection)
+                knownCount = AcceptKnownCount(knownCount, collection.Count);
+            if (ids is IReadOnlyCollection<string> readOnlyCollection)
+                knownCount = AcceptKnownCount(knownCount, readOnlyCollection.Count);
+            return knownCount;
+        }
+
+        private static int AcceptKnownCount(int? knownCount, int candidate)
+        {
+            if (candidate < 0)
+                throw new InvalidOperationException("Semantic selection known Count cannot be negative.");
+            if (candidate > MaxInputCount)
+                throw new InvalidOperationException("Semantic selection cannot exceed " + MaxInputCount + " input entries.");
+            if (knownCount.HasValue && knownCount.Value != candidate)
+                throw new InvalidOperationException(
+                    "Semantic selection exposes conflicting known Counts: " + knownCount.Value + " and " + candidate + ".");
+            return candidate;
         }
     }
 }
