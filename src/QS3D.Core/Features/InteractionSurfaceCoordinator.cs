@@ -46,6 +46,7 @@ namespace QS3D.Core.Features
 
         private static string? NormalizeOptional(string? value)
         {
+            if (value == null) return null;
             if (string.IsNullOrWhiteSpace(value)) return null;
             return value.Trim();
         }
@@ -186,6 +187,8 @@ namespace QS3D.Core.Features
                     _modal = null;
                     return true;
                 case InteractionSurface.FloatingTool:
+                    if (contentKey == null)
+                        throw new ArgumentException("Floating tool close requires its semantic content key.", nameof(contentKey));
                     if (string.IsNullOrWhiteSpace(contentKey))
                         throw new ArgumentException("Floating tool close requires its semantic content key.", nameof(contentKey));
                     return _floatingTools.Remove(contentKey.Trim());
