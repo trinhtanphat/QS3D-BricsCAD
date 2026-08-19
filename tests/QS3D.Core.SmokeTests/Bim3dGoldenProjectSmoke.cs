@@ -29,7 +29,9 @@ namespace QS3D.Core.SmokeTests
             var engine = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
 
             var regenerated = engine.RegenerateDirty(project);
-            Equal(7, regenerated, "initial regeneration count");
+            // Seven semantic elements are processed, then Door regeneration marks its host Wall quantity-dirty,
+            // so the deterministic dependency-aware total includes one additional Wall pass.
+            Equal(8, regenerated, "initial regeneration count");
             AssertExpectedQuantities(project);
             AssertReport(project);
             AssertIdentity(project);
@@ -183,7 +185,7 @@ namespace QS3D.Core.SmokeTests
                 foreach (var element in loaded.Elements)
                     element.MarkDirty(ElementDirtyFlags.Quantity);
                 var engine = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
-                Equal(7, engine.RegenerateDirty(loaded), "post-round-trip regeneration count");
+                Equal(8, engine.RegenerateDirty(loaded), "post-round-trip regeneration count");
                 AssertExpectedQuantities(loaded);
                 AssertReport(loaded);
             }
