@@ -101,6 +101,45 @@ namespace QS3D.Core.Reporting
                 row.Count = QuantityReportMath.AddCount(row.Count, 1);
                 row.ElementIds.Add(elementId);
                 AddHandles(row.SourceHandles, SourceHandleResolver.Resolve(project, new[] { elementId }));
+
+                var hasGrossEvidence = HasAnyQuantity(element, "GrossConcreteM3", "GrossVolumeM3");
+                var hasNetEvidence = HasAnyQuantity(element, "NetConcreteM3", "NetVolumeM3");
+                var hasDeductionEvidence = element.Quantities.ContainsKey("DeductionM3") || (hasGrossEvidence && hasNetEvidence);
+                var hasFormworkEvidence = element.Quantities.ContainsKey("FormworkM2");
+                var hasLengthEvidence = element.Quantities.ContainsKey("LengthM");
+                var hasOuterPerimeterEvidence = element.Category == ElementCategory.Room
+                    ? HasAnyQuantity(element, "OuterPerimeterM", "PerimeterM")
+                    : element.Quantities.ContainsKey("OuterPerimeterM");
+                var hasInnerPerimeterEvidence = element.Category == ElementCategory.Skirting
+                    ? HasAnyQuantity(element, "InnerPerimeterM", "PerimeterM")
+                    : element.Quantities.ContainsKey("InnerPerimeterM");
+                var hasDoorAreaEvidence = element.Category == ElementCategory.Door || element.Category == ElementCategory.WallOpening
+                    ? element.Quantities.ContainsKey("OpeningAreaM2")
+                    : element.Quantities.ContainsKey("DoorAreaM2");
+                var hasSideAreaEvidence = element.Category == ElementCategory.WallFinish
+                    ? HasAnyQuantity(element, "NetFinishAreaM2", "SideAreaM2")
+                    : element.Quantities.ContainsKey("SideAreaM2");
+                var hasBottomAreaEvidence = element.Category == ElementCategory.FloorFinish || element.Category == ElementCategory.Waterproofing
+                    ? HasAnyQuantity(element, "BottomAreaM2", "AreaM2")
+                    : element.Quantities.ContainsKey("BottomAreaM2");
+                var hasTopAreaEvidence = element.Category == ElementCategory.CeilingFinish
+                    ? HasAnyQuantity(element, "TopAreaM2", "AreaM2")
+                    : element.Quantities.ContainsKey("TopAreaM2");
+                var hasOtherAreaEvidence = HasAnyQuantity(element, "OtherAreaM2", "MeasuredSurfaceAreaM2");
+
+                row.HasGrossConcreteM3Evidence = AggregateEvidence(row.HasGrossConcreteM3Evidence, hasGrossEvidence, created);
+                row.HasDeductionM3Evidence = AggregateEvidence(row.HasDeductionM3Evidence, hasDeductionEvidence, created);
+                row.HasNetConcreteM3Evidence = AggregateEvidence(row.HasNetConcreteM3Evidence, hasNetEvidence, created);
+                row.HasFormworkM2Evidence = AggregateEvidence(row.HasFormworkM2Evidence, hasFormworkEvidence, created);
+                row.HasLengthMEvidence = AggregateEvidence(row.HasLengthMEvidence, hasLengthEvidence, created);
+                row.HasOuterPerimeterMEvidence = AggregateEvidence(row.HasOuterPerimeterMEvidence, hasOuterPerimeterEvidence, created);
+                row.HasInnerPerimeterMEvidence = AggregateEvidence(row.HasInnerPerimeterMEvidence, hasInnerPerimeterEvidence, created);
+                row.HasDoorAreaM2Evidence = AggregateEvidence(row.HasDoorAreaM2Evidence, hasDoorAreaEvidence, created);
+                row.HasSideAreaM2Evidence = AggregateEvidence(row.HasSideAreaM2Evidence, hasSideAreaEvidence, created);
+                row.HasBottomAreaM2Evidence = AggregateEvidence(row.HasBottomAreaM2Evidence, hasBottomAreaEvidence, created);
+                row.HasTopAreaM2Evidence = AggregateEvidence(row.HasTopAreaM2Evidence, hasTopAreaEvidence, created);
+                row.HasOtherAreaM2Evidence = AggregateEvidence(row.HasOtherAreaM2Evidence, hasOtherAreaEvidence, created);
+
                 var gross = QFirst(element, "GrossConcreteM3", "GrossVolumeM3");
                 var net = QFirstOrFallback(element, gross, "NetConcreteM3", "NetVolumeM3");
                 row.GrossConcreteM3 = QuantityReportMath.Add(row.GrossConcreteM3, gross, element.Id + "/GrossConcreteM3");
@@ -318,6 +357,16 @@ namespace QS3D.Core.Reporting
             if (existing.Length == 0) return incoming;
             return existing + " | " + incoming;
         }
+
+        private static bool HasAnyQuantity(ProjectElement element, params string[] keys)
+        {
+            foreach (var key in keys)
+                if (element.Quantities.ContainsKey(key)) return true;
+            return false;
+        }
+
+        private static bool AggregateEvidence(bool current, bool elementEvidence, bool created) =>
+            created ? elementEvidence : current && elementEvidence;
 
         private static double QFirst(ProjectElement element, params string[] keys)
         {
