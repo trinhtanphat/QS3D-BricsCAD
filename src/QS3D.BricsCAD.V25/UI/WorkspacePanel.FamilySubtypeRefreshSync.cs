@@ -6,10 +6,10 @@ using System.Windows.Threading;
 namespace QS3D.BricsCAD.V25.UI
 {
     /// <summary>
-    /// Keeps the visible Family list aligned with the preserved Foundation subtype after a
+    /// Keeps the visible Family list aligned with the preserved active subtype after a
     /// same-document Workspace reload. RefreshProject intentionally preserves authoring state for
     /// the active DWG, but WorkspaceViewModel.Load rebuilds Families before the generic category
-    /// filter is applied. Re-apply the subtype view filter only after that load stack has unwound.
+    /// filter is applied. Re-apply the correct subtype view filter only after that load stack has unwound.
     /// </summary>
     public partial class WorkspacePanel
     {
@@ -89,11 +89,15 @@ namespace QS3D.BricsCAD.V25.UI
 
                     // A document switch clears the subtype before the new project is loaded. Only
                     // same-document refreshes retain a subtype and therefore reach this view-only
-                    // repair path.
+                    // repair path. Grid subtypes use their own category-aware filter; all legacy
+                    // Foundation subtype behavior stays on the existing path.
                     if (string.IsNullOrWhiteSpace(_familySubtypeFilter))
                         return;
 
-                    ApplyFamilySubtypeFilter();
+                    if (IsGridSubtype(_familySubtypeFilter))
+                        ApplyGridFamilySubtypeFilter();
+                    else
+                        ApplyFamilySubtypeFilter();
                 }));
         }
     }
