@@ -8,6 +8,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             LegacyBottomOffsetRejectsSwallowedPositiveAndNegativeTerms();
+            LegacyBottomOffsetRejectsSwallowedBaseTerm();
             LegacyHeightRejectsSwallowedPositiveTerm();
             BottomLevelOffsetRejectsSwallowedPositiveAndNegativeTerms();
             TopLevelOffsetRejectsSwallowedPositiveAndNegativeTerms();
@@ -28,6 +29,18 @@ namespace QS3D.Core.SmokeTests
                     "legacy bottom elevation cannot preserve its non-zero additive term");
                 Equal(version, project.ChangeVersion);
             }
+        }
+
+        private static void LegacyBottomOffsetRejectsSwallowedBaseTerm()
+        {
+            var project = NewProject();
+            var element = NewElement(project, "legacy-bottom-base-term");
+            var version = project.ChangeVersion;
+            Contains(
+                ThrowsMessage<InvalidOperationException>(() =>
+                    ElementVerticalPlacementService.Resolve(project, element, 1d, 4d, 1e16d)),
+                "legacy bottom elevation cannot preserve its non-zero additive term");
+            Equal(version, project.ChangeVersion);
         }
 
         private static void LegacyHeightRejectsSwallowedPositiveTerm()
@@ -104,6 +117,11 @@ namespace QS3D.Core.SmokeTests
             var cancellationPlacement = ElementVerticalPlacementService.Resolve(project, cancellation, 1d, 2d, -1d);
             Equal(0d, cancellationPlacement.BottomElevationM);
             Equal(2d, cancellationPlacement.TopElevationM);
+
+            var ordinary = NewElement(project, "ordinary-finite");
+            var ordinaryPlacement = ElementVerticalPlacementService.Resolve(project, ordinary, 1d, 4d, 2d);
+            Equal(3d, ordinaryPlacement.BottomElevationM);
+            Equal(7d, ordinaryPlacement.TopElevationM);
 
             var representable = NewElement(project, "representable-large");
             var representablePlacement = ElementVerticalPlacementService.Resolve(project, representable, 1e16d, 4d, 2d);
