@@ -8,6 +8,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Media;
 using QS3D.BricsCAD.V25.Services;
+using QS3D.BricsCAD.V25.UI.ViewModels;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using Application = Bricscad.ApplicationServices.Application;
@@ -16,7 +17,7 @@ namespace QS3D.BricsCAD.V25.UI
 {
     /// <summary>
     /// Workspace-only subtype routing. The persisted ProjectFamily model remains unchanged;
-    /// supported subtypes are resolved from the tree leaf plus the established family-name prefix.
+    /// Foundation subtypes are resolved from the tree leaf plus the established family-name prefix.
     /// </summary>
     public partial class WorkspacePanel
     {
@@ -25,10 +26,19 @@ namespace QS3D.BricsCAD.V25.UI
             "Bê Tông Lót", "Móng Băng", "Móng Bè", "Dầm Móng", "Đài Cọc", "Cọc"
         };
 
-        private static readonly string[] GridFamilySubtypes =
-        {
-            "Lưới Thẳng", "Lưới Cong"
-        };
+        private const string RoomTopLevelKey = "TopLevel";
+        private const string RoomBottomLevelKey = "BottomLevel";
+        private const string RoomColorModeKey = "ColorMode";
+        private const string RoomTransparencyKey = "TransparencyPercent";
+        private const string RoomMarkKey = "Mark";
+        private const string RoomCommentKey = "Comment";
+        private const string RoomWbsKey = "WBS";
+        private const string RoomMaterialKey = "Material";
+
+        private static readonly string[] RoomLevelChoices = { "bottom_level", "top_level" };
+        private static readonly string[] RoomColorModeChoices = { "Theo loại (mặc định)", "Tùy chỉnh" };
+        private static readonly string[] RoomTransparencyChoices = { "0", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100" };
+        private static readonly string[] RoomMaterialChoices = { "Khác" };
 
         private bool _familySubtypeInteractionsAttached;
         private bool _applyingFamilySubtypeFilter;
@@ -43,6 +53,7 @@ namespace QS3D.BricsCAD.V25.UI
             FamilySearch.TextChanged += OnFamilySubtypeSearchChanged;
             FamilyList.SelectionChanged += OnFamilySubtypeFamilySelectionChanged;
             FamilyList.ItemContainerGenerator.StatusChanged += OnFamilyContainerGeneratorStatusChanged;
+            FloorCombo.SelectionChanged += OnRoomFloorContextChanged;
             RewireFamilyAddActions();
             RefreshSelectedFamilyHighlight();
         }
@@ -107,8 +118,7 @@ namespace QS3D.BricsCAD.V25.UI
                 if (selected != null && !FamilyMatchesWorkspaceSubtype(selected, subtype)) selected = null;
 
                 var category = _categoryFilter ?? selected?.Category ?? ElementCategory.Room;
-                var subtypeCategory = CategoryForSubtype(subtype);
-                if (subtypeCategory.HasValue) category = subtypeCategory.Value;
+                if (!string.IsNullOrWhiteSpace(subtype)) category = ElementCategory.Foundation;
                 if (launchSolid3D && !Cad.NativeBuildCapability.Supports(category))
                 {
                     SetStatus(Cad.NativeBuildCapability.UnsupportedMessage(category));
@@ -144,12 +154,12 @@ namespace QS3D.BricsCAD.V25.UI
                     {
                         family = ProjectFamilyService.Create(project, Guid.NewGuid().ToString("N"), name, category);
                         SeedQuickSchemaDefaults(family);
-                        SeedWorkspaceSubtypeDefaults(family, subtype);
                         AuditTrail.ForProject(project).Record(
                             "family.create", string.Empty,
                             family.Id + " • " + family.Category + " • " + family.Name + " • Workspace " +
                             (launchSolid3D ? "Solid3D" : "Tham số"));
                     }
+                    SeedRoomFamilyDefaults(family);
                     ProjectFamilyActivationService.SetActive(project, family.Id);
                     return family;
                 }, launchSolid3D ? "Tạo Family Solid3D từ Workspace" : "Tạo Family tham số từ Workspace");
@@ -187,23 +197,194 @@ namespace QS3D.BricsCAD.V25.UI
                 family.Properties["Material"] = schema.DefaultMaterial;
         }
 
-        private static void SeedWorkspaceSubtypeDefaults(ProjectFamily family, string subtype)
+        private static void SeedRoomFamilyDefaults(ProjectFamily family)
         {
-            if (family.Category != ElementCategory.Grid) return;
+            if (family == null || family.Category != ElementCategory.Room) return;
+            SeedRoomDefault(family, RoomTopLevelKey, "bottom_level");
+            SeedRoomDefault(family, RoomBottomLevelKey, "bottom_level");
+            SeedRoomDefault(family, RoomColorModeKey, "Theo loại (mặc định)");
+            SeedRoomDefault(family, RoomTransparencyKey, "70");
+            SeedRoomDefault(family, RoomMarkKey, string.Empty);
+            SeedRoomDefault(family, RoomCommentKey, string.Empty);
+            SeedRoomDefault(family, RoomWbsKey, string.Empty);
+            SeedRoomDefault(family, RoomMaterialKey, "Khác");
+        }
 
-            family.Properties["GridAxisName"] = "1";
-            family.Properties["GridLocked"] = "false";
-            family.Properties["GridStartBubbleVisible"] = "true";
-            family.Properties["GridEndBubbleVisible"] = "true";
-            family.Properties["DisplayColor"] = "Theo loại (mặc định)";
-            family.Properties["DisplayTransparencyPercent"] = "0";
-            family.Properties["Mark"] = string.Empty;
-            family.Properties["Comment"] = string.Empty;
-            family.Properties["WBS"] = string.Empty;
-            family.Properties["Material"] = "Khác";
+        private static void SeedRoomDefault(ProjectFamily family, string key, string value)
+        {
+            if (!family.Properties.ContainsKey(key)) family.Properties[key] = value;
+        }
 
-            if (string.Equals(subtype, "Lưới Cong", StringComparison.OrdinalIgnoreCase))
-                family.Properties["GridRadiusM"] = "0.5";
+        private void ApplyRoomFamilyPropertyForm(ProjectFamily family)
+        {
+            if (family == null || family.Category != ElementCategory.Room ||
+                !string.Equals(_viewModel.SelectedPropertyScope, WorkspaceViewModel.FamilyScope, StringComparison.Ordinal)) return;
+
+            var familyNameRow = _viewModel.Properties.FirstOrDefault(x =>
+                string.Equals(x.Name, "Tên Family", StringComparison.CurrentCultureIgnoreCase));
+
+            _viewModel.Properties.Clear();
+            if (familyNameRow != null)
+            {
+                familyNameRow.Group = "Information";
+                _viewModel.Properties.Add(familyNameRow);
+            }
+            else
+            {
+                var fallbackName = new PropertyRowViewModel
+                {
+                    Group = "Information",
+                    Name = "Tên Family",
+                    IsReadOnly = true
+                };
+                fallbackName.Value = family.Name;
+                _viewModel.Properties.Add(fallbackName);
+            }
+
+            var categoryRow = new PropertyRowViewModel
+            {
+                Group = "Information",
+                Name = "Loại cấu kiện",
+                IsReadOnly = true
+            };
+            categoryRow.Value = "Phòng";
+            _viewModel.Properties.Add(categoryRow);
+
+            var floorRow = new PropertyRowViewModel
+            {
+                Group = "Information",
+                Name = "Tầng",
+                IsReadOnly = true
+            };
+            floorRow.Value = FloorCombo?.SelectedItem as string ?? string.Empty;
+            _viewModel.Properties.Add(floorRow);
+
+            AddRoomFamilyPropertyRow(family, "Cao độ", "Cao độ đầu", RoomTopLevelKey, "bottom_level", RoomLevelChoices);
+            AddRoomFamilyPropertyRow(family, "Cao độ", "Cao độ đáy", RoomBottomLevelKey, "bottom_level", RoomLevelChoices);
+            AddRoomFamilyPropertyRow(family, "Display", "Màu sắc", RoomColorModeKey, "Theo loại (mặc định)", RoomColorModeChoices);
+            AddRoomFamilyPropertyRow(family, "Display", "Độ trong suốt", RoomTransparencyKey, "70", RoomTransparencyChoices, "%");
+            AddRoomFamilyPropertyRow(family, "Metadata", "Mark", RoomMarkKey, string.Empty, Array.Empty<string>());
+            AddRoomFamilyPropertyRow(family, "Metadata", "Comment", RoomCommentKey, string.Empty, Array.Empty<string>());
+            AddRoomFamilyPropertyRow(family, "Metadata", "WBS", RoomWbsKey, string.Empty, Array.Empty<string>());
+            AddRoomFamilyPropertyRow(family, "Metadata", "Vật liệu", RoomMaterialKey, "Khác", RoomMaterialChoices);
+        }
+
+        private void AddRoomFamilyPropertyRow(
+            ProjectFamily family,
+            string group,
+            string label,
+            string key,
+            string fallback,
+            IReadOnlyList<string> choices,
+            string unit = "")
+        {
+            var current = family.Properties.TryGetValue(key, out var stored) ? (stored ?? string.Empty).Trim() : fallback;
+            var rowChoices = choices
+                .Concat(new[] { current })
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.CurrentCultureIgnoreCase)
+                .ToArray();
+            var row = new PropertyRowViewModel
+            {
+                Group = group,
+                Name = label,
+                Unit = unit,
+                EditorKind = rowChoices.Length > 0 ? PropertyRowViewModel.ChoiceEditor : PropertyRowViewModel.TextEditor,
+                Choices = rowChoices
+            };
+            row.Value = current;
+            row.Apply = value => ApplyRoomFamilyProperty(family, key, value);
+            _viewModel.Properties.Add(row);
+        }
+
+        private string ApplyRoomFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var previous = family.Properties.TryGetValue(key, out var stored)
+                ? (stored ?? string.Empty).Trim()
+                : RoomDefaultValue(key);
+            var next = (value ?? string.Empty).Trim();
+
+            if (string.Equals(key, RoomTransparencyKey, StringComparison.Ordinal))
+            {
+                if ((!double.TryParse(next, NumberStyles.Float, CultureInfo.InvariantCulture, out var percent) &&
+                     !double.TryParse(next, NumberStyles.Float, CultureInfo.CurrentCulture, out percent)) ||
+                    double.IsNaN(percent) || double.IsInfinity(percent) || percent < 0d || percent > 100d)
+                {
+                    SetStatus("Độ trong suốt: chỉ nhận giá trị từ 0% đến 100%.");
+                    return previous;
+                }
+                next = percent.ToString("0.##", CultureInfo.InvariantCulture);
+            }
+            else if ((string.Equals(key, RoomTopLevelKey, StringComparison.Ordinal) ||
+                      string.Equals(key, RoomBottomLevelKey, StringComparison.Ordinal) ||
+                      string.Equals(key, RoomColorModeKey, StringComparison.Ordinal) ||
+                      string.Equals(key, RoomMaterialKey, StringComparison.Ordinal)) && next.Length == 0)
+            {
+                SetStatus(RoomPropertyLabel(key) + ": không được để trống.");
+                return previous;
+            }
+
+            if (string.Equals(previous, next, StringComparison.Ordinal)) return previous;
+
+            try
+            {
+                var doc = Application.DocumentManager.MdiActiveDocument;
+                if (doc == null) throw new InvalidOperationException("Không có bản vẽ BricsCAD đang active.");
+                var project = ExistingProjectMutationContext.Require(doc, "Cập nhật thuộc tính Family Phòng");
+                var owned = project.FindFamily(family.Id);
+                if (owned == null || !ReferenceEquals(owned, family))
+                    throw new InvalidOperationException("Family Phòng đang chọn đã stale hoặc không thuộc project hiện tại.");
+
+                var result = ExecuteAtomic(
+                    project,
+                    () => ProjectFamilyService.SetProperty(project, owned.Id, key, next),
+                    "Cập nhật thuộc tính Family Phòng");
+                var live = owned.Properties.TryGetValue(key, out var saved) ? saved ?? next : next;
+                SetStatus("Đã cập nhật " + RoomPropertyLabel(key) + " • kế thừa " + result.InheritedInstancesUpdated + " cấu kiện" +
+                          (result.OverridesPreserved > 0 ? " • giữ " + result.OverridesPreserved + " instance override" : string.Empty));
+                return live;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is ArgumentException || ex is OverflowException)
+            {
+                SetStatus("Không thể cập nhật " + RoomPropertyLabel(key) + ": " + ex.Message);
+                return previous;
+            }
+        }
+
+        private static string RoomDefaultValue(string key)
+        {
+            switch (key)
+            {
+                case RoomTopLevelKey:
+                case RoomBottomLevelKey: return "bottom_level";
+                case RoomColorModeKey: return "Theo loại (mặc định)";
+                case RoomTransparencyKey: return "70";
+                case RoomMaterialKey: return "Khác";
+                default: return string.Empty;
+            }
+        }
+
+        private static string RoomPropertyLabel(string key)
+        {
+            switch (key)
+            {
+                case RoomTopLevelKey: return "Cao độ đầu";
+                case RoomBottomLevelKey: return "Cao độ đáy";
+                case RoomColorModeKey: return "Màu sắc";
+                case RoomTransparencyKey: return "Độ trong suốt";
+                case RoomMarkKey: return "Mark";
+                case RoomCommentKey: return "Comment";
+                case RoomWbsKey: return "WBS";
+                case RoomMaterialKey: return "Vật liệu";
+                default: return key;
+            }
+        }
+
+        private void OnRoomFloorContextChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_loadingContext) return;
+            if (FamilyList.SelectedItem is ProjectFamily family && family.Category == ElementCategory.Room)
+                ApplyRoomFamilyPropertyForm(family);
         }
 
         private static string NextSubtypeFamilyName(string subtype, ISet<string> existingNames)
@@ -231,7 +412,7 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnFamilySubtypeTreeSelectionChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (!(e.NewValue is TreeViewItem item)) return;
-            _familySubtypeFilter = ResolveWorkspaceSubtype(item);
+            _familySubtypeFilter = ResolveFoundationSubtype(item);
             ApplyFamilySubtypeFilter();
             if (string.IsNullOrWhiteSpace(_familySubtypeFilter)) return;
 
@@ -265,17 +446,20 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnFamilySubtypeFamilySelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_applyingFamilySubtypeFilter) return;
-            if (FamilyList.SelectedItem is ProjectFamily family)
+            var family = FamilyList.SelectedItem as ProjectFamily;
+            if (family != null && family.Category == ElementCategory.Foundation)
             {
-                var inferred = InferWorkspaceSubtype(family);
+                var inferred = InferFoundationSubtype(family.Name);
                 if (_inspection.Count > 0 && inferred.Length > 0 &&
                     !string.Equals(_familySubtypeFilter, inferred, StringComparison.OrdinalIgnoreCase))
                 {
                     _familySubtypeFilter = inferred;
-                    _categoryFilter = family.Category;
+                    _categoryFilter = ElementCategory.Foundation;
                     ApplyFamilySubtypeFilter();
                 }
             }
+            if (family != null && family.Category == ElementCategory.Room)
+                ApplyRoomFamilyPropertyForm(family);
             RefreshSelectedFamilyHighlight();
         }
 
@@ -310,42 +494,22 @@ namespace QS3D.BricsCAD.V25.UI
             finally { _applyingFamilySubtypeFilter = false; }
         }
 
-        private static string ResolveWorkspaceSubtype(TreeViewItem item)
+        private static string ResolveFoundationSubtype(TreeViewItem item)
         {
             if (!(item.Tag is string tag) ||
-                !Enum.TryParse(tag, true, out ElementCategory category)) return string.Empty;
+                !Enum.TryParse(tag, true, out ElementCategory category) ||
+                category != ElementCategory.Foundation) return string.Empty;
             var header = (item.Header as string ?? string.Empty).Trim();
-            var candidates = category == ElementCategory.Foundation
-                ? FoundationFamilySubtypes
-                : category == ElementCategory.Grid ? GridFamilySubtypes : Array.Empty<string>();
-            return candidates.FirstOrDefault(x =>
+            return FoundationFamilySubtypes.FirstOrDefault(x =>
                 string.Equals(x, header, StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
         }
 
-        private static ElementCategory? CategoryForSubtype(string subtype)
-        {
-            if (FoundationFamilySubtypes.Any(x => string.Equals(x, subtype, StringComparison.OrdinalIgnoreCase)))
-                return ElementCategory.Foundation;
-            if (GridFamilySubtypes.Any(x => string.Equals(x, subtype, StringComparison.OrdinalIgnoreCase)))
-                return ElementCategory.Grid;
-            return null;
-        }
+        private static string InferFoundationSubtype(string familyName) =>
+            FoundationFamilySubtypes.FirstOrDefault(x => FamilyNameHasSubtype(familyName, x)) ?? string.Empty;
 
-        private static string InferWorkspaceSubtype(ProjectFamily family)
-        {
-            if (family == null) return string.Empty;
-            var candidates = family.Category == ElementCategory.Foundation
-                ? FoundationFamilySubtypes
-                : family.Category == ElementCategory.Grid ? GridFamilySubtypes : Array.Empty<string>();
-            return candidates.FirstOrDefault(x => FamilyNameHasSubtype(family.Name, x)) ?? string.Empty;
-        }
-
-        private static bool FamilyMatchesWorkspaceSubtype(ProjectFamily family, string subtype)
-        {
-            if (string.IsNullOrWhiteSpace(subtype)) return true;
-            var category = CategoryForSubtype(subtype);
-            return category.HasValue && family.Category == category.Value && FamilyNameHasSubtype(family.Name, subtype);
-        }
+        private static bool FamilyMatchesWorkspaceSubtype(ProjectFamily family, string subtype) =>
+            string.IsNullOrWhiteSpace(subtype) ||
+            (family.Category == ElementCategory.Foundation && FamilyNameHasSubtype(family.Name, subtype));
 
         private static bool FamilyNameHasSubtype(string familyName, string subtype)
         {

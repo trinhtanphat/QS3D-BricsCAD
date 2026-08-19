@@ -39,7 +39,11 @@ namespace QS3D.BricsCAD.V25.UI
                 !(FamilyList.SelectedItem is ProjectFamily family))
                 return;
 
-            var inferred = InferWorkspaceSubtype(family);
+            var inferred = family.Category == ElementCategory.Foundation
+                ? InferFoundationSubtype(family.Name)
+                : family.Category == ElementCategory.Grid
+                    ? InferGridSubtype(family.Name)
+                    : string.Empty;
             if (string.Equals(_familySubtypeFilter, inferred, StringComparison.OrdinalIgnoreCase))
                 return;
 
@@ -47,6 +51,8 @@ namespace QS3D.BricsCAD.V25.UI
             _categoryFilter = family.Category;
             if (inferred.Length == 0)
                 ApplyFamilyFilter();
+            else if (family.Category == ElementCategory.Grid)
+                ApplyGridFamilySubtypeFilter();
             else
                 ApplyFamilySubtypeFilter();
         }
