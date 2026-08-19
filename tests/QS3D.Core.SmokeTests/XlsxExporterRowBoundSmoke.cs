@@ -75,7 +75,11 @@ namespace QS3D.Core.SmokeTests
                             Floor = "  Level 2  ",
                             FamilyName = "Glass & Frame",
                             WallCount = 1,
-                            PanelCount = 1
+                            PanelCount = 1,
+                            MinimumClearPanelWidthM = 0d,
+                            MaximumClearPanelWidthM = 0d,
+                            MinimumClearPanelHeightM = 0d,
+                            MaximumClearPanelHeightM = 0d
                         }
                     });
 
