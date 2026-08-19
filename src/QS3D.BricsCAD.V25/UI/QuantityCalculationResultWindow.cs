@@ -160,15 +160,17 @@ namespace QS3D.BricsCAD.V25.UI
                 VerticalAlignment = VerticalAlignment.Top,
                 HorizontalAlignment = HorizontalAlignment.Left
             };
-            stateCircle.Child = new TextBlock
+            var stateIcon = new TextBlock
             {
-                Text = success ? "✓" : offerModeling ? "→" : "!",
+                Text = success ? "✓" : "!",
                 Foreground = Brushes.White,
                 FontSize = 23,
                 FontWeight = FontWeights.Bold,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
+            if (offerModeling) stateIcon.Text = "→";
+            stateCircle.Child = stateIcon;
             body.Children.Add(stateCircle);
 
             var texts = new StackPanel { Margin = new Thickness(8, 0, 0, 0) };
