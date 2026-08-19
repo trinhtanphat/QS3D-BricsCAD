@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
             WorkspaceInteractionSafetyContractsSmoke.Run();
             InteractionSurfaceCoordinatorSmoke.Run();
             InspectorHostLayoutSmoke.Run();
+            FloatingToolWindowPolicySmoke.Run();
+            RoomFinishInteractionProfilesSmoke.Run();
         }
 
         private static void RoomDirectAddIsRepresentable()

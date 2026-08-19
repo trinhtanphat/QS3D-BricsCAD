@@ -547,7 +547,7 @@ namespace QS3D.Core.Scheduling
 
         internal static double NumericTolerance(double value)
         {
-            return Math.Max(1d, Math.Abs(value)) * 1e-12;
+            return Math.Abs(value) * 1e-12;
         }
 
         internal static string MeasurementIdentity(string semanticIdentity, string sourceIdentity, string quantityKey)
