@@ -497,7 +497,6 @@ namespace QS3D.BricsCAD.V25.UI
                 FontSize = 12,
                 FontWeight = FontWeights.SemiBold
             };
-
             var button = CreateClickSurface(frame, Cursors.Hand);
             button.Margin = new Thickness(0, 0, 7, 0);
             button.ToolTip = text;
@@ -754,7 +753,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             try
             {
-                Application.DocumentManager.Open(normalized, false);
+                ProjectFileUiService.OpenProject(normalized);
                 StartCenterUserStateStore.RecordProject(normalized);
                 _statusText.Text = "Đã mở " + Path.GetFileName(normalized) + ".";
                 RefreshRecentProjects();

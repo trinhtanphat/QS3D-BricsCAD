@@ -38,7 +38,7 @@ namespace QS3D.Core.Formulas
             var normalized = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
             if (variables == null) return normalized;
 
-            ValidateKnownVariableCounts(variables);
+            var expectedVariableCount = ValidateKnownVariableCounts(variables);
 
             var variableCount = 0;
             foreach (var pair in variables)
@@ -59,10 +59,13 @@ namespace QS3D.Core.Formulas
                 normalized.Add(normalizedName, pair.Value);
             }
 
+            if (variableCount != expectedVariableCount)
+                throw new InvalidOperationException($"Variable source known count reported {expectedVariableCount}, but traversal produced {variableCount}.");
+
             return normalized;
         }
 
-        private static void ValidateKnownVariableCounts(IReadOnlyDictionary<string, double> variables)
+        private static int ValidateKnownVariableCounts(IReadOnlyDictionary<string, double> variables)
         {
             var knownCounts = new List<int>(3) { variables.Count };
             if (variables is ICollection<KeyValuePair<string, double>> genericCollection)
@@ -88,6 +91,8 @@ namespace QS3D.Core.Formulas
                 if (knownCounts[i] != expectedCount)
                     throw new InvalidOperationException("Variable source reports conflicting known counts.");
             }
+
+            return expectedCount;
         }
 
         private static bool IsValidIdentifier(string value)
@@ -162,6 +167,8 @@ namespace QS3D.Core.Formulas
                         var result = EnsureFinite(sum + compensation, "Addition/subtraction produced a non-finite result.");
                         if (compensation != 0d && result == sum)
                             throw Error("Addition/subtraction lost the compensated contribution at double precision.");
+                        if (sum != 0d && result == compensation)
+                            throw Error("Addition/subtraction lost the primary sum at double precision.");
                         return result;
                     }
                 }
