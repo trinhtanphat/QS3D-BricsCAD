@@ -229,8 +229,9 @@ namespace QS3D.Core.Export
 
         private static void StringCell(StringBuilder sb, string cellRef, string value, int style)
         {
-            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is><t>")
-                .Append(XlsxXmlText.Escape(value)).Append("</t></is></c>");
+            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is>");
+            XlsxXmlText.AppendTextElement(sb, value);
+            sb.Append("</is></c>");
         }
 
         private static void NumberCell(StringBuilder sb, string cellRef, double value)
