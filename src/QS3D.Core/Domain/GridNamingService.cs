@@ -78,6 +78,8 @@ namespace QS3D.Core.Domain
             }
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Grid renumber targets were being enumerated. Retry renumbering against the current project state.");
+            if (knownCount.HasValue && ids.Count != knownCount.Value)
+                throw new InvalidOperationException("Grid renumber target source Count does not match the enumerated element count.");
             if (ids.Count == 0) throw new InvalidOperationException("At least one Grid element is required for renumbering.");
             if (ids.Distinct(StringComparer.OrdinalIgnoreCase).Count() != ids.Count)
                 throw new InvalidOperationException("Grid renumber input contains duplicate element ids.");

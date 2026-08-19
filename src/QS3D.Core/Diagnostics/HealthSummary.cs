@@ -31,6 +31,8 @@ namespace QS3D.Core.Diagnostics
 
         private static List<ModelHealthIssue> MaterializeIssues(IEnumerable<ModelHealthIssue> issues)
         {
+            var expectedKnownCount = RequireKnownCountsWithinLimit(issues);
+
             var result = new List<ModelHealthIssue>(Math.Min(MaxIssueCount, 256));
             using (var enumerator = issues.GetEnumerator())
             {
@@ -41,7 +43,41 @@ namespace QS3D.Core.Diagnostics
                     result.Add(enumerator.Current);
                 }
             }
+
+            if (expectedKnownCount.HasValue && result.Count != expectedKnownCount.Value)
+                throw new InvalidOperationException("Health summary known issue count does not match enumerated issue count.");
+
             return result;
+        }
+
+        private static int? RequireKnownCountsWithinLimit(IEnumerable<ModelHealthIssue> issues)
+        {
+            var counts = new List<int>(3);
+            if (issues is ICollection<ModelHealthIssue> collection) counts.Add(collection.Count);
+            if (issues is IReadOnlyCollection<ModelHealthIssue> readOnlyCollection) counts.Add(readOnlyCollection.Count);
+            if (issues is System.Collections.ICollection nonGenericCollection) counts.Add(nonGenericCollection.Count);
+
+            if (counts.Count == 0) return null;
+
+            var expected = counts[0];
+            var maximum = expected;
+            var hasNegative = expected < 0;
+            var hasConflict = false;
+            for (var i = 1; i < counts.Count; i++)
+            {
+                if (counts[i] < 0) hasNegative = true;
+                if (counts[i] != expected) hasConflict = true;
+                if (counts[i] > maximum) maximum = counts[i];
+            }
+
+            if (maximum > MaxIssueCount)
+                throw new InvalidOperationException("Health summary supports at most " + MaxIssueCount + " diagnostic issues.");
+            if (hasNegative)
+                throw new InvalidOperationException("Health summary received an invalid negative known issue count.");
+            if (hasConflict)
+                throw new InvalidOperationException("Health summary received conflicting known issue counts.");
+
+            return expected;
         }
     }
 }
