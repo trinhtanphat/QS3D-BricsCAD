@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -179,6 +180,8 @@ namespace QS3D.Core.Navigation
         {
             var result = new HashSet<string>(StringComparer.Ordinal);
             if (expandedPaths == null) return result;
+
+            var knownCount = RequireKnownExpandedPathCount(expandedPaths);
             var count = 0;
             foreach (var raw in expandedPaths)
             {
@@ -191,7 +194,33 @@ namespace QS3D.Core.Navigation
                 if (!result.Add(raw)) throw new InvalidOperationException("Project browser contains duplicate expanded node path: " + raw + ".");
                 if (!index.ContainsKey(raw)) throw new InvalidOperationException("Project browser expanded node path does not exist: " + raw + ".");
             }
+
+            if (knownCount.HasValue && count != knownCount.Value)
+                throw new InvalidOperationException("Project browser expanded node path Count does not match traversal count.");
             return result;
+        }
+
+        private static int? RequireKnownExpandedPathCount(IEnumerable<string> expandedPaths)
+        {
+            int? knownCount = null;
+            if (expandedPaths is ICollection<string> generic)
+                MergeKnownExpandedPathCount(generic.Count, ref knownCount);
+            if (expandedPaths is IReadOnlyCollection<string> readOnly)
+                MergeKnownExpandedPathCount(readOnly.Count, ref knownCount);
+            if (expandedPaths is ICollection nonGeneric)
+                MergeKnownExpandedPathCount(nonGeneric.Count, ref knownCount);
+            return knownCount;
+        }
+
+        private static void MergeKnownExpandedPathCount(int candidate, ref int? knownCount)
+        {
+            if (candidate < 0)
+                throw new InvalidOperationException("Project browser expanded node path source exposes a negative Count.");
+            if (candidate > MaxExpandedPaths)
+                throw new InvalidOperationException("Project browser supports at most " + MaxExpandedPaths + " expanded node paths.");
+            if (knownCount.HasValue && knownCount.Value != candidate)
+                throw new InvalidOperationException("Project browser expanded node path source exposes conflicting Count values.");
+            knownCount = candidate;
         }
 
         private static void AppendVisibleWindow(
